@@ -98,15 +98,15 @@ void shim_vblank(void) {
 	{
 		uint32_t spin2;
 		uint16_t wcmd;
-		// 5-phase cycle: compose, then FOUR 56-row blit slices. The
-		// 112-row half-blit fit MAME's vblank with ease (0.53ms) but
-		// ares' slower FB writes ran it past vblank end — the flip-back
-		// deferred a frame and bank X (frame area all zeros = black)
-		// displayed for a full frame every cycle: the "flashing between
-		// frame renders". 56-row slices keep the whole flip pair inside
-		// vblank even at several times MAME's cost.
+		// 4-phase cycle: compose, then THREE 75-row blit slices (was
+		// four 56-row: field-proven safe; 112-row halves overran ares'
+		// vblank — FB writes there are several times MAME's 0.27ms/56r,
+		// the flip-back deferred a frame and all-zero bank X displayed
+		// black). 75 rows probes the budget between the known-good 56
+		// and known-bad 112: if ares shows black flashes again, drop
+		// back to 56. Shorter cycle = 15Hz display (was 12Hz).
 		uint16_t next = wskip + 1;
-		if (next >= 5) next = 0;
+		if (next >= 4) next = 0;
 		wcmd = (next == 0) ? 0x2100
 		                   : (uint16_t)(0x2000 | ((next - 1) << 4));
 		// EARLY-VBLANK GATE for blit phases: this vint fires at vblank
