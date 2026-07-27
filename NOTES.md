@@ -894,6 +894,39 @@ at ~1ms apiece = 60+ms handler entries = game starved to a standstill
 that then SUSTAINED ITSELF (frozen game -> same scene -> same load).
 The ack-wait budget is now TOTAL across the stream section (~2ms).
 
+## State after the freeze fix (user-played, 2026-07-27 evening)
+
+Full gameplay works in ares: rise completes, way more sprites, no
+freeze. Remaining complaints: "dog slow" + "flickerfest and artifacts".
+
+Flicker: the every-8th-window fs0 blit was the big one (under deferred
+FBCTL latching the fs0 bank is DISPLAYED during each window's flip-latch
+wait; skipping its blit showed up-to-8-window-old frames). Reverted —
+fs0 blits every window again.
+
+Remaining artifact/slowness sources, ranked for next session:
+1. THE COMM STREAM IS NOW THE WRONG ARCHITECTURE. With the SH-2s
+   compose-busy, batches ack at ~1ms; the bounded budget (2ms/entry)
+   protects the game but throttles palette/text refresh — sprite/tile
+   colors lag seconds behind scene changes (= many of the "artifacts").
+   PLAN: kill the stream. Stage the PALETTE in the framebuffer like
+   tiles/sprites (game palette writes verified word-size — movew sites;
+   4KB at FB offset 0x1F000 free) and read it in-window. TEXT can't be
+   naively FB-staged (the game writes 0x00 BYTES at 0x410002 — the
+   zero-byte drop would break the MCU screen-sync handshake); options:
+   keep a small COMM text stream, or MD-side copy text shadow into FB
+   staging with word writes during the vblank handler (2KB = ~1ms 68K).
+2. Cache-miss placeholder tiles during scroll/scene loads (flat-color
+   blocks). Tunables: fill budget, prefetch a column ahead using the
+   scroll delta, bigger cache (3-way needs an SDRAM re-pack).
+3. Speed: gameplay windows are sprite-bound (in-window ~7-10ms) plus
+   concurrent compose stretching the cadence when scenes are dense.
+   Sprite compose could ALSO leave the window via an SDRAM sprite-frame
+   cache (same trick as tiles; frames are larger — needs eviction), or
+   at least overlap the two CPUs better within the window.
+4. Sprite priority bits + shadow pen still unimplemented (visual
+   correctness, not speed).
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
