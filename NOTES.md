@@ -1195,7 +1195,7 @@ clock reads as confidently, and wrongly, as a live one.
 Field report: "any powered effects or flashing sprites cause the
 entire screen to flash." Cause: the positional allocator re-numbered
 EVERY group whenever the used-color set changed — a sprite flashing
-its color each frame reshuffled the whole map每cycle, and pixels
+its color each frame reshuffled the whole map every cycle, and pixels
 already on screen (composed with last cycle's map) pointed at
 re-purposed CRAM entries.
 
