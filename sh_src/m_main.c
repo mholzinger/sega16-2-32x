@@ -916,16 +916,39 @@ RAMCODE void m_main(void)
                     tp = frt();
                     apply_cram(par);
                     diag_add(2, tp);
-                } else {
-                    tp = frt();
-                    cache_fill(256);         /* drain misses from the thirds */
-                    diag_add(1, tp);
                 }
+                tp = frt();
+                cache_fill(256);             /* drain misses EVERY window —
+                                              * a 2-window fill delay showed
+                                              * as white stale rectangles on
+                                              * scroll in the field */
+                diag_add(1, tp);
                 tp = frt();
                 compose_sprites(lo, lo + 36, par);
                 compose_layer(lo, lo + 36, 0, 0, 0, bank1, par, 2);
                 compose_text((k == 1) ? 4 : 13, (k == 1) ? 9 : 18, par);
                 diag_add(12, tp);
+
+                if (k == 2) {
+                    /* PERF BAR (debug): ares has no profiler tap, so the
+                     * frame itself is the tap. Row 2: this cycle's total
+                     * in-window ticks; row 4: window-head tile-third wait.
+                     * 1px = 64 FRT ticks = 87.7us; CRAM[255] forced white
+                     * (sprite pair 15 pen 15 — never rendered). */
+                    static uint32_t pw, pv;
+                    uint32_t w = DIAG[8], v = DIAG[4];
+                    int lw = (int)((w - pw) >> 6), lv = (int)((v - pv) >> 6);
+                    pw = w; pv = v;
+                    if (lw > 300) lw = 300;
+                    if (lv > 300) lv = 300;
+                    ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
+                    uint8_t *b2 = sbuf + (8 + 2) * SBUF_W + 8;
+                    uint8_t *b4 = sbuf + (8 + 4) * SBUF_W + 8;
+                    for (int i = 0; i < 300; i++) {
+                        b2[i] = (i < lw) ? 0xFF : b2[i];
+                        b4[i] = (i < lv) ? 0xFF : b4[i];
+                    }
+                }
             }
 
             tp = frt();

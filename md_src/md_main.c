@@ -186,15 +186,11 @@ window_done: ;
 		if (last_fs != 0xFFFF && fs != last_fs)
 			torn = 1;
 		last_fs = fs;
-		uint16_t tpal = 0, spal = 0;
-		volatile uint16_t *pp = (volatile uint16_t*)0x85F000;
-		for (uint16_t k = 0; k < 32; k++)
-			tpal |= pp[k];
-		pp = (volatile uint16_t*)0x85F800;
-		for (uint16_t k = 0; k < 64; k++)
-			spal |= pp[k];
-		vdp_color(0, torn ? 0xE0E : (tpal ? (spal ? 0x0E0 : 0x0EE) : 0x00E));
-		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | (tpal ? 2 : 0) | (spal ? 4 : 0) | torn);
+		// (palette-scan half of the tracer retired: ~96 staged-palette
+		// reads per vint of 68K time, and its border colors are visual
+		// noise now that the pipeline is trusted. Diagnosis via the
+		// SH-2 perf bar + 0xFFB0F4 state word instead.)
+		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | torn);
 		*(volatile uint16_t*)0xFFB0F6 = fs;  // steady FS: the render window's
 		                                     // exit gate waits for this value
 	}
@@ -225,7 +221,7 @@ window_done: ;
 		// entries when the SH-2s ack slowly — the freeze spiral).
 		uint16_t spin = 800;
 
-		for (uint16_t burst = 0; burst < 64; burst++) {
+		for (uint16_t burst = 0; burst < 40; burst++) {
 			if (burst) {
 				while (*mars_comm0 && --spin) ;
 				if (*mars_comm0)
