@@ -264,3 +264,36 @@ master SH-2 in m_main, slave in s_main, COMM0 idle.
 
 Next (stage B): shim init copies boot_copy to 0xFFB400, installs vblank
 MCU-duty handler, jmp 0xFFB400 to run the game's own boot.
+
+## Phase 3 stage B: IN PROGRESS — MCU shim written, boot handshake blocker
+
+Done and correct (in tree):
+- tools/patch_game.py REDIR pass: 8 boot-region CONSTANT reads (cmpi/pea/
+  move-source) into displaced 0x400-0x807 now retarget to the RAM copy at
+  0xFFB400 (+0xB000). Writes to that range left alone (arcade-ROM-faithful:
+  writes there are no-ops on real hardware). This fixed the `pea 0x5be` ->
+  rts runaway into blob bytes and the `cmpiw #-1,0x45a` false-flag reads.
+  objdump wraps long instrs across lines, so operands are located by
+  scanning ROM bytes after the opcode, not the wrapped hex.
+- md_main.c: full i8751 MCU replacement (shim_vblank) — MD pads -> arcade
+  P1/P2 + SERVICE at 0xFFB0xx, coins mirrored to 0xFFF0C2, tile-bank req
+  0xFFF095 -> shadow, sound-mailbox 0xFFF0C4 pump, screen-sync handshake.
+  DIP defaults DSW2=0xFD / DSW1=0xFF. main: RV=1, copy boot->0xFFB400,
+  seed vectors 0/4, jmp game boot.
+- md_start.s: _vblank chains shim_vblank then jmp 0x2AAC when game_running.
+
+BLOCKER (next session): SH-2<->68K cold handshake deadlocks with the
+stage-B cart. Symptom: MD spins in _start's M_OK wait (0x8c050e), COMM0=0,
+COMM8 never latches 0xACED; master SH-2 races AHEAD into m_main (seen at
+0x02040fac by frame 6) having consumed a transient ACED, so it never
+re-posts M_OK and the MD waits forever. The handshake CODE is byte-identical
+to the committed stage-A build (git diff clean) which boots to main
+reliably (verified: /tmp/stageA.32x reaches main by frame 6). So the
+regression is layout/timing: growing the MD boot binary shifted the SH-2
+code, changing handshake timing enough to expose the race.
+Leading fix: make the MD->SH2 release a monotonic LEVEL both sides latch
+(MD raises ACED and holds; SH-2 waits for level, never a value it can miss),
+and have the MD post its OWN readiness (not just wait), so neither side can
+win the race. i.e. redesign the 3-way M_OK/S_OK/ACED handshake to be
+edge-race-free. Harness: scratchpad/hs2.lua dumps MD PC + both SH-2 PCs +
+COMM0/4/8 per frame.
