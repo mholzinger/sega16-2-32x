@@ -69,8 +69,9 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
 /* Slave commands (SYNC[0]; nonzero = pending; echo to SYNC[1] when done):
  * bits 15-12 opcode, bit 8 map parity, bits 2-0 tile bank 1. */
-#define CMD_WIN     0x1000                              /* sprites+text half + prescan */
+#define CMD_WIN     0x1000                              /* compose window: sprites+text half */
 #define CMD_TILE    0x2000                              /* concurrent BG/FG half */
+#define CMD_BLIT    0x3000                              /* blit window: top-half blit */
 
 /* Tile cache bookkeeping (.bss, written master-only in-window).
  * 4-WAY x 256 sets (same 64KB): the round-1 sky-gradient codes alias
@@ -695,12 +696,20 @@ RAMCODE static void blit_half(int ylo, int yhi)
  * 1 = first-bank blit done, 2 = second-bank blit done) and SYNC[3]
  * (master: flip latched, second bank writable). No stream servicing
  * inside the window — the 68K is stalled, no batches arrive. */
+/* Blit window (every other H-int, entirely inside vblank): the master
+ * selected display bank Y before the command; blit our half at once.
+ * sbuf reads hit our own cached writes — no purge needed. */
+RAMCODE void slave_blit_half(void)
+{
+    blit_half(0, 112);
+    SYNC[2] = 1;                                 /* master restores bank X */
+}
+
 RAMCODE void slave_window_half(uint16_t bank1, int par)
 {
     cache_purge();
-    for (int i = 0; i < 512; i += 8) {           /* sprite-list snapshot: the
-                                                  * access bank is fs0 ONLY
-                                                  * pre-flip — capture now */
+    for (int i = 0; i < 512; i += 8) {           /* sprite-list snapshot from
+                                                  * bank X (game staging) */
         SPR_SNAP[i + 0] = FB_SPR[i + 0];
         SPR_SNAP[i + 1] = FB_SPR[i + 1];
         SPR_SNAP[i + 2] = FB_SPR[i + 2];
@@ -710,17 +719,11 @@ RAMCODE void slave_window_half(uint16_t bank1, int par)
         SPR_SNAP[i + 6] = FB_SPR[i + 6];
         SPR_SNAP[i + 7] = FB_SPR[i + 7];
     }
-    copy_pages(6, NPAGES);                       /* staging -> shadow, top half
-                                                  * of the page range (pre-flip) */
-    SYNC[2] = 1;                                 /* snapshot ready */
+    copy_pages(6, NPAGES);
+    SYNC[2] = 2;                                 /* snapshot + pages ready */
     compose_sprites(0, 112, par);
     compose_layer(0, 112, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
     compose_text(0, 14, par);
-    blit_half(0, 112);                           /* bank fs0, top half */
-    SYNC[2] = 2;
-    while (SYNC[3] == 0) ;                       /* master flips + latch-waits */
-    blit_half(0, 112);                           /* other bank, top half */
-    SYNC[2] = 3;
 }
 
 RAMCODE void slave_tile_half(uint16_t bank1, int par)
@@ -798,10 +801,59 @@ RAMCODE void m_main(void)
 
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
-        if (c0 != 0x2000)
+
+        /* ---- BLIT WINDOW (every other H-int; fits inside vblank).
+         * FBCTL latches immediately during vblank even on deferred-
+         * latch hardware (ares) — the old mid-frame flips waited up to
+         * a full frame per edge there, the hidden slowness MAME's
+         * instant latching never showed. Flip to the permanent display
+         * bank Y, both CPUs blit their halves (~1.1ms each), flip back:
+         * the pair completes inside blanking. The game's staging bank X
+         * is never deselected while the game runs; only Y is ever
+         * blitted; sbuf holds the COMPLETE previous frame (tiles from
+         * the concurrent phase + sprites/text from the compose window
+         * that followed it). ---- */
+        if (c0 == 0x2000) {
+            uint16_t tw = frt(), tp = tw;
+            uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
+            uint32_t guard = 2000000;
+            MARS_VDP_FBCTL = fs_x ^ 1;       /* -> display bank Y */
+            while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_x ^ 1) && --guard) ;
+            diag_add(6, tp);
+            SYNC[2] = 0;
+            slave_cmd(CMD_BLIT);
+            tp = frt();
+            blit_half(112, 224);
+            while (SYNC[2] < 1) ;            /* slave half blitted */
+            diag_add(5, tp);
+            MARS_VDP_FBCTL = fs_x;           /* back to staging bank X */
+            guard = 2000000;
+            while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
+            slave_wait(CMD_BLIT);
+            diag_add(7, tw);
+            MARS_SYS_COMM0 = 0;              /* ack */
+
+            /* Launch the CONCURRENT tile compose for the NEXT frame —
+             * only after the blit shipped, so new tiles never erase
+             * un-shipped sprites. */
+            cache_purge();
+            tile_cmd = (uint16_t)(CMD_TILE | (par << 8) | last_bank);
+            slave_cmd(tile_cmd);
+            tp = frt();
+            compose_layer(112, 224, 0, 1, 1, last_bank, par, 0);   /* BG bottom */
+            diag_add(10, tp);
+            tp = frt();
+            compose_layer(112, 224, 0, 0, 0, last_bank, par, 1);   /* FG cat0 bottom */
+            diag_add(11, tp);
+            build_maps(par ^ 1, last_bank);  /* prescan on the lighter tail */
+            continue;
+        }
+        if (c0 != 0x2100)
             continue;                        /* stream is the slave's job */
 
-        /* ---- WINDOW (RV=0, FM=1, 68K stalled) ---- */
+        /* ---- COMPOSE WINDOW (the alternate H-ints): staging copies,
+         * CRAM, sprites+text on top of the concurrent tiles. No FB
+         * flips at all. ---- */
         uint16_t bank1 = MARS_SYS_COMM2 & 7;
         uint16_t tw = frt(), tp = tw;
         last_bank = bank1;
@@ -812,18 +864,11 @@ RAMCODE void m_main(void)
         }
         diag_add(4, tp);
 
-        /* Kick the slave FIRST (sprites+text+blit top half): its work
-         * overlaps the master's housekeeping below. Needs only last
-         * window's maps, the stable staging list, and the tiles already
-         * in sbuf. SYNC[2]/[3] carry the flip-edge steps. */
         cache_purge();
         latch_layer_regs();                  /* scanline-261-style reg latch */
         SYNC[2] = 0;
-        SYNC[3] = 0;
         slave_cmd((uint16_t)(CMD_WIN | (par << 8) | bank1));
 
-        /* Staging page copy: FULL every window, split with the slave
-         * (it copies pages 6-11 at CMD_WIN start; both pre-flip). */
         tp = frt();
         copy_pages(0, 6);
         diag_add(0, tp);
@@ -832,7 +877,7 @@ RAMCODE void m_main(void)
         apply_cram(par);
         diag_add(2, tp);
 
-        while (SYNC[2] < 1) ;                /* sprite-list snapshot ready */
+        while (SYNC[2] < 2) ;                /* sprite-list snapshot ready */
         tp = frt();
         compose_sprites(112, 224, par);
         compose_layer(112, 224, 0, 0, 0, bank1, par, 2); /* FG cat1 OVER sprites */
@@ -841,36 +886,12 @@ RAMCODE void m_main(void)
         compose_text(14, 28, par);
         diag_add(13, tp);
 
-        /* Verified-flip dual blit, HALVED across the CPUs (see NOTES on
-         * deferred FBCTL latching; both banks blitted every window). */
-        {
-            uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
-            uint32_t guard = 4000000;
-            tp = frt();
-            blit_half(112, 224);             /* bank fs0, bottom half */
-            while (SYNC[2] < 2) ;            /* slave top-half blit done */
-            diag_add(5, tp);
-            MARS_VDP_FBCTL = fs0 ^ 1;
-            tp = frt();
-            while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
-            diag_add(6, tp);
-            SYNC[3] = 1;                     /* slave: second bank writable */
-            tp = frt();
-            blit_half(112, 224);
-            while (SYNC[2] < 3) ;            /* slave second blit done */
-            diag_add(7, tp);
-            MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
-        }
-
         tp = frt();
         slave_wait((uint16_t)(CMD_WIN | (par << 8) | bank1));
         diag_add(3, tp);
 
-        /* Fills AFTER all of the slave's in-window cache reads are done
-         * (its cat-1 pass) — no reader can observe a slot mid-fill. The
-         * concurrent compose starts post-ack and sees them complete. */
         tp = frt();
-        cache_fill(256);
+        cache_fill(256);                     /* after all slave cache reads */
         diag_add(1, tp);
         par ^= 1;
 
@@ -878,23 +899,5 @@ RAMCODE void m_main(void)
         DIAG[9]++;
 
         MARS_SYS_COMM0 = 0;                  /* ack: MD restores FM/RV, game runs */
-
-        /* ---- CONCURRENT (RV=1, game running): next frame's tiles ---- */
-        cache_purge();
-        tile_cmd = (uint16_t)(CMD_TILE | (par << 8) | last_bank);
-        slave_cmd(tile_cmd);
-        tp = frt();
-        compose_layer(112, 224, 0, 1, 1, last_bank, par, 0);   /* BG bottom */
-        diag_add(10, tp);
-        tp = frt();
-        compose_layer(112, 224, 0, 0, 0, last_bank, par, 1);   /* FG cat0 bottom */
-        diag_add(11, tp);
-        /* Prescan for the NEXT window on the MASTER's concurrent tail —
-         * its half is lighter than the slave's (which carries the tile
-         * strips + stream servicing), so both CPUs now fit the inter-
-         * window gap and the window-start tcmd wait drops to ~0. Reads
-         * the stable shadow + last window's sprite snapshot (spawn
-         * colors one frame late, invisible). */
-        build_maps(par ^ 1, last_bank);
     }
 }
