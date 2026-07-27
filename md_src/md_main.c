@@ -86,15 +86,20 @@ void shim_vblank(void) {
 	// frozen at 1 entry). Alternating window/no-window entries gives the
 	// game the whole gap after each cheap entry. Display updates at ~20-30
 	// fps until the compose is split across both SH-2s.
-	// TWO alternating short windows, one per H-int: the BLIT window
-	// (0x2000, flip-pair + split blit, fits inside vblank where FBCTL
-	// latches immediately even on deferred-latch hardware) and the
-	// COMPOSE window (0x2100, sprites/text/copies, no flips). Longest
-	// 68K stall drops to the compose window (~7ms).
+	// THREE-phase window cadence, one short window per H-int: the
+	// COMPOSE window (0x2100, sprites/text/copies, no flips), then TWO
+	// BLIT windows (0x2000 top half, 0x2010 bottom half). The full-
+	// frame blit pair measured ~2.5ms > the 2.4ms vblank, so its flip-
+	// back missed blanking and ares deferred it a frame — raw staging
+	// on screen ("just flashing"). Each half-blit window is ~1ms:
+	// both flip edges land safely inside vblank. Longest 68K stall
+	// stays the compose window (~7ms).
 	static uint16_t wskip;
 	{
 		uint32_t spin2;
-		uint16_t wcmd = (++wskip & 1) ? 0x2000 : 0x2100;
+		uint16_t wcmd;
+		if (++wskip >= 3) wskip = 0;
+		wcmd = (wskip == 0) ? 0x2100 : (wskip == 1) ? 0x2000 : 0x2010;
 		while (*mars_comm0) ;                    // drain any pending stream batch
 		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
 		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM

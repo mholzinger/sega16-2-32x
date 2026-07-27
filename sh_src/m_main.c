@@ -699,9 +699,10 @@ RAMCODE static void blit_half(int ylo, int yhi)
 /* Blit window (every other H-int, entirely inside vblank): the master
  * selected display bank Y before the command; blit our half at once.
  * sbuf reads hit our own cached writes — no purge needed. */
-RAMCODE void slave_blit_half(void)
+RAMCODE void slave_blit_half(int half)
 {
-    blit_half(0, 112);
+    int y0 = half ? 112 : 0;
+    blit_half(y0, y0 + 56);
     SYNC[2] = 1;                                 /* master restores bank X */
 }
 
@@ -802,18 +803,27 @@ RAMCODE void m_main(void)
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
 
-        /* ---- BLIT WINDOW (every other H-int; fits inside vblank).
-         * FBCTL latches immediately during vblank even on deferred-
-         * latch hardware (ares) — the old mid-frame flips waited up to
-         * a full frame per edge there, the hidden slowness MAME's
-         * instant latching never showed. Flip to the permanent display
-         * bank Y, both CPUs blit their halves (~1.1ms each), flip back:
-         * the pair completes inside blanking. The game's staging bank X
-         * is never deselected while the game runs; only Y is ever
+        /* ---- BLIT WINDOWS (two per 3-phase cycle; each fits inside
+         * vblank). FBCTL latches immediately during vblank even on
+         * deferred-latch hardware (ares) — mid-frame flips wait up to
+         * a full frame per edge there, invisible under MAME's instant
+         * latching. Flip to the permanent display bank Y, both CPUs
+         * blit a quarter (~0.55ms each), flip back: the pair completes
+         * inside blanking with margin. The game's staging bank X is
+         * never deselected while the game runs; only Y is ever
          * blitted; sbuf holds the COMPLETE previous frame (tiles from
          * the concurrent phase + sprites/text from the compose window
          * that followed it). ---- */
-        if (c0 == 0x2000) {
+        if ((c0 & 0xFFEF) == 0x2000) {
+            /* Half-frame blit: 0x2000 = rows 0-112, 0x2010 = rows 112-224.
+             * The full-frame blit pair measured ~2.5ms — LONGER than the
+             * 2.4ms NTSC vblank, so the flip-back missed blanking, ares
+             * deferred it a frame, and the display showed raw staging
+             * (the "just flashing" build). Each half is ~1ms total:
+             * both flip edges land safely inside vblank. */
+            int half = (c0 >> 4) & 1;
+            int y0 = half ? 112 : 0;
+            uint16_t bcmd = (uint16_t)(CMD_BLIT | (c0 & 0x10));
             uint16_t tw = frt(), tp = tw;
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard = 2000000;
@@ -821,20 +831,23 @@ RAMCODE void m_main(void)
             while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_x ^ 1) && --guard) ;
             diag_add(6, tp);
             SYNC[2] = 0;
-            slave_cmd(CMD_BLIT);
+            slave_cmd(bcmd);
             tp = frt();
-            blit_half(112, 224);
-            while (SYNC[2] < 1) ;            /* slave half blitted */
+            blit_half(y0 + 56, y0 + 112);
+            while (SYNC[2] < 1) ;            /* slave quarter blitted */
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs_x;           /* back to staging bank X */
             guard = 2000000;
             while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
-            slave_wait(CMD_BLIT);
+            slave_wait(bcmd);
             diag_add(7, tw);
             MARS_SYS_COMM0 = 0;              /* ack */
 
-            /* Launch the CONCURRENT tile compose for the NEXT frame —
-             * only after the blit shipped, so new tiles never erase
+            if (!half)
+                continue;                    /* bottom half ships next window */
+
+            /* Frame fully shipped: launch the CONCURRENT tile compose
+             * for the NEXT frame — only now, so new tiles never erase
              * un-shipped sprites. */
             cache_purge();
             tile_cmd = (uint16_t)(CMD_TILE | (par << 8) | last_bank);
