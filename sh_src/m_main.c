@@ -717,8 +717,11 @@ RAMCODE void m_main(void)
             uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard = 4000000;
             tp = frt();
-            if ((DIAG[9] & 7) == 0)
-                blit_frame();
+            /* Blit bank fs0 EVERY window: under deferred FBCTL latching
+             * (ares) it is DISPLAYED for the whole flip-latch wait each
+             * window — skipping it showed frames up to 8 windows old
+             * (the "flickerfest"). Worth the ~2ms. */
+            blit_frame();
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs0 ^ 1;
             tp = frt();
