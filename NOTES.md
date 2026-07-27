@@ -824,3 +824,39 @@ path with per-tile opacity classes, dynamic row split (master is the
 critical path only in sprite-heavy halves), every-H-int cadence for
 title-class windows (<16.7ms), and dirty-scene burst copies. Profiler
 left wired — DIAG[10..13] = per-layer master compose.
+
+## THE SPEED ENDGAME (architecture, discussed 2026-07-27)
+
+This is a PORT, not emulation: the arcade 68K binary runs natively on
+the MD 68K; the SH-2s run our own reimplementation of the S16B video
+chips. The hard wall is BUS EXCLUSIVITY, not CPU horsepower: while the
+game owns the cart (RV=1), the SH-2s cannot touch cart ROM, where the
+2MB of tile/sprite pixel data lives — so game and renderer take turns,
+and heavy scenes stall the game ~36ms per cycle (= the ~1/3 speed).
+
+Step-6 plan: SDRAM TILE CACHE so tile compose runs CONCURRENTLY with
+the game (SDRAM + FB staging are legal SH-2 reads at RV=1). Scenes use
+1-3K distinct tiles of the 16K; the slave's prescan already walks every
+visible tilemap word, so it can drive cache fills; scene loads (tile
+bank writes / RLE bursts) are the natural fill moment via short RV
+pulses. Sprites stay in-window (~9ms) — frames too big/dynamic to
+cache. Target stall ~15ms -> 70-90% arcade speed. Also: fixed window
+cadence to kill the 2-vs-3-H-int stutter even before it's faster.
+
+## SOUND PLAN: mine the official MD port (megadriveref/)
+
+The user provided the retail MD port ROM: megadriveref/"Altered Beast
+(USA, Europe).md" (512KB, header GM 00054002-02, verified). Value:
+1. It contains a COMPLETE working YM2612+Z80 sound implementation of
+   the same music/SFX. Our MCU shim already captures every arcade sound
+   command byte (0xFFF0C4 mailbox, logged on COMM14 as 0x50xx). If we
+   map arcade command bytes -> MD-port command bytes, we embed their
+   Z80 driver + FM patches and skip YM2151 emulation entirely.
+   Z80 control code (busreq 0xA11100 / reset 0xA11200 / Z80 RAM upload
+   0xA00000 refs) clusters at ROM 0x48A0-0x4A1E — start there to find
+   the driver blob and the 68K-side sound-command entry point.
+2. Their asset/palette compromises are the answer key if background
+   layers ever move to the idle MD VDP (4-palette limit is the catch).
+CAUTION: the 32X shim owns the Z80 bus request lines today (PAUSE_Z80
+in read_joypad); embedding their driver means real Z80 code running —
+coordinate bus ownership carefully.
