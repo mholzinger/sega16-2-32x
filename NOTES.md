@@ -232,3 +232,35 @@ Milestone hit: altbeast tiles render on emulated 32X (ares, 59 VPS).
   FB are unreliable on hardware), tile sampler across two ROM banks
 - Test loop: `open -a ares rom/s16.32x`, then `screencapture -x` + crop
 Next: real text/tile-layer renderer driven by a VRAM shadow (phase 3 prep).
+
+## Phase 3 stage A COMPLETE (2026-07-27): boot chain verified in MAME 32x
+
+Hardware truth discovered on the way (all verified against the real BIOS
+dump, disassembled in scratchpad mbios.asm):
+- The master SH-2 BIOS WORD-COMPARES cart 0x400-0x7FF against a reference
+  copy of the Sega security program inside the BIOS (0x36C-0x76B). Those
+  bytes are immovable. Final layout (F-3): blob stock at 0x3F0, stolen
+  8-byte jmp at 0x800 (only the blob's own fall-through lands there), game
+  native from 0x808, game's displaced 0x400-0x807 runs from a RAM copy at
+  0xFFB400 (boot_copy.bin: pc-rel refs converted to abs.w, 4 runtime
+  jump-in sites retargeted +0xB000).
+- Header word 0x18E must be 0: nonzero engages a BIOS whole-ROM checksum
+  handshake over COMM8 that is race-prone with fast boots.
+- The marsdev cold-boot handshake is one-shot and racy (BIOS posts M_OK
+  once; the blob clears COMM0 later). Replaced with sticky reposts of
+  M_OK/S_OK + a LEVEL signal: MD writes 0xACED to COMM8 when ready.
+  COMM2 can't hold the level (M_OK long write covers COMM0+COMM2).
+- mov.w @(disp,Rn),Rm (non-R0) silently assembles as SH2A-only 32-bit
+  encoding — illegal on the 32X SH7604s. Watch for it.
+- RV=1 must be set from RAM-resident code; setting it while executing from
+  the 0x880000 window kills the instruction fetch (reset loop).
+- .data VMA moved to 0xFF0100 (0xFF0000-0xFF00FF reserved for the game
+  boot's mapper-mirror writes) — _start's copy loop needed an explicit
+  destination (the RAM-clear left a1=0xFF0000).
+
+Verified state (MAME 32x + tools/mame_tap.lua-style beacons): MD executes
+shim main from work RAM with RV=1 (COMM14=0xB007 beacon, COMM12 heartbeat),
+master SH-2 in m_main, slave in s_main, COMM0 idle.
+
+Next (stage B): shim init copies boot_copy to 0xFFB400, installs vblank
+MCU-duty handler, jmp 0xFFB400 to run the game's own boot.

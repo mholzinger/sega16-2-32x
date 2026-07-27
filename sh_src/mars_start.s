@@ -6,16 +6,17 @@
 
 	.org 0
 
-		.long	0x01000000
+		.long	0xFFFFFF00	/* game-compatible initial SP (read at runtime) */
 	.rept	63
-		.long	0x000003F0
+		.long	0x000003F0	/* cold entry: stock Sega security blob */
 	.endr
 
 		.ascii	"SEGA 32X        "
 		.ascii	"SKYCHASE 2024.04"
 		.ascii	"SAMPLE PROGRAM                                  "
 		.ascii	"SAMPLE PROGRAM                                  "
-		.ascii	"GM CHANGEME-00  "
+		.ascii	"GM CHANGEME-00"
+		.byte	0,0	/* header 0x18E = 0: skip BIOS ROM-checksum handshake (race-prone) */
 		.ascii	"J6              "
 		.long	0x000000
 		.long	0x3FFFFF
@@ -37,42 +38,42 @@
 	.word	0x4EB9,\_addr>>16,\_addr&0xFFFF
 .endm
 
-		md_jmp	0x880800	/* reset = hot start */
-		md_jsr	0x880806	/* EX_BusError */
-		md_jsr	0x880806	/* EX_AddrError */
-		md_jsr	0x880806	/* EX_IllInstr */
-		md_jsr	0x880806	/* EX_DivByZero */
-		md_jsr	0x880806	/* EX_CHK */
-		md_jsr	0x880806	/* EX_TrapV */
-		md_jsr	0x880806	/* EX_Priviledge */
-		md_jsr	0x880806	/* EX_Trace */
-		md_jsr	0x880806	/* EX_LineA */
-		md_jsr	0x880806	/* EX_LineF */
+		md_jmp	0x8C0410	/* reset = hot start */
+		md_jsr	0x8C0416	/* EX_BusError */
+		md_jsr	0x8C0416	/* EX_AddrError */
+		md_jsr	0x8C0416	/* EX_IllInstr */
+		md_jsr	0x8C0416	/* EX_DivByZero */
+		md_jsr	0x8C0416	/* EX_CHK */
+		md_jsr	0x8C0416	/* EX_TrapV */
+		md_jsr	0x8C0416	/* EX_Priviledge */
+		md_jsr	0x8C0416	/* EX_Trace */
+		md_jsr	0x8C0416	/* EX_LineA */
+		md_jsr	0x8C0416	/* EX_LineF */
 		.space	72			/* reserved */
-		md_jsr	0x880806	/* EX_Spurious */
-		md_jsr	0x880806	/* EX_Level1 */
-		md_jsr	0x880806	/* EX_Level2 */
-		md_jsr	0x880806	/* EX_Level3 */
-		md_jmp	0x88080C	/* EX_Level4 HBlank */
-		md_jsr	0x880806	/* EX_Level5 */
-		md_jmp	0x880812	/* EX_Level6 VBlank */
-		md_jsr	0x880806	/* EX_Level7 */
-		md_jsr	0x880806	/* EX_Trap0 */
-		md_jsr	0x880806	/* EX_Trap1 */
-		md_jsr	0x880806	/* EX_Trap2 */
-		md_jsr	0x880806	/* EX_Trap3 */
-		md_jsr	0x880806	/* EX_Trap4 */
-		md_jsr	0x880806	/* EX_Trap5 */
-		md_jsr	0x880806	/* EX_Trap6 */
-		md_jsr	0x880806	/* EX_Trap7 */
-		md_jsr	0x880806	/* EX_Trap8 */
-		md_jsr	0x880806	/* EX_Trap9 */
-		md_jsr	0x880806	/* EX_TrapA */
-		md_jsr	0x880806	/* EX_TrapB */
-		md_jsr	0x880806	/* EX_TrapC */
-		md_jsr	0x880806	/* EX_TrapD */
-		md_jsr	0x880806	/* EX_TrapE */
-		md_jsr	0x880806	/* EX_TrapF */
+		md_jsr	0x8C0416	/* EX_Spurious */
+		md_jsr	0x8C0416	/* EX_Level1 */
+		md_jsr	0x8C0416	/* EX_Level2 */
+		md_jsr	0x8C0416	/* EX_Level3 */
+		md_jmp	0x8C041C	/* EX_Level4 HBlank */
+		md_jsr	0x8C0416	/* EX_Level5 */
+		md_jmp	0x8C0422	/* EX_Level6 VBlank */
+		md_jsr	0x8C0416	/* EX_Level7 */
+		md_jsr	0x8C0416	/* EX_Trap0 */
+		md_jsr	0x8C0416	/* EX_Trap1 */
+		md_jsr	0x8C0416	/* EX_Trap2 */
+		md_jsr	0x8C0416	/* EX_Trap3 */
+		md_jsr	0x8C0416	/* EX_Trap4 */
+		md_jsr	0x8C0416	/* EX_Trap5 */
+		md_jsr	0x8C0416	/* EX_Trap6 */
+		md_jsr	0x8C0416	/* EX_Trap7 */
+		md_jsr	0x8C0416	/* EX_Trap8 */
+		md_jsr	0x8C0416	/* EX_Trap9 */
+		md_jsr	0x8C0416	/* EX_TrapA */
+		md_jsr	0x8C0416	/* EX_TrapB */
+		md_jsr	0x8C0416	/* EX_TrapC */
+		md_jsr	0x8C0416	/* EX_TrapD */
+		md_jsr	0x8C0416	/* EX_TrapE */
+		md_jsr	0x8C0416	/* EX_TrapF */
 		.space	166			/* reserved */
 
 MARS_HEADER:
@@ -86,7 +87,32 @@ MARS_HEADER:
 		.long	0x06000000			/* Primary SH2 VBR */
 		.long	0x06000120			/* Secondary SH2 VBR */
 
-! Standard MD startup code at 0x3F0
+! Stock Sega security blob at its hardware-verified home 0x3F0-0x7FF.
+! The master SH-2 BIOS word-compares cart 0x400-0x7FF against its internal
+! reference copy — these bytes are immovable and unpatchable.
+	.org	0x3F0
+SEGA_BLOB:
+		.incbin "sega_blob.bin"
+
+! The blob ends with a pc-relative bra to cart 0x800. Stolen 8 bytes:
+! redirect into our boot (jmptab entry 0 = _start). The game's real
+! 0x800-0x807 bytes live in the boot RAM copy (see boot_copy.bin).
+		.word	0x4EF9, 0x008C, 0x0410
+		.word	0x0000
+
+! Arcade game body at native cart offsets 0x808-0x3FFFF (patched HW refs)
+	.org	0x808
+GAME_BODY:
+		.incbin "game_body.bin"
+
+! Boot RAM-copy stash: patched game [0x400,0x808) + continuation jmp,
+! copied by the shim to 0xFFB400 and executed there.
+	.org	0x40000
+BOOT_STASH:
+		.incbin "boot_copy.bin"
+
+! MD boot (jmptab + _start + shim) at cart 0x40410
+	.org	0x40410
 M68K_CODE:
 		.incbin "md_start.bin"
 
@@ -253,15 +279,24 @@ mcont:
 		bf/s    0b
 		add     #4,r1
 
-! wait for 68000 to finish init
+! handshake with the 68000: keep (re)posting M_OK until the 68000 ACKs
+! with a different value. The BIOS's own one-shot M_OK post races the
+! security blob's COMM0 clear when boot is fast (checksum skipped), so a
+! sticky repost is required. The 68000 ACKs with 0x55555555.
 		mov.l   _primary_sts,r0
 		mov.l   _primary_ok,r1
+		mov.l   _primary_ack,r3
+! Level-based: keep posting M_OK on COMM0 until the 68000 raises its
+! MD-ready level (0xACED on COMM2). Edge ACKs get eaten by repost races.
 	1:
-		mov.l   @r0,r2
-		nop
-		nop
-		cmp/eq  r1,r2
-		bt      1b
+		mov.l   r1,@r0      /* post M_OK (blob may clobber COMM0; repost) */
+		mov.l   _primary_mdrdy,r2
+		mov.w   @r2,r2
+		extu.w  r2,r2
+		cmp/eq  r3,r2
+		bf      1b
+		mov     #0,r2
+		mov.l   r2,@r0      /* COMM0 back to idle for runtime protocols */
 
 ! do all initializers
 		mov.l   _primary_do_init,r0
@@ -305,6 +340,10 @@ _primary_sts:
 		.long   0x20004020
 _primary_ok:
 		.ascii  "M_OK"
+_primary_ack:
+		.long   0x0000ACED  /* MD-ready level on COMM2 */
+_primary_mdrdy:
+		.long   0x20004028  /* COMM8 — COMM2 is clobbered by the M_OK long write */
 _primary_adapter:
 		.long   0x20004000
 _primary_cctl:
@@ -336,15 +375,22 @@ scont:
 		mov.w   r0,@r1
 
 		mov.l   _secondary_stk,r15
-! wait for Primary SH2 and 68000 to finish init
+! handshake with the 68000: keep (re)posting S_OK on COMM4 until the
+! 68000 ACKs with 0x55555555 (same sticky scheme as the primary's M_OK —
+! the BIOS one-shot post is race-prone on fast boots).
 		mov.l   _secondary_sts,r0
 		mov.l   _secondary_ok,r1
+		mov.l   _secondary_ack,r3
+! Same level-based scheme as the primary: repost S_OK until MD-ready.
 	1:
-		mov.l   @r0,r2
-		nop
-		nop
-		cmp/eq  r1,r2
-		bt      1b
+		mov.l   r1,@r0
+		mov.l   _secondary_mdrdy,r2
+		mov.w   @r2,r2
+		extu.w  r2,r2
+		cmp/eq  r3,r2
+		bf      1b
+		mov     #0,r2
+		mov.l   r2,@r0
 
 		mov.l   _secondary_adapter,r1
 		mov     #0x00,r0
@@ -369,6 +415,10 @@ _secondary_sts:
 		.long   0x20004024
 _secondary_ok:
 		.ascii  "S_OK"
+_secondary_ack:
+		.long   0x0000ACED
+_secondary_mdrdy:
+		.long   0x20004028  /* COMM8 */
 _secondary_adapter:
 		.long   0x20004000
 _secondary_cctl:
