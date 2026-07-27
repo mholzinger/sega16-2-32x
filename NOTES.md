@@ -352,3 +352,40 @@ palette shadows the game is already writing, so it appears on screen.
 ## Phase 3 stage C: BLOCKED on SH-2 VDP access (root cause found)
 
 (see git log for the full diagnosis)
+
+## Phase 3 stage C: display still blocked — leads narrowed (2026-07-27)
+
+Tried, none fixed the black screen (ares: black s16/Mega32X/60VPS window,
+game running):
+- CRAM writes gated on FBCTL VBLK bit — no change.
+- CRAM writes synced to the 68K vblank counter COMM12 (backrooms' proven
+  pattern, m_main.c:1005 "wait for first vblank — palette is writable now")
+  — no change.
+- 32X display priority set to 32X-over-MD (MARS_VDP_PRIO_32X) so the game's
+  unused-but-enabled MD VDP layer doesn't cover the 32X layer — no change.
+
+Confounder: MAME lua space-reads of the 0x2000xxxx MMIO (COMM/CRAM/INTMSK)
+do NOT go through the device handlers — they return raw/wrong values (proven:
+lua read COMM0 at 0x20004020 = 0 while the CPU sees 0x80be at the cached
+0x00004020 alias). So my "CRAM=0 / INTMSK=0 / framebuffer empty" headless
+reads are UNRELIABLE. Only the ares visual (black) is ground truth.
+
+Biggest architectural difference vs the working backrooms build: backrooms
+keeps **RV=0** (md_start.s:162 "clear RV - allow SH2 to access ROM"); we hold
+**RV=1** for the whole game (its ROM self-refs need the cart at 0x000000).
+Backrooms' 68K (md_main) also runs a COOPERATIVE loop that services the SH-2
+and manages framebuffer access every frame; our shim runs the arcade game
+instead and does no such handoff. Prime suspects for the black screen, in
+order: (1) RV=1 changes 32X framebuffer/CRAM access arbitration so SH-2
+writes don't land — needs verifying whether RV must be 0 during the SH-2's
+draw window (would require toggling RV, or a different game-relocation scheme
+that doesn't need RV=1); (2) the SH-2 render needs the 68K to hand off
+framebuffer access (FM toggle) each frame like backrooms' md_main does, which
+our game-running shim omits; (3) the framebuffer flip/currentFB bookkeeping
+in our m_main diverged from backrooms' swapBuffers discipline.
+
+NEXT SESSION: study backrooms md_main.c + m_main.c framebuffer handoff end
+to end and replicate the exact protocol in the shim; and settle the RV
+question with a clean test (SH-2 draws a solid colour with RV forced 0 vs 1,
+screenshotted). Everything else (game running indefinitely, palette streamed
+to COMM) is solid and committed.
