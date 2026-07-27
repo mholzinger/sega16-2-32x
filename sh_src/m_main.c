@@ -76,8 +76,13 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * 4-WAY x 256 sets (same 64KB): the round-1 sky-gradient codes alias
  * 3+ deep against the scene's ground tiles in a 2-way arrangement and
  * thrashed forever — rendering the sky band as black placeholders. */
-#define NSETS       256
-#define NWAYS       4
+/* 8-WAY x 128 sets: the animated cells cycle codes 0x100/0x400 apart
+ * (three anim-frame families), and any byte-fold collides the family
+ * into one set — 5+ hot codes over 4 ways churned every window (the
+ * "same tiles flash in place" bug + fill burn). 8 ways hold them; the
+ * >>7 fold spreads the families into different sets as well. */
+#define NSETS       128
+#define NWAYS       8
 static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 static uint8_t cache_rot[NSETS];            /* round-robin eviction way */
 
@@ -135,21 +140,16 @@ static inline void cache_purge(void)
  * ROM), and this runs at RV=1 where ROM fetch is forbidden. */
 /* Set index: XOR-fold the high code bits so sequential art ranges (which
  * alias every 512 codes) spread across sets instead of thrashing a way. */
-#define CACHE_SET(code) (((code) ^ ((code) >> 8)) & (NSETS - 1))
+#define CACHE_SET(code) (((code) ^ ((code) >> 7)) & (NSETS - 1))
 
 __attribute__((always_inline))
 static inline const uint8_t *tile_pixels(unsigned code, int cpu)
 {
     unsigned set = CACHE_SET(code);
     unsigned s4 = set * NWAYS;
-    if (cache_tag[s4] == code)
-        return CACHE_C + s4 * 64;
-    if (cache_tag[s4 + 1] == code)
-        return CACHE_C + (s4 + 1) * 64;
-    if (cache_tag[s4 + 2] == code)
-        return CACHE_C + (s4 + 2) * 64;
-    if (cache_tag[s4 + 3] == code)
-        return CACHE_C + (s4 + 3) * 64;
+    for (unsigned w2 = 0; w2 < NWAYS; w2++)
+        if (cache_tag[s4 + w2] == code)
+            return CACHE_C + (s4 + w2) * 64;
     uint16_t n = miss_n[cpu];
     if (n < 256) {
         missq[cpu][n] = (uint16_t)code;
@@ -615,8 +615,11 @@ RAMCODE static void cache_fill(int budget)
             unsigned code = missq[q][i];
             unsigned set = CACHE_SET(code);
             unsigned s4 = set * NWAYS;
-            if (cache_tag[s4] == code || cache_tag[s4 + 1] == code ||
-                cache_tag[s4 + 2] == code || cache_tag[s4 + 3] == code)
+            int hit = 0;
+            for (unsigned w2 = 0; w2 < NWAYS; w2++)
+                if (cache_tag[s4 + w2] == code)
+                    hit = 1;
+            if (hit)
                 continue;
             unsigned way = cache_rot[set] & (NWAYS - 1);
             cache_rot[set] = (uint8_t)(way + 1);
@@ -714,9 +717,6 @@ RAMCODE void slave_window_half(uint16_t bank1, int par)
     while (SYNC[3] == 0) ;                       /* master flips + latch-waits */
     blit_half(0, 112);                           /* other bank, top half */
     SYNC[2] = 3;
-    build_maps(par ^ 1, bank1);                  /* overlaps master's tail;
-                                                  * reads the snapshot, bank-
-                                                  * independent */
 }
 
 RAMCODE void slave_tile_half(uint16_t bank1, int par)
@@ -885,5 +885,12 @@ RAMCODE void m_main(void)
         tp = frt();
         compose_layer(112, 224, 0, 0, 0, last_bank, par, 1);   /* FG cat0 bottom */
         diag_add(11, tp);
+        /* Prescan for the NEXT window on the MASTER's concurrent tail —
+         * its half is lighter than the slave's (which carries the tile
+         * strips + stream servicing), so both CPUs now fit the inter-
+         * window gap and the window-start tcmd wait drops to ~0. Reads
+         * the stable shadow + last window's sprite snapshot (spawn
+         * colors one frame late, invisible). */
+        build_maps(par ^ 1, last_bank);
     }
 }
