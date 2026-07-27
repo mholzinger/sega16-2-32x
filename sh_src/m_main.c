@@ -401,60 +401,64 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             int x = xpos;
             uint16_t o = addr;
             int pix = 0;
-            if (!flip && hzoom == 0) {
-                while (x < 504) {
-                    uint16_t w = sd[o++];
-                    unsigned sx;
-                    pix = (w >> 12) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
+            if (hzoom == 0) {
+                /* 1:1 paths. NIB draws one nibble; when the sprite starts
+                 * on-screen (xpos >= 184) the sx<320 test is implied by
+                 * the x<504 loop bound — the NC variants drop it. */
+#define NIB(PIX_EXPR)                                                       \
+                    pix = (PIX_EXPR);                                       \
+                    { unsigned sx = (unsigned)(x - 184);                    \
+                      if ((unsigned)(pix - 1) < 14u && sx < 320)            \
+                          row[sx] = (uint8_t)(base + pix); }                \
                     x++;
-                    pix = (w >> 8) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
+#define NIB_NC(PIX_EXPR)                                                    \
+                    pix = (PIX_EXPR);                                       \
+                    if ((unsigned)(pix - 1) < 14u)                          \
+                        row[x - 184] = (uint8_t)(base + pix);               \
                     x++;
-                    pix = (w >> 4) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    pix = w & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    if (pix == 15)
-                        break;
+                if (!flip && xpos >= 184) {
+                    while (x < 504) {
+                        uint16_t w = sd[o++];
+                        NIB_NC((w >> 12) & 0xF)
+                        NIB_NC((w >> 8) & 0xF)
+                        NIB_NC((w >> 4) & 0xF)
+                        NIB_NC(w & 0xF)
+                        if (pix == 15)
+                            break;
+                    }
+                } else if (!flip) {
+                    while (x < 504) {
+                        uint16_t w = sd[o++];
+                        NIB((w >> 12) & 0xF)
+                        NIB((w >> 8) & 0xF)
+                        NIB((w >> 4) & 0xF)
+                        NIB(w & 0xF)
+                        if (pix == 15)
+                            break;
+                    }
+                } else if (xpos >= 184) {
+                    while (x < 504) {
+                        uint16_t w = sd[o--];
+                        NIB_NC(w & 0xF)
+                        NIB_NC((w >> 4) & 0xF)
+                        NIB_NC((w >> 8) & 0xF)
+                        NIB_NC((w >> 12) & 0xF)
+                        if (pix == 15)
+                            break;
+                    }
+                } else {
+                    while (x < 504) {
+                        uint16_t w = sd[o--];
+                        NIB(w & 0xF)
+                        NIB((w >> 4) & 0xF)
+                        NIB((w >> 8) & 0xF)
+                        NIB((w >> 12) & 0xF)
+                        if (pix == 15)
+                            break;
+                    }
                 }
-            } else if (hzoom == 0) {
-                while (x < 504) {
-                    uint16_t w = sd[o--];
-                    unsigned sx;
-                    pix = w & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    pix = (w >> 4) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    pix = (w >> 8) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    pix = (w >> 12) & 0xF;
-                    sx = (unsigned)(x - 184);
-                    if ((unsigned)(pix - 1) < 14u && sx < 320)
-                        row[sx] = (uint8_t)(base + pix);
-                    x++;
-                    if (pix == 15)
-                        break;
-                }
+#undef NIB
+#undef NIB_NC
             } else {
                 /* Zoomed path. Nibbles unrolled with CONSTANT shifts —
                  * a variable shift is a libgcc call on SH-2 (slow; and
@@ -552,13 +556,43 @@ RAMCODE static void cache_fill(int budget)
     }
 }
 
-/* Slave entry points (called from s_main; see the command mailbox). */
+RAMCODE static void blit_half(int ylo, int yhi)
+{
+    for (int y = ylo; y < yhi; y++) {
+        const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+        volatile uint32_t *dst = (volatile uint32_t *)
+            ((uintptr_t)&MARS_FRAMEBUFFER + 0x200 + y * 320);
+        for (int i = 0; i < 80; i += 8) {
+            dst[i + 0] = src[i + 0];
+            dst[i + 1] = src[i + 1];
+            dst[i + 2] = src[i + 2];
+            dst[i + 3] = src[i + 3];
+            dst[i + 4] = src[i + 4];
+            dst[i + 5] = src[i + 5];
+            dst[i + 6] = src[i + 6];
+            dst[i + 7] = src[i + 7];
+        }
+    }
+}
+
+/* Slave entry points (called from s_main; see the command mailbox).
+ * The window is now fully two-CPU: each side composes AND BLITS its own
+ * half (FM grants the whole SH-2 side, either CPU may write the FB).
+ * The global flip edges are synchronized through SYNC[2] (slave step:
+ * 1 = first-bank blit done, 2 = second-bank blit done) and SYNC[3]
+ * (master: flip latched, second bank writable). No stream servicing
+ * inside the window — the 68K is stalled, no batches arrive. */
 RAMCODE void slave_window_half(uint16_t bank1, int par)
 {
     cache_purge();
     compose_sprites(0, 112, par);
     compose_text(0, 14);
-    build_maps(par ^ 1, bank1);
+    blit_half(0, 112);                           /* bank fs0, top half */
+    SYNC[2] = 1;
+    while (SYNC[3] == 0) ;                       /* master flips + latch-waits */
+    blit_half(0, 112);                           /* other bank, top half */
+    SYNC[2] = 2;
+    build_maps(par ^ 1, bank1);                  /* overlaps master's tail */
 }
 
 RAMCODE void slave_tile_half(uint16_t bank1, int par)
@@ -575,25 +609,6 @@ RAMCODE void slave_tile_half(uint16_t bank1, int par)
     for (int y = 0; y < 112; y += 16) {
         compose_layer(y, y + 16, 1, 0, 0, bank1, par);
         slave_service_stream();
-    }
-}
-
-RAMCODE static void blit_frame(void)
-{
-    for (int y = 0; y < 224; y++) {
-        const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
-        volatile uint32_t *dst = (volatile uint32_t *)
-            ((uintptr_t)&MARS_FRAMEBUFFER + 0x200 + y * 320);
-        for (int i = 0; i < 80; i += 8) {
-            dst[i + 0] = src[i + 0];
-            dst[i + 1] = src[i + 1];
-            dst[i + 2] = src[i + 2];
-            dst[i + 3] = src[i + 3];
-            dst[i + 4] = src[i + 4];
-            dst[i + 5] = src[i + 5];
-            dst[i + 6] = src[i + 6];
-            dst[i + 7] = src[i + 7];
-        }
     }
 }
 
@@ -634,7 +649,7 @@ RAMCODE void m_main(void)
         for (int i = 0; i < 64; i++)
             spr_pair[k][i] = 0xFF;
     }
-    SYNC[0] = SYNC[1] = 0;
+    SYNC[0] = SYNC[1] = SYNC[2] = SYNC[3] = 0;
 
     volatile uint16_t *cram = &MARS_CRAM;
     for (int i = 0; i < 256; i++)
@@ -668,7 +683,18 @@ RAMCODE void m_main(void)
         }
         diag_add(4, tp);
 
-        /* Staging page copy (before any flip). */
+        /* Kick the slave FIRST (sprites+text+blit top half): its work
+         * overlaps the master's housekeeping below. Needs only last
+         * window's maps, the stable staging list, and the tiles already
+         * in sbuf. SYNC[2]/[3] carry the flip-edge steps. */
+        cache_purge();
+        latch_layer_regs();                  /* scanline-261-style reg latch */
+        SYNC[2] = 0;
+        SYNC[3] = 0;
+        slave_cmd((uint16_t)(CMD_WIN | (par << 8) | bank1));
+
+        /* Staging page copy (before any flip; races only the slave's
+         * later build_maps read, worth one frame of color staleness). */
         tp = frt();
         for (int n = 0; n < 2; n++) {
             volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + copy_rotor * 0x800);
@@ -689,11 +715,6 @@ RAMCODE void m_main(void)
         }
         diag_add(0, tp);
 
-        cache_purge();
-        latch_layer_regs();                  /* scanline-261-style reg latch:
-                                              * prescan + all of next frame's
-                                              * compose use this snapshot */
-
         tp = frt();
         apply_cram(par);
         diag_add(2, tp);
@@ -702,8 +723,6 @@ RAMCODE void m_main(void)
         cache_fill(256);
         diag_add(1, tp);
 
-        /* Sprites + text, split; slave also prescans next maps. */
-        slave_cmd((uint16_t)(CMD_WIN | (par << 8) | bank1));
         tp = frt();
         compose_sprites(112, 224, par);
         diag_add(12, tp);
@@ -711,23 +730,23 @@ RAMCODE void m_main(void)
         compose_text(14, 28);
         diag_add(13, tp);
 
-        /* Verified-flip dual blit (see NOTES: deferred FBCTL latching). */
+        /* Verified-flip dual blit, HALVED across the CPUs (see NOTES on
+         * deferred FBCTL latching; both banks blitted every window). */
         {
             uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard = 4000000;
             tp = frt();
-            /* Blit bank fs0 EVERY window: under deferred FBCTL latching
-             * (ares) it is DISPLAYED for the whole flip-latch wait each
-             * window — skipping it showed frames up to 8 windows old
-             * (the "flickerfest"). Worth the ~2ms. */
-            blit_frame();
+            blit_half(112, 224);             /* bank fs0, bottom half */
+            while (SYNC[2] < 1) ;            /* slave top-half blit done */
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs0 ^ 1;
             tp = frt();
             while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
             diag_add(6, tp);
+            SYNC[3] = 1;                     /* slave: second bank writable */
             tp = frt();
-            blit_frame();
+            blit_half(112, 224);
+            while (SYNC[2] < 2) ;            /* slave second blit done */
             diag_add(7, tp);
             MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
         }
