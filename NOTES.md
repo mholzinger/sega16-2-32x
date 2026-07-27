@@ -72,12 +72,41 @@ So per frame: MCU takes vblank, reads coins, pokes results into work RAM,
 passes sound commands 68K→Z80, and raises IRQ4 on the 68K. **The 68K's vblank
 comes FROM the MCU.**
 
-Port implication: our shim must replace the MCU. It's 4KB of 8051 code (dumped).
-Options: (a) disassemble + reimplement its protocol in the shim (preferred,
-it's tiny), (b) run a small 8051 interpreter on the slave SH-2.
-MAME runs the real dump for altbeast (no HLE sim exists to crib) — but jts16
-`cores/s16b/` and MAME's tturf/wb3 sims (segas16b.cpp:1333) show the protocol
-shape.
+### MCU FULLY REVERSE-ENGINEERED (roms/altbeast/mcu.asm via unidasm)
+
+Vectors: reset→0x180, INT0 (vblank)→0xC00. INT1/timer1 handlers are bare reti.
+
+**Boot sequence** (0x180→0x680→0x880):
+1. Hold 68K in RESET (mapper reg2=0x03), self-checksum MCU ROM, internal RAM test
+2. Program mapper regs 0x10-0x1F from its OWN table at MCU ROM 0xFEA —
+   byte-identical to the 68K's table at 68K ROM 0x1986 (redundant by design)
+3. PROTECTION: checksum first 2KB of 68K ROM over the bus (separate 16-bit
+   sums of high and low bytes) vs constants at MCU ROM 0xFFA-0xFFD; halt on
+   mismatch
+4. Release 68K reset (reg2=0x00), write **0x40 to sound latch** (init/silence
+   command), enable INT0, enter main loop
+
+**Main loop** (0xA80, continuous polling):
+- Read word 0xFFF0C0: if high byte != 0 → set busy flag, poll word 0x410002
+  (TEXT RAM) until high byte == 0, clear busy. (Screen-sync handshake; while
+  busy, vblank fires IRQ4 only and skips input/bank work.)
+- Sound mailbox: read word 0xFFF0C4; if high byte != 0xFF, write it to the
+  Z80 sound latch (reg3) and rewrite the mailbox high byte to 0xFF.
+
+**Per vblank** (INT0 handler 0xC00):
+1. Read P1 (coin/service, active-low), invert, write to high byte of 0xFFF0C2
+   — the 68K reads its coin inputs from work RAM, not from the I/O chip
+2. Read low byte of word 0xFFF094 (= 0xFFF095) = tile bank request from 68K;
+   write 0x0000 to 0x3F0000 and 0x00:req to 0x3F0002
+3. Raise IRQ4 on the 68K (reg4=0x0B) — every frame, unconditionally
+
+**32X shim duties** (complete replacement, no 8051 emulation needed):
+- MD vblank (IRQ6, vector 0x78) → shim: read MD pad → arcade bits →
+  0xFFF0C2; forward 0xFFF095 → tile bank state; then jump to the game's
+  IRQ4 handler (0x2AAC). Patch vector 0x78 in our ROM image.
+- Main-loop duties fold into the same handler: pump 0xFFF0C4 sound mailbox,
+  honor the 0xFFF0C0/0x410002 handshake.
+- Skip the 2KB checksum entirely; send sound cmd 0x40 at boot.
 
 ## References on disk
 
@@ -118,3 +147,7 @@ interleave a7 (even/high) + a5 (odd/low).
   nibble == 0xF (sega16sp.cpp:1389). Pen 0 = transparent, pen 15 = marker.
   Verified: hero frames, transformation faces, wolves, bosses, logo visible.
 - Previews land in gfx-preview/ (gitignored — copyrighted art).
+
+## Testing
+
+- ares emulator installed locally — primary 32X test target for phases 2+.
