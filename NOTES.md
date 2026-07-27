@@ -151,3 +151,14 @@ interleave a7 (even/high) + a5 (odd/low).
 ## Testing
 
 - ares emulator installed locally — primary 32X test target for phases 2+.
+
+## Phase 2 status (2026-07-27)
+
+Milestone hit: altbeast tiles render on emulated 32X (ares, 59 VPS).
+- Build: `make` → rom/s16.32x (md_src 68K blob .incbin'd into sh_src ROM,
+  32x-builder pattern, fixed crt0 + COMM4=0 slave release)
+- tools/gen_tiles.py: planar → chunky 8bpp at build time (1MB, ROM-resident)
+- m_main.c: 256-color mode, word-paired framebuffer writes (byte writes to
+  FB are unreliable on hardware), tile sampler across two ROM banks
+- Test loop: `open -a ares rom/s16.32x`, then `screencapture -x` + crop
+Next: real text/tile-layer renderer driven by a VRAM shadow (phase 3 prep).

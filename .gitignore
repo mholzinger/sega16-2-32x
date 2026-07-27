@@ -3,3 +3,10 @@ roms/
 *.32x
 build/
 gfx-preview/
+sh_src/md_start.bin
+sh_src/tiles.bin
+*.o
+*.d
+*.elf
+*.lst
+rom/
