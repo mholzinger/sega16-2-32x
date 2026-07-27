@@ -72,9 +72,13 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define CMD_WIN     0x1000                              /* sprites+text half + prescan */
 #define CMD_TILE    0x2000                              /* concurrent BG/FG half */
 
-/* Tile cache bookkeeping (.bss, written master-only in-window). */
-#define NSETS       512
-static uint16_t cache_tag[NSETS * 2];       /* folded tile code; 0xFFFF empty */
+/* Tile cache bookkeeping (.bss, written master-only in-window).
+ * 4-WAY x 256 sets (same 64KB): the round-1 sky-gradient codes alias
+ * 3+ deep against the scene's ground tiles in a 2-way arrangement and
+ * thrashed forever — rendering the sky band as black placeholders. */
+#define NSETS       256
+#define NWAYS       4
+static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 static uint8_t cache_rot[NSETS];            /* round-robin eviction way */
 
 /* Per-CPU miss queues: appended (write-through) during concurrent compose,
@@ -130,16 +134,21 @@ static inline void cache_purge(void)
  * ROM), and this runs at RV=1 where ROM fetch is forbidden. */
 /* Set index: XOR-fold the high code bits so sequential art ranges (which
  * alias every 512 codes) spread across sets instead of thrashing a way. */
-#define CACHE_SET(code) (((code) ^ ((code) >> 9)) & (NSETS - 1))
+#define CACHE_SET(code) (((code) ^ ((code) >> 8)) & (NSETS - 1))
 
 __attribute__((always_inline))
 static inline const uint8_t *tile_pixels(unsigned code, int cpu)
 {
     unsigned set = CACHE_SET(code);
-    if (cache_tag[set * 2] == code)
-        return CACHE_C + (set * 2) * 64;
-    if (cache_tag[set * 2 + 1] == code)
-        return CACHE_C + (set * 2 + 1) * 64;
+    unsigned s4 = set * NWAYS;
+    if (cache_tag[s4] == code)
+        return CACHE_C + s4 * 64;
+    if (cache_tag[s4 + 1] == code)
+        return CACHE_C + (s4 + 1) * 64;
+    if (cache_tag[s4 + 2] == code)
+        return CACHE_C + (s4 + 2) * 64;
+    if (cache_tag[s4 + 3] == code)
+        return CACHE_C + (s4 + 3) * 64;
     uint16_t n = miss_n[cpu];
     if (n < 256) {
         missq[cpu][n] = (uint16_t)code;
@@ -543,16 +552,19 @@ RAMCODE static void cache_fill(int budget)
         uint16_t n = miss_n[q];
         if (n > 256)
             n = 256;
+        DIAG[14] += n;                       /* miss telemetry */
         for (uint16_t i = 0; i < n && budget; i++) {
             unsigned code = missq[q][i];
             unsigned set = CACHE_SET(code);
-            if (cache_tag[set * 2] == code || cache_tag[set * 2 + 1] == code)
+            unsigned s4 = set * NWAYS;
+            if (cache_tag[s4] == code || cache_tag[s4 + 1] == code ||
+                cache_tag[s4 + 2] == code || cache_tag[s4 + 3] == code)
                 continue;
-            unsigned way = cache_rot[set] & 1;
-            cache_rot[set] ^= 1;
-            cache_tag[set * 2 + way] = (uint16_t)code;
+            unsigned way = cache_rot[set] & (NWAYS - 1);
+            cache_rot[set] = (uint8_t)(way + 1);
+            cache_tag[s4 + way] = (uint16_t)code;
             const uint32_t *src = (const uint32_t *)(altbeast_tiles + code * 64);
-            uint32_t *dst = (uint32_t *)(CACHE_C + (set * 2 + way) * 64);
+            uint32_t *dst = (uint32_t *)(CACHE_C + (s4 + way) * 64);
             for (int k = 0; k < 16; k += 4) {
                 dst[k + 0] = src[k + 0];
                 dst[k + 1] = src[k + 1];
@@ -660,7 +672,7 @@ RAMCODE void m_main(void)
         TILEMAP_U[i] = 0;
     for (int i = 0; i < 2048; i++)
         TEXT_U[i] = 0;
-    for (int i = 0; i < NSETS * 2; i++)
+    for (int i = 0; i < NSETS * NWAYS; i++)
         cache_tag[i] = 0xFFFF;
     for (int i = 0; i < NSETS; i++)
         cache_rot[i] = 0;
