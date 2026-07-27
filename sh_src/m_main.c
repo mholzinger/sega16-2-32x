@@ -1,84 +1,100 @@
 #include "mars.h"
 
-/* Stage C: render the System-16B scene — BG+FG tile layers, SPRITES, and
- * the text layer, with the live palette via dynamic CRAM allocation.
+/* Stage C step 6: CONCURRENT TILE COMPOSE via an SDRAM tile cache.
  *
- * Data paths into the SH-2:
- *   COMM0 = 0x8000|idx : palette batch, 5 words, entries idx..idx+4 of the
- *                        full 2048 (tiles/text 0-1023, sprites 1024-2047).
- *   COMM0 = 0x4000|idx : text batch, 5 text-RAM words at word index idx.
- *   COMM0 = 0x2000     : render window (MD dropped RV, raised FM). COMM2
- *                        holds the tile-bank-1 value (rom_5704 slot 1).
- *   Tilemap: the game's tile RAM is remapped to a FRAMEBUFFER staging area
- *   (MD 0x852000.. / SH-2 0x24012000.., byte offset 0x12000 in the access
- *   bank, past the 0x11A00 display image). Each render window the SH-2
- *   copies 2 of the 12 game-written 4KB pages into an SDRAM shadow (full
- *   refresh every 6 windows), then renders from the shadow so both
- *   framebuffers can be drawn regardless of the flip state.
- *   Sprites: sprite RAM is likewise staged in the framebuffer (MD
- *   0x85E000.. / SH-2 0x2401E000..) and read DIRECTLY during compose —
- *   compose happens before any flip, so no SDRAM copy is needed.
+ * The hard 32X rule: while the game's 68K owns the cart (RV=1), the SH-2s
+ * may not touch cart ROM — where the 2MB of tile/sprite pixel data lives.
+ * Previously the whole compose therefore ran inside the render window
+ * with the game frozen (~36ms/window in heavy scenes = 1/3 game speed).
  *
- * CRAM allocation (unified prescan, master only, no cross-CPU races): the
- * master walks the visible tilemap windows and the sprite list at window
- * start and builds this frame's maps — tile colors get 8-pen groups
- * ascending from 8 (0-7 identity, shared with text exactly as they share
- * palette entries 0-63 on hardware), sprite colors get ALIGNED PAIRS of
- * groups (16 pens) descending from pair 15. CRAM is applied from the same
- * maps in the same window: no one-frame color lag. The slave reads the
- * maps from SDRAM after its own cache purge (they are complete before the
- * COMM4 go command).
+ * Now the BG/FG tile layers compose OUTSIDE the window, concurrently with
+ * the game: everything they need is SH-2-legal at RV=1 — the SDRAM
+ * shadows, the color maps, sbuf, and a 64KB SDRAM TILE CACHE (512 sets x
+ * 2 ways x 64B). Cache misses render as a flat placeholder (the tile's
+ * pen-0 color) and are queued; the master fills them from cart ROM inside
+ * the next window (budgeted), so scenes converge in a few frames and
+ * steady state runs miss-free. Sprites (large, dynamic frames) and text
+ * still compose in-window, on top of the concurrently-composed tiles,
+ * followed by the verified-flip dual blit.
  *
- * System-16B facts (MAME segaic16.cpp/sega16sp.cpp, verified vs reference):
- *   tile word: code = data & 0x1FFF, color = (data>>6) & 0x7F, bank slot =
- *   code>>12, banksize 0x1000, bank[0] always 0 (MCU writes slot 0 = 0).
- *   text word: code = data & 0x1FF, color = (data>>9) & 7, pen 0 clear.
- *   Latched regs (word idx in text RAM): pages 0x740+which, yscroll
- *   0x748+which, xscroll 0x74C+which; which: 0=FG, 1=BG.
- *   Raw pages word quadrants (1024x512 virtual, 16 pages): UL=(p>>4)&0xF,
- *   UR=p&0xF, LL=(p>>12)&0xF, LR=(p>>8)&0xF. Screen: vx=(sx-(0xC0-xsc))
- *   &0x3FF, vy=(sy-ysc)&0x1FF.
- *   Sprites (8 words): d0 = bottom<<8|top, d1 = xpos (0x1FF; screen x =
- *   raw-184), d2 = end(15)/hide(14)/hflip(8)/signed pitch(7-0), d3 = word
- *   addr in bank, d4 = bank(11-8, identity, %8)/prio(7-6)/color(5-0), d5 =
- *   vzoom(9-5)/hzoom(4-0). Rows: addr += pitch BEFORE each row; vzoom
- *   accumulates in bit 15 to skip rows; 4 nibbles/word MSB-first (LSB
- *   when flipped), pen 0/15 transparent, last nibble 15 ends the row.
- *   Palette entry = 1024 + color*16 + pen.
- *   Draw order: BG opaque, FG, SPRITES, TEXT (pen0-clear each).
+ * Division of labor per cycle:
+ *   WINDOW N (RV=0, FM=1, 68K stalled): master: staging page copy, CRAM
+ *   from maps[par], cache fills (both CPUs' miss queues), sprite+text
+ *   bottom half, blits+flips; slave: sprite+text top half + prescan of
+ *   maps[par^1] for the next frame.
+ *   CONCURRENT N+1 (RV=1, game running): both CPUs compose BG/FG halves
+ *   of the next frame from the cache; the slave also SERVICES THE MD
+ *   STREAM (palette/text COMM batches) — the master is busy composing,
+ *   and between strips the slave polls so the MD never stalls long.
  *
- * CPU split: fixed SCREEN row seam at y=112 for every layer (slave takes
- * 0-111). A tile-row-index split would drift with yscroll and let one
- * CPU's tiles overwrite the other's sprites near the seam.
+ * Master<->slave signaling moved OFF the COMM registers into SDRAM
+ * mailboxes (SYNC): the MD stream owns COMM2..COMM10 at any moment the
+ * game is running, so COMM4/COMM6 handshakes would race batch payloads.
  *
- * RV discipline: the COMM loop runs from SDRAM (.ramtext) and never touches
- * cart ROM while RV=1. The render path executes only inside the window
- * (RV=0), so it reads the 1MB chunky tile set and the 1MB sprite stream
- * straight from cart ROM. */
+ * System-16B facts, staging layout, verified-flip discipline, pixel-
+ * value-0 transparency, CRAM allocation: see NOTES.md (unchanged). */
 
 #define RAMCODE __attribute__((section(".ramtext")))
 
 extern const uint8_t altbeast_tiles[];      /* 16384 tiles x 64B, cart ROM */
 extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
-/* SDRAM shadows. Uncached (0x26..) views for COMM/copy writes; the renderer
- * reads the cached (0x06..) views after a cache purge at window start (the
- * 68K is stalled during the window, so nothing mutates them under us). */
-#define TILEMAP_U   ((volatile uint16_t *)0x26020000)   /* 16 pages x 2K words */
-#define TILEMAP_C   ((const uint16_t *)0x06020000)
-#define TEXT_U      ((volatile uint16_t *)0x26030000)   /* 2048 words */
-#define TEXT_C      ((const uint16_t *)0x06030000)
-#define PAL_U       ((volatile uint16_t *)0x26031000)   /* 2048 words */
-#define PAL_C       ((const uint16_t *)0x06031000)
+/* ---- SDRAM map (stacks: master grows down from 0x0603F000, slave from
+ * 0x06040000; .bss ends well below 0x06018000 — checked per build) ----
+ * Uncached (0x26..) views for cross-CPU/stream writes; cached (0x06..)
+ * views for render reads after a purge. */
+#define TILEMAP_U   ((volatile uint16_t *)0x26018000)   /* 13 pages x 2K words */
+#define TILEMAP_C   ((const uint16_t *)0x06018000)      /* page 12 = blank */
+#define TEXT_U      ((volatile uint16_t *)0x26025000)   /* 2048 words */
+#define TEXT_C      ((const uint16_t *)0x06025000)
+#define PAL_U       ((volatile uint16_t *)0x26026000)   /* 2048 words */
+#define PAL_C       ((const uint16_t *)0x06026000)
+#define DIAG        ((volatile uint32_t *)0x26027000)   /* profiling, lua-read */
+#define SYNC        ((volatile uint16_t *)0x26027800)   /* [0] cmd  [1] echo */
+#define CACHE_C     ((uint8_t *)0x06028000)             /* 1024 slots x 64B */
 
 #define FB_STAGING  ((volatile uint16_t *)0x24012000)   /* game tile RAM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
 #define NPAGES      12
 
-/* Window phase profile, FRT ticks (sysclk/32 ~ 1.37us), lua-readable:
- * [0]copy [1]maps [2]cram [3]compose [4]slavewait [5]blit1 [6]flipwait
- * [7]blit2 [8]total [9]window count. Accumulating; lua divides by [9]. */
-#define DIAG        ((volatile uint32_t *)0x26033000)
+/* Slave commands (SYNC[0]; nonzero = pending; echo to SYNC[1] when done):
+ * bits 15-12 opcode, bit 8 map parity, bits 2-0 tile bank 1. */
+#define CMD_WIN     0x1000                              /* sprites+text half + prescan */
+#define CMD_TILE    0x2000                              /* concurrent BG/FG half */
+
+/* Tile cache bookkeeping (.bss, written master-only in-window). */
+#define NSETS       512
+static uint16_t cache_tag[NSETS * 2];       /* folded tile code; 0xFFFF empty */
+static uint8_t cache_rot[NSETS];            /* round-robin eviction way */
+
+/* Per-CPU miss queues: appended (write-through) during concurrent compose,
+ * drained by the master in the next window. */
+static uint16_t missq[2][256];
+static volatile uint16_t miss_n[2];
+
+/* Placeholder pixels for uncached tiles: all pen 0 -> the tile color's
+ * base entry. Must be RAM (.bss), never ROM — it is read at RV=1. */
+static uint8_t blank_tile[64] __attribute__((aligned(4)));
+
+/* Color maps, double-buffered by window parity (slave prescans par^1
+ * during window N; both CPUs compose frame N+1 from par^1 after the
+ * toggle). */
+static uint8_t tile_grp[2][128];
+static uint8_t spr_pair[2][64];
+#define BG0_GRP 8                           /* opaque BG must never emit
+                                             * pixel value 0 (MD-through) */
+
+#define SBUF_W 336
+#define SBUF_H 240
+static uint8_t sbuf[SBUF_W * SBUF_H] __attribute__((aligned(4)));
+
+static inline uint16_t s16_to_mars(uint16_t v)
+{
+    uint16_t r = ((v >> 12) & 0x01) | ((v << 1) & 0x1e);
+    uint16_t g = ((v >> 13) & 0x01) | ((v >> 3) & 0x1e);
+    uint16_t b = ((v >> 14) & 0x01) | ((v >> 7) & 0x1e);
+    return (uint16_t)((b << 10) | (g << 5) | r);
+}
 
 static inline uint16_t frt(void)
 {
@@ -92,82 +108,90 @@ static inline void diag_add(int slot, uint16_t t0)
     DIAG[slot] += (uint16_t)(frt() - t0);
 }
 
-/* This frame's color maps, built by the master's prescan, read by both. */
-/* Color maps, DOUBLE-BUFFERED by window parity: the slave builds set
- * par^1 (for the next window) after finishing its compose half, while the
- * master is still composing/blitting from set par — full overlap, no
- * races, at the cost of colors lagging the scene by one window. */
-static uint8_t tile_grp[2][128];            /* s16 tile color -> 8-pen group */
-static uint8_t spr_pair[2][64];             /* sprite color -> 16-pen pair */
-#define BG0_GRP 8                           /* fixed alias group for BG color
-                                             * 0: pixel VALUE 0 is transparent-
-                                             * to-MD on hardware/ares, so the
-                                             * opaque BG must never emit it */
-
-/* Composed frame, PADDED so scroll fine-offsets never need clipping: 8px on
- * every side; visible pixel (x,y) lives at [8+x + (8+y)*336]. Compose ONCE
- * per frame here (cached, write-through), then blit to BOTH framebuffers —
- * composing is the expensive half, blitting is cheap 32-bit streaming. */
-#define SBUF_W 336
-#define SBUF_H 240
-static uint8_t sbuf[SBUF_W * SBUF_H] __attribute__((aligned(4)));
-
-/* Screen-row clip per CPU (sbuf rows are screen+8). */
-#define CLIP_LO(cpu) ((cpu) ? 0 : 112)
-#define CLIP_HI(cpu) ((cpu) ? 112 : 224)
-
-/* System-16 palette word  sBGR BBBB GGGG RRRR  ->  32X BGR555. */
-static inline uint16_t s16_to_mars(uint16_t v)
+static inline void cache_purge(void)
 {
-    uint16_t r = ((v >> 12) & 0x01) | ((v << 1) & 0x1e);
-    uint16_t g = ((v >> 13) & 0x01) | ((v >> 3) & 0x1e);
-    uint16_t b = ((v >> 14) & 0x01) | ((v >> 7) & 0x1e);
-    return (uint16_t)((b << 10) | (g << 5) | r);
+    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
 }
 
-/* Layer register fetch, shared by prescan and compose. */
+/* Cache lookup during compose. Returns pixel pointer; on miss, queues the
+ * folded code (dup-tolerant; fills re-check tags) and returns the blank
+ * placeholder. always_inline: an outlined copy would land in .text (cart
+ * ROM), and this runs at RV=1 where ROM fetch is forbidden. */
+/* Set index: XOR-fold the high code bits so sequential art ranges (which
+ * alias every 512 codes) spread across sets instead of thrashing a way. */
+#define CACHE_SET(code) (((code) ^ ((code) >> 9)) & (NSETS - 1))
+
+__attribute__((always_inline))
+static inline const uint8_t *tile_pixels(unsigned code, int cpu)
+{
+    unsigned set = CACHE_SET(code);
+    if (cache_tag[set * 2] == code)
+        return CACHE_C + (set * 2) * 64;
+    if (cache_tag[set * 2 + 1] == code)
+        return CACHE_C + (set * 2 + 1) * 64;
+    uint16_t n = miss_n[cpu];
+    if (n < 256) {
+        missq[cpu][n] = (uint16_t)code;
+        miss_n[cpu] = (uint16_t)(n + 1);
+    }
+    return blank_tile;
+}
+
 typedef struct {
-    uint8_t pq[4];                          /* [vy9*2+vx9] quadrant page */
-    int vx0, vy0;                           /* virtual xy of screen (0,0) */
+    uint8_t pq[4];
+    int vx0, vy0;
 } layer_regs;
 
-RAMCODE static void get_layer_regs(int which, layer_regs *lr)
+/* Scroll/page registers are LATCHED once per window into this snapshot,
+ * used by BOTH the prescan and the whole of the next frame's compose.
+ * The game (running concurrently now) mutates the live regs continuously;
+ * without the latch, compose sees rows/columns the prescan never colored
+ * (garish placeholder tiles at the screen edges). Real System 16B latches
+ * these at scanline 261 — this mirrors the hardware. */
+static layer_regs snap[2];
+
+RAMCODE static void latch_layer_regs(void)
 {
-    uint16_t pages = TEXT_C[0x740 + which];
-    uint16_t ysc   = TEXT_C[0x748 + which] & 0x1FF;
-    uint16_t xsc   = TEXT_C[0x74C + which] & 0x1FF;
-    lr->pq[0] = (pages >> 4) & 0xF;
-    lr->pq[1] = pages & 0xF;
-    lr->pq[2] = (pages >> 12) & 0xF;
-    lr->pq[3] = (pages >> 8) & 0xF;
-    lr->vx0 = (0 - ((0xC0 - xsc) & 0x3FF)) & 0x3FF;
-    lr->vy0 = (0 - ysc) & 0x1FF;
+    for (int which = 0; which < 2; which++) {
+        layer_regs *lr = &snap[which];
+        uint16_t pages = TEXT_C[0x740 + which];
+        uint16_t ysc   = TEXT_C[0x748 + which] & 0x1FF;
+        uint16_t xsc   = TEXT_C[0x74C + which] & 0x1FF;
+        /* 16 selectable pages, but the game only writes 0-11; 12-15 all
+         * map to the single blank page 12 of the shadow. */
+        uint8_t p;
+        p = (pages >> 4) & 0xF;  lr->pq[0] = p > 12 ? 12 : p;
+        p = pages & 0xF;         lr->pq[1] = p > 12 ? 12 : p;
+        p = (pages >> 12) & 0xF; lr->pq[2] = p > 12 ? 12 : p;
+        p = (pages >> 8) & 0xF;  lr->pq[3] = p > 12 ? 12 : p;
+        lr->vx0 = (0 - ((0xC0 - xsc) & 0x3FF)) & 0x3FF;
+        lr->vy0 = (0 - ysc) & 0x1FF;
+    }
 }
 
-/* Prescan (run on the SLAVE, into the off-parity map set): collect every
- * color the staging currently references and assign CRAM groups — tiles
- * ascending from 9 (8 = BG0_GRP alias), sprite pairs descending from 15,
- * overflow clamps where they meet. Deterministic, once per window. */
-RAMCODE static void build_maps(int par)
+/* Prescan (slave, in-window): visible tilemap + sprite list -> color
+ * groups for the NEXT window's frame. Tiles ascend from BG0_GRP+1,
+ * sprite pairs descend from 15. */
+RAMCODE static void build_maps(int par, uint16_t bank1)
 {
     uint8_t tused[128], sused[64];
     for (int i = 0; i < 128; i++) tused[i] = 0;
     for (int i = 0; i < 64; i++) sused[i] = 0;
+    (void)bank1;
 
     for (int which = 0; which < 2; which++) {
-        layer_regs lr;
-        get_layer_regs(which, &lr);
-        int yf = lr.vy0 & 7;
+        const layer_regs *lr = &snap[which];
+        int yf = lr->vy0 & 7;
         int nrows = yf ? 29 : 28;
         for (int r = 0; r < nrows; r++) {
-            int vy = (lr.vy0 - yf + r * 8) & 0x1FF;
+            int vy = (lr->vy0 - yf + r * 8) & 0x1FF;
             int trow = (vy >> 3) & 0x1F;
             int qy = (vy & 0x100) ? 2 : 0;
-            const uint16_t *pg;
-            for (int c = 0; c <= 40; c++) {
-                int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
-                pg = TILEMAP_C + lr.pq[qy + ((vx >> 9) & 1)] * 0x800;
-                tused[(pg[trow * 64 + ((vx >> 3) & 0x3F)] >> 6) & 0x7F] = 1;
+            for (int c = 0; c <= 41; c++) {      /* 42: match compose's spill */
+                int vx = ((lr->vx0 & ~7) + c * 8) & 0x3FF;
+                uint16_t w = TILEMAP_C[lr->pq[qy + ((vx >> 9) & 1)] * 0x800
+                                       + trow * 64 + ((vx >> 3) & 0x3F)];
+                tused[(w >> 6) & 0x7F] = 1;
             }
         }
     }
@@ -183,7 +207,7 @@ RAMCODE static void build_maps(int par)
     }
 
     for (int c = 0; c < 8; c++)
-        tile_grp[par][c] = (uint8_t)c;      /* identity, shared with text */
+        tile_grp[par][c] = (uint8_t)c;
     uint8_t next = BG0_GRP + 1;
     for (int c = 8; c < 128; c++)
         tile_grp[par][c] = tused[c] ? (next < 32 ? next++ : 31) : 0xFF;
@@ -200,7 +224,6 @@ RAMCODE static void build_maps(int par)
     }
 }
 
-/* CRAM from this window's map set (window start, still vblank). */
 RAMCODE static void apply_cram(int par)
 {
     volatile uint16_t *cram = &MARS_CRAM;
@@ -213,7 +236,7 @@ RAMCODE static void apply_cram(int par)
         for (int p = 0; p < 8; p++)
             dst[p] = s16_to_mars(src[p]);
     }
-    for (int p = 0; p < 8; p++)             /* BG color-0 alias group */
+    for (int p = 0; p < 8; p++)
         cram[BG0_GRP * 8 + p] = s16_to_mars(PAL_C[p]);
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
@@ -226,20 +249,16 @@ RAMCODE static void apply_cram(int par)
     }
 }
 
-/* Compose one tile layer into sbuf. opaque=1: BG — PACKED 32-bit path:
- * per tile row, decode all 42 cells once (pointer + per-tile color base
- * replicated across 4 lanes; pens are <=7 so base+pen never carries
- * across byte lanes), then per line pre-add the base and shift-merge
- * adjacent tiles' rows so every store is an ALIGNED uint32 despite the
- * fine-x scroll. opaque=0: FG — byte path, pen 0 transparent, tile-0
- * skip. Rows clip to the CPU's fixed screen seam. */
-RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1, int par)
+/* Compose one tile layer's SCREEN ROW RANGE [ylo,yhi) into sbuf from the
+ * SDRAM cache (legal at RV=1). opaque=1: BG packed 32-bit path; 0: FG
+ * byte path. Callers pick ranges: master (112,224), slave 16px strips. */
+RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
+                                  int opaque, uint16_t bank1, int par)
 {
-    layer_regs lr;
-    get_layer_regs(which, &lr);
+    const layer_regs lr = snap[which];       /* latched once per window */
     int xf = lr.vx0 & 7, yf = lr.vy0 & 7;
     int nrows = yf ? 29 : 28;
-    int blo = 8 + CLIP_LO(cpu), bhi = 8 + CLIP_HI(cpu);
+    int blo = 8 + ylo, bhi = 8 + yhi;
     const uint8_t *tg = tile_grp[par];
     const uint32_t s = (uint32_t)(xf * 8);
 
@@ -247,7 +266,7 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
     uint32_t tbase[42];
 
     for (int r = 0; r < nrows; r++) {
-        int by = 8 - yf + r * 8;                    /* buffer y of tile row top */
+        int by = 8 - yf + r * 8;
         int l0 = blo - by, l1 = bhi - by;
         if (l0 < 0) l0 = 0;
         if (l1 > 8) l1 = 8;
@@ -258,7 +277,6 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
         int qy = (vy & 0x100) ? 2 : 0;
 
         if (opaque) {
-            /* decode pass: 41 visible cells + 1 spill for the merge */
             for (int c = 0; c <= 41; c++) {
                 int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
                 uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
@@ -266,16 +284,14 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
                 unsigned code = w & 0x1FFF;
                 if (code & 0x1000)
                     code = (code & 0xFFF) + bank1 * 0x1000u;
-                tptr[c] = altbeast_tiles + code * 64;
+                tptr[c] = tile_pixels(code, cpu);
                 uint8_t g = tg[(w >> 6) & 0x7F];
                 if (g == 0xFF)
                     g = 31;
                 else if (g == 0)
-                    g = BG0_GRP;                    /* never emit pixel value 0 */
+                    g = BG0_GRP;
                 tbase[c] = (uint32_t)(g << 3) * 0x01010101u;
             }
-            /* Shift case hoisted out of the pixel loop (s is fixed per
-             * frame; the in-loop branch chain cost ~20% of BG compose). */
             for (int y = l0; y < l1; y++) {
                 uint32_t *dst = (uint32_t *)(sbuf + (by + y) * SBUF_W + 8);
                 const uint32_t *t0 = (const uint32_t *)(tptr[0] + y * 8);
@@ -333,17 +349,17 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
 
         /* FG byte path */
         uint8_t *drow = sbuf + (by + l0) * SBUF_W + (8 - xf);
-        for (int c = 0; c <= 40; c++) {             /* 41 tiles cover 320+xf px */
+        for (int c = 0; c <= 40; c++) {
             int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
             uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
                                    + trow * 64 + ((vx >> 3) & 0x3F)];
             uint8_t *dst = drow + c * 8;
-            if (w == 0)                             /* tile 0 is blank */
+            if (w == 0)
                 continue;
             unsigned code = w & 0x1FFF;
             if (code & 0x1000)
                 code = (code & 0xFFF) + bank1 * 0x1000u;
-            const uint8_t *tp = altbeast_tiles + code * 64 + l0 * 8;
+            const uint8_t *tp = tile_pixels(code, cpu) + l0 * 8;
             uint8_t g = tg[(w >> 6) & 0x7F];
             uint8_t base = (uint8_t)((g == 0xFF ? 31 : g) << 3);
             for (int y = l0; y < l1; y++) {
@@ -362,21 +378,19 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
     }
 }
 
-/* Sprites from the FB staging list (read in place; compose precedes any
- * flip). Faithful to sega16sp.cpp sega_sys16b_sprite_device::draw. */
-RAMCODE static void compose_sprites(int cpu, int par)
+/* Sprites: IN-WINDOW (reads cart ROM + FB staging list in place).
+ * Faithful to sega16sp.cpp; see NOTES. Row clip [ymin,ymax). */
+RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
-    int ymin = CLIP_LO(cpu), ymax = CLIP_HI(cpu);
-
     for (int i = 0; i < 64; i++) {
         volatile uint16_t *e = FB_SPR + i * 8;
         uint16_t d2 = e[2];
         if (d2 & 0x8000)
-            break;                                  /* end of list */
+            break;
         uint16_t d0 = e[0];
         int top = d0 & 0xFF, bottom = d0 >> 8;
         if ((d2 & 0x4000) || top >= bottom)
-            continue;                               /* hidden / degenerate */
+            continue;
         int xpos = e[1] & 0x1FF;
         int flip = d2 & 0x100;
         int pitch = (int8_t)(d2 & 0xFF);
@@ -389,24 +403,20 @@ RAMCODE static void compose_sprites(int cpu, int par)
         uint16_t yacc = 0;
 
         for (int y = top; y < bottom; y++) {
-            addr = (uint16_t)(addr + pitch);        /* pre-advance, hw order */
+            addr = (uint16_t)(addr + pitch);
             yacc = (uint16_t)(yacc + (vzoom << 10));
-            if (yacc & 0x8000) {                    /* vzoom skips a row */
+            if (yacc & 0x8000) {
                 addr = (uint16_t)(addr + pitch);
                 yacc &= 0x7FFF;
             }
             if (y < ymin || y >= ymax)
-                continue;                           /* other CPU / offscreen */
+                continue;
 
             uint8_t *row = sbuf + (8 + y) * SBUF_W + 8;
             int x = xpos;
             uint16_t o = addr;
             int pix = 0;
             if (!flip && hzoom == 0) {
-                /* Fast path (most sprites): 1:1, left-to-right. x only
-                 * increments, so past column 503 nothing can be visible
-                 * (screen x = x-184) — bail without scanning to the
-                 * terminator. Pen test pen-1 < 14 covers 1..14. */
                 while (x < 504) {
                     uint16_t w = sd[o++];
                     unsigned sx;
@@ -431,11 +441,9 @@ RAMCODE static void compose_sprites(int cpu, int par)
                         row[sx] = (uint8_t)(base + pix);
                     x++;
                     if (pix == 15)
-                        break;                      /* row terminator */
+                        break;
                 }
             } else if (hzoom == 0) {
-                /* Flipped 1:1: same as the fast path with the source word
-                 * order and nibble order reversed. */
                 while (x < 504) {
                     uint16_t w = sd[o--];
                     unsigned sx;
@@ -460,7 +468,7 @@ RAMCODE static void compose_sprites(int cpu, int par)
                         row[sx] = (uint8_t)(base + pix);
                     x++;
                     if (pix == 15)
-                        break;                      /* row terminator */
+                        break;
                 }
             } else {
                 int xacc = 4 * hzoom;
@@ -472,7 +480,7 @@ RAMCODE static void compose_sprites(int cpu, int par)
                                    : ((w >> (12 - 4 * n)) & 0xF);
                         xacc = (xacc & 0x3F) + hzoom;
                         if (xacc < 0x40) {
-                            unsigned sx = (unsigned)(x - 184);  /* screen x */
+                            unsigned sx = (unsigned)(x - 184);
                             if (sx < 320 && pix != 0 && pix != 15)
                                 row[sx] = (uint8_t)(base + pix);
                             x++;
@@ -481,29 +489,24 @@ RAMCODE static void compose_sprites(int cpu, int par)
                         }
                     }
                     if (pix == 15)
-                        break;                      /* row terminator */
+                        break;
                     if (x >= 504)
-                        break;                      /* x is monotonic in every
-                                                     * mode: nothing visible
-                                                     * past column 503 */
+                        break;
                 }
             }
         }
     }
 }
 
-/* Text layer on top: screen-aligned, cols 24..63 = the visible 320px.
- * Pen 0 transparent; colors 0-7 are the identity CRAM groups. Row seam at
- * 14 aligns exactly with the pixel seam (14*8 = 112). */
-RAMCODE static void compose_text(int cpu)
+/* Text: IN-WINDOW (ROM glyphs), above sprites. Row range [row0,row1). */
+RAMCODE static void compose_text(int row0, int row1)
 {
-    int row0 = cpu ? 0 : 14, row1 = cpu ? 14 : 28;
     for (int row = row0; row < row1; row++) {
         for (int col = 24; col < 64; col++) {
             uint16_t d = TEXT_C[row * 64 + col];
             unsigned code = d & 0x1FF;
             if (code == 0 && !(d & 0x0E00))
-                continue;                           /* blank glyph fast path */
+                continue;
             const uint8_t *tp = altbeast_tiles + code * 64;
             uint8_t base = (uint8_t)(((d >> 9) & 7) << 3);
             uint8_t *dst = sbuf + (8 + row * 8) * SBUF_W + 8 + (col - 24) * 8;
@@ -523,21 +526,62 @@ RAMCODE static void compose_text(int cpu)
     }
 }
 
-/* Slave's half of the render window: purge its cache (it reads the shadows
- * and the color maps through its own cache; write-through keeps SDRAM
- * true), compose the top half from map set `par`, then PRESCAN the next
- * window's maps into set par^1 — overlapping the master's compose+blits. */
-RAMCODE void slave_render(uint16_t bank1, int par)
+/* Drain both miss queues: copy tiles ROM -> cache (in-window; RV=0).
+ * Budgeted; duplicates and already-filled codes skipped by tag check. */
+RAMCODE static void cache_fill(int budget)
 {
-    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
-    compose_layer(1, 1, 1, bank1, par);          /* BG opaque, rows 0-111 */
-    compose_layer(1, 0, 0, bank1, par);          /* FG transparent */
-    compose_sprites(1, par);
-    compose_text(1);
-    build_maps(par ^ 1);                         /* next window's colors */
+    for (int q = 0; q < 2; q++) {
+        uint16_t n = miss_n[q];
+        if (n > 256)
+            n = 256;
+        for (uint16_t i = 0; i < n && budget; i++) {
+            unsigned code = missq[q][i];
+            unsigned set = CACHE_SET(code);
+            if (cache_tag[set * 2] == code || cache_tag[set * 2 + 1] == code)
+                continue;
+            unsigned way = cache_rot[set] & 1;
+            cache_rot[set] ^= 1;
+            cache_tag[set * 2 + way] = (uint16_t)code;
+            const uint32_t *src = (const uint32_t *)(altbeast_tiles + code * 64);
+            uint32_t *dst = (uint32_t *)(CACHE_C + (set * 2 + way) * 64);
+            for (int k = 0; k < 16; k += 4) {
+                dst[k + 0] = src[k + 0];
+                dst[k + 1] = src[k + 1];
+                dst[k + 2] = src[k + 2];
+                dst[k + 3] = src[k + 3];
+            }
+            budget--;
+        }
+        miss_n[q] = 0;
+    }
 }
 
-/* Stream the composed frame to the current access framebuffer, 32-bit. */
+/* Slave entry points (called from s_main; see the command mailbox). */
+RAMCODE void slave_window_half(uint16_t bank1, int par)
+{
+    cache_purge();
+    compose_sprites(0, 112, par);
+    compose_text(0, 14);
+    build_maps(par ^ 1, bank1);
+}
+
+RAMCODE void slave_tile_half(uint16_t bank1, int par)
+{
+    /* 16px strips so the slave can service MD stream batches between
+     * strips (the MD's window-entry drain waits on the last batch ack —
+     * keep that latency well under a millisecond). */
+    extern void slave_service_stream(void);
+    cache_purge();
+    for (int y = 0; y < 112; y += 16) {
+        compose_layer(y, y + 16, 1, 1, 1, bank1, par);
+        slave_service_stream();
+    }
+    for (int y = 0; y < 112; y += 16) {
+        compose_layer(y, y + 16, 1, 0, 0, bank1, par);
+        slave_service_stream();
+    }
+}
+
 RAMCODE static void blit_frame(void)
 {
     for (int y = 0; y < 224; y++) {
@@ -557,35 +601,52 @@ RAMCODE static void blit_frame(void)
     }
 }
 
+RAMCODE static void slave_cmd(uint16_t cmd)
+{
+    SYNC[1] = 0;
+    SYNC[0] = cmd;
+}
+
+RAMCODE static void slave_wait(uint16_t cmd)
+{
+    while (SYNC[1] != cmd) ;
+    SYNC[0] = 0;
+}
+
 RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
     MARS_SYS_COMM4 = 0;
 
     Hw32xInit(MARS_VDP_MODE_256, 0);
-
-    /* 32X layer above the game's (unused) MD VDP layer. */
     MARS_VDP_DISPMODE = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X | MARS_VDP_MODE_256;
 
-    for (int i = 0; i < 16 * 0x800; i++)            /* all 16 selectable pages:
-                                                     * 12-15 stay zero (blank) */
+    for (int i = 0; i < 13 * 0x800; i++)
         TILEMAP_U[i] = 0;
     for (int i = 0; i < 2048; i++)
         TEXT_U[i] = 0;
     for (int i = 0; i < 2048; i++)
         PAL_U[i] = 0;
+    for (int i = 0; i < NSETS * 2; i++)
+        cache_tag[i] = 0xFFFF;
+    for (int i = 0; i < NSETS; i++)
+        cache_rot[i] = 0;
+    miss_n[0] = miss_n[1] = 0;
+    for (int i = 0; i < 64; i++)
+        blank_tile[i] = 0;
     for (int k = 0; k < 2; k++) {
         for (int i = 0; i < 128; i++)
             tile_grp[k][i] = (uint8_t)(i < 8 ? i : 0xFF);
         for (int i = 0; i < 64; i++)
             spr_pair[k][i] = 0xFF;
     }
+    SYNC[0] = SYNC[1] = 0;
 
     volatile uint16_t *cram = &MARS_CRAM;
     for (int i = 0; i < 256; i++)
         cram[i] = 0;
 
-    SH2_FRT_TCR = 1;                            /* FRC = sysclk/32, ~1.37us */
+    SH2_FRT_TCR = 1;
     for (int i = 0; i < 16; i++)
         DIAG[i] = 0;
 
@@ -594,120 +655,105 @@ RAMCODE void m_main(void)
 
     uint16_t copy_rotor = 0;
     int par = 0;
+    uint16_t last_bank = 0;
+    uint16_t tile_cmd = 0;                   /* outstanding CMD_TILE, if any */
 
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
-        if (c0 == 0x2000) {                      /* RENDER window (RV=0, FM=1) */
-            uint16_t bank1 = MARS_SYS_COMM2 & 7;
-            uint16_t tw = frt(), tp = tw;
+        if (c0 != 0x2000)
+            continue;                        /* stream is the slave's job */
 
-            /* 1. Tilemap page copy — BEFORE any flip, while the access bank
-             * is still the one the game stages into. 32-bit streaming. */
-            for (int n = 0; n < 2; n++) {
-                volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + copy_rotor * 0x800);
-                volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + copy_rotor * 0x800);
-                for (int i = 0; i < 0x400; i += 8) {
-                    dst[i + 0] = src[i + 0];
-                    dst[i + 1] = src[i + 1];
-                    dst[i + 2] = src[i + 2];
-                    dst[i + 3] = src[i + 3];
-                    dst[i + 4] = src[i + 4];
-                    dst[i + 5] = src[i + 5];
-                    dst[i + 6] = src[i + 6];
-                    dst[i + 7] = src[i + 7];
-                }
-                copy_rotor++;
-                if (copy_rotor >= NPAGES)
-                    copy_rotor = 0;
-            }
-            diag_add(0, tp);
+        /* ---- WINDOW (RV=0, FM=1, 68K stalled) ---- */
+        uint16_t bank1 = MARS_SYS_COMM2 & 7;
+        uint16_t tw = frt(), tp = tw;
+        last_bank = bank1;
 
-            /* 2. Purge the cache: the renderer reads the shadows through the
-             * cached mirror, and the COMM loop/copy wrote them uncached. */
-            *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
-
-            /* 3. CRAM from the map set the SLAVE prescanned last window
-             * (colors lag the scene by one window), then compose — split
-             * across both SH-2s; the slave also prescans the NEXT set
-             * while the master blits, so the two timelines fully overlap. */
-            tp = frt();
-            apply_cram(par);
-            diag_add(2, tp);
-            MARS_SYS_COMM6 = 0;                  /* clear stale stream data */
-            MARS_SYS_COMM4 = (uint16_t)(0xC000 | ((uint16_t)par << 8) | bank1);
-            tp = frt();
-            compose_layer(0, 1, 1, bank1, par);  /* BG opaque, rows 112-223 */
-            diag_add(10, tp);
-            tp = frt();
-            compose_layer(0, 0, 0, bank1, par);  /* FG transparent */
-            diag_add(11, tp);
-            tp = frt();
-            compose_sprites(0, par);
-            diag_add(12, tp);
-            tp = frt();
-            compose_text(0);
-            diag_add(13, tp);
-
-            /* Dual-bank blit with VERIFIED flips. ares (and per the hw
-             * manual, real hardware outside vblank) LATCHES FBCTL writes at
-             * the next vblank — two blind toggles collapse into a net ONE
-             * flip, the access bank alternates every window, and the game's
-             * staged tile/sprite writes tear across banks (proven by the
-             * MD-side FS tracer: torn=1 ares, torn=0 MAME). So: wait for
-             * the mid-window flip to actually latch before the second
-             * blit, and restore FS as an ABSOLUTE value (the MD also waits
-             * for that restore to latch before resuming the game).
-             *
-             * Bank fs0 is DISPLAYED only for the few ms between the two
-             * latches, so it only needs to stay roughly fresh: blit it
-             * every 8th window and save ~2ms on the rest. */
-            {
-                uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
-                uint32_t guard = 4000000;
-                tp = frt();
-                if ((DIAG[9] & 7) == 0)
-                    blit_frame();
-                diag_add(5, tp);
-                MARS_VDP_FBCTL = fs0 ^ 1;
-                tp = frt();
-                while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
-                diag_add(6, tp);
-                tp = frt();
-                blit_frame();
-                diag_add(7, tp);
-                MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
-            }
-
-            tp = frt();
-            while (MARS_SYS_COMM6 != 0xD0) ;     /* slave compose+prescan done */
-            MARS_SYS_COMM4 = 0;                  /* slave: idle (it clears COMM6) */
-            diag_add(4, tp);
-            par ^= 1;
-
-            diag_add(8, tw);
-            DIAG[9]++;
-
-            MARS_SYS_COMM0 = 0;                  /* ack: MD restores FM/RV */
-        } else if (c0 & 0x8000) {                /* palette batch (RV=1 ok) */
-            int idx = c0 & 0x7FF;
-            PAL_U[(idx + 0) & 0x7FF] = MARS_SYS_COMM2;
-            PAL_U[(idx + 1) & 0x7FF] = MARS_SYS_COMM4;
-            PAL_U[(idx + 2) & 0x7FF] = MARS_SYS_COMM6;
-            PAL_U[(idx + 3) & 0x7FF] = MARS_SYS_COMM8;
-            PAL_U[(idx + 4) & 0x7FF] = MARS_SYS_COMM10;
-            MARS_SYS_COMM0 = 0;                  /* ack */
-        } else if (c0 & 0x4000) {                /* text batch (RV=1 ok) */
-            int idx = c0 & 0x7FF;
-            uint16_t w0 = MARS_SYS_COMM2, w1 = MARS_SYS_COMM4, w2 = MARS_SYS_COMM6;
-            uint16_t w3 = MARS_SYS_COMM8, w4 = MARS_SYS_COMM10;
-            if (idx + 4 < 2048) {
-                TEXT_U[idx + 0] = w0;
-                TEXT_U[idx + 1] = w1;
-                TEXT_U[idx + 2] = w2;
-                TEXT_U[idx + 3] = w3;
-                TEXT_U[idx + 4] = w4;
-            }
-            MARS_SYS_COMM0 = 0;                  /* ack */
+        if (tile_cmd) {                      /* concurrent compose finished? */
+            slave_wait(tile_cmd);
+            tile_cmd = 0;
         }
+        diag_add(4, tp);
+
+        /* Staging page copy (before any flip). */
+        tp = frt();
+        for (int n = 0; n < 2; n++) {
+            volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + copy_rotor * 0x800);
+            volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + copy_rotor * 0x800);
+            for (int i = 0; i < 0x400; i += 8) {
+                dst[i + 0] = src[i + 0];
+                dst[i + 1] = src[i + 1];
+                dst[i + 2] = src[i + 2];
+                dst[i + 3] = src[i + 3];
+                dst[i + 4] = src[i + 4];
+                dst[i + 5] = src[i + 5];
+                dst[i + 6] = src[i + 6];
+                dst[i + 7] = src[i + 7];
+            }
+            copy_rotor++;
+            if (copy_rotor >= NPAGES)
+                copy_rotor = 0;
+        }
+        diag_add(0, tp);
+
+        cache_purge();
+        latch_layer_regs();                  /* scanline-261-style reg latch:
+                                              * prescan + all of next frame's
+                                              * compose use this snapshot */
+
+        tp = frt();
+        apply_cram(par);
+        diag_add(2, tp);
+
+        tp = frt();
+        cache_fill(256);
+        diag_add(1, tp);
+
+        /* Sprites + text, split; slave also prescans next maps. */
+        slave_cmd((uint16_t)(CMD_WIN | (par << 8) | bank1));
+        tp = frt();
+        compose_sprites(112, 224, par);
+        diag_add(12, tp);
+        tp = frt();
+        compose_text(14, 28);
+        diag_add(13, tp);
+
+        /* Verified-flip dual blit (see NOTES: deferred FBCTL latching). */
+        {
+            uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
+            uint32_t guard = 4000000;
+            tp = frt();
+            if ((DIAG[9] & 7) == 0)
+                blit_frame();
+            diag_add(5, tp);
+            MARS_VDP_FBCTL = fs0 ^ 1;
+            tp = frt();
+            while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
+            diag_add(6, tp);
+            tp = frt();
+            blit_frame();
+            diag_add(7, tp);
+            MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
+        }
+
+        tp = frt();
+        slave_wait((uint16_t)(CMD_WIN | (par << 8) | bank1));
+        diag_add(3, tp);
+        par ^= 1;
+
+        diag_add(8, tw);
+        DIAG[9]++;
+
+        MARS_SYS_COMM0 = 0;                  /* ack: MD restores FM/RV, game runs */
+
+        /* ---- CONCURRENT (RV=1, game running): next frame's tiles ---- */
+        cache_purge();
+        tile_cmd = (uint16_t)(CMD_TILE | (par << 8) | last_bank);
+        slave_cmd(tile_cmd);
+        tp = frt();
+        compose_layer(112, 224, 0, 1, 1, last_bank, par);   /* BG bottom */
+        diag_add(10, tp);
+        tp = frt();
+        compose_layer(112, 224, 0, 0, 0, last_bank, par);   /* FG bottom */
+        diag_add(11, tp);
     }
 }

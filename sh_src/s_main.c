@@ -5,29 +5,67 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 {
 }
 
-extern void slave_render(uint16_t bank1, int par);  /* m_main.c, .ramtext */
+#define TEXT_U      ((volatile uint16_t *)0x26025000)
+#define PAL_U       ((volatile uint16_t *)0x26026000)
+#define SYNC        ((volatile uint16_t *)0x26027800)
 
-/* Secondary SH-2: heartbeat on COMM6 so the MD's boot can prove the slave
- * reached SDRAM code. It must stop free-running once the game starts: the
- * MD->master stream carries batch data through COMM6, and a wild increment
- * races those words (latent corruption the emulators' coarse scheduling
- * mostly hid). The MD posts 0xB007 on COMM14 after it has consumed the
- * heartbeat, strictly before the game (and the stream) start.
- *
- * After that: render worker. Master posts 0xC000|bank on COMM4 inside each
- * render window; slave composes the top half of the frame into sbuf, posts
- * 0xD0 on COMM6, and clears COMM6 once the master lowers the command
- * (COMM6 belongs to the MD stream between windows). */
+extern void slave_window_half(uint16_t bank1, int par);  /* m_main.c .ramtext */
+extern void slave_tile_half(uint16_t bank1, int par);
+
+/* MD stream servicing lives on the SLAVE now: the master spends the
+ * inter-window gap composing tiles, so it can't poll COMM0. Batches are
+ * MD-written COMM payloads; acking = clearing COMM0. The 0x2000 render
+ * command is left for the master (distinct pattern; both CPUs poll, only
+ * one consumes each kind). */
+__attribute__((section(".ramtext"))) void slave_service_stream(void)
+{
+    uint16_t c0 = MARS_SYS_COMM0;
+    if (c0 & 0x8000) {                       /* palette batch */
+        int idx = c0 & 0x7FF;
+        PAL_U[(idx + 0) & 0x7FF] = MARS_SYS_COMM2;
+        PAL_U[(idx + 1) & 0x7FF] = MARS_SYS_COMM4;
+        PAL_U[(idx + 2) & 0x7FF] = MARS_SYS_COMM6;
+        PAL_U[(idx + 3) & 0x7FF] = MARS_SYS_COMM8;
+        PAL_U[(idx + 4) & 0x7FF] = MARS_SYS_COMM10;
+        MARS_SYS_COMM0 = 0;
+    } else if (c0 & 0x4000) {                /* text batch */
+        int idx = c0 & 0x7FF;
+        uint16_t w0 = MARS_SYS_COMM2, w1 = MARS_SYS_COMM4, w2 = MARS_SYS_COMM6;
+        uint16_t w3 = MARS_SYS_COMM8, w4 = MARS_SYS_COMM10;
+        if (idx + 4 < 2048) {
+            TEXT_U[idx + 0] = w0;
+            TEXT_U[idx + 1] = w1;
+            TEXT_U[idx + 2] = w2;
+            TEXT_U[idx + 3] = w3;
+            TEXT_U[idx + 4] = w4;
+        }
+        MARS_SYS_COMM0 = 0;
+    }
+}
+
+/* Secondary SH-2: boot heartbeat on COMM6 until the MD's 0xB007 beacon
+ * (proves the slave reached SDRAM code), then: render worker + stream
+ * servicer. Commands arrive via the SDRAM SYNC mailbox — NOT the COMM
+ * registers, which carry MD stream payloads whenever the game runs. */
 __attribute__((section(".ramtext"))) void s_main(void)
 {
     while (MARS_SYS_COMM14 != 0xB007)
         MARS_SYS_COMM6++;
+
     for (;;) {
-        if ((MARS_SYS_COMM4 & 0xF000) == 0xC000) {
-            slave_render(MARS_SYS_COMM4 & 7, (MARS_SYS_COMM4 >> 8) & 1);
-            MARS_SYS_COMM6 = 0xD0;
-            while ((MARS_SYS_COMM4 & 0xF000) == 0xC000) ;
-            MARS_SYS_COMM6 = 0;
+        uint16_t cmd = SYNC[0];
+        if (cmd & 0xF000) {
+            uint16_t bank1 = cmd & 7;
+            int par = (cmd >> 8) & 1;
+            if ((cmd & 0xF000) == 0x1000)
+                slave_window_half(bank1, par);
+            else
+                slave_tile_half(bank1, par);
+            SYNC[1] = cmd;                   /* done */
+            while (SYNC[0] == cmd)           /* wait master clear; keep the */
+                slave_service_stream();      /* stream alive meanwhile */
+        } else {
+            slave_service_stream();
         }
     }
 }
