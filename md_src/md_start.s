@@ -251,6 +251,7 @@ get_input:
 
 	.global _vblank
 _vblank:
+		move.l	2(sp),(0xFFB0F8)	/* diagnostics: interrupted (game) PC */
 		movem.l	d0-d7/a0-a6,-(sp)
 		jsr		shim_vblank			/* C shim: MCU duties (md_main.c) */
 		movem.l	(sp)+,d0-d7/a0-a6

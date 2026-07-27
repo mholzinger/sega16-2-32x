@@ -88,8 +88,9 @@ static uint8_t spr_pair[2][64];
 #define SBUF_H 240
 static uint8_t sbuf[SBUF_W * SBUF_H] __attribute__((aligned(4)));
 
-static inline uint16_t s16_to_mars(uint16_t v)
+static inline uint16_t s16_to_mars(uint16_t vv)
 {
+    unsigned v = vv;                        /* unsigned shifts: no libgcc */
     uint16_t r = ((v >> 12) & 0x01) | ((v << 1) & 0x1e);
     uint16_t g = ((v >> 13) & 0x01) | ((v >> 3) & 0x1e);
     uint16_t b = ((v >> 14) & 0x01) | ((v >> 7) & 0x1e);
@@ -185,13 +186,13 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         int nrows = yf ? 29 : 28;
         for (int r = 0; r < nrows; r++) {
             int vy = (lr->vy0 - yf + r * 8) & 0x1FF;
-            int trow = (vy >> 3) & 0x1F;
-            int qy = (vy & 0x100) ? 2 : 0;
+            int trow = (int)(((unsigned)vy >> 3) & 0x1F);
+            int qy = (int)(((unsigned)vy >> 7) & 2);
             for (int c = 0; c <= 41; c++) {      /* 42: match compose's spill */
                 int vx = ((lr->vx0 & ~7) + c * 8) & 0x3FF;
-                uint16_t w = TILEMAP_C[lr->pq[qy + ((vx >> 9) & 1)] * 0x800
-                                       + trow * 64 + ((vx >> 3) & 0x3F)];
-                tused[(w >> 6) & 0x7F] = 1;
+                uint16_t w = TILEMAP_C[lr->pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
+                                       + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
+                tused[((unsigned)w >> 6) & 0x7F] = 1;
             }
         }
     }
@@ -273,77 +274,60 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
         if (l0 >= l1)
             continue;
         int vy = (lr.vy0 - yf + r * 8) & 0x1FF;
-        int trow = (vy >> 3) & 0x1F;
-        int qy = (vy & 0x100) ? 2 : 0;
+        int trow = (int)(((unsigned)vy >> 3) & 0x1F);
+        int qy = (int)(((unsigned)vy >> 7) & 2);
 
         if (opaque) {
             for (int c = 0; c <= 41; c++) {
                 int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
-                uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
-                                       + trow * 64 + ((vx >> 3) & 0x3F)];
+                uint16_t w = TILEMAP_C[lr.pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
+                                       + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
                 unsigned code = w & 0x1FFF;
                 if (code & 0x1000)
                     code = (code & 0xFFF) + bank1 * 0x1000u;
                 tptr[c] = tile_pixels(code, cpu);
-                uint8_t g = tg[(w >> 6) & 0x7F];
+                uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
                 if (g == 0xFF)
                     g = 31;
                 else if (g == 0)
                     g = BG0_GRP;
                 tbase[c] = (uint32_t)(g << 3) * 0x01010101u;
             }
+            /* CONSTANT-shift specialization per xf case. SH-2 has no
+             * variable-shift instruction: `a << s` with runtime s becomes
+             * a LIBGCC CALL resident in .text = CART ROM. This path runs
+             * at RV=1 where SH-2 ROM fetch is forbidden (ares kills the
+             * CPU; proven: slave PC sampled inside __ashrsi3 during the
+             * rise-from-grave hang). Constant shifts compile to native
+             * shll8/16-composed sequences — faster AND legal. */
+#define MERGE_ROW(EXPR0, EXPR1)                                             \
+                for (int c = 0; c <= 40; c++) {                             \
+                    const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+                    uint32_t b0 = tn[0] + tbase[c + 1];                     \
+                    uint32_t b1 = tn[1] + tbase[c + 1];                     \
+                    dst[0] = (EXPR0);                                       \
+                    dst[1] = (EXPR1);                                       \
+                    dst += 2;                                               \
+                    a0 = b0;                                                \
+                    a1 = b1;                                                \
+                    (void)a0; (void)b1;                                     \
+                }
             for (int y = l0; y < l1; y++) {
                 uint32_t *dst = (uint32_t *)(sbuf + (by + y) * SBUF_W + 8);
                 const uint32_t *t0 = (const uint32_t *)(tptr[0] + y * 8);
                 uint32_t a0 = t0[0] + tbase[0], a1 = t0[1] + tbase[0];
-                if (s == 0) {
-                    for (int c = 0; c <= 40; c++) {
-                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
-                        uint32_t b0 = tn[0] + tbase[c + 1];
-                        uint32_t b1 = tn[1] + tbase[c + 1];
-                        dst[0] = a0;
-                        dst[1] = a1;
-                        dst += 2;
-                        a0 = b0;
-                        a1 = b1;
-                    }
-                } else if (s < 32) {
-                    uint32_t rs = 32 - s;
-                    for (int c = 0; c <= 40; c++) {
-                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
-                        uint32_t b0 = tn[0] + tbase[c + 1];
-                        uint32_t b1 = tn[1] + tbase[c + 1];
-                        dst[0] = (a0 << s) | (a1 >> rs);
-                        dst[1] = (a1 << s) | (b0 >> rs);
-                        dst += 2;
-                        a0 = b0;
-                        a1 = b1;
-                    }
-                } else if (s == 32) {
-                    for (int c = 0; c <= 40; c++) {
-                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
-                        uint32_t b0 = tn[0] + tbase[c + 1];
-                        uint32_t b1 = tn[1] + tbase[c + 1];
-                        dst[0] = a1;
-                        dst[1] = b0;
-                        dst += 2;
-                        a0 = b0;
-                        a1 = b1;
-                    }
-                } else {
-                    uint32_t t = s - 32, rt = 32 - (s - 32);
-                    for (int c = 0; c <= 40; c++) {
-                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
-                        uint32_t b0 = tn[0] + tbase[c + 1];
-                        uint32_t b1 = tn[1] + tbase[c + 1];
-                        dst[0] = (a1 << t) | (b0 >> rt);
-                        dst[1] = (b0 << t) | (b1 >> rt);
-                        dst += 2;
-                        a0 = b0;
-                        a1 = b1;
-                    }
+                switch (s) {
+                case 0:  MERGE_ROW(a0, a1) break;
+                case 8:  MERGE_ROW((a0 << 8) | (a1 >> 24), (a1 << 8) | (b0 >> 24)) break;
+                case 16: MERGE_ROW((a0 << 16) | (a1 >> 16), (a1 << 16) | (b0 >> 16)) break;
+                case 24: MERGE_ROW((a0 << 24) | (a1 >> 8), (a1 << 24) | (b0 >> 8)) break;
+                case 32: MERGE_ROW(a1, b0) break;
+                case 40: MERGE_ROW((a1 << 8) | (b0 >> 24), (b0 << 8) | (b1 >> 24)) break;
+                case 48: MERGE_ROW((a1 << 16) | (b0 >> 16), (b0 << 16) | (b1 >> 16)) break;
+                default: MERGE_ROW((a1 << 24) | (b0 >> 8), (b0 << 24) | (b1 >> 8)) break;
                 }
             }
+#undef MERGE_ROW
             continue;
         }
 
@@ -351,8 +335,8 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
         uint8_t *drow = sbuf + (by + l0) * SBUF_W + (8 - xf);
         for (int c = 0; c <= 40; c++) {
             int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
-            uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
-                                   + trow * 64 + ((vx >> 3) & 0x3F)];
+            uint16_t w = TILEMAP_C[lr.pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
+                                   + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
             uint8_t *dst = drow + c * 8;
             if (w == 0)
                 continue;
@@ -360,7 +344,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
             if (code & 0x1000)
                 code = (code & 0xFFF) + bank1 * 0x1000u;
             const uint8_t *tp = tile_pixels(code, cpu) + l0 * 8;
-            uint8_t g = tg[(w >> 6) & 0x7F];
+            uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
             uint8_t base = (uint8_t)((g == 0xFF ? 31 : g) << 3);
             for (int y = l0; y < l1; y++) {
                 if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
@@ -471,28 +455,39 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                         break;
                 }
             } else {
+                /* Zoomed path. Nibbles unrolled with CONSTANT shifts —
+                 * a variable shift is a libgcc call on SH-2 (slow; and
+                 * kept out of habit-forming reach of the RV=1 paths). */
                 int xacc = 4 * hzoom;
+#define ZNIB(PIX_EXPR)                                                      \
+                    pix = (PIX_EXPR);                                       \
+                    xacc = (xacc & 0x3F) + hzoom;                           \
+                    if (xacc < 0x40) {                                      \
+                        unsigned sx = (unsigned)(x - 184);                  \
+                        if (sx < 320 && pix != 0 && pix != 15)              \
+                            row[sx] = (uint8_t)(base + pix);                \
+                        x++;                                                \
+                    }
                 while (((xpos - x) & 0x1FF) != 1) {
                     uint16_t w = sd[o];
                     o = (uint16_t)(flip ? o - 1 : o + 1);
-                    for (int n = 0; n < 4; n++) {
-                        pix = flip ? ((w >> (4 * n)) & 0xF)
-                                   : ((w >> (12 - 4 * n)) & 0xF);
-                        xacc = (xacc & 0x3F) + hzoom;
-                        if (xacc < 0x40) {
-                            unsigned sx = (unsigned)(x - 184);
-                            if (sx < 320 && pix != 0 && pix != 15)
-                                row[sx] = (uint8_t)(base + pix);
-                            x++;
-                            if (((xpos - x) & 0x1FF) == 1)
-                                break;
-                        }
+                    if (!flip) {
+                        ZNIB((w >> 12) & 0xF)
+                        ZNIB((w >> 8) & 0xF)
+                        ZNIB((w >> 4) & 0xF)
+                        ZNIB(w & 0xF)
+                    } else {
+                        ZNIB(w & 0xF)
+                        ZNIB((w >> 4) & 0xF)
+                        ZNIB((w >> 8) & 0xF)
+                        ZNIB((w >> 12) & 0xF)
                     }
                     if (pix == 15)
                         break;
                     if (x >= 504)
                         break;
                 }
+#undef ZNIB
             }
         }
     }

@@ -106,11 +106,17 @@ void shim_vblank(void) {
 	// ~12.8 frames; text RAM (2048 words) every ~13.
 	{
 		static uint16_t pal_idx, txt_idx;
-		uint16_t spin;
+
+		// TOTAL ack-wait budget for the whole stream section, not per
+		// batch: when the SH-2s are deep in concurrent compose they ack
+		// at ~1ms cadence, and 64 per-batch spins of 400 each trickled
+		// through at ~1ms apiece — 60+ms handler entries that starved
+		// the game into a freeze (rise-from-grave hang). Bounded total:
+		// worst case ~2ms, then yield and resume next frame.
+		uint16_t spin = 800;
 
 		for (uint16_t burst = 0; burst < 64; burst++) {
 			if (burst) {
-				spin = 400;
 				while (*mars_comm0 && --spin) ;
 				if (*mars_comm0)
 					break;               // SH-2 busy; resume next frame
