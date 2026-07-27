@@ -98,17 +98,14 @@ void shim_vblank(void) {
 	{
 		uint32_t spin2;
 		uint16_t wcmd;
-		// 4-phase cycle: compose, then THREE 75-row blit slices (was
-		// four 56-row: field-proven safe; 112-row halves overran ares'
-		// vblank — FB writes there are several times MAME's 0.27ms/56r,
-		// the flip-back deferred a frame and all-zero bank X displayed
-		// black). 75 rows probes the budget between the known-good 56
-		// and known-bad 112: if ares shows black flashes again, drop
-		// back to 56. Shorter cycle = 15Hz display (was 12Hz).
+		// 3-phase cycle, NO dedicated compose vint: every window blits
+		// one 75-row slice inside vblank, then composes the next
+		// frame's sprites/text into already-shipped rows (row-following
+		// pipeline; tiles fill in concurrently between windows on the
+		// SDRAM cache). Full frame ships every 3 vints = 20Hz display.
 		uint16_t next = wskip + 1;
-		if (next >= 4) next = 0;
-		wcmd = (next == 0) ? 0x2100
-		                   : (uint16_t)(0x2000 | ((next - 1) << 4));
+		if (next >= 3) next = 0;
+		wcmd = (uint16_t)(0x2000 | (next << 4));
 		// EARLY-VBLANK GATE for blit phases: this vint fires at vblank
 		// start ONLY when the previous window didn't overrun the frame.
 		// If it did, the pending vint fires at rte MID-FRAME — and a

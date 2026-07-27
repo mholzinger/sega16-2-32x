@@ -1127,3 +1127,41 @@ LESSON: vblank budgets must be set against the SLOWEST target
 (ares FB-write timing), not MAME's; every flip pair needs 2x+ margin
 inside the 2.4ms. Diag counters: 0xFFB0FC gate skips, 0xFFB0FE HV at
 last blit attempt.
+
+## ROW-FOLLOWING PIPELINE: no dedicated compose vint — 20Hz display
+
+The dedicated compose window was the display-rate ceiling (cycle =
+compose + N slices). Now every vint window does BOTH: the vblank
+flip-pair + 75-row slice blit of the SHIPPING frame, then in-window
+compose of the NEXT frame's sprites/cat1/text into rows the blit
+pointer has already passed. Tile thirds run concurrent between windows
+(SDRAM cache). Cycle = 3 vints = 20Hz display; 68K pause total ~11ms
+per 50ms cycle in heavy scenes (MAME).
+
+Row schedule (regions tile-aligned at 72/144; slices 75/75/74):
+- W0: blit rows 0-74; ext: finish shipping frame rows 144-224 with the
+  OLD parity (slave 144-184, master 184-224), then latch regs,
+  SPR_SNAP (slave, gated on SYNC[3] so the master's tail finishes
+  before the old snapshot dies), copy_pages, par^=1, apply_cram,
+  cache_fill. Launch tile third 0 (next frame rows 0-72).
+- W1: blit 75-149; ext: sprites+cat1+text rows 0-72 (halves at 36).
+  Launch third 1 (72-144).
+- W2: blit 150-223; ext: rows 72-144. Launch third 2 (144-224) +
+  build_maps(par^1) on the master tail.
+Every region composed is a strict subset of rows already shipped this
+cycle — new-frame pixels never land in un-shipped rows.
+
+Safety: all windows gated on V in 0xDF-0xE2; if the master loses
+vblank waiting on a straggling tile third, it SKIPS the slice (bit 3
+of the slave cmd; stale band for one cycle, never a mid-frame flip).
+Both CPUs cache_purge before blitting (slice rows may hold the other
+CPU's composes from last cycle).
+
+D32XR/Backrooms mining verdict (32x-builder/D32XR_MINING.md, local
+srcref): there is NO faster FB path — no FB DMA (FIFO runs
+peripheral->SDRAM, RV-gated), AUTOFILL is constant-only, parallel CPU
+stores are the state of the art and our unrolled long-store blit
+already matches it. Field-measured ares budget: 75 rows/vblank clean
+(0 black in 4214 frames with the tight gate), 112 rows over. 30Hz
+(2-slice cycle) therefore needs a ~35% faster inner blit loop
+(candidate: D32XR's load/store pipelining) — future work.
