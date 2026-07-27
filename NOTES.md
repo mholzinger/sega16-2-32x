@@ -484,3 +484,32 @@ differently across the RV toggle. NEXT: (a) widen/measure the render window
 count); (b) verify the diagonal glyph layout is the true screen vs a render
 stride artifact; (c) consider 68K-side framebuffer writes (0x840000, FM=0)
 as an alternative that sidesteps the SH-2 RV block entirely.
+
+## Phase 3 stage C step 2 COMPLETE (2026-07-27): TEXT LAYER ON SCREEN IN ARES
+
+Fixed the last ares gap: the SH-2 now draws BOTH framebuffers each render
+window (render_text / flip / render_text), so whichever buffer ares displays
+is always current — ares' flip timing no longer matters. ares now shows the
+game's text layer at 60 VPS: dark glyphs on the game's live maroon backdrop,
+identical to MAME. Proof: docs_text_ares.png.
+
+The complete, WORKING stage-C pipeline (both emulators):
+  game 68K -> text RAM 0xFF8000 + palette 0xFFA000 shadows
+  -> MD vblank shim streams both over acked COMM bursts (RV=1; CRAM/mem ok)
+  -> SH-2 stores into SDRAM shadows
+  -> RV=0 render window (MD shim is RAM-resident, needs no ROM):
+       apply palette -> CRAM, render 40x28 text tiles -> BOTH framebuffers
+  -> RV=1 restored, MD returns to the game's IRQ handler (0x2AAC)
+Cost: ~5ms 68K stall/frame, holds 60 VPS.
+
+Key hardware truths banked (all d32xr-confirmed):
+- SH-2 framebuffer (DRAM) writes need RV=0; CRAM writes do not.
+- MD level-6 VINT vectors through a 0x880000-window trampoline = illegal
+  under RV=1; use the writable H-int vector (0x70) at level 4 = arcade IRQ4.
+- All SH-2 runtime code must be SDRAM-resident (.ramtext) under RV=1.
+- Draw both buffers when flip timing is emulator-divergent.
+
+NEXT: tile (scrolling background) + sprite layers via the same window; then
+the diagonal glyph layout needs confirming as real screen content vs a
+render-stride quirk (compare against MAME's altbeast attract in the
+reference driver).

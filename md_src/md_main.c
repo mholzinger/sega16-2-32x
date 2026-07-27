@@ -121,12 +121,15 @@ void shim_vblank(void) {
 	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
 	// restore RV=1 before returning to the game's IRQ handler.
 	{
-		uint16_t spin2;
+		uint32_t spin2;
 		while (*mars_comm0) ;                    // drain any pending stream batch
 		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
 		*mars_comm0 = 0x2000;                    // "render now"
-		spin2 = 30000;
-		while (*mars_comm0 && --spin2) ;         // wait for SH-2 render+ack
+		// Full-screen render is ~5ms; wait for the SH-2's ack (COMM0=0), not a
+		// tiny spin count that expired mid-render and re-blocked the writes.
+		// ~8M-iteration safety ceiling (~well over a frame) guards a dead SH-2.
+		spin2 = 8000000UL;
+		while (*mars_comm0 && --spin2) ;
 		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
 	}
 
