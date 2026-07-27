@@ -70,6 +70,55 @@ void shim_vblank(void) {
 
 	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
 
+	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
+	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
+	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
+	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
+	// restore RV=1 before returning to the game's IRQ handler.
+	//
+	// Runs FIRST in the handler: the SH-2s' flip pair must land inside
+	// vblank (H-int fires at its start), where FBCTL latches immediately
+	// even on deferred-latch hardware — mid-frame flips cost up to a
+	// whole frame of latch wait per edge on ares.
+	// Only every SECOND entry: the full compose+blit window (~2 frames) is
+	// longer than a frame, so back-to-back windows leave a pending H-int at
+	// every rte and the game never gets cycles (proven: palette shadow
+	// frozen at 1 entry). Alternating window/no-window entries gives the
+	// game the whole gap after each cheap entry. Display updates at ~20-30
+	// fps until the compose is split across both SH-2s.
+	// TWO alternating short windows, one per H-int: the BLIT window
+	// (0x2000, flip-pair + split blit, fits inside vblank where FBCTL
+	// latches immediately even on deferred-latch hardware) and the
+	// COMPOSE window (0x2100, sprites/text/copies, no flips). Longest
+	// 68K stall drops to the compose window (~7ms).
+	static uint16_t wskip;
+	{
+		uint32_t spin2;
+		uint16_t wcmd = (++wskip & 1) ? 0x2000 : 0x2100;
+		while (*mars_comm0) ;                    // drain any pending stream batch
+		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
+		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM
+		// stays 0 outside so the GAME's staged writes land.
+		*(volatile uint16_t*)0xA15100 |= 0x8000;
+		*mars_comm2 = BANK_SHADOW;               // tile bank 1 value for renderer
+		*mars_comm0 = wcmd;
+		spin2 = 8000000UL;
+		while (*mars_comm0 && --spin2) ;
+		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
+		// The SH-2's final FS restore may LATCH only at the next vblank
+		// (ares/hardware defer FBCTL writes made outside vblank). The game
+		// must not resume while its staging bank is deselected — hold here
+		// until FS reads back at its steady value (immediate on MAME).
+		{
+			uint32_t g = 200000UL;
+			uint16_t fs_home = *(volatile uint16_t*)0xFFB0F6;
+			while ((*(volatile uint16_t*)0xA1518A & 1) != fs_home && --g) ;
+		}
+		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
+		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
+	}
+
+
 	// STAGED-PALETTE TRACER (temporary): border reports what the 68K sees
 	// in the FB-staged palette at handler entry (FM=0, access bank):
 	//   GREEN  = tile AND sprite palette halves nonzero (healthy)
@@ -138,48 +187,6 @@ void shim_vblank(void) {
 			if (txt_idx >= 2045)
 				txt_idx = 0;
 		}
-	}
-
-	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
-	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
-	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
-	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
-	// restore RV=1 before returning to the game's IRQ handler.
-	//
-	// Only every SECOND entry: the full compose+blit window (~2 frames) is
-	// longer than a frame, so back-to-back windows leave a pending H-int at
-	// every rte and the game never gets cycles (proven: palette shadow
-	// frozen at 1 entry). Alternating window/no-window entries gives the
-	// game the whole gap after each cheap entry. Display updates at ~20-30
-	// fps until the compose is split across both SH-2s.
-	static uint16_t wskip;
-	if ((++wskip & 1) == 0) {
-		uint32_t spin2;
-		while (*mars_comm0) ;                    // drain any pending stream batch
-		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
-		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the render window.
-		// Outside the window FM stays 0 so the GAME's remapped tile-RAM
-		// writes (FB staging at 0x852000) actually land.
-		*(volatile uint16_t*)0xA15100 |= 0x8000;
-		*mars_comm2 = BANK_SHADOW;               // tile bank 1 value for renderer
-		*mars_comm0 = 0x2000;                    // "render now"
-		// Full-screen render is ~5ms; wait for the SH-2's ack (COMM0=0), not a
-		// tiny spin count that expired mid-render and re-blocked the writes.
-		// ~8M-iteration safety ceiling (~well over a frame) guards a dead SH-2.
-		spin2 = 8000000UL;
-		while (*mars_comm0 && --spin2) ;
-		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
-		// The SH-2's final FS restore may LATCH only at the next vblank
-		// (ares/hardware defer FBCTL writes made outside vblank). The game
-		// must not resume while its staging bank is deselected — hold here
-		// until FS reads back at its steady value (immediate on MAME).
-		{
-			uint32_t g = 200000UL;
-			uint16_t fs_home = *(volatile uint16_t*)0xFFB0F6;
-			while ((*(volatile uint16_t*)0xA1518A & 1) != fs_home && --g) ;
-		}
-		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
-		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
 	}
 
 	if (busy)
