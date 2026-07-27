@@ -152,6 +152,58 @@ interleave a7 (even/high) + a5 (odd/low).
 
 - ares emulator installed locally — primary 32X test target for phases 2+.
 
+## PHASE 3 ARCHITECTURE (decided 2026-07-27): RV=1 native execution
+
+Census of prog68k.bin killed full relocation: 1477 jsr/jmp abs.l opcodes +
+thousands of data-table pointers (sprite/anim tables) = unpatchable risk.
+But hardware refs are tiny: text 63, palette 43, I/O 33, tile 29, bank 4,
+sprite 3 literal sites — patchable.
+
+Key discovery (MAME src/mame/shared/mega32x.cpp:359): **RV bit (0xA15106
+bit 0) = 1 maps the cart at 0x000100-0x3FFFFF on the MD side** ("NBA Jam TE
+relies on this"). Identity mapping: cart offset X = MD address X. So the
+arcade binary placed at its native cart offsets runs UNPATCHED for all ROM
+self-references. Keep RV=1 permanently during gameplay.
+
+Cart layout:
+- 0x000-0x0FF: our cold-boot vectors (adapter overlays this range at runtime)
+- 0x100-0x1FF: 32X header; 0x200: adapter-targeted jmp trampoline table
+  (retarget to our shim at 0x040410+)
+- 0x3F0-0x7FF: Sega security blob (byte-exact, position-locked at 0x3F0)
+  — REPLACES the game's 0x400-0x7FF boot code, which we skip anyway (our
+  init replicates it: RAM clear, IO shadow init, sound cmd 0x40)
+- 0x800-0x403FF: game body at NATIVE offsets, byte-identical
+- 0x40400+: our MD shim (linked low @0x040400; reachable via RV identity
+  map during gameplay, via 0x8C0400 window pre-RV at boot)
+- 1MB+: SH-2 code + tile data
+
+Consequences:
+- While RV=1 the SH-2s must NEVER touch ROM (0x02000000/0x22000000) —
+  SH-2 code+data must be SDRAM-resident (crt0 copies; link .text to SDRAM).
+  Tile data for the renderer: preload subset to SDRAM at boot (pre-RV),
+  stream misses later via MD-side FIFO (phase 4 problem).
+- MD interrupts: adapter's fixed overlay vectors → cart 0x200 trampolines →
+  our shim. The game's own vector table is NEVER consulted. Vblank shim does
+  MCU duties (inputs→0xFFF0C2, sound mailbox 0xFFF0C4→(later), tile bank
+  0xFFF095) then jmp 0x2AAC (game handler's rte pops the real frame).
+- Small-patch set (tools/patch_game.py, to write): text 0x410000→0xFF8000,
+  palette 0x840000→0xFFA000, sprites 0x440000→0xFF9800, I/O 0xC4xxxx→
+  0xFFB1xx mailboxes (0xC4 low byte lands on MD VDP — MUST all be patched),
+  tile RAM 0x400000→bit-bucket for milestone A (0x300000 cart hole).
+- RAM budget: game owns 0xFFC000-0xFFFFFF (native). Shim owns 0xFF0000-
+  0xFFBFFF: text shadow 4KB, palette 4KB, sprites 2KB, mailboxes, stack.
+
+OPEN QUESTIONS for MAME oracle (now installed):
+1. Mystery calls: real code at 0x2356/0x2384/0x241e/0x2434/0x2498/0x24ba
+   jumps into 0x3F04-0x3F40 — which is stub-vector filler in ROM. Dead code
+   from shared engine, or executed? MAME bp will answer. If executed, our
+   security blob at those offsets = crash; need shim.
+2. Post-boot calls into game's 0x400-0x7FF (replaced by blob) — find any
+   with MAME PC watchpoints; the known jsr 0x1a88c at 0x4a8 is fine (target
+   is high), but callers INTO the low region must be enumerated.
+3. Exact safe entry point after our replicated init (boot flow crosses
+   0x800? disassemble the seam).
+
 ## Phase 2 status (2026-07-27)
 
 Milestone hit: altbeast tiles render on emulated 32X (ares, 59 VPS).
