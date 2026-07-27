@@ -330,6 +330,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
 
     const uint8_t *tptr[42];
     uint32_t tbase[42];
+    uint8_t tmiss[42];
 
     for (int r = 0; r < nrows; r++) {
         int by = 8 - yf + r * 8;
@@ -351,6 +352,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                 if (code & 0x1000)
                     code = (code & 0xFFF) + bank1 * 0x1000u;
                 tptr[c] = tile_pixels(code, cpu);
+                tmiss[c] = (tptr[c] == blank_tile);
                 uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
                 if (g == 0xFF)
                     g = 1;                          /* prescan miss: neutral */
@@ -368,8 +370,10 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
                     uint32_t b0 = tn[0] + tbase[c + 1];                     \
                     uint32_t b1 = tn[1] + tbase[c + 1];                     \
-                    dst[0] = (EXPR0);                                       \
-                    dst[1] = (EXPR1);                                       \
+                    if (!(tmiss[c] | tmiss[c + 1])) {                       \
+                        dst[0] = (EXPR0);                                   \
+                        dst[1] = (EXPR1);                                   \
+                    }                                                       \
                     dst += 2;                                               \
                     a0 = b0;                                                \
                     a1 = b1;                                                \
@@ -410,7 +414,10 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
             unsigned code = w & 0x1FFF;
             if (code & 0x1000)
                 code = (code & 0xFFF) + bank1 * 0x1000u;
-            const uint8_t *tp = tile_pixels(code, cpu) + l0 * 8;
+            const uint8_t *tpx = tile_pixels(code, cpu);
+            if (tpx == blank_tile)
+                continue;                           /* miss: keep last frame */
+            const uint8_t *tp = tpx + l0 * 8;
             uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
             uint8_t base = (uint8_t)((g == 0xFF ? 1 : g) << 3);
             for (int y = l0; y < l1; y++) {
