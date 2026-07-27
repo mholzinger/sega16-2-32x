@@ -930,23 +930,28 @@ RAMCODE void m_main(void)
                 diag_add(12, tp);
 
                 if (k == 2) {
-                    /* PERF BAR (debug): ares has no profiler tap, so the
-                     * frame itself is the tap. Row 2: this cycle's total
-                     * in-window ticks; row 4: window-head tile-third wait.
-                     * 1px = 64 FRT ticks = 87.7us; CRAM[255] forced white
-                     * (sprite pair 15 pen 15 — never rendered). */
-                    static uint32_t pw, pv;
-                    uint32_t w = DIAG[8], v = DIAG[4];
-                    int lw = (int)((w - pw) >> 6), lv = (int)((v - pv) >> 6);
-                    pw = w; pv = v;
-                    if (lw > 300) lw = 300;
-                    if (lv > 300) lv = 300;
+                    /* PERF BARS (debug): ares has no profiler tap, so the
+                     * frame itself is the tap. 1px = 64 FRT ticks =
+                     * 87.7us; CRAM[255] forced white (sprite pair 15
+                     * pen 15 — never rendered). Rows:
+                     *   2 = total in-window this cycle
+                     *   4 = sprites+cat1+text
+                     *   6 = staging (copies+CRAM+fills)
+                     *   8 = blit slices + flips  */
+                    static uint32_t p[4];
+                    uint32_t c[4];
+                    c[0] = DIAG[8];
+                    c[1] = DIAG[12] + DIAG[13];
+                    c[2] = DIAG[0] + DIAG[1] + DIAG[2];
+                    c[3] = DIAG[5] + DIAG[6];
                     ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
-                    uint8_t *b2 = sbuf + (8 + 2) * SBUF_W + 8;
-                    uint8_t *b4 = sbuf + (8 + 4) * SBUF_W + 8;
-                    for (int i = 0; i < 300; i++) {
-                        b2[i] = (i < lw) ? 0xFF : b2[i];
-                        b4[i] = (i < lv) ? 0xFF : b4[i];
+                    for (int j = 0; j < 4; j++) {
+                        int len = (int)((c[j] - p[j]) >> 6);
+                        p[j] = c[j];
+                        if (len > 300) len = 300;
+                        uint8_t *b = sbuf + (8 + 2 + 2 * j) * SBUF_W + 8;
+                        for (int i = 0; i < len; i++)
+                            b[i] = 0xFF;
                     }
                 }
             }
