@@ -93,8 +93,11 @@ RAMCODE void m_main(void)
         if (c0 == 0x2000) {                      /* RENDER window (RV=0) */
             for (int i = 0; i < 256; i++)        /* apply live palette */
                 cram[i] = s16_to_mars(PAL_SHADOW[i]);
-            render_text();                       /* framebuffer writable now */
-            MARS_VDP_FBCTL = (MARS_VDP_FBCTL & MARS_VDP_FS) ^ 1;   /* flip */
+            /* Draw BOTH buffers so the displayed one is always current
+             * regardless of ares' flip timing (step-1 lesson). */
+            render_text();
+            MARS_VDP_FBCTL = (MARS_VDP_FBCTL & MARS_VDP_FS) ^ 1;
+            render_text();
             MARS_SYS_COMM0 = 0;                  /* ack: MD may restore RV=1 */
         } else if (c0 & 0x8000) {                /* palette batch (RV=1 ok) */
             int idx = c0 & 0xFF;
