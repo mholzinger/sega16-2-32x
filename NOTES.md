@@ -994,6 +994,41 @@ Fixed against them:
 MAME gameplay now color-matches the FPGA captures. Agreed direction:
 hardware accuracy + sprite work before more speed tuning.
 
+## Late-evening sweep 2 (2026-07-27): squares eradicated, speed restored
+
+User-driven fixes, in order (screenshots/ holds a 1171-frame capture of
+the resulting build — combat, gore, colors all arcade-correct):
+1. Full staging->shadow copy every window (was a 2-page rotor, ~200ms
+   stale during scroll = roaming garbled squares).
+2. Cache misses draw NOTHING (keep last frame's pixels) instead of
+   placeholder blocks — animated tiles show their previous frame.
+3. cache_fill races: data-then-tag write order + fills moved after the
+   slave's in-window cache reads (torn plausible-but-wrong tiles).
+4. PATCHER DATA CORRUPTION found: the level event/spawn script at
+   0x1D2DC-0x1D520 (12-byte records [camX][p1][p2][0x0040][handler.l])
+   misdisassembles so param+handler-high pairs look like 0x00400000
+   operands; one got remapped -> corrupted round-1 spawn (red blob).
+   Table excluded. LESSON: operand-confirmed != code — check the
+   surrounding disassembly for data-table patterns before trusting an
+   A-site in unexplored regions.
+5. THE FLASHING-IN-PLACE SQUARES (user: "exact same patterns while
+   standing still"): animated tiles cycle codes 0x100/0x400 apart; ANY
+   byte-fold collides the family into one cache set -> 5+ hot codes
+   over 4 ways churned every window (miss queue showed one code 12x per
+   frame). 8-way x 128 sets + (code ^ code>>7) fold: misses 23 -> 3.
+6. Speed regression (window 19ms): the prescan had landed on the
+   slave's in-window critical path, then didn't fit its concurrent
+   phase either. Now on the MASTER's concurrent tail (lighter half):
+   slvw 4.4->0, tcmd 6->1, window ~11ms in gameplay with all accuracy
+   features intact.
+
+RESIDUAL (only visible defect in the 1171-frame capture): small purple
+flecks at the far LEFT screen edge, ~30% of frames. Signature matches
+the g==0xFF -> group 1 fallback: freshly scrolled-in edge columns whose
+colors the one-window-old prescan hasn't mapped yet. Candidate fix:
+prescan one tile column beyond both edges (c = -1..42), or fall back to
+the nearest mapped color instead of group 1.
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
