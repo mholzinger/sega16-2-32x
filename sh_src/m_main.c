@@ -48,6 +48,11 @@ void m_main(void)
 
     Hw32xInit(MARS_VDP_MODE_256, 0);
 
+    /* The game's MD-side VDP is enabled but unused (all backdrop), and would
+     * cover the 32X layer at the default 68K priority. Give the 32X layer
+     * priority so our rendered output shows. */
+    MARS_VDP_DISPMODE = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X | MARS_VDP_MODE_256;
+
     volatile uint16_t *cram = &MARS_CRAM;
     for (int i = 0; i < 256; i++)
         cram[i] = 0;
@@ -61,11 +66,15 @@ void m_main(void)
     /* Fire-and-forget: apply the current batch every iteration (idempotent
      * per index; the MD advances the index each frame). No ack — the MD
      * overwrites COMM0 freely. */
-    /* 32X CRAM can only be written during VBLANK — writes during active
-     * display are dropped. Apply each batch inside the VBLANK window. */
+    /* CRAM is only writable during VBLANK. Sync to the 68K's vblank counter
+     * (COMM12, incremented by the shim each vblank) — the same proven pattern
+     * backrooms uses — rather than the SH-2's FBCTL VBLK bit, which isn't a
+     * reliable wait source here. Apply one palette batch per vblank. */
+    uint16_t lastTick = MARS_SYS_COMM12;
     for (;;) {
-        while (!(MARS_VDP_FBCTL & MARS_VDP_VBLK))
-            ;                                    /* wait for VBLANK */
+        while (lastTick == MARS_SYS_COMM12)
+            ;                                    /* wait for the 68K vblank */
+        lastTick = MARS_SYS_COMM12;
         uint16_t c0 = MARS_SYS_COMM0;
         if (c0 & 0x8000) {
             int start = c0 & 0xFF;
@@ -75,7 +84,5 @@ void m_main(void)
             cram[(start + 3) & 0xFF] = s16_to_mars(MARS_SYS_COMM8);
             cram[(start + 4) & 0xFF] = s16_to_mars(MARS_SYS_COMM10);
         }
-        while (MARS_VDP_FBCTL & MARS_VDP_VBLK)
-            ;                                    /* wait out VBLANK (one apply/frame) */
     }
 }
