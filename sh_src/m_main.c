@@ -215,7 +215,11 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
             int vy = (lr->vy0 - yf + r * 8) & 0x1FF;
             int trow = (int)(((unsigned)vy >> 3) & 0x1F);
             int qy = (int)(((unsigned)vy >> 7) & 2);
-            for (int c = 0; c <= 41; c++) {      /* 42: match compose's spill */
+            for (int c = -1; c <= 42; c++) {     /* one column BEYOND each
+                                                  * edge: freshly scrolled-in
+                                                  * columns must already be
+                                                  * color-mapped (left-edge
+                                                  * purple flecks otherwise) */
                 int vx = ((lr->vx0 & ~7) + c * 8) & 0x3FF;
                 uint16_t w = TILEMAP_C[lr->pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
                                        + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
