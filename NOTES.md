@@ -971,6 +971,29 @@ gaps: sprite-vs-tile priority bits (sprites always on top — zombies
 should walk BEHIND gravestones), shadow pen, off-screen sprite color
 prescan at extreme edges. Then sound.
 
+## FPGA-reference accuracy pass (2026-07-27, user-supplied MiSTer shots)
+
+fpgascreens/ holds MiSTer FPGA arcade captures — the pixel ground truth
+for color/layout diffs (user-provided; add more scenes as needed).
+
+Fixed against them:
+1. CRAM cross-contamination: overflowing tile colors marched into
+   groups 24-31 = sprite pair CRAM (gravestones in zombie skin tones,
+   sprites in stone colors). build_maps now reserves the scene's sprite
+   pairs FIRST (pairs 16-nspr..15, floor pair 6), caps tile groups
+   below, clamps tile overflow to the last legal tile group.
+2. Sprite-vs-tile priority: census shows all altbeast gameplay sprites
+   at pp=2, no shadow pens, 780 cat-1 tiles. Exact sega16b rule
+   ((1<<pp) > topmost tile mark) reduces to: FG category-1 tiles
+   recompose OVER sprites, in-window, from the SDRAM tile cache, split
+   across CPUs. compose_layer has a catsel param (0 all / 1 cat0 /
+   2 cat1); the concurrent FG pass draws cat0 only. If later rounds use
+   pp<2 sprites or BG-cat1-over-sprite, extend with more passes (the
+   census tool is tools/ + scratchpad pph_ref.lua pattern).
+
+MAME gameplay now color-matches the FPGA captures. Agreed direction:
+hardware accuracy + sprite work before more speed tuning.
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
