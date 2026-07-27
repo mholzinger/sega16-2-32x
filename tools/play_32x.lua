@@ -41,6 +41,8 @@ emu.register_frame_done(function()
     local cpu = manager.machine.devices[':maincpu']
     local mem = cpu.spaces['program']
     local ent = mem:read_u16(0xFFB0F0)
+    local skips = mem:read_u16(0xFFB0FC)
+    local hv = mem:read_u16(0xFFB0FE)
     local gpc = mem:read_u32(0xFFB0F8)
     -- window timing from the SH-2 profiler
     local sh2 = manager.machine.devices[':sega32x:32x_master_sh2'].spaces['program']
@@ -48,7 +50,7 @@ emu.register_frame_done(function()
     local tot = sh2:read_u32(0x06027000 + 8 * 4)
     local blit = sh2:read_u32(0x06027000 + 7 * 4)
     local miss = sh2:read_u32(0x06027000 + 14 * 4)
-    local line = string.format('f=%d ent=%d gpc=%08x', frames, ent, gpc)
+    local line = string.format('f=%d ent=%d skips=%d hv=%04x gpc=%08x', frames, ent, skips, hv, gpc)
     if n > 0 then
         line = line .. string.format(' compose=%.2fms blitwin=%.2fms miss=%.1f', tot / n * 1.37e-3, blit / (2 * n) * 1.37e-3, miss / n)
     end

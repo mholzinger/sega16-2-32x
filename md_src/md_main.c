@@ -98,8 +98,34 @@ void shim_vblank(void) {
 	{
 		uint32_t spin2;
 		uint16_t wcmd;
-		if (++wskip >= 3) wskip = 0;
-		wcmd = (wskip == 0) ? 0x2100 : (wskip == 1) ? 0x2000 : 0x2010;
+		uint16_t next = wskip + 1;
+		if (next >= 3) next = 0;
+		wcmd = (next == 0) ? 0x2100 : (next == 1) ? 0x2000 : 0x2010;
+		// EARLY-VBLANK GATE for blit phases: this vint fires at vblank
+		// start ONLY when the previous window didn't overrun the frame.
+		// If it did, the pending vint fires at rte MID-FRAME — and a
+		// mid-frame FBCTL flip is catastrophic on deferred-latch
+		// hardware (ares collapses blind toggles; the display lands on
+		// the staging bank = the perpetual flashing). Never touch FBCTL
+		// outside vblank: require the MD VDP's live V counter to sit in
+		// the first ~7 lines of vblank (0xE0-0xE6 NTSC V28) and RETRY
+		// the same blit phase at the next vint otherwise. The V counter
+		// (not the 32X VBLK bit) because MAME sets its VBLK flag in a
+		// 32X callback that can run AFTER the 68K enters this handler —
+		// the bit reads 0 at vint entry there and gated every blit.
+		// Compose windows don't flip — ungated.
+		if (wcmd != 0x2100) {
+			uint16_t hv = *(volatile uint16_t*)0xC00008;
+			uint8_t v = hv >> 8;
+			*(volatile uint16_t*)0xFFB0FE = hv;      // diag: HV at vint
+			// on-time vint: V reads 0xDF (counter not yet stepped past
+			// line 223 at IRQ time — MAME-measured) through early vblank
+			if (v < 0xDF || v > 0xE6) {
+				(*(volatile uint16_t*)0xFFB0FC)++;   // diag: gate skips
+				goto window_done;
+			}
+		}
+		wskip = next;
 		while (*mars_comm0) ;                    // drain any pending stream batch
 		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
 		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM
@@ -121,6 +147,7 @@ void shim_vblank(void) {
 		}
 		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
 		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
+window_done: ;
 	}
 
 
