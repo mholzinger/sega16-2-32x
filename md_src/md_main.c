@@ -70,18 +70,27 @@ void shim_vblank(void) {
 
 	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
 
-	// BANK-PARITY TRACER: MAGENTA border (sticky) = the FB access bank
-	// changed between handler entries, i.e. the verified-flip discipline
-	// broke and the game's staged tile/sprite writes are tearing across
-	// banks (this caught ares' deferred FBCTL latching). GREEN = healthy.
+	// STAGED-PALETTE TRACER (temporary): border reports what the 68K sees
+	// in the FB-staged palette at handler entry (FM=0, access bank):
+	//   GREEN  = tile AND sprite palette halves nonzero (healthy)
+	//   YELLOW = tile half ok, SPRITE half (0x85F800+) reads empty
+	//   RED    = tile half empty too
+	//   MAGENTA (sticky) = access-bank parity broke (bank tearing)
 	{
 		static uint16_t last_fs = 0xFFFF, torn;
 		uint16_t fs = *(volatile uint16_t*)0xA1518A & 1;   // FM=0 here: readable
 		if (last_fs != 0xFFFF && fs != last_fs)
 			torn = 1;
 		last_fs = fs;
-		vdp_color(0, torn ? 0xE0E : 0x0E0);
-		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | torn);
+		uint16_t tpal = 0, spal = 0;
+		volatile uint16_t *pp = (volatile uint16_t*)0x85F000;
+		for (uint16_t k = 0; k < 32; k++)
+			tpal |= pp[k];
+		pp = (volatile uint16_t*)0x85F800;
+		for (uint16_t k = 0; k < 64; k++)
+			spal |= pp[k];
+		vdp_color(0, torn ? 0xE0E : (tpal ? (spal ? 0x0E0 : 0x0EE) : 0x00E));
+		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | (tpal ? 2 : 0) | (spal ? 4 : 0) | torn);
 		*(volatile uint16_t*)0xFFB0F6 = fs;  // steady FS: the render window's
 		                                     // exit gate waits for this value
 	}
