@@ -20,8 +20,13 @@ def remap(v):
     if v >> 24:
         return None                     # real abs.l operands have high byte 0
     a = v & 0xFFFFFF
-    if 0x400000 <= a < 0x410000:            # tile RAM -> cart hole bit-bucket
-        return 0x300000 + (a & 0xFFFF)
+    if 0x400000 <= a < 0x410000:            # tile RAM -> 32X FB staging area
+        # 0x840000 FB window + 0x12000 (past the 0x11A00 display image).
+        # Game-touched span is 0x0000-0xBFFF (pages 0-11); 0xE000+ would
+        # exceed the 128KB window -> warn.
+        if (a & 0xFFFF) >= 0xE000:
+            return 'WARN'
+        return 0x852000 + (a & 0xFFFF)
     if 0x410000 <= a < 0x420000:            # text RAM -> shadow
         return 0xFF8000 + (a & 0xFFF)
     if 0x440000 <= a < 0x450000:            # sprite RAM -> shadow (2KB mirror)
@@ -89,8 +94,13 @@ for off in range(0, len(rom) - 3, 2):
     # move.w D0,(0x44,A6) into move.w D0,(0xFF,A6) -> odd EA -> address error.
     # Genuine data-table pointers into HW RAM are rare (tables point at ROM
     # graphics, not hardware); dropping class B is the safe trade.
+    # objdump prints abs.l EA operands in hex but IMMEDIATE operands in
+    # DECIMAL (moveal #4261713,%a1 = #0x410751), so confirm either form.
+    # The decimal match is exact, so coincidental byte patterns that
+    # disassemble as a different immediate (oriw #0,%d1) still fail it.
     hexval = f"0x{v & 0xFFFFFF:x}"
-    if hexval not in ctx:
+    decval = f"#{v & 0xFFFFFF}"
+    if hexval not in ctx and decval not in ctx:
         cls = 'B' if pointerish(off) else 'C'
         report.append(f"SKIP-{cls} {off:06X}: {v:08X} not a confirmed operand | {ctx}")
         continue
@@ -158,13 +168,30 @@ for line in (ROMS / 'prog68k.asm').read_text().splitlines():
         report.append(f"REDIR {iaddr:06X}: {op} 0x{v:x} -> 0x{tgt:06X} | {line.strip()}")
 report.append(f"\n{redir} boot-region constant reads redirected to RAM copy\n")
 
-# ---- runtime jump-ins to the displaced 0x400-0x807 region ----
-# ROM 0x400-0x7FF holds the Sega security program (BIOS-verified); the
-# game's own bytes there execute from a RAM copy at 0xFFB400 (+0xB000).
 def expect(off, old):
     got = rom[off:off+len(old)]
     assert got == bytes(old), f"{off:#x}: {got.hex()} != {bytes(old).hex()}"
 
+# ---- tilemap RLE even-byte pass -> word writes (FB staging fix) ----
+# Tile RAM now lives in the 32X framebuffer, where BYTE writes of ZERO are
+# dropped by the hardware (MAME mega32x.cpp m68k_dram_w, "tested on real hw").
+# The game loads tilemaps with two RLE passes: 0x16BE writes all EVEN (high)
+# bytes, then 0x16DE writes all ODD (low) bytes; both streams contain zeros.
+# Fix: make pass 1 write WORDS of (value<<8)|0x00 — word writes always land,
+# so every odd byte is pre-zeroed; pass 2's zero writes are then no-ops on
+# already-zero bytes and only its nonzero writes matter. Sole call site pair
+# at 0x16AE/0x16B2 (bsrw 16be; bsrw 16de) — verified no other callers.
+#   16cc: 1419  moveb (a1)+,d2   (kept)
+#   16ce: 1082  moveb d2,(a0)    -> E14A  lslw #8,d2
+#   16d0: 5488  addql #2,a0      -> 30C2  movew d2,(a0)+
+#   16d6: 51c8 fff6 dbf d0,16ce  -> 51c8 fff8 dbf d0,16d0  (skip the reshift)
+expect(0x16CC, [0x14,0x19,0x10,0x82,0x54,0x88])
+rom[0x16CE:0x16D2] = bytes([0xE1,0x4A,0x30,0xC2])
+expect(0x16D6, [0x51,0xC8,0xFF,0xF6]); rom[0x16D8:0x16DA] = bytes([0xFF,0xF8])
+
+# ---- runtime jump-ins to the displaced 0x400-0x807 region ----
+# ROM 0x400-0x7FF holds the Sega security program (BIOS-verified); the
+# game's own bytes there execute from a RAM copy at 0xFFB400 (+0xB000).
 expect(0x0978, [0x61,0x00,0xFC,0x04]); rom[0x0978:0x097C] = bytes([0x4E,0xB8,0xB5,0x7E])  # bsrw 57e -> jsr (B57E).w
 expect(0x0BD2, [0x60,0x00,0xFA,0x56]); rom[0x0BD2:0x0BD6] = bytes([0x4E,0xF8,0xB6,0x2A])  # braw 62a -> jmp (B62A).w
 expect(0x1EEC, [0x4E,0xF9,0x00,0x00,0x05,0xBE]); rom[0x1EEE:0x1EF2] = bytes([0x00,0xFF,0xB5,0xBE])  # jmp 5be -> jmp FFB5BE
