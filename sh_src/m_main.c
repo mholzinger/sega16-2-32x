@@ -472,10 +472,25 @@ RAMCODE void m_main(void)
             compose_text(0);
             while (MARS_SYS_COMM6 != 0xD0) ;     /* slave half done */
             MARS_SYS_COMM4 = 0;                  /* slave: idle (it clears COMM6) */
-            blit_frame();
-            MARS_VDP_FBCTL = (MARS_VDP_FBCTL & MARS_VDP_FS) ^ 1;
-            blit_frame();
-            MARS_VDP_FBCTL = (MARS_VDP_FBCTL & MARS_VDP_FS) ^ 1;
+
+            /* Dual-bank blit with VERIFIED flips. ares (and per the hw
+             * manual, real hardware outside vblank) LATCHES FBCTL writes at
+             * the next vblank — two blind toggles collapse into a net ONE
+             * flip, the access bank alternates every window, and the game's
+             * staged tile/sprite writes tear across banks (proven by the
+             * MD-side FS tracer: torn=1 ares, torn=0 MAME). So: wait for
+             * the mid-window flip to actually latch before the second
+             * blit, and restore FS as an ABSOLUTE value (the MD also waits
+             * for that restore to latch before resuming the game). */
+            {
+                uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
+                uint32_t guard = 4000000;
+                blit_frame();
+                MARS_VDP_FBCTL = fs0 ^ 1;
+                while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
+                blit_frame();
+                MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
+            }
 
             MARS_SYS_COMM0 = 0;                  /* ack: MD restores FM/RV */
         } else if (c0 & 0x8000) {                /* palette batch (RV=1 ok) */
