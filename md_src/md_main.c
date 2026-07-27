@@ -221,7 +221,7 @@ window_done: ;
 		// entries when the SH-2s ack slowly — the freeze spiral).
 		uint16_t spin = 800;
 
-		for (uint16_t burst = 0; burst < 40; burst++) {
+		for (uint16_t burst = 0; burst < 64; burst++) {
 			if (burst) {
 				while (*mars_comm0 && --spin) ;
 				if (*mars_comm0)
