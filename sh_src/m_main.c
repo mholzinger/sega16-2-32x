@@ -231,20 +231,35 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         sused[d[4] & 0x3F] = 1;
     }
 
+    /* RESERVE the sprite pairs FIRST, then cap the tile groups below
+     * them. The old order let overflowing tile colors march into groups
+     * 24-31 = sprite pair CRAM: gravestones rendered in zombie skin
+     * tones and sprites in stone colors (FPGA-reference diff). Overflow
+     * tiles now share the LAST LEGAL tile group instead. */
+    int nspr = 0;
+    for (int sc = 0; sc < 64; sc++)
+        if (sused[sc])
+            nspr++;
+    int pair_lo = 16 - nspr;                /* pairs pair_lo..15 are sprite CRAM */
+    if (pair_lo < 6)
+        pair_lo = 6;                        /* tiles keep >= 3 dynamic groups */
+    uint8_t tile_cap = (uint8_t)(pair_lo * 2);
+
     for (int c = 0; c < 8; c++)
         tile_grp[par][c] = (uint8_t)c;
     uint8_t next = BG0_GRP + 1;
     for (int c = 8; c < 128; c++)
-        tile_grp[par][c] = tused[c] ? (next < 32 ? next++ : 31) : 0xFF;
+        tile_grp[par][c] = tused[c]
+            ? (next < tile_cap ? next++ : (uint8_t)(tile_cap - 1))
+            : 0xFF;
     int pair = 15;
-    int floor_pair = (next + 1) >> 1;
     for (int sc = 0; sc < 64; sc++) {
         if (!sused[sc]) {
             spr_pair[par][sc] = 0xFF;
             continue;
         }
-        spr_pair[par][sc] = (uint8_t)(pair >= floor_pair ? pair : floor_pair);
-        if (pair >= floor_pair)
+        spr_pair[par][sc] = (uint8_t)(pair >= pair_lo ? pair : pair_lo);
+        if (pair >= pair_lo)
             pair--;
     }
 }
@@ -276,9 +291,12 @@ RAMCODE static void apply_cram(int par)
 
 /* Compose one tile layer's SCREEN ROW RANGE [ylo,yhi) into sbuf from the
  * SDRAM cache (legal at RV=1). opaque=1: BG packed 32-bit path; 0: FG
- * byte path. Callers pick ranges: master (112,224), slave 16px strips. */
+ * byte path. catsel (FG path only): 0 = all tiles, 1 = category-0 only,
+ * 2 = category-1 (priority) only — the cat-1 pass runs IN-WINDOW after
+ * sprites so priority tiles cover them (sega16b: pp=2 sprite pixels lose
+ * to FG cat-1's 0x04 mark). Callers pick ranges. */
 RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
-                                  int opaque, uint16_t bank1, int par)
+                                  int opaque, uint16_t bank1, int par, int catsel)
 {
     const layer_regs lr = snap[which];       /* latched once per window */
     int xf = lr.vx0 & 7, yf = lr.vy0 & 7;
@@ -363,6 +381,10 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                                    + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
             uint8_t *dst = drow + c * 8;
             if (w == 0)
+                continue;
+            if (catsel == 1 && (w & 0x8000))
+                continue;                           /* priority tiles: later pass */
+            if (catsel == 2 && !(w & 0x8000))
                 continue;
             unsigned code = w & 0x1FFF;
             if (code & 0x1000)
@@ -625,6 +647,7 @@ RAMCODE void slave_window_half(uint16_t bank1, int par)
     }
     SYNC[2] = 1;                                 /* snapshot ready */
     compose_sprites(0, 112, par);
+    compose_layer(0, 112, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
     compose_text(0, 14);
     blit_half(0, 112);                           /* bank fs0, top half */
     SYNC[2] = 2;
@@ -644,11 +667,11 @@ RAMCODE void slave_tile_half(uint16_t bank1, int par)
     extern void slave_service_stream(void);
     cache_purge();
     for (int y = 0; y < 112; y += 16) {
-        compose_layer(y, y + 16, 1, 1, 1, bank1, par);
+        compose_layer(y, y + 16, 1, 1, 1, bank1, par, 0);
         slave_service_stream();
     }
     for (int y = 0; y < 112; y += 16) {
-        compose_layer(y, y + 16, 1, 0, 0, bank1, par);
+        compose_layer(y, y + 16, 1, 0, 0, bank1, par, 1);
         slave_service_stream();
     }
 }
@@ -767,6 +790,7 @@ RAMCODE void m_main(void)
         while (SYNC[2] < 1) ;                /* sprite-list snapshot ready */
         tp = frt();
         compose_sprites(112, 224, par);
+        compose_layer(112, 224, 0, 0, 0, bank1, par, 2); /* FG cat1 OVER sprites */
         diag_add(12, tp);
         tp = frt();
         compose_text(14, 28);
@@ -808,10 +832,10 @@ RAMCODE void m_main(void)
         tile_cmd = (uint16_t)(CMD_TILE | (par << 8) | last_bank);
         slave_cmd(tile_cmd);
         tp = frt();
-        compose_layer(112, 224, 0, 1, 1, last_bank, par);   /* BG bottom */
+        compose_layer(112, 224, 0, 1, 1, last_bank, par, 0);   /* BG bottom */
         diag_add(10, tp);
         tp = frt();
-        compose_layer(112, 224, 0, 0, 0, last_bank, par);   /* FG bottom */
+        compose_layer(112, 224, 0, 0, 0, last_bank, par, 1);   /* FG cat0 bottom */
         diag_add(11, tp);
     }
 }
