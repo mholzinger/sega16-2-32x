@@ -51,6 +51,15 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * stream (game palette writes are all word/long; zero-byte-drop safe). */
 #define FB_PAL      ((volatile uint16_t *)0x2401F000)   /* 2048 words */
 #define DIAG        ((volatile uint32_t *)0x26027000)   /* profiling, lua-read */
+#define SPR_SNAP    ((volatile uint16_t *)0x26027400)   /* 512-word sprite-list
+                                                         * snapshot: FB staging
+                                                         * is BANK-DEPENDENT and
+                                                         * the access bank isn't
+                                                         * fs0 after the flip
+                                                         * (ares defers the
+                                                         * restore latch) — all
+                                                         * sprite readers use
+                                                         * this copy */
 #define SYNC        ((volatile uint16_t *)0x26027800)   /* [0] cmd  [1] echo */
 #define CACHE_C     ((uint8_t *)0x06028000)             /* 1024 slots x 64B */
 
@@ -198,7 +207,7 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         }
     }
     for (int i = 0; i < 64; i++) {
-        volatile uint16_t *d = FB_SPR + i * 8;
+        volatile uint16_t *d = SPR_SNAP + i * 8;
         uint16_t d2 = d[2];
         if (d2 & 0x8000)
             break;
@@ -368,7 +377,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
     for (int i = 0; i < 64; i++) {
-        volatile uint16_t *e = FB_SPR + i * 8;
+        volatile uint16_t *e = SPR_SNAP + i * 8;
         uint16_t d2 = e[2];
         if (d2 & 0x8000)
             break;
@@ -585,14 +594,29 @@ RAMCODE static void blit_half(int ylo, int yhi)
 RAMCODE void slave_window_half(uint16_t bank1, int par)
 {
     cache_purge();
+    for (int i = 0; i < 512; i += 8) {           /* sprite-list snapshot: the
+                                                  * access bank is fs0 ONLY
+                                                  * pre-flip — capture now */
+        SPR_SNAP[i + 0] = FB_SPR[i + 0];
+        SPR_SNAP[i + 1] = FB_SPR[i + 1];
+        SPR_SNAP[i + 2] = FB_SPR[i + 2];
+        SPR_SNAP[i + 3] = FB_SPR[i + 3];
+        SPR_SNAP[i + 4] = FB_SPR[i + 4];
+        SPR_SNAP[i + 5] = FB_SPR[i + 5];
+        SPR_SNAP[i + 6] = FB_SPR[i + 6];
+        SPR_SNAP[i + 7] = FB_SPR[i + 7];
+    }
+    SYNC[2] = 1;                                 /* snapshot ready */
     compose_sprites(0, 112, par);
     compose_text(0, 14);
     blit_half(0, 112);                           /* bank fs0, top half */
-    SYNC[2] = 1;
+    SYNC[2] = 2;
     while (SYNC[3] == 0) ;                       /* master flips + latch-waits */
     blit_half(0, 112);                           /* other bank, top half */
-    SYNC[2] = 2;
-    build_maps(par ^ 1, bank1);                  /* overlaps master's tail */
+    SYNC[2] = 3;
+    build_maps(par ^ 1, bank1);                  /* overlaps master's tail;
+                                                  * reads the snapshot, bank-
+                                                  * independent */
 }
 
 RAMCODE void slave_tile_half(uint16_t bank1, int par)
@@ -723,6 +747,7 @@ RAMCODE void m_main(void)
         cache_fill(256);
         diag_add(1, tp);
 
+        while (SYNC[2] < 1) ;                /* sprite-list snapshot ready */
         tp = frt();
         compose_sprites(112, 224, par);
         diag_add(12, tp);
@@ -737,7 +762,7 @@ RAMCODE void m_main(void)
             uint32_t guard = 4000000;
             tp = frt();
             blit_half(112, 224);             /* bank fs0, bottom half */
-            while (SYNC[2] < 1) ;            /* slave top-half blit done */
+            while (SYNC[2] < 2) ;            /* slave top-half blit done */
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs0 ^ 1;
             tp = frt();
@@ -746,7 +771,7 @@ RAMCODE void m_main(void)
             SYNC[3] = 1;                     /* slave: second bank writable */
             tp = frt();
             blit_half(112, 224);
-            while (SYNC[2] < 2) ;            /* slave second blit done */
+            while (SYNC[2] < 3) ;            /* slave second blit done */
             diag_add(7, tp);
             MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
         }
