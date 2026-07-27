@@ -622,3 +622,86 @@ This is a self-contained subsystem (68K DREQ send ~40 lines + SH-2 DMA-from-
 FIFO handler + the tilemap compositor) — the right size for one focused
 session. The text + palette layers are fully working on both emulators; the
 tile background slots into the same proven render window.
+
+## Stage C step 3 IMPLEMENTED (2026-07-27): BACKGROUND LAYERS ON SCREEN
+
+MAME shows the full title scene — temple, lion monument, sky gradient, red
+ALTERED BEAST logo, live palette — arcade-accurate minus sprites. The DREQ
+FIFO plan was DROPPED for something simpler: tile RAM is remapped to a
+framebuffer STAGING area the SH-2 reads directly (both CPUs address the FB;
+DREQ would have been pointless indirection — d32xr needs it only because
+its sources are MD-side ROM/RAM, not the FB).
+
+Architecture (the working pipeline):
+- patcher: tile RAM 0x400000-0x40FFFF -> FB staging 0x852000 (byte offset
+  0x12000 in the access bank, past the 0x11A00 display image; game-touched
+  span is pages 0-11 = 48KB, fits under the 0x20000 bank limit).
+- FM ownership: FM=0 during gameplay (68K owns the FB window so the game's
+  staged tile writes land); the vblank shim raises FM=1 only for the RV=0
+  render window, restores both before returning to the game.
+- SH-2 render window: copy 2 staging pages -> SDRAM tilemap shadow
+  (0x06020000, 16 pages; full refresh every 6 windows), purge cache, apply
+  CRAM, compose ONCE into a padded 336x240 SDRAM screen buffer (BG opaque,
+  FG transparent, TEXT on top), then blit it to BOTH framebuffers with an
+  EVEN number of FBCTL flips (keeps the staging bank stable). Tiles are
+  read straight from cart ROM (legal at RV=0) — no SDRAM tile cache.
+- Compose is SPLIT across both SH-2s: slave renders tile rows 0-13 on a
+  COMM4 0xC000|bank command, posts 0xD0 on COMM6; master renders the rest,
+  waits, blits. (COMM6 doubles as the MD stream lane — master clears it
+  before each command; slave stops its boot heartbeat at the 0xB007 beacon,
+  fixing a latent slave-tick-vs-stream race.)
+- Dynamic CRAM allocation: a scene uses tile colors 0-127 -> palette
+  entries to 1023, but 256-color mode has 32 groups of 8. Per-CPU lazy
+  alloc maps (master groups 20-31, slave 8-19, 0-7 identity shared with
+  text) rebuilt every frame; CRAM applied at window start from last
+  frame's maps (steady-state exact). Palette stream widened to 1024
+  entries (32 pal + 32 text batches/vblank, alternating).
+- Render window (~25ms) exceeds a frame, so the shim opens one only every
+  SECOND H-int — back-to-back windows leave a pending H-int at every rte
+  and STARVE the game to a standstill (diagnosed via work-RAM entry/window
+  counters at 0xFFB0F0/2 — MMIO reads from lua lie, work RAM doesn't).
+
+HARD-WON FACTS:
+1. ALL byte writes to the 32X framebuffer drop zero bytes (MAME
+   mega32x.cpp m68k_dram_w, "tested on real hw" — both windows). The
+   game's tilemap RLE loaders are byte-writers (0x16BE even bytes, 0x16DE
+   odd). Fix IN THE GAME CODE: patch the even pass to write words
+   (value<<8|0x00) — same byte count (lslw #8,d2 / movew d2,(a0)+), plus
+   a dbf retarget — which pre-zeroes every odd byte, so the odd pass's
+   zero writes become no-ops on already-zero bytes. Verified: the pair
+   0x16AE/0x16B2 is the only call site (the 0x1d2d0 "16be" hits are an
+   ascending data table, not pointers).
+2. PATCHER BUG (major find): objdump prints IMMEDIATE operands in DECIMAL
+   (moveal #4261713,%a1 = #0x410751), so the class-A "operand confirmed in
+   disassembly" test missed every movea.l/move.l #hw-address pointer load
+   — 27 real sites, including the boot stashing POINTERS TO THE PAGE
+   REGISTERS in work RAM (movel #0x410E80,0xFFF0EC) and palette/sprite
+   base loads. Symptom: page-select regs never reached the shadow ->
+   background rendered as sparse dots. Fix: also accept the exact decimal
+   "#<value>" form. 166 -> 193 sites.
+3. System-16B PAGE/SCROLL REGS (NOTES had the 16A layout — wrong): the
+   LATCHED set is pages 0xE80+2*which, yscroll 0xE90+, xscroll 0xE98+
+   (which: 0=FG 1=BG). Raw pages word quadrants (1024x512 virtual, 16
+   pages): UL=(p>>4)&0xF UR=p&0xF LL=(p>>12)&0xF LR=(p>>8)&0xF. Screen:
+   vx=(sx-(0xC0-xsc))&0x3FF, vy=(sy-ysc)&0x1FF. Tile: code=data&0x1FFF,
+   color=(data>>6)&0x7F, bank slot=code>>12, banksize 0x1000, bank[0]
+   always 0 (MCU), bank[1] = the 0xFFF095 request &7. Draw order: BG
+   opaque -> FG -> TEXT, all pen0-transparent except BG.
+4. Attract palette truth (reference dump): ~1200 nonzero entries, tile
+   colors 11-101 (entries to 815) — an 8bpp pixel==entry scheme can never
+   work; dynamic allocation is mandatory. Demo scenes scroll (xscroll
+   live), ysc=0x20 constant, no row/col scroll flags in attract.
+5. MAME screen:snapshot works under -video bgfx/default but silently
+   kills the machine under -video none.
+
+STATE: MAME verified end-to-end (title scene arcade-accurate, scene
+changes tracked, page regs streaming, tilemap shadow == reference 19520
+nonzero words). Game speed ~1/3 real time (window every 2nd H-int + ~25ms
+windows). White/black interstitial screens are believed correct (their
+art is SPRITES — next phase; splash background really is palette entry 0
+= white). ares: verification pending this session.
+
+NEXT: sprites (the attract is mostly sprite art), then window cost: the
+compose split can go finer (thirds via wider COMM protocol), the blit can
+skip unchanged rows, and scroll-only frames could scroll-blit. Sound
+untouched. Diagnostic counters 0xFFB0F0/0xFFB0F2 left in the shim.

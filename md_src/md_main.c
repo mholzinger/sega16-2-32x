@@ -68,6 +68,9 @@ __attribute__((section(".data")))
 void shim_vblank(void) {
 	static uint16_t busy;
 
+	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
+
+
 	// MCU main-loop half: screen-sync handshake + sound mailbox pump
 	if (!busy && MCU_BUSY)
 		busy = 1;
@@ -81,37 +84,42 @@ void shim_vblank(void) {
 	}
 
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
-	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): one palette
-	// batch + up to 63 text batches per vblank. Text RAM (2048 words) fully
-	// refreshes every ~7 frames; palette every ~52.
+	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
+	// palette/text batches, up to 64 per vblank. Palette now covers 1024
+	// entries (tiles use colors up to 127 -> entries up to 1023): full
+	// refresh every ~6.4 frames; text RAM (2048 words) every ~13.
 	{
 		static uint16_t pal_idx, txt_idx;
 		uint16_t spin;
 
-		volatile uint16_t *p = PAL_SHADOW + pal_idx;
-		*mars_comm2  = p[0];
-		*mars_comm4  = p[1];
-		*mars_comm6  = p[2];
-		*mars_comm8  = p[3];
-		*mars_comm10 = p[4];
-		*mars_comm0  = 0x8000 | pal_idx;
-		pal_idx = (uint16_t)((pal_idx + 5) & 0xFF);
-
-		for (uint16_t burst = 0; burst < 63; burst++) {
-			spin = 400;
-			while (*mars_comm0 && --spin) ;
-			if (*mars_comm0)
-				break;                   // SH-2 busy (rendering); resume next frame
-			volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + txt_idx;
-			*mars_comm2  = t[0];
-			*mars_comm4  = t[1];
-			*mars_comm6  = t[2];
-			*mars_comm8  = t[3];
-			*mars_comm10 = t[4];
-			*mars_comm0  = 0x4000 | txt_idx;
-			txt_idx += 5;
-			if (txt_idx >= 2045)
-				txt_idx = 0;
+		for (uint16_t burst = 0; burst < 64; burst++) {
+			if (burst) {
+				spin = 400;
+				while (*mars_comm0 && --spin) ;
+				if (*mars_comm0)
+					break;               // SH-2 busy; resume next frame
+			}
+			if (burst & 1) {
+				volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + txt_idx;
+				*mars_comm2  = t[0];
+				*mars_comm4  = t[1];
+				*mars_comm6  = t[2];
+				*mars_comm8  = t[3];
+				*mars_comm10 = t[4];
+				*mars_comm0  = 0x4000 | txt_idx;
+				txt_idx += 5;
+				if (txt_idx >= 2045)
+					txt_idx = 0;
+			} else {
+				volatile uint16_t *p = PAL_SHADOW + pal_idx;
+				*mars_comm2  = p[0];
+				*mars_comm4  = p[1];
+				*mars_comm6  = p[2];
+				*mars_comm8  = p[3];
+				*mars_comm10 = p[4];
+				*mars_comm0  = 0x8000 | pal_idx;
+				pal_idx = (uint16_t)((pal_idx + 5) & 0x3FF);
+			}
 		}
 	}
 
@@ -120,17 +128,32 @@ void shim_vblank(void) {
 	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
 	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
 	// restore RV=1 before returning to the game's IRQ handler.
-	{
+	//
+	// Only every SECOND entry: the full compose+blit window (~2 frames) is
+	// longer than a frame, so back-to-back windows leave a pending H-int at
+	// every rte and the game never gets cycles (proven: palette shadow
+	// frozen at 1 entry). Alternating window/no-window entries gives the
+	// game the whole gap after each cheap entry. Display updates at ~20-30
+	// fps until the compose is split across both SH-2s.
+	static uint16_t wskip;
+	if ((++wskip & 1) == 0) {
 		uint32_t spin2;
 		while (*mars_comm0) ;                    // drain any pending stream batch
 		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
+		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the render window.
+		// Outside the window FM stays 0 so the GAME's remapped tile-RAM
+		// writes (FB staging at 0x852000) actually land.
+		*(volatile uint16_t*)0xA15100 |= 0x8000;
+		*mars_comm2 = BANK_SHADOW;               // tile bank 1 value for renderer
 		*mars_comm0 = 0x2000;                    // "render now"
 		// Full-screen render is ~5ms; wait for the SH-2's ack (COMM0=0), not a
 		// tiny spin count that expired mid-render and re-blocked the writes.
 		// ~8M-iteration safety ceiling (~well over a frame) guards a dead SH-2.
 		spin2 = 8000000UL;
 		while (*mars_comm0 && --spin2) ;
+		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
 		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
+		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
 	}
 
 	if (busy)
@@ -177,6 +200,12 @@ void main(void) {
 		while (*mars_comm6 == c6) ;
 	}
 	vdp_color(0, 0xEE0);                // CYAN: slave alive too
+
+	// FM=0: 68K owns the FB window during gameplay so the game's remapped
+	// tile-RAM writes (FB staging 0x852000) land. The SH-2 is done with its
+	// VDP init (it posted 0x600D from SDRAM); from here it only touches
+	// FB/CRAM inside the render window, where the shim raises FM first.
+	*(volatile uint16_t*)0xA15100 &= 0x7FFF;
 
 	*(volatile uint8_t*)0xA15107 = 1;   // RV=1: cart at 0x000000 — set from RAM,
 	                                    // never from the 0x880000 window
