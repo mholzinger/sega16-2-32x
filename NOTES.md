@@ -349,32 +349,6 @@ runs natively on the MD 68K with our memory-map shims + full i8751 MCU
 replacement. Next: stage C — SH-2 renderer reads the text/tile/sprite/
 palette shadows the game is already writing, so it appears on screen.
 
-## Phase 3 stage C: IN PROGRESS — palette pipeline wired, SH-2 last mile
+## Phase 3 stage C: BLOCKED on SH-2 VDP access (root cause found)
 
-Goal: get the game's output on screen. Step 1 = stream the game's live
-palette to the SH-2 over the proven COMM channel and show it (16x16 swatch
-grid), before tackling bulk tile/sprite transfer via DREQ.
-
-WORKING (verified in MAME):
-- MD shim streams the palette shadow (0xFFA000) to the SH-2 every frame:
-  COMM2..COMM10 = 5 System-16 palette words, COMM0 = 0x8000|index. Index
-  cycles the first 256 entries. Placed ABOVE the MCU busy/return path so it
-  runs even while the game holds screen-sync. Confirmed: COMM0 shows
-  0x803a/0x8066/0x80ca... (bit15 + advancing index) every frame, game still
-  runs indefinitely (stage B intact), palette shadow fills to ~45 non-zero.
-- SH-2 m_main: 16x16 swatch grid drawn once (pixel value = CRAM index);
-  loop reads COMM0, converts System-16 sBGRbbbbggggrrrr -> 32X BGR555
-  (s16_to_mars), writes CRAM. Confirmed the SH-2 IS executing the conversion
-  code (PC seen inside s16_to_mars at 0x020410e0).
-
-BUG (next): CRAM stays all-zero (direct read), so nothing shows. The SH-2
-enters the convert-and-write branch but the CRAM writes don't land as
-non-zero. Suspects, in order: (a) the SH-2 reads COMM2..10 as 0 despite the
-MD posting non-zero (COMM0 reads fine, so unlikely but check the data regs
-specifically); (b) 32X CRAM (0x20004200) writes need FM access / a specific
-timing window during gameplay that differs from the stage-2 setup path;
-(c) s16_to_mars output is 0 for the streamed entries. Next: tap the SH-2's
-actual COMM2 read value and the CRAM store value in one run (the earlier
-program-space write-tap on 0x20004200 may not observe 32X-register writes —
-read CRAM back right after the store instead). Visual check was blocked by a
-locked screen. Harness: scratchpad/flow.lua, palchk.lua, shwr.lua.
+(see git log for the full diagnosis)
