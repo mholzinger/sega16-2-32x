@@ -1,4 +1,4 @@
-193 hardware refs patched
+192 hardware refs patched
 
 A 000460: 00C43007 -> 00FFB037   | 45c:	13fc 0080 00c4 	moveb #-128,0xc43007
 A 000468: 00C40001 -> 00FFB001   | 464:	13fc 0080 00c4 	moveb #-128,0xc40001
@@ -579,34 +579,6 @@ A 01BAE4: 00410000 -> 00FF8000   | 1bae2:	203c 0041 0000 	movel #4259840,%d0
 SKIP-B 01BDF6: 00410000 not a confirmed operand | 1bdf6:	0041 0000      	oriw #0,%d1
 SKIP-B 01BDFC: 00400000 not a confirmed operand | 1bdfc:	0040 0000      	oriw #0,%d0
 SKIP-B 01BE02: 00840000 not a confirmed operand | 1be02:	0084 0000 07ff 	oril #2047,%d4
-SKIP-C 01D366: 00400000 not a confirmed operand | 1d366:	0040 0000      	oriw #0,%d0
-SKIP-C 01D372: 00400000 not a confirmed operand | 1d372:	0040 0000      	oriw #0,%d0
-SKIP-C 01D37E: 00400000 not a confirmed operand | 1d37e:	0040 0000      	oriw #0,%d0
-SKIP-C 01D38A: 00400000 not a confirmed operand | 1d38a:	0040 0000      	oriw #0,%d0
-SKIP-C 01D396: 00400000 not a confirmed operand | 1d396:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3A2: 00400000 not a confirmed operand | 1d3a2:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3AE: 00400000 not a confirmed operand | 1d3ae:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3BA: 00400000 not a confirmed operand | 1d3ba:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3C6: 00400000 not a confirmed operand | 1d3c6:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3D2: 00400000 not a confirmed operand | 1d3d2:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3DE: 00400000 not a confirmed operand | 1d3de:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3EA: 00400000 not a confirmed operand | 1d3ea:	0040 0000      	oriw #0,%d0
-SKIP-C 01D3F6: 00400000 not a confirmed operand | 1d3f6:	0040 0000      	oriw #0,%d0
-A 01D402: 00400000 -> 00852000   | 1d3fe:	13ec 1118 0040 	moveb %a4@(4376),0x400000
-SKIP-C 01D40E: 00400000 not a confirmed operand | 1d40e:	0040 0000      	oriw #0,%d0
-SKIP-C 01D426: 00400000 not a confirmed operand | 1d422:	13c0 1118 0040 	moveb %d0,0x11180040
-SKIP-C 01D432: 00400000 not a confirmed operand | 1d42e:	1370 1118 0040 	moveb %a0@(0,%d1:w),%a1@(64)
-SKIP-C 01D43E: 00400000 not a confirmed operand | 1d43e:	0040 0000      	oriw #0,%d0
-SKIP-C 01D44A: 00400000 not a confirmed operand | 1d44a:	0040 0000      	oriw #0,%d0
-SKIP-C 01D462: 00400000 not a confirmed operand | 1d462:	0040 0000      	oriw #0,%d0
-SKIP-C 01D46E: 00400000 not a confirmed operand | 1d46e:	0040 0000      	oriw #0,%d0
-SKIP-C 01D47A: 00400000 not a confirmed operand | 1d47a:	0040 0000      	oriw #0,%d0
-SKIP-C 01D486: 00400000 not a confirmed operand | 1d486:	0040 0000      	oriw #0,%d0
-SKIP-C 01D49E: 00400000 not a confirmed operand | 1d49e:	0040 0000      	oriw #0,%d0
-SKIP-C 01D4AA: 00400000 not a confirmed operand | 1d4aa:	0040 0000      	oriw #0,%d0
-SKIP-C 01D4B6: 00400000 not a confirmed operand | 1d4b6:	0040 0000      	oriw #0,%d0
-SKIP-C 01D4C2: 00400000 not a confirmed operand | 1d4c2:	0040 0000      	oriw #0,%d0
-SKIP-C 01D4CE: 00400000 not a confirmed operand | 1d4ce:	0040 0000      	oriw #0,%d0
 SKIP-B 01D71A: 00400403 not a confirmed operand | 1d71a:	0040 0403      	oriw #1027,%d0
 SKIP-B 01DB08: 00401140 not a confirmed operand | 1db06:	0007 0040      	orib #64,%d7
 SKIP-C 01DBD8: 004012D0 not a confirmed operand | 1dbd6:	0007 0040      	orib #64,%d7
