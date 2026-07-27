@@ -754,7 +754,34 @@ KNOWN GAPS: (1) game speed ~1/3 — the ~25-30ms window every 2nd H-int
 starves the game; next: finer SH-2 split / dirty-row blits / scroll-aware
 compose. (2) sprite-vs-tile priority bits ignored (sprites always over
 BG/FG, under TEXT). (3) shadow/hilite pen unimplemented. (4) sprite
-palette lag on scene cuts. (5) ares gameplay showed green (MD-through)
-play-field mid-session — unconfirmed whether scene-load transient or an
-ares-specific staging gap; attract background in ares needs re-verifying
-per build.
+palette lag on scene cuts.
+
+## Stage C step 4b (2026-07-27): ares BANK-TEARING root-caused and FIXED
+
+Symptom: in ares, gameplay scenes showed only text/sprite HUD over the
+green MD backdrop — but boot-loaded scenes (attract title) rendered fine.
+
+ROOT CAUSE (proven with an MD-side FS tracer, sticky magenta border +
+work-RAM mirror at 0xFFB0F4): ares — like real hardware outside vblank —
+LATCHES FBCTL writes at the next vblank. Our two blind mid-window toggles
+both computed from a STALE FS readback, collapsing into a net ONE flip
+per window: the access bank alternated every window, and the game's
+FB-staged tile/sprite writes (which span many frames during an RLE scene
+load) tore across the two banks. Boot-loaded scenes survived because
+they were staged before the first render window. MAME latches flips
+immediately (control run: torn=0), which is why it never showed this.
+
+FIX (verified-flip discipline, no cost on immediate-latch emulators):
+- SH-2: blit bank A; write FS toggle; SPIN until FS reads back flipped;
+  blit bank B; restore FS with an ABSOLUTE write (never a toggle — a
+  toggle recomputed from stale readback is how the parity broke).
+- MD shim: after the render ack + FM=0, HOLD the game until FS reads
+  back at its steady value (0xFFB0F6, sampled at handler entry) — the
+  game must never run while its staging bank is deselected.
+ares now renders full gameplay scenes at 60 VPS (round-1 intro: Zeus
+sprite, lightning, temple background, story text — user-played).
+Tracer stays in the shim: MAGENTA border = parity broken again.
+
+LESSON for the bank: NEVER derive an FBCTL write from a fresh FBCTL
+readback mid-frame — under deferred latching the readback is stale.
+Always track the intended FS value and write it absolutely.

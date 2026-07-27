@@ -70,6 +70,22 @@ void shim_vblank(void) {
 
 	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
 
+	// BANK-PARITY TRACER: MAGENTA border (sticky) = the FB access bank
+	// changed between handler entries, i.e. the verified-flip discipline
+	// broke and the game's staged tile/sprite writes are tearing across
+	// banks (this caught ares' deferred FBCTL latching). GREEN = healthy.
+	{
+		static uint16_t last_fs = 0xFFFF, torn;
+		uint16_t fs = *(volatile uint16_t*)0xA1518A & 1;   // FM=0 here: readable
+		if (last_fs != 0xFFFF && fs != last_fs)
+			torn = 1;
+		last_fs = fs;
+		vdp_color(0, torn ? 0xE0E : 0x0E0);
+		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | torn);
+		*(volatile uint16_t*)0xFFB0F6 = fs;  // steady FS: the render window's
+		                                     // exit gate waits for this value
+	}
+
 
 	// MCU main-loop half: screen-sync handshake + sound mailbox pump
 	if (!busy && MCU_BUSY)
@@ -152,6 +168,15 @@ void shim_vblank(void) {
 		spin2 = 8000000UL;
 		while (*mars_comm0 && --spin2) ;
 		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
+		// The SH-2's final FS restore may LATCH only at the next vblank
+		// (ares/hardware defer FBCTL writes made outside vblank). The game
+		// must not resume while its staging bank is deselected — hold here
+		// until FS reads back at its steady value (immediate on MAME).
+		{
+			uint32_t g = 200000UL;
+			uint16_t fs_home = *(volatile uint16_t*)0xFFB0F6;
+			while ((*(volatile uint16_t*)0xA1518A & 1) != fs_home && --g) ;
+		}
 		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
 		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
 	}
