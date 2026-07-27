@@ -193,16 +193,34 @@ Consequences:
 - RAM budget: game owns 0xFFC000-0xFFFFFF (native). Shim owns 0xFF0000-
   0xFFBFFF: text shadow 4KB, palette 4KB, sprites 2KB, mailboxes, stack.
 
-OPEN QUESTIONS for MAME oracle (now installed):
-1. Mystery calls: real code at 0x2356/0x2384/0x241e/0x2434/0x2498/0x24ba
-   jumps into 0x3F04-0x3F40 — which is stub-vector filler in ROM. Dead code
-   from shared engine, or executed? MAME bp will answer. If executed, our
-   security blob at those offsets = crash; need shim.
-2. Post-boot calls into game's 0x400-0x7FF (replaced by blob) — find any
-   with MAME PC watchpoints; the known jsr 0x1a88c at 0x4a8 is fine (target
-   is high), but callers INTO the low region must be enumerated.
-3. Exact safe entry point after our replicated init (boot flow crosses
-   0x800? disassemble the seam).
+ORACLE RESULTS (MAME 0.288 + tools/mame_tap.lua, attract + coined play):
+1. RESOLVED: the 0x3Fxx calls target 0x3F00-0x3F5F (game body, real code) —
+   earlier concern was a hex misread of the 0x3F0 vector padding. Preserved
+   natively; non-issue.
+2. Game routines DO read live data from 0x400-0x7FF during play (~25 sites)
+   => game bytes 0x400-0x7FF must stay VERBATIM. Therefore the security
+   blob moves instead: relocate to cart 0x40400 and patch its ~6 internal
+   abs refs (lea 0x4C0/0x4D4/0x4E8/0x6BC...). Adapter never checksums cart
+   bytes (MAME mega32x.cpp) — blob effects are register writes only.
+3. Header area 0x000-0x2FF (ours): only game-visible reads are vector[0]
+   (store game's SP 0xFFFFFF00 there; our boot sets its own SP in code) and
+   IRQ4 vector fetches at 0x70/0x72 (adapter overlay serves those at
+   runtime -> trampolines -> shim). The 0x000-0x7FF full sweep seen in MAME
+   is the MCU protection checksum leaking through the bus model — our shim
+   replaces the MCU, so it never happens on 32X.
+4. Game's own boot AT 0x400 CAN RUN UNMODIFIED (no entry-point surgery):
+   mapper-table writes to 0xFE00xx land in MD RAM mirror (reserve
+   0xFF0000-0xFF003F), tile-bank movep to 0x3F0000 lands on ROM (ignored),
+   I/O sites are in the patch set anyway. VRAM memtest expectations: handle
+   during bring-up (may need one branch patch if POST fails on shadow).
+5. Warm-restart path jmp 0x47e (abs.w, at 0x1b5c6) is fine unpatched — the
+   boot region stays intact and executable.
+
+FINAL cart layout (F-2):
+- 0x000-0x0FF our vectors (vector[0]=0xFFFFFF00 for game compat)
+- 0x100-0x1FF 32X header; 0x200-0x2FF adapter trampolines -> shim
+- 0x300-0x403FF game bytes VERBATIM (only ~175 HW-site patches applied)
+- 0x40400+ relocated security blob + MD shim; 1MB+ SH-2 code + tiles
 
 ## Phase 2 status (2026-07-27)
 
