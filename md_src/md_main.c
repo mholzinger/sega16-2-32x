@@ -108,18 +108,16 @@ void main(void) {
 	MCU_COINS = 0; MCU_SNDCMD = 0xFF; MCU_BUSY = 0;
 	// (MCU also sends sound cmd 0x40 at boot — no Z80 yet, noted)
 
-	// The adapter's vector area (0x000-0xFF) is writable RAM (the security
-	// blob itself installs vector 0x70). The game soft-restarts through the
-	// reset vectors (routine at 0x3078 reads SP/PC from 0/4) — point them at
-	// the RAM boot copy so restarts re-enter the game, not our dead _start.
-	*(volatile uint32_t*)0x000000 = 0xFFFFFF00;
-	*(volatile uint32_t*)0x000004 = 0x00FFB400;
+	// Vectors are served from the cart ROM table (RV=1 makes 0x0-0x3FF the
+	// cart image): exceptions -> 0xFFB408 rte stub, VBLANK -> _vblank. No
+	// runtime vector writes are possible (cart is read-only under RV=1).
 
 	*mars_comm14 = 0xB007;              // beacon: shim init complete
 	game_running = 1;
 
-	// Enter the game's own boot in its RAM copy. It sets SR, clears its work
-	// RAM, runs POST, and drops into the main loop; vblank chains via shim.
-	__asm__ volatile ("jmp 0xFFB400.l");
-	__builtin_unreachable();
+	// Enter the game's own boot in its RAM copy via a function-pointer call
+	// (GCC emits a real jsr; the earlier inline-asm jmp was dropped by the
+	// optimizer, leaving main to fall through into bss). The game boot sets
+	// its own SP at 0xFFB40E, so the pushed return is discarded.
+	((void (*)(void))0x00FFB400)();
 }

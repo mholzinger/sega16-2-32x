@@ -6,9 +6,23 @@
 
 	.org 0
 
-		.long	0xFFFFFF00	/* game-compatible initial SP (read at runtime) */
-	.rept	63
-		.long	0x000003F0	/* cold entry: stock Sega security blob */
+! 68K vector table. With RV=1 the game reads ALL its vectors from here (cart
+! ROM at 0x0-0x3FF), so they must resolve to valid MD targets — NOT the blob.
+! Exceptions/traps -> the game's own rte stub in the RAM boot copy (0xFFB408);
+! level-6 VBLANK -> our _vblank trampoline (jmptab @0x40422); level-4 HBLANK ->
+! _hblank. At COLD boot RV=0 and the adapter overrides these, so reset (v1)
+! still points at the blob for the 32X security sequence.
+		.long	0xFFFFFF00	/* v0  : initial SP */
+		.long	0x000003F0	/* v1  : reset PC -> security blob (32X boot) */
+	.rept	26			/* v2-v27 : bus/addr/illegal..level3 -> rte stub */
+		.long	0x00FFB408
+	.endr
+		.long	0x0004041C	/* v28 : level-4 HBLANK -> _hblank (jmptab) */
+		.long	0x00FFB408	/* v29 : level-5 -> rte stub */
+		.long	0x00040422	/* v30 : level-6 VBLANK -> _vblank (jmptab) */
+		.long	0x00FFB408	/* v31 : level-7 -> rte stub */
+	.rept	32			/* v32-v63 : TRAPs etc -> rte stub */
+		.long	0x00FFB408
 	.endr
 
 		.ascii	"SEGA 32X        "
