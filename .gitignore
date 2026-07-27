@@ -1,0 +1,4 @@
+roms/
+*.bin
+*.32x
+build/
