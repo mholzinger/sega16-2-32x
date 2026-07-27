@@ -701,8 +701,8 @@ RAMCODE static void blit_half(int ylo, int yhi)
  * sbuf reads hit our own cached writes — no purge needed. */
 RAMCODE void slave_blit_half(int half)
 {
-    int y0 = half * 56;
-    blit_half(y0, y0 + 28);
+    int y0 = half * 75;
+    blit_half(y0, y0 + 37);
     SYNC[2] = 1;                                 /* master restores bank X */
 }
 
@@ -815,17 +815,18 @@ RAMCODE void m_main(void)
          * the concurrent phase + sprites/text from the compose window
          * that followed it). ---- */
         if ((c0 & 0xFFCF) == 0x2000) {
-            /* Quarter-frame blit slices: 0x2000/0x2010/0x2020/0x2030 =
-             * 56 rows each. The blit and both flip edges must complete
-             * inside the ~2.3ms of vblank left after vint dispatch —
-             * measured 0.53ms per 112-row half in MAME, but ares' FB
-             * writes are several times slower and the restore missed
-             * vblank, deferring a frame: bank X (frame area = zeros =
-             * black) displayed one full frame per cycle. 56-row slices
-             * (~0.3ms MAME, each CPU 28 rows) leave margin for a 4-5x
-             * slower emulator. */
+            /* 75-row blit slices: 0x2000/0x2010/0x2020 = rows 0-75,
+             * 75-150, 150-224. The blit and both flip edges must
+             * complete inside the ~2.3ms of vblank left after vint
+             * dispatch — 112-row halves overran that on ares (FB
+             * writes several times MAME's cost; the deferred restore
+             * displayed all-zero bank X = black for a frame), 56-row
+             * slices were field-clean. 75 probes the budget for a
+             * shorter cycle; if ares flashes black again, revert to
+             * 56. */
             int half = (c0 >> 4) & 3;
-            int y0 = half * 56;
+            int y0 = half * 75;
+            int yend = (half == 2) ? 224 : y0 + 75;
             uint16_t bcmd = (uint16_t)(CMD_BLIT | (c0 & 0x30));
             uint16_t tw = frt(), tp = tw;
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
@@ -836,7 +837,7 @@ RAMCODE void m_main(void)
             SYNC[2] = 0;
             slave_cmd(bcmd);
             tp = frt();
-            blit_half(y0 + 28, y0 + 56);
+            blit_half(y0 + 37, yend);
             while (SYNC[2] < 1) ;            /* slave slice blitted */
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs_x;           /* back to staging bank X */
@@ -846,7 +847,7 @@ RAMCODE void m_main(void)
             diag_add(7, tw);
             MARS_SYS_COMM0 = 0;              /* ack */
 
-            if (half != 3)
+            if (half != 2)
                 continue;                    /* later slices ship next windows */
 
             /* Frame fully shipped: launch the CONCURRENT tile compose
