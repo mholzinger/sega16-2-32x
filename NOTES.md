@@ -927,6 +927,24 @@ Remaining artifact/slowness sources, ranked for next session:
 4. Sprite priority bits + shadow pen still unimplemented (visual
    correctness, not speed).
 
+## Speed RESOLVED (2026-07-27 night): two-CPU window, game at full pace
+
+Follow-ups to the freeze fix, in order: palette moved to FB staging
+(0x85F000; all 44 game palette writes are word/long — stream now carries
+text only, color lag gone); then the render window went fully two-CPU:
+the slave composes AND blits rows 0-111 of both banks (FM grants the
+SH-2 SIDE — either CPU may write the FB), flip edges handshaken via
+SYNC[2]/[3], CMD_WIN issued before the master's housekeeping so
+everything overlaps, and the slave's prescan overlaps the master's tail.
+Sprite 1:1 paths gained no-clip variants (xpos>=184 => x<504 implies
+sx<320).
+
+MEASURED (MAME, scripted gameplay): window ~10-11ms, blit phases 1.3 +
+1.0ms, slavewait/flipwait 0.00, handler 60/60 H-ints — and the game's
+interrupted-PC sample sits in ITS OWN idle vblank-wait loop (0x3982):
+frame logic completes with cycles to spare, arcade-style pacing.
+Display is 30fps (window every 2nd H-int buys the game its cycles).
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
