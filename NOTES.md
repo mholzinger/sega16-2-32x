@@ -545,3 +545,48 @@ instrumentation (screen snapshot / CPU-side markers, not per-frame PC), and:
      textram[0xe9e/2], row/col scroll from textram[0xf80.../0xf30...], tile
      format = same 3bpp chunky tiles (code&0x1fff via bank, colour bits).
      Reference: segaic16.cpp tilemap_16b_draw_layer (~line 820).
+
+## Stage C step 3: WHY the tilemap needs SDRAM (definitive, 2026-07-27)
+
+Re-ran the tile capture with UNBIASED instrumentation (palette-shadow
+nonzero count = proof of game liveness, not per-frame PC). Result: capturing
+tile RAM to a partial MD shadow (0xFF0600, 28KB) DID break the game
+(pal_nz stuck at 1 vs 45 in the good build).
+
+ROOT CAUSE (exact): the game's tilemap fill loop at 0x16BE writes ~40KB of
+tile RAM in one pass:
+    16be: lea 0x400000,a0 ; 16c4: move #20479,d1
+    16ce: move.b d2,(a0) ; 16d0: addq #2,a0 ; dbf d1  -> a0 spans
+    0x400000..0x409FFE (pages 0-9, 40KB).
+With the base patched to 0xFF0600, this clears 40KB from 0xFF0600 up to
+~0xFFA5FE, clobbering the sprite/text/palette shadows AND the game's own
+work RAM -> corruption -> stuck.
+
+BUDGET PROOF the tilemap can't fit MD RAM (64KB total):
+  game work RAM (mapper region 3, FIXED) 0xFFC000-0xFFFFFF = 16KB
+  shadows (text+sprite+palette+IO)                          ~14KB
+  tilemap written span (pages 0-9)                           40KB
+  40 + 16 + 14 = 70KB > 64KB. Even pages 0-6 (28KB) collides.
+=> The System-16 tilemap MUST live in 32X SDRAM (256KB); the transfer is
+   mandatory, not optional.
+
+TRANSFER DESIGN for next session (two viable paths):
+1. DREQ FIFO (68K->SH-2 DMA): the canonical bulk path. Needs the tile data
+   in a 68K-addressable staging buffer to DREQ from — but the game writes
+   40KB in one loop we can't chunk. So pair with a FULL 64KB tile-RAM
+   region... which doesn't fit MD RAM. Dead end unless we intercept the
+   fill loop.
+2. Framebuffer-staging: remap tile RAM -> 32X framebuffer off-screen area
+   (0x840000-based, 68K-writable, SH-2-readable at 0x24000000; the bank is
+   128KB, display uses ~72KB, ~56KB off-screen holds the 40KB tilemap). The
+   catch is the double-buffer flip (68K's 0x840000 = the same back bank the
+   SH-2 renders into). Resolve by running a SINGLE display buffer (no flip)
+   so the off-screen tilemap and on-screen render coexist in one bank, or by
+   writing the tilemap to a fixed offset in BOTH banks.
+3. PRAGMATIC: patch the fill loop's count (0x16C4 move #20479) + base so the
+   game writes a SMALLER tilemap we can shadow — only if altbeast truly uses
+   just pages 0,1,5,6 and the loop is the sole writer. Fragile; verify first.
+
+Reverted to the clean text-layer build (HEAD text milestone). The tilemap
+transfer is the next focused subsystem; text + palette layers remain fully
+working on both emulators.
