@@ -297,3 +297,28 @@ and have the MD post its OWN readiness (not just wait), so neither side can
 win the race. i.e. redesign the 3-way M_OK/S_OK/ACED handshake to be
 edge-race-free. Harness: scratchpad/hs2.lua dumps MD PC + both SH-2 PCs +
 COMM0/4/8 per frame.
+
+## Phase 3 stage B UPDATE: GAME EXECUTES (2026-07-27)
+
+Milestone: arcade 68K code boots and runs under our MCU shim. Verified in
+MAME 32x: ~7s native execution (pc=0x3982-0x39be main loop), shim heartbeat
+(COMM12) incrementing, a sound cmd captured via the MCU mailbox
+(COMM14=0x5000), text+palette shadows written (~9300 writes).
+
+Real blockers fixed (none were the handshake):
+1. RV=1 interrupt-vector table: under RV=1 the 68K reads vectors from cart
+   ROM 0x0-0x3FF. Old fill pointed all at the blob (0x3F0), so the first
+   VBLANK vectored into the blob -> cleared ACED -> full reset (looked like
+   a handshake deadlock). Fixed in mars_start.s: 0x78 VBLANK -> _vblank
+   (jmptab 0x40422), 0x70 HBLANK -> _hblank, exceptions/traps -> game rte
+   stub (0xFFB408), v1 reset stays -> blob for the 32X security sequence.
+2. main never jumped to the game: inline-asm jmp was optimizer-dropped, main
+   fell into bss (trap). Now a function-pointer call (real jmp). Removed the
+   dead 0x0/0x4 vector writes (cart ROM read-only under RV=1).
+
+REMAINING: after ~7s the game jumps to ODD addr 0xffffd4ff -> address error
+-> rte stub can't recover -> fault loop. Game reads a bad pointer/return,
+likely from a shadow that differs from real 16B hw (candidate: sprite RAM
+readback 0xFF9800, or a polled hw register used as an index). Next: trace
+last native PC before fault + the pointer source. Harness:
+scratchpad/fault2.lua (exception frame), scratchpad/stageb.lua (per-frame).
