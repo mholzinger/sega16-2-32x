@@ -185,7 +185,12 @@ RAMCODE static void latch_layer_regs(void)
         p = (pages >> 12) & 0xF; lr->pq[2] = p > 12 ? 12 : p;
         p = (pages >> 8) & 0xF;  lr->pq[3] = p > 12 ? 12 : p;
         lr->vx0 = (0 - ((0xC0 - xsc) & 0x3FF)) & 0x3FF;
-        lr->vy0 = (0 - ysc) & 0x1FF;
+        /* MAME's tilemap scroll convention is ASYMMETRIC: the 16B driver
+         * negates X itself (0xC0 - xsc) but passes Y raw — positive
+         * scrolly moves the SOURCE WINDOW DOWN: vy = sy + ysc. The minus
+         * form wrapped the screen top to the virtual map's bottom rows
+         * (phantom rock band + black gap; user-spotted). */
+        lr->vy0 = ysc;
     }
 }
 
