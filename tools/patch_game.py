@@ -81,13 +81,21 @@ for off in range(0, len(rom) - 3, 2):
         if off - back in asm:
             ctx = asm[off - back]
             break
+    # ONLY patch class A: the disassembly shows this exact value as an
+    # instruction operand. Class B (pointer-ish neighbours) is UNSAFE — it
+    # patches mid-instruction false positives. Real example that crashed the
+    # game: 0x16BD0 held 0x0044422E (the 0x44 displacement of a move.w plus
+    # the next opcode); class B rewrote it to a sprite-RAM shadow, turning
+    # move.w D0,(0x44,A6) into move.w D0,(0xFF,A6) -> odd EA -> address error.
+    # Genuine data-table pointers into HW RAM are rare (tables point at ROM
+    # graphics, not hardware); dropping class B is the safe trade.
     hexval = f"0x{v & 0xFFFFFF:x}"
-    cls = 'A' if hexval in ctx else ('B' if pointerish(off) else 'C')
-    if cls == 'C':
-        report.append(f"SKIP-C {off:06X}: {v:08X} isolated, not patched | {ctx}")
+    if hexval not in ctx:
+        cls = 'B' if pointerish(off) else 'C'
+        report.append(f"SKIP-{cls} {off:06X}: {v:08X} not a confirmed operand | {ctx}")
         continue
     struct.pack_into('>I', rom, off, new)
-    report.append(f"{cls} {off:06X}: {v:08X} -> {new:08X}   | {ctx}")
+    report.append(f"A {off:06X}: {v:08X} -> {new:08X}   | {ctx}")
     hits += 1
 
 # collision check: game refs into our shim RAM area 0xFF0000-0xFFBFFF
