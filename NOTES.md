@@ -785,3 +785,42 @@ Tracer stays in the shim: MAGENTA border = parity broken again.
 LESSON for the bank: NEVER derive an FBCTL write from a fresh FBCTL
 readback mid-frame — under deferred latching the readback is stale.
 Always track the intended FS value and write it absolutely.
+
+## Stage C step 5 (2026-07-27): render window PROFILED and OPTIMIZED
+
+FRT-based phase profiler added (sysclk/32 ticks, accumulators in SDRAM at
+0x26033000, lua-readable; slots include per-layer compose). Baseline
+window: title 27ms, demo scenes ~48ms; the 68K handler ran at ~40Hz and
+the game got ~12% of its cycles.
+
+Optimizations landed (measure -> fix -> re-measure):
+1. PACKED 32-bit BG compose: per tile row, decode all 42 cells once
+   (pointer + color base replicated x4 lanes — pens <=7 never carry on
+   the byte-lane add), then per line pre-add the base per tile and
+   SHIFT-MERGE adjacent tiles' rows so every store is an aligned uint32
+   despite fine-x scroll. Shift-case branch hoisted out of the pixel
+   loop. BG half: 10ms -> ~5ms (title), demo ~12ms (cache misses from
+   scrolling tile churn dominate there).
+2. PRESCAN MOVED TO THE SLAVE with double-buffered color maps (window
+   parity in the COMM4 command): the slave builds NEXT window's maps
+   after its compose half, overlapping the master's compose+blits; the
+   master's slave-wait moved after its blits. Master path -4.1ms; colors
+   lag the scene by one window (invisible in steady state).
+3. Sprite fast paths: unzoomed sprites (flipped or not — hzoom is what
+   forces the accumulator) get tight 4-nibble loops; ALL modes bail at
+   x>=504 (x is monotonic in every mode; nothing visible past column
+   503, and MAME only scans on for RAM-writeback side effects we don't
+   emulate). Demo sprite half: 17ms -> 9ms.
+4. Bank-fs0 blit only every 8th window (it is displayed only for the few
+   ms between the two verified flip latches): -2ms on 7 of 8 windows.
+
+RESULT: title window 27 -> 11ms, demo ~48 -> ~36ms; handler 40 -> 56Hz;
+windows 27.5/s of the 30 max; the game reaches full attract palette in
+2s of emulated time vs 10-18s. Perceived speed several times better.
+
+REMAINING window cost (demo marginal): BG ~12ms + FG ~10ms (dense-scene
+tile compose, cache-miss bound) + sprites ~9ms. Next levers: FG packed
+path with per-tile opacity classes, dynamic row split (master is the
+critical path only in sprite-heavy halves), every-H-int cadence for
+title-class windows (<16.7ms), and dirty-scene burst copies. Profiler
+left wired — DIAG[10..13] = per-layer master compose.
