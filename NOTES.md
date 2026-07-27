@@ -1090,3 +1090,40 @@ freshly scrolled-in codes keeps old pixels for a few windows until
 cache_fill catches up, e.g. flat foliage-green rectangles over the
 left wall in frame 1800). Candidate fixes: raise cache_fill budget,
 or prioritize on-screen misses over prefetch.
+
+## ARES ROUND 2: the gate alone wasn't enough — 56-row blit slices
+
+Field report on the gated 3-phase build (bab5f74): "still flashing but
+not as a strobe light. now its flashing between frame renders.
+gameplay slow." User frame dump: the flash frame is SOLID BLACK with a
+green bottom strip (5716.png) between two correct gameplay frames.
+
+Diagnosis: black = bank X displayed for a full frame. Bank X's frame
+area (0x200-0x117FC) is never written (staging lives at 0x12000+), all
+zeros -> every pixel hits CRAM[0] = 0x0000, through-bit clear = opaque
+black. So the blit window's flip-back was missing vblank END: ares'
+FB writes are several times slower than MAME's (112-row half = 0.53ms
+MAME), the blit ran past the ~2.3ms of remaining vblank, the restore
+deferred a frame, and bank X displayed for one full frame per cycle.
+The "slow gameplay" was the same event: the MD FS-home gate holds the
+68K until the deferred restore latches.
+
+Fixes this round:
+1. EARLY-VBLANK GATE (bab5f74): MD requires its VDP V counter in
+   0xDF-0xE6 before opening a blit window; otherwise skip and RETRY
+   the same phase next vint. Kills all mid-frame FBCTL writes (the
+   prior "strobe" flashing: compose overruns -> pending vint fires at
+   rte mid-frame -> flip mid-frame -> deferred/collapsed latches).
+   NOTE: vint fires with V still reading 0xDF (line 223), measured in
+   MAME; the 32X VBLK bit (0xA1518A bit 15) is UNUSABLE for this —
+   MAME sets it in a 32X callback that can run after the 68K enters
+   the handler.
+2. 56-ROW BLIT SLICES: 5-phase cycle (compose + 4 slices, 0x2000/
+   0x2010/0x2020/0x2030, each CPU 28 rows ≈ 0.3ms MAME). Budget holds
+   even if the emulator is 4-5x slower. Display ships at ~12Hz until
+   the compose window shrinks — stability first, speed next.
+
+LESSON: vblank budgets must be set against the SLOWEST target
+(ares FB-write timing), not MAME's; every flip pair needs 2x+ margin
+inside the 2.4ms. Diag counters: 0xFFB0FC gate skips, 0xFFB0FE HV at
+last blit attempt.

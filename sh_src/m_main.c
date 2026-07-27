@@ -701,8 +701,8 @@ RAMCODE static void blit_half(int ylo, int yhi)
  * sbuf reads hit our own cached writes — no purge needed. */
 RAMCODE void slave_blit_half(int half)
 {
-    int y0 = half ? 112 : 0;
-    blit_half(y0, y0 + 56);
+    int y0 = half * 56;
+    blit_half(y0, y0 + 28);
     SYNC[2] = 1;                                 /* master restores bank X */
 }
 
@@ -814,16 +814,19 @@ RAMCODE void m_main(void)
          * blitted; sbuf holds the COMPLETE previous frame (tiles from
          * the concurrent phase + sprites/text from the compose window
          * that followed it). ---- */
-        if ((c0 & 0xFFEF) == 0x2000) {
-            /* Half-frame blit: 0x2000 = rows 0-112, 0x2010 = rows 112-224.
-             * The full-frame blit pair measured ~2.5ms — LONGER than the
-             * 2.4ms NTSC vblank, so the flip-back missed blanking, ares
-             * deferred it a frame, and the display showed raw staging
-             * (the "just flashing" build). Each half is ~1ms total:
-             * both flip edges land safely inside vblank. */
-            int half = (c0 >> 4) & 1;
-            int y0 = half ? 112 : 0;
-            uint16_t bcmd = (uint16_t)(CMD_BLIT | (c0 & 0x10));
+        if ((c0 & 0xFFCF) == 0x2000) {
+            /* Quarter-frame blit slices: 0x2000/0x2010/0x2020/0x2030 =
+             * 56 rows each. The blit and both flip edges must complete
+             * inside the ~2.3ms of vblank left after vint dispatch —
+             * measured 0.53ms per 112-row half in MAME, but ares' FB
+             * writes are several times slower and the restore missed
+             * vblank, deferring a frame: bank X (frame area = zeros =
+             * black) displayed one full frame per cycle. 56-row slices
+             * (~0.3ms MAME, each CPU 28 rows) leave margin for a 4-5x
+             * slower emulator. */
+            int half = (c0 >> 4) & 3;
+            int y0 = half * 56;
+            uint16_t bcmd = (uint16_t)(CMD_BLIT | (c0 & 0x30));
             uint16_t tw = frt(), tp = tw;
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard = 2000000;
@@ -833,8 +836,8 @@ RAMCODE void m_main(void)
             SYNC[2] = 0;
             slave_cmd(bcmd);
             tp = frt();
-            blit_half(y0 + 56, y0 + 112);
-            while (SYNC[2] < 1) ;            /* slave quarter blitted */
+            blit_half(y0 + 28, y0 + 56);
+            while (SYNC[2] < 1) ;            /* slave slice blitted */
             diag_add(5, tp);
             MARS_VDP_FBCTL = fs_x;           /* back to staging bank X */
             guard = 2000000;
@@ -843,8 +846,8 @@ RAMCODE void m_main(void)
             diag_add(7, tw);
             MARS_SYS_COMM0 = 0;              /* ack */
 
-            if (!half)
-                continue;                    /* bottom half ships next window */
+            if (half != 3)
+                continue;                    /* later slices ship next windows */
 
             /* Frame fully shipped: launch the CONCURRENT tile compose
              * for the NEXT frame — only now, so new tiles never erase
