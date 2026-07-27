@@ -10,7 +10,7 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 
 extern void slave_window_half(uint16_t bank1, int par);  /* m_main.c .ramtext */
 extern void slave_tile_half(uint16_t bank1, int par);
-extern void slave_blit_half(void);
+extern void slave_blit_half(int half);
 
 /* MD stream servicing lives on the SLAVE now: the master spends the
  * inter-window gap composing tiles, so it can't poll COMM0. Batches are
@@ -52,7 +52,7 @@ __attribute__((section(".ramtext"))) void s_main(void)
             if ((cmd & 0xF000) == 0x1000)
                 slave_window_half(bank1, par);
             else if ((cmd & 0xF000) == 0x3000)
-                slave_blit_half();
+                slave_blit_half((cmd >> 4) & 1);
             else
                 slave_tile_half(bank1, par);
             SYNC[1] = cmd;                   /* done */

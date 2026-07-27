@@ -1046,3 +1046,47 @@ The user provided the retail MD port ROM: megadriveref/"Altered Beast
 CAUTION: the 32X shim owns the Z80 bus request lines today (PAUSE_Z80
 in read_joypad); embedding their driver means real Z80 code running —
 coordinate bus ownership carefully.
+
+## THE THREE-PHASE WINDOW CADENCE (fixes both "STILL so slow" and "just flashing")
+
+Why the port stayed slow no matter what the windows measured: ALL
+timing was measured in MAME, which latches FBCTL instantly. ares (and
+hardware) defer FBCTL writes made OUTSIDE vblank to the next vblank.
+Every mid-frame flip edge could stall up to a full frame — invisible
+in MAME, dominant in ares. Fix: only flip during vblank, where the
+latch is immediate on every implementation.
+
+Architecture (commit after 5d0021e): the MD vblank handler opens one
+short window per H-int, cycling THREE phases:
+- COMPOSE window (0x2100, ~7ms, mid-frame, NO flips): tile_cmd wait,
+  staging copies, CRAM, sprite compose + FG cat-1 + text on top of the
+  concurrently-composed tiles in sbuf. Longest 68K stall.
+- BLIT window A (0x2000, ~1ms, inside vblank): flip to display bank Y,
+  both CPUs blit a QUARTER (56 rows each) shipping sbuf rows 0-112,
+  flip back to staging bank X.
+- BLIT window B (0x2010, ~1ms, inside vblank): same for rows 112-224;
+  then (frame fully shipped) master launches the concurrent tile
+  compose (CMD_TILE) for the next frame + build_maps prescan on its
+  tail — AFTER the blit so new tiles never erase un-shipped sprites.
+
+Frame ships every 3 H-ints (20Hz display update); windows steal
+~9ms/50ms = 18% of 68K time (vs 29% before) so the GAME runs faster.
+
+POSTMORTEM — the "just flashing" build (5d0021e, two-phase): the
+full-frame blit window measured ~2.5ms, LONGER than the 2.4ms NTSC
+vblank (38 lines x 63.5us). The flip-back missed blanking; ares
+deferred it a full frame; the display showed the raw staging bank
+(garbage) AND the resuming game wrote staging into the wrong bank
+until the latch. MAME's instant latch showed a perfect picture.
+LESSON: any FBCTL flip pair must fit inside 2.4ms WITH handshake
+margin — budget ~1ms, never ~2.5ms. Measure against the vblank
+budget, not against "does MAME look right".
+
+Field verification (user's 2016-frame capture of the PRE-two-window
+build): zero left-edge purple frames (prescan c=-1..42 fix confirmed,
+was ~30%), zero black frames. Remaining visible artifact class:
+scroll-burst stale-tile patches (cache misses draw nothing; a burst of
+freshly scrolled-in codes keeps old pixels for a few windows until
+cache_fill catches up, e.g. flat foliage-green rectangles over the
+left wall in frame 1800). Candidate fixes: raise cache_fill budget,
+or prioritize on-screen misses over prefetch.
