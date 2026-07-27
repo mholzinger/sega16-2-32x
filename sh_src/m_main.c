@@ -47,8 +47,9 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define TILEMAP_C   ((const uint16_t *)0x06018000)      /* page 12 = blank */
 #define TEXT_U      ((volatile uint16_t *)0x26025000)   /* 2048 words */
 #define TEXT_C      ((const uint16_t *)0x06025000)
-#define PAL_U       ((volatile uint16_t *)0x26026000)   /* 2048 words */
-#define PAL_C       ((const uint16_t *)0x06026000)
+/* Palette: read straight from FB staging in-window — no shadow, no
+ * stream (game palette writes are all word/long; zero-byte-drop safe). */
+#define FB_PAL      ((volatile uint16_t *)0x2401F000)   /* 2048 words */
 #define DIAG        ((volatile uint32_t *)0x26027000)   /* profiling, lua-read */
 #define SYNC        ((volatile uint16_t *)0x26027800)   /* [0] cmd  [1] echo */
 #define CACHE_C     ((uint8_t *)0x06028000)             /* 1024 slots x 64B */
@@ -232,18 +233,18 @@ RAMCODE static void apply_cram(int par)
         uint8_t g = tile_grp[par][c];
         if (g == 0xFF)
             continue;
-        const uint16_t *src = PAL_C + c * 8;
+        volatile uint16_t *src = FB_PAL + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
             dst[p] = s16_to_mars(src[p]);
     }
     for (int p = 0; p < 8; p++)
-        cram[BG0_GRP * 8 + p] = s16_to_mars(PAL_C[p]);
+        cram[BG0_GRP * 8 + p] = s16_to_mars(FB_PAL[p]);
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
         if (pr == 0xFF)
             continue;
-        const uint16_t *src = PAL_C + 1024 + sc * 16;
+        volatile uint16_t *src = FB_PAL + 1024 + sc * 16;
         volatile uint16_t *dst = cram + pr * 16;
         for (int p = 0; p < 16; p++)
             dst[p] = s16_to_mars(src[p]);
@@ -620,8 +621,6 @@ RAMCODE void m_main(void)
         TILEMAP_U[i] = 0;
     for (int i = 0; i < 2048; i++)
         TEXT_U[i] = 0;
-    for (int i = 0; i < 2048; i++)
-        PAL_U[i] = 0;
     for (int i = 0; i < NSETS * 2; i++)
         cache_tag[i] = 0xFFFF;
     for (int i = 0; i < NSETS; i++)

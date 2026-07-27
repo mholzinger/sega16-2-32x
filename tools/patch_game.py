@@ -34,8 +34,11 @@ def remap(v):
         # (verified: movel/movew upload loop at 0x2B1E), so the FB
         # zero-byte-drop hazard doesn't apply.
         return 0x85E000 + (a & 0x7FF)
-    if 0x840000 <= a < 0x850000:            # palette -> shadow (4KB mirror)
-        return 0xFFA000 + (a & 0xFFF)
+    if 0x840000 <= a < 0x850000:            # palette -> FB staging (4KB mirror)
+        # All game palette writes are word/long (verified: zero moveb
+        # sites), so the FB zero-byte-drop hazard doesn't apply. Read
+        # in-window by the SH-2 — no COMM streaming needed.
+        return 0x85F000 + (a & 0xFFF)
     if 0x3F0000 <= a < 0x400000:            # tile bank regs -> shadow words
         return 0xFFB040 + (a & 0xF)
     if 0xC40000 <= a < 0xC44000:            # I/O -> mailbox bytes
