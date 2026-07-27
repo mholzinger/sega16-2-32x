@@ -864,6 +864,36 @@ between the slave's prescan (window N) and sprite compose (window N+1) —
 tiles whose colors the prescan sees but whose grouping overflows.
 Repro: MAME attract temple scene, blocks at screen top/bottom edges.
 
+## Rise-from-grave FREEZE fixed (2026-07-27) — two systemic lessons
+
+Symptom: coin+start, "rise from your grave", smoke appears, game freezes
+(first found by the user in ares; reproduced in MAME with scripted
+inputs — the attract demo never exercises this path, so it was latent).
+
+Diagnosis chain worth remembering: game PC captured from the exception
+frame at each H-int (_vblank stores 2(sp) to 0xFFB0F8 — unbiased,
+handler-bias-proof) -> object-slot differential vs the reference arcade
+run (slot 59's intro sequencer at handler 0x5618 never advanced; the
+0xFFF14C intro countdown frozen) -> MAME debugger trace showed the 68K
+eating whole frames in the shim's stream spins -> slave SH-2 PC sampled
+INSIDE ___ashrsi3 in cart ROM.
+
+LESSON 1 — NO VARIABLE SHIFTS IN SH-2 SDRAM CODE: SH-2 (SH7604) has no
+variable-shift instruction; GCC emits libgcc helper CALLS, and libgcc
+lives in .text = cart ROM. Any RV=1-path code with a runtime shift
+faults its CPU on ares (and crawls everywhere). GCC even strength-
+reduces ternaries like (x & 0x100) ? 2 : 0 into signed-shift helper
+calls. Constant shifts only (switch on the shift case if needed); cast
+to unsigned before right-shifting; VERIFY per build that .ramtext
+literal pools contain no 0x0204xxxx call targets (objdump -s).
+
+LESSON 2 — BOUND HANDLER TIME GLOBALLY, NOT PER-WAIT: the stream's
+per-batch 400-iteration spins each individually "worked", but with the
+SH-2s acking at ~1ms cadence mid-compose, 64 batches trickled through
+at ~1ms apiece = 60+ms handler entries = game starved to a standstill
+that then SUSTAINED ITSELF (frozen game -> same scene -> same load).
+The ack-wait budget is now TOTAL across the stream section (~2ms).
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
