@@ -843,6 +843,27 @@ pulses. Sprites stay in-window (~9ms) — frames too big/dynamic to
 cache. Target stall ~15ms -> 70-90% arcade speed. Also: fixed window
 cadence to kill the 2-vs-3-H-int stutter even before it's faster.
 
+## Stage C step 6 LANDED (2026-07-27): concurrent tile compose via SDRAM cache
+
+The step-6 plan above is implemented and committed. Render window
+5.9-13.6ms (was 27-48); handler 58.5Hz; game cycle share ~4x. Details in
+the commit and the m_main.c header comment. Key pieces: 64KB 2-way tile
+cache (XOR-folded sets, miss queues, budgeted in-window ROM fills, flat
+placeholder tiles until filled), BG/FG compose at RV=1 on both CPUs,
+stream servicing on the slave, SDRAM SYNC mailboxes for master<->slave
+(COMM regs belong to the MD stream), and a hardware-faithful once-per-
+window scroll/page register latch.
+
+KNOWN COSMETIC ISSUE (predates the cache — arrived with the sprite
+build): small fixed wrong-color blocks at the top/bottom screen edges in
+some scenes. Signature is unmapped-color groups (purple/green flats).
+Investigated: NOT the reg-latch race (fixed and artifact persists), not
+cache thrash (predates cache). Next suspects: sprite-list mutation
+between the slave's prescan (window N) and sprite compose (window N+1) —
+1-frame-stale spr_pair mappings for newly-spawned sprites — or edge
+tiles whose colors the prescan sees but whose grouping overflows.
+Repro: MAME attract temple scene, blocks at screen top/bottom edges.
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
