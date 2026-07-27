@@ -61,7 +61,11 @@ void m_main(void)
     /* Fire-and-forget: apply the current batch every iteration (idempotent
      * per index; the MD advances the index each frame). No ack — the MD
      * overwrites COMM0 freely. */
+    /* 32X CRAM can only be written during VBLANK — writes during active
+     * display are dropped. Apply each batch inside the VBLANK window. */
     for (;;) {
+        while (!(MARS_VDP_FBCTL & MARS_VDP_VBLK))
+            ;                                    /* wait for VBLANK */
         uint16_t c0 = MARS_SYS_COMM0;
         if (c0 & 0x8000) {
             int start = c0 & 0xFF;
@@ -71,5 +75,7 @@ void m_main(void)
             cram[(start + 3) & 0xFF] = s16_to_mars(MARS_SYS_COMM8);
             cram[(start + 4) & 0xFF] = s16_to_mars(MARS_SYS_COMM10);
         }
+        while (MARS_VDP_FBCTL & MARS_VDP_VBLK)
+            ;                                    /* wait out VBLANK (one apply/frame) */
     }
 }
