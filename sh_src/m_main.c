@@ -59,9 +59,17 @@ RAMCODE void m_main(void)
      * priority so our rendered output shows. */
     MARS_VDP_DISPMODE = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X | MARS_VDP_MODE_256;
 
+    /* Init-time CRAM preload: a static rainbow so the swatch grid is visible
+     * even before (or without) the live palette stream. Also isolates
+     * runtime-CRAM-write failures: rainbow grid + no animation = init writes
+     * land, runtime writes don't. */
     volatile uint16_t *cram = &MARS_CRAM;
-    for (int i = 0; i < 256; i++)
-        cram[i] = 0;
+    for (int i = 0; i < 256; i++) {
+        uint16_t r = (i & 0x07) << 2;
+        uint16_t g = ((i >> 3) & 0x07) << 2;
+        uint16_t b = ((i >> 6) & 0x03) << 3;
+        cram[i] = (uint16_t)((b << 10) | (g << 5) | r);
+    }
 
     /* Static swatch grid in both buffers; only CRAM changes per frame. */
     draw_swatches();

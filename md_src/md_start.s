@@ -133,8 +133,10 @@ _start:
 
 ;// VDP register initialization values
 InitVDPRegs:
-		dc.b	0x04			/* 80 = no HBL INT, enable read H/V cnt */
-		dc.b	0x74			/* 81 = disp on, VBL INT, DMA on, V28 mode */
+		dc.b	0x14			/* 80 = HBL INT ON (level 4 = arcade IRQ4), read H/V cnt */
+		dc.b	0x54			/* 81 = disp on, VBL INT OFF (adapter level-6 vector
+								 * points at a 0x880000-window trampoline — forbidden
+								 * under RV=1; ares enforces), DMA on, V28 mode */
 		dc.b	0xC000 / 0x400	/* 82 = Name Tbl A */
 		dc.b	0xB000 / 0x400	/* 83 = Name Tbl W */
 		dc.b	0xE000 / 0x2000	/* 84 = Name Tbl B */
@@ -143,7 +145,8 @@ InitVDPRegs:
 		dc.b	0x00			/* 87 = BG color */
 		dc.b	0x00			/* 88 = always 0 */
 		dc.b	0x00			/* 89 = always 0 */
-		dc.b	0x00			/* 8A = HINT = 0 */
+		dc.b	0xDF			/* 8A = HINT counter 223: one IRQ4 at the last
+								 * active line = vblank cadence, arcade-style */
 		dc.b	0x00			/* 8B = no EXT INT, full scroll */
 		dc.b	0x81			/* 8C = H40 mode, no lace, no shadow/hilite */
 		dc.b	0xFC00 / 0x400	/* 8D = HScroll Tbl */
@@ -246,6 +249,7 @@ get_input:
 		move.b	(a0),d2
 		rts
 
+	.global _vblank
 _vblank:
 		movem.l	d0-d7/a0-a6,-(sp)
 		jsr		shim_vblank			/* C shim: MCU duties (md_main.c) */

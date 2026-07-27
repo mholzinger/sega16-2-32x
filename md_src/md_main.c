@@ -38,6 +38,16 @@ extern uint16_t read_joypad(uint8_t player);
 
 uint16_t game_running = 0;
 
+static volatile uint16_t* const vdp_data_port = (uint16_t*) VDP_DATA_PORT;
+static volatile uint32_t* const vdp_ctrl_wide = (uint32_t*) VDP_CTRL_PORT;
+
+__attribute__((section(".data")))
+static void vdp_color(uint16_t index, uint16_t color) {
+	index <<= 1;
+	*vdp_ctrl_wide = ((0xC000 + (((uint32_t)index) & 0x3FFF)) << 16) + (((uint32_t)index) >> 14);
+	*vdp_data_port = color;
+}
+
 __attribute__((section(".data")))
 static uint8_t md_to_arcade(uint16_t p) {
 	// read_joypad: 0 0 0 1 M X Y Z S A C B R L D U (active high)
@@ -112,16 +122,24 @@ void shim_vblank(void) {
 
 __attribute__((section(".data")))
 void main(void) {
+	// BOOT-PHASE TRACER: Genesis backdrop colour is visible in ares no matter
+	// what the 32X side does (stage-A red flash proved it). BGR:
+	// RED=entered main; YELLOW=master SDRAM signal; CYAN=slave alive;
+	// GREEN=RV set + stash copied; game then owns the screen.
+	vdp_color(0, 0x00E);                // RED: main entered
+
 	// Wait for BOTH SH-2s to reach their SDRAM-resident code before setting
 	// RV=1 — with RV set the SH-2s must never touch cart ROM (hardware rule,
 	// enforced by ares; violating it kills their instruction fetch). The
 	// master posts 0x600D on COMM14 from SDRAM; the slave's SDRAM loop
 	// increments COMM6.
 	while (*mars_comm14 != 0x600D) ;
+	vdp_color(0, 0x0EE);                // YELLOW: master is SDRAM-resident
 	{
 		uint16_t c6 = *mars_comm6;
 		while (*mars_comm6 == c6) ;
 	}
+	vdp_color(0, 0xEE0);                // CYAN: slave alive too
 
 	*(volatile uint8_t*)0xA15107 = 1;   // RV=1: cart at 0x000000 — set from RAM,
 	                                    // never from the 0x880000 window
@@ -148,6 +166,17 @@ void main(void) {
 	// Vectors are served from the cart ROM table (RV=1 makes 0x0-0x3FF the
 	// cart image): exceptions -> 0xFFB408 rte stub, VBLANK -> _vblank. No
 	// runtime vector writes are possible (cart is read-only under RV=1).
+
+	// Interrupt delivery that works under RV=1: the adapter's H-int vector
+	// (0x70) is WRITABLE RAM (the security blob itself writes it). Point it
+	// straight at our RAM-resident handler — no adapter trampoline, no
+	// 0x880000-window fetch. H-int is 68K level 4 == the arcade's IRQ4.
+	{
+		extern void _vblank(void);
+		*(volatile uint32_t*)0x000070 = (uint32_t)&_vblank;
+	}
+
+	vdp_color(0, 0x0E0);                // GREEN: RV set, stash copied, handing to game
 
 	*mars_comm14 = 0xB007;              // beacon: shim init complete
 	game_running = 1;

@@ -422,3 +422,35 @@ binary-search where ares diverges.
 
 MAME lua caveat (repeat): space-reads of 0x2000xxxx MMIO bypass handlers;
 use screen snapshots or CPU-side effects for truth.
+
+## Phase 3 stage C step 1 COMPLETE (2026-07-27): live palette in BOTH emulators
+
+ARES ROOT CAUSE (found via Genesis-border phase tracer + blink tracer): the
+MD VBLANK (level 6) interrupt never fired in ares. The adapter's fixed
+level-6 vector points at a 0x880000-WINDOW trampoline (MAME: v78=0x008802AE)
+— and window access is forbidden under RV=1, which ares enforces. MAME
+doesn't, hence the divergence.
+
+FIX — arcade-faithful and trampoline-free: use the H-INT instead.
+- The adapter's H-int vector (0x000070) is WRITABLE RAM (the security blob
+  itself writes it; MAME installs a handler for it in all RV states). main
+  points it directly at our RAM-resident _vblank (now .global).
+- VDP reg 0 = 0x14 (IE1 on), reg 1 = 0x54 (IE0 OFF — kill the broken VINT
+  path), reg 10 = 0xDF (counter 223: ONE interrupt at the last active line =
+  vblank cadence).
+- H-int is 68K LEVEL 4 == the arcade's IRQ4. The game now receives the same
+  interrupt level as real System 16B hardware, through its own handler chain.
+
+VERIFIED IN ARES: border blink tracer ran (handler firing), the init rainbow
+was fully overwritten by the LIVE game palette (stream working), and the
+palette ANIMATES with attract mode (game running, receiving IRQ4). MAME
+unchanged-good. Both emulators now show the same thing: the game's live
+palette rendered by the 32X.
+
+Boot-phase tracer left in place (RED/YELLOW/CYAN/GREEN border during init;
+GREEN border during gameplay = MD backdrop). Blink tracer retired.
+
+NEXT (stage C step 2): stream TEXT RAM (4KB shadow at 0xFF8000) the same
+way — or via DREQ FIFO for bandwidth — and have the SH-2 render the text
+layer with the SDRAM-preloaded font tiles + live CRAM. That's "SEGA" /
+"INSERT COIN" on screen.
