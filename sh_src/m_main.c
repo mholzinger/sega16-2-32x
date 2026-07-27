@@ -628,6 +628,28 @@ RAMCODE static void cache_fill(int budget)
     }
 }
 
+/* Copy staging tilemap pages [p0,p1) into the SDRAM shadow. FULL refresh
+ * every window (split master/slave): the old 2-page rotor left the shadow
+ * up to ~200ms stale, and scrolling streams new tile columns continuously
+ * — the roaming garbled squares were stale shadow columns. ~0.7ms/CPU. */
+RAMCODE static void copy_pages(int p0, int p1)
+{
+    for (int pg = p0; pg < p1; pg++) {
+        volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
+        volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
+        for (int i = 0; i < 0x400; i += 8) {
+            dst[i + 0] = src[i + 0];
+            dst[i + 1] = src[i + 1];
+            dst[i + 2] = src[i + 2];
+            dst[i + 3] = src[i + 3];
+            dst[i + 4] = src[i + 4];
+            dst[i + 5] = src[i + 5];
+            dst[i + 6] = src[i + 6];
+            dst[i + 7] = src[i + 7];
+        }
+    }
+}
+
 RAMCODE static void blit_half(int ylo, int yhi)
 {
     for (int y = ylo; y < yhi; y++) {
@@ -669,6 +691,8 @@ RAMCODE void slave_window_half(uint16_t bank1, int par)
         SPR_SNAP[i + 6] = FB_SPR[i + 6];
         SPR_SNAP[i + 7] = FB_SPR[i + 7];
     }
+    copy_pages(6, NPAGES);                       /* staging -> shadow, top half
+                                                  * of the page range (pre-flip) */
     SYNC[2] = 1;                                 /* snapshot ready */
     compose_sprites(0, 112, par);
     compose_layer(0, 112, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
@@ -752,7 +776,6 @@ RAMCODE void m_main(void)
     /* Master is SDRAM-resident from here on: the MD may set RV=1 now. */
     MARS_SYS_COMM14 = 0x600D;
 
-    uint16_t copy_rotor = 0;
     int par = 0;
     uint16_t last_bank = 0;
     uint16_t tile_cmd = 0;                   /* outstanding CMD_TILE, if any */
@@ -783,26 +806,10 @@ RAMCODE void m_main(void)
         SYNC[3] = 0;
         slave_cmd((uint16_t)(CMD_WIN | (par << 8) | bank1));
 
-        /* Staging page copy (before any flip; races only the slave's
-         * later build_maps read, worth one frame of color staleness). */
+        /* Staging page copy: FULL every window, split with the slave
+         * (it copies pages 6-11 at CMD_WIN start; both pre-flip). */
         tp = frt();
-        for (int n = 0; n < 2; n++) {
-            volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + copy_rotor * 0x800);
-            volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + copy_rotor * 0x800);
-            for (int i = 0; i < 0x400; i += 8) {
-                dst[i + 0] = src[i + 0];
-                dst[i + 1] = src[i + 1];
-                dst[i + 2] = src[i + 2];
-                dst[i + 3] = src[i + 3];
-                dst[i + 4] = src[i + 4];
-                dst[i + 5] = src[i + 5];
-                dst[i + 6] = src[i + 6];
-                dst[i + 7] = src[i + 7];
-            }
-            copy_rotor++;
-            if (copy_rotor >= NPAGES)
-                copy_rotor = 0;
-        }
+        copy_pages(0, 6);
         diag_add(0, tp);
 
         tp = frt();
