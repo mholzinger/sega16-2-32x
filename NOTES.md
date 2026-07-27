@@ -590,3 +590,35 @@ TRANSFER DESIGN for next session (two viable paths):
 Reverted to the clean text-layer build (HEAD text milestone). The tilemap
 transfer is the next focused subsystem; text + palette layers remain fully
 working on both emulators.
+
+## Stage C step 3: the tile-transfer implementation plan (d32xr-referenced)
+
+The tilemap MUST reach SH-2 SDRAM. The clean, canonical path is the DREQ
+FIFO — and d32xr has a complete, working implementation to port:
+  src-md/crt0.s ~3180-3300: the 68K DREQ send. Sequence:
+    - dest -> 0xA1510C (SH DREQ dest = SDRAM addr)
+    - length(words, rounded to units of 4) -> 0xA15110
+    - set 68S bit: 0xA15107 = 0x04  (starts the SH-2 DREQ DMA)
+    - stream words to the FIFO at 0xA15112, polling FIFO-full at
+      0xA15107 bit 7; the SH-2's DMA channel drains FIFO -> SDRAM
+    - clear 68S (0xA15107=0) when done
+  SH-2 side: DMA channel 0, source = DREQ FIFO, dest = SDRAM, DREQ-triggered.
+
+SOURCE for the DREQ = the framebuffer: remap tile RAM 0x400000-0x40FFFF ->
+the 32X framebuffer (0x840000, 128KB, 68K-writable & DREQ-sourceable). The
+game fills the tilemap there; the shim DREQs it (40KB) to a persistent SDRAM
+tilemap; the SH-2 renders the display from SDRAM (never from the live
+framebuffer, avoiding the double-buffer/flip conflict). Only re-DREQ when the
+tilemap changes (dirty flag on the game's tile-bank write, or the fill-loop
+completion) — the game writes the tilemap on scene load, not per frame.
+
+Then extend the existing RV=0 render window (SH-2 already draws text there)
+to also composite the background tilemap: System-16B BG/FG pages from
+textram[0xe9e/2], row/col scroll from textram[0xf80.../0xf30...], same 3bpp
+chunky tiles, priority vs text. Reference: segaic16.cpp
+tilemap_16b_draw_layer (~line 820).
+
+This is a self-contained subsystem (68K DREQ send ~40 lines + SH-2 DMA-from-
+FIFO handler + the tilemap compositor) — the right size for one focused
+session. The text + palette layers are fully working on both emulators; the
+tile background slots into the same proven render window.
