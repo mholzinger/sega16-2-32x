@@ -13,6 +13,12 @@
  *   SH2 consumes, writes CRAM[start..start+4], acks by clearing COMM0.
  */
 
+/* Functions that run after the MD sets RV=1 MUST live in SDRAM — with RV
+ * set the SH-2 is forbidden from touching cart ROM (d32xr rule; ares
+ * enforces it, MAME doesn't). mars.ld's .ramtext is copied to SDRAM by the
+ * BIOS module load along with .data. */
+#define RAMCODE __attribute__((section(".ramtext")))
+
 /* System-16 palette word  sBGR BBBB GGGG RRRR  ->  32X BGR555. */
 static inline uint16_t s16_to_mars(uint16_t v)
 {
@@ -24,7 +30,7 @@ static inline uint16_t s16_to_mars(uint16_t v)
 
 /* Fill the framebuffer with a 16x16 grid of swatches; cell (cx,cy) is
  * painted with pixel value = CRAM index cy*16+cx, so CRAM supplies colour. */
-static void draw_swatches(void)
+RAMCODE static void draw_swatches(void)
 {
     volatile uint16_t *fb = &MARS_FRAMEBUFFER;
     /* 320x224, 8bpp: 160 words/line, pixels packed 2/word. 20px cells. */
@@ -41,7 +47,7 @@ static void draw_swatches(void)
     }
 }
 
-void m_main(void)
+RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
     MARS_SYS_COMM4 = 0;
@@ -70,6 +76,11 @@ void m_main(void)
      * (COMM12, incremented by the shim each vblank) — the same proven pattern
      * backrooms uses — rather than the SH-2's FBCTL VBLK bit, which isn't a
      * reliable wait source here. Apply one palette batch per vblank. */
+    /* Signal the MD that the master SH-2 is executing from SDRAM: only now
+     * may it set RV=1 (which cuts our ROM access). Everything after this
+     * point must be ROM-free: the loop reads COMM and writes CRAM only. */
+    MARS_SYS_COMM14 = 0x600D;
+
     uint16_t lastTick = MARS_SYS_COMM12;
     for (;;) {
         while (lastTick == MARS_SYS_COMM12)

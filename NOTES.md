@@ -389,3 +389,36 @@ to end and replicate the exact protocol in the shim; and settle the RV
 question with a clean test (SH-2 draws a solid colour with RV forced 0 vs 1,
 screenshotted). Everything else (game running indefinitely, palette streamed
 to COMM) is solid and committed.
+
+## Phase 3 stage C MILESTONE (2026-07-27): game palette ON SCREEN in MAME
+
+MAME's rendered frame (snap.lua screen:snapshot) shows the 16x16 CRAM swatch
+grid filled with Altered Beast's LIVE attract-mode palette — reds, skin
+tones, blues, greens, animating with the game. The full pipeline is proven:
+game code -> palette shadow (0xFFA000) -> shim COMM stream -> SH-2
+s16_to_mars (sBGR4443 -> BGR555) -> CRAM -> 32X display. Proof frame saved
+as docs_palette_proof.png (gitignored art? no - it's a palette grid, kept).
+
+Hardware-correctness fixes landed with it (d32xr-informed, srcref/d32xr):
+- d32xr treats RV as a BRIEF PULSE (bset/bclr around ROM-DMA only) and keeps
+  all runtime SH-2 code in SDRAM (.sdata/.ramtext) because the SH-2 must
+  never touch cart ROM while RV=1. Ares enforces this; MAME does not.
+- Our SH-2 runtime (m_main, draw_swatches, s_main, amb_dma_handler) is now
+  __attribute__((section(".ramtext"))) = SDRAM-resident via the existing
+  mars.ld .ramtext mechanism (BIOS module copy carries .data+.ramtext).
+- New boot ordering: master posts 0x600D on COMM14 from SDRAM code; slave's
+  SDRAM loop ticks COMM6; the MD shim waits for BOTH before setting RV=1.
+  (mars.h: COMM14 defined, COMM12 narrowed to u16.)
+- Mars_UploadPalette (d32xr marshw.c:154) confirms the INTMSK ACCESS_VDP
+  gate + upload-in-vblank-interrupt pattern for later stages.
+
+ARES STILL BLACK: its 32X model diverges from MAME somewhere deeper in our
+boot (game may not even be starting there — the MD now waits on SH-2
+signals; if ares kills the SH-2s earlier, main never proceeds). NEXT
+SESSION'S TOOL: instrument boot progress via the GENESIS VDP background
+colour (visible in ares regardless of 32X state — the stage-A red-border
+flash proved this path works). Step colours through main's phases to
+binary-search where ares diverges.
+
+MAME lua caveat (repeat): space-reads of 0x2000xxxx MMIO bypass handlers;
+use screen snapshots or CPU-side effects for truth.

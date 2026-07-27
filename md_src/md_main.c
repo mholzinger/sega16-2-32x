@@ -112,6 +112,17 @@ void shim_vblank(void) {
 
 __attribute__((section(".data")))
 void main(void) {
+	// Wait for BOTH SH-2s to reach their SDRAM-resident code before setting
+	// RV=1 — with RV set the SH-2s must never touch cart ROM (hardware rule,
+	// enforced by ares; violating it kills their instruction fetch). The
+	// master posts 0x600D on COMM14 from SDRAM; the slave's SDRAM loop
+	// increments COMM6.
+	while (*mars_comm14 != 0x600D) ;
+	{
+		uint16_t c6 = *mars_comm6;
+		while (*mars_comm6 == c6) ;
+	}
+
 	*(volatile uint8_t*)0xA15107 = 1;   // RV=1: cart at 0x000000 — set from RAM,
 	                                    // never from the 0x880000 window
 
