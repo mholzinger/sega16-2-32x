@@ -322,3 +322,29 @@ likely from a shadow that differs from real 16B hw (candidate: sprite RAM
 readback 0xFF9800, or a polled hw register used as an index). Next: trace
 last native PC before fault + the pointer source. Harness:
 scratchpad/fault2.lua (exception frame), scratchpad/stageb.lua (per-frame).
+
+## Phase 3 stage B: COMPLETE (2026-07-27) — game runs indefinitely
+
+The odd-address fault was a PATCHER BUG, not a hardware discrepancy. The
+"class B" heuristic (patch any 4-byte HW-range value whose neighbours look
+pointer-ish) rewrote offset 0x16BD0, which was NOT a pointer — it was
+mid-instruction: the 0x0044 displacement of `move.w D0,(0x44,A6)` at 0x16bce
+plus the next opcode. The rewrite turned it into `move.w D0,(0xFF,A6)` ->
+EA = 0xffffd400+0xff = 0xffffd4ff (odd) -> 68000 address error. Found via
+MAME's GUI debugger (`save /tmp/stack.bin,sp,64` -> decode the group-0
+frame) cross-referenced with tools/patch_report.txt.
+
+Fix: patch ONLY class-A refs (value confirmed as an instruction operand by
+the disassembly). Class B dropped entirely — genuine data-table pointers
+into HW RAM are rare (tables point at ROM graphics), so the trade is safe.
+Patch count 288 -> 166, all disassembly-confirmed.
+
+Verified: 45s / 2600+ frames of continuous execution, PC roaming the game's
+main dispatch (0x3d0e-0x3f10), heartbeat never stalls, VARYING sound
+commands emitted through the MCU mailbox (0x5000/0x5041/0x50b6/0x5046 = the
+attract-mode audio script). No faults.
+
+STAGE B DONE. The whole architecture is validated: original arcade 68K code
+runs natively on the MD 68K with our memory-map shims + full i8751 MCU
+replacement. Next: stage C — SH-2 renderer reads the text/tile/sprite/
+palette shadows the game is already writing, so it appears on screen.
