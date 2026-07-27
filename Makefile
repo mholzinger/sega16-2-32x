@@ -84,10 +84,20 @@ $(TARGET).elf: $(SHOBJS) | $(ROMDIR)
 $(ROMDIR):
 	@mkdir -p $(ROMDIR)
 
+# Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
+md_src/game_body.bin md_src/boot_copy.bin &: roms/altbeast/prog68k.bin tools/patch_game.py
+	@python3 tools/patch_game.py
+sh_src/game_body.bin: md_src/game_body.bin
+	@cp $< $@
+sh_src/boot_copy.bin: md_src/boot_copy.bin
+	@cp $< $@
+sh_src/sega_blob.bin: md_src/sega_blob.bin
+	@cp $< $@
+
 # 68K boot blob is .incbin'd by mars_start.s (resolved via -Ish_src)
 sh_src/md_start.bin: $(MDTARGET).bin
 	@cp $< $@
-sh_src/mars_start.o: sh_src/md_start.bin
+sh_src/mars_start.o: sh_src/md_start.bin sh_src/game_body.bin sh_src/boot_copy.bin sh_src/sega_blob.bin
 
 # Arcade tile data: planar ROMs -> chunky 8bpp, .incbin'd by tiles_data.s
 sh_src/tiles.bin: tools/gen_tiles.py roms/altbeast/opr-11674.a14
