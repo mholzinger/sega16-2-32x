@@ -127,8 +127,13 @@ void shim_vblank(void) {
 			uint8_t v = hv >> 8;
 			*(volatile uint16_t*)0xFFB0FE = hv;      // diag: HV at vint
 			// on-time vint: V reads 0xDF (counter not yet stepped past
-			// line 223 at IRQ time — MAME-measured) through early vblank
-			if (v < 0xDF || v > 0xE6) {
+			// line 223 at IRQ time — MAME-measured). Upper bound is
+			// TIGHT (0xE2, ~4 lines in): 75-row slices starting at
+			// V=0xE5-0xE6 left only ~1.7ms of vblank and missed the
+			// restore on ares ~0.5% of frames (black frame each time,
+			// field-measured 11/2063). A late start now retries next
+			// vint instead of gambling the flip-back.
+			if (v < 0xDF || v > 0xE2) {
 				(*(volatile uint16_t*)0xFFB0FC)++;   // diag: gate skips
 				goto window_done;
 			}
