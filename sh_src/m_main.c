@@ -850,10 +850,24 @@ RAMCODE void m_main(void)
 
             /* vblank-critical part. If the third-wait ate the vblank,
              * skip the blit (slice ships next cycle) rather than flip
-             * mid-frame — a stale band beats a black frame. */
+             * mid-frame — a stale band beats a black frame. The clock
+             * is the MD's live V-counter heartbeat (COMM12, tag 0xD0xx,
+             * written every ack-spin iteration): ares' FBCTL VBLK bit
+             * proved untrustworthy (the field bursts of one black frame
+             * per cycle — flips passing a stale/false vblank check). */
             int y0 = k * 75;
             int yend = (k == 2) ? 224 : y0 + 75;
-            int skip = !(MARS_VDP_FBCTL & 0x8000);
+            int skip;
+            {
+                uint16_t md_v = MARS_SYS_COMM12;
+                if ((md_v & 0xFF00) == 0xD000) {
+                    unsigned v = md_v & 0xFF;
+                    skip = (v < 0xDF || v > 0xE4);
+                } else
+                    skip = !(MARS_VDP_FBCTL & 0x8000);
+                if (skip)
+                    DIAG[7]++;               /* master-side silent skips */
+            }
             uint16_t scmd = (uint16_t)(0x3000 | (k << 4) | (par << 8)
                                        | bank1 | (skip ? 8 : 0));
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
@@ -894,14 +908,19 @@ RAMCODE void m_main(void)
                 copy_pages(0, 6);
                 diag_add(0, tp);
                 par ^= 1;                    /* now composing the next frame */
-                tp = frt();
-                apply_cram(par);
-                diag_add(2, tp);
-                tp = frt();
-                cache_fill(256);             /* drain misses from the thirds */
-                diag_add(1, tp);
             } else {
+                /* W0 stays lean (its concurrent gap feeds the slowest
+                 * third): CRAM applies at W1, miss fills drain at W2. */
                 int lo = (k == 1) ? 36 : 108;    /* master half of R(k-1) */
+                if (k == 1) {
+                    tp = frt();
+                    apply_cram(par);
+                    diag_add(2, tp);
+                } else {
+                    tp = frt();
+                    cache_fill(256);         /* drain misses from the thirds */
+                    diag_add(1, tp);
+                }
                 tp = frt();
                 compose_sprites(lo, lo + 36, par);
                 compose_layer(lo, lo + 36, 0, 0, 0, bank1, par, 2);

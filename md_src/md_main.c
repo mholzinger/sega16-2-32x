@@ -142,9 +142,22 @@ void shim_vblank(void) {
 		// stays 0 outside so the GAME's staged writes land.
 		*(volatile uint16_t*)0xA15100 |= 0x8000;
 		*mars_comm2 = BANK_SHADOW;               // tile bank 1 value for renderer
+		// Publish a live V-counter heartbeat (tag 0xD0xx): the master
+		// decides flip-vs-skip from THIS, not from the 32X VBLK bit —
+		// the only clock that's trustworthy on both MAME and ares when
+		// a straggling tile third delays command pickup past the gate
+		// check. MUST be written BEFORE the command is posted: the
+		// previous window's final heartbeat is mid-frame stale, and the
+		// master may read COMM12 the instant it sees COMM0 (the race
+		// skipped nearly every blit — black bands + palette-drifted
+		// stale slices).
+		*mars_comm12 = (uint16_t)(0xD000
+			| (*(volatile uint16_t*)0xC00008 >> 8));
 		*mars_comm0 = wcmd;
 		spin2 = 8000000UL;
-		while (*mars_comm0 && --spin2) ;
+		while (*mars_comm0 && --spin2)
+			*mars_comm12 = (uint16_t)(0xD000
+				| (*(volatile uint16_t*)0xC00008 >> 8));
 		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
 		// The SH-2's final FS restore may LATCH only at the next vblank
 		// (ares/hardware defer FBCTL writes made outside vblank). The game

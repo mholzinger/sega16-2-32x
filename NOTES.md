@@ -1165,3 +1165,27 @@ already matches it. Field-measured ares budget: 75 rows/vblank clean
 (0 black in 4214 frames with the tight gate), 112 rows over. 30Hz
 (2-slice cycle) therefore needs a ~35% faster inner blit loop
 (candidate: D32XR's load/store pipelining) — future work.
+
+## ROW-FOLLOWING ROUND 2: heartbeat clock + window rebalance
+
+Field report on aaef286: black-frame bursts (one per cycle in heavy
+stretches), slow, jumping frames. Two causes, both fixed:
+1. The master's flip-vs-skip check used the 32X FBCTL VBLK bit, which
+   is NOT trustworthy at command-pickup time (and the first fix
+   attempt — MD publishing its V counter on COMM12 during the ack
+   spin — had a stale-read race: the master could read the PREVIOUS
+   window's final mid-frame heartbeat and silently skip nearly every
+   blit: black bands + palette-drifted stale slices, compose dropping
+   11.4->7.7ms was the tell). Fix: MD writes a fresh 0xD0xx-tagged
+   V-counter heartbeat BEFORE posting the window command and keeps
+   refreshing it during the spin; the master trusts only that tag
+   (skip if V outside 0xDF-0xE4) and counts skips in DIAG[7].
+2. W0 was fat (leftover + snapshot + CRAM + fills), shrinking the
+   concurrent gap that feeds the slowest tile third -> stragglers ->
+   vblank eaten at the next window. Rebalanced: CRAM applies at W1,
+   miss fills drain at W2; W0 keeps leftover + snapshot only.
+MAME: 5460-frame coined run, no stalls, mskips 29/~1800 cycles
+(legit late windows -> one-cycle stale band, never a mid-frame flip).
+LESSON: any cross-CPU "am I in vblank" decision must consume a value
+PUBLISHED FRESH FOR THIS WINDOW — a mailbox holding last window's
+clock reads as confidently, and wrongly, as a live one.

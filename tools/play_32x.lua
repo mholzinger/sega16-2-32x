@@ -48,11 +48,11 @@ emu.register_frame_done(function()
     local sh2 = manager.machine.devices[':sega32x:32x_master_sh2'].spaces['program']
     local n = sh2:read_u32(0x06027000 + 9 * 4)
     local tot = sh2:read_u32(0x06027000 + 8 * 4)
-    local blit = sh2:read_u32(0x06027000 + 7 * 4)
+    local mskips = sh2:read_u32(0x06027000 + 7 * 4)
     local miss = sh2:read_u32(0x06027000 + 14 * 4)
     local line = string.format('f=%d ent=%d skips=%d hv=%04x gpc=%08x', frames, ent, skips, hv, gpc)
     if n > 0 then
-        line = line .. string.format(' compose=%.2fms blitwin=%.2fms miss=%.1f', tot / n * 1.37e-3, blit / (2 * n) * 1.37e-3, miss / n)
+        line = line .. string.format(' compose=%.2fms mskips=%d miss=%.1f', tot / n * 1.37e-3, mskips, miss / n)
     end
     out:write(line .. '\n')
     out:flush()
