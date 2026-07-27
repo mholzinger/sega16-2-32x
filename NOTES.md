@@ -705,3 +705,56 @@ NEXT: sprites (the attract is mostly sprite art), then window cost: the
 compose split can go finer (thirds via wider COMM protocol), the blit can
 skip unchanged rows, and scroll-only frames could scroll-blit. Sound
 untouched. Diagnostic counters 0xFFB0F0/0xFFB0F2 left in the shim.
+
+## Stage C step 4 (2026-07-27): SPRITES RENDER — full scene composition
+
+MAME attract now shows the complete System-16B scene: hero, wolves,
+zombies over the tile background with text on top — shapes and most
+colors arcade-correct. Verified interactive in ares by the user: COIN +
+START work, HUD text and the lives sprites display, game plays (slowly).
+
+Sprite pipeline (mirrors sega16sp.cpp sega_sys16b_sprite_device::draw):
+- Sprite RAM 0x440000 -> FB staging 0x85E000 (SH-2 0x2401E000). Only 4
+  patch sites; the game's uploads are all movew/movel (verified 0x2B1E
+  loop) so the FB zero-byte-drop hazard doesn't apply. The SH-2 reads the
+  list IN PLACE during compose — compose precedes any flip, so no SDRAM
+  copy is needed at all.
+- tools/gen_sprites.py: 8 ROMs -> sprites.bin, 1MB 16-bit-BE stream
+  matching MAME's region (even byte = b5-b8, odd = b1-b4, four 256KB pair
+  blocks); .rodata in cart, read at RV=0. Cart now 2.4MB.
+- Entry format implemented faithfully: d0 bottom<<8|top, d1 xpos 0x1FF
+  (screen x = raw-184), d2 end/hide/hflip/signed pitch, d3 word addr, d4
+  bank(identity,%8)/color(0-63), d5 vzoom/hzoom (5 bits each, accumulator
+  skip — attract USES zoom, 8 of 18 sprites in the reference dump).
+  4 nibbles/word MSB-first (LSB flipped), pen 0/15 clear, last nibble 15
+  ends the row; addr += pitch BEFORE each row. Palette entry =
+  1024 + color*16 + pen. Draw order BG, FG, SPRITES, TEXT.
+
+Allocation rework (unified prescan replaces per-CPU lazy alloc): the
+master walks both visible tilemap windows + the sprite list at window
+start, then assigns 8-pen groups to tile colors (ascending from 8) and
+ALIGNED 16-pen group-pairs to sprite colors (descending from pair 15),
+clamping where they meet. CRAM applied same-window (no color lag); slave
+reads the maps post-purge (complete before the COMM4 go). Reference dump:
+<=7 sprite colors + scene tile colors fit 32 groups in practice.
+
+CPU split fixed at SCREEN row 112 for ALL layers (a tile-row-index split
+drifts with yscroll and lets one CPU's tiles overwrite the other's
+sprites near the seam). Palette stream widened to all 2048 entries
+(sprite half converges in ~13 frames — transient wrong sprite colors on
+scene changes until dirty-tracking exists).
+
+PIXEL-VALUE-0 TRANSPARENCY (ares vs MAME divergence, likely real hw): in
+256-color mode with 32X priority, pixel value 0 shows the MD layer
+through (ares implements; MAME shows CRAM[0]). The opaque BG therefore
+NEVER emits value 0: BG tile color 0 maps to an alias group (bg0_grp,
+CRAM copy of entries 0-7). Interstitial screens: white in MAME.
+
+KNOWN GAPS: (1) game speed ~1/3 — the ~25-30ms window every 2nd H-int
+starves the game; next: finer SH-2 split / dirty-row blits / scroll-aware
+compose. (2) sprite-vs-tile priority bits ignored (sprites always over
+BG/FG, under TEXT). (3) shadow/hilite pen unimplemented. (4) sprite
+palette lag on scene cuts. (5) ares gameplay showed green (MD-through)
+play-field mid-session — unconfirmed whether scene-load transient or an
+ares-specific staging gap; attract background in ares needs re-verifying
+per build.

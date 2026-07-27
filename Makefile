@@ -104,6 +104,11 @@ sh_src/tiles.bin: tools/gen_tiles.py roms/altbeast/opr-11674.a14
 	@python3 tools/gen_tiles.py
 sh_src/tiles_data.o: sh_src/tiles.bin
 
+# Arcade sprite data: 16-bit-BE interleave, .incbin'd by sprites_data.s
+sh_src/sprites.bin: tools/gen_sprites.py roms/altbeast/epr-11677.b1
+	@python3 tools/gen_sprites.py
+sh_src/sprites_data.o: sh_src/sprites.bin
+
 sh_src/%.o: sh_src/%.s
 	@echo "SHAS $<"
 	@$(SHAS) $(SHASFLAGS) $< -o $@
@@ -119,4 +124,4 @@ clean:
 	rm -f $(MDOBJS) $(SHOBJS) $(MDOBJS:.o=.d) $(SHOBJS:.o=.d)
 	rm -f $(MDTARGET).bin $(MDTARGET).elf $(MDTARGET).lst
 	rm -f $(TARGET).32x $(TARGET).elf $(TARGET).lst
-	rm -f sh_src/md_start.bin sh_src/tiles.bin
+	rm -f sh_src/md_start.bin sh_src/tiles.bin sh_src/sprites.bin
