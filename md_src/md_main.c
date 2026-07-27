@@ -7,8 +7,17 @@
 // Stage B: replicate the i8751 MCU (see NOTES.md "MCU FULLY REVERSE-
 // ENGINEERED") and run the game's own boot from its RAM copy at 0xFFB400.
 
+static volatile uint16_t* const mars_comm0  = (uint16_t*) MARS_COMM0;
+static volatile uint16_t* const mars_comm2  = (uint16_t*) MARS_COMM2;
+static volatile uint16_t* const mars_comm4  = (uint16_t*) MARS_COMM4;
+static volatile uint16_t* const mars_comm6  = (uint16_t*) MARS_COMM6;
+static volatile uint16_t* const mars_comm8  = (uint16_t*) MARS_COMM8;
+static volatile uint16_t* const mars_comm10 = (uint16_t*) MARS_COMM10;
 static volatile uint16_t* const mars_comm12 = (uint16_t*) MARS_COMM12;
 static volatile uint16_t* const mars_comm14 = (uint16_t*) MARS_COMM14;
+
+// Palette shadow (game writes 0x840000 -> here). 2048 System-16 words.
+#define PAL_SHADOW  ((volatile uint16_t*)0xFFA000)
 
 extern uint16_t read_joypad(uint8_t player);
 
@@ -61,6 +70,22 @@ void shim_vblank(void) {
 		MCU_SNDCMD = 0xFF;
 	}
 
+	// Stage C palette streaming — independent of the MCU busy/screen-sync
+	// state, so it keeps refreshing CRAM even while the game holds sync.
+	// Fire-and-forget: one 5-entry batch per frame, index cycles the first
+	// 256 System-16 palette words; the SH-2 applies the current batch.
+	{
+		static uint16_t pal_idx;
+		volatile uint16_t *p = PAL_SHADOW + pal_idx;
+		*mars_comm2  = p[0];
+		*mars_comm4  = p[1];
+		*mars_comm6  = p[2];
+		*mars_comm8  = p[3];
+		*mars_comm10 = p[4];
+		*mars_comm0  = 0x8000 | pal_idx;
+		pal_idx = (uint16_t)((pal_idx + 5) & 0xFF);
+	}
+
 	if (busy)
 		return;                          // MCU skips input/bank work while busy
 
@@ -82,6 +107,7 @@ void shim_vblank(void) {
 
 	BANK_SHADOW = MCU_BANKREQ;           // tile bank req -> shadow (SH-2 later)
 	*mars_comm12 += 1;                   // frame heartbeat
+
 }
 
 __attribute__((section(".data")))
