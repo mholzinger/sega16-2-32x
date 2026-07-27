@@ -66,7 +66,7 @@ A 002AD4: 00410E98 -> 00FF8E98   | 2ad2:	33c0 0041 0e98 	movew %d0,0x410e98
 A 002AE2: 00410E90 -> 00FF8E90   | 2ae0:	33c0 0041 0e90 	movew %d0,0x410e90
 A 002AF0: 00410E9A -> 00FF8E9A   | 2aee:	33c0 0041 0e9a 	movew %d0,0x410e9a
 A 002AFE: 00410E92 -> 00FF8E92   | 2afc:	33c0 0041 0e92 	movew %d0,0x410e92
-A 002B20: 00440000 -> 00FF9800   | 2b1e:	247c 0044 0000 	moveal #4456448,%a2
+A 002B20: 00440000 -> 0085E000   | 2b1e:	247c 0044 0000 	moveal #4456448,%a2
 A 002B54: 00C40001 -> 00FFB001   | 2b50:	13f8 f018 00c4 	moveb 0xfffff018,0xc40001
 A 002B5C: 00C43001 -> 00FFB031   | 2b58:	13f8 f094 00c4 	moveb 0xfffff094,0xc43001
 A 002B80: 00840400 -> 00FFA400   | 2b7e:	43f9 0084 0400 	lea 0x840400,%a1
@@ -81,7 +81,7 @@ SKIP-B 0032CA: 0040000F not a confirmed operand | 32c8:	0160 0040
 SKIP-C 003470: 00416406 not a confirmed operand | 346e:	0c41 0041      	cmpiw #65,%d1
 A 00369E: 00410000 -> 00FF8000   | 369c:	207c 0041 0000 	moveal #4259840,%a0
 A 0036B2: 00400000 -> 00852000   | 36b0:	207c 0040 0000 	moveal #4194304,%a0
-A 0036C6: 00440000 -> 00FF9800   | 36c4:	207c 0044 0000 	moveal #4456448,%a0
+A 0036C6: 00440000 -> 0085E000   | 36c4:	207c 0044 0000 	moveal #4456448,%a0
 SKIP-C 0036FC: 003F20C0 not a confirmed operand | 36fa:	323c 003f      	movew #63,%d1
 A 003768: 004100D2 -> 00FF80D2   | 3766:	45f9 0041 00d2 	lea 0x4100d2,%a2
 A 003794: 004100D2 -> 00FF80D2   | 3792:	45f9 0041 00d2 	lea 0x4100d2,%a2
@@ -491,7 +491,7 @@ SKIP-C 01A5F0: 00403D7C not a confirmed operand | 1a5ec:	3d7c 10a0 0040 	movew #
 SKIP-C 01A5F6: 00443D7C not a confirmed operand | 1a5f2:	3d7c 1098 0044 	movew #4248,%fp@(68)
 SKIP-B 01A64A: 0040D26E not a confirmed operand | 1a648:	d06e 0040      	addw %fp@(64),%d0
 SKIP-B 01A64E: 00443D40 not a confirmed operand | 1a64c:	d26e 0044      	addw %fp@(68),%d1
-A 01A930: 00440004 -> 00FF9804   | 1a92c:	33fc ffff 0044 	movew #-1,0x440004
+A 01A930: 00440004 -> 0085E004   | 1a92c:	33fc ffff 0044 	movew #-1,0x440004
 A 01A938: 00840000 -> 00FFA000   | 1a934:	33fc 0888 0084 	movew #2184,0x840000
 A 01A940: 00840002 -> 00FFA002   | 1a93c:	33fc 0fff 0084 	movew #4095,0x840002
 A 01A948: 00840004 -> 00FFA004   | 1a944:	33fc 0888 0084 	movew #2184,0x840004
@@ -520,7 +520,7 @@ A 01AFF6: 00C40001 -> 00FFB001   | 1aff2:	08b9 0006 00c4 	bclr #6,0xc40001
 A 01B018: 00C40001 -> 00FFB001   | 1b014:	13f8 f018 00c4 	moveb 0xfffff018,0xc40001
 A 01B022: 004101C4 -> 00FF81C4   | 1b020:	41f9 0041 01c4 	lea 0x4101c4,%a0
 A 01B084: 00410344 -> 00FF8344   | 1b082:	43f9 0041 0344 	lea 0x410344,%a1
-A 01B0D2: 00440004 -> 00FF9804   | 1b0ce:	33fc ffff 0044 	movew #-1,0x440004
+A 01B0D2: 00440004 -> 0085E004   | 1b0ce:	33fc ffff 0044 	movew #-1,0x440004
 A 01B0DA: 00410E80 -> 00FF8E80   | 1b0d6:	33fc 7777 0041 	movew #30583,0x410e80
 A 01B0E2: 00410E82 -> 00FF8E82   | 1b0de:	33fc 0000 0041 	movew #0,0x410e82
 A 01B0EA: 00840000 -> 00FFA000   | 1b0e6:	33fc 0888 0084 	movew #2184,0x840000
@@ -709,7 +709,6 @@ WARNINGS (refs into shim RAM):
 002AE2: ref 00FF8E90 into shim RAM range
 002AF0: ref 00FF8E9A into shim RAM range
 002AFE: ref 00FF8E92 into shim RAM range
-002B20: ref 00FF9800 into shim RAM range
 002B26: ref 00FF7400 into shim RAM range
 002B44: ref FFFF357C into shim RAM range
 002B48: ref FFFF0004 into shim RAM range
@@ -725,7 +724,6 @@ WARNINGS (refs into shim RAM):
 00320E: ref 00FF1631 into shim RAM range
 00332C: ref 00FF0000 into shim RAM range
 00369E: ref 00FF8000 into shim RAM range
-0036C6: ref 00FF9800 into shim RAM range
 0036EE: ref FFFF41F8 into shim RAM range
 0036F8: ref FFFF323C into shim RAM range
 003768: ref 00FF80D2 into shim RAM range
@@ -925,8 +923,7 @@ WARNINGS (refs into shim RAM):
 018E9E: ref 00FF0020 into shim RAM range
 0193FE: ref 00FF0020 into shim RAM range
 01A4F2: ref 00FFA490 into shim RAM range
-01A92E: ref FFFF00FF into shim RAM range
-01A930: ref 00FF9804 into shim RAM range
+01A92E: ref FFFF0085 into shim RAM range
 01A938: ref 00FFA000 into shim RAM range
 01A940: ref 00FFA002 into shim RAM range
 01A948: ref 00FFA004 into shim RAM range
@@ -955,8 +952,7 @@ WARNINGS (refs into shim RAM):
 01B018: ref 00FFB001 into shim RAM range
 01B022: ref 00FF81C4 into shim RAM range
 01B084: ref 00FF8344 into shim RAM range
-01B0D0: ref FFFF00FF into shim RAM range
-01B0D2: ref 00FF9804 into shim RAM range
+01B0D0: ref FFFF0085 into shim RAM range
 01B0DA: ref 00FF8E80 into shim RAM range
 01B0E2: ref 00FF8E82 into shim RAM range
 01B0EA: ref 00FFA000 into shim RAM range

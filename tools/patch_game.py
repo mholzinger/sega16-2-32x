@@ -29,8 +29,11 @@ def remap(v):
         return 0x852000 + (a & 0xFFFF)
     if 0x410000 <= a < 0x420000:            # text RAM -> shadow
         return 0xFF8000 + (a & 0xFFF)
-    if 0x440000 <= a < 0x450000:            # sprite RAM -> shadow (2KB mirror)
-        return 0xFF9800 + (a & 0x7FF)
+    if 0x440000 <= a < 0x450000:            # sprite RAM -> FB staging (2KB mirror)
+        # 0x840000 FB window + 0x1E000; game writes are all word/long
+        # (verified: movel/movew upload loop at 0x2B1E), so the FB
+        # zero-byte-drop hazard doesn't apply.
+        return 0x85E000 + (a & 0x7FF)
     if 0x840000 <= a < 0x850000:            # palette -> shadow (4KB mirror)
         return 0xFFA000 + (a & 0xFFF)
     if 0x3F0000 <= a < 0x400000:            # tile bank regs -> shadow words

@@ -85,9 +85,9 @@ void shim_vblank(void) {
 
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
 	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
-	// palette/text batches, up to 64 per vblank. Palette now covers 1024
-	// entries (tiles use colors up to 127 -> entries up to 1023): full
-	// refresh every ~6.4 frames; text RAM (2048 words) every ~13.
+	// palette/text batches, up to 64 per vblank. Palette covers all 2048
+	// entries (tiles/text 0-1023, sprites 1024-2047): full refresh every
+	// ~12.8 frames; text RAM (2048 words) every ~13.
 	{
 		static uint16_t pal_idx, txt_idx;
 		uint16_t spin;
@@ -118,7 +118,7 @@ void shim_vblank(void) {
 				*mars_comm8  = p[3];
 				*mars_comm10 = p[4];
 				*mars_comm0  = 0x8000 | pal_idx;
-				pal_idx = (uint16_t)((pal_idx + 5) & 0x3FF);
+				pal_idx = (uint16_t)((pal_idx + 5) & 0x7FF);
 			}
 		}
 	}
