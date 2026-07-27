@@ -945,6 +945,32 @@ interrupted-PC sample sits in ITS OWN idle vblank-wait loop (0x3982):
 frame logic completes with cycles to spare, arcade-style pacing.
 Display is 30fps (window every 2nd H-int buys the game its cycles).
 
+## Evening sweep (2026-07-27): the last structural render bugs
+
+Fixed in sequence, each MAME+ares verified:
+1. Palette -> FB staging (stream now text-only; color lag gone).
+2. Two-CPU window (slave composes AND blits its half; SYNC[2]/[3] flip
+   handshake; full overlap). Game logic reached full 60Hz pacing — its
+   interrupted-PC idles in the vblank-wait loop.
+3. Black sprites in ares: the slave's prescan ran post-flip and read the
+   sprite list from the WRONG BANK (deferred latch). Sprite list now
+   snapshots to SDRAM at window start; all sprite readers use it.
+   RULE: nothing reads FB staging after the first flip edge.
+4. 4-way tile cache (256 sets, same 64KB): round-1 sky-gradient codes
+   aliased 3+ deep in 2-way and thrashed forever (black band part 1).
+5. VERTICAL SCROLL SIGN: vy = sy + ysc. MAME's convention is
+   asymmetric — the driver negates X itself (0xC0 - xsc) but passes Y
+   raw (positive scrolly moves the source window DOWN). The minus form
+   had the screen top wrapping to the virtual map's bottom since the
+   FIRST background milestone (phantom rock band + black gap; the
+   title layout coincidentally looked plausible). Found via
+   byte-identical shadow diffs + the user's annotated screenshot.
+
+Gameplay layout now frame-for-frame arcade-identical. Remaining visual
+gaps: sprite-vs-tile priority bits (sprites always on top — zombies
+should walk BEHIND gravestones), shadow pen, off-screen sprite color
+prescan at extreme edges. Then sound.
+
 ## SOUND PLAN: mine the official MD port (megadriveref/)
 
 The user provided the retail MD port ROM: megadriveref/"Altered Beast
