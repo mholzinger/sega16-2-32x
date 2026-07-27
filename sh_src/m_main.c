@@ -102,6 +102,11 @@ static uint8_t blank_tile[64] __attribute__((aligned(4)));
 static uint8_t tile_grp[2][128];
 static uint8_t spr_pair[2][64];
 static uint8_t text_grp[2][8];              /* text colors: on-demand too */
+/* Sticky ownership (persistent across cycles — see build_maps): which
+ * color owns each CRAM group / sprite pair, and how long since it was
+ * last seen on screen. */
+static uint8_t grp_key[32], grp_kind[32], grp_age[32];
+static uint8_t pr_key[16], pr_age[16];
 /* Group 0 is NEVER assigned by the allocator, so no composed pixel is
  * ever VALUE 0 (the MD-through value) — replaces the old BG0 alias. */
 
@@ -245,43 +250,134 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         sused[d[4] & 0x3F] = 1;
     }
 
-    /* Group budget (31 usable — group 0 is never assigned, so no pixel
-     * is ever VALUE 0, the MD-through value): sprite pairs reserved off
-     * the top first; text colors allocate on demand (the old fixed 0-7
-     * identity block wasted 5-6 groups every frame); tile colors get the
-     * rest ranked by PIXEL WEIGHT — two passes, mass colors (sky, ground)
-     * first, rare ones while room lasts, overflow shares the last tile
-     * group. Gameplay scenes carry ~20 tile colors + 7 sprite pairs and
-     * the old fixed budget clamped the SKY into the shared group. */
+    /* STICKY group allocation (31 usable — group 0 is never assigned,
+     * so no pixel is ever VALUE 0, the MD-through value). The old
+     * positional allocator re-numbered EVERY group whenever the used-
+     * color set changed — a sprite flashing its color each frame
+     * reshuffled the whole map every cycle, and pixels already on
+     * screen (composed with last cycle's map) pointed at re-purposed
+     * CRAM entries: the full-screen strobe on power-up effects.
+     * Now colors OWN their groups across cycles: singles (tile/text)
+     * allocate lowest-first, sprite PAIRS (two aligned groups)
+     * highest-first, new claims take free slots then the oldest
+     * unused ones, and colors unseen for ~90 cycles decay away.
+     * Over-subscription overflows into sharing, as before. */
+    for (int g = 1; g < 32; g++)
+        if (grp_key[g] != 0xFF) {
+            int used = grp_kind[g] ? txused[grp_key[g]]
+                                   : (tcount[grp_key[g]] != 0);
+            if (used)
+                grp_age[g] = 0;
+            else if (++grp_age[g] > 90)
+                grp_key[g] = 0xFF;
+        }
+    for (int p = 1; p < 16; p++)
+        if (pr_key[p] != 0xFF) {
+            if (sused[pr_key[p]])
+                pr_age[p] = 0;
+            else if (++pr_age[p] > 90)
+                pr_key[p] = 0xFF;
+        }
+
+    /* Budget boundary: sprites need ALIGNED pairs, and tiles filling
+     * low groups unbounded starves them (MAME field test: red-
+     * silhouette player, purple-less zombies). Reserve pair space for
+     * the demand (6..10 pairs, hysteresis via stickiness): singles
+     * live strictly below `bound`, pairs strictly above. */
     int nspr = 0;
     for (int sc = 0; sc < 64; sc++)
         if (sused[sc])
             nspr++;
-    int pair_lo = 16 - nspr;
-    if (pair_lo < 6)
-        pair_lo = 6;
-    uint8_t tile_cap = (uint8_t)(pair_lo * 2);
+    int need = nspr < 6 ? 6 : (nspr > 10 ? 10 : nspr);
+    int bound = 32 - 2 * need;
+    for (int q = bound; q < 32; q++)         /* evict singles from pair zone */
+        if (grp_key[q] != 0xFF)
+            grp_key[q] = 0xFF;
 
-    uint8_t next = 1;                        /* NEVER group 0 */
-    for (int c = 0; c < 8; c++)
-        text_grp[par][c] = txused[c] && next < tile_cap ? next++ : 0xFF;
-    for (int c = 0; c < 128; c++)
-        tile_grp[par][c] = 0xFF;
-    for (int c = 0; c < 128; c++)            /* pass 1: mass colors */
-        if (tcount[c] >= 24 && next < tile_cap)
-            tile_grp[par][c] = next++;
-    for (int c = 0; c < 128; c++)            /* pass 2: the rest */
-        if (tcount[c] && tile_grp[par][c] == 0xFF)
-            tile_grp[par][c] = next < tile_cap ? next++ : (uint8_t)(tile_cap - 1);
-    int pair = 15;
+    /* sprites first (a pair = aligned groups 2p/2p+1) */
+    uint8_t shared_pair = 15;
+    for (int sc = 0; sc < 64; sc++)
+        spr_pair[par][sc] = 0xFF;
     for (int sc = 0; sc < 64; sc++) {
-        if (!sused[sc]) {
-            spr_pair[par][sc] = 0xFF;
+        if (!sused[sc])
+            continue;
+        int p = -1;
+        for (int q = 1; q < 16; q++)
+            if (pr_key[q] == sc) { p = q; break; }
+        if (p < 0)
+            for (int q = 15; q >= bound / 2; q--)
+                if (pr_key[q] == 0xFF && grp_key[2 * q] == 0xFF
+                    && grp_key[2 * q + 1] == 0xFF) { p = q; break; }
+        if (p < 0) {                         /* steal the oldest OFF-SCREEN
+                                              * pair (age>=3: stealing one
+                                              * merely absent THIS scan
+                                              * recolors pixels still
+                                              * displayed) */
+            uint8_t best = 2;
+            for (int q = 15; q >= bound / 2; q--)
+                if (pr_key[q] != 0xFF && pr_age[q] > best) {
+                    best = pr_age[q]; p = q;
+                }
+        }
+        if (p < 0) {
+            spr_pair[par][sc] = shared_pair;  /* over budget: share */
             continue;
         }
-        spr_pair[par][sc] = (uint8_t)(pair >= pair_lo ? pair : pair_lo);
-        if (pair >= pair_lo)
-            pair--;
+        pr_key[p] = (uint8_t)sc;
+        pr_age[p] = 0;
+        grp_key[2 * p] = grp_key[2 * p + 1] = 0xFF;
+        spr_pair[par][sc] = (uint8_t)p;
+        shared_pair = (uint8_t)p;
+    }
+
+    /* text + tile singles (mass tile colors before rare ones) */
+    for (int c = 0; c < 8; c++)
+        text_grp[par][c] = 0xFF;
+    for (int c = 0; c < 128; c++)
+        tile_grp[par][c] = 0xFF;
+    uint8_t shared_tile = 0xFF;
+    for (int pass = 0; pass < 3; pass++) {
+        for (int c = 0; c < (pass ? 128 : 8); c++) {
+            int kind = pass ? 0 : 1;
+            if (pass == 0 && !txused[c]) continue;
+            if (pass == 1 && tcount[c] < 24) continue;
+            if (pass == 2 && (!tcount[c] || tile_grp[par][c] != 0xFF)) continue;
+            int g = -1;
+            for (int q = 1; q < bound; q++)
+                if (grp_key[q] == (uint8_t)c && grp_kind[q] == kind
+                    && pr_key[q >> 1] == 0xFF) { g = q; break; }
+            if (g < 0)
+                for (int q = 1; q < bound; q++)
+                    if (grp_key[q] == 0xFF && pr_key[q >> 1] == 0xFF) {
+                        g = q; break;
+                    }
+            if (g < 0) {                     /* steal the oldest OFF-SCREEN
+                                              * single (age>=3, see pairs) */
+                uint8_t best = 2;
+                for (int q = 1; q < bound; q++)
+                    if (grp_key[q] != 0xFF && pr_key[q >> 1] == 0xFF
+                        && grp_age[q] > best) {
+                        best = grp_age[q]; g = q;
+                    }
+            }
+            if (g < 0) {
+                if (kind == 0)
+                    tile_grp[par][c] = shared_tile;   /* over budget: share */
+                else
+                    text_grp[par][c] = shared_tile;
+                continue;
+            }
+            grp_key[g] = (uint8_t)c;
+            grp_kind[g] = (uint8_t)kind;
+            grp_age[g] = 0;
+            if (kind == 0) {
+                tile_grp[par][c] = (uint8_t)g;
+                shared_tile = (uint8_t)g;
+            } else
+                text_grp[par][c] = (uint8_t)g;
+            if (shared_tile == 0xFF)
+                shared_tile = (uint8_t)g;
+        }
     }
 }
 
@@ -805,6 +901,14 @@ RAMCODE void m_main(void)
             spr_pair[k][i] = 0xFF;
         for (int i = 0; i < 8; i++)
             text_grp[k][i] = 0xFF;
+    }
+    for (int i = 0; i < 32; i++) {
+        grp_key[i] = 0xFF;
+        grp_age[i] = 0;
+    }
+    for (int i = 0; i < 16; i++) {
+        pr_key[i] = 0xFF;
+        pr_age[i] = 0;
     }
     SYNC[0] = SYNC[1] = SYNC[2] = SYNC[3] = 0;
 

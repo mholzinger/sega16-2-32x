@@ -1189,3 +1189,30 @@ MAME: 5460-frame coined run, no stalls, mskips 29/~1800 cycles
 LESSON: any cross-CPU "am I in vblank" decision must consume a value
 PUBLISHED FRESH FOR THIS WINDOW — a mailbox holding last window's
 clock reads as confidently, and wrongly, as a live one.
+
+## STICKY CRAM ALLOCATOR (kills the power-effect full-screen strobe)
+
+Field report: "any powered effects or flashing sprites cause the
+entire screen to flash." Cause: the positional allocator re-numbered
+EVERY group whenever the used-color set changed — a sprite flashing
+its color each frame reshuffled the whole map每cycle, and pixels
+already on screen (composed with last cycle's map) pointed at
+re-purposed CRAM entries.
+
+Now colors OWN groups across cycles (grp_key/grp_kind/grp_age,
+pr_key/pr_age): keep if seen, age if not, decay after ~90 cycles;
+new colors claim free slots, then steal only OFF-SCREEN ones
+(age>=3 — stealing an age-1 slot recolors pixels still displayed).
+Singles (tile/text) allocate lowest-first; sprite PAIRS (aligned
+2p/2p+1) highest-first, with a demand-driven boundary (6..10 pairs)
+reserving pair space — without it tiles starved the sprites (MAME
+field test: red-silhouette player, purple-less zombies).
+
+Residual: rise-scene text renders yellow (FPGA ground truth: red) —
+some text/tile color lands in a shared or re-sourced group; chase
+with a CRAM differ vs the reference arcade driver (toolkit item).
+
+ALSO this round: TOOLKIT.md added — the project's second deliverable
+is a reusable S16->32X porting kit; that file is the living inventory
+of which pieces are game-agnostic and what must become per-title
+config.
