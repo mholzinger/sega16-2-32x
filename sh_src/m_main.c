@@ -95,8 +95,9 @@ static uint8_t blank_tile[64] __attribute__((aligned(4)));
  * toggle). */
 static uint8_t tile_grp[2][128];
 static uint8_t spr_pair[2][64];
-#define BG0_GRP 8                           /* opaque BG must never emit
-                                             * pixel value 0 (MD-through) */
+static uint8_t text_grp[2][8];              /* text colors: on-demand too */
+/* Group 0 is NEVER assigned by the allocator, so no composed pixel is
+ * ever VALUE 0 (the MD-through value) — replaces the old BG0 alias. */
 
 #define SBUF_W 336
 #define SBUF_H 240
@@ -199,9 +200,11 @@ RAMCODE static void latch_layer_regs(void)
  * sprite pairs descend from 15. */
 RAMCODE static void build_maps(int par, uint16_t bank1)
 {
-    uint8_t tused[128], sused[64];
-    for (int i = 0; i < 128; i++) tused[i] = 0;
+    uint16_t tcount[128];
+    uint8_t sused[64], txused[8];
+    for (int i = 0; i < 128; i++) tcount[i] = 0;
     for (int i = 0; i < 64; i++) sused[i] = 0;
+    for (int i = 0; i < 8; i++) txused[i] = 0;
     (void)bank1;
 
     for (int which = 0; which < 2; which++) {
@@ -216,10 +219,16 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
                 int vx = ((lr->vx0 & ~7) + c * 8) & 0x3FF;
                 uint16_t w = TILEMAP_C[lr->pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
                                        + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
-                tused[((unsigned)w >> 6) & 0x7F] = 1;
+                tcount[((unsigned)w >> 6) & 0x7F]++;
             }
         }
     }
+    for (int row = 0; row < 28; row++)
+        for (int col = 24; col < 64; col++) {
+            uint16_t d = TEXT_C[row * 64 + col];
+            if ((d & 0x1FF) || (d & 0x0E00))
+                txused[((unsigned)d >> 9) & 7] = 1;
+        }
     for (int i = 0; i < 64; i++) {
         volatile uint16_t *d = SPR_SNAP + i * 8;
         uint16_t d2 = d[2];
@@ -231,27 +240,34 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         sused[d[4] & 0x3F] = 1;
     }
 
-    /* RESERVE the sprite pairs FIRST, then cap the tile groups below
-     * them. The old order let overflowing tile colors march into groups
-     * 24-31 = sprite pair CRAM: gravestones rendered in zombie skin
-     * tones and sprites in stone colors (FPGA-reference diff). Overflow
-     * tiles now share the LAST LEGAL tile group instead. */
+    /* Group budget (31 usable — group 0 is never assigned, so no pixel
+     * is ever VALUE 0, the MD-through value): sprite pairs reserved off
+     * the top first; text colors allocate on demand (the old fixed 0-7
+     * identity block wasted 5-6 groups every frame); tile colors get the
+     * rest ranked by PIXEL WEIGHT — two passes, mass colors (sky, ground)
+     * first, rare ones while room lasts, overflow shares the last tile
+     * group. Gameplay scenes carry ~20 tile colors + 7 sprite pairs and
+     * the old fixed budget clamped the SKY into the shared group. */
     int nspr = 0;
     for (int sc = 0; sc < 64; sc++)
         if (sused[sc])
             nspr++;
-    int pair_lo = 16 - nspr;                /* pairs pair_lo..15 are sprite CRAM */
+    int pair_lo = 16 - nspr;
     if (pair_lo < 6)
-        pair_lo = 6;                        /* tiles keep >= 3 dynamic groups */
+        pair_lo = 6;
     uint8_t tile_cap = (uint8_t)(pair_lo * 2);
 
+    uint8_t next = 1;                        /* NEVER group 0 */
     for (int c = 0; c < 8; c++)
-        tile_grp[par][c] = (uint8_t)c;
-    uint8_t next = BG0_GRP + 1;
-    for (int c = 8; c < 128; c++)
-        tile_grp[par][c] = tused[c]
-            ? (next < tile_cap ? next++ : (uint8_t)(tile_cap - 1))
-            : 0xFF;
+        text_grp[par][c] = txused[c] && next < tile_cap ? next++ : 0xFF;
+    for (int c = 0; c < 128; c++)
+        tile_grp[par][c] = 0xFF;
+    for (int c = 0; c < 128; c++)            /* pass 1: mass colors */
+        if (tcount[c] >= 24 && next < tile_cap)
+            tile_grp[par][c] = next++;
+    for (int c = 0; c < 128; c++)            /* pass 2: the rest */
+        if (tcount[c] && tile_grp[par][c] == 0xFF)
+            tile_grp[par][c] = next < tile_cap ? next++ : (uint8_t)(tile_cap - 1);
     int pair = 15;
     for (int sc = 0; sc < 64; sc++) {
         if (!sused[sc]) {
@@ -276,8 +292,15 @@ RAMCODE static void apply_cram(int par)
         for (int p = 0; p < 8; p++)
             dst[p] = s16_to_mars(src[p]);
     }
-    for (int p = 0; p < 8; p++)
-        cram[BG0_GRP * 8 + p] = s16_to_mars(FB_PAL[p]);
+    for (int c = 0; c < 8; c++) {
+        uint8_t g = text_grp[par][c];
+        if (g == 0xFF)
+            continue;
+        volatile uint16_t *src = FB_PAL + c * 8;
+        volatile uint16_t *dst = cram + g * 8;
+        for (int p = 0; p < 8; p++)
+            dst[p] = s16_to_mars(src[p]);
+    }
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
         if (pr == 0xFF)
@@ -330,9 +353,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                 tptr[c] = tile_pixels(code, cpu);
                 uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
                 if (g == 0xFF)
-                    g = 31;
-                else if (g == 0)
-                    g = BG0_GRP;
+                    g = 1;                          /* prescan miss: neutral */
                 tbase[c] = (uint32_t)(g << 3) * 0x01010101u;
             }
             /* CONSTANT-shift specialization per xf case. SH-2 has no
@@ -391,7 +412,7 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                 code = (code & 0xFFF) + bank1 * 0x1000u;
             const uint8_t *tp = tile_pixels(code, cpu) + l0 * 8;
             uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
-            uint8_t base = (uint8_t)((g == 0xFF ? 31 : g) << 3);
+            uint8_t base = (uint8_t)((g == 0xFF ? 1 : g) << 3);
             for (int y = l0; y < l1; y++) {
                 if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
                 if (tp[1]) dst[1] = (uint8_t)(base + tp[1]);
@@ -544,7 +565,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 }
 
 /* Text: IN-WINDOW (ROM glyphs), above sprites. Row range [row0,row1). */
-RAMCODE static void compose_text(int row0, int row1)
+RAMCODE static void compose_text(int row0, int row1, int par_text)
 {
     for (int row = row0; row < row1; row++) {
         for (int col = 24; col < 64; col++) {
@@ -552,8 +573,11 @@ RAMCODE static void compose_text(int row0, int row1)
             unsigned code = d & 0x1FF;
             if (code == 0 && !(d & 0x0E00))
                 continue;
+            uint8_t g = text_grp[par_text][((unsigned)d >> 9) & 7];
+            if (g == 0xFF)
+                continue;
             const uint8_t *tp = altbeast_tiles + code * 64;
-            uint8_t base = (uint8_t)(((d >> 9) & 7) << 3);
+            uint8_t base = (uint8_t)(g << 3);
             uint8_t *dst = sbuf + (8 + row * 8) * SBUF_W + 8 + (col - 24) * 8;
             for (int y = 0; y < 8; y++) {
                 if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
@@ -648,7 +672,7 @@ RAMCODE void slave_window_half(uint16_t bank1, int par)
     SYNC[2] = 1;                                 /* snapshot ready */
     compose_sprites(0, 112, par);
     compose_layer(0, 112, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
-    compose_text(0, 14);
+    compose_text(0, 14, par);
     blit_half(0, 112);                           /* bank fs0, top half */
     SYNC[2] = 2;
     while (SYNC[3] == 0) ;                       /* master flips + latch-waits */
@@ -709,9 +733,11 @@ RAMCODE void m_main(void)
         blank_tile[i] = 0;
     for (int k = 0; k < 2; k++) {
         for (int i = 0; i < 128; i++)
-            tile_grp[k][i] = (uint8_t)(i < 8 ? i : 0xFF);
+            tile_grp[k][i] = 0xFF;
         for (int i = 0; i < 64; i++)
             spr_pair[k][i] = 0xFF;
+        for (int i = 0; i < 8; i++)
+            text_grp[k][i] = 0xFF;
     }
     SYNC[0] = SYNC[1] = SYNC[2] = SYNC[3] = 0;
 
@@ -793,7 +819,7 @@ RAMCODE void m_main(void)
         compose_layer(112, 224, 0, 0, 0, bank1, par, 2); /* FG cat1 OVER sprites */
         diag_add(12, tp);
         tp = frt();
-        compose_text(14, 28);
+        compose_text(14, 28, par);
         diag_add(13, tp);
 
         /* Verified-flip dual blit, HALVED across the CPUs (see NOTES on
