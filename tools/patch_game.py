@@ -14,7 +14,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ROMS = ROOT / 'roms' / 'altbeast'
 
-DATA_EXCLUDE = [(0x1986, 0x1998)]   # boot mapper table (raw bytes, not code)
+DATA_EXCLUDE = [
+    (0x1986, 0x1998),   # boot mapper table (raw bytes, not code)
+    (0x1D2DC, 0x1D520), # level event/spawn script: 12-byte records
+                        # [camX.w][p1.w][p2.w][0x0040.w][handler.l] — the
+                        # 0x0040,0x0000 word pairs LOOK like 0x00400000
+                        # tile-RAM operands in objdump's misdisassembly;
+                        # patching one corrupted a round-1 spawn (red blob)
+]
 
 def remap(v):
     if v >> 24:

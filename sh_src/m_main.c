@@ -620,7 +620,11 @@ RAMCODE static void cache_fill(int budget)
                 continue;
             unsigned way = cache_rot[set] & (NWAYS - 1);
             cache_rot[set] = (uint8_t)(way + 1);
-            cache_tag[s4 + way] = (uint16_t)code;
+            /* Data FIRST, tag LAST: a concurrent reader (the slave's
+             * in-window cat-1 pass) must never hit a tag whose 64 bytes
+             * are still half-copied — that tearing rendered plausible-
+             * but-wrong tiles at animated cells. */
+            cache_tag[s4 + way] = 0xFFFF;
             const uint32_t *src = (const uint32_t *)(altbeast_tiles + code * 64);
             uint32_t *dst = (uint32_t *)(CACHE_C + (s4 + way) * 64);
             for (int k = 0; k < 16; k += 4) {
@@ -629,6 +633,7 @@ RAMCODE static void cache_fill(int budget)
                 dst[k + 2] = src[k + 2];
                 dst[k + 3] = src[k + 3];
             }
+            cache_tag[s4 + way] = (uint16_t)code;
             budget--;
         }
         miss_n[q] = 0;
@@ -823,10 +828,6 @@ RAMCODE void m_main(void)
         apply_cram(par);
         diag_add(2, tp);
 
-        tp = frt();
-        cache_fill(256);
-        diag_add(1, tp);
-
         while (SYNC[2] < 1) ;                /* sprite-list snapshot ready */
         tp = frt();
         compose_sprites(112, 224, par);
@@ -860,6 +861,13 @@ RAMCODE void m_main(void)
         tp = frt();
         slave_wait((uint16_t)(CMD_WIN | (par << 8) | bank1));
         diag_add(3, tp);
+
+        /* Fills AFTER all of the slave's in-window cache reads are done
+         * (its cat-1 pass) — no reader can observe a slot mid-fill. The
+         * concurrent compose starts post-ack and sees them complete. */
+        tp = frt();
+        cache_fill(256);
+        diag_add(1, tp);
         par ^= 1;
 
         diag_add(8, tw);
