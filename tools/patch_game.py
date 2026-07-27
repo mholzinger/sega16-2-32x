@@ -8,7 +8,7 @@ cross-referenced against the disassembly and reported for review.
 Output: md_src/game_body.bin (bytes 0x400-0x3FFFF, cart-ready) and
 tools/patch_report.txt.
 """
-import struct
+import struct, re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -102,6 +102,53 @@ for line in (ROMS / 'prog68k.asm').read_text().splitlines():
     for pat in ('0xffff8', '0xffff9', '0xffffa', '0xffffb'):
         if pat in line:
             warn.append("ASM " + line.strip())
+
+# ---- boot-region CONSTANT reads (0x400-0x807 is displaced by the blob) ----
+# Any absolute reference that READS a game byte in 0x400-0x807 must hit the
+# RAM copy at 0xFFB400 (+0xB000), not the blob now occupying native 0x400.
+# WRITES to that range are skipped: on the arcade those addresses are program
+# ROM (writes are no-ops), so leaving them pointing at cart ROM is faithful.
+# Driven by the disassembly so we rewrite real operands, not table bytes.
+READ_OPS = {'cmpiw','cmpib','cmpil','tstw','tstb','tstl',
+            'moveb','movew','movel','pea','lea','btst'}
+BOOT_DELTA = 0xFFB400 - 0x400
+redir = 0
+for line in (ROMS / 'prog68k.asm').read_text().splitlines():
+    m = re.match(r'\s*([0-9a-f]+):\t([0-9a-f ]+)\t(\w+)\s+(.*)', line)
+    if not m:
+        continue
+    iaddr = int(m.group(1), 16)
+    ibytes = bytes.fromhex(m.group(2).replace(' ', ''))
+    op, operand = m.group(3), m.group(4).strip()
+    if op not in READ_OPS:
+        continue
+    mt = re.search(r'0x([0-9a-f]+)', operand)
+    if not mt:
+        continue
+    v = int(mt.group(1), 16)
+    if not (0x400 <= v < 0x808):
+        continue
+    # for move, the boot addr must be the SOURCE (before the comma)
+    if op.startswith('move') and ',' in operand:
+        if f"0x{v:x}" not in operand.split(',', 1)[0]:
+            continue
+    tgt = v + BOOT_DELTA                     # 0xFFB400-based
+    # locate the operand encoding by scanning the ROM after the opcode word
+    # (objdump wraps long instructions across lines, so ibytes is unreliable).
+    done = False
+    for k in range(2, 12, 2):                 # abs.l (4 bytes, high word 0)
+        if struct.unpack_from('>I', rom, iaddr + k)[0] == v:
+            struct.pack_into('>I', rom, iaddr + k, tgt)
+            done = True; break
+    if not done:
+        for k in range(2, 8, 2):              # abs.w (2 bytes; sign-extends)
+            if struct.unpack_from('>H', rom, iaddr + k)[0] == (v & 0xFFFF):
+                struct.pack_into('>H', rom, iaddr + k, tgt & 0xFFFF)
+                done = True; break
+    if done:
+        redir += 1
+        report.append(f"REDIR {iaddr:06X}: {op} 0x{v:x} -> 0x{tgt:06X} | {line.strip()}")
+report.append(f"\n{redir} boot-region constant reads redirected to RAM copy\n")
 
 # ---- runtime jump-ins to the displaced 0x400-0x807 region ----
 # ROM 0x400-0x7FF holds the Sega security program (BIOS-verified); the

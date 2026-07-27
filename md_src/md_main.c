@@ -1,40 +1,125 @@
 #include "common.h"
 
 // MD-side shim for the arcade game. Runs entirely from work RAM (.data):
-// once RV=1 the low ROM map belongs to the game, and the 0x880000 window
-// must stay untouched, so nothing here may execute from or read cart ROM.
+// once RV=1 the low ROM map belongs to the game and the 0x880000 window
+// must stay untouched.
 //
-// Stage A: prove the relocated boot chain (blob @0x40400 -> _start @0x8C0810
-// -> RV=1 -> RAM main) completes. Beacon on COMM14, heartbeat on COMM12.
+// Stage B: replicate the i8751 MCU (see NOTES.md "MCU FULLY REVERSE-
+// ENGINEERED") and run the game's own boot from its RAM copy at 0xFFB400.
 
-static volatile uint16_t* const vdp_data_port = (uint16_t*) VDP_DATA_PORT;
-static volatile uint16_t* const vdp_ctrl_port = (uint16_t*) VDP_CTRL_PORT;
-static volatile uint32_t* const vdp_ctrl_wide = (uint32_t*) VDP_CTRL_PORT;
-static volatile uint16_t* const mars_comm12  = (uint16_t*) MARS_COMM12;
-static volatile uint16_t* const mars_comm14  = (uint16_t*) MARS_COMM14;
+static volatile uint16_t* const mars_comm12 = (uint16_t*) MARS_COMM12;
+static volatile uint16_t* const mars_comm14 = (uint16_t*) MARS_COMM14;
 
 extern uint16_t read_joypad(uint8_t player);
 
+// ---- shadow / mailbox addresses (see NOTES.md memory map) ----
+#define IO_MISC     (*(volatile uint8_t*)0xFFB001)  // c40001: flip/display/lamps
+#define IO_SERVICE  (*(volatile uint8_t*)0xFFB011)  // c41001: coins/service/start
+#define IO_P1       (*(volatile uint8_t*)0xFFB013)  // c41003
+#define IO_P2       (*(volatile uint8_t*)0xFFB017)  // c41007
+#define IO_DSW2     (*(volatile uint8_t*)0xFFB021)  // c42001
+#define IO_DSW1     (*(volatile uint8_t*)0xFFB023)  // c42003
+#define IO_C43007   (*(volatile uint8_t*)0xFFB037)
+#define BANK_SHADOW (*(volatile uint8_t*)0xFFB043)  // 3F0002 low byte
+#define MCU_COINS   (*(volatile uint8_t*)0xFFF0C2)  // MCU posts inverted SERVICE
+#define MCU_BANKREQ (*(volatile uint8_t*)0xFFF095)  // game's tile bank request
+#define MCU_SNDCMD  (*(volatile uint8_t*)0xFFF0C4)  // sound mailbox (0xFF = idle)
+#define MCU_BUSY    (*(volatile uint8_t*)0xFFF0C0)  // screen-sync handshake
+#define TEXT_SYNC   (*(volatile uint8_t*)0xFF8002)  // text RAM shadow +2
+
+uint16_t game_running = 0;
+
 __attribute__((section(".data")))
-void vdp_color(uint16_t index, uint16_t color) {
-	index <<= 1;
-	*vdp_ctrl_wide = ((0xC000 + (((uint32_t)index) & 0x3FFF)) << 16) + (((uint32_t)index) >> 14);
-	*vdp_data_port = color;
+static uint8_t md_to_arcade(uint16_t p) {
+	// read_joypad: 0 0 0 1 M X Y Z S A C B R L D U (active high)
+	// arcade Pn (active low): b0 BTN3 b1 BTN1 b2 BTN2 b4 DOWN b5 UP b6 RIGHT b7 LEFT
+	// altbeast: BTN1 punch, BTN2 kick, BTN3 jump -> MD A punch, B kick, C jump
+	uint8_t a = 0;
+	if (p & 0x0001) a |= 0x20;  // up
+	if (p & 0x0002) a |= 0x10;  // down
+	if (p & 0x0004) a |= 0x80;  // left
+	if (p & 0x0008) a |= 0x40;  // right
+	if (p & 0x0040) a |= 0x02;  // A -> punch
+	if (p & 0x0010) a |= 0x04;  // B -> kick
+	if (p & 0x0020) a |= 0x01;  // C -> jump
+	return (uint8_t)~a;
+}
+
+__attribute__((section(".data")))
+void shim_vblank(void) {
+	static uint16_t busy;
+
+	// MCU main-loop half: screen-sync handshake + sound mailbox pump
+	if (!busy && MCU_BUSY)
+		busy = 1;
+	else if (busy && !TEXT_SYNC)
+		busy = 0;
+
+	uint8_t cmd = MCU_SNDCMD;
+	if (cmd != 0xFF) {
+		*mars_comm14 = 0x5000 | cmd;    // log sound command (no Z80 yet)
+		MCU_SNDCMD = 0xFF;
+	}
+
+	if (busy)
+		return;                          // MCU skips input/bank work while busy
+
+	// MCU vblank half: inputs + tile bank mirror
+	uint16_t p1 = read_joypad(0);
+	uint16_t p2 = read_joypad(1);
+	IO_P1 = md_to_arcade(p1);
+	IO_P2 = md_to_arcade(p2);
+
+	// SERVICE (active low): b0 coin1, b2 test, b3 service, b4 start1, b5 start2
+	// MD X (or START+A held) = coin, START = start1
+	uint8_t svc = 0;
+	uint16_t start = p1 & 0x0080, aheld = p1 & 0x0040, xbtn = p1 & 0x0200;
+	if (xbtn || (start && aheld)) svc |= 0x01;
+	if (start && !aheld)          svc |= 0x10;
+	if (p2 & 0x0080)              svc |= 0x20;
+	IO_SERVICE = (uint8_t)~svc;
+	MCU_COINS = svc;                     // MCU posts XOR-inverted (active high)
+
+	BANK_SHADOW = MCU_BANKREQ;           // tile bank req -> shadow (SH-2 later)
+	*mars_comm12 += 1;                   // frame heartbeat
 }
 
 __attribute__((section(".data")))
 void main(void) {
-	uint16_t ticks = 0;
-
 	*(volatile uint8_t*)0xA15107 = 1;   // RV=1: cart at 0x000000 — set from RAM,
 	                                    // never from the 0x880000 window
-	*mars_comm14 = 0xB007;          // stage-A beacon: boot chain completed
 
-	while (1) {
-		// visible MD-layer sign of life while the shim idles
-		while (*vdp_ctrl_port & 8) ;
-		while (!(*vdp_ctrl_port & 8)) ;
-		vdp_color(0, (++ticks & 8) ? 0x00A : 0x000);
-		*mars_comm12 = ticks;       // heartbeat
+	// Copy the game's displaced boot [0x400,0x808) + continuation jmp into
+	// work RAM at 0xFFB400 (cart stash at 0x40000, readable via RV low map).
+	{
+		volatile uint16_t *src = (volatile uint16_t*)0x040000;
+		volatile uint16_t *dst = (volatile uint16_t*)0xFFB400;
+		for (int i = 0; i < 0x40C / 2; i++)
+			dst[i] = src[i];
 	}
+
+	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
+	// demo sounds on; DSW1 0xFF = 1 coin / 1 credit)
+	IO_MISC = 0; IO_SERVICE = 0xFF; IO_P1 = 0xFF; IO_P2 = 0xFF;
+	IO_DSW2 = 0xFD; IO_DSW1 = 0xFF; IO_C43007 = 0;
+	BANK_SHADOW = 0;
+
+	// MCU-owned state
+	MCU_COINS = 0; MCU_SNDCMD = 0xFF; MCU_BUSY = 0;
+	// (MCU also sends sound cmd 0x40 at boot — no Z80 yet, noted)
+
+	// The adapter's vector area (0x000-0xFF) is writable RAM (the security
+	// blob itself installs vector 0x70). The game soft-restarts through the
+	// reset vectors (routine at 0x3078 reads SP/PC from 0/4) — point them at
+	// the RAM boot copy so restarts re-enter the game, not our dead _start.
+	*(volatile uint32_t*)0x000000 = 0xFFFFFF00;
+	*(volatile uint32_t*)0x000004 = 0x00FFB400;
+
+	*mars_comm14 = 0xB007;              // beacon: shim init complete
+	game_running = 1;
+
+	// Enter the game's own boot in its RAM copy. It sets SR, clears its work
+	// RAM, runs POST, and drops into the main loop; vblank chains via shim.
+	__asm__ volatile ("jmp 0xFFB400.l");
+	__builtin_unreachable();
 }

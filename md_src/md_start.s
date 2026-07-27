@@ -247,12 +247,12 @@ get_input:
 		rts
 
 _vblank:
-		move.l	d0,-(sp)
-
-		move.l	(VBlankCounter),d0
-		addq.l	#1,d0
-		move.l	d0,(VBlankCounter)	/* increment the vblank count */
-
-		move.l	(sp)+,d0
+		movem.l	d0-d7/a0-a6,-(sp)
+		jsr		shim_vblank			/* C shim: MCU duties (md_main.c) */
+		movem.l	(sp)+,d0-d7/a0-a6
+		tst.w	(game_running)
+		beq.s	1f
+		jmp		(0x2AAC).l			/* game IRQ4 handler; its rte pops our frame */
+	1:
 _hblank:
 		rte

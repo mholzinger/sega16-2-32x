@@ -627,6 +627,17 @@ SKIP-C 034004: 003F5D5D isolated, not patched | 34004:	003f           	.short 0x
 SKIP-C 03B710: 003FD0D0 isolated, not patched | 3b710:	003f           	.short 0x003f
 SKIP-C 03BCAA: 003FD0D0 isolated, not patched | 3bcaa:	003f           	.short 0x003f
 SKIP-C 03C244: 003FD0D0 isolated, not patched | 3c244:	003f           	.short 0x003f
+REDIR 0005C6: cmpiw 0x45a -> 0xFFB45A | 5c6:	0c79 ffff 0000 	cmpiw #-1,0x45a
+REDIR 000CE4: cmpiw 0x43e -> 0xFFB43E | ce4:	0c79 ffff 0000 	cmpiw #-1,0x43e
+REDIR 002D76: pea 0x5be -> 0xFFB5BE | 2d76:	4879 0000 05be 	pea 0x5be
+REDIR 002DB0: pea 0x400 -> 0xFFB400 | 2db0:	4879 0000 0400 	pea 0x400
+REDIR 02528E: movew 0x467 -> 0xFFB467 | 2528e:	3578 0467 00bf 	movew 0x467,%a2@(191)
+REDIR 026BD0: moveb 0x5e8 -> 0xFFB5E8 | 26bd0:	1a38 05e8      	moveb 0x5e8,%d5
+REDIR 026BD4: movel 0x7a8 -> 0xFFB7A8 | 26bd4:	2238 07a8      	movel 0x7a8,%d1
+REDIR 02EC98: movew 0x506 -> 0xFFB506 | 2ec98:	3738 0506      	movew 0x506,%a3@-
+
+8 boot-region constant reads redirected to RAM copy
+
 
 WARNINGS (refs into shim RAM):
 0003FA: ref FFFF0000 into shim RAM range
