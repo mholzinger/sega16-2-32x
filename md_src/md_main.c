@@ -80,12 +80,14 @@ void shim_vblank(void) {
 		MCU_SNDCMD = 0xFF;
 	}
 
-	// Stage C palette streaming — independent of the MCU busy/screen-sync
-	// state, so it keeps refreshing CRAM even while the game holds sync.
-	// Fire-and-forget: one 5-entry batch per frame, index cycles the first
-	// 256 System-16 palette words; the SH-2 applies the current batch.
+	// Stage C shadow streaming — independent of the MCU busy/screen-sync
+	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): one palette
+	// batch + up to 63 text batches per vblank. Text RAM (2048 words) fully
+	// refreshes every ~7 frames; palette every ~52.
 	{
-		static uint16_t pal_idx;
+		static uint16_t pal_idx, txt_idx;
+		uint16_t spin;
+
 		volatile uint16_t *p = PAL_SHADOW + pal_idx;
 		*mars_comm2  = p[0];
 		*mars_comm4  = p[1];
@@ -94,6 +96,38 @@ void shim_vblank(void) {
 		*mars_comm10 = p[4];
 		*mars_comm0  = 0x8000 | pal_idx;
 		pal_idx = (uint16_t)((pal_idx + 5) & 0xFF);
+
+		for (uint16_t burst = 0; burst < 63; burst++) {
+			spin = 400;
+			while (*mars_comm0 && --spin) ;
+			if (*mars_comm0)
+				break;                   // SH-2 busy (rendering); resume next frame
+			volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + txt_idx;
+			*mars_comm2  = t[0];
+			*mars_comm4  = t[1];
+			*mars_comm6  = t[2];
+			*mars_comm8  = t[3];
+			*mars_comm10 = t[4];
+			*mars_comm0  = 0x4000 | txt_idx;
+			txt_idx += 5;
+			if (txt_idx >= 2045)
+				txt_idx = 0;
+		}
+	}
+
+	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
+	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
+	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
+	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
+	// restore RV=1 before returning to the game's IRQ handler.
+	{
+		uint16_t spin2;
+		while (*mars_comm0) ;                    // drain any pending stream batch
+		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
+		*mars_comm0 = 0x2000;                    // "render now"
+		spin2 = 30000;
+		while (*mars_comm0 && --spin2) ;         // wait for SH-2 render+ack
+		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
 	}
 
 	if (busy)

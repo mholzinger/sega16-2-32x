@@ -454,3 +454,33 @@ NEXT (stage C step 2): stream TEXT RAM (4KB shadow at 0xFF8000) the same
 way — or via DREQ FIFO for bandwidth — and have the SH-2 render the text
 layer with the SDRAM-preloaded font tiles + live CRAM. That's "SEGA" /
 "INSERT COIN" on screen.
+
+## Phase 3 stage C step 2 (2026-07-27): TEXT LAYER renders (MAME-proven)
+
+The SH-2 now renders the System-16B text layer from the game's live text RAM:
+MAME frames show real font glyphs (digits/letters) in the game's colours.
+Pipeline: game text RAM -> 0xFF8000 shadow -> shim COMM burst stream (1 pal +
+up to 63 text batches/frame, acked) -> SH-2 SDRAM text+pal shadows -> render
+40x28 visible window (cols 24..63, scrolldx -192) with SDRAM font tiles ->
+framebuffer. Text tile format (segaic16.cpp:1024): code=data&0x1FF,
+colour=(data>>9)&7, pal entry = colour*8+pen, pen0 transparent. Proof:
+docs_text_proof.png.
+
+THE RV/FRAMEBUFFER TENSION (root, verified): SH-2 framebuffer (DRAM) writes
+are BLOCKED while RV=1 — even a solid fill is black in ares (CRAM writes are
+NOT blocked, which is why step-1 palette worked). The game needs RV=1 for
+68K code fetch. Resolution (d32xr RV-pulse, adapted): the MD vblank handler
+runs from WORK RAM, so during it the 68K needs no ROM — it drops RV=0,
+signals the SH-2 (COMM0=0x2000) to draw the whole frame, waits for the ack,
+restores RV=1 before returning to the game. SH-2 renders + applies CRAM +
+flips only inside that window. MAME renders correctly with this.
+
+ARES: still black interior (game runs — green border). MAME proves the
+render + protocol are correct, so the remaining gap is the ares RV-window
+framebuffer timing: likely the SH-2 doesn't complete render_text before the
+68K's spin2 budget restores RV=1, or ares needs the flip/access sequenced
+differently across the RV toggle. NEXT: (a) widen/measure the render window
+(have the SH-2 ack a start marker so the 68K waits on completion, not a spin
+count); (b) verify the diagonal glyph layout is the true screen vs a render
+stride artifact; (c) consider 68K-side framebuffer writes (0x840000, FM=0)
+as an alternative that sidesteps the SH-2 RV block entirely.
