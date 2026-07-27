@@ -513,3 +513,35 @@ NEXT: tile (scrolling background) + sprite layers via the same window; then
 the diagonal glyph layout needs confirming as real screen content vs a
 render-stride quirk (compare against MAME's altbeast attract in the
 reference driver).
+
+## Stage C step 3 (tile background) — design findings (2026-07-27)
+
+Measured against the reference altbeast attract (MAME):
+- The visible scene is mostly the TILE background (graveyard/temple) + SPRITES.
+  The text layer is sparse ("50000", "INSERT COIN", "©SEGA 1988"); our text
+  render is correct — it just has little to show in attract (verified: our
+  text RAM is empty most frames). So the big visual win is the tile layer.
+- Active tilemap footprint is SMALL: only ~2382 nonzero words, in pages 0,1,
+  5,6 of the 64KB tile RAM (0x400000). Scroll registers (textram 0xe9e/0xff8/
+  0xf24) were 0 during attract (static). MAME write-taps don't fire on the
+  mapper's install_ram tile region — read back the RAM to observe it.
+- MD RAM budget is roomier than assumed: the shim's .data/.bss ends at
+  0xFF052C (~1KB), so 0xFF0600-0xFF7FFF (~30KB) is free — enough to shadow
+  the used tile pages.
+
+Attempted: patcher remap of tile RAM 0x400000-0x406FFF -> 0xFF0600 shadow
+(16 class-A lea refs caught). Result unclear — the tile shadow read back
+empty and the game appeared stuck, BUT the PC-sampling diagnostic was biased
+(register_frame_done fires in vblank = always catches the shim, never the
+game's mid-frame loop; it reported game=0 even for the KNOWN-GOOD text build).
+Reverted to keep HEAD clean. NEXT SESSION must re-attempt with UNBIASED
+instrumentation (screen snapshot / CPU-side markers, not per-frame PC), and:
+  1. remap tile RAM to the 0xFF0600 shadow (verify game still boots via ares
+     visual, not PC sampling);
+  2. stream the tile shadow to SH-2 SDRAM (COMM burst like text; ~45 frames
+     for a full 28KB refresh — fine for a static attract background, or add
+     DREQ FIFO for bandwidth);
+  3. render the System-16B background: 64x32 tile pages, page-select from
+     textram[0xe9e/2], row/col scroll from textram[0xf80.../0xf30...], tile
+     format = same 3bpp chunky tiles (code&0x1fff via bank, colour bits).
+     Reference: segaic16.cpp tilemap_16b_draw_layer (~line 820).

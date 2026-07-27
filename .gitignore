@@ -10,3 +10,4 @@ sh_src/tiles.bin
 *.elf
 *.lst
 rom/
+snap/
