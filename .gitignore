@@ -2,3 +2,4 @@ roms/
 *.bin
 *.32x
 build/
+gfx-preview/

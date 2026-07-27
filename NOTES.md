@@ -108,3 +108,13 @@ Build pattern: copy `~/src/32x-builder/Makefile` md_src/sh_src split.
 
 ## ROMs are NOT committed — .gitignore excludes roms/. Rebuild prog68k.bin:
 interleave a7 (even/high) + a5 (odd/low).
+
+## Graphics formats — VERIFIED by decoding to PNG (tools/decode_gfx.py)
+
+- Tiles: 3 planar ROMs (opr-11674/75/76 = planes 0/1/2), 8x8 3bpp,
+  8 bytes/tile/plane, 16384 tiles. Verified: font, SEGA logo, terrain visible.
+- Sprites: 8 ROMs → 16-bit words (even byte = b5/6/7/8 socket, odd = b1/2/3/4),
+  4bpp nibbles MSB-first, variable-width rows, row ends when a word's final
+  nibble == 0xF (sega16sp.cpp:1389). Pen 0 = transparent, pen 15 = marker.
+  Verified: hero frames, transformation faces, wolves, bosses, logo visible.
+- Previews land in gfx-preview/ (gitignored — copyrighted art).
