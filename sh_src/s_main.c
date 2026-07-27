@@ -52,7 +52,7 @@ __attribute__((section(".ramtext"))) void s_main(void)
             if ((cmd & 0xF000) == 0x1000)
                 slave_window_half(bank1, par);
             else if ((cmd & 0xF000) == 0x3000)
-                slave_blit_half((cmd >> 4) & 1);
+                slave_blit_half((cmd >> 4) & 3);
             else
                 slave_tile_half(bank1, par);
             SYNC[1] = cmd;                   /* done */
