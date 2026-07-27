@@ -75,11 +75,32 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
 #define NPAGES      12
 
+/* Window phase profile, FRT ticks (sysclk/32 ~ 1.37us), lua-readable:
+ * [0]copy [1]maps [2]cram [3]compose [4]slavewait [5]blit1 [6]flipwait
+ * [7]blit2 [8]total [9]window count. Accumulating; lua divides by [9]. */
+#define DIAG        ((volatile uint32_t *)0x26033000)
+
+static inline uint16_t frt(void)
+{
+    uint8_t h = SH2_FRT_FRCH;
+    uint8_t l = SH2_FRT_FRCL;
+    return (uint16_t)((h << 8) | l);
+}
+
+static inline void diag_add(int slot, uint16_t t0)
+{
+    DIAG[slot] += (uint16_t)(frt() - t0);
+}
+
 /* This frame's color maps, built by the master's prescan, read by both. */
-static uint8_t tile_grp[128];               /* s16 tile color -> 8-pen group */
-static uint8_t spr_pair[64];                /* sprite color -> 16-pen pair */
-static uint8_t bg0_grp;                     /* alias group for BG color 0:
-                                             * pixel VALUE 0 is transparent-
+/* Color maps, DOUBLE-BUFFERED by window parity: the slave builds set
+ * par^1 (for the next window) after finishing its compose half, while the
+ * master is still composing/blitting from set par — full overlap, no
+ * races, at the cost of colors lagging the scene by one window. */
+static uint8_t tile_grp[2][128];            /* s16 tile color -> 8-pen group */
+static uint8_t spr_pair[2][64];             /* sprite color -> 16-pen pair */
+#define BG0_GRP 8                           /* fixed alias group for BG color
+                                             * 0: pixel VALUE 0 is transparent-
                                              * to-MD on hardware/ares, so the
                                              * opaque BG must never emit it */
 
@@ -123,10 +144,11 @@ RAMCODE static void get_layer_regs(int which, layer_regs *lr)
     lr->vy0 = (0 - ysc) & 0x1FF;
 }
 
-/* Master prescan: collect every color the frame will reference and assign
- * CRAM groups — tiles ascending from 8, sprite pairs descending from 15,
- * overflow clamps where they meet. Deterministic, once per frame. */
-RAMCODE static void build_maps(void)
+/* Prescan (run on the SLAVE, into the off-parity map set): collect every
+ * color the staging currently references and assign CRAM groups — tiles
+ * ascending from 9 (8 = BG0_GRP alias), sprite pairs descending from 15,
+ * overflow clamps where they meet. Deterministic, once per window. */
+RAMCODE static void build_maps(int par)
 {
     uint8_t tused[128], sused[64];
     for (int i = 0; i < 128; i++) tused[i] = 0;
@@ -161,30 +183,29 @@ RAMCODE static void build_maps(void)
     }
 
     for (int c = 0; c < 8; c++)
-        tile_grp[c] = (uint8_t)c;           /* identity, shared with text */
-    uint8_t next = 8;
-    bg0_grp = next++;                       /* CRAM copy of entries 0-7 */
+        tile_grp[par][c] = (uint8_t)c;      /* identity, shared with text */
+    uint8_t next = BG0_GRP + 1;
     for (int c = 8; c < 128; c++)
-        tile_grp[c] = tused[c] ? (next < 32 ? next++ : 31) : 0xFF;
+        tile_grp[par][c] = tused[c] ? (next < 32 ? next++ : 31) : 0xFF;
     int pair = 15;
     int floor_pair = (next + 1) >> 1;
     for (int sc = 0; sc < 64; sc++) {
         if (!sused[sc]) {
-            spr_pair[sc] = 0xFF;
+            spr_pair[par][sc] = 0xFF;
             continue;
         }
-        spr_pair[sc] = (uint8_t)(pair >= floor_pair ? pair : floor_pair);
+        spr_pair[par][sc] = (uint8_t)(pair >= floor_pair ? pair : floor_pair);
         if (pair >= floor_pair)
             pair--;
     }
 }
 
-/* CRAM from this frame's maps (window start, still vblank). */
-RAMCODE static void apply_cram(void)
+/* CRAM from this window's map set (window start, still vblank). */
+RAMCODE static void apply_cram(int par)
 {
     volatile uint16_t *cram = &MARS_CRAM;
     for (int c = 0; c < 128; c++) {
-        uint8_t g = tile_grp[c];
+        uint8_t g = tile_grp[par][c];
         if (g == 0xFF)
             continue;
         const uint16_t *src = PAL_C + c * 8;
@@ -193,9 +214,9 @@ RAMCODE static void apply_cram(void)
             dst[p] = s16_to_mars(src[p]);
     }
     for (int p = 0; p < 8; p++)             /* BG color-0 alias group */
-        cram[bg0_grp * 8 + p] = s16_to_mars(PAL_C[p]);
+        cram[BG0_GRP * 8 + p] = s16_to_mars(PAL_C[p]);
     for (int sc = 0; sc < 64; sc++) {
-        uint8_t pr = spr_pair[sc];
+        uint8_t pr = spr_pair[par][sc];
         if (pr == 0xFF)
             continue;
         const uint16_t *src = PAL_C + 1024 + sc * 16;
@@ -205,16 +226,25 @@ RAMCODE static void apply_cram(void)
     }
 }
 
-/* Compose one tile layer into sbuf, tile-major (each tilemap word fetched
- * once, then up to 64 pixels drawn). opaque=1: BG; opaque=0: FG (pen 0
- * clear). Rows clip to the CPU's fixed screen seam. */
-RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1)
+/* Compose one tile layer into sbuf. opaque=1: BG — PACKED 32-bit path:
+ * per tile row, decode all 42 cells once (pointer + per-tile color base
+ * replicated across 4 lanes; pens are <=7 so base+pen never carries
+ * across byte lanes), then per line pre-add the base and shift-merge
+ * adjacent tiles' rows so every store is an ALIGNED uint32 despite the
+ * fine-x scroll. opaque=0: FG — byte path, pen 0 transparent, tile-0
+ * skip. Rows clip to the CPU's fixed screen seam. */
+RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1, int par)
 {
     layer_regs lr;
     get_layer_regs(which, &lr);
     int xf = lr.vx0 & 7, yf = lr.vy0 & 7;
     int nrows = yf ? 29 : 28;
     int blo = 8 + CLIP_LO(cpu), bhi = 8 + CLIP_HI(cpu);
+    const uint8_t *tg = tile_grp[par];
+    const uint32_t s = (uint32_t)(xf * 8);
+
+    const uint8_t *tptr[42];
+    uint32_t tbase[42];
 
     for (int r = 0; r < nrows; r++) {
         int by = 8 - yf + r * 8;                    /* buffer y of tile row top */
@@ -226,44 +256,105 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
         int vy = (lr.vy0 - yf + r * 8) & 0x1FF;
         int trow = (vy >> 3) & 0x1F;
         int qy = (vy & 0x100) ? 2 : 0;
+
+        if (opaque) {
+            /* decode pass: 41 visible cells + 1 spill for the merge */
+            for (int c = 0; c <= 41; c++) {
+                int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
+                uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
+                                       + trow * 64 + ((vx >> 3) & 0x3F)];
+                unsigned code = w & 0x1FFF;
+                if (code & 0x1000)
+                    code = (code & 0xFFF) + bank1 * 0x1000u;
+                tptr[c] = altbeast_tiles + code * 64;
+                uint8_t g = tg[(w >> 6) & 0x7F];
+                if (g == 0xFF)
+                    g = 31;
+                else if (g == 0)
+                    g = BG0_GRP;                    /* never emit pixel value 0 */
+                tbase[c] = (uint32_t)(g << 3) * 0x01010101u;
+            }
+            /* Shift case hoisted out of the pixel loop (s is fixed per
+             * frame; the in-loop branch chain cost ~20% of BG compose). */
+            for (int y = l0; y < l1; y++) {
+                uint32_t *dst = (uint32_t *)(sbuf + (by + y) * SBUF_W + 8);
+                const uint32_t *t0 = (const uint32_t *)(tptr[0] + y * 8);
+                uint32_t a0 = t0[0] + tbase[0], a1 = t0[1] + tbase[0];
+                if (s == 0) {
+                    for (int c = 0; c <= 40; c++) {
+                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
+                        uint32_t b0 = tn[0] + tbase[c + 1];
+                        uint32_t b1 = tn[1] + tbase[c + 1];
+                        dst[0] = a0;
+                        dst[1] = a1;
+                        dst += 2;
+                        a0 = b0;
+                        a1 = b1;
+                    }
+                } else if (s < 32) {
+                    uint32_t rs = 32 - s;
+                    for (int c = 0; c <= 40; c++) {
+                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
+                        uint32_t b0 = tn[0] + tbase[c + 1];
+                        uint32_t b1 = tn[1] + tbase[c + 1];
+                        dst[0] = (a0 << s) | (a1 >> rs);
+                        dst[1] = (a1 << s) | (b0 >> rs);
+                        dst += 2;
+                        a0 = b0;
+                        a1 = b1;
+                    }
+                } else if (s == 32) {
+                    for (int c = 0; c <= 40; c++) {
+                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
+                        uint32_t b0 = tn[0] + tbase[c + 1];
+                        uint32_t b1 = tn[1] + tbase[c + 1];
+                        dst[0] = a1;
+                        dst[1] = b0;
+                        dst += 2;
+                        a0 = b0;
+                        a1 = b1;
+                    }
+                } else {
+                    uint32_t t = s - 32, rt = 32 - (s - 32);
+                    for (int c = 0; c <= 40; c++) {
+                        const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8);
+                        uint32_t b0 = tn[0] + tbase[c + 1];
+                        uint32_t b1 = tn[1] + tbase[c + 1];
+                        dst[0] = (a1 << t) | (b0 >> rt);
+                        dst[1] = (b0 << t) | (b1 >> rt);
+                        dst += 2;
+                        a0 = b0;
+                        a1 = b1;
+                    }
+                }
+            }
+            continue;
+        }
+
+        /* FG byte path */
         uint8_t *drow = sbuf + (by + l0) * SBUF_W + (8 - xf);
         for (int c = 0; c <= 40; c++) {             /* 41 tiles cover 320+xf px */
             int vx = ((lr.vx0 & ~7) + c * 8) & 0x3FF;
             uint16_t w = TILEMAP_C[lr.pq[qy + ((vx >> 9) & 1)] * 0x800
                                    + trow * 64 + ((vx >> 3) & 0x3F)];
             uint8_t *dst = drow + c * 8;
-            if (w == 0 && !opaque)                  /* tile 0 is blank */
+            if (w == 0)                             /* tile 0 is blank */
                 continue;
             unsigned code = w & 0x1FFF;
             if (code & 0x1000)
                 code = (code & 0xFFF) + bank1 * 0x1000u;
             const uint8_t *tp = altbeast_tiles + code * 64 + l0 * 8;
-            uint8_t g = tile_grp[(w >> 6) & 0x7F];
-            if (g == 0xFF)
-                g = 31;
-            else if (g == 0 && opaque)
-                g = bg0_grp;                        /* never emit pixel value 0 */
-            uint8_t base = (uint8_t)(g << 3);
+            uint8_t g = tg[(w >> 6) & 0x7F];
+            uint8_t base = (uint8_t)((g == 0xFF ? 31 : g) << 3);
             for (int y = l0; y < l1; y++) {
-                if (opaque) {
-                    dst[0] = (uint8_t)(base + tp[0]);
-                    dst[1] = (uint8_t)(base + tp[1]);
-                    dst[2] = (uint8_t)(base + tp[2]);
-                    dst[3] = (uint8_t)(base + tp[3]);
-                    dst[4] = (uint8_t)(base + tp[4]);
-                    dst[5] = (uint8_t)(base + tp[5]);
-                    dst[6] = (uint8_t)(base + tp[6]);
-                    dst[7] = (uint8_t)(base + tp[7]);
-                } else {
-                    if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
-                    if (tp[1]) dst[1] = (uint8_t)(base + tp[1]);
-                    if (tp[2]) dst[2] = (uint8_t)(base + tp[2]);
-                    if (tp[3]) dst[3] = (uint8_t)(base + tp[3]);
-                    if (tp[4]) dst[4] = (uint8_t)(base + tp[4]);
-                    if (tp[5]) dst[5] = (uint8_t)(base + tp[5]);
-                    if (tp[6]) dst[6] = (uint8_t)(base + tp[6]);
-                    if (tp[7]) dst[7] = (uint8_t)(base + tp[7]);
-                }
+                if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
+                if (tp[1]) dst[1] = (uint8_t)(base + tp[1]);
+                if (tp[2]) dst[2] = (uint8_t)(base + tp[2]);
+                if (tp[3]) dst[3] = (uint8_t)(base + tp[3]);
+                if (tp[4]) dst[4] = (uint8_t)(base + tp[4]);
+                if (tp[5]) dst[5] = (uint8_t)(base + tp[5]);
+                if (tp[6]) dst[6] = (uint8_t)(base + tp[6]);
+                if (tp[7]) dst[7] = (uint8_t)(base + tp[7]);
                 tp += 8;
                 dst += SBUF_W;
             }
@@ -273,7 +364,7 @@ RAMCODE static void compose_layer(int cpu, int which, int opaque, uint16_t bank1
 
 /* Sprites from the FB staging list (read in place; compose precedes any
  * flip). Faithful to sega16sp.cpp sega_sys16b_sprite_device::draw. */
-RAMCODE static void compose_sprites(int cpu)
+RAMCODE static void compose_sprites(int cpu, int par)
 {
     int ymin = CLIP_LO(cpu), ymax = CLIP_HI(cpu);
 
@@ -292,7 +383,7 @@ RAMCODE static void compose_sprites(int cpu)
         uint16_t addr = e[3];
         uint16_t d4 = e[4], d5 = e[5];
         const uint16_t *sd = altbeast_sprites + (((d4 >> 8) & 0xF) & 7) * 0x10000;
-        uint8_t pr = spr_pair[d4 & 0x3F];
+        uint8_t pr = spr_pair[par][d4 & 0x3F];
         uint8_t base = (uint8_t)((pr == 0xFF ? 15 : pr) << 4);
         int vzoom = (d5 >> 5) & 0x1F, hzoom = d5 & 0x1F;
         uint16_t yacc = 0;
@@ -308,28 +399,94 @@ RAMCODE static void compose_sprites(int cpu)
                 continue;                           /* other CPU / offscreen */
 
             uint8_t *row = sbuf + (8 + y) * SBUF_W + 8;
-            int xacc = 4 * hzoom;
             int x = xpos;
             uint16_t o = addr;
             int pix = 0;
-            while (((xpos - x) & 0x1FF) != 1) {
-                uint16_t w = sd[o];
-                o = (uint16_t)(flip ? o - 1 : o + 1);
-                for (int n = 0; n < 4; n++) {
-                    pix = flip ? ((w >> (4 * n)) & 0xF)
-                               : ((w >> (12 - 4 * n)) & 0xF);
-                    xacc = (xacc & 0x3F) + hzoom;
-                    if (xacc < 0x40) {
-                        unsigned sx = (unsigned)(x - 184);  /* screen x */
-                        if (sx < 320 && pix != 0 && pix != 15)
-                            row[sx] = (uint8_t)(base + pix);
-                        x++;
-                        if (((xpos - x) & 0x1FF) == 1)
-                            break;
-                    }
+            if (!flip && hzoom == 0) {
+                /* Fast path (most sprites): 1:1, left-to-right. x only
+                 * increments, so past column 503 nothing can be visible
+                 * (screen x = x-184) — bail without scanning to the
+                 * terminator. Pen test pen-1 < 14 covers 1..14. */
+                while (x < 504) {
+                    uint16_t w = sd[o++];
+                    unsigned sx;
+                    pix = (w >> 12) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = (w >> 8) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = (w >> 4) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = w & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    if (pix == 15)
+                        break;                      /* row terminator */
                 }
-                if (pix == 15)
-                    break;                          /* row terminator */
+            } else if (hzoom == 0) {
+                /* Flipped 1:1: same as the fast path with the source word
+                 * order and nibble order reversed. */
+                while (x < 504) {
+                    uint16_t w = sd[o--];
+                    unsigned sx;
+                    pix = w & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = (w >> 4) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = (w >> 8) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    pix = (w >> 12) & 0xF;
+                    sx = (unsigned)(x - 184);
+                    if ((unsigned)(pix - 1) < 14u && sx < 320)
+                        row[sx] = (uint8_t)(base + pix);
+                    x++;
+                    if (pix == 15)
+                        break;                      /* row terminator */
+                }
+            } else {
+                int xacc = 4 * hzoom;
+                while (((xpos - x) & 0x1FF) != 1) {
+                    uint16_t w = sd[o];
+                    o = (uint16_t)(flip ? o - 1 : o + 1);
+                    for (int n = 0; n < 4; n++) {
+                        pix = flip ? ((w >> (4 * n)) & 0xF)
+                                   : ((w >> (12 - 4 * n)) & 0xF);
+                        xacc = (xacc & 0x3F) + hzoom;
+                        if (xacc < 0x40) {
+                            unsigned sx = (unsigned)(x - 184);  /* screen x */
+                            if (sx < 320 && pix != 0 && pix != 15)
+                                row[sx] = (uint8_t)(base + pix);
+                            x++;
+                            if (((xpos - x) & 0x1FF) == 1)
+                                break;
+                        }
+                    }
+                    if (pix == 15)
+                        break;                      /* row terminator */
+                    if (x >= 504)
+                        break;                      /* x is monotonic in every
+                                                     * mode: nothing visible
+                                                     * past column 503 */
+                }
             }
         }
     }
@@ -367,16 +524,17 @@ RAMCODE static void compose_text(int cpu)
 }
 
 /* Slave's half of the render window: purge its cache (it reads the shadows
- * and the master-built color maps through its own cache; write-through
- * keeps SDRAM true), compose the top half. Called from s_main on the
- * 0xC000 COMM4 command — the maps are complete before the command. */
-RAMCODE void slave_render(uint16_t bank1)
+ * and the color maps through its own cache; write-through keeps SDRAM
+ * true), compose the top half from map set `par`, then PRESCAN the next
+ * window's maps into set par^1 — overlapping the master's compose+blits. */
+RAMCODE void slave_render(uint16_t bank1, int par)
 {
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
-    compose_layer(1, 1, 1, bank1);               /* BG opaque, rows 0-111 */
-    compose_layer(1, 0, 0, bank1);               /* FG transparent */
-    compose_sprites(1);
+    compose_layer(1, 1, 1, bank1, par);          /* BG opaque, rows 0-111 */
+    compose_layer(1, 0, 0, bank1, par);          /* FG transparent */
+    compose_sprites(1, par);
     compose_text(1);
+    build_maps(par ^ 1);                         /* next window's colors */
 }
 
 /* Stream the composed frame to the current access framebuffer, 32-bit. */
@@ -416,24 +574,32 @@ RAMCODE void m_main(void)
         TEXT_U[i] = 0;
     for (int i = 0; i < 2048; i++)
         PAL_U[i] = 0;
-    for (int i = 0; i < 128; i++)
-        tile_grp[i] = (uint8_t)(i < 8 ? i : 0xFF);
-    for (int i = 0; i < 64; i++)
-        spr_pair[i] = 0xFF;
+    for (int k = 0; k < 2; k++) {
+        for (int i = 0; i < 128; i++)
+            tile_grp[k][i] = (uint8_t)(i < 8 ? i : 0xFF);
+        for (int i = 0; i < 64; i++)
+            spr_pair[k][i] = 0xFF;
+    }
 
     volatile uint16_t *cram = &MARS_CRAM;
     for (int i = 0; i < 256; i++)
         cram[i] = 0;
 
+    SH2_FRT_TCR = 1;                            /* FRC = sysclk/32, ~1.37us */
+    for (int i = 0; i < 16; i++)
+        DIAG[i] = 0;
+
     /* Master is SDRAM-resident from here on: the MD may set RV=1 now. */
     MARS_SYS_COMM14 = 0x600D;
 
     uint16_t copy_rotor = 0;
+    int par = 0;
 
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
         if (c0 == 0x2000) {                      /* RENDER window (RV=0, FM=1) */
             uint16_t bank1 = MARS_SYS_COMM2 & 7;
+            uint16_t tw = frt(), tp = tw;
 
             /* 1. Tilemap page copy — BEFORE any flip, while the access bank
              * is still the one the game stages into. 32-bit streaming. */
@@ -454,24 +620,33 @@ RAMCODE void m_main(void)
                 if (copy_rotor >= NPAGES)
                     copy_rotor = 0;
             }
+            diag_add(0, tp);
 
             /* 2. Purge the cache: the renderer reads the shadows through the
              * cached mirror, and the COMM loop/copy wrote them uncached. */
             *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
 
-            /* 3. This frame's color maps (prescan) + CRAM, then compose —
-             * split across both SH-2s — and blit to BOTH buffers with an
-             * EVEN number of flips so the staging bank stays stable. */
-            build_maps();
-            apply_cram();
+            /* 3. CRAM from the map set the SLAVE prescanned last window
+             * (colors lag the scene by one window), then compose — split
+             * across both SH-2s; the slave also prescans the NEXT set
+             * while the master blits, so the two timelines fully overlap. */
+            tp = frt();
+            apply_cram(par);
+            diag_add(2, tp);
             MARS_SYS_COMM6 = 0;                  /* clear stale stream data */
-            MARS_SYS_COMM4 = 0xC000 | bank1;     /* slave: go (maps ready) */
-            compose_layer(0, 1, 1, bank1);       /* BG opaque, rows 112-223 */
-            compose_layer(0, 0, 0, bank1);       /* FG transparent */
-            compose_sprites(0);
+            MARS_SYS_COMM4 = (uint16_t)(0xC000 | ((uint16_t)par << 8) | bank1);
+            tp = frt();
+            compose_layer(0, 1, 1, bank1, par);  /* BG opaque, rows 112-223 */
+            diag_add(10, tp);
+            tp = frt();
+            compose_layer(0, 0, 0, bank1, par);  /* FG transparent */
+            diag_add(11, tp);
+            tp = frt();
+            compose_sprites(0, par);
+            diag_add(12, tp);
+            tp = frt();
             compose_text(0);
-            while (MARS_SYS_COMM6 != 0xD0) ;     /* slave half done */
-            MARS_SYS_COMM4 = 0;                  /* slave: idle (it clears COMM6) */
+            diag_add(13, tp);
 
             /* Dual-bank blit with VERIFIED flips. ares (and per the hw
              * manual, real hardware outside vblank) LATCHES FBCTL writes at
@@ -481,16 +656,36 @@ RAMCODE void m_main(void)
              * MD-side FS tracer: torn=1 ares, torn=0 MAME). So: wait for
              * the mid-window flip to actually latch before the second
              * blit, and restore FS as an ABSOLUTE value (the MD also waits
-             * for that restore to latch before resuming the game). */
+             * for that restore to latch before resuming the game).
+             *
+             * Bank fs0 is DISPLAYED only for the few ms between the two
+             * latches, so it only needs to stay roughly fresh: blit it
+             * every 8th window and save ~2ms on the rest. */
             {
                 uint16_t fs0 = MARS_VDP_FBCTL & MARS_VDP_FS;
                 uint32_t guard = 4000000;
-                blit_frame();
+                tp = frt();
+                if ((DIAG[9] & 7) == 0)
+                    blit_frame();
+                diag_add(5, tp);
                 MARS_VDP_FBCTL = fs0 ^ 1;
+                tp = frt();
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs0 ^ 1) && --guard) ;
+                diag_add(6, tp);
+                tp = frt();
                 blit_frame();
+                diag_add(7, tp);
                 MARS_VDP_FBCTL = fs0;            /* absolute, not a toggle */
             }
+
+            tp = frt();
+            while (MARS_SYS_COMM6 != 0xD0) ;     /* slave compose+prescan done */
+            MARS_SYS_COMM4 = 0;                  /* slave: idle (it clears COMM6) */
+            diag_add(4, tp);
+            par ^= 1;
+
+            diag_add(8, tw);
+            DIAG[9]++;
 
             MARS_SYS_COMM0 = 0;                  /* ack: MD restores FM/RV */
         } else if (c0 & 0x8000) {                /* palette batch (RV=1 ok) */
