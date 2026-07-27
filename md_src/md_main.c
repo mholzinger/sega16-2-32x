@@ -16,8 +16,8 @@ static volatile uint16_t* const mars_comm10 = (uint16_t*) MARS_COMM10;
 static volatile uint16_t* const mars_comm12 = (uint16_t*) MARS_COMM12;
 static volatile uint16_t* const mars_comm14 = (uint16_t*) MARS_COMM14;
 
-// Palette shadow (game writes 0x840000 -> here). 2048 System-16 words.
-#define PAL_SHADOW  ((volatile uint16_t*)0xFFA000)
+// Palette lives in FB staging now (game 0x840000 -> MD 0x85F000), read
+// in-window by the SH-2 — the 0xFFA000 shadow and its stream are gone.
 
 extern uint16_t read_joypad(uint8_t player);
 
@@ -101,18 +101,15 @@ void shim_vblank(void) {
 
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
 	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
-	// palette/text batches, up to 64 per vblank. Palette covers all 2048
-	// entries (tiles/text 0-1023, sprites 1024-2047): full refresh every
-	// ~12.8 frames; text RAM (2048 words) every ~13.
+	// TEXT batches only: the palette now lives in FB staging (0x85F000)
+	// and is read in-window by the SH-2 — no palette streaming at all.
+	// Text RAM (2048 words) fully refreshes every ~6.4 frames.
 	{
-		static uint16_t pal_idx, txt_idx;
+		static uint16_t txt_idx;
 
 		// TOTAL ack-wait budget for the whole stream section, not per
-		// batch: when the SH-2s are deep in concurrent compose they ack
-		// at ~1ms cadence, and 64 per-batch spins of 400 each trickled
-		// through at ~1ms apiece — 60+ms handler entries that starved
-		// the game into a freeze (rise-from-grave hang). Bounded total:
-		// worst case ~2ms, then yield and resume next frame.
+		// batch (see NOTES: per-batch spins trickled 60+ms handler
+		// entries when the SH-2s ack slowly — the freeze spiral).
 		uint16_t spin = 800;
 
 		for (uint16_t burst = 0; burst < 64; burst++) {
@@ -121,27 +118,16 @@ void shim_vblank(void) {
 				if (*mars_comm0)
 					break;               // SH-2 busy; resume next frame
 			}
-			if (burst & 1) {
-				volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + txt_idx;
-				*mars_comm2  = t[0];
-				*mars_comm4  = t[1];
-				*mars_comm6  = t[2];
-				*mars_comm8  = t[3];
-				*mars_comm10 = t[4];
-				*mars_comm0  = 0x4000 | txt_idx;
-				txt_idx += 5;
-				if (txt_idx >= 2045)
-					txt_idx = 0;
-			} else {
-				volatile uint16_t *p = PAL_SHADOW + pal_idx;
-				*mars_comm2  = p[0];
-				*mars_comm4  = p[1];
-				*mars_comm6  = p[2];
-				*mars_comm8  = p[3];
-				*mars_comm10 = p[4];
-				*mars_comm0  = 0x8000 | pal_idx;
-				pal_idx = (uint16_t)((pal_idx + 5) & 0x7FF);
-			}
+			volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + txt_idx;
+			*mars_comm2  = t[0];
+			*mars_comm4  = t[1];
+			*mars_comm6  = t[2];
+			*mars_comm8  = t[3];
+			*mars_comm10 = t[4];
+			*mars_comm0  = 0x4000 | txt_idx;
+			txt_idx += 5;
+			if (txt_idx >= 2045)
+				txt_idx = 0;
 		}
 	}
 

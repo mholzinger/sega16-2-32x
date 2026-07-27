@@ -6,7 +6,6 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 }
 
 #define TEXT_U      ((volatile uint16_t *)0x26025000)
-#define PAL_U       ((volatile uint16_t *)0x26026000)
 #define SYNC        ((volatile uint16_t *)0x26027800)
 
 extern void slave_window_half(uint16_t bank1, int par);  /* m_main.c .ramtext */
@@ -20,15 +19,7 @@ extern void slave_tile_half(uint16_t bank1, int par);
 __attribute__((section(".ramtext"))) void slave_service_stream(void)
 {
     uint16_t c0 = MARS_SYS_COMM0;
-    if (c0 & 0x8000) {                       /* palette batch */
-        int idx = c0 & 0x7FF;
-        PAL_U[(idx + 0) & 0x7FF] = MARS_SYS_COMM2;
-        PAL_U[(idx + 1) & 0x7FF] = MARS_SYS_COMM4;
-        PAL_U[(idx + 2) & 0x7FF] = MARS_SYS_COMM6;
-        PAL_U[(idx + 3) & 0x7FF] = MARS_SYS_COMM8;
-        PAL_U[(idx + 4) & 0x7FF] = MARS_SYS_COMM10;
-        MARS_SYS_COMM0 = 0;
-    } else if (c0 & 0x4000) {                /* text batch */
+    if (c0 & 0x4000) {                       /* text batch */
         int idx = c0 & 0x7FF;
         uint16_t w0 = MARS_SYS_COMM2, w1 = MARS_SYS_COMM4, w2 = MARS_SYS_COMM6;
         uint16_t w3 = MARS_SYS_COMM8, w4 = MARS_SYS_COMM10;
