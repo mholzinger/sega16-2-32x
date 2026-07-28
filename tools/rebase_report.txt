@@ -2278,6 +2278,7 @@ R 014932: low-vector ref 0 -> 00900000
 R 01493E: low-vector ref 0 -> 00900000
 R 00307A: low-vector ref 0 -> 00900000
 R 00ABC4: low-vector ref 0 -> 00900000
+REVERT 006DC0-006DCA: excluded region restored
 
 SKIPPED long immediates (burn-down candidates):
 002DE4: 00000200 | 2de2:	95fc 0000 0200 	subal #512,%a2

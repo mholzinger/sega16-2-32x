@@ -381,8 +381,11 @@ for tbl in sorted(meta_targets):
 # OFFSET variant of the idiom self-heals and needs nothing). First one
 # found the hard way: the mode dispatcher at 0x26DC sent the boot to
 # un-rebased 0x1F80 (MAME trace hunt.tr line 7545).
-REBASE_TABLES = [(0x26DC, 8), (0x6D70, 21), (0x6D90, 13), (0x92F0, 6),
+REBASE_TABLES = [(0x26DC, 8), (0x6D70, 8), (0x6D90, 12), (0x92F0, 6),
                  (0xF556, 5), (0x17E24, 5), (0x1A076, 9)]
+# 0x6D70/0x6D90 extents are HARD-BOUNDED: 0x6DC0+ is a WORD index
+# table; the old 21/13 extents pair-read it as longs and injected
+# +0x90 into an index word (round-2 attract jsr-to-zero crash).
 tbl_offs = set()
 for start, n in REBASE_TABLES:
     for k in range(n):
@@ -598,6 +601,17 @@ hrom[0x39A8:0x39AE] = bytes([0x4E, 0xB8, 0xB3, 0xA0, 0x4E, 0x71])
 assert hrom[0xD842:0xD848] == bytes([0x22, 0x68, 0x00, 0x08, 0x4E, 0x91])
 hrom[0xD842:0xD848] = bytes([0x4E, 0xB8, 0xB3, 0xC0, 0x4E, 0x71])
 # (shim installs the thunks at 0xFFB3A0 / 0xFFB3C0)
+
+# REBASE_EXCLUDE: regions no pass may touch (word tables whose pairs
+# forge valid-looking pointers — heuristics cannot reject them).
+# 0x6DC0-0x6DCA: round-index WORD table of the two-level dispatcher
+# (pair 0x00030004 passed every classifier; +0x90 in an index word
+# crashed round-2 attract with jsr-to-zero).
+REBASE_EXCLUDE = [(0x6DC0, 0x6DCA)]
+for lo, hi_ in REBASE_EXCLUDE:
+    if hrom[lo:hi_] != orig_rom[lo:hi_]:
+        hrom[lo:hi_] = orig_rom[lo:hi_]
+        reb_report.append(f"REVERT {lo:06X}-{hi_:06X}: excluded region restored")
 
 (ROOT / 'md_src' / 'game_high.bin').write_bytes(hrom[:0x40000])
 (ROOT / 'tools' / 'rebase_report.txt').write_text(

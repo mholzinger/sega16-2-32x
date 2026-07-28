@@ -1507,3 +1507,17 @@ test of a vector byte) and oriw #0,0x0 (RMW). All four redirected to
 the high copy's authentic arcade vector bytes (operand 0 ->
 0x900000). TOOLKIT: the rebase census must include [0x000,0x100) —
 vector-table-as-constants is a real 68K idiom.
+
+## ROUND-2 DISPATCHER FIX + CLEAN 20K SWEEP
+
+The round-2 attract crash chain: the two-level dispatcher's WORD
+index table at 0x6DC0 pair-reads as 0x00030004 — a forged "valid ROM
+pointer" that passed every classifier (three different sweeps
+re-swallowed it). Resolution: REBASE_EXCLUDE hard list applied as a
+final revert pass over game_high.bin (heuristics cannot reject forged
+pairs; exclusion is the only safe answer — same philosophy as
+DATA_EXCLUDE in the original patcher).
+RESULT: 20,000-frame attract sweep (all round demos) with ZERO
+address-space escapes under poison. Ares build includes the
+low-vector constant fix (P1-position candidate) — awaiting field
+verdict on: P1 spawn position, round-2+ demo visuals, choppiness.
