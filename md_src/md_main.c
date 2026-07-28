@@ -333,6 +333,35 @@ void main(void) {
 		d = (volatile uint16_t*)0xFFB3C0;
 		for (unsigned i = 0; i < sizeof t2 / 2; i++) d[i] = t2[i];
 	}
+	// DATA-pointer normalization thunks: same trick for two STORED table
+	// pointers whose source values live below 0x28000 (excluded from the
+	// byte-harvest sweep — packed-art collisions). Caught by wpcatch.lua
+	// on the poisoned low copy during the intro:
+	// B340 = multi-object spawn walker's record table (0xDBA8:
+	//        movea.l (0x24,A6),A4 — the intro-cast list at low 0xDD46,
+	//        so Zeus/orb/rising-player spawned from poison);
+	// B360 = palette-cycle streamer's script (0x30D0:
+	//        movea.l (2,A5),A0 — glow/fade tables at low 0x1A78E).
+	{
+		static const uint16_t t3[] = {   // movea.l (0x24,A6),A4
+			0x286E, 0x0024,
+			0xB9FC, 0x0004, 0x0000,      // cmpa.l #0x40000,A4
+			0x6406,                      // bcc.s +6 (already high)
+			0xD9FC, 0x0090, 0x0000,      // adda.l #0x900000,A4
+			0x4E75                       // rts
+		};
+		static const uint16_t t4[] = {   // movea.l (2,A5),A0
+			0x206D, 0x0002,
+			0xB1FC, 0x0004, 0x0000,      // cmpa.l #0x40000,A0
+			0x6406,
+			0xD1FC, 0x0090, 0x0000,      // adda.l #0x900000,A0
+			0x4E75
+		};
+		volatile uint16_t *d = (volatile uint16_t*)0xFFB340;
+		for (unsigned i = 0; i < sizeof t3 / 2; i++) d[i] = t3[i];
+		d = (volatile uint16_t*)0xFFB360;
+		for (unsigned i = 0; i < sizeof t4 / 2; i++) d[i] = t4[i];
+	}
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
 	// demo sounds on; DSW1 0xFF = 1 coin / 1 credit)

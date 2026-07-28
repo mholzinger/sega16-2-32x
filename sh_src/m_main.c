@@ -247,6 +247,8 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         uint16_t d0 = d[0];
         if ((d2 & 0x4000) || (d0 & 0xFF) >= (d0 >> 8))
             continue;
+        if ((d[4] & 0x3F) == 0x3F)
+            continue;                        /* shadows use reserved pair 15 */
         sused[d[4] & 0x3F] = 1;
     }
 
@@ -300,7 +302,13 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
         if (grp_key[q] != 0xFF && grp_age[q] > 0)
             grp_key[q] = 0xFF;
 
-    /* sprites first (a pair = aligned groups 2p/2p+1) */
+    /* sprites first (a pair = aligned groups 2p/2p+1). Pair 15 is
+     * DUAL-PURPOSE: allocatable like any pair (a hard reserve cost one
+     * pair and blacked out the player in full scenes), but whenever no
+     * color claims it, apply_cram parks the shadow ramp there. Shadows
+     * always draw through base 240, so under peak pressure they tint
+     * with pair 15's owner instead of going dark — cutscenes, where
+     * shadows actually star, run far below capacity. */
     uint8_t shared_pair = 15;
     for (int sc = 0; sc < 64; sc++)
         spr_pair[par][sc] = 0xFF;
@@ -417,6 +425,16 @@ RAMCODE static void apply_cram(int par)
         for (int p = 0; p < 16; p++)
             dst[p] = s16_to_mars(src[p]);
     }
+    /* Shadow ramp: when pair 15 has no real owner this frame, its
+     * pens 1-14 go near-black so shadow sprites (and over-budget
+     * spillover) draw as dark silhouettes. Entry 255 stays free for
+     * the debug bar hijack. */
+    int p15_used = 0;
+    for (int sc = 0; sc < 64; sc++)
+        if (spr_pair[par][sc] == 15) { p15_used = 1; break; }
+    if (!p15_used)
+        for (int p = 1; p < 15; p++)
+            cram[240 + p] = 0x0842;
 }
 
 /* Compose one tile layer's SCREEN ROW RANGE [ylo,yhi) into sbuf from the
@@ -561,15 +579,22 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         int pitch = (int8_t)(d2 & 0xFF);
         uint16_t addr = e[3];
         uint16_t d4 = e[4], d5 = e[5];
-        if ((d4 & 0x3F) == 0x3F)
-            continue;                        /* SHADOW sprites (color 0x3F =
-                                              * darken-underlying, not yet
-                                              * implemented): skip — they
-                                              * rendered as bright ghosts
-                                              * through the shared pair */
         const uint16_t *sd = altbeast_sprites + (((d4 >> 8) & 0xF) & 7) * 0x10000;
-        uint8_t pr = spr_pair[par][d4 & 0x3F];
-        uint8_t base = (uint8_t)((pr == 0xFF ? 15 : pr) << 4);
+        uint8_t base;
+        if ((d4 & 0x3F) == 0x3F) {
+            /* SHADOW sprites (color 0x3F = darken-underlying on real
+             * hardware) render as SOLID DARK SILHOUETTES via reserved
+             * pair 15 (CRAM 241-254 = dark, set in apply_cram). The
+             * arcade draws the whole intro cast this way — Zeus and
+             * the rise-from-grave player are shadow sprites, so the
+             * old skip-them approach deleted the entrance animations
+             * entirely. True 50%-darkening needs a per-pixel palette
+             * lookup; silhouette matches the arcade look closely. */
+            base = 15 << 4;
+        } else {
+            uint8_t pr = spr_pair[par][d4 & 0x3F];
+            base = (uint8_t)((pr == 0xFF ? 15 : pr) << 4);
+        }
         int vzoom = (d5 >> 5) & 0x1F, hzoom = d5 & 0x1F;
         uint16_t yacc = 0;
 

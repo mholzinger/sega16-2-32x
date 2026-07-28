@@ -602,12 +602,37 @@ assert hrom[0xD842:0xD848] == bytes([0x22, 0x68, 0x00, 0x08, 0x4E, 0x91])
 hrom[0xD842:0xD848] = bytes([0x4E, 0xB8, 0xB3, 0xC0, 0x4E, 0x71])
 # (shim installs the thunks at 0xFFB3A0 / 0xFFB3C0)
 
+# DATA-POINTER NORMALIZATION (wpcatch.lua finds, intro window): two
+# readers consume STORED table pointers whose values live below the
+# 0x28000 harvest bound (packed-art byte collisions forbid rebasing
+# them statically). Normalize at use time via shim thunks:
+#   0xDBA8 spawn walker (intro cast list @0xDD46):
+#          movea.l (0x24,A6),A4 -> jsr (FFFFB340).w
+#   0x30D0 palette-cycle streamer (glow scripts @0x1A78E):
+#          movea.l (2,A5),A0    -> jsr (FFFFB360).w
+assert hrom[0xDBA8:0xDBAC] == bytes([0x28, 0x6E, 0x00, 0x24])
+hrom[0xDBA8:0xDBAC] = bytes([0x4E, 0xB8, 0xB3, 0x40])
+assert hrom[0x30D0:0x30D4] == bytes([0x20, 0x6D, 0x00, 0x02])
+hrom[0x30D0:0x30D4] = bytes([0x4E, 0xB8, 0xB3, 0x60])
+
 # REBASE_EXCLUDE: regions no pass may touch (word tables whose pairs
 # forge valid-looking pointers — heuristics cannot reject them).
 # 0x6DC0-0x6DCA: round-index WORD table of the two-level dispatcher
 # (pair 0x00030004 passed every classifier; +0x90 in an index word
 # crashed round-2 attract with jsr-to-zero).
-REBASE_EXCLUDE = [(0x6DC0, 0x6DCA)]
+# 0x1AD10-0x1AD18: cutscene record words [0000][0E10][0000][1C20] —
+# the 0x0000 words forged longs 0x00000E10/0x00001C20 and took +0x90,
+# shifting the intro camera AND the player spawn X by 144px (the
+# field "P1 spawns at P2" bug). Values are frame counts, not handlers.
+# 0x7358-0x73A0: record fields 0x102/0x104/0x106 (the known collision
+# value family) misread as harvested handler longs. If any ever IS a
+# handler, the B3A0/B3C0 call-time thunks normalize it anyway.
+# 0xEC32-0xEC46 / 0xECAC-0xECB0: object animation records ("harvested
+# handler" 0x0003000A / 0x00010000 — collision-family values, data).
+# (NOT 0x1989E-0x198AE: those ascending longs 0x0000F0EE..0x0003F1EF
+# are a REAL per-round pointer table — reverting them stalled boot.)
+REBASE_EXCLUDE = [(0x6DC0, 0x6DCA), (0x1AD10, 0x1AD18), (0x7358, 0x73A0),
+                  (0xEC32, 0xEC46), (0xECAC, 0xECB0)]
 for lo, hi_ in REBASE_EXCLUDE:
     if hrom[lo:hi_] != orig_rom[lo:hi_]:
         hrom[lo:hi_] = orig_rom[lo:hi_]
