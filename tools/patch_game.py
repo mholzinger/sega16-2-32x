@@ -381,6 +381,55 @@ for i, (ia, it) in enumerate(insns_l):
                               f"(store at {ia:06X})")
             for k in range(n):
                 tbl_offs.add(tbl + k * 4)
+
+# GLOBAL LEA-TABLE SWEEP (burn-down catch #5 — ares field probe): DATA-
+# read pointers were the remaining miss class. MAME hid them (it maps
+# the cart at address 0 even at RV=0, so un-rebased low reads silently
+# return correct bytes); ares maps the adapter region there and the
+# reads return junk — the RLE tile loader decompressed a constant and
+# tiled the whole screen with one garbage pattern. Root every lea
+# (pc-relative or absolute) whose target looks like a pointer table
+# (>=3 plausible even ROM pointers); recursive expansion below chases
+# nesting. Odd/even data pointers both count here: these are READ
+# pointers, not jump targets.
+def entry_class(v):
+    """1 = ROM pointer (rebase), 2 = runtime/HW address (pass), 0 = stop."""
+    if 0x100 <= v < 0x40000:
+        return 1
+    a = v & 0xFFFFFF
+    if (v >> 24) == 0 and (0xFF0000 <= a <= 0xFFFFFF or
+                           0x400000 <= a < 0x450000 or
+                           0x840000 <= a < 0x860000):
+        return 2
+    return 0
+
+def table_extent_any(at):
+    n = 0
+    rom_ptrs = 0
+    while at + n * 4 + 4 <= 0x40000:
+        v = struct.unpack_from('>I', orig_rom, at + n * 4)[0]
+        c = entry_class(v)
+        if c == 0:
+            break
+        if c == 1:
+            rom_ptrs += 1
+        n += 1
+    return n if rom_ptrs >= 2 else 0
+lea_roots = 0
+for ia, it in insns_l:
+    lm = re.search(r'lea (?:%pc@\()?0x([0-9a-f]+)\)?,%a[0-7]', it)
+    if not lm:
+        continue
+    tbl = int(lm.group(1), 16)
+    if not (0x100 <= tbl < 0x40000):
+        continue
+    n = table_extent_any(tbl)
+    if n >= 3:
+        lea_roots += 1
+        reb_report.append(f"LEA-TABLE {tbl:06X} x{n} (lea at {ia:06X})")
+        for k in range(n):
+            tbl_offs.add(tbl + k * 4)
+reb_report.append(f"(lea-table sweep: {lea_roots} roots)")
 # RECURSIVE expansion (burn-down catch #4: two-level dispatch at
 # 0x4C00 — table of SUB-TABLE pointers at 0x6DA0, each sub-table =
 # handler pointers): any harvested entry that POINTS AT >=3 further
@@ -401,23 +450,24 @@ while work:
         continue
     seen_tbl.add(a)
     v = struct.unpack_from('>I', orig_rom, a)[0]
-    if not (0x100 <= v < 0x40000) or (v & 1):
-        reb_report.append(f"SKIP-T {a:06X}: {v:08X} not a code pointer")
+    if not (0x100 <= v < 0x40000):
+        reb_report.append(f"SKIP-T {a:06X}: {v:08X} not a ROM pointer")
         continue
-    n = looks_like_table(v)
-    if n >= 3:
-        reb_report.append(f"NESTED table {v:06X} x{n} (via entry {a:06X})")
-        for k in range(n):
-            work.append(v + k * 4)
+    if not (v & 1):
+        n = looks_like_table(v)
+        if n >= 3:
+            reb_report.append(f"NESTED table {v:06X} x{n} (via entry {a:06X})")
+            for k in range(n):
+                work.append(v + k * 4)
 tbl_offs = seen_tbl
 for a in sorted(tbl_offs):
     v = struct.unpack_from('>I', orig_rom, a)[0]
-    if not (0x100 <= v < 0x40000) or (v & 1):
-        continue
+    if not (0x100 <= v < 0x40000):
+        continue                    # runtime addrs pass through untouched
     if struct.unpack_from('>I', hrom, a)[0] == v:       # not yet rebased
         struct.pack_into('>I', hrom, a, v + REBASE)
         reb += 1
-        reb_report.append(f"R {a:06X}: jump table {v:08X} -> {v + REBASE:08X}")
+        reb_report.append(f"R {a:06X}: table entry {v:08X} -> {v + REBASE:08X}")
 
 # RUNTIME-HARVESTED handler values (tools/harvested_handlers.txt: every
 # distinct object-handler pointer observed live in the WORKING RV=1
@@ -441,6 +491,19 @@ if hh.exists():
                           f"{v + REBASE:08X}")
     reb_report.append(f"(harvested-handler pass: {nh} sites from "
                       f"{len(hvals)} live values)")
+
+# STRIDE-RECORD asset tables (mixed word+long records the 4-stride
+# sweeps can't see). 0x1CE2: the tilemap RLE loader's per-round table,
+# 8 records of [bank.w][srcptr.l] — THE source of the ares garbage
+# tilemap (unrebased srcptr -> 68K read junk from adapter space).
+for start, cnt, stride, poff in [(0x1CE2, 8, 6, 2)]:
+    for k in range(cnt):
+        a = start + k * stride + poff
+        v = struct.unpack_from('>I', orig_rom, a)[0]
+        if 0x100 <= v < 0x40000 and struct.unpack_from('>I', hrom, a)[0] == v:
+            struct.pack_into('>I', hrom, a, v + REBASE)
+            reb += 1
+            reb_report.append(f"R {a:06X}: stride-rec {v:08X} -> {v + REBASE:08X}")
 
 # the one abs.w code ref that can't hold 0x94xxxx: thunk via shim RAM
 assert hrom[0x1B5C6:0x1B5CA] == bytes([0x4E, 0xF8, 0x04, 0x7E])

@@ -1066,6 +1066,18 @@ RAMCODE void m_main(void)
                         for (int i = 0; i < len; i++)
                             b[i] = 0xFF;
                     }
+                    /* rows 10/12: RAW WORD probes — is the junk in FB
+                     * staging itself or introduced by copy_pages?
+                     * bar length = word value >> 8 (0xFFFF -> 255px). */
+                    {
+                        unsigned v1 = TILEMAP_U[0x40];
+                        unsigned v2 = FB_STAGING[0x40];   /* in-window */
+                        int l1 = (int)(v1 >> 8), l2 = (int)(v2 >> 8);
+                        uint8_t *b1 = sbuf + (8 + 10) * SBUF_W + 8;
+                        uint8_t *b2 = sbuf + (8 + 12) * SBUF_W + 8;
+                        for (int i = 0; i < l1; i++) b1[i] = 0xFF;
+                        for (int i = 0; i < l2; i++) b2[i] = 0xFF;
+                    }
                 }
             }
 
