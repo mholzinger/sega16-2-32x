@@ -11,3 +11,5 @@ sh_src/tiles.bin
 *.lst
 rom/
 snap/
+screenshots/
+rom/*.32x
