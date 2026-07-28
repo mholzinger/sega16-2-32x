@@ -1477,3 +1477,21 @@ score-award mailboxes). 2243 static rebases.
 Field state per Mike: sky fixed ("MUCH better"), gravestone wiggle
 correct, frames still dropping on ares (53-60 VPS — queued with the
 step-2 speed work).
+
+## OPEN ITEMS AFTER THE SKY/PLAYER FIX ROUND (field: "MUCH better")
+
+Confirmed fixed on ares: sky/tilemaps, gravestone rise animation,
+scores, spawn params, player visibility (in MAME).
+OPEN, in priority order:
+1. ARES-ONLY: P1 spawns at/near the P2 X (far right, half off-screen);
+   MAME object state is byte-identical old-vs-new (slot dumps).
+   Poison covers ROM reads, so the divergence domain is: (a) reads of
+   0x000-0x0FF (EXCLUDED from rebasing; MAME models the adapter vector
+   area as writable-hint-vector + bios, ares differs) — census the
+   game's low-vector reads next; or (b) window-timing vs the game's
+   sprite-list/spawn sequence. 
+2. White skyline rectangles (tree-row tiles) — MAME-reproducible,
+   wp-harness next.
+3. Choppiness/frame drops on ares (53-60 VPS) — belongs to step-2
+   (pull compose out of windows) which is still the end-goal.
+4. Round-2+ garble sweep; Zeus sprite edge dropouts.
