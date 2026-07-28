@@ -1249,3 +1249,29 @@ step 2 = pull sprite/tile compose out of the windows (the payoff).
 
 Also confirmed already-right: controller reading lives on the 68K
 (Backrooms lesson) — SH-2s never touch pads.
+
+## REBASE DESIGN (settled, pre-implementation)
+
+At RV=0 the 32X adapter delivers 68K interrupts to FIXED cart offsets:
+HBlank -> 0x880880, VBlank -> 0x8808C0 (d32xr crt0.s layout — stubs
+there dispatch via a RAM pointer). Our cart image holds GAME bytes at
+those offsets (game body at 0x808+ for the RV=1 model), so:
+
+1. APPEND a second copy of the (rebased) game body at image offset
+   0x240000 (past all SH-2 data; zero layout churn for linked SH-2
+   cart addresses). The 68K reaches it through the BANKED 0x900000
+   window, bank register 0xA15104 = 2, set once at boot. Uniform
+   rebase delta: arcade addr A -> 0x940000 + A.
+2. OVERWRITE cart offsets 0x880-0x8FF with d32xr-style vector stubs
+   (jmp via RAM pointer -> shim handlers). The low game copy is dead
+   at RV=0 (execution and data reads all go through 0x94xxxx).
+3. Patcher rebase pass (class-A confirmed operands in [0x100,
+   0x40000)): EA/hex-confirmed always; long immediates only when the
+   destination is an address register or a memory store (the 303
+   pointer-store class); #imm into data registers left for runtime
+   burn-down. Spawn-table handler longs +delta. abs.w code refs
+   (16-bit slot) get work-RAM thunks via sign-extended negative
+   abs.w (0xFFFFB0xx) when hit.
+4. Shim: RV never set to 1; game-entry and vint-chain targets
+   +0x940000; FM windows unchanged (step 1 = memory model only,
+   perf-neutral by design; step 2 pulls compose out of windows).
