@@ -1,4 +1,4 @@
-2243 refs rebased (+0x900000)
+2247 refs rebased (+0x900000)
 
 R 0004AA: 0001A88C -> 0091A88C | 4a8:	4eb9 0001 a88c 	jsr 0x1a88c
 R 0004FA: 00001996 -> 00901996 | 4f8:	41f9 0000 1996 	lea 0x1996,%a0
@@ -2274,6 +2274,10 @@ R 001CF0: stride-rec 000324D0 -> 009324D0
 R 001CF6: stride-rec 000369C0 -> 009369C0
 R 001CFC: stride-rec 0003B0E0 -> 0093B0E0
 R 003C92: immediate override 000255E0 -> 009255E0
+R 014932: low-vector ref 0 -> 00900000
+R 01493E: low-vector ref 0 -> 00900000
+R 00307A: low-vector ref 0 -> 00900000
+R 00ABC4: low-vector ref 0 -> 00900000
 
 SKIPPED long immediates (burn-down candidates):
 002DE4: 00000200 | 2de2:	95fc 0000 0200 	subal #512,%a2

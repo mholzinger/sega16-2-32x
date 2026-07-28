@@ -1495,3 +1495,15 @@ OPEN, in priority order:
 3. Choppiness/frame drops on ares (53-60 VPS) — belongs to step-2
    (pull compose out of windows) which is still the end-goal.
 4. Round-2+ garble sweep; Zeus sprite edge dropouts.
+
+## LOW-VECTOR CONSTANT READS (the ares-only P1-position suspect)
+
+Census found 4 game references below 0x100 — the killers:
+0x14930/0x1493C `addal 0x0,%a4` = the game ADDS vector[0]
+(0xFFFFFF00 = -0x100, a size-optimized constant) to an address
+register. At RV=0, MAME and ares serve DIFFERENT adapter bytes at
+address 0 -> ares-only pointer/position skew. Plus tstb 0x0 (flag
+test of a vector byte) and oriw #0,0x0 (RMW). All four redirected to
+the high copy's authentic arcade vector bytes (operand 0 ->
+0x900000). TOOLKIT: the rebase census must include [0x000,0x100) —
+vector-table-as-constants is a real 68K idiom.

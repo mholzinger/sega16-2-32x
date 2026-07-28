@@ -569,6 +569,18 @@ for off, v in [(0x3C92, 0x255E0)]:
     reb += 1
     reb_report.append(f"R {off:06X}: immediate override {v:08X} -> {v + REBASE:08X}")
 
+# LOW-VECTOR reads (census: 4 sites): the game reads its own vector
+# table as CONSTANTS (addal 0x0,%a4 adds vector[0]=0xFFFFFF00 = -0x100
+# — a 68K size trick). At RV=0 MAME/ares serve DIFFERENT adapter bytes
+# at low addresses -> ares-only position skew (the "P1 spawns at P2"
+# field bug). Redirect to the high copy's authentic arcade vectors.
+for off in (0x14932, 0x1493E, 0x307A, 0xABC4):
+    v = struct.unpack_from('>I', hrom, off)[0]
+    assert v == 0, f"{off:#x}: {v:#x}"
+    struct.pack_into('>I', hrom, off, REBASE)
+    reb += 1
+    reb_report.append(f"R {off:06X}: low-vector ref 0 -> {REBASE:08X}")
+
 # the one abs.w code ref that can't hold 0x94xxxx: thunk via shim RAM
 assert hrom[0x1B5C6:0x1B5CA] == bytes([0x4E, 0xF8, 0x04, 0x7E])
 hrom[0x1B5C6:0x1B5CA] = bytes([0x4E, 0xF8, 0xB3, 0xF0])   # jmp (FFFFB3F0).w
