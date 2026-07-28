@@ -161,7 +161,14 @@ static inline const uint8_t *tile_pixels(unsigned code, int cpu)
         missq[cpu][n] = (uint16_t)code;
         miss_n[cpu] = (uint16_t)(n + 1);
     }
-    return blank_tile;
+    /* MISS: read the tile STRAIGHT FROM CART ROM (cached 0x02 view).
+     * Legal at any time under unpair (RV pinned 0) — the old
+     * blank-sentinel "keep last frame" dance was an RV=1 artifact.
+     * It also could never converge on working sets larger than the
+     * cache: the animated title backdrop (~1120 cycling codes vs 1024
+     * slots) thrashed forever and rendered as a black/purple field.
+     * The queue still promotes hot tiles into SDRAM for speed. */
+    return altbeast_tiles + (unsigned)code * 64;
 }
 
 typedef struct {
@@ -1193,19 +1200,18 @@ RAMCODE void m_main(void)
                                               * W1->R0, W2->R1, W0->R2 */
                 cache_purge();               /* pages/maps changed in-window:
                                               * cached lines are stale */
-                /* queue the master band; if the queue is somehow full
-                 * (master persistently over budget), block-drain the
-                 * head band first — degraded but coherent. */
+                /* queue the master band; if the queue is full (master
+                 * persistently over budget — heavy attract scenes),
+                 * DROP the head band's remaining compose: it displays
+                 * one cycle stale, which beats the old block-drain
+                 * (4-8ms in-window -> delayed next pickup -> mskips ->
+                 * MORE staleness, the ares attract smear cascade).
+                 * Only build_maps still runs — the next cycle's colors
+                 * depend on it. */
                 if (bq[bq_t].on) {
                     struct band *b = &bq[bq_h];
-                    DIAG[13]++;              /* queue-full block-drains */
-                    int lo2 = (b->rg == 2) ? 184 : (b->rg * 72 + 36);
-                    int hi2 = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
-                    compose_layer(b->y, hi2, 0, 1, 1, b->bank, b->bpar, 0);
-                    compose_layer(lo2, hi2, 0, 0, 0, b->bank, b->bpar, 1);
-                    compose_sprites(lo2, hi2, b->bpar);
-                    compose_layer(lo2, hi2, 0, 0, 0, b->bank, b->bpar, 2);
-                    if (b->rg == 2)
+                    DIAG[13]++;              /* queue-full drops */
+                    if (b->rg == 2 && b->phase <= 6)
                         build_maps(b->bpar ^ 1, b->bank);
                     b->on = 0;
                     bq_h = (bq_h + 1) & 3;
