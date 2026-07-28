@@ -1582,6 +1582,6 @@ region R2's tail (before the next W1 snapshot).
 REMAINING known-visual, queued:
 - Slice-seam temporal tearing on fast movers: inherent to progressive
   shipping at full game speed; mitigate with the 30Hz/2-slice retest,
-  真 fix = whole-frame ship (double sbuf) someday.
+  true fix = whole-frame ship (double sbuf) someday.
 - Title-screen purple field / unfinished background: allocator drift
   (suspect the eviction age-gate) — allocator polish pass next.
