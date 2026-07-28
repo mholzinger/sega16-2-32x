@@ -1360,3 +1360,28 @@ Next actions, in order:
    harvested-handler false positive in a data table); the 13 skipped
    immediates in tools/rebase_report.txt are the remaining burn-down
    candidates if anything else acts odd.
+
+## POISON RIG + READ-POINTER BURN-DOWN (unpair, continued)
+
+TOOLKIT BREAKTHROUGH: the dead low copy (cart 0x808-0x3FFFF) is now
+0xFF-POISONED. MAME leaves the cart readable at low addresses (the
+leniency that hid every missed READ pointer), so poisoning makes MAME
+fail EXACTLY like ares — the whole remaining burn-down runs in the
+scripted rig, no ares round-trips. Catches so far with it:
+- Sprite frame-table base #0x255E0 in %d2 (a deliberately-skipped
+  data-register immediate; consumed via adda.l -> movea.l (A0) ->
+  address-error cascade into the adapter vector weeds). Fixed via a
+  REBASE_IMMEDIATES override list.
+- Detector note: mask the sampled 68K PC to 24 bits (abs.w-called
+  thunks report as 0xFFFFB3xx).
+Earlier the same evening, the ares field probes (word-value bars) had
+proven the garbage tilemap was 68K-side: the RLE loader's stride-6
+per-round source table at 0x1CE2 read poison. Global lea-table sweep,
+mixed-table classifier (runtime addresses pass through), stride-record
+tables, odd data pointers — all landed in the patcher.
+STATUS: full coined 5400-frame run clean on the poisoned build; tiles/
+sprites/gameplay render; REMAINING: patchy wrong-color BG rows (sky
+shows brick/water strips) — now MAME-reproducible; next tool is a
+TILEMAP_U staging diff old-vs-new build to name the loader.
+ALSO WATCH: implausible score digits (possible over-rebase false
+positive) — the staging/RAM diff will catch its table too.

@@ -505,6 +505,16 @@ for start, cnt, stride, poff in [(0x1CE2, 8, 6, 2)]:
             reb += 1
             reb_report.append(f"R {a:06X}: stride-rec {v:08X} -> {v + REBASE:08X}")
 
+# SKIPPED-IMMEDIATE overrides (audited by trace): #imm values that ARE
+# pointers despite landing in data registers. 0x3C92: movel #0x255E0,
+# %d2 = sprite frame-table base consumed via adda.l D2 in the sprite
+# list builder (poison-rig catch: adda.w (A0) address error at 0x3EA4).
+for off, v in [(0x3C92, 0x255E0)]:
+    assert struct.unpack_from('>I', hrom, off)[0] == v, hex(off)
+    struct.pack_into('>I', hrom, off, v + REBASE)
+    reb += 1
+    reb_report.append(f"R {off:06X}: immediate override {v:08X} -> {v + REBASE:08X}")
+
 # the one abs.w code ref that can't hold 0x94xxxx: thunk via shim RAM
 assert hrom[0x1B5C6:0x1B5CA] == bytes([0x4E, 0xF8, 0x04, 0x7E])
 hrom[0x1B5C6:0x1B5CA] = bytes([0x4E, 0xF8, 0xB3, 0xF0])   # jmp (FFFFB3F0).w

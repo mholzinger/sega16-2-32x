@@ -114,10 +114,15 @@ SEGA_BLOB:
 		.word	0x4EF9, 0x008C, 0x0410
 		.word	0x0000
 
-! Arcade game body at native cart offsets 0x808-0x3FFFF (patched HW refs)
+! Arcade game body region 0x808-0x3FFFF: POISONED (0xFF fill). The
+! game executes the rebased copy at 0x300000 (unpair model); ares maps
+! adapter space at low addresses, so any missed rebase pointer reads
+! junk there — this fill makes MAME fail the SAME way instead of
+! silently returning correct bytes (MAME leaves the cart readable at
+! low addresses), so the burn-down runs entirely in the scripted rig.
 	.org	0x808
 GAME_BODY:
-		.incbin "game_body.bin"
+		.fill	0x3F7F8, 1, 0xFF
 
 ! Boot RAM-copy stash: patched game [0x400,0x808) + continuation jmp,
 ! copied by the shim to 0xFFB400 and executed there.
