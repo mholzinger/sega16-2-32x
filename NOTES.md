@@ -1345,7 +1345,38 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
-## === RESUME POINT (2026-07-28) ===
+## === RESUME POINT (2026-07-28 evening) ===
+State: branch unpair-rebase @ 3c99d3b. THE ENTRANCE ANIMATIONS ARE
+BACK (Zeus head + orb + lightning + gravestone + rise smoke, verified
+frame-matched vs the arcade oracle) plus Mike's "P1 spawns at P2"
+fixed (+0x90 pan-speed corruption) and shadow sprites render as dark
+silhouettes. Two root causes closed the intro:
+1. Harvest false positives: value 0x00010000 patched at 72 DATA sites
+   (movement/spawn records); one was the cutscene pan speed 0x0001 ->
+   0x0091. Now a VALUE BLACKLIST {0x10000,0x102,0x104,0x106} in the
+   harvest pass — call-time thunks cover any real handler.
+2. SH-2 snapshot race: the slave's W1 SPR_SNAP copy raced the
+   master's FB bank restore and read display-bank zeros — short
+   cutscene sprite lists vanished whole. Snapshot moved to the master
+   after its own restore.
+TOOLKIT ADDITIONS (permanent): tools/oracle_shots.lua (frame-matched
+arcade ground truth), tools/wpcatch.lua (r/w watchpoint catcher with
+values, both machines), the paired-trace + RAM-diff + build-buffer
+diff pattern (ours-vs-arcade at the same frame answers "which side
+broke" in one run).
+LESSONS: ascending byte ramps forge ascending "pointer" longs (the
+0x1AD10 easing curve); ascending REAL pointer tables exist too
+(0x1989E — reverting it stalls boot); collision-family harvested
+values are best killed by VALUE, not by region.
+Pacing state: sprite strips pre-vint margin 10800 ticks, tiles 11300,
+heavy 8000, cache_fill 128/shot. Full coined run: mskips 13 to end of
+gameplay, bdrain 0; post-game ATTRACT still saturates bands (bdrain
+1523, mskips->143) — polish item, gameplay unaffected.
+Next: 1. Mike's ares verdict (rom/s16.32x). 2. Attract-scene band
+saturation. 3. Roadmap unchanged (30Hz retest, rounds 2-5, sound,
+parallax, allocator polish, merge).
+
+## === OLD RESUME POINT (2026-07-28) ===
 State: branch unpair-rebase @ 5f7f9ed. Step 2 complete + band-staleness
 fix VERIFIED in MAME: interruptible band state machine + heavy-phase
 self-pacing + PRE-VINT QUIET ZONE (master starts no band work >11300
