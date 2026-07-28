@@ -940,6 +940,21 @@ RAMCODE void m_main(void)
     int par = 0;
     uint16_t tile_cmd = 0;                   /* outstanding CMD_TILE, if any */
 
+    /* Master band work is an INTERRUPTIBLE state machine: queued per
+     * window, processed in 12-row strips between COMM0 polls. A busy
+     * master tail used to delay window pickup past vblank -> silent
+     * blit skip -> that band displayed a full-cycle-old frame (the
+     * ares "floating heads / split sprites" staleness). Now pickup
+     * latency is bounded by one strip (~0.4ms). */
+    struct band {
+        uint8_t on, rg, bpar, bank, phase, y;
+    };
+    struct band bq[4];
+    int bq_h = 0, bq_t = 0;
+    uint16_t t_vint = 0;                 /* FRT at last window pickup */
+    for (int i = 0; i < 4; i++)
+        bq[i].on = 0;
+
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
 
@@ -953,12 +968,80 @@ RAMCODE void m_main(void)
          * the shipping frame's 144-224 tail with the OLD parity, then
          * snapshots staging (regs, sprite list, pages, CRAM) for the
          * next frame and flips parity. ---- */
-        if ((c0 & 0xFFCF) != 0x2000)
-            continue;                        /* stream is the slave's job */
+        if ((c0 & 0xFFCF) != 0x2000) {
+            /* no window pending: advance the queued band by ONE strip.
+             * SELF-PACING: heavy single-shot phases (fills, build_maps)
+             * only run in the EARLY part of the frame — near the next
+             * vint we stay light so window pickup latency is bounded
+             * by one 12-row strip (else the vblank gate skips blits:
+             * 923 mskips/run when build_maps sat on the pickup). */
+            if (bq[bq_h].on) {
+                struct band *b = &bq[bq_h];
+                uint16_t dt = (uint16_t)(frt() - t_vint);
+                /* PRE-VINT QUIET ZONE: the window period is ~12000 FRT
+                 * ticks; past 11300 start NOTHING and just poll, so
+                 * pickup latency at the heartbeat gate is ~0. A strip
+                 * begun here (~0.4ms = 6 scanlines) blew the 2-line
+                 * worst-case gate slack in busy scenes (385 mskips/run,
+                 * swait=0, bdrain=0 — the strip WAS the latency).
+                 * Shrinking strips instead collapsed throughput to
+                 * block-drain saturation (2305 mskips). */
+                if (dt > 11300)
+                    continue;
+                if (b->phase >= 5 && dt > 8000)
+                    continue;            /* defer heavy work past the vint */
+                int lo = (b->rg == 2) ? 184 : (b->rg * 72 + 36);
+                int hi = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
+                int y = b->y, ye = (y + 12 > hi) ? hi : y + 12;
+                uint16_t tq = frt();
+                switch (b->phase) {
+                case 0:
+                    compose_layer(y, ye, 0, 1, 1, b->bank, b->bpar, 0);
+                    diag_add(10, tq);
+                    break;
+                case 1:
+                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 1);
+                    diag_add(11, tq);
+                    break;
+                case 2:
+                    compose_sprites(y, ye, b->bpar);
+                    diag_add(12, tq);
+                    break;
+                case 3:
+                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 2);
+                    break;
+                case 4:
+                    compose_text((b->rg == 0) ? 4 : (b->rg == 1) ? 13 : 23,
+                                 (b->rg == 0) ? 9 : (b->rg == 1) ? 18 : 28,
+                                 b->bpar);
+                    break;
+                case 5:
+                    cache_fill(256);
+                    diag_add(1, tq);
+                    break;
+                default:
+                    if (b->rg == 2)
+                        build_maps(b->bpar ^ 1, b->bank);
+                    b->on = 0;
+                    bq_h = (bq_h + 1) & 3;
+                    continue;
+                }
+                if (b->phase >= 4) {         /* single-shot phases */
+                    b->phase++;
+                    b->y = (uint8_t)lo;
+                } else if (ye >= hi) {
+                    b->phase++;
+                    b->y = (uint8_t)lo;
+                } else
+                    b->y = (uint8_t)ye;
+            }
+            continue;
+        }
         {
             int k = (c0 >> 4) & 3;
             uint16_t bank1 = MARS_SYS_COMM2 & 7;
             uint16_t tw = frt(), tp = tw;
+            t_vint = tw;
 
             if (tile_cmd) {                  /* concurrent third finished? */
                 slave_wait(tile_cmd);
@@ -1026,49 +1109,26 @@ RAMCODE void m_main(void)
                 diag_add(2, tp);
             } else {
                 if (k == 2) {
-                    /* STAGING-HEALTH BARS (unpair debug round): which
-                     * 68K-written staging stream is alive on ares?
-                     *   2 = total in-window time (perf, 1px=87.7us)
-                     *   4 = nonzero TILEMAP page-0 words (>>3)
-                     *   6 = nonzero FB palette entries (first 256)
-                     *   8 = nonzero SPR_SNAP words (>>1)
-                     * CRAM[255] forced white (pair 15 pen 15). */
-                    static uint32_t p0;
+                    /* SKIP-RATE BARS (band-staleness debug):
+                     *   2 = total in-window time (1px = 87.7us)
+                     *   4 = master-side blit skips this cycle x16px
+                     *       (each = one band stale a full cycle)
+                     *   6 = cumulative master skips (x2px, cap 300) */
+                    static uint32_t p0, ps;
                     uint32_t c0v = DIAG[8];
-                    int lens[4];
+                    int lens[3];
                     lens[0] = (int)((c0v - p0) >> 6);
                     p0 = c0v;
-                    int n = 0;
-                    for (int i = 0; i < 2048; i++)
-                        if (TILEMAP_U[i]) n++;
-                    lens[1] = n >> 3;
-                    n = 0;
-                    for (int i = 0; i < 256; i++)
-                        if (FB_PAL[i]) n++;          /* in-window: legal */
-                    lens[2] = n;
-                    n = 0;
-                    for (int i = 0; i < 512; i++)
-                        if (SPR_SNAP[i]) n++;
-                    lens[3] = n >> 1;
+                    lens[1] = (int)((DIAG[7] - ps) * 16);
+                    ps = DIAG[7];
+                    lens[2] = (int)(DIAG[7] * 2);
                     ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
-                    for (int j = 0; j < 4; j++) {
+                    for (int j = 0; j < 3; j++) {
                         int len = lens[j];
                         if (len > 300) len = 300;
                         uint8_t *b = sbuf + (8 + 2 + 2 * j) * SBUF_W + 8;
                         for (int i = 0; i < len; i++)
                             b[i] = 0xFF;
-                    }
-                    /* rows 10/12: RAW WORD probes — is the junk in FB
-                     * staging itself or introduced by copy_pages?
-                     * bar length = word value >> 8 (0xFFFF -> 255px). */
-                    {
-                        unsigned v1 = TILEMAP_U[0x40];
-                        unsigned v2 = FB_STAGING[0x40];   /* in-window */
-                        int l1 = (int)(v1 >> 8), l2 = (int)(v2 >> 8);
-                        uint8_t *b1 = sbuf + (8 + 10) * SBUF_W + 8;
-                        uint8_t *b2 = sbuf + (8 + 12) * SBUF_W + 8;
-                        for (int i = 0; i < l1; i++) b1[i] = 0xFF;
-                        for (int i = 0; i < l2; i++) b2[i] = 0xFF;
                     }
                 }
             }
@@ -1089,27 +1149,33 @@ RAMCODE void m_main(void)
             {
                 int rg = (k + 2) % 3;        /* window k composes region:
                                               * W1->R0, W2->R1, W0->R2 */
-                int lo = (rg == 2) ? 184 : (rg * 72 + 36);
-                int hi = (rg == 2) ? 224 : (rg * 72 + 72);
                 cache_purge();               /* pages/maps changed in-window:
                                               * cached lines are stale */
-                tp = frt();
-                compose_layer(lo, hi, 0, 1, 1, bank1, par, 0);   /* BG */
-                diag_add(10, tp);
-                tp = frt();
-                compose_layer(lo, hi, 0, 0, 0, bank1, par, 1);   /* FG cat0 */
-                diag_add(11, tp);
-                tp = frt();
-                compose_sprites(lo, hi, par);
-                compose_layer(lo, hi, 0, 0, 0, bank1, par, 2);   /* cat1 OVER */
-                compose_text((rg == 0) ? 4 : (rg == 1) ? 13 : 23,
-                             (rg == 0) ? 9 : (rg == 1) ? 18 : 28, par);
-                diag_add(12, tp);
-                cache_fill(256);             /* cart reads legal at RV=0:
-                                              * fills are concurrent now */
-                if (rg == 2)
-                    build_maps(par ^ 1, bank1);  /* prescan before the NEXT
-                                                  * snapshot (W1) */
+                /* queue the master band; if the queue is somehow full
+                 * (master persistently over budget), block-drain the
+                 * head band first — degraded but coherent. */
+                if (bq[bq_t].on) {
+                    struct band *b = &bq[bq_h];
+                    DIAG[13]++;              /* queue-full block-drains */
+                    int lo2 = (b->rg == 2) ? 184 : (b->rg * 72 + 36);
+                    int hi2 = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
+                    compose_layer(b->y, hi2, 0, 1, 1, b->bank, b->bpar, 0);
+                    compose_layer(lo2, hi2, 0, 0, 0, b->bank, b->bpar, 1);
+                    compose_sprites(lo2, hi2, b->bpar);
+                    compose_layer(lo2, hi2, 0, 0, 0, b->bank, b->bpar, 2);
+                    if (b->rg == 2)
+                        build_maps(b->bpar ^ 1, b->bank);
+                    b->on = 0;
+                    bq_h = (bq_h + 1) & 3;
+                }
+                struct band *nb = &bq[bq_t];
+                nb->on = 1;
+                nb->rg = (uint8_t)rg;
+                nb->bpar = (uint8_t)par;
+                nb->bank = (uint8_t)bank1;
+                nb->phase = 0;
+                nb->y = (uint8_t)((rg == 2) ? 184 : (rg * 72 + 36));
+                bq_t = (bq_t + 1) & 3;
             }
         }
     }

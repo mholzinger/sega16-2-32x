@@ -50,9 +50,11 @@ emu.register_frame_done(function()
     local tot = sh2:read_u32(0x06027000 + 8 * 4)
     local mskips = sh2:read_u32(0x06027000 + 7 * 4)
     local miss = sh2:read_u32(0x06027000 + 14 * 4)
+    local swait = sh2:read_u32(0x06027000 + 4 * 4)
+    local bdrain = sh2:read_u32(0x06027000 + 13 * 4)
     local line = string.format('f=%d ent=%d skips=%d hv=%04x gpc=%08x', frames, ent, skips, hv, gpc)
     if n > 0 then
-        line = line .. string.format(' compose=%.2fms mskips=%d miss=%.1f', tot / n * 1.37e-3, mskips, miss / n)
+        line = line .. string.format(' compose=%.2fms mskips=%d miss=%.1f swait=%.2fms bdrain=%d', tot / n * 1.37e-3, mskips, miss / n, swait / n * 1.37e-3, bdrain)
     end
     out:write(line .. '\n')
     out:flush()
