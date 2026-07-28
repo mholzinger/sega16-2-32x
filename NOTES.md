@@ -1447,3 +1447,21 @@ NEXT PROBES (local rig):
 3. Suspect list: something the rebase changed in the RLE callers'
    flow (bank word consumed differently?), or a second loader
    touching the same pages between passes.
+
+## SKY-PATCH CLASS SOLVED: harvested-value byte collisions in packed streams
+
+The pass-2 RLE writer control run nailed it (old wrote the cell via
+the zero-RUN path at 0x16F8, new via the LITERAL path at 0x1704 =
+stream desync), and the report cross-check found the cause: harvested
+handler VALUES 0x102/0x106 byte-collide inside the compressed map
+streams — the occurrence pass sprayed 79 +0x900000 corruptions across
+0x29E00-0x3E3xx. Occurrence matching now bounded below the asset
+region (<0x28000, where all real handler tables live). Scene-locked
+staging diff: ~14,000 corrupt words -> 1 (single word, page 9,
+dump-instant race suspect). MAME visuals: rise + gameplay match the
+main build.
+LESSON (toolkit): value-occurrence patching MUST be region-bounded or
+context-gated — small harvested values WILL collide inside packed
+data. The full diagnostic chain that solved this: scene-locked
+staging diff -> byte-pattern census -> single-cell watchpoint with
+old-build CONTROL run -> report cross-check.

@@ -516,7 +516,11 @@ hh = ROOT / 'tools' / 'harvested_handlers.txt'
 if hh.exists():
     hvals = set(int(x, 16) for x in hh.read_text().split() if x.strip())
     nh = 0
-    for off in range(0, 0x40000 - 3, 2):
+    # occurrences only BELOW the packed asset streams (round map srcs
+    # start at 0x29E00): harvested values like 0x102/0x106 byte-collide
+    # inside compressed data — 79 such hits desynced the round-1 RLE
+    # (the sky-patch corruption).
+    for off in range(0, 0x28000 - 3, 2):
         v = struct.unpack_from('>I', orig_rom, off)[0]
         if v not in hvals:
             continue

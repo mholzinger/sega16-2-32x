@@ -1,4 +1,4 @@
-2056 refs rebased (+0x900000)
+1977 refs rebased (+0x900000)
 
 R 0004AA: 0001A88C -> 0091A88C | 4a8:	4eb9 0001 a88c 	jsr 0x1a88c
 R 0004FA: 00001996 -> 00901996 | 4f8:	41f9 0000 1996 	lea 0x1996,%a0
@@ -2001,86 +2001,7 @@ R 016B9C: harvested handler 00016BF0 -> 00916BF0
 R 017640: harvested handler 00010000 -> 00910000
 R 017660: harvested handler 00010000 -> 00910000
 R 01A6FE: harvested handler 0001A70E -> 0091A70E
-R 02B042: harvested handler 00000102 -> 00900102
-R 02B744: harvested handler 00000102 -> 00900102
-R 02BE34: harvested handler 00000102 -> 00900102
-R 02BE5A: harvested handler 00000102 -> 00900102
-R 02C546: harvested handler 00000102 -> 00900102
-R 02CC70: harvested handler 00000102 -> 00900102
-R 02D8AE: harvested handler 00000102 -> 00900102
-R 02ED28: harvested handler 00000102 -> 00900102
-R 030548: harvested handler 00000102 -> 00900102
-R 03093C: harvested handler 00000102 -> 00900102
-R 031064: harvested handler 00000102 -> 00900102
-R 03114A: harvested handler 00000102 -> 00900102
-R 031156: harvested handler 00000102 -> 00900102
-R 031360: harvested handler 00000102 -> 00900102
-R 034E1C: harvested handler 00000102 -> 00900102
-R 034E32: harvested handler 00000102 -> 00900102
-R 0354CA: harvested handler 00000102 -> 00900102
-R 035B30: harvested handler 00000102 -> 00900102
-R 035B46: harvested handler 00000102 -> 00900102
-R 0361C2: harvested handler 00000102 -> 00900102
-R 036840: harvested handler 00000102 -> 00900102
-R 03685C: harvested handler 00000102 -> 00900102
-R 036872: harvested handler 00000102 -> 00900102
-R 0376D6: harvested handler 00000102 -> 00900102
-R 0384CA: harvested handler 00000102 -> 00900102
-R 038BE6: harvested handler 00000102 -> 00900102
-R 038DCE: harvested handler 00000102 -> 00900102
-R 038DF8: harvested handler 00000102 -> 00900102
-R 0394D0: harvested handler 00000102 -> 00900102
-R 0394FA: harvested handler 00000102 -> 00900102
-R 039BD4: harvested handler 00000102 -> 00900102
-R 039BFE: harvested handler 00000102 -> 00900102
-R 03A2D6: harvested handler 00000102 -> 00900102
-R 03A300: harvested handler 00000102 -> 00900102
-R 03A82E: harvested handler 00000102 -> 00900102
-R 03A9EE: harvested handler 00000102 -> 00900102
-R 03AF1C: harvested handler 00000102 -> 00900102
-R 03B830: harvested handler 00000102 -> 00900102
-R 03BAE2: harvested handler 00000102 -> 00900102
-R 03BDCC: harvested handler 00000102 -> 00900102
-R 03C0B6: harvested handler 00000102 -> 00900102
-R 03C508: harvested handler 00000102 -> 00900102
-R 03C58A: harvested handler 00000102 -> 00900102
-R 03C5A0: harvested handler 00000102 -> 00900102
-R 03C5C0: harvested handler 00000102 -> 00900102
-R 03CA52: harvested handler 00000102 -> 00900102
-R 03CA5E: harvested handler 00000102 -> 00900102
-R 03CA70: harvested handler 00000106 -> 00900106
-R 03CA7A: harvested handler 00000106 -> 00900106
-R 03CA90: harvested handler 00000106 -> 00900106
-R 03CBE4: harvested handler 00000102 -> 00900102
-R 03CBFA: harvested handler 00000102 -> 00900102
-R 03CC10: harvested handler 00000102 -> 00900102
-R 03D052: harvested handler 00000102 -> 00900102
-R 03D05A: harvested handler 00000102 -> 00900102
-R 03D0BA: harvested handler 00000106 -> 00900106
-R 03D0D4: harvested handler 00000106 -> 00900106
-R 03D0EA: harvested handler 00000106 -> 00900106
-R 03D23E: harvested handler 00000102 -> 00900102
-R 03D254: harvested handler 00000102 -> 00900102
-R 03D26A: harvested handler 00000102 -> 00900102
-R 03D700: harvested handler 00000106 -> 00900106
-R 03D712: harvested handler 00000106 -> 00900106
-R 03D728: harvested handler 00000106 -> 00900106
-R 03D896: harvested handler 00000102 -> 00900102
-R 03D8AC: harvested handler 00000102 -> 00900102
-R 03D8C2: harvested handler 00000102 -> 00900102
-R 03DD08: harvested handler 00000102 -> 00900102
-R 03DD56: harvested handler 00000106 -> 00900106
-R 03DD70: harvested handler 00000106 -> 00900106
-R 03DEDA: harvested handler 00000102 -> 00900102
-R 03DEF0: harvested handler 00000102 -> 00900102
-R 03DF06: harvested handler 00000102 -> 00900102
-R 03E33E: harvested handler 00000102 -> 00900102
-R 03E346: harvested handler 00000102 -> 00900102
-R 03E34E: harvested handler 00000102 -> 00900102
-R 03E3A6: harvested handler 00000106 -> 00900106
-R 03E3C0: harvested handler 00000106 -> 00900106
-R 03E3D6: harvested handler 00000106 -> 00900106
-(harvested-handler pass: 197 sites from 43 live values)
+(harvested-handler pass: 118 sites from 43 live values)
 R 001CE4: stride-rec 00029E00 -> 00929E00
 R 001CEA: stride-rec 0002EF10 -> 0092EF10
 R 001CF0: stride-rec 000324D0 -> 009324D0
