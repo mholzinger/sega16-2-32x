@@ -825,7 +825,12 @@ RAMCODE void slave_window_k(uint16_t cmd)
         blit_half(y0, y0 + 37);
     }
     SYNC[2] = 1;                                 /* master restores bank X */
-    if (k == 0) {
+    if (k == 1) {
+        /* SNAPSHOT AT W1, not W0: the game's own vint handler (which
+         * rebuilds the sprite list) runs AFTER our window in the
+         * interrupt chain — a W0 snapshot reads a stale or mid-rebuild
+         * list once the game runs at speed (field: vanishing Zeus,
+         * sprites cut at band seams). At W1 the list is complete. */
         for (int i = 0; i < 512; i += 8) {       /* sprite-list snapshot from
                                                   * bank X (game staging) */
             SPR_SNAP[i + 0] = FB_SPR[i + 0];
@@ -850,8 +855,9 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     int k = (cmd >> 4) & 3;
     int par = (cmd >> 8) & 1;
     uint16_t bank1 = cmd & 7;
-    int lo = k * 72;
-    int hi = (k == 2) ? 184 : lo + 36;           /* slave rows of R(k) */
+    int rg = (k + 2) % 3;                        /* W1->R0, W2->R1, W0->R2 */
+    int lo = rg * 72;
+    int hi = (rg == 2) ? 184 : lo + 36;          /* slave rows of R(rg) */
     cache_purge();
     for (int y = lo; y < hi; y += 12) {
         int ye = (y + 12 > hi) ? hi : y + 12;
@@ -867,8 +873,8 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     slave_service_stream();
     compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
     slave_service_stream();
-    compose_text((k == 0) ? 0 : (k == 1) ? 9 : 18,
-                 (k == 0) ? 4 : (k == 1) ? 13 : 23, par);
+    compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
+                 (rg == 0) ? 4 : (rg == 1) ? 13 : 23, par);
 }
 
 RAMCODE static void slave_cmd(uint16_t cmd)
@@ -1006,10 +1012,10 @@ RAMCODE void m_main(void)
             }
             diag_add(5, tp);
 
-            /* in-window work (game paused, RV=0): W0 = snapshot + CRAM
-             * only; W1/W2 = nothing beyond the blit. All composition
-             * is concurrent now (step 2). */
-            if (k == 0) {
+            /* in-window work (game paused, RV=0): W1 = snapshot + CRAM
+             * only (post game-vint: the sprite list is complete);
+             * W0/W2 = nothing beyond the blit. */
+            if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
                 tp = frt();
                 copy_pages(0, 6);
@@ -1076,13 +1082,15 @@ RAMCODE void m_main(void)
             tile_cmd = (uint16_t)(CMD_TILE | (k << 4) | (par << 8) | bank1);
             slave_cmd(tile_cmd);
             diag_add(8, tw);
-            if (k == 0)
+            if (k == 1)
                 DIAG[9]++;
             MARS_SYS_COMM0 = 0;              /* ack: MD restores FM/RV, game runs */
 
             {
-                int lo = (k == 2) ? 184 : (k * 72 + 36);
-                int hi = (k == 2) ? 224 : (k * 72 + 72);
+                int rg = (k + 2) % 3;        /* window k composes region:
+                                              * W1->R0, W2->R1, W0->R2 */
+                int lo = (rg == 2) ? 184 : (rg * 72 + 36);
+                int hi = (rg == 2) ? 224 : (rg * 72 + 72);
                 cache_purge();               /* pages/maps changed in-window:
                                               * cached lines are stale */
                 tp = frt();
@@ -1094,13 +1102,14 @@ RAMCODE void m_main(void)
                 tp = frt();
                 compose_sprites(lo, hi, par);
                 compose_layer(lo, hi, 0, 0, 0, bank1, par, 2);   /* cat1 OVER */
-                compose_text((k == 0) ? 4 : (k == 1) ? 13 : 23,
-                             (k == 0) ? 9 : (k == 1) ? 18 : 28, par);
+                compose_text((rg == 0) ? 4 : (rg == 1) ? 13 : 23,
+                             (rg == 0) ? 9 : (rg == 1) ? 18 : 28, par);
                 diag_add(12, tp);
                 cache_fill(256);             /* cart reads legal at RV=0:
                                               * fills are concurrent now */
-                if (k == 2)
-                    build_maps(par ^ 1, bank1);  /* prescan for the NEXT cycle */
+                if (rg == 2)
+                    build_maps(par ^ 1, bank1);  /* prescan before the NEXT
+                                                  * snapshot (W1) */
             }
         }
     }

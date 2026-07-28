@@ -1568,3 +1568,20 @@ Notes from the round:
 - Sprite color 0x3F (shadow/darken) sprites are SKIPPED for now
   (proper darkening is a residual); pair-zone eviction now spares
   live singles (group-14 text/pair-7 thrash).
+
+## SNAPSHOT PHASE-SHIFT (step-2 follow-up, from Mike's 3-image report)
+
+Step 2 exposed a sprite-list race: the game's own vint handler (which
+rebuilds the sprite hardware list) runs AFTER our window in the
+interrupt chain, so a W0 snapshot read a stale/mid-rebuild list once
+the game ran at speed — vanishing Zeus, sprites cut at band seams.
+Snapshot now taken at W1 (post game-vint, list complete); band
+schedule phase-shifted: W1 composes R0, W2 -> R1, W0 -> R2 (each
+band still done 2+ vints before its rows ship). build_maps rides
+region R2's tail (before the next W1 snapshot).
+REMAINING known-visual, queued:
+- Slice-seam temporal tearing on fast movers: inherent to progressive
+  shipping at full game speed; mitigate with the 30Hz/2-slice retest,
+  真 fix = whole-frame ship (double sbuf) someday.
+- Title-screen purple field / unfinished background: allocator drift
+  (suspect the eviction age-gate) — allocator polish pass next.
