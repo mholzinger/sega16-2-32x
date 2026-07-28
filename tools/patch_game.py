@@ -615,6 +615,18 @@ hrom[0xDBA8:0xDBAC] = bytes([0x4E, 0xB8, 0xB3, 0x40])
 assert hrom[0x30D0:0x30D4] == bytes([0x20, 0x6D, 0x00, 0x02])
 hrom[0x30D0:0x30D4] = bytes([0x4E, 0xB8, 0xB3, 0x60])
 
+# Palette-cycle LAUNCH TABLE at 0x1A6FA ([id.w][script.l] x3): the
+# harvest pass caught entry 1 (0x1A70E) but missed entries 2/3, whose
+# 0x0001A78E script pointers stayed low — the launcher reads the
+# script header DIRECTLY (0x1A6E0: move.w (2,A1)) before the thunked
+# streamer ever runs, so it read poison: no lightning/red-text glow.
+for off in (0x1A704, 0x1A70A):
+    v = struct.unpack_from('>I', hrom, off)[0]
+    assert v == 0x0001A78E, f"{off:#x}: {v:#x}"
+    struct.pack_into('>I', hrom, off, v + REBASE)
+    reb += 1
+    reb_report.append(f"R {off:06X}: palette launch entry -> {v + REBASE:08X}")
+
 # REBASE_EXCLUDE: regions no pass may touch (word tables whose pairs
 # forge valid-looking pointers — heuristics cannot reject them).
 # 0x6DC0-0x6DCA: round-index WORD table of the two-level dispatcher
@@ -631,7 +643,11 @@ hrom[0x30D0:0x30D4] = bytes([0x4E, 0xB8, 0xB3, 0x60])
 # handler" 0x0003000A / 0x00010000 — collision-family values, data).
 # (NOT 0x1989E-0x198AE: those ascending longs 0x0000F0EE..0x0003F1EF
 # are a REAL per-round pointer table — reverting them stalled boot.)
-REBASE_EXCLUDE = [(0x6DC0, 0x6DCA), (0x1AD10, 0x1AD18), (0x7358, 0x73A0),
+# 0x1AD10-0x1AD34: BYTE RAMP 0E 10 1C 20 23 28 ... (animation easing
+# curve for the intro emergence arc) — ascending byte pairs forged
+# ascending "pointer" longs and fooled the lea-table sweep. Also the
+# source of the +0x90 camera/spawn skew (first two longs).
+REBASE_EXCLUDE = [(0x6DC0, 0x6DCA), (0x1AD10, 0x1AD34), (0x7358, 0x73A0),
                   (0xEC32, 0xEC46), (0xECAC, 0xECB0)]
 for lo, hi_ in REBASE_EXCLUDE:
     if hrom[lo:hi_] != orig_rom[lo:hi_]:

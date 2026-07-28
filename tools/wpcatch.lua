@@ -39,7 +39,7 @@ emu.register_frame_done(function()
     if frames == arm then
         manager.machine.debugger:command(
             'wpset ' .. range .. ',' .. wtype ..
-            ',1,{logerror "WPHIT pc=%08X a=%08X\\n",pc,wpaddr;g}')
+            ',1,{logerror "WPHIT pc=%08X a=%08X d=%08X\\n",pc,wpaddr,wpdata;g}')
     end
     if frames == disarm then
         manager.machine.debugger:command('wpclear')
