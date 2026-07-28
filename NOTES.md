@@ -1425,3 +1425,25 @@ OPEN: sky brick/water patch rows (round-1 BG) + round-2+ demo garble
 + purple fleck columns + Zeus sprite dropouts. Scene-synced staging
 differ rigged (rise-text trigger); old-build trigger needs longer
 timeout (its boot is slower).
+
+## SKY-PATCH CLASS: narrowed to RLE pass interleave corruption
+
+Scene-locked staging census (coined rise, f=1400, both builds):
+OLD pages 0-9 = fully populated real maps (both-bytes ~1789/page,
+exactly 256 zero words/page = blank stripes). NEW = same maps but
+scatter-corrupted: ~150-470 words/page missing their LOW byte,
+~110-256 missing their HIGH byte, blank stripes filled with junk.
+So the per-round source table fix WORKS (maps load); the corruption
+is in the write path: the two RLE passes (patched word-write pass-1
+at 0x16C0 base 0x852000, odd-byte pass-2 at 0x16E0 base 0x852001)
+are landing out of phase with each other in the NEW build only.
+NEXT PROBES (local rig):
+1. Dump staging at TITLE in both builds — does corruption pre-date
+   the round-1 load (leftover from an earlier loader) or arrive with
+   it?
+2. wp-trace pass-1 vs pass-2 write ADDRESSES for one page in the new
+   build (wpset on one page + PC log) — mis-phase will show as
+   address skew between the passes.
+3. Suspect list: something the rebase changed in the RLE callers'
+   flow (bank word consumed differently?), or a second loader
+   touching the same pages between passes.
