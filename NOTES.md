@@ -1216,3 +1216,36 @@ ALSO this round: TOOLKIT.md added — the project's second deliverable
 is a reusable S16->32X porting kit; that file is the living inventory
 of which pieces are game-agnostic and what must become per-title
 config.
+
+## THE UNPAIR PROJECT (GO): rebase the game to 0x880000, pin RV=0
+
+Field metrics (perf bars, ares, heavy scenes): total 68K pause mean
+18.4ms/50ms cycle (37%), sprites 10.2ms of it, blit 6.3ms. The pause
+exists ONLY because sprite/tile art lives in cart ROM and RV=1 forbids
+SH-2 cart access — the game's code shares that cart at address 0.
+
+The escape is the STANDARD commercial-32X memory model: the 68K
+executes cart code through the 0x880000 window (works at RV=0, bus-
+arbitrated concurrently with SH-2 cart reads — how Doom 32X runs).
+Program is 0x40000 bytes = fits the fixed 512KB window, no banking.
+Plan: patcher rebases every absolute ROM reference +0x880000, RV
+pinned 0, SH-2s read art anytime -> sprite/tile compose leaves the
+windows entirely; windows shrink to snapshot+blits (~4-5ms/cycle
+= ~9% tax vs 37%).
+
+tools/rebase_scan.py census (toolkit module #1): J=1477 jsr/jmp,
+L/A/E=67 lea/pea/movea/abs.l, M=303 pointer-stores (movel #addr into
+object struct fields +36/+2 — handler/script pointers), D=39 spawn
+handlers, W~174 abs.w-encoded (mostly data-as-code noise; real ones
+like "jmp 0x47e" @1B5C6 need thunks — 16-bit slots can't hold
+0x88xxxx). Burn-down rig: wild jumps land in 32X vector space and the
+0xFFB0F8 interrupted-PC sampler names the culprit.
+
+68K-side changes: vint via the RV=0 adapter vector hooks (d32xr crt0
+reference), boot jumps 0x880000+entry, shim chain targets +0x880000,
+RV toggles deleted. Step 1 = memory-model swap only (windows
+unchanged — zero perf delta expected, isolates correctness risk);
+step 2 = pull sprite/tile compose out of the windows (the payoff).
+
+Also confirmed already-right: controller reading lives on the 68K
+(Backrooms lesson) — SH-2s never touch pads.
