@@ -243,12 +243,12 @@ print(f"{hits} refs patched, {len(warn)} warnings -> tools/patch_report.txt")
 print("game_body.bin:", 0x40000 - 0x808, "bytes; boot_copy.bin:", len(boot), "bytes")
 
 # ==== UNPAIR REBASE (design v2, NOTES.md): game_high.bin ====
-# Full 256KB image executing at 0x940000 (banked 0x900000 window,
-# bank 2): every confirmed ROM-space reference gets +0x940000. Starts
+# Full 256KB image executing at 0x900000+ (banked 0x900000 window,
+# bank 3 -> cart 0x300000): every confirmed ROM-space reference gets +0x900000. Starts
 # from a FRESH copy of the source ROM plus the HW passes ONLY — the
 # displacement machinery (stash bfixes, jump-ins) must NOT be applied,
 # so this section rebuilds those patches' preconditions itself.
-REBASE = 0x940000
+REBASE = 0x900000
 
 hrom = bytearray(orig_rom)          # pristine source image
 # re-apply the HW staging/IO patches to the fresh copy by replaying
@@ -304,17 +304,161 @@ for off in range(0, 0x40000 - 3, 2):
     reb_report.append(f"R {off:06X}: {v:08X} -> {v + REBASE:08X} | {ctx}")
     reb += 1
 
-# spawn-script handler pointers (data; excluded from operand scan)
-for a in range(0x1D2DC, 0x1D520, 12):
-    v = struct.unpack_from('>I', hrom, a + 8)[0]
-    if v < 0x40000:
-        struct.pack_into('>I', hrom, a + 8, v + REBASE)
+# spawn-script region 0x1D2DC-0x1D520 (data; excluded from operand
+# scan): TWO-LEVEL layout discovered in burn-down catch #3 — a per-
+# round META-TABLE of table pointers (consumed at 0xD80E: lea 0x1d32a;
+# movea.l (a0,d0*4),a0) plus stride-12 record lists with the handler
+# long at +8 (walker at 0xD842: movea.l (8,A0),A1; jsr (A1)).
+# 1) meta entries = longs pointing INSIDE the region -> rebase;
+# 2) walk each pointed-to record list, rebasing +8 handlers until the
+#    record shape breaks.
+spawn_meta, meta_end = 0x1D32A, 0x1D33E     # 5 per-round table pointers
+walk_cap = 0x1E000
+meta_targets = set()
+for a in range(spawn_meta, meta_end - 3, 4):
+    v = struct.unpack_from('>I', orig_rom, a)[0]
+    if 0x1D300 <= v < walk_cap:
+        struct.pack_into('>I', hrom, a, v + REBASE)
         reb += 1
-        reb_report.append(f"R {a + 8:06X}: spawn handler {v:08X} -> {v + REBASE:08X}")
+        reb_report.append(f"R {a:06X}: spawn meta {v:08X} -> {v + REBASE:08X}")
+        meta_targets.add(v)
+for tbl in sorted(meta_targets):
+    a = tbl
+    while a + 12 <= walk_cap:
+        h = struct.unpack_from('>I', orig_rom, a + 8)[0]
+        if not (0x100 <= h < 0x40000) or (h & 1):
+            break
+        if struct.unpack_from('>I', hrom, a + 8)[0] == h:   # not yet done
+            struct.pack_into('>I', hrom, a + 8, h + REBASE)
+            reb += 1
+            reb_report.append(
+                f"R {a + 8:06X}: spawn handler {h:08X} -> {h + REBASE:08X}")
+        a += 12
+
+# jump tables of ABSOLUTE code pointers (lea %pc@(tbl); movea.l (A0,D0);
+# jmp (A0) dispatch idiom — harvested from the disassembly; the word-
+# OFFSET variant of the idiom self-heals and needs nothing). First one
+# found the hard way: the mode dispatcher at 0x26DC sent the boot to
+# un-rebased 0x1F80 (MAME trace hunt.tr line 7545).
+REBASE_TABLES = [(0x26DC, 8), (0x6D70, 21), (0x6D90, 13), (0x92F0, 6),
+                 (0xF556, 5), (0x17E24, 5), (0x1A076, 9)]
+tbl_offs = set()
+for start, n in REBASE_TABLES:
+    for k in range(n):
+        tbl_offs.add(start + k * 4)
+
+# HANDLER-POINTER TABLES (burn-down catch #2, attract object spawner):
+# the object system stores handlers from pc-lea'd pointer tables
+# (lea %pc@(tbl),%aN ... movel %aN@...,%xx@(2)). The pc-lea itself
+# self-heals in the high copy; the TABLE CONTENT (absolute code
+# pointers) does not. Harvest: every pc-lea within 10 instructions
+# before a memory-sourced store into an object handler slot (@(2)),
+# table extent = consecutive plausible code pointers.
+insns_l = []
+for line in (ROMS / 'prog68k.asm').read_text().splitlines():
+    m = re.match(r'\s*([0-9a-f]+):\t[0-9a-f ]+\t(\S.*)$', line)
+    if m:
+        insns_l.append((int(m.group(1), 16), m.group(2).strip()))
+for i, (ia, it) in enumerate(insns_l):
+    m = re.match(r'movel %(a[0-7]|fp)@.*,%(?:a[0-7]|fp)@\(2\)$', it)
+    if not m:
+        continue
+    src = m.group(1)
+    for j in range(max(0, i - 10), i):
+        lm = re.search(r'lea %pc@\(0x([0-9a-f]+)\),%' + src + r'\b',
+                       insns_l[j][1])
+        if not lm:
+            continue
+        tbl = int(lm.group(1), 16)
+        n = 0
+        while tbl + n * 4 + 4 <= 0x40000:
+            v = struct.unpack_from('>I', orig_rom, tbl + n * 4)[0]
+            if not (0x100 <= v < 0x40000) or (v & 1):
+                break
+            n += 1
+        if n:
+            reb_report.append(f"HARVEST handler table {tbl:06X} x{n} "
+                              f"(store at {ia:06X})")
+            for k in range(n):
+                tbl_offs.add(tbl + k * 4)
+# RECURSIVE expansion (burn-down catch #4: two-level dispatch at
+# 0x4C00 — table of SUB-TABLE pointers at 0x6DA0, each sub-table =
+# handler pointers): any harvested entry that POINTS AT >=3 further
+# plausible pointers is itself a table — harvest transitively.
+def looks_like_table(at):
+    n = 0
+    while at + n * 4 + 4 <= 0x40000:
+        v = struct.unpack_from('>I', orig_rom, at + n * 4)[0]
+        if not (0x100 <= v < 0x40000) or (v & 1):
+            break
+        n += 1
+    return n
+work = sorted(tbl_offs)
+seen_tbl = set()
+while work:
+    a = work.pop()
+    if a in seen_tbl:
+        continue
+    seen_tbl.add(a)
+    v = struct.unpack_from('>I', orig_rom, a)[0]
+    if not (0x100 <= v < 0x40000) or (v & 1):
+        reb_report.append(f"SKIP-T {a:06X}: {v:08X} not a code pointer")
+        continue
+    n = looks_like_table(v)
+    if n >= 3:
+        reb_report.append(f"NESTED table {v:06X} x{n} (via entry {a:06X})")
+        for k in range(n):
+            work.append(v + k * 4)
+tbl_offs = seen_tbl
+for a in sorted(tbl_offs):
+    v = struct.unpack_from('>I', orig_rom, a)[0]
+    if not (0x100 <= v < 0x40000) or (v & 1):
+        continue
+    if struct.unpack_from('>I', hrom, a)[0] == v:       # not yet rebased
+        struct.pack_into('>I', hrom, a, v + REBASE)
+        reb += 1
+        reb_report.append(f"R {a:06X}: jump table {v:08X} -> {v + REBASE:08X}")
+
+# RUNTIME-HARVESTED handler values (tools/harvested_handlers.txt: every
+# distinct object-handler pointer observed live in the WORKING RV=1
+# build across attract + coined gameplay — see TOOLKIT.md). For each
+# value, every data occurrence in ROM gets rebased; occurrences the
+# operand pass already changed are skipped automatically.
+hh = ROOT / 'tools' / 'harvested_handlers.txt'
+if hh.exists():
+    hvals = set(int(x, 16) for x in hh.read_text().split() if x.strip())
+    nh = 0
+    for off in range(0, 0x40000 - 3, 2):
+        v = struct.unpack_from('>I', orig_rom, off)[0]
+        if v not in hvals:
+            continue
+        if struct.unpack_from('>I', hrom, off)[0] != v:
+            continue                        # already rebased by another pass
+        struct.pack_into('>I', hrom, off, v + REBASE)
+        reb += 1
+        nh += 1
+        reb_report.append(f"R {off:06X}: harvested handler {v:08X} -> "
+                          f"{v + REBASE:08X}")
+    reb_report.append(f"(harvested-handler pass: {nh} sites from "
+                      f"{len(hvals)} live values)")
 
 # the one abs.w code ref that can't hold 0x94xxxx: thunk via shim RAM
 assert hrom[0x1B5C6:0x1B5CA] == bytes([0x4E, 0xF8, 0x04, 0x7E])
 hrom[0x1B5C6:0x1B5CA] = bytes([0x4E, 0xF8, 0xB3, 0xF0])   # jmp (FFFFB3F0).w
+# (shim installs the thunk: 0xFFB3F0 = jmp 0x90047E.l)
+
+# DISPATCHER NORMALIZATION (the total fix for handler-pointer data we
+# can't enumerate): the two proven consumption funnels get re-pointed
+# at shim-RAM thunks that add +0x900000 to any low handler pointer at
+# call time. Static table rebases become best-effort; anything missed
+# is corrected here.
+#   0x39A8 object dispatcher: movea.l (2,A6),A0 ; jsr (A0)
+#   0xD842 spawn walker:      movea.l (8,A0),A1 ; jsr (A1)
+assert hrom[0x39A8:0x39AE] == bytes([0x20, 0x6E, 0x00, 0x02, 0x4E, 0x90])
+hrom[0x39A8:0x39AE] = bytes([0x4E, 0xB8, 0xB3, 0xA0, 0x4E, 0x71])
+assert hrom[0xD842:0xD848] == bytes([0x22, 0x68, 0x00, 0x08, 0x4E, 0x91])
+hrom[0xD842:0xD848] = bytes([0x4E, 0xB8, 0xB3, 0xC0, 0x4E, 0x71])
+# (shim installs the thunks at 0xFFB3A0 / 0xFFB3C0)
 
 (ROOT / 'md_src' / 'game_high.bin').write_bytes(hrom[:0x40000])
 (ROOT / 'tools' / 'rebase_report.txt').write_text(

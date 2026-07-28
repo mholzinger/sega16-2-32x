@@ -137,7 +137,7 @@ void shim_vblank(void) {
 		}
 		wskip = next;
 		while (*mars_comm0) ;                    // drain any pending stream batch
-		*(volatile uint8_t*)0xA15107 = 0;        // RV=0: SH-2 can write framebuffer
+		// (unpair model: RV is 0 permanently — no toggle here)
 		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM
 		// stays 0 outside so the GAME's staged writes land.
 		*(volatile uint16_t*)0xA15100 |= 0x8000;
@@ -168,7 +168,7 @@ void shim_vblank(void) {
 			uint16_t fs_home = *(volatile uint16_t*)0xFFB0F6;
 			while ((*(volatile uint16_t*)0xA1518A & 1) != fs_home && --g) ;
 		}
-		*(volatile uint8_t*)0xA15107 = 1;        // RV=1: game can fetch ROM again
+		// (unpair model: RV stays 0 — the game fetches through 0x900000)
 		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
 window_done: ;
 	}
@@ -291,16 +291,47 @@ void main(void) {
 	// FB/CRAM inside the render window, where the shim raises FM first.
 	*(volatile uint16_t*)0xA15100 &= 0x7FFF;
 
-	*(volatile uint8_t*)0xA15107 = 1;   // RV=1: cart at 0x000000 — set from RAM,
-	                                    // never from the 0x880000 window
+	// UNPAIR MODEL (NOTES.md "REBASE DESIGN v2"): RV stays 0 FOREVER.
+	// The game executes its REBASED copy through the banked 0x900000
+	// cart window (bank 3 -> cart 0x300000, delta +0x900000): the SH-2s
+	// may touch cart ROM at ANY time, concurrent with the 68K's own
+	// (bus-arbitrated) instruction fetches — the standard commercial-32X
+	// memory model. No RAM stash: the game's boot bytes at arcade
+	// 0x400-0x807 (displaced in the LOW cart copy by the Sega security
+	// blob) exist intact in the high copy and run in place at 0x900400.
+	*(volatile uint16_t*)0xA15104 = 3;  // 0x900000 window -> cart bank 3
 
-	// Copy the game's displaced boot [0x400,0x808) + continuation jmp into
-	// work RAM at 0xFFB400 (cart stash at 0x40000, readable via RV low map).
+	// Thunk for the one abs.w-encoded jump the rebase couldn't widen
+	// (0x1B5C6: jmp (47E).w -> jmp (FFFFB3F0).w): jmp 0x90047E.l
 	{
-		volatile uint16_t *src = (volatile uint16_t*)0x040000;
-		volatile uint16_t *dst = (volatile uint16_t*)0xFFB400;
-		for (int i = 0; i < 0x40C / 2; i++)
-			dst[i] = src[i];
+		volatile uint16_t *t = (volatile uint16_t*)0xFFB3F0;
+		t[0] = 0x4EF9;
+		t[1] = 0x0090;
+		t[2] = 0x047E;
+	}
+	// Dispatcher-normalization thunks (see patch_game.py): any handler
+	// pointer that escaped the static rebase gets +0x900000 at call
+	// time. B3A0 = object dispatcher (handler from (2,A6) -> A0);
+	// B3C0 = spawn walker (handler from (8,A0) -> A1).
+	{
+		static const uint16_t t1[] = {   // movea.l (2,A6),A0
+			0x206E, 0x0002,              // cmpa.l #0x40000,A0
+			0xB1FC, 0x0004, 0x0000,      // bcc.s +6 (already high)
+			0x6406,                      // adda.l #0x900000,A0
+			0xD1FC, 0x0090, 0x0000,      // jmp (A0)
+			0x4ED0
+		};
+		static const uint16_t t2[] = {   // movea.l (8,A0),A1
+			0x2268, 0x0008,
+			0xB3FC, 0x0004, 0x0000,      // cmpa.l #0x40000,A1
+			0x6406,
+			0xD3FC, 0x0090, 0x0000,      // adda.l #0x900000,A1
+			0x4ED1                       // jmp (A1)
+		};
+		volatile uint16_t *d = (volatile uint16_t*)0xFFB3A0;
+		for (unsigned i = 0; i < sizeof t1 / 2; i++) d[i] = t1[i];
+		d = (volatile uint16_t*)0xFFB3C0;
+		for (unsigned i = 0; i < sizeof t2 / 2; i++) d[i] = t2[i];
 	}
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
@@ -326,14 +357,13 @@ void main(void) {
 		*(volatile uint32_t*)0x000070 = (uint32_t)&_vblank;
 	}
 
-	vdp_color(0, 0x0E0);                // GREEN: RV set, stash copied, handing to game
+	vdp_color(0, 0x0E0);                // GREEN: handing to the rebased game
 
 	*mars_comm14 = 0xB007;              // beacon: shim init complete
 	game_running = 1;
 
-	// Enter the game's own boot in its RAM copy via a function-pointer call
-	// (GCC emits a real jsr; the earlier inline-asm jmp was dropped by the
-	// optimizer, leaving main to fall through into bss). The game boot sets
-	// its own SP at 0xFFB40E, so the pushed return is discarded.
-	((void (*)(void))0x00FFB400)();
+	// Enter the game's own boot IN PLACE in the rebased high copy
+	// (function-pointer call: GCC emits a real jsr; the game boot sets
+	// its own SP, discarding the pushed return).
+	((void (*)(void))0x00900400)();
 }

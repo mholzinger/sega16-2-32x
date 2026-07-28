@@ -1307,3 +1307,40 @@ arcade image (offsets 0x0-0x3FFFF), not body-only. Consequences:
   excluded (data-as-code false positives); spawn-table handler longs
   at +8 of each 12-byte record rebased explicitly.
 Branch: unpair-rebase. Main stays playable (2be2a5f-era) meanwhile.
+
+## UNPAIR STEP 1 LANDED (branch unpair-rebase): the game runs rebased
+
+Burn-down log (each caught via MAME trace/stack instrumentation in
+_vblank — 16 stack words at 0xFFB100 every vint):
+1. Mode-dispatcher jump table 0x26DC (lea pc-table; movea.l (A0,D0);
+   jmp (A0)) -> harvested ALL such tables from the disassembly;
+   word-OFFSET variant self-heals (addaw (A0),A0) and needs nothing.
+2. Handler-pointer tables consumed via movel %aN@...,@(2) after a
+   pc-lea -> harvested by idiom scan.
+3. Spawn-script region is TWO-LEVEL: meta-table at 0x1D32A of 5 per-
+   round record-table pointers, records stride 12 with handler at +8
+   (walker at 0xD842); tables extend past the old DATA_EXCLUDE bound.
+4. Two-level dispatch at 0x4C00 (table of sub-tables at 0x6DA0) ->
+   RECURSIVE table expansion (entry pointing at >=3 plausible pointers
+   is itself a table).
+5. Runtime handler harvest (toolkit move): run the WORKING RV=1 build,
+   sample live object-handler longs (slots 0xFFC000/0xFFD800 +2) over
+   attract+gameplay -> 43 distinct values -> rebase all data
+   occurrences (tools/harvested_handlers.txt, 181 sites).
+6. THE CLOSER — dispatcher normalization: the two consumption funnels
+   (0x39A8 object dispatcher, 0xD842 spawn walker) re-pointed at shim
+   RAM thunks (0xFFB3A0/0xFFB3C0) that add +0x900000 to any low
+   pointer AT CALL TIME. Every handler-table format, enumerated or
+   not, is covered. After this: NO drops in 5400 frames of coined
+   gameplay ("no drop" from the stack-catch harness).
+
+Total: 2289 static rebases + 2 dispatcher thunks + 1 abs.w thunk.
+MAME-verified: boots to title, coined gameplay through the wolf
+scene, window telemetry healthy (gpc idles at 0x903982). The vint
+delivery needed NO changes — the adapter's writable H-int vector at
+0x70 (already in use, field-proven on ares) works at any RV.
+Worktree lesson re-learned: compound commands with cd drift the
+shell's cwd — the patcher once silently ran from the main worktree.
+
+NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
+the pause windows (cart readable at any time now).

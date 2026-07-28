@@ -253,11 +253,20 @@ get_input:
 _vblank:
 		move.l	2(sp),(0xFFB0F8)	/* diagnostics: interrupted (game) PC */
 		movem.l	d0-d7/a0-a6,-(sp)
+		/* burn-down aid: snapshot 16 words of the interrupted stack to
+		 * 0xFFB100 — when a missed rebase pointer drops the game PC low,
+		 * the return-address chain here names the jsr that did it. */
+		lea		66(sp),a0			/* movem 60 bytes + frame SR2/PC4 */
+		lea		0xFFB100,a1
+		moveq	#15,d0
+	9:	move.w	(a0)+,(a1)+
+		dbf		d0,9b
 		jsr		shim_vblank			/* C shim: MCU duties (md_main.c) */
 		movem.l	(sp)+,d0-d7/a0-a6
 		tst.w	(game_running)
 		beq.s	1f
-		jmp		(0x2AAC).l			/* game IRQ4 handler; its rte pops our frame */
+		jmp		(0x902AAC).l		/* game IRQ4 handler (rebased high copy);
+									   its rte pops our frame */
 	1:
 _hblank:
 		rte

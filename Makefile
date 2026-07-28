@@ -85,10 +85,13 @@ $(ROMDIR):
 	@mkdir -p $(ROMDIR)
 
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
-md_src/game_body.bin md_src/boot_copy.bin &: roms/altbeast/prog68k.bin tools/patch_game.py
+md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin &: roms/altbeast/prog68k.bin tools/patch_game.py
 	@python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
+sh_src/game_high.bin: md_src/game_high.bin
+	@cp $< $@
+sh_src/game_high_data.o: sh_src/game_high.bin
 sh_src/boot_copy.bin: md_src/boot_copy.bin
 	@cp $< $@
 sh_src/sega_blob.bin: md_src/sega_blob.bin
