@@ -1344,3 +1344,19 @@ shell's cwd — the patcher once silently ran from the main worktree.
 
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
+
+## === RESUME POINT (2026-07-27 evening) ===
+State: branch unpair-rebase @ 9140cf8 — the rebased (RV=0, 0x900000-
+window) build boots and plays in MAME; ares smoke test PENDING (build
+was launched in ares, verdict not yet reported). Main branch = last
+field-approved build (sticky CRAM, 20Hz row-following pipeline).
+Next actions, in order:
+1. Mike's ares verdict on the unpair build (boot? artifacts? speed
+   should feel UNCHANGED — step 1 was memory-model only).
+2. STEP 2: pull sprite/tile compose out of the pause windows (cart is
+   SH-2-readable at any time now) — windows shrink to snapshot+blits,
+   ~18ms pause -> ~4-5ms. This is the game-speed payoff.
+3. Watch list: implausible demo-HUD score seen once in MAME (possible
+   harvested-handler false positive in a data table); the 13 skipped
+   immediates in tools/rebase_report.txt are the remaining burn-down
+   candidates if anything else acts odd.
