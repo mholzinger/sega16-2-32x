@@ -9,7 +9,7 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 #define SYNC        ((volatile uint16_t *)0x26027800)
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
-extern void slave_tile_third(uint16_t cmd);
+extern void slave_concurrent_k(uint16_t cmd);
 
 /* MD stream servicing lives on the SLAVE now: the master spends the
  * inter-window gap composing tiles, so it can't poll COMM0. Batches are
@@ -49,7 +49,7 @@ __attribute__((section(".ramtext"))) void s_main(void)
             if ((cmd & 0xF000) == 0x3000)
                 slave_window_k(cmd);         /* slice blit + row-region compose */
             else
-                slave_tile_third(cmd);       /* concurrent tile third */
+                slave_concurrent_k(cmd);     /* concurrent band compose */
             SYNC[1] = cmd;                   /* done */
             while (SYNC[0] == cmd)           /* wait master clear; keep the */
                 slave_service_stream();      /* stream alive meanwhile */

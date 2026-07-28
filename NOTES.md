@@ -1546,3 +1546,25 @@ choppiness/speed fix Mike has asked for throughout. Plan sketch:
   constraint on cart tile reads).
 - Cycle can then shorten (2-slice/112-row retest is BACK on the
   table since blits get the whole vblank to themselves).
+
+## UNPAIR STEP 2 LANDED: full concurrent compose — 68K pause 3.4ms/cycle
+
+Windows now hold ONLY: vblank slice blits + (W0) staging snapshot
+(regs, pages, SPR_SNAP) + apply_cram. ALL composition — tiles AND
+sprites/cat1/text — runs concurrent with the game (RV=0 makes cart
+art readable anytime). Per-band schedule after Wk's ack: each CPU
+composes tiles then sprites on ITS OWN rows of band R(k) (row splits
+= no cross-CPU ordering). Leftover machinery + SYNC[3] handshake
+deleted; fills concurrent (master tail); build_maps unchanged at k2.
+MAME gameplay: total in-window time 3.38ms/cycle (was ~11-12), no
+stalls, misses ~3. Projected ares tax ~10% (was 37%).
+Notes from the round:
+- Master must cache_purge before its post-ack band work (pages/maps
+  changed in-window).
+- The "yellow ghosts" that appeared are AUTHENTIC: the arcade's
+  grave-emergence effect sprites (FPGA ground truth shows the same
+  yellow block) — step 2's budget renders sprites older builds
+  dropped.
+- Sprite color 0x3F (shadow/darken) sprites are SKIPPED for now
+  (proper darkening is a residual); pair-zone eviction now spares
+  live singles (group-14 text/pair-7 thrash).
