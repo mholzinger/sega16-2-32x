@@ -1345,7 +1345,32 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
-## === RESUME POINT (2026-07-27 evening) ===
+## === RESUME POINT (2026-07-28) ===
+State: branch unpair-rebase @ 5f7f9ed. Step 2 complete + band-staleness
+fix VERIFIED in MAME: interruptible band state machine + heavy-phase
+self-pacing + PRE-VINT QUIET ZONE (master starts no band work >11300
+FRT ticks after pickup; polls only). Full coined 5460-frame run:
+mskips 2 (was 385, and 923 before self-pacing), bdrain 0, MD skips 1,
+compose 2.32ms/cycle, sprites whole in screenshots.
+DIAGNOSIS TRAIL (toolkit lesson): swait/bdrain telemetry exonerated
+slave-wait and queue-full; the pickup latency WAS the 12-row strip
+(~0.4ms = 6 scanlines) vs the heartbeat gate's 2-line worst-case
+slack. Shrinking strips (6/4-row) backfired: per-strip overhead
+saturated throughput -> block-drain feedback loop, 2305 mskips. The
+quiet zone keeps full-size strips AND ~0 pickup latency for ~0.7ms
+idle/frame. LESSON: when a latency budget is blown, idle before the
+deadline beats shrinking the work unit — overhead scales with count.
+Next actions, in order:
+1. ARES: Mike tests rom/s16.32x — verdict wanted on floating heads /
+   split sprites (band staleness) and overall choppiness.
+2. Known open artifacts: solid-red player / red legs / white+yellow
+   rectangles = CRAM allocator capacity (polish pass queued); purple
+   title field; tearing at rows 75/150 (30Hz/2-slice retest queued).
+3. Then: rounds 2-5 asset sweep, sound (megadriveref Z80 driver),
+   shadow pen, row/column parallax, merge to main after approval
+   (strip debug bars first).
+
+## === OLD RESUME POINT (2026-07-27 evening) ===
 State: branch unpair-rebase @ 9140cf8 — the rebased (RV=0, 0x900000-
 window) build boots and plays in MAME; ares smoke test PENDING (build
 was launched in ares, verdict not yet reported). Main branch = last
