@@ -1034,24 +1034,33 @@ RAMCODE void m_main(void)
                 diag_add(12, tp);
 
                 if (k == 2) {
-                    /* PERF BARS (debug): ares has no profiler tap, so the
-                     * frame itself is the tap. 1px = 64 FRT ticks =
-                     * 87.7us; CRAM[255] forced white (sprite pair 15
-                     * pen 15 — never rendered). Rows:
-                     *   2 = total in-window this cycle
-                     *   4 = sprites+cat1+text
-                     *   6 = staging (copies+CRAM+fills)
-                     *   8 = blit slices + flips  */
-                    static uint32_t p[4];
-                    uint32_t c[4];
-                    c[0] = DIAG[8];
-                    c[1] = DIAG[12] + DIAG[13];
-                    c[2] = DIAG[0] + DIAG[1] + DIAG[2];
-                    c[3] = DIAG[5] + DIAG[6];
+                    /* STAGING-HEALTH BARS (unpair debug round): which
+                     * 68K-written staging stream is alive on ares?
+                     *   2 = total in-window time (perf, 1px=87.7us)
+                     *   4 = nonzero TILEMAP page-0 words (>>3)
+                     *   6 = nonzero FB palette entries (first 256)
+                     *   8 = nonzero SPR_SNAP words (>>1)
+                     * CRAM[255] forced white (pair 15 pen 15). */
+                    static uint32_t p0;
+                    uint32_t c0v = DIAG[8];
+                    int lens[4];
+                    lens[0] = (int)((c0v - p0) >> 6);
+                    p0 = c0v;
+                    int n = 0;
+                    for (int i = 0; i < 2048; i++)
+                        if (TILEMAP_U[i]) n++;
+                    lens[1] = n >> 3;
+                    n = 0;
+                    for (int i = 0; i < 256; i++)
+                        if (FB_PAL[i]) n++;          /* in-window: legal */
+                    lens[2] = n;
+                    n = 0;
+                    for (int i = 0; i < 512; i++)
+                        if (SPR_SNAP[i]) n++;
+                    lens[3] = n >> 1;
                     ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
                     for (int j = 0; j < 4; j++) {
-                        int len = (int)((c[j] - p[j]) >> 6);
-                        p[j] = c[j];
+                        int len = lens[j];
                         if (len > 300) len = 300;
                         uint8_t *b = sbuf + (8 + 2 + 2 * j) * SBUF_W + 8;
                         for (int i = 0; i < len; i++)
