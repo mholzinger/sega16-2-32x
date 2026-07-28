@@ -1275,3 +1275,35 @@ those offsets (game body at 0x808+ for the RV=1 model), so:
 4. Shim: RV never set to 1; game-entry and vint-chain targets
    +0x940000; FM windows unchanged (step 1 = memory model only,
    perf-neutral by design; step 2 pulls compose out of windows).
+
+## REBASE DESIGN v2 (supersedes v1 details above — simpler)
+
+Key realization: the HIGH copy at cart 0x240000 is the FULL 256KB
+arcade image (offsets 0x0-0x3FFFF), not body-only. Consequences:
+- The game's displaced boot bytes (arcade 0x400-0x7FF, unplaceable in
+  cart LOW space because the Sega security blob owns those offsets)
+  exist at cart 0x240400+ = 68K 0x940400+ — the boot executes IN
+  PLACE with pc-relative code intact. The 0xFFB400 RAM stash, ALL
+  bfix conversions, and the four jump-in patches DIE. Their whole
+  reason (displacement) is gone.
+- game_high.bin patch set = existing HW staging/IO passes + RLE
+  word-write patch + the rebase pass (+0x940000) + ONE thunk
+  (0x1B5C6 jmp (47E).w -> jmp (B3F0).w; shim thunk jmp 0x94047E.l).
+- The LOW copy shrinks to just the adapter vector stubs:
+  cart 0x880 (level 4): rte;
+  cart 0x8C0 (level 6): move.l (B3FC).w,-(sp); rts   [2F38 B3FC 4E75]
+  — 68K vint jumps via the work-RAM pointer 0xFFB3FC -> shim_vblank.
+  (MAME confirms: at adapter-enable, 0x0-0x3FFFFF = 32X vector ROM,
+  fixed L4/L6 vectors -> 0x880880/0x8808C0; H-int vector at 0x70-73
+  is a writable register. 0x880000 fixed window + 0x900000 banked
+  window install exactly as the design needs.)
+- Boot: set 0xA15104 bank=2, write 0xFFB3FC=&shim_vblank, never set
+  RV=1, enter the game at 0x940000+reset-PC. Shim vint chain target
+  0x942AAC. RV toggles deleted from the window scheduler.
+- Rebase pass rules (patcher): class-A confirmed operands in
+  [0x100,0x40000): hex-confirmed EA/jsr/jmp/lea always rebased;
+  decimal-confirmed long immediates only into %aN or memory stores;
+  #imm->%dN skipped (runtime burn-down); .short/.long ctx lines
+  excluded (data-as-code false positives); spawn-table handler longs
+  at +8 of each 12-byte record rebased explicitly.
+Branch: unpair-rebase. Main stays playable (2be2a5f-era) meanwhile.
