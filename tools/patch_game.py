@@ -319,10 +319,12 @@ for off in range(0, 0x40000 - 3, 2):
         elif mn in ('cmpil', 'cmpl') and v >= 0x1000:
             pass                             # pointer-field compare (fp@(36)
                                              # handler slots, dN-held ptrs)
-        elif mn in ('movel', 'pea') and (re.fullmatch(r'%a[0-7]', dst)
-                                         or '@' in dst
-                                         or dst.startswith('0x')):
-            pass                             # pointer store
+        elif mn in ('movel', 'pea') and re.fullmatch(r'%a[0-7]', dst):
+            pass                             # pointer into address register
+        # NOTE: memory-destination immediates (movel #imm,<mem>) are NOT
+        # rebased — most are DATA (BCD score awards to 0xFFF032 showed
+        # as +0x900000 scores in the field). Real handler stores among
+        # them are normalized at call time by the dispatcher thunks.
         else:
             skipped_imm.append(f"{off:06X}: {v:08X} | {ctx}")
             continue
@@ -353,6 +355,14 @@ for a in range(spawn_meta, meta_end - 3, 4):
 for tbl in sorted(meta_targets):
     a = tbl
     while a + 12 <= walk_cap:
+        # STRICT record shape: the documented spawn record carries the
+        # 0x0040 marker word at +6 (see DATA_EXCLUDE note). Walking on
+        # "plausible handler" alone over-ran table ends and rebased
+        # spawn PARAMS — the field-reported red-silhouette mis-spawns.
+        if struct.unpack_from('>H', orig_rom, a)[0] == 0xFFFF:
+            break                            # camX terminator
+        if struct.unpack_from('>H', orig_rom, a + 6)[0] not in (0x0000, 0x0040):
+            break                            # not a spawn record
         h = struct.unpack_from('>I', orig_rom, a + 8)[0]
         if not (0x100 <= h < 0x40000) or (h & 1):
             break

@@ -1405,3 +1405,23 @@ Tools this round: wpset-with-condition + lua stop-poll harness
 REMAINING: sky brick/water patch rows still visible in MAME under
 poison — next isolated target (suspect: another writer family or the
 row-scroll tables); rig is fully local now.
+
+## OVER-REBASE REGRESSION PAIR (caught by Mike's ares screenshots)
+
+1. Red-silhouette mis-spawns: the spawn-record walker rebased past
+   table ends (no shape check) into spawn PARAMS. Records are
+   [camX][p1][p2][flag 0x0000|0x0040][handler.l], camX=0xFFFF
+   terminates — walker now shape-gated (31 verified handlers).
+2. Scores of 900100/1800200/2700300 = BCD points +0x900000: the
+   pointer-store heuristic rebased `movel #imm,<mem>` immediates —
+   score awards to 0xFFF032. Rule DROPPED entirely: real handler
+   stores are normalized at call time by the dispatcher thunks, data
+   mailboxes stay untouched. (2056 static rebases now, down from the
+   over-eager 2354 — recall handled by thunks.)
+LESSON: consumption-point normalization (thunks) beats aggressive
+static sweeps for ambiguous immediates — sweep only what's PROVEN
+pointer-shaped by type or table structure.
+OPEN: sky brick/water patch rows (round-1 BG) + round-2+ demo garble
++ purple fleck columns + Zeus sprite dropouts. Scene-synced staging
+differ rigged (rise-text trigger); old-build trigger needs longer
+timeout (its boot is slower).
