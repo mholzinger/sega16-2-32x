@@ -1521,3 +1521,28 @@ RESULT: 20,000-frame attract sweep (all round demos) with ZERO
 address-space escapes under poison. Ares build includes the
 low-vector constant fix (P1-position candidate) — awaiting field
 verdict on: P1 spawn position, round-2+ demo visuals, choppiness.
+
+## FIELD TRIAGE: remaining round-1 artifacts are ALLOCATOR-CAPACITY class
+
+Mike's "top half eats player sprite" = the demo player's LEGS sprite
+color overflowing to the shared CRAM pair (multi-part S16 characters;
+torso color owns a pair, legs color over budget -> flat red). Same
+family as the white skyline rectangles (tile-group overflow sharing).
+NOT rebase bugs — the pointer surgery is stable (20k-frame sweeps
+clean). Allocator follow-ups (bounded, later): nearest-color overflow
+fallback instead of last-assigned; revisit the 6..10 pair budget
+clamp for sprite-heavy scenes.
+
+DECISION: pivot to UNPAIR STEP 2 — pull sprite/tile compose out of
+the pause windows (cart is SH-2-readable at any time under RV=0).
+This is the payoff: 68K pause ~18ms -> ~4-5ms per cycle, the
+choppiness/speed fix Mike has asked for throughout. Plan sketch:
+- Sprite compose moves from window exts to the CONCURRENT phase
+  (SPR_SNAP + spr maps already SDRAM; cart sprite reads now legal
+  anytime). Same row-following schedule, just post-ack.
+- Tile thirds unchanged (already concurrent).
+- Windows shrink to: snapshot (SPR_SNAP/pages/regs/CRAM) + blit
+  slices + cache fills (fills can ALSO go concurrent now — no RV
+  constraint on cart tile reads).
+- Cycle can then shorten (2-slice/112-row retest is BACK on the
+  table since blits get the whole vblank to themselves).
