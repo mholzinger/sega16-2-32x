@@ -57,6 +57,7 @@ def remap(v):
     return None
 
 rom = bytearray((ROMS / 'prog68k.bin').read_bytes())
+orig_rom = bytes(rom)               # pristine copy for the rebase build
 asm = {}
 for line in (ROMS / 'prog68k.asm').read_text().splitlines():
     if ':\t' in line:
@@ -240,3 +241,85 @@ out.write_text(f"{hits} hardware refs patched\n\n" + "\n".join(report)
 (ROOT / 'md_src' / 'boot_copy.bin').write_bytes(boot)
 print(f"{hits} refs patched, {len(warn)} warnings -> tools/patch_report.txt")
 print("game_body.bin:", 0x40000 - 0x808, "bytes; boot_copy.bin:", len(boot), "bytes")
+
+# ==== UNPAIR REBASE (design v2, NOTES.md): game_high.bin ====
+# Full 256KB image executing at 0x940000 (banked 0x900000 window,
+# bank 2): every confirmed ROM-space reference gets +0x940000. Starts
+# from a FRESH copy of the source ROM plus the HW passes ONLY — the
+# displacement machinery (stash bfixes, jump-ins) must NOT be applied,
+# so this section rebuilds those patches' preconditions itself.
+REBASE = 0x940000
+
+hrom = bytearray(orig_rom)          # pristine source image
+# re-apply the HW staging/IO patches to the fresh copy by replaying
+# the class-A sites recorded in `report` (offset -> new value)
+for line in report:
+    if not line.startswith('A '):
+        continue
+    off_s, rest = line[2:].split(':', 1)
+    off = int(off_s, 16)
+    new = int(rest.strip().split('->')[1].strip().split()[0], 16)
+    struct.pack_into('>I', hrom, off, new)
+# RLE even-byte word-write patch (same bytes as the low copy)
+hrom[0x16CE:0x16D2] = bytes([0xE1, 0x4A, 0x30, 0xC2])
+hrom[0x16D8:0x16DA] = bytes([0xFF, 0xF8])
+
+reb_report = []
+reb = 0
+skipped_imm = []
+for off in range(0, 0x40000 - 3, 2):
+    v = struct.unpack_from('>I', hrom, off)[0]
+    if not (0x100 <= v < 0x40000):
+        continue
+    ctx = ''
+    for back in range(0, 10, 2):
+        if off - back in asm:
+            ctx = asm[off - back]
+            break
+    itext = ctx.split('\t')[-1].strip()      # text after the bytes column
+    mn = itext.split()[0] if itext.split() else ''
+    if mn.startswith('.'):
+        continue                             # data-as-code lines
+    hexval = f"0x{v:x}"
+    decval = f"#{v}"
+    if hexval in ctx:
+        pass                                 # abs.l EA / jsr / jmp / lea
+    elif decval in ctx:
+        dst = itext.split(",")[-1].strip()
+        if mn.startswith('movea') or mn.startswith('cmpa'):
+            pass                             # pointer by type (load/compare)
+        elif mn in ('cmpil', 'cmpl') and v >= 0x1000:
+            pass                             # pointer-field compare (fp@(36)
+                                             # handler slots, dN-held ptrs)
+        elif mn in ('movel', 'pea') and (re.fullmatch(r'%a[0-7]', dst)
+                                         or '@' in dst
+                                         or dst.startswith('0x')):
+            pass                             # pointer store
+        else:
+            skipped_imm.append(f"{off:06X}: {v:08X} | {ctx}")
+            continue
+    else:
+        continue
+    struct.pack_into('>I', hrom, off, v + REBASE)
+    reb_report.append(f"R {off:06X}: {v:08X} -> {v + REBASE:08X} | {ctx}")
+    reb += 1
+
+# spawn-script handler pointers (data; excluded from operand scan)
+for a in range(0x1D2DC, 0x1D520, 12):
+    v = struct.unpack_from('>I', hrom, a + 8)[0]
+    if v < 0x40000:
+        struct.pack_into('>I', hrom, a + 8, v + REBASE)
+        reb += 1
+        reb_report.append(f"R {a + 8:06X}: spawn handler {v:08X} -> {v + REBASE:08X}")
+
+# the one abs.w code ref that can't hold 0x94xxxx: thunk via shim RAM
+assert hrom[0x1B5C6:0x1B5CA] == bytes([0x4E, 0xF8, 0x04, 0x7E])
+hrom[0x1B5C6:0x1B5CA] = bytes([0x4E, 0xF8, 0xB3, 0xF0])   # jmp (FFFFB3F0).w
+
+(ROOT / 'md_src' / 'game_high.bin').write_bytes(hrom[:0x40000])
+(ROOT / 'tools' / 'rebase_report.txt').write_text(
+    f"{reb} refs rebased (+{REBASE:#x})\n\n" + "\n".join(reb_report)
+    + "\n\nSKIPPED long immediates (burn-down candidates):\n"
+    + "\n".join(skipped_imm) + "\n")
+print(f"game_high.bin: {reb} refs rebased, {len(skipped_imm)} immediates "
+      "skipped -> tools/rebase_report.txt")
