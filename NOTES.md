@@ -1385,3 +1385,23 @@ shows brick/water strips) — now MAME-reproducible; next tool is a
 TILEMAP_U staging diff old-vs-new build to name the loader.
 ALSO WATCH: implausible score digits (possible over-rebase false
 positive) — the staging/RAM diff will catch its table too.
+
+## THE MOVEW-CLOBBER IDIOM FAMILY (latent since the FIRST staging remap!)
+
+wp-harness catch: the strip-blitter at 0x258A builds dests as
+  movel #BASE,%d0 ; movew (a0)+,%d0   (REPLACES d0's low word)
+— the arcade relied on BASE having a ZERO low word (0x400000). Our
+staging bases don't (tile 0x852000, text 0xFF8000): the +0x2000/+0x8000
+bias silently died at every such site, in EVERY build to date. This is
+the long-standing "misassembled sky strip" artifact class AND stray
+text-writer stores into 0xFF0xxx (shim .data!). Fix: movew -> ADDW at
+9 audited sites (offsets never carry). Excluded lookalikes: delay
+counters / tile-attribute builders (movew #0xA000).
+LESSON (toolkit, permanent): any base remap to a non-64K-aligned
+address must audit the movew-into-low-word idiom — grep every
+movel #BASE,%dN and trace the next d0 write.
+Tools this round: wpset-with-condition + lua stop-poll harness
+(wpcatch.lua pattern), staging page differ old-vs-new builds.
+REMAINING: sky brick/water patch rows still visible in MAME under
+poison — next isolated target (suspect: another writer family or the
+row-scroll tables); rig is fully local now.

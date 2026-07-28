@@ -203,6 +203,34 @@ expect(0x16CC, [0x14,0x19,0x10,0x82,0x54,0x88])
 rom[0x16CE:0x16D2] = bytes([0xE1,0x4A,0x30,0xC2])
 expect(0x16D6, [0x51,0xC8,0xFF,0xF6]); rom[0x16D8:0x16DA] = bytes([0xFF,0xF8])
 
+# ---- strip-blitter base idiom fix (movew clobbers the patched base) ----
+# 0x258A: movel #0x400000(->0x852000),%d0 ; movew (a0)+,%d0 REPLACES the
+# low word — the arcade relied on base low word 0000, our staging base
+# has +0x2000 and lost it: every strip landed 2 pages low, spilling into
+# the frame image (the long-standing "misassembled sky strips" artifact,
+# present on main too). movew->ADDW (3018->D058): offsets are <=0xDFFF
+# so 0x2000+off never carries.
+expect(0x2590, [0x30, 0x18])
+rom[0x2590:0x2592] = bytes([0xD0, 0x58])
+
+# ---- text-writer base idiom fixes (same movew-clobber family) ----
+# The text base 0x410000 -> 0xFF8000 has low word 0x8000; these sites
+# build dests with movew into %d0 (relying on base low word 0000).
+# movew -> addw preserves the +0x8000 (offsets <= 0xFFF: no carry).
+TEXT_IDIOM = [
+    (0x1B4CC, 0x3039, 0xD079),   # movew 0x1bf56,%d0
+    (0x1B660, 0x3039, 0xD079),   # movew 0x1bf06,%d0
+    (0x1B95C, 0x303C, 0xD07C),   # movew #imm,%d0 (attract text rows)
+    (0x1B964, 0x303C, 0xD07C),
+    (0x1B96E, 0x303C, 0xD07C),
+    (0x1B97C, 0x303C, 0xD07C),
+    (0x1B986, 0x303C, 0xD07C),
+    (0x1BAE8, 0x301B, 0xD05B),   # movew (a3)+,%d0
+]
+for off, old, new in TEXT_IDIOM:
+    expect(off, [old >> 8, old & 0xFF])
+    struct.pack_into('>H', rom, off, new)
+
 # ---- runtime jump-ins to the displaced 0x400-0x807 region ----
 # ROM 0x400-0x7FF holds the Sega security program (BIOS-verified); the
 # game's own bytes there execute from a RAM copy at 0xFFB400 (+0xB000).
@@ -504,6 +532,15 @@ for start, cnt, stride, poff in [(0x1CE2, 8, 6, 2)]:
             struct.pack_into('>I', hrom, a, v + REBASE)
             reb += 1
             reb_report.append(f"R {a:06X}: stride-rec {v:08X} -> {v + REBASE:08X}")
+
+# strip-blitter movew->addw (see low-copy pass; same fix)
+assert hrom[0x2590:0x2592] == bytes([0x30, 0x18])
+hrom[0x2590:0x2592] = bytes([0xD0, 0x58])
+
+# text-writer movew->addw family (see low-copy pass)
+for off, old, new in TEXT_IDIOM:
+    assert struct.unpack_from('>H', hrom, off)[0] == old
+    struct.pack_into('>H', hrom, off, new)
 
 # SKIPPED-IMMEDIATE overrides (audited by trace): #imm values that ARE
 # pointers despite landing in data registers. 0x3C92: movel #0x255E0,
