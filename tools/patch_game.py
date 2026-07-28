@@ -321,10 +321,13 @@ for off in range(0, 0x40000 - 3, 2):
                                              # handler slots, dN-held ptrs)
         elif mn in ('movel', 'pea') and re.fullmatch(r'%a[0-7]', dst):
             pass                             # pointer into address register
-        # NOTE: memory-destination immediates (movel #imm,<mem>) are NOT
-        # rebased — most are DATA (BCD score awards to 0xFFF032 showed
-        # as +0x900000 scores in the field). Real handler stores among
-        # them are normalized at call time by the dispatcher thunks.
+        elif mn == 'movel' and re.match(r'%(a[0-7]|fp)@\(\d+\)$', dst):
+            pass                             # pointer into object field
+            # (register-indirect dst: the @(2) handler and @(36) sprite-
+            # definition slots — the latter is consumed as DATA, no
+            # thunk covers it; dropping this rule made the demo player
+            # invisible. ABSOLUTE dsts stay excluded: those were the
+            # BCD score-award mailboxes.)
         else:
             skipped_imm.append(f"{off:06X}: {v:08X} | {ctx}")
             continue

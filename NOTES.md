@@ -1465,3 +1465,15 @@ context-gated — small harvested values WILL collide inside packed
 data. The full diagnostic chain that solved this: scene-locked
 staging diff -> byte-pattern census -> single-cell watchpoint with
 old-build CONTROL run -> report cross-check.
+
+## PLAYER-INVISIBLE REGRESSION: the @(36) sprite-definition stores
+
+Dropping the memory-dst immediate rule took the `movel #ptr,%fp@(36)`
+family with it — object field +36 is the SPRITE DEFINITION pointer,
+consumed as DATA (movea (36,A6)) with no thunk at the consumer. Rule
+restored PRECISELY: register-indirect destinations only (%aN@(k) /
+%fp@(k)); ABSOLUTE destinations stay excluded (those were the BCD
+score-award mailboxes). 2243 static rebases.
+Field state per Mike: sky fixed ("MUCH better"), gravestone wiggle
+correct, frames still dropping on ares (53-60 VPS — queued with the
+step-2 speed work).
