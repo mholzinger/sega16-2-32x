@@ -856,17 +856,11 @@ RAMCODE void slave_window_k(uint16_t cmd)
          * interrupt chain — a W0 snapshot reads a stale or mid-rebuild
          * list once the game runs at speed (field: vanishing Zeus,
          * sprites cut at band seams). At W1 the list is complete. */
-        for (int i = 0; i < 512; i += 8) {       /* sprite-list snapshot from
-                                                  * bank X (game staging) */
-            SPR_SNAP[i + 0] = FB_SPR[i + 0];
-            SPR_SNAP[i + 1] = FB_SPR[i + 1];
-            SPR_SNAP[i + 2] = FB_SPR[i + 2];
-            SPR_SNAP[i + 3] = FB_SPR[i + 3];
-            SPR_SNAP[i + 4] = FB_SPR[i + 4];
-            SPR_SNAP[i + 5] = FB_SPR[i + 5];
-            SPR_SNAP[i + 6] = FB_SPR[i + 6];
-            SPR_SNAP[i + 7] = FB_SPR[i + 7];
-        }
+        /* The sprite-list snapshot moved to the MASTER (k==1 block):
+         * taken here it raced the master's bank restore and read the
+         * DISPLAY bank (zeros at 0x1E000) — short cutscene lists
+         * vanished whole (the missing intro cast). The master is
+         * ordered after its own restore by construction. */
         copy_pages(6, NPAGES);
     }
 }
@@ -1011,10 +1005,17 @@ RAMCODE void m_main(void)
                  * swait=0, bdrain=0 — the strip WAS the latency).
                  * Shrinking strips instead collapsed throughput to
                  * block-drain saturation (2305 mskips). */
-                if (dt > 11300)
+                /* sprite strips can run ~1ms+ when big zoomed actors
+                 * (cutscene Zeus head) span the rows — give phase 2 a
+                 * wider pre-vint margin (mskips 311/run when it shared
+                 * the tile strips' 11300 threshold; 10400 was too wide
+                 * and starved throughput into block-drains). */
+                if (dt > (b->phase == 2 ? 10800 : 11300))
                     continue;
                 if (b->phase >= 5 && dt > 8000)
-                    continue;            /* defer heavy work past the vint */
+                    continue;            /* defer heavy work past the vint
+                                          * (build_maps ~4ms uninterruptible:
+                                          * a 9600 deadline overran the post) */
                 int lo = (b->rg == 2) ? 184 : (b->rg * 72 + 36);
                 int hi = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
                 int y = b->y, ye = (y + 12 > hi) ? hi : y + 12;
@@ -1041,7 +1042,9 @@ RAMCODE void m_main(void)
                                  b->bpar);
                     break;
                 case 5:
-                    cache_fill(256);
+                    cache_fill(128);     /* shorter single-shot: fits the
+                                          * later heavy deadline; misses
+                                          * drain over two windows */
                     diag_add(1, tq);
                     break;
                 default:
@@ -1125,6 +1128,20 @@ RAMCODE void m_main(void)
              * W0/W2 = nothing beyond the blit. */
             if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
+                /* sprite-list snapshot — on the MASTER, after ITS bank
+                 * restore, so FB_SPR is the staging bank for certain
+                 * (the slave-side copy raced the restore and read
+                 * display-bank zeros: whole short lists vanished) */
+                for (int i = 0; i < 512; i += 8) {
+                    SPR_SNAP[i + 0] = FB_SPR[i + 0];
+                    SPR_SNAP[i + 1] = FB_SPR[i + 1];
+                    SPR_SNAP[i + 2] = FB_SPR[i + 2];
+                    SPR_SNAP[i + 3] = FB_SPR[i + 3];
+                    SPR_SNAP[i + 4] = FB_SPR[i + 4];
+                    SPR_SNAP[i + 5] = FB_SPR[i + 5];
+                    SPR_SNAP[i + 6] = FB_SPR[i + 6];
+                    SPR_SNAP[i + 7] = FB_SPR[i + 7];
+                }
                 tp = frt();
                 copy_pages(0, 6);
                 diag_add(0, tp);

@@ -521,6 +521,15 @@ for a in sorted(tbl_offs):
 hh = ROOT / 'tools' / 'harvested_handlers.txt'
 if hh.exists():
     hvals = set(int(x, 16) for x in hh.read_text().split() if x.strip())
+    # VALUE BLACKLIST: harvested values whose byte patterns are common
+    # DATA idioms — patching every ROM occurrence corrupts records.
+    # 0x10000 ([0001][0000] word pairs: 72 hits, all inside movement/
+    # spawn records — one broke the intro camera pan speed 0x0001 ->
+    # 0x0091, shifting the whole cutscene cast 144px). 0x102-0x106:
+    # the known packed-map collision family (also region-excluded).
+    # A REAL handler with these values is normalized at call time by
+    # the dispatcher thunks, so dropping them here is strictly safe.
+    hvals -= {0x10000, 0x102, 0x104, 0x106}
     nh = 0
     # occurrences only BELOW the packed asset streams (round map srcs
     # start at 0x29E00): harvested values like 0x102/0x106 byte-collide
