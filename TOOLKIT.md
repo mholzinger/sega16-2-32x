@@ -66,6 +66,55 @@ what must be parameterized.
 - One bank stages, the other displays; staging is never deselected
   while the game runs.
 
+## Diagnosis methodology (proven on the unpair burn-down + title hunt)
+
+The debugging kit that found every bug so far, in escalation order:
+
+1. **Arcade oracle first** — `tools/oracle_shots.lua` runs the real
+   arcade with the same coin/start/input cadence and screenshots the
+   same frame numbers. Diff before theorizing. CLEAN THE NVRAM first:
+   persisted credits change the attract flow.
+2. **Poison rig** — the dead low copy is 0xFF-filled; any un-rebased
+   READ pointer fails loudly in MAME exactly like ares.
+3. **wpcatch.lua** — watchpoint catcher (r/w, value logging, both
+   machines, env-configured window/range). Diff writer/reader PC sets
+   ours-vs-arcade at the same moment; identical sets mean the 68K is
+   innocent and the bug is data or renderer-side.
+4. **Pipeline-stage verification** — before touching code, verify
+   each stage in order: 68K write stream → FB staging → SDRAM shadow
+   → latched regs → compose. The title-art hunt burned three wrong
+   theories because stages were assumed instead of checked; the
+   actual bug (quadrant decode) was in the LAST stage.
+5. **Trace diff** — MAME `trace` over a frame window on both
+   machines, PC-set clusters name the diverging scene handler;
+   first-divergence lockstep needs interrupt-aware alignment.
+6. **RAM diff at matched moments** — dump work RAM both machines,
+   filter for structured deltas (the +0x90 family). A delta that
+   equals the rebase offset is a patcher false positive; check
+   rebase_report.txt for the offending pass.
+
+Patcher lessons the kit must encode:
+- Harvested-value passes need a VALUE BLACKLIST for byte-collision
+  families (0x10000, 0x102/4/6-style); call-time normalization thunks
+  make dropping them strictly safe.
+- Ascending longs can be a REAL pointer table (0x1989E) or a forged
+  one from a byte ramp (0x1AD10 easing curve). Ascending alone proves
+  nothing — check what the values point AT.
+- Layer-decode conventions (page quadrant nibbles, scroll sign, alt
+  register set, rowscroll) must be lifted from the MAME driver
+  SOURCE, not inferred from working scenes: a wrong quadrant decode
+  hid behind scrolling scenes for weeks because they keep both map
+  halves loaded.
+
+## Workflow (agreed with Mike, 2026-07-29)
+
+Interactive sessions for architecture/new-ground (renderer refactors,
+sound bring-up, first bring-up of each new title) — ares verdicts and
+judgment calls gate these. Autonomous loops for mechanical grinds
+with objective pass/fail (per-round parity sweeps against the oracle,
+soak tests, bisects). Ares play-testing remains the outer acceptance
+gate for everything.
+
 ## Roadmap to "kit" status
 
 1. Finish Altered Beast (accuracy + speed + sound) — the reference
