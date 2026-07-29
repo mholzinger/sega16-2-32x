@@ -174,6 +174,18 @@ static inline const uint8_t *tile_pixels(unsigned code, int cpu)
 typedef struct {
     uint8_t pq[4];
     int vx0, vy0;
+    /* ALTERNATE register set + rowscroll (segaic16 tilemap_16b_draw_
+     * layer): every 8-screen-row band reads its rowscroll word; bit 15
+     * there switches the band to the ALT pages/scrolls (text words
+     * 0x742+which / 0x74A / 0x74E), and bit 15 of the PRIMARY xscroll
+     * makes the rowscroll word the band's xscroll (per-row parallax).
+     * The attract title screen draws ENTIRELY through the alt set —
+     * without this it composed empty page 0: black backdrop. */
+    uint8_t pq_a[4];
+    int vx0_a, vy0_a;
+    uint16_t xs_raw;                        /* primary xscroll, unmasked */
+    uint16_t rs[28];                        /* rowscroll per 8-row band */
+    uint8_t any_special;                    /* any alt/rowscroll bit set */
 } layer_regs;
 
 /* Scroll/page registers are LATCHED once per window into this snapshot,
@@ -184,27 +196,49 @@ typedef struct {
  * these at scanline 261 — this mirrors the hardware. */
 static layer_regs snap[2];
 
+static inline void decode_pages(uint16_t pages, uint8_t *pq)
+{
+    /* 16 selectable pages, but the game only writes 0-11; 12-15 all
+     * map to the single blank page 12 of the shadow.
+     * Quadrant nibbles per segaic16 draw_virtual_tilemap: upper-left
+     * = bits 0-3, upper-right = 4-7, lower-left = 8-11, lower-right
+     * = 12-15. The old decode had each pair X-SWAPPED — the attract
+     * title (pages 0x1212, art in page 2, camera over the left half)
+     * composed the EMPTY page 1: black title backdrop. */
+    uint8_t p;
+    p = pages & 0xF;         pq[0] = p > 12 ? 12 : p;
+    p = (pages >> 4) & 0xF;  pq[1] = p > 12 ? 12 : p;
+    p = (pages >> 8) & 0xF;  pq[2] = p > 12 ? 12 : p;
+    p = (pages >> 12) & 0xF; pq[3] = p > 12 ? 12 : p;
+}
+
 RAMCODE static void latch_layer_regs(void)
 {
     for (int which = 0; which < 2; which++) {
         layer_regs *lr = &snap[which];
-        uint16_t pages = TEXT_C[0x740 + which];
+        uint16_t xraw  = TEXT_C[0x74C + which];
         uint16_t ysc   = TEXT_C[0x748 + which] & 0x1FF;
-        uint16_t xsc   = TEXT_C[0x74C + which] & 0x1FF;
-        /* 16 selectable pages, but the game only writes 0-11; 12-15 all
-         * map to the single blank page 12 of the shadow. */
-        uint8_t p;
-        p = (pages >> 4) & 0xF;  lr->pq[0] = p > 12 ? 12 : p;
-        p = pages & 0xF;         lr->pq[1] = p > 12 ? 12 : p;
-        p = (pages >> 12) & 0xF; lr->pq[2] = p > 12 ? 12 : p;
-        p = (pages >> 8) & 0xF;  lr->pq[3] = p > 12 ? 12 : p;
-        lr->vx0 = (0 - ((0xC0 - xsc) & 0x3FF)) & 0x3FF;
+        decode_pages(TEXT_C[0x740 + which], lr->pq);
+        lr->xs_raw = xraw;
+        lr->vx0 = (0 - ((0xC0 - (xraw & 0x1FF)) & 0x3FF)) & 0x3FF;
         /* MAME's tilemap scroll convention is ASYMMETRIC: the 16B driver
          * negates X itself (0xC0 - xsc) but passes Y raw — positive
          * scrolly moves the SOURCE WINDOW DOWN: vy = sy + ysc. The minus
          * form wrapped the screen top to the virtual map's bottom rows
          * (phantom rock band + black gap; user-spotted). */
         lr->vy0 = ysc;
+        /* alternate set (text words +2) + per-band rowscroll table */
+        decode_pages(TEXT_C[0x742 + which], lr->pq_a);
+        lr->vy0_a = TEXT_C[0x74A + which] & 0x1FF;
+        lr->vx0_a = (0 - ((0xC0 - (TEXT_C[0x74E + which] & 0x1FF))
+                          & 0x3FF)) & 0x3FF;
+        uint16_t any = xraw & 0x8000;
+        for (int rw = 0; rw < 28; rw++) {
+            uint16_t v = TEXT_C[0x7C0 + 0x20 * which + rw];
+            lr->rs[rw] = v;
+            any |= (uint16_t)(v & 0x8000);
+        }
+        lr->any_special = (uint8_t)(any != 0);
     }
 }
 
@@ -222,21 +256,28 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
 
     for (int which = 0; which < 2; which++) {
         const layer_regs *lr = &snap[which];
-        int yf = lr->vy0 & 7;
-        int nrows = yf ? 29 : 28;
-        for (int r = 0; r < nrows; r++) {
-            int vy = (lr->vy0 - yf + r * 8) & 0x1FF;
-            int trow = (int)(((unsigned)vy >> 3) & 0x1F);
-            int qy = (int)(((unsigned)vy >> 7) & 2);
-            for (int c = -1; c <= 42; c++) {     /* one column BEYOND each
+        /* pass 0 = primary regs; pass 1 = ALT set (only when a band
+         * selects it), so alt-page tiles get color groups too */
+        for (int aset = 0; aset < (lr->any_special ? 2 : 1); aset++) {
+            const uint8_t *pq = aset ? lr->pq_a : lr->pq;
+            int vy0 = aset ? lr->vy0_a : lr->vy0;
+            int vx00 = aset ? lr->vx0_a : lr->vx0;
+            int yf = vy0 & 7;
+            int nrows = yf ? 29 : 28;
+            for (int r = 0; r < nrows; r++) {
+                int vy = (vy0 - yf + r * 8) & 0x1FF;
+                int trow = (int)(((unsigned)vy >> 3) & 0x1F);
+                int qy = (int)(((unsigned)vy >> 7) & 2);
+                for (int c = -1; c <= 42; c++) { /* one column BEYOND each
                                                   * edge: freshly scrolled-in
                                                   * columns must already be
                                                   * color-mapped (left-edge
                                                   * purple flecks otherwise) */
-                int vx = ((lr->vx0 & ~7) + c * 8) & 0x3FF;
-                uint16_t w = TILEMAP_C[lr->pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
-                                       + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
-                tcount[((unsigned)w >> 6) & 0x7F]++;
+                    int vx = ((vx00 & ~7) + c * 8) & 0x3FF;
+                    uint16_t w = TILEMAP_C[pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
+                                           + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
+                    tcount[((unsigned)w >> 6) & 0x7F]++;
+                }
             }
         }
     }
@@ -450,10 +491,51 @@ RAMCODE static void apply_cram(int par)
  * 2 = category-1 (priority) only — the cat-1 pass runs IN-WINDOW after
  * sprites so priority tiles cover them (sega16b: pp=2 sprite pixels lose
  * to FG cat-1's 0x04 mark). Callers pick ranges. */
+RAMCODE static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
+                                       int opaque, uint16_t bank1, int par,
+                                       int catsel, const layer_regs *lrp);
+
+/* Per-band reg selection (segaic16): each 8-screen-row band may use the
+ * rowscroll word as its xscroll (primary xscroll bit 15) and/or switch
+ * wholesale to the ALT page/scroll set (rowscroll bit 15). The common
+ * gameplay case has neither — one full-range call, zero new cost. */
 RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                                   int opaque, uint16_t bank1, int par, int catsel)
 {
-    const layer_regs lr = snap[which];       /* latched once per window */
+    const layer_regs *lr = &snap[which];
+    if (!lr->any_special) {
+        compose_layer_regs(ylo, yhi, cpu, which, opaque, bank1, par,
+                           catsel, lr);
+        return;
+    }
+    layer_regs eff = *lr;
+    for (int b = ylo & ~7; b < yhi; b += 8) {
+        int lo = b < ylo ? ylo : b;
+        int hi = b + 8 > yhi ? yhi : b + 8;
+        uint16_t rs = lr->rs[(unsigned)b >> 3];
+        if (rs & 0x8000) {                   /* band uses the ALT set */
+            for (int i = 0; i < 4; i++)
+                eff.pq[i] = lr->pq_a[i];
+            eff.vx0 = lr->vx0_a;
+            eff.vy0 = lr->vy0_a;
+        } else {
+            for (int i = 0; i < 4; i++)
+                eff.pq[i] = lr->pq[i];
+            eff.vy0 = lr->vy0;
+            eff.vx0 = (lr->xs_raw & 0x8000)  /* per-row parallax x */
+                ? (int)((0 - ((0xC0 - (rs & 0x1FF)) & 0x3FF)) & 0x3FF)
+                : lr->vx0;
+        }
+        compose_layer_regs(lo, hi, cpu, which, opaque, bank1, par,
+                           catsel, &eff);
+    }
+}
+
+RAMCODE static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
+                                       int opaque, uint16_t bank1, int par,
+                                       int catsel, const layer_regs *lrp)
+{
+    const layer_regs lr = *lrp;
     int xf = lr.vx0 & 7, yf = lr.vy0 & 7;
     int nrows = yf ? 29 : 28;
     int blo = 8 + ylo, bhi = 8 + yhi;
