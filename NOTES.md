@@ -1345,6 +1345,32 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-29 afternoon) ===
+NEGATIVE RESULT (measured, load-bearing): 30Hz/2-slice cadence does
+NOT fit — full-frame compose at a 2-vint cycle is 1.5x the sustained
+budget (slave half-region stopped finishing between windows: swait
+1.5ms, mskips 1323, bdrain 4402, MD gate slipping to 0xE9+). Reverted
+to the 3-phase/20Hz config (mskips 5). CONCLUSION: the pipeline is
+COMPUTE-BOUND at 20Hz full-frame rate; ares smoothness must come from
+ATOMIC shipping, not rate. Next architecture step is therefore the
+double-sbuf whole-frame handoff at 20Hz:
+  - compose frame N+1 into sbuf_B while slices of completed frame N
+    ship from sbuf_A; swap pointers only when N+1 is COMPLETE (all
+    bands + sprites + text). A band that misses its deadline delays
+    the swap one cycle (whole frame holds, still coherent) instead of
+    showing a stale band.
+  - memory: second buffer needs ~72-80KB. Candidates: shrink the tile
+    cache (direct-ROM misses make small caches viable — measure miss
+    cost first) and/or drop sbuf borders for the ship buffer.
+  - eye-screen artifacts on ares (vertical black band) are timing-
+    class: MAME same build renders them clean (e32_4950/5250).
+Ares verdict from Mike on fa1faf8: EYES/title art confirmed working
+("accomplished the impossible"), gameplay still has the staleness
+class — matches the atomic-ship diagnosis.
+Workflow decision (Mike): interactive for architecture; /loop for
+oracle-verified parity grinds (rounds 2-5) once gameplay stabilizes.
+End goal recorded: the whole sega16 library ported via the kit.
+
 ## === RESUME POINT (2026-07-29) ===
 State: branch unpair-rebase @ fa1faf8. TITLE ART RESTORED (the "eyes"
 regression Mike reported was never a regression — the attract title
