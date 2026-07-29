@@ -1345,7 +1345,34 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
-## === RESUME POINT (2026-07-28 evening) ===
+## === RESUME POINT (2026-07-29) ===
+State: branch unpair-rebase @ fa1faf8. TITLE ART RESTORED (the "eyes"
+regression Mike reported was never a regression — the attract title
+scenes had NEVER rendered in the port). Root cause: page-select
+quadrant decode X-swapped vs segaic16 (UL=bits0-3, UR=4-7, LL=8-11,
+LR=12-15). Gameplay had survived because scrolling scenes keep both
+X-halves loaded; the title is a single-half scene. Landed with it:
+ALT register set + per-row parallax xscroll support in compose_layer
+(fast path for the common case) — the rounds-2+ parallax groundwork.
+Also this session: direct-ROM tile misses (placeholder machinery was
+an RV=1 artifact; cold scenes now always correct), drop-oldest band
+queue (attract block-drain cascade -> isolated stale bands),
+tools/oracle_shots.lua + wpcatch.lua now take the LOCAL rompath:
+MAME ROMs live in ./mame/ (gitignored) — no NAS needed.
+DIAGNOSIS LESSONS (toolkit): clean-NVRAM before arcade-oracle attract
+comparisons (persisted credits change the attract flow); scene-flow
+"skips" can be layer-decode bugs (data was present and correct at
+every stage — staging, shadow, regs — only the final quadrant lookup
+was wrong); verify each pipeline STAGE (68K write stream -> staging
+-> SDRAM shadow -> regs -> compose) before touching code.
+Full run: mskips 5, compose 2.51ms, gameplay screenshot-identical,
+title frame-matched vs arcade.
+Next: 1. Mike's ares pass (title, intro, smear). 2. Whole-frame-ship
+refactor proposal (compose into off-screen FB bank, flip per frame:
+kills band staleness/tearing wholesale). 3. Roadmap: rounds 2-5,
+sound, allocator polish, column scroll (log-if-seen), merge.
+
+## === OLD RESUME POINT (2026-07-28 evening) ===
 State: branch unpair-rebase @ 3c99d3b. THE ENTRANCE ANIMATIONS ARE
 BACK (Zeus head + orb + lightning + gravestone + rise smoke, verified
 frame-matched vs the arcade oracle) plus Mike's "P1 spawns at P2"
