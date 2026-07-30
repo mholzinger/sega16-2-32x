@@ -75,6 +75,8 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
 #define FB_STAGING  ((volatile uint16_t *)0x24012000)   /* game tile RAM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
+#define SPR_LAND    ((volatile uint16_t *)0x26028C00)   /* DREQ landing, 1KB
+                                                         * (0x28C00-0x28FFF) */
 #define NPAGES      12
 
 /* Slave commands (SYNC[0]; nonzero = pending; echo to SYNC[1] when done):
@@ -104,7 +106,14 @@ static volatile uint16_t miss_n[2];
 
 /* Placeholder pixels for uncached tiles: all pen 0 -> the tile color's
  * base entry. Must be RAM (.bss), never ROM — it is read at RV=1. */
-static uint8_t blank_tile[64] __attribute__((aligned(4)));
+/* fixed SDRAM: .bss squeezed by the 0x19000 region guard. LAYOUT:
+ * 28000 DIAG | 28100 BM (+alloc state at 28360) | 28400 SPR_SNAP |
+ * 28800 SYNC (+blank_tile 28840) | 28900 cram_mirror | 28B00
+ * shadow_lut | 28C00-28FFF SPR_LAND (DREQ DMA target - EXCLUSIVE:
+ * the DMA rewrites this whole KB every frame).
+ * blank_tile is constant zeros after master init (coherent for both
+ * CPUs); the grp/pr allocator state is master-only (bm_tail). */
+#define blank_tile ((uint8_t *)0x06028840)              /* 64B, after SYNC */
 
 /* Color maps, double-buffered by window parity (slave prescans par^1
  * during window N; both CPUs compose frame N+1 from par^1 after the
@@ -115,8 +124,11 @@ static uint8_t text_grp[2][8];              /* text colors: on-demand too */
 /* Sticky ownership (persistent across cycles — see build_maps): which
  * color owns each CRAM group / sprite pair, and how long since it was
  * last seen on screen. */
-static uint8_t grp_key[32], grp_kind[32], grp_age[32];
-static uint8_t pr_key[16], pr_age[16];
+#define grp_key  ((uint8_t *)0x06028360)               /* 32B, BM tail */
+#define grp_kind ((uint8_t *)0x06028380)               /* 32B */
+#define grp_age  ((uint8_t *)0x060283A0)               /* 32B */
+#define pr_key   ((uint8_t *)0x060283C0)               /* 16B */
+#define pr_age   ((uint8_t *)0x060283D0)               /* 16B */
 /* PER-PIXEL SPRITE/TILE PRIORITY (segas16b_v.cpp screen_update):
  * tile pixels carry a level — BG cat0=1, BG cat1=2, FG cat0=2,
  * FG cat1=4, text cat0=4, text cat1=8 — and a sprite pixel draws iff
@@ -290,7 +302,7 @@ RAMCODE static void latch_layer_regs(void)
 /* Prescan (slave, in-window): visible tilemap + sprite list -> color
  * groups for the NEXT window's frame. Tiles ascend from BG0_GRP+1,
  * sprite pairs descend from 15. */
-/* build_maps accumulators live in a fixed SDRAM block (0x28C00-0x28FFF,
+/* build_maps accumulators live in a fixed SDRAM block (0x28100-0x283FF,
  * between SYNC and CACHE_C) so the scan can run CHUNKED: under sustained
  * overload the band queue is never empty, and the idle-only owed-maps
  * path starved forever — stale tile_grp -> prescan misses -> the group-1
@@ -303,7 +315,7 @@ struct bm_state {
     uint8_t amb_col[128];
     uint8_t active, par, which, aset, row;
 };
-#define BM ((struct bm_state *)0x06028C00)
+#define BM ((struct bm_state *)0x06028100)  /* 768B free after DIAG */
 /* All bm_* helpers take the state by pointer: the inline (phase-6)
  * build uses a STACK instance so the hot path optimizes exactly as the
  * original stack-local code did; only the chunked path pays for the
@@ -1667,20 +1679,38 @@ RAMCODE void m_main(void)
              * W0/W2 = nothing beyond the blit. */
             if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
-                /* sprite-list snapshot — on the MASTER, after ITS bank
-                 * restore, so FB_SPR is the staging bank for certain
-                 * (the slave-side copy raced the restore and read
-                 * display-bank zeros: whole short lists vanished) */
-                for (int i = 0; i < 512; i += 8) {
-                    SPR_SNAP[i + 0] = FB_SPR[i + 0];
-                    SPR_SNAP[i + 1] = FB_SPR[i + 1];
-                    SPR_SNAP[i + 2] = FB_SPR[i + 2];
-                    SPR_SNAP[i + 3] = FB_SPR[i + 3];
-                    SPR_SNAP[i + 4] = FB_SPR[i + 4];
-                    SPR_SNAP[i + 5] = FB_SPR[i + 5];
-                    SPR_SNAP[i + 6] = FB_SPR[i + 6];
-                    SPR_SNAP[i + 7] = FB_SPR[i + 7];
-                }
+                /* sprite-list snapshot — DREQ FIFO DMA (the FB staging
+                 * copy is retired: the game's vint upload crossed the
+                 * FB window exactly when the SH-2 owned the FB, and
+                 * ares/hardware DISCARD those MD writes — savestate-
+                 * proven 40/64 torn records. The MD shim now walks the
+                 * game's order table and pushes the ordered list over
+                 * the DREQ FIFO; DMAC0 lands it at SPR_LAND. TE set =
+                 * a complete coherent list; TE clear = keep last
+                 * frame's list (stale beats torn). */
+                if (SH2_DMA_CHCR0 & 2) {     /* TE: transfer complete */
+                    for (int i = 0; i < 512; i += 8) {
+                        SPR_SNAP[i + 0] = SPR_LAND[i + 0];
+                        SPR_SNAP[i + 1] = SPR_LAND[i + 1];
+                        SPR_SNAP[i + 2] = SPR_LAND[i + 2];
+                        SPR_SNAP[i + 3] = SPR_LAND[i + 3];
+                        SPR_SNAP[i + 4] = SPR_LAND[i + 4];
+                        SPR_SNAP[i + 5] = SPR_LAND[i + 5];
+                        SPR_SNAP[i + 6] = SPR_LAND[i + 6];
+                        SPR_SNAP[i + 7] = SPR_LAND[i + 7];
+                    }
+                } else
+                    DIAG[17]++;              /* incomplete DREQ frames */
+                /* re-arm for the NEXT vint's push (Chaotix sequence:
+                 * disable, read to clear TE, program, enable) */
+                SH2_DMA_CHCR0 = 0x44E0;
+                (void)SH2_DMA_CHCR0;
+                SH2_DMA_SAR0 = 0x20004012;   /* DREQ FIFO */
+                SH2_DMA_DAR0 = 0x26028C00;   /* SPR_LAND (uncached) */
+                SH2_DMA_TCR0 = 512;
+                SH2_DMA_DRCR0 = 0;
+                SH2_DMA_DMAOR = 1;
+                SH2_DMA_CHCR0 = 0x44E1;
                 tp = frt();
                 copy_pages(0, 6);
                 diag_add(0, tp);

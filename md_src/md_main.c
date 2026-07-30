@@ -219,6 +219,45 @@ window_done: ;
 			palq[pal_t] = (b); pal_t = (uint8_t)((pal_t + 1) & 63); } \
 	} while (0)
 
+	// SPRITE LIST over DREQ FIFO: the game's own vint upload writes
+	// sprite RAM through the FB window (remap 0x85E000) exactly while
+	// the SH-2 blit owns the FB — ares/hardware DISCARD those writes
+	// (savestate-proven 40/64 torn records: the "utterly broken"
+	// sprites). The one reliable bulk channel is the DREQ FIFO. Walk
+	// the game's order table (0xEC80) over its record buffer (0xF800)
+	// — the exact 0x2B1E upload semantics — and push the ordered list
+	// + terminator, padded to exactly 512 words (the DMAC's fixed
+	// TCR). Chaotix protocol: length -> A15110, 68S via A15107=4,
+	// 4-word groups gated on the FIFO-full sign bit. Bounded spins:
+	// if the SH-2 side isn't armed (boot, mskip), abort and retry
+	// next vint — the SH-2 keeps last frame's coherent list.
+	{
+		// Source: the game's own STAGED, ORDERED list — its vint
+		// upload (0x2B1E) now lands in the MD RAM mirror at 0xFF7000
+		// (patch_game sprite remap; the order table at 0xEC80 is
+		// consumed by that upload and reads 0xFF afterward, so it
+		// can't be walked here). This handler runs BEFORE the game's
+		// IRQ code, so the pushed list is last vint's — coherent,
+		// one frame stale, consistent.
+		volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
+		volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
+		const uint16_t *s = (const uint16_t*)0xFF7000;
+		uint16_t spin;
+		uint8_t ok = 1;
+		*(volatile uint16_t*)0xA15110 = 512;
+		*ctrl = 4;                            // 68S: session start
+		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
+			spin = 400;
+			while (*ctrl < 0 && --spin) ;
+			if (!spin) { ok = 0; break; }
+			fifo[0] = s[0]; fifo[0] = s[1];
+			fifo[0] = s[2]; fifo[0] = s[3];
+			s += 4;
+		}
+		if (!ok)
+			*ctrl = 0;                        // abort session; retry next vint
+	}
+
 	// Palette dirty scan: the mirror (0xFF9000, game writes) is diffed
 	// against the sent-copy (0xFFA000) one 512-word quarter per vint;
 	// dirty 5-word batches queue for the COMM stream below. The FB
@@ -257,6 +296,7 @@ window_done: ;
 	// Text RAM (2048 words) fully refreshes every ~6.4 frames.
 	{
 		static uint16_t txt_idx;
+		uint8_t pal_sent_now = 0;
 
 		// TOTAL ack-wait budget for the whole stream section, not per
 		// batch (see NOTES: per-batch spins trickled 60+ms handler
@@ -286,11 +326,17 @@ window_done: ;
 				idx = (uint16_t)(0x740 + burst * 5);
 			else if (burst < 16)
 				idx = (uint16_t)(0x7C0 + (burst - 4) * 5);
-			else if (pal_h != pal_t) {
+			else if (pal_h != pal_t && pal_sent_now < 8) {
+				// cap 8 palette batches/vint: an uncapped flood
+				// displaced text batches and stretched slave stream
+				// servicing, starving band compose on ares (group-1
+				// fallback garbage). 8/vint still converges a full
+				// palette reload in ~1s; typical fades fit one vint.
 				uint16_t b = palq[pal_h];      // FIFO: oldest first
 				pal_h = (uint8_t)((pal_h + 1) & 63);
 				idx = (uint16_t)(b * 5);
 				tag = 0x4800;                  // palette batch
+				pal_sent_now++;
 			} else
 				idx = txt_idx;
 			if (tag == 0x4800) {
@@ -467,6 +513,9 @@ void main(void) {
 	{
 		volatile uint32_t *pm = (volatile uint32_t*)0xFF9000;
 		for (uint16_t i = 0; i < 2048; i++)
+			pm[i] = 0;
+		pm = (volatile uint32_t*)0xFF7000;    // sprite-list mirror
+		for (uint16_t i = 0; i < 512; i++)
 			pm[i] = 0;
 	}
 

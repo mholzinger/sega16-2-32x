@@ -36,11 +36,15 @@ def remap(v):
         return 0x852000 + (a & 0xFFFF)
     if 0x410000 <= a < 0x420000:            # text RAM -> shadow
         return 0xFF8000 + (a & 0xFFF)
-    if 0x440000 <= a < 0x450000:            # sprite RAM -> FB staging (2KB mirror)
-        # 0x840000 FB window + 0x1E000; game writes are all word/long
-        # (verified: movel/movew upload loop at 0x2B1E), so the FB
-        # zero-byte-drop hazard doesn't apply.
-        return 0x85E000 + (a & 0x7FF)
+    if 0x440000 <= a < 0x450000:            # sprite RAM -> MD RAM mirror (2KB)
+        # WAS FB staging (0x85E000) — but the game's vint upload
+        # crossed the FB window exactly while the SH-2 blit owned the
+        # FB, and ares/hardware DISCARD those MD writes (savestate:
+        # 40/64 records torn — the broken-sprites era). The ordered
+        # list now lands in MD RAM; the shim vint pushes it to the
+        # SH-2 over the DREQ FIFO (md_main.c). Game readbacks hit
+        # real RAM — always coherent.
+        return 0xFF7000 + (a & 0x7FF)
     if 0x840000 <= a < 0x850000:            # palette -> MD RAM mirror (4KB)
         # BANK-SKEW FIX: palette used to remap straight into FB staging
         # (0x85F000), but FB staging is per-bank — rows written while
