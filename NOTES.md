@@ -1345,6 +1345,26 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30d) — EYE GEOMETRY EXACT ===
+State: branch unpair-rebase @ 688a9e5. Eye-sequence geometry now
+PIXEL-MATCHED to the arcade at register-matched frames. Three fixes
+on top of the sign fix: 10-bit xscroll (latch masked to 9 bits —
+every pan past the map midpoint was 512px off), rowscroll-x path
+still had the pre-fix negated sign, and PRIORITY REG STREAMING (the
+rotating text stream gave each word 0-6.4 frames random staleness;
+pages could be fresher than their xscroll neighbor → mismatched
+compose state during fast pans; the reg block 0x740-0x753 now ships
+every vint, SH-2 tracks MD within ~1 frame).
+METHOD ADDITIONS: reg-stamped sequence capture (seqcap.lua — align
+machines by REGISTER STATE, never frame number: attract rotations
+differ and drift); reg-matched trigger capture (regmatch pattern);
+remember the NVRAM-credits trap applies to EVERY arcade run.
+Remaining ledger: attract pacing (mskips ~900 in heavy scenes),
+allocator capacity, big-shadow cap, pp3/amb exactness, text-layer
+palette phase (logo white vs teal at matched frames — text palette
+streaming timing, small). Structural rework (atomic ship) still the
+umbrella for the pacing class. Ares verdict wanted on 688a9e5.
+
 ## === RESUME POINT (2026-07-30c) — SCROLL X SIGN FIXED ===
 State: branch unpair-rebase @ 2cad330. THE EYES ARE SOLVED — and the
 root cause was bigger than the eyes: the X scroll conversion was
