@@ -28,6 +28,11 @@ SHLIBS   = -L$(MARSDEV)/sh-elf/lib/gcc/sh-elf/$(SHCC_VER) -lgcc
 
 MDCCFLAGS  = -m68000 -mshort -Wall -Wextra -std=c99 -ffreestanding
 SHCCFLAGS  = -m2 -mb -Wall -Wextra -std=c99 -ffreestanding
+# `make PRESSURE=1` = ares-proxy budgets (cut quiet zone) for pre-handoff
+# validation; NEVER ship a PRESSURE build to ares/hardware.
+ifdef PRESSURE
+SHCCFLAGS += -DPRESSURE_TEST
+endif
 MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-optional
 SHASFLAGS  = -Ish_src --small
 MDLDFLAGS  = -T md_src/md.ld -nostdlib

@@ -136,8 +136,11 @@ static uint8_t pri_max[2];                  /* max level in pri_lut[par] */
  * entries per visit) whenever apply_cram changes CRAM; silhouette
  * fallback while dirty. cram_mirror exists because CRAM itself is
  * unreadable outside the window (FM=0). */
-static uint16_t cram_mirror[256];
-static uint8_t shadow_lut[256];
+/* Fixed SDRAM (0x28900/0x28B00, behind SYNC): .bss hit the 0x19000
+ * region guard; these are master-only and boot-initialized in m_main
+ * (fixed blocks are NOT zeroed like .bss). */
+#define cram_mirror ((uint16_t *)0x06028900)   /* 512B */
+#define shadow_lut  ((uint8_t *)0x06028B00)    /* 256B */
 static volatile uint8_t shadow_dirty = 1;
 static uint8_t shadow_cur;                  /* rebuild chunk cursor */
 /* Group 0 is NEVER assigned by the allocator, so no composed pixel is
@@ -287,16 +290,81 @@ RAMCODE static void latch_layer_regs(void)
 /* Prescan (slave, in-window): visible tilemap + sprite list -> color
  * groups for the NEXT window's frame. Tiles ascend from BG0_GRP+1,
  * sprite pairs descend from 15. */
-RAMCODE static void build_maps(int par, uint16_t bank1)
-{
+/* build_maps accumulators live in a fixed SDRAM block (0x28C00-0x28FFF,
+ * between SYNC and CACHE_C) so the scan can run CHUNKED: under sustained
+ * overload the band queue is never empty, and the idle-only owed-maps
+ * path starved forever — stale tile_grp -> prescan misses -> the group-1
+ * red/white/blue garbage frames on ares. Chunks bound the per-window
+ * cost; the inline phase-6 path still runs the whole build at once. */
+struct bm_state {
     uint16_t tcount[128];
     uint8_t sused[64], txused[8];
-    uint8_t col_lvl[128], txt_lvl[8];       /* max priority level per color */
-    uint8_t amb_col[128];                   /* color seen at 2+ levels */
+    uint8_t col_lvl[128], txt_lvl[8];
+    uint8_t amb_col[128];
+    uint8_t active, par, which, aset, row;
+};
+#define BM ((struct bm_state *)0x06028C00)
+/* All bm_* helpers take the state by pointer: the inline (phase-6)
+ * build uses a STACK instance so the hot path optimizes exactly as the
+ * original stack-local code did; only the chunked path pays for the
+ * fixed SDRAM block. */
+#define tcount  (a->tcount)
+#define sused   (a->sused)
+#define txused  (a->txused)
+#define col_lvl (a->col_lvl)
+#define txt_lvl (a->txt_lvl)
+#define amb_col (a->amb_col)
+
+RAMCODE static void bm_reset(struct bm_state *a)
+{
     for (int i = 0; i < 128; i++) { tcount[i] = 0; col_lvl[i] = 0; amb_col[i] = 0; }
     for (int i = 0; i < 64; i++) sused[i] = 0;
     for (int i = 0; i < 8; i++) { txused[i] = 0; txt_lvl[i] = 0; }
+}
+
+/* scan `nr` tilemap rows of (which, aset) starting at row r0;
+ * returns rows actually available for that pass (28 or 29) */
+RAMCODE static int bm_scan_rows(struct bm_state *a, int which, int aset, int r0, int nr)
+{
+    const layer_regs *lr = &snap[which];
+    const uint8_t *pq = aset ? lr->pq_a : lr->pq;
+    int vy0 = aset ? lr->vy0_a : lr->vy0;
+    int vx00 = aset ? lr->vx0_a : lr->vx0;
+    int yf = vy0 & 7;
+    int nrows = yf ? 29 : 28;
+    for (int r = r0; r < nrows && r < r0 + nr; r++) {
+        int vy = (vy0 - yf + r * 8) & 0x1FF;
+        int trow = (int)(((unsigned)vy >> 3) & 0x1F);
+        int qy = (int)(((unsigned)vy >> 7) & 2);
+        for (int c = -1; c <= 42; c++) {
+            int vx = ((vx00 & ~7) + c * 8) & 0x3FF;
+            uint16_t w = TILEMAP_C[pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
+                                   + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
+            unsigned cc = ((unsigned)w >> 6) & 0x7F;
+            tcount[cc]++;
+            if (w) {
+                uint8_t lvl = which
+                    ? ((w & 0x8000) ? 2 : 1)
+                    : ((w & 0x8000) ? 4 : 2);
+                if (col_lvl[cc] && col_lvl[cc] != lvl)
+                    amb_col[cc] = 1;
+                if (lvl > col_lvl[cc])
+                    col_lvl[cc] = lvl;
+            }
+        }
+    }
+    return nrows;
+}
+
+static void bm_tail(struct bm_state *a, int par);
+
+RAMCODE static void build_maps(int par, uint16_t bank1)
+{
+    struct bm_state st;                     /* STACK: hot path stays fast */
+    struct bm_state *a = &st;
     (void)bank1;
+    BM->active = 0;                         /* invalidate any chunked build */
+    bm_reset(a);
 
     for (int which = 0; which < 2; which++) {
         const layer_regs *lr = &snap[which];
@@ -338,6 +406,13 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
             }
         }
     }
+    bm_tail(a, par);
+}
+
+/* text scan + sprite scan + sticky allocation + priority LUT: the fast
+ * final stage, one chunk in the chunked path */
+RAMCODE static void bm_tail(struct bm_state *a, int par)
+{
     for (int row = 0; row < 28; row++)
         for (int col = 24; col < 64; col++) {
             uint16_t d = TEXT_C[row * 64 + col];
@@ -542,6 +617,47 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
                                               * dst read) entirely */
     }
 }
+
+/* One bounded slice of an owed build (the queue-busy maintenance slot).
+ * Returns 1 when the build for `par` completed this call. A build that
+ * spans a snapshot boundary mixes two frames' regs — same staleness
+ * class as the deferral itself; the next build corrects it. */
+RAMCODE static int build_maps_chunk(int par)
+{
+    struct bm_state *a = BM;
+    if (!BM->active || BM->par != (uint8_t)par) {
+        bm_reset(a);
+        BM->active = 1;
+        BM->par = (uint8_t)par;
+        BM->which = 0;
+        BM->aset = 0;
+        BM->row = 0;
+        return 0;
+    }
+    if (BM->which < 2) {
+        int nrows = bm_scan_rows(a, BM->which, BM->aset, BM->row, 8);
+        BM->row = (uint8_t)(BM->row + 8);
+        if (BM->row >= nrows) {
+            BM->row = 0;
+            if (BM->aset == 0 && snap[BM->which].any_special)
+                BM->aset = 1;
+            else {
+                BM->aset = 0;
+                BM->which++;
+            }
+        }
+        return 0;
+    }
+    bm_tail(a, par);
+    BM->active = 0;
+    return 1;
+}
+#undef tcount
+#undef sused
+#undef txused
+#undef col_lvl
+#undef txt_lvl
+#undef amb_col
 
 __attribute__((always_inline))
 /* v carries the S16 word's bit 15 in bit 15 of the MIRROR only: it is
@@ -1331,8 +1447,14 @@ RAMCODE void m_main(void)
     uint8_t drop_s0[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
+    uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
+    for (int i = 0; i < 256; i++) {      /* fixed blocks aren't .bss-zeroed */
+        cram_mirror[i] = 0;
+        shadow_lut[i] = (uint8_t)i;      /* identity until first rebuild */
+    }
+    BM->active = 0;
 
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
@@ -1355,12 +1477,14 @@ RAMCODE void m_main(void)
              * by one 12-row strip (else the vblank gate skips blits:
              * 923 mskips/run when build_maps sat on the pickup). */
             if (!bq[bq_h].on && maps_owed) {
-                /* owed build_maps from a dropped band: run it self-
-                 * paced like any heavy phase (early-frame only) */
+                /* owed build_maps from a dropped band: CHUNKED — one
+                 * bounded slice per visit (idle drains it in ~9 visits;
+                 * the queue-busy maintenance slot below keeps it moving
+                 * when idle never comes) */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
                 if (dt <= 8000) {
-                    build_maps(owed_par, owed_bank);
-                    maps_owed = 0;
+                    if (build_maps_chunk(owed_par))
+                        maps_owed = 0;
                 }
                 continue;
             }
@@ -1372,17 +1496,23 @@ RAMCODE void m_main(void)
                     shadow_lut_chunk();
                 continue;
             }
-            if (bq[bq_h].on && shadow_dirty && !shadow_stole) {
-                /* GUARANTEED PROGRESS: under sustained overload the
-                 * queue is never empty early-frame, so the idle-only
-                 * rebuild starved forever on ares (savestate:
-                 * shadow_dirty=1 after minutes -> permanent silhouette
-                 * fallback). Steal ONE chunk per window even when
-                 * band work is pending: full refresh in <=64 windows
-                 * (~3.2s) at any load, costing at most one strip. */
+            if (bq[bq_h].on && !shadow_stole && (win_no & 1) == 0 &&
+                (maps_owed || shadow_dirty)) {
+                /* MAINTENANCE SLOT: one bounded chunk of deferred work
+                 * every 2nd window even when band work is pending.
+                 * Under sustained overload the queue is NEVER empty, so
+                 * idle-only deferrals starve forever — this bit every
+                 * subsystem in turn (shadow LUT: permanent silhouettes;
+                 * owed maps: stale tile_grp -> prescan misses -> the
+                 * group-1 red/white/blue garbage). Owed maps outrank
+                 * the shadow LUT: wrong colors beat wrong shadows. */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
                 if (dt <= 7000) {
-                    shadow_lut_chunk();
+                    if (maps_owed) {
+                        if (build_maps_chunk(owed_par))
+                            maps_owed = 0;
+                    } else
+                        shadow_lut_chunk();
                     shadow_stole = 1;
                     continue;
                 }
@@ -1403,7 +1533,17 @@ RAMCODE void m_main(void)
                  * wider pre-vint margin (mskips 311/run when it shared
                  * the tile strips' 11300 threshold; 10400 was too wide
                  * and starved throughput into block-drains). */
+#ifdef PRESSURE_TEST
+                /* ares-proxy budgets: MAME is ~3x faster, so cutting
+                 * the quiet zone reproduces the ares operating point
+                 * (drops in the eye hold ~1/2 cycles). Build with
+                 * `make PRESSURE=1` before EVERY ares handoff; the
+                 * shadow-steal/palette-flood regression shipped
+                 * because this check wasn't routine. */
+                if (dt > (b->phase == 2 ? 6000 : 6500))
+#else
                 if (dt > (b->phase == 2 ? 10300 : 11300))
+#endif
                     continue;               /* sprite strips: gated/shadow
                                              * actors can run ~1.4ms */
                 if (b->phase >= 5 && dt > 8000)
@@ -1468,6 +1608,7 @@ RAMCODE void m_main(void)
             uint16_t tw = frt(), tp = tw;
             t_vint = tw;
             shadow_stole = 0;
+            win_no++;
 
             if (tile_cmd) {                  /* concurrent third finished? */
                 slave_wait(tile_cmd);
