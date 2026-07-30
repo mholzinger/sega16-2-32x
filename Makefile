@@ -50,6 +50,14 @@ SHOBJS += $(patsubst %.c,%.o,$(wildcard sh_src/*.c))
 
 all: release
 
+# build stamp header: git short hash as u32 -> DIAG[18] at boot, so every
+# savestate self-identifies its commit. Regenerated when HEAD changes.
+BUILD_HASH := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo 0)
+sh_src/buildstamp.h: .git/HEAD $(wildcard .git/refs/heads/*)
+	@echo "#define BUILD_HASH32 0x$(BUILD_HASH)u" > $@
+sh_src/m_main.o: sh_src/buildstamp.h
+
+
 release: MDEXTRA = -O2 -fomit-frame-pointer -flto -fuse-linker-plugin
 release: SHEXTRA = -O2 -fomit-frame-pointer -flto -fuse-linker-plugin
 release: $(MDTARGET).bin $(MDTARGET).lst $(TARGET).32x $(TARGET).lst
@@ -88,6 +96,11 @@ $(TARGET).32x: $(TARGET).elf
 	@$(SHOBJC) -O binary $< temp.32x
 	@dd if=temp.32x of=$@ bs=8192 conv=sync 2>/dev/null
 	@rm -f temp.32x
+	@# BUILD STAMP at file offset 0x3C0 (unused header pad): git hash +
+	@# epoch + PRESSURE flag. Every savestate self-identifies its build
+	@# (tools/build_id.py) — no more provenance arguments.
+	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,normal)
+	@python3 tools/build_id.py show $@
 
 $(TARGET).elf: $(SHOBJS) | $(ROMDIR)
 	$(SHCC) $(SHLDFLAGS) $^ -o $@ $(SHLIBS)

@@ -1,4 +1,5 @@
 #include "mars.h"
+#include "buildstamp.h"
 
 /* Stage C step 6: CONCURRENT TILE COMPOSE via an SDRAM tile cache.
  *
@@ -97,7 +98,9 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define NSETS       128
 #define NWAYS       8
 static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
-static uint8_t cache_rot[NSETS];            /* round-robin eviction way */
+#define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
+                                            * round-robin eviction way,
+                                            * master-only (cache_fill) */
 
 /* Per-CPU miss queues: appended (write-through) during concurrent compose,
  * drained by the master in the next window. */
@@ -1467,6 +1470,7 @@ RAMCODE void m_main(void)
         shadow_lut[i] = (uint8_t)i;      /* identity until first rebuild */
     }
     BM->active = 0;
+    DIAG[18] = BUILD_HASH32;             /* savestates self-identify */
 
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
