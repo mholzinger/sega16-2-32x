@@ -242,20 +242,29 @@ window_done: ;
 		volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
 		volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
 		const uint16_t *s = (const uint16_t*)0xFF7000;
-		uint16_t spin;
+		// TOTAL spin budget for the whole push, not per group: a
+		// slow-draining FIFO (emulator DMA service timing) could cost
+		// up to 128x400 polls per vint WITHOUT ever timing out —
+		// several ms of 68K time inside every vint = the game itself
+		// running slow. ~800 total polls ≈ 0.1ms hard ceiling; an
+		// exhausted budget aborts and retries next vint (the SH-2
+		// keeps last frame's coherent list). 0xFFB0F2 counts aborts
+		// (savestate-readable).
+		uint16_t spin = 800;
 		uint8_t ok = 1;
 		*(volatile uint16_t*)0xA15110 = 512;
 		*ctrl = 4;                            // 68S: session start
 		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
-			spin = 400;
 			while (*ctrl < 0 && --spin) ;
 			if (!spin) { ok = 0; break; }
 			fifo[0] = s[0]; fifo[0] = s[1];
 			fifo[0] = s[2]; fifo[0] = s[3];
 			s += 4;
 		}
-		if (!ok)
+		if (!ok) {
 			*ctrl = 0;                        // abort session; retry next vint
+			(*(volatile uint16_t*)0xFFB0F2)++;
+		}
 	}
 
 	// Palette dirty scan: the mirror (0xFF9000, game writes) is diffed
