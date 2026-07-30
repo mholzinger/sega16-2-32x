@@ -1373,12 +1373,17 @@ Any row written during the other bank's tenure is zeros in the bank
 apply_cram happens to snapshot -> black sprite pairs. SH-2 cannot
 read the other bank (single draw-bank window), so no SH-2-side
 fallback exists.
-FIX DIRECTION (definitive): retire FB_PAL staging for palette; ship
-palette through the MD RAM sideband stream with dirty-row tracking
-(game's work-RAM palette buffer at ~0xFFE5B0 is the source of
-truth; MD vint diffs rows, streams changed rows like the reg
-batches). First client of the atomic-ship + sideband rework (the
-tearing umbrella).
+FIXED (180de61): palette writes remapped to a stable MD RAM mirror
+(0xFF9000); shim vint copies one 512-word quarter/vint into the
+staging bank's FB_PAL — both banks always complete, snapshot can
+never read never-written rows. Fade RMW reads hit real RAM. Known
+gap: fresh rows lag <=4 vints (~67ms) — brief dark flash on hard
+scene-palette loads (MAME: transient blob at f=1500 player-spawn,
+clean by 1700). If ares objects: prioritize dirty quarters (MD
+tracks which quarter got game writes since last copy, copies dirty
+first, 2/vint burst). Also landed same session: guaranteed shadow-
+LUT progress (steal one chunk/window under load). BOTH ares
+symptoms from the attract savestate now have fixes in rom/s16.32x.
 Savestate parse one-liners: sdram file base 0x23B (probe-relocate
 per TOOLKIT recipe); MD RAM base = find swap16(TAS thunk bytes
 4a38c02050f8c0204e75) minus 0xB380.
