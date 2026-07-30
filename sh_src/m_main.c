@@ -1235,8 +1235,8 @@ RAMCODE static void cache_fill(int budget)
 {
     for (int q = 0; q < 2; q++) {
         uint16_t n = miss_n[q];
-        if (n > 256)
-            n = 256;
+        if (n > MISSQ_CAP)
+            n = MISSQ_CAP;
         DIAG[14] += n;                       /* miss telemetry */
         for (uint16_t i = 0; i < n && budget; i++) {
             unsigned code = missq[q][i];
@@ -1633,9 +1633,12 @@ RAMCODE void m_main(void)
                                  b->bpar);
                     break;
                 case 5:
-                    cache_fill(128);     /* shorter single-shot: fits the
-                                          * later heavy deadline; misses
-                                          * drain over two windows */
+                    /* ADAPTIVE DRAIN: flat 128/window left seconds of
+                     * white placeholder tiles on ares when cutscenes
+                     * burst-load art (Zeus). Deep backlog gets a 3x
+                     * budget — still inside the dt<=8000 heavy slot
+                     * (build_maps at ~4ms fits the same gate). */
+                    cache_fill((miss_n[0] + miss_n[1] > 96) ? 384 : 128);
                     diag_add(1, tq);
                     break;
                 default:
