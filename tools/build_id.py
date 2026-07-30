@@ -22,7 +22,9 @@ def git_hash():
         h = subprocess.run(["git", "rev-parse", "--short=8", "HEAD"],
                            capture_output=True, text=True).stdout.strip()
         dirty = subprocess.run(["git", "status", "--porcelain", "-uno", "--",
-                                "sh_src", "md_src", "tools", "Makefile"],
+                                "sh_src", "md_src", "tools", "Makefile",
+                                ":(exclude)tools/patch_report.txt",
+                                ":(exclude)tools/rebase_report.txt"],
                                capture_output=True, text=True).stdout.strip()
         return h + ("+" if dirty else "")
     except Exception:
