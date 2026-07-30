@@ -248,7 +248,11 @@ RAMCODE static void latch_layer_regs(void)
         uint16_t ysc   = TEXT_C[0x748 + which] & 0x1FF;
         decode_pages(TEXT_C[0x740 + which], lr->pq);
         lr->xs_raw = xraw;
-        lr->vx0 = ((0xC0 - (xraw & 0x1FF)) & 0x3FF);
+        /* xscroll is a FULL 10-bit value (virtual map = 1024px wide;
+         * MAME applies no latch mask). The old &0x1FF made every pan
+         * phase with xs >= 0x200 off by 512px — the wrong map half.
+         * The eye sequence pans across both halves. */
+        lr->vx0 = ((0xC0 - (xraw & 0x3FF)) & 0x3FF);
         /* X convention PINNED by the attract scream screen (art at
          * cols 24-63 displayed full-bleed at xs=0): source vx =
          * screen x + ((0xC0 - xs) & 0x3FF) — matching segaic16's
@@ -264,7 +268,7 @@ RAMCODE static void latch_layer_regs(void)
         /* alternate set (text words +2) + per-band rowscroll table */
         decode_pages(TEXT_C[0x742 + which], lr->pq_a);
         lr->vy0_a = TEXT_C[0x74A + which] & 0x1FF;
-        lr->vx0_a = ((0xC0 - (TEXT_C[0x74E + which] & 0x1FF)) & 0x3FF);
+        lr->vx0_a = ((0xC0 - (TEXT_C[0x74E + which] & 0x3FF)) & 0x3FF);
         uint16_t any = xraw & 0x8000;
         for (int rw = 0; rw < 28; rw++) {
             uint16_t v = TEXT_C[0x7C0 + 0x20 * which + rw];
@@ -624,7 +628,8 @@ RAMCODE static void compose_layer(int ylo, int yhi, int cpu, int which,
                 eff.pq[i] = lr->pq[i];
             eff.vy0 = lr->vy0;
             eff.vx0 = (lr->xs_raw & 0x8000)  /* per-row parallax x */
-                ? (int)((0 - ((0xC0 - (rs & 0x1FF)) & 0x3FF)) & 0x3FF)
+                ? (int)((0xC0 - (rs & 0x3FF)) & 0x3FF)   /* sign+mask fixed
+                                                          * same as vx0 */
                 : lr->vx0;
         }
         compose_layer_regs(lo, hi, cpu, which, opaque, bank1, par,
