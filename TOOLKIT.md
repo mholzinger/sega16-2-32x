@@ -52,6 +52,51 @@ what must be parameterized.
      scratchpad into `tools/scan_frames.py`; make the lua harness
      read per-title input scripts.
 
+## MD-hardware landmines for arcade 68K code (kit-critical)
+
+- **TAS never latches on MD/32X**: the MD bus arbiter drops the write
+  phase of the 68K locked RMW cycle (MAME, ares, and real hardware all
+  drop it; S16 boards don't). Every `tas/bne` one-shot latch in a
+  ported game silently re-fires forever. Altered Beast: 5 TAS sites;
+  the one at 0x2268 locked the attract sequencer into the infinite
+  title/eye loop (velocity-kill add ran twice → camera runaway past
+  the transition gate). KIT RULE: opcode-scan every ported binary for
+  0x4AC8-0x4AFF words in code, replace each TAS with jsr to a RAM
+  thunk: `tst.b` (TAS's exact N/Z, clears V/C) + `st` (no CC) + `rts`.
+  See patch_game.py TAS_SITES + md_main.c TAS thunks.
+
+## Hardware truth from jtcores (srcref/jtcores, GPL — derive, never copy)
+
+S16B shares jts16_prio.v/jts16_colmix.v with S16A (jts16_video.v's
+MODEL parameter only alters tilemap/obj internals). Facts derived:
+
+- **Shadow is arithmetic** (jts16_colmix.v:80-88): shadowed pixel =
+  each 5-bit channel `a - (a>>2)` (×0.75). NOT a palette pick. And
+  **palette bit 15 exempts the color from shadowing** (`shadow &
+  ~pal[15]`). Our indexed-color FB can't synthesize new colors →
+  nearest-CRAM match must TARGET ×0.75 per channel (gap: flagged,
+  closest 32X approximation) and must honor the bit-15 exemption.
+- **Sprite pixel fields** (jts16_prio.v:52-64): [11:10] priority,
+  [9:4] palette, [3:0] color. Palette 0x3F (`&obj[9:4]`) = shadow
+  applied to the UNDERLYING tile pixel (confirms the MAME rule).
+- **Per-layer sprite thresholds** (jts16_prio.v:83-88): sprite beats
+  text iff pp==3; beats FG (scr1) iff pp>=2; beats BG (scr2) iff
+  pp>=1 — consistent with the MAME level model.
+- **Priority-tile punch-through** (jts16_prio.v:61): a priority tile
+  still loses to the sprite where its color index bits [2:0]==0
+  (indexes 0 AND 8 punch through, not just 0).
+- **Layer opacity in the final mix** (jts16_prio.v:90-99): a tile
+  pixel falls through to the next layer when [2:0]==0 (0 AND 8 are
+  transparent); a selected sprite pixel is opaque when [3:0]!=0.
+- **All-transparent fallback** (jts16_prio.v:87): the visible pixel is
+  the BG (scr2) pixel's palette row with index bits [2:0] forced to 0
+  — bit 3 of the index SURVIVES (row color 0 or 8), not a fixed
+  backdrop color.
+
+Cross-check ledger: verify m_main.c compose against the punch-through
+and fallback rules (pp3/amb exactness work item); rebuild shadow_lut
+to target ×0.75 + bit-15 exemption.
+
 ## Hard-won invariants the kit must encode (see NOTES.md for full log)
 
 - RV=1 forbids SH-2 cart access → all hot code in .ramtext, tile/
