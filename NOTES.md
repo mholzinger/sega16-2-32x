@@ -1345,6 +1345,21 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30f) — FAIRNESS + SPEED BOUND; SHIP f2d9682 ===
+After the near-working ares run (build 9dbe9184: HUD/tiles/sprites
+correct, one frozen purple band): drop-streak fairness (05b42cb —
+protecting the maps band had made one region the permanent
+sacrifice; 3-strike undroppable rotation fixes the frozen rows) and
+the DREQ push TOTAL spin budget (f2d9682 — per-group budgets could
+burn several ms of 68K time per vint on slow FIFO drain without
+ever timing out = Mike's "VERY VERY SLOW"; now ~0.1ms hard ceiling,
+aborts retry next vint, 0xFFB0F2 counts aborts). Build provenance:
+roms stamped (tools/build_id.py show), savestates carry the commit
+hash in DIAG[18], PRESSURE builds labeled, the .lst guard gates rom
+emission. SHIP = f2d96820. Awaiting ares verdict on: speed, frozen
+band gone, sprites intact. Then: tearing (atomic-ship), jts16_prio
+exactness, sound.
+
 ## === RESUME POINT (2026-07-30e) — SPRITE LIST ON DREQ; FB DATA-FREE ===
 The DREQ FIFO sprite channel is IN (6466663): game sprite RAM
 remapped to MD RAM 0xFF7000 (ordered staged list, coherent
