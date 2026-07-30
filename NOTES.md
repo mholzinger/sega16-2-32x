@@ -1345,6 +1345,30 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30) — EYE "WHITE BAND" = LOCKED DROP ===
+Mike's ares report post-TAS-fix: attract rotates, but the eye scene
+has a moving white band stripe. DIAGNOSED: drop-oldest under ares's
+sustained mild overload victimized the SAME strips every cycle — a
+locked stale stripe (mustard eyelid bar from an earlier pan position
++ growing lavender gap). MAME never drops there (bdrain=0), so it
+was reproduced with PRESSURE BUILDS (quiet zone temporarily cut
+11300->6500: eye hold drops ~1 band/2 cycles = the ares regime; the
+identical stripe appeared, proving the mechanism). FIX (a4b51d0):
+rotating drop-resume — per-region stale frontier drop_s0[]; a
+dropped band's next same-region band starts its strip walk at the
+frontier (stale rows first), bounding any row's staleness to ~2
+cycles. Bands now walk strips by rotating index (s0+cnt, wraps; 6
+strips R0/R1, 4 strips R2) instead of linear y. Validated: clean at
+moderate pressure WITH active drops; severe pressure spreads
+staleness instead of locking (expected); zero-pressure identical to
+before. METHOD (toolkit): pressure builds — throttle your own
+budget until MAME misbehaves like the slowest target, fix at that
+operating point, then restore. Regression: skips=13, scenes intact.
+NEXT: Mike's ares verdict on the eye scene ("clean read" candidate).
+If residual shimmer on ares, an ares savestate taken mid-artifact
+(+DIAG[13] drop counter at 0x06028000+52) tells us the actual ares
+drop rate; the structural cure remains the atomic-ship rework.
+
 ## === RESUME POINT (2026-07-29b) — ATTRACT STALL SOLVED: TAS ===
 ROOT CAUSE (not a patcher bug — a HARDWARE divergence): the game
 latches one-shots with tas/bne. On System 16B, TAS's locked
