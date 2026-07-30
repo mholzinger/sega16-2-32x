@@ -1452,7 +1452,7 @@ RAMCODE void m_main(void)
     struct band bq[4];
     int bq_h = 0, bq_t = 0;
     int maps_owed = 0;                   /* build_maps from a dropped band */
-    uint8_t owed_par = 0, owed_bank = 0;
+    uint8_t owed_par = 0;
     /* Per-region stale frontier: strip index where the last DROPPED
      * band's compose had reached. The region's next band starts its
      * strip walk here, so rows left stale by a drop are recomposed
@@ -1462,12 +1462,6 @@ RAMCODE void m_main(void)
      * (the eye-scene "white band"). Rotation bounds any row's
      * staleness to ~2 cycles. */
     uint8_t drop_s0[3] = {0, 0, 0};
-    /* Consecutive-drop streak per region: protecting the maps band
-     * made the OTHER regions the permanent sacrifice — on ares one
-     * region starved to zero compute (rows 48-88 frozen on intro
-     * content for minutes). A region dropped 3 cycles running becomes
-     * temporarily undroppable, so sacrifice rotates. */
-    uint8_t drop_streak[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
@@ -1615,7 +1609,6 @@ RAMCODE void m_main(void)
                 default:
                     if (b->rg == 2)
                         build_maps(b->bpar ^ 1, b->bank);
-                    drop_streak[b->rg] = 0;  /* completed: fed this cycle */
                     b->on = 0;
                     bq_h = (bq_h + 1) & 3;
                     continue;
@@ -1778,74 +1771,32 @@ RAMCODE void m_main(void)
                                               * W1->R0, W2->R1, W0->R2 */
                 cache_purge();               /* pages/maps changed in-window:
                                               * cached lines are stale */
-                /* queue the master band; if the queue is full (master
-                 * persistently over budget — heavy attract scenes),
-                 * DROP the head band's remaining compose: it displays
-                 * one cycle stale, which beats the old block-drain
-                 * (4-8ms in-window -> delayed next pickup -> mskips ->
-                 * MORE staleness, the ares attract smear cascade).
-                 * Only build_maps still runs — the next cycle's colors
-                 * depend on it. */
+                /* COMPLETE-OR-DEFER (accuracy mandate): when the queue
+                 * is full (persistently over budget — ares), the NEW
+                 * band is simply not enqueued: in-flight bands always
+                 * COMPLETE, the region just updates at half cadence
+                 * this cycle. Every prior policy that killed partial
+                 * bands (drop-oldest, rotation, victim selection,
+                 * streak fairness) traded one artifact for another —
+                 * stale locked stripes, starved maps, frozen regions,
+                 * BG-only rows with the FG phases missing (the "red
+                 * box" report). A complete band one cycle late looks
+                 * exactly like the arcade one frame ago; a partial
+                 * band looks like a broken game. maps_owed machinery
+                 * stays for the rare boot/transition races. */
                 if (bq[bq_t].on) {
-                    struct band *b = &bq[bq_h];
-                    DIAG[13]++;              /* queue-full drops */
-                    /* VICTIM SELECTION: never drop the maps-carrying
-                     * band (rg==2, phase<=6) if any other queued band
-                     * can die instead. Owed (chunked) rebuilds take
-                     * ~20 windows under saturation; on ares's steady
-                     * drop rate that left the color maps PERPETUALLY
-                     * mid-convergence: group-1 garbage tiles + black
-                     * fallback sprites while the DREQ data was
-                     * perfect. Losing any other band costs one stale
-                     * strip for one cycle; losing R2-pre-maps costs a
-                     * second of wrong colors. */
-                    if ((b->rg == 2 && b->phase <= 6) ||
-                        drop_streak[b->rg] >= 3) {
-                        for (int qi = 1; qi < 4; qi++) {
-                            struct band *c2 = &bq[(bq_h + qi) & 3];
-                            if (c2->on && !(c2->rg == 2 && c2->phase <= 6)
-                                && drop_streak[c2->rg] < 3) {
-                                /* field-wise swap: struct assignment
-                                 * emits memcpy (no libc at RV=1) */
-                                uint8_t t8;
-#define BSWAP(f) t8 = b->f; b->f = c2->f; c2->f = t8
-                                BSWAP(on); BSWAP(rg); BSWAP(bpar);
-                                BSWAP(bank); BSWAP(phase);
-                                BSWAP(s0); BSWAP(cnt);
-#undef BSWAP
-                                break;
-                            }
-                        }
-                    }
-                    {   /* record the stale frontier for rotation */
-                        uint8_t nsd = (b->rg == 2) ? 4 : 6;
-                        uint8_t fi = (uint8_t)(b->s0 + b->cnt);
-                        if (fi >= nsd) fi -= nsd;
-                        drop_s0[b->rg] = fi;
-                        if (drop_streak[b->rg] < 255)
-                            drop_streak[b->rg]++;
-                    }
-                    if (b->rg == 2 && b->phase <= 6) {
-                        /* build_maps still owed — but NOT here: inline
-                         * it ran right before the next pickup and
-                         * re-created the block-drain mskip cascade.
-                         * The idle branch runs it self-paced. */
-                        maps_owed = 1;
-                        owed_par = (uint8_t)(b->bpar ^ 1);
-                        owed_bank = b->bank;
-                    }
-                    b->on = 0;
-                    bq_h = (bq_h + 1) & 3;
+                    DIAG[13]++;              /* queue-full deferrals */
+                } else {
+                    struct band *nb = &bq[bq_t];
+                    nb->on = 1;
+                    nb->rg = (uint8_t)rg;
+                    nb->bpar = (uint8_t)par;
+                    nb->bank = (uint8_t)bank1;
+                    nb->phase = 0;
+                    nb->s0 = drop_s0[rg];    /* resume rotation point */
+                    nb->cnt = 0;
+                    bq_t = (bq_t + 1) & 3;
                 }
-                struct band *nb = &bq[bq_t];
-                nb->on = 1;
-                nb->rg = (uint8_t)rg;
-                nb->bpar = (uint8_t)par;
-                nb->bank = (uint8_t)bank1;
-                nb->phase = 0;
-                nb->s0 = drop_s0[rg];        /* stale rows first */
-                nb->cnt = 0;
-                bq_t = (bq_t + 1) & 3;
             }
         }
     }
