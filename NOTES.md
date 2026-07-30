@@ -1345,6 +1345,20 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === MILESTONE (2026-07-30g) — THE THROUGHPUT FIX; SHIP 3cb9ffd7 ===
+The ares budget shortfall was mostly ONE waste: compose_sprites
+walked every sprite from its TOP row on every 12-row strip (150-row
+boss = ~150 steps to compose 12, every strip, both CPUs). Replaced
+with closed-form fast-forward (n rows = one multiply; bit-exact).
+MAME: spr 11.4->2.6ms (4.4x), DEFERRALS 823->ZERO whole-run,
+mskips 776->299. With complete-or-defer + zero deferrals, bands are
+complete AND on-cadence. Expect on ares: ghosting/half-cadence gone,
+full-speed action band. Scheduler journey (for the record): partial-
+band policies (drop-oldest/rotation/victim/fairness) all traded
+artifacts; complete-or-defer + ENOUGH BUDGET is the correct end
+state. Ledger: tearing (atomic-ship on DREQ), jts16_prio
+punch-through exactness, pp3/amb, sound, rounds 2-5 sweep.
+
 ## === RESUME POINT (2026-07-30f) — FAIRNESS + SPEED BOUND; SHIP f2d9682 ===
 After the near-working ares run (build 9dbe9184: HUD/tiles/sprites
 correct, one frozen purple band): drop-streak fairness (05b42cb —
