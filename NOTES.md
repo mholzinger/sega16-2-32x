@@ -1345,6 +1345,34 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-29 evening) ===
+State: branch unpair-rebase @ 7ef5526. ACCURACY MANDATE ACTIVE (Mike:
+"accuracy before speed — must look and play exactly like its MAME
+source"; memory: accuracy-before-speed).
+Landed: EXACT sprite/tile priority mixing per segas16b_v.cpp — pp=2
+exact by layer order (measured dominant), pp<=1 per-pixel gated via
+the value->level pri_lut (these are the intro emergence actors that
+rise BEHIND the gravestone — Mike's "layer eating" report was partly
+THIS, now hardware-correct), pp=3 counted (only shadows). Gates kept
+OUT of the unrolled hot macros (register-spill lesson: +43% sprite
+time; uncached-read variant even worse via SDRAM bus contention).
+ALSO: found+fixed a LONG-STANDING .bss/tilemap-shadow overlap at
+0x18000 (cache tags stomped every window; steady-state miss ~10/win
+instead of ~0 in every prior build). Regions now at 0x19000+, and the
+MAKEFILE FAILS THE BUILD if __end crosses the base — kit rule: every
+hard-coded memory map gets an enforced boundary check.
+Telemetry legend additions: amb= colors at 2 levels (LUT approx
+engaged, 5-9 in title scenes only), pp3= pp==3 sprite sightings.
+Verification: compose 2.50ms = baseline, ch_1700 matches the arcade
+oracle full cast for the first time; mskips 107 concentrated where
+big zoomed gated actors pay the gate honestly (gameplay clean).
+Accuracy queue (in order): 1. Mike's ares pass on 7ef5526.
+2. Shadow sprites: real darkening (arcade adds a shadowed palette
+copy; we currently draw silhouettes). 3. amb-color exactness (title
+scenes) + pp=3-over-cat1 exactness — both fold into the atomic-ship
+compose rework (priority sideband). 4. Column scroll (log-if-seen).
+5. Allocator capacity (nearest-color overflow). Then atomic ship.
+
 ## === RESUME POINT (2026-07-29 afternoon) ===
 NEGATIVE RESULT (measured, load-bearing): 30Hz/2-slice cadence does
 NOT fit — full-frame compose at a 2-vint cycle is 1.5x the sustained
