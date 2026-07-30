@@ -1345,6 +1345,23 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30h) — BISECT VERDICT + SACRED DEADLINE ===
+Mike's A/B/C rom bisect (stamped worktree builds — the technique for
+"what did you change": rebuild old commits, stamp, 30s savestate
+each, read the counters): A=a4b51d0 blit-skips 31% of cycles (FAST
+per Mike); C=8b4ecc2 blit-skips 94% (the "insanely slow") — the
+un-throttled shadow steal blocked window pickup on ares. LAW: the
+blit deadline is sacred — NO maintenance chunk may be in flight when
+a window signal can arrive; all non-band work gated to dt<=4000
+(54b227c). Perception note: complete-or-defer clusters staleness
+(frozen regions read as stutter) vs partial-band tears (distributed,
+read as fast-but-broken) — with deferrals near zero after the sprite
+fast-forward this should be moot, but judge cadence by the SKIP RATE
+in savestates, not by feel. SHIP 54b227ce; awaiting Mike's 30s
+savestate on it (target: skips well under A's 31%).
+Ledger: seams/tearing (atomic-ship), SH-2 SLEEP idling if ares VPS
+low, jts16_prio exactness, sound.
+
 ## === MILESTONE (2026-07-30g) — THE THROUGHPUT FIX; SHIP 3cb9ffd7 ===
 The ares budget shortfall was mostly ONE waste: compose_sprites
 walked every sprite from its TOP row on every 12-row strip (150-row
