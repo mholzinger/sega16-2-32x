@@ -54,7 +54,12 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define TEXT_C      ((const uint16_t *)0x06026000)
 /* Palette: read straight from FB staging in-window — no shadow, no
  * stream (game palette writes are all word/long; zero-byte-drop safe). */
-#define FB_PAL      ((volatile uint16_t *)0x2401F000)   /* 2048 words */
+/* Palette arrives via the COMM stream into SDRAM (slave writes PAL_SH;
+ * see s_main.c). FB staging couldn't carry it: MD FB-window writes are
+ * dropped by arbitration when the SH-2 owns the FB (ares/hardware
+ * strict, MAME lenient), and per-bank staging left never-written rows
+ * as zeros — the black-actor family. */
+#define PAL_SH      ((volatile uint16_t *)0x26027000)   /* 2048 words */
 #define DIAG        ((volatile uint32_t *)0x26028000)   /* profiling, lua-read */
 #define SPR_SNAP    ((volatile uint16_t *)0x26028400)   /* 512-word sprite-list
                                                          * snapshot: FB staging
@@ -558,7 +563,7 @@ RAMCODE static void apply_cram(int par)
         uint8_t g = tile_grp[par][c];
         if (g == 0xFF)
             continue;
-        volatile uint16_t *src = FB_PAL + c * 8;
+        volatile uint16_t *src = PAL_SH + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
             cram_set(dst + p, g * 8 + p,
@@ -568,7 +573,7 @@ RAMCODE static void apply_cram(int par)
         uint8_t g = text_grp[par][c];
         if (g == 0xFF)
             continue;
-        volatile uint16_t *src = FB_PAL + c * 8;
+        volatile uint16_t *src = PAL_SH + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
             cram_set(dst + p, g * 8 + p,
@@ -578,7 +583,7 @@ RAMCODE static void apply_cram(int par)
         uint8_t pr = spr_pair[par][sc];
         if (pr == 0xFF)
             continue;
-        volatile uint16_t *src = FB_PAL + 1024 + sc * 16;
+        volatile uint16_t *src = PAL_SH + 1024 + sc * 16;
         volatile uint16_t *dst = cram + pr * 16;
         for (int p = 0; p < 16; p++)
             cram_set(dst + p, pr * 16 + p,

@@ -6,6 +6,7 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 }
 
 #define TEXT_U      ((volatile uint16_t *)0x26026000)
+#define PAL_U       ((volatile uint16_t *)0x26027000)  /* 2048 words */
 #define SYNC        ((volatile uint16_t *)0x26028800)
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
@@ -19,16 +20,25 @@ extern void slave_concurrent_k(uint16_t cmd);
 __attribute__((section(".ramtext"))) void slave_service_stream(void)
 {
     uint16_t c0 = MARS_SYS_COMM0;
-    if (c0 & 0x4000) {                       /* text batch */
+    if (c0 & 0x4000) {                       /* text or palette batch */
         int idx = c0 & 0x7FF;
+        /* bit 11 routes: 0x4000|idx = text RAM, 0x4800|idx = palette
+         * (COMM palette stream — the FB can't carry palette: MD FB
+         * writes drop under ares/hardware arbitration; see md_main) */
+        volatile uint16_t *dst = (c0 & 0x0800) ? PAL_U : TEXT_U;
         uint16_t w0 = MARS_SYS_COMM2, w1 = MARS_SYS_COMM4, w2 = MARS_SYS_COMM6;
         uint16_t w3 = MARS_SYS_COMM8, w4 = MARS_SYS_COMM10;
         if (idx + 4 < 2048) {
-            TEXT_U[idx + 0] = w0;
-            TEXT_U[idx + 1] = w1;
-            TEXT_U[idx + 2] = w2;
-            TEXT_U[idx + 3] = w3;
-            TEXT_U[idx + 4] = w4;
+            dst[idx + 0] = w0;
+            dst[idx + 1] = w1;
+            dst[idx + 2] = w2;
+            dst[idx + 3] = w3;
+            dst[idx + 4] = w4;
+        } else if (idx < 2048) {             /* tail batch (palette 2045+) */
+            dst[idx] = w0;
+            if (idx + 1 < 2048) dst[idx + 1] = w1;
+            if (idx + 2 < 2048) dst[idx + 2] = w2;
+            if (idx + 3 < 2048) dst[idx + 3] = w3;
         }
         MARS_SYS_COMM0 = 0;
     }

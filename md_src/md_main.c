@@ -208,29 +208,45 @@ window_done: ;
 		MCU_SNDCMD = 0xFF;
 	}
 
-	// Palette mirror -> staging FB_PAL, one rotating quarter per vint
-	// (full 2048-word palette refreshed every 4 vints). Game palette
-	// writes land in the MD RAM mirror at 0xFF9000 (patch_game remap):
-	// FB staging is PER-BANK, so direct game writes left rows written
-	// during the other bank's tenure as zeros in the snapshot bank
-	// (ares black actors — savestate-proven). This copy runs every
-	// vint against whichever bank is staging, so both banks stay
-	// complete. ~512 words ≈ 0.7ms of 68K.
+	// Dirty palette batch queue: FIFO ring. LIFO consumption starved
+	// old entries forever while fades re-dirtied rows every frame
+	// (zombie sprite rows queued once, buried, never sent).
+	static uint16_t palq[64];
+	static uint8_t pal_h, pal_t;
+	#define PALQ_CNT ((uint8_t)((pal_t - pal_h) & 63))
+	#define PALQ_PUSH(b) do { \
+		if (((uint8_t)((pal_t + 1) & 63)) != pal_h) { \
+			palq[pal_t] = (b); pal_t = (uint8_t)((pal_t + 1) & 63); } \
+	} while (0)
+
+	// Palette dirty scan: the mirror (0xFF9000, game writes) is diffed
+	// against the sent-copy (0xFFA000) one 512-word quarter per vint;
+	// dirty 5-word batches queue for the COMM stream below. The FB
+	// CANNOT carry palette: MD FB-window writes are silently dropped
+	// when the SH-2 owns the framebuffer (ares/hardware arbitration —
+	// proven by savestate: mirror populated, FB rows still zero), and
+	// the vint copy overlapped the blit window near-always. COMM is
+	// the one arbitration-free channel and its acked protocol already
+	// delivers text reliably on ares. Full-palette convergence after a
+	// scene load: <=8 vints; steady state: zero palette batches.
 	{
-		static uint8_t pal_q;
-		const uint16_t *src = (const uint16_t*)(0xFF9000 + (uint32_t)pal_q * 1024);
-		volatile uint16_t *dst = (volatile uint16_t*)(0x85F000 + (uint32_t)pal_q * 1024);
-		for (uint16_t i = 0; i < 512; i += 8) {
-			dst[i]     = src[i];
-			dst[i + 1] = src[i + 1];
-			dst[i + 2] = src[i + 2];
-			dst[i + 3] = src[i + 3];
-			dst[i + 4] = src[i + 4];
-			dst[i + 5] = src[i + 5];
-			dst[i + 6] = src[i + 6];
-			dst[i + 7] = src[i + 7];
+		static uint8_t scan_q;
+		const uint16_t *mir  = (const uint16_t*)(0xFF9000 + (uint32_t)scan_q * 1024);
+		uint16_t *sent = (uint16_t*)(0xFFA000 + (uint32_t)scan_q * 1024);
+		uint16_t qbase = (uint16_t)(scan_q * 512);
+		for (uint16_t i = 0; i < 512; i += 4) {
+			if (mir[i] != sent[i] || mir[i+1] != sent[i+1] ||
+			    mir[i+2] != sent[i+2] || mir[i+3] != sent[i+3]) {
+				uint16_t b0 = (uint16_t)((qbase + i) / 5);
+				uint16_t b1 = (uint16_t)((qbase + i + 3) / 5);
+				if (pal_h == pal_t ||
+				    palq[(uint8_t)((pal_t - 1) & 63)] != b0)
+					PALQ_PUSH(b0);
+				if (b1 != b0)
+					PALQ_PUSH(b1);
+			}
 		}
-		pal_q = (uint8_t)((pal_q + 1) & 3);
+		scan_q = (uint8_t)((scan_q + 1) & 3);
 	}
 
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
@@ -262,21 +278,36 @@ window_done: ;
 			// (per-row xscroll) tore into displaced strips when its
 			// table words lagged randomly. Rest still rotates (full
 			// text refresh every ~8.5 frames).
-			uint16_t idx;
+			// batch order: layer regs + rowscroll (16) > dirty
+			// palette batches > rotating text refresh
+			uint16_t idx, tag = 0x4000;
+			const uint16_t *t;
 			if (burst < 4)
 				idx = (uint16_t)(0x740 + burst * 5);
 			else if (burst < 16)
 				idx = (uint16_t)(0x7C0 + (burst - 4) * 5);
-			else
+			else if (pal_h != pal_t) {
+				uint16_t b = palq[pal_h];      // FIFO: oldest first
+				pal_h = (uint8_t)((pal_h + 1) & 63);
+				idx = (uint16_t)(b * 5);
+				tag = 0x4800;                  // palette batch
+			} else
 				idx = txt_idx;
-			volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + idx;
+			if (tag == 0x4800) {
+				const uint16_t *m = (const uint16_t*)0xFF9000 + idx;
+				uint16_t *s = (uint16_t*)0xFFA000 + idx;
+				s[0] = m[0]; s[1] = m[1]; s[2] = m[2];
+				s[3] = m[3]; s[4] = m[4];
+				t = m;
+			} else
+				t = (const uint16_t*)0xFF8000 + idx;
 			*mars_comm2  = t[0];
 			*mars_comm4  = t[1];
 			*mars_comm6  = t[2];
 			*mars_comm8  = t[3];
 			*mars_comm10 = t[4];
-			*mars_comm0  = 0x4000 | idx;
-			if (burst >= 16) {
+			*mars_comm0  = tag | idx;
+			if (tag == 0x4000 && burst >= 16) {
 				txt_idx += 5;
 				if (txt_idx >= 2045)
 					txt_idx = 0;
@@ -430,12 +461,12 @@ void main(void) {
 		for (unsigned i = 0; i < sizeof tt2 / 2; i++) d[i] = tt2[i];
 	}
 
-	// Palette mirror starts zeroed (boot RAM is random; the vint copy
-	// would otherwise splat garbage into FB_PAL until the game's first
-	// palette upload)
+	// Palette mirror (0xFF9000) and sent-copy (0xFFA000) start zeroed
+	// and equal: boot RAM is random, and the dirty scan must not
+	// stream garbage before the game's first palette upload
 	{
 		volatile uint32_t *pm = (volatile uint32_t*)0xFF9000;
-		for (uint16_t i = 0; i < 1024; i++)
+		for (uint16_t i = 0; i < 2048; i++)
 			pm[i] = 0;
 	}
 
