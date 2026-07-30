@@ -33,6 +33,10 @@ SHCCFLAGS  = -m2 -mb -Wall -Wextra -std=c99 -ffreestanding
 ifdef PRESSURE
 SHCCFLAGS += -DPRESSURE_TEST
 endif
+# `make SPROBE=1` = sprites-off cart-bus contention probe; never ship.
+ifdef SPROBE
+SHCCFLAGS += -DSPRITES_OFF_TEST
+endif
 MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-optional
 SHASFLAGS  = -Ish_src --small
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
@@ -102,7 +106,7 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# BUILD STAMP at file offset 0x3C0 (unused header pad): git hash +
 	@# epoch + PRESSURE flag. Every savestate self-identifies its build
 	@# (tools/build_id.py) — no more provenance arguments.
-	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,normal)
+	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,normal))
 	@python3 tools/build_id.py show $@
 
 $(TARGET).elf: $(SHOBJS) | $(ROMDIR)

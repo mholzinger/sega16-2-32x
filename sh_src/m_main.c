@@ -904,6 +904,15 @@ RAMCODE static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
  * Faithful to sega16sp.cpp; see NOTES. Row clip [ymin,ymax). */
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
+#ifdef SPRITES_OFF_TEST
+    /* A/B probe for the cart-bus contention hypothesis (LOOP iter 4):
+     * sprite compose is the heaviest SH-2 cart reader (per-pixel
+     * sd[o] fetches). If ares V-gate rejects collapse with sprites
+     * off, the 68K's chronic lateness is bus contention, not
+     * scheduling. Build: make SPROBE=1. NEVER ship. */
+    (void)ymin; (void)ymax; (void)par;
+    return;
+#endif
     /* Gated dst reads go through the UNCACHED sbuf alias: the SH-2
      * cache is write-through/no-allocate, so the write-only fast path
      * never fills lines — a cached gate read would pay a 16-byte line
