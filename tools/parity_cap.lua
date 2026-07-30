@@ -15,8 +15,8 @@
 local scenes = {
     { name = "title",  after = 45,
       terms = { {0xFFF031,1,0xFF,0x08}, {0xFFF02D,1,0x3F,0x00} } },
-    { name = "scream", after = 0,
-      terms = { {0xFFF031,1,0xFF,0x0C}, {0xFFF0E4,2,0x1F0,0x100} } },
+    { name = "scream", after = 45,   -- static scene (xs=0); settle
+      terms = { {0xFFF031,1,0xFF,0x0C} } },
     { name = "eyehold",after = 20,
       terms = { {0xFFF031,1,0xFF,0x10}, {0xFFC0A1,1,0xFF,0x09},
                 {0xFFC0A2,2,0xFFF0,0x0040} } },
@@ -26,7 +26,7 @@ local scenes = {
       terms = { {0xFFF031,1,0xFF,0x14}, {0xFFF02A,2,0xFFFF,0x0180} } },
 }
 local f, mem = 0, nil
-local shot, nshot = {}, 0
+local armed, shot, nshot = {}, {}, 0
 
 emu.register_frame_done(function()
     f = f + 1

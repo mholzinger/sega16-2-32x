@@ -58,7 +58,8 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 
 | date | build | title | scream | eyehold | demo | demo2 | mean |
 |------|-------|-------|--------|---------|------|-------|------|
-| 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 |
+| 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
+| 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
 ### Iteration 1a — atomic ship via bank alternation: REVERTED
 
