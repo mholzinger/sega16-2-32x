@@ -1345,6 +1345,34 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30d) — TRANSPORT LAW + MAINTENANCE SLOT ===
+THE LAW (cost 5 hours to converge on; now in TOOLKIT): the FB window
+is NOT a valid MD->SH2 data channel — MD writes are DISCARDED while
+the SH-2 owns the FB (ares/hardware strict, MAME lenient), and both
+sides want the FB exactly at vblank. Only COMM (small, acked) and
+DREQ FIFO (bulk, unused yet) cross reliably. Every ares-only symptom
+mapped to a channel violation or to idle-starvation of deferred work:
+- palette per-bank skew -> COMM stream (24b799a) VERIFIED synced
+- shadow LUT idle-starvation -> maintenance slot
+- owed build_maps idle-starvation -> chunked + maintenance slot
+  (1629e28; the group-1 red/white/blue garbage = prescan misses)
+- SPRITE LIST: still on the FB and PROVEN torn on ares (40/64
+  records part-stale in Mike's savestate; game uploads it IN VINT =
+  maximal overlap). NEXT MAJOR ARC: DREQ FIFO channel — MD pushes
+  sprite list (2KB/frame) per vint, SH-2 DMAC lands it in SPR_SNAP;
+  later regs+palette+sprites ride it as ONE frame packet = the
+  atomic-ship rework AND the tearing fix.
+Verification rig: `make PRESSURE=1` (ares-proxy budgets baked in).
+Under pressure the eye scene is CLEAN while dropping; demo scenes
+still degrade at severities beyond the measured ares point (ares
+attract drops ~490/minutes vs thousands in the rig) — capacity arc.
+Layout lesson: .bss near the 0x19000 guard caused a ~1.5ms LTO/cache
+layout regression; cram_mirror/shadow_lut now fixed SDRAM 0x28900/
+0x28B00, BM chunk state 0x28C00, _end at 0x18FF0 (16B headroom —
+next .bss growth must move something or grow the region map).
+Cross-build frame numbers are INVALID for comparisons (timelines
+drift minutes); scene-match or reg-match only.
+
 ## === RESUME POINT (2026-07-30c) — BLACK ACTORS = SPRITE-PAIR CRAM ZEROS ===
 Mike's ares attract savestate (rom/s16.bs1, demo scene with ALL
 actors as black silhouettes, tiles/HUD fine — screenshots/2100.png):
