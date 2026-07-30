@@ -61,6 +61,22 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
+### Iteration 3c closed / 4 opened — the ring works; the drag is deeper
+
+Ring verdict (state_health on ares, build d6165d5d): dirty bitmap
+drains to ZERO (the ring is correct and steady-state page traffic is
+gone) — yet V-gate rejects held at 63.9% vs 67%. Across original /
+split / ring scheduling the reject rate is INVARIANT: the 68K's
+chronic lateness is not scheduling. ITERATION 4 HYPOTHESIS: cart-bus
+contention — unpair keeps RV=0, the SH-2s read sprite art from cart
+per composed pixel, on the bus the 68K fetches game code from; MAME
+does not model the arbitration, ares does. A/B probe built:
+rom/PROBE_sprites_off.32x (`make SPROBE=1`, stamped SPROBE) disables
+sprite compose. If ares rejects collapse -> the fix arc is sprite-art
+RESIDENCY (SDRAM working-set cache for sprite rows, like the tile
+cache); if unchanged -> next probe strips the shim vint preamble.
+tools/state_health.py = the one-line savestate health report.
+
 ### Iteration 3b — stall probe verdict: splitting is not shrinking
 
 Dual-PC probe at the "deadlock": both CPUs healthy, composing
