@@ -539,9 +539,12 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
 }
 
 __attribute__((always_inline))
+/* v carries the S16 word's bit 15 in bit 15 of the MIRROR only: it is
+ * the hardware's shadow-exempt flag (jts16_colmix.v: shadow & ~pal[15]).
+ * Real CRAM gets bits 0-14 only — bit 15 there is the 32X through-bit. */
 static inline void cram_set(volatile uint16_t *dst, int idx, uint16_t v)
 {
-    dst[0] = v;
+    dst[0] = (uint16_t)(v & 0x7FFF);
     if (cram_mirror[idx] != v) {
         cram_mirror[idx] = v;
         shadow_dirty = 1;
@@ -558,7 +561,8 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
-            cram_set(dst + p, g * 8 + p, s16_to_mars(src[p]));
+            cram_set(dst + p, g * 8 + p,
+                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
     }
     for (int c = 0; c < 8; c++) {
         uint8_t g = text_grp[par][c];
@@ -567,7 +571,8 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
-            cram_set(dst + p, g * 8 + p, s16_to_mars(src[p]));
+            cram_set(dst + p, g * 8 + p,
+                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
     }
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
@@ -576,7 +581,8 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + 1024 + sc * 16;
         volatile uint16_t *dst = cram + pr * 16;
         for (int p = 0; p < 16; p++)
-            cram_set(dst + p, pr * 16 + p, s16_to_mars(src[p]));
+            cram_set(dst + p, pr * 16 + p,
+                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
     }
     /* Shadow ramp: when pair 15 has no real owner this frame, its
      * pens 1-14 go near-black so shadow sprites (and over-budget
@@ -1037,9 +1043,19 @@ RAMCODE static void shadow_lut_chunk(void)
     unsigned lo = (unsigned)shadow_cur * 4;
     for (unsigned i = lo; i < lo + 4; i++) {
         uint16_t c = cram_mirror[i];
-        int tr = (c & 0x1F) >> 1;
-        int tg = ((c >> 5) & 0x1F) >> 1;
-        int tb = ((c >> 10) & 0x1F) >> 1;
+        if (c & 0x8000) {
+            /* pal bit 15 = shadow-exempt (jts16_colmix.v:
+             * shadow & ~pal[15]): the color shows unshadowed */
+            shadow_lut[i] = (uint8_t)i;
+            continue;
+        }
+        /* hardware shadow = each channel x0.75: a - (a>>2)
+         * (jts16_colmix.v dim()); nearest CRAM entry to that target
+         * is the closest an indexed FB can get (gap flagged) */
+        int r = c & 0x1F, g = (c >> 5) & 0x1F, b = (c >> 10) & 0x1F;
+        int tr = r - (r >> 2);
+        int tg = g - (g >> 2);
+        int tb = b - (b >> 2);
         unsigned best = i, bestd = 0xFFFFFFFFu;
         for (unsigned j = 0; j < 256; j++) {
             uint16_t e = cram_mirror[j];
