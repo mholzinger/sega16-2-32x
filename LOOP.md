@@ -60,6 +60,35 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 |------|-------|-------|--------|---------|------|-------|------|
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 |
 
+### Iteration 1a — atomic ship via bank alternation: REVERTED
+
+Attempted: single flip per k==1 vblank entry, full-frame two-CPU blit
+into the hidden bank, banks alternating per cycle. Two REAL findings
+survived the revert:
+1. The MD's fs_home hold and the per-window double-flip dance cost
+   measurable time everywhere — with them gone the pipeline hit its
+   best-ever health (mskips 9 vs 300+, skips 2 vs 25+). Reclaim these
+   wins when 1b lands.
+2. FATAL FLAW: `copy_pages` is a BLIND copy — with banks alternating,
+   each bank holds only the tile writes from its own access cycles,
+   and the blind copy overwrites the SDRAM shadow with partial truth
+   (letter-soup tilemaps). Accumulation needs dirty-aware merge, which
+   doesn't exist. Also found: the shim's windows-completed diag and
+   the DREQ abort counter collided at 0xFFB0F2 (fixed in 1b's base).
+
+### Iteration 1b — the real fix: tile write-log over DREQ (NEXT)
+
+Evict the last FB tenant: patch the game's ~15-25 tile-store
+instructions (enumerable from patch_report's 29 address-formation
+sites) to thunks appending (offset,value) to an MD RAM ring; the
+DREQ push ships ring entries after the sprite list (header word
+distinguishes payloads); the SH-2 applies the log directly to the
+SDRAM tilemap shadow. copy_pages retires (frees its window time),
+the FB becomes pure display double-buffer, and 1a's flip discipline
+(+ its measured wins) drops in cleanly. 68K read-watchpoint already
+proved zero tile-staging readbacks (90s attract+demo) — the write
+side is the whole contract.
+
 Baseline note: frame-exact anchors reveal the dominant term is the
 ROLLING SHIP (per-window flips display a composite of two frames; the
 arcade ships whole frames). Iteration 1 = atomic ship: flip once per
