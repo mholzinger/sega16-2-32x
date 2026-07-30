@@ -124,3 +124,15 @@ gate for everything.
 3. Generalize patcher + asset converters against that config.
 4. Second title (e.g. Golden Axe / Shinobi — S16B, similar boards)
    as the proof the kit holds.
+
+## Geometry-convention rule (learned the hard way, 2026-07-30)
+
+Every scroll/offset/sign convention lifted into a port MUST be pinned
+against a discriminator scene: art that is UNIQUE and ASYMMETRIC at a
+known register value. Periodic content (tiled walls, repeating props)
+and symmetric register values (xs=0xC0 -> eff=0) validate BOTH signs
+of a conversion — the Altered Beast X-scroll sign was inverted for
+the project's entire life while passing oracle screenshot comparisons.
+The attract transformation-scream screen (unique full-bleed art,
+xs=0) was the first true discriminator. Per title, find such a scene
+EARLY and regression-pin it.

@@ -1345,7 +1345,29 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
-## === RESUME POINT (2026-07-30b) — EYE DIAGNOSIS COMPLETE ===
+## === RESUME POINT (2026-07-30c) — SCROLL X SIGN FIXED ===
+State: branch unpair-rebase @ 2cad330. THE EYES ARE SOLVED — and the
+root cause was bigger than the eyes: the X scroll conversion was
+SIGN-INVERTED since the project began (vx = screen + ((0xC0-xs)
+&0x3FF), we had the negation). Survived every oracle comparison
+because the title is sign-agnostic (xs=0xC0) and gameplay backgrounds
+are locally periodic. Pinned by the attract TRANSFORMATION SCREAM
+(unique art, cols 24-63, xs=0): sign_scream.png is now pixel-
+identical to the arcade. The eye "split"/"band"/"skin fragments" =
+wrapped-column views of correctly-loaded pages — geometry, not
+loading, not pacing. Also fixed en route this arc: BG/FG reg
+mapping verified correct against segaic16 (FOREGROUND=idx0=word
+0x740); page A/B content verified word-identical to arcade during
+transitions; reg stream verified live-tracking (~1-frame lag).
+The 2026-07-30b "visible loading state" diagnosis was WRONG — kept
+for the record; the atomic-ship re-plumb remains queued for the
+pacing ledger (attract mskips ~950, band drops) but the eye/scream
+GEOMETRY is now exact.
+Mike's next ares pass should show: eyes/scream/attract art all
+correctly framed; backgrounds possibly subtly improved everywhere
+(any place the old sign wrapped unnoticed).
+
+## === RESUME POINT (2026-07-30b) — EYE DIAGNOSIS COMPLETE (superseded) ===
 Root cause found via live reg logging (reglog.lua pattern): the eye
 TRANSITION loads the next eye into pages 0xA/0xB (regs flip to
 AAAA/BBBB, xscroll 0) while the old eye shows from pages 0/1. The
