@@ -957,6 +957,29 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         int vzoom = (d5 >> 5) & 0x1F, hzoom = d5 & 0x1F;
         uint16_t yacc = 0;
 
+        /* CLOSED-FORM ROW FAST-FORWARD: the strip model used to walk
+         * every sprite from its TOP row each strip just to reach
+         * [ymin,ymax) — a 150-row boss stepped ~150 times to compose
+         * 12 rows, on every strip, on both CPUs (the ares budget
+         * shortfall's biggest single waste). The vzoom accumulator is
+         * a plain linear sum, so n skipped rows collapse to one
+         * multiply: carries = (n*step)>>15, remainder = &0x7FFF —
+         * bit-exact with the per-row loop. Fully-outside sprites now
+         * cost O(1) per strip. */
+        {
+            int y0 = top < ymin ? ymin : top;
+            int ylim = bottom > ymax ? ymax : bottom;
+            if (y0 >= ylim)
+                continue;
+            unsigned n = (unsigned)(y0 - top);
+            if (n) {
+                unsigned tot = n * ((unsigned)vzoom << 10);
+                addr = (uint16_t)(addr + pitch * (int)(n + (tot >> 15)));
+                yacc = (uint16_t)(tot & 0x7FFF);
+            }
+            top = y0;
+            bottom = ylim;
+        }
         for (int y = top; y < bottom; y++) {
             addr = (uint16_t)(addr + pitch);
             yacc = (uint16_t)(yacc + (vzoom << 10));
@@ -964,8 +987,6 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                 addr = (uint16_t)(addr + pitch);
                 yacc &= 0x7FFF;
             }
-            if (y < ymin || y >= ymax)
-                continue;
 
             uint8_t *row = sbuf + (8 + y) * SBUF_W + 8;
             const uint8_t *urow = row;       /* gate reads (rare: pp<=1) */
