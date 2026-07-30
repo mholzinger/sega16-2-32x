@@ -1296,8 +1296,15 @@ RAMCODE static void blit_half(int ylo, int yhi)
 {
     for (int y = ylo; y < yhi; y++) {
         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+        /* CACHED-AREA FB WRITES (0x04000000 alias): every shipped Sega
+         * 32X arcade port (Space Harrier/After Burner/T-MEK literal
+         * pools: 111-125 cached FB refs vs a handful uncached) blits
+         * through the cached window — SH-2 write-through means stores
+         * ride the 4-deep write buffer instead of stalling the bus per
+         * word. Write-only path: no stale-read hazard; the buffer
+         * drains long before any flip. */
         volatile uint32_t *dst = (volatile uint32_t *)
-            ((uintptr_t)&MARS_FRAMEBUFFER + 0x200 + y * 320);
+            (0x04000000u + 0x200 + (unsigned)y * 320);
         for (int i = 0; i < 80; i += 8) {
             dst[i + 0] = src[i + 0];
             dst[i + 1] = src[i + 1];

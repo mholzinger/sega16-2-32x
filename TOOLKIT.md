@@ -112,6 +112,25 @@ proved ares drops bands steadily in attract (DIAG[13]=864) while the
 rotation fix keeps the read clean — measured the acceptance-gate
 emulator's real operating point from a play-test session.
 
+## Shipped-ROM archaeology (srcref/*.32x — Sega's own arcade ports)
+
+Fast technique: scan the binary for 32-bit literals of 32X register/
+window addresses (SH-2 code loads addresses from literal pools, so a
+plain big-endian u32 scan maps the architecture in seconds — no
+disassembly needed for the first pass; Ghidra for control flow when
+required). Findings from Space Harrier / After Burner Complete /
+T-MEK:
+- ALL blit the framebuffer through the CACHED window (0x04000000:
+  111-125 refs) not the uncached one (handful) — SH-2 write-through
+  cache means cached-area stores ride the 4-deep write buffer instead
+  of stalling the bus per word. Write-only paths only; reads keep
+  uncached. STOLEN into blit_half.
+- COMM barely used (1 literal each), DREQ FIFO not at all: their MD
+  side is a stub — the whole game runs on SH-2s. Confirms our
+  keep-the-68K-game-running architecture is the harder problem, and
+  their MD-side patterns don't transfer; their SH-2 render-side
+  disciplines do.
+
 ## Hard-won invariants the kit must encode (see NOTES.md for full log)
 
 - RV=1 forbids SH-2 cart access → all hot code in .ramtext, tile/
