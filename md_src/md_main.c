@@ -208,10 +208,36 @@ window_done: ;
 		MCU_SNDCMD = 0xFF;
 	}
 
+	// Palette mirror -> staging FB_PAL, one rotating quarter per vint
+	// (full 2048-word palette refreshed every 4 vints). Game palette
+	// writes land in the MD RAM mirror at 0xFF9000 (patch_game remap):
+	// FB staging is PER-BANK, so direct game writes left rows written
+	// during the other bank's tenure as zeros in the snapshot bank
+	// (ares black actors — savestate-proven). This copy runs every
+	// vint against whichever bank is staging, so both banks stay
+	// complete. ~512 words ≈ 0.7ms of 68K.
+	{
+		static uint8_t pal_q;
+		const uint16_t *src = (const uint16_t*)(0xFF9000 + (uint32_t)pal_q * 1024);
+		volatile uint16_t *dst = (volatile uint16_t*)(0x85F000 + (uint32_t)pal_q * 1024);
+		for (uint16_t i = 0; i < 512; i += 8) {
+			dst[i]     = src[i];
+			dst[i + 1] = src[i + 1];
+			dst[i + 2] = src[i + 2];
+			dst[i + 3] = src[i + 3];
+			dst[i + 4] = src[i + 4];
+			dst[i + 5] = src[i + 5];
+			dst[i + 6] = src[i + 6];
+			dst[i + 7] = src[i + 7];
+		}
+		pal_q = (uint8_t)((pal_q + 1) & 3);
+	}
+
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
 	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
-	// TEXT batches only: the palette now lives in FB staging (0x85F000)
-	// and is read in-window by the SH-2 — no palette streaming at all.
+	// TEXT batches only: the palette lives in the MD RAM mirror at
+	// 0xFF9000 and is copied into FB staging above — no palette
+	// COMM streaming.
 	// Text RAM (2048 words) fully refreshes every ~6.4 frames.
 	{
 		static uint16_t txt_idx;
@@ -402,6 +428,15 @@ void main(void) {
 		for (unsigned i = 0; i < sizeof tt / 2; i++) d[i] = tt[i];
 		d = (volatile uint16_t*)0xFFB3F6;
 		for (unsigned i = 0; i < sizeof tt2 / 2; i++) d[i] = tt2[i];
+	}
+
+	// Palette mirror starts zeroed (boot RAM is random; the vint copy
+	// would otherwise splat garbage into FB_PAL until the game's first
+	// palette upload)
+	{
+		volatile uint32_t *pm = (volatile uint32_t*)0xFF9000;
+		for (uint16_t i = 0; i < 1024; i++)
+			pm[i] = 0;
 	}
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,

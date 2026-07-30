@@ -41,11 +41,17 @@ def remap(v):
         # (verified: movel/movew upload loop at 0x2B1E), so the FB
         # zero-byte-drop hazard doesn't apply.
         return 0x85E000 + (a & 0x7FF)
-    if 0x840000 <= a < 0x850000:            # palette -> FB staging (4KB mirror)
-        # All game palette writes are word/long (verified: zero moveb
-        # sites), so the FB zero-byte-drop hazard doesn't apply. Read
-        # in-window by the SH-2 — no COMM streaming needed.
-        return 0x85F000 + (a & 0xFFF)
+    if 0x840000 <= a < 0x850000:            # palette -> MD RAM mirror (4KB)
+        # BANK-SKEW FIX: palette used to remap straight into FB staging
+        # (0x85F000), but FB staging is per-bank — rows written while
+        # the OTHER bank staged were zeros in the bank the SH-2
+        # snapshot read (ares black actors; proven via savestate: the
+        # group-12 S16 words existed in exactly ONE bank). Writes now
+        # land in a stable MD RAM mirror; the shim vint copies the
+        # mirror into the staging bank's FB_PAL in rotating quarters
+        # (md_main.c), so every snapshot sees a complete palette.
+        # Reads (fade RMW) hit real RAM — always coherent.
+        return 0xFF9000 + (a & 0xFFF)
     if 0x3F0000 <= a < 0x400000:            # tile bank regs -> shadow words
         return 0xFFB040 + (a & 0xF)
     if 0xC40000 <= a < 0xC44000:            # I/O -> mailbox bytes
