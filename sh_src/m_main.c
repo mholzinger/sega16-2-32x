@@ -1809,12 +1809,24 @@ RAMCODE void m_main(void)
                  * 8-15ms on ares (the 67%-gate-reject cadence spiral,
                  * ares verdict d6ed14ac) to ~2ms. */
                 tp = frt();
-                for (int pc = 0; pc < 3 && pg_pending; pc++) {
-                    int pg = 0;
-                    while (!(pg_pending & (1u << pg)))
-                        pg++;
-                    copy_pages(pg, pg + 1);
-                    pg_pending &= (uint16_t)~(1u << pg);
+                {
+                    /* ADAPTIVE: per-frame animators that mark ALL-dirty
+                     * (the 0x258A table blitter drives the title
+                     * backdrop every frame) flooded the 3-page budget —
+                     * the shadow lagged the animation by ~5 cycles and
+                     * the title showed a stale pale phase (parity 70%).
+                     * A flood gets bulk copying (those scenes are
+                     * static screens; cadence doesn't matter there);
+                     * sparse dirt keeps the ~2ms fast path where
+                     * cadence IS the game. */
+                    int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
+                    for (int pc = 0; pc < budget && pg_pending; pc++) {
+                        int pg = 0;
+                        while (!(pg_pending & (1u << pg)))
+                            pg++;
+                        copy_pages(pg, pg + 1);
+                        pg_pending &= (uint16_t)~(1u << pg);
+                    }
                 }
                 diag_add(0, tp);
                 par ^= 1;                    /* now composing the next frame */
