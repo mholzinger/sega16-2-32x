@@ -61,6 +61,21 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
+### Iteration 2 — 30Hz cadence retry: REVERTED (sharper negative result)
+
+The original 30Hz negative predates the sprite fast-forward, so it was
+retried with 9ms/cycle freed: STILL fails (skips 976, swait 2.1ms,
+scoreboard collapses from deferral staleness). SHARPENED MECHANISM:
+the binding constraint is not raw compute (per-frame work ~8ms fits a
+33ms cycle on paper) but the PER-WINDOW SYNC BARRIERS — master waits
+slave at every window entry, and 3 region-composes + 2 blits + stream
+service serialize across only 2 window-gaps. 30Hz needs an async
+slave scheduler (no per-window barriers), which is a real arc, not a
+cadence flag. Motion-scene latency floor stands at 20Hz until then.
+Iteration 3 candidates: demo-scene sprite-list timing alignment
+(cheap latency win: harvest the DREQ list every vint instead of every
+k1 — sprites currently lag up to 3 vints), then the statics' last 3%.
+
 ### Iteration 1a — atomic ship via bank alternation: REVERTED
 
 Attempted: single flip per k==1 vblank entry, full-frame two-CPU blit
