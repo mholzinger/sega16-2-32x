@@ -1345,6 +1345,33 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-29 late) ===
+State: branch unpair-rebase @ 4c6aa1a. Accuracy round 2 landed: TRUE
+SHADOW DARKENING for standard shadow sprites (nearest-darker CRAM via
+shadow_lut, lazy 4-entry idle rebuilds from cram_mirror; silhouette
+fallback while dirty and for actors >48 rows tall — the giant
+cutscene cast at 2x/pixel saturated both CPUs into band staleness,
+a worse inaccuracy). PACING LESSONS bought with blood this round:
+- 64-entry LUT chunks = ~10ms of multiplies (est. said 0.5) — SIZE
+  idle work by MEASURED cost, not arithmetic hope.
+- The slave may NEVER run a multi-ms pass without stream service:
+  one whole-half shadow-sprite call stalled the MD past its vint
+  gate (458 skips). Strips + service between, always.
+- Finer strips are NOT free for tall zoomed sprites: every strip
+  call walks the sprite's FULL height for address stepping.
+ACCURACY LEDGER (current approximations, all measured/logged):
+1. Shadow actors >48 rows: silhouette (attract/cutscene only).
+2. pp=3 sprites vs FG-cat1/text-cat0: approximated as pp=2 (DIAG[16]
+   sightings = shadows only so far).
+3. amb= colors at two priority levels: 5-7 in title scenes (pri_lut
+   takes max level there).
+4. Column scroll: unimplemented (no sighting yet).
+All four resolve structurally in the SIDEBAND + ATOMIC-SHIP rework
+(per-pixel priority plane + complete-frame handoff) — next major.
+Attract pacing debt: mskips ~1k in the post-game attract (gated
+emergence actors); gameplay clean (MD skips 2, mskips 169, compose
+2.60ms). Mike's ares verdict wanted on 4c6aa1a.
+
 ## === RESUME POINT (2026-07-29 evening) ===
 State: branch unpair-rebase @ 7ef5526. ACCURACY MANDATE ACTIVE (Mike:
 "accuracy before speed — must look and play exactly like its MAME
