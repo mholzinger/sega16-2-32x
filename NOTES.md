@@ -1345,6 +1345,33 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30) — EYE-SCENE DEFECTS PINNED ===
+Mike's ares round on 4c6aa1a: eyes DECODING (quadrant fix ✓) but not
+MAME-matched. Both defects now REPRODUCED IN MAME on the FIRST
+(uncoined) attract loop — earlier captures sampled the post-game loop
+which renders clean, hiding them. Deterministic, locally debuggable:
+1. VERTICAL SPLIT-BAND: ours shows two half-eyes with a black seam
+   (y32_1400); the arcade NEVER splits — it morphs the eye FULL-FRAME
+   by palette animation (yarc_1200-1300: blue pupil phases). Not
+   rowscroll/alt-set (arcade regs at the scene: rowscroll all zero,
+   plain scrolls, BG pages=0000, FG pages=5555).
+2. WRONG PUPIL COLORS (magenta vs blue/gold phases; later full
+   red/white chaos at y32_1800) — palette-cycle phase/script wrong;
+   same family as the 0x1A6FA launch-table fixes (more scripts or
+   phase state likely broken).
+Timeline note: ours runs ~150 frames behind arcade from boot overhead
+— SCENE-match, don't frame-match. Probe queued for next session:
+diff OUR SDRAM shadow pages (now 0x06019000!) at the split moment vs
+arcade tile RAM at its scene-matched frame (~ -150): content split =
+load/copy path; content correct = compose path. Then wp the palette
+stream slots (0xF300 family) ours-vs-arcade through the morph.
+TOOL NOTE: probe luas from the old scratchpad have STALE region
+addresses (shadow was 0x18000, DIAG 0x27000) — regenerate from the
+new map (shadow 0x19000, TEXT 0x26000, DIAG 0x28000, SNAP 0x28400).
+FB_PAL reads from lua at frame_done race the access bank — reads of
+0x2401F000 returning zeros are AMBIGUOUS, use in-window state or the
+cram_mirror (0x06... .bss, dumpable via nm address) instead.
+
 ## === RESUME POINT (2026-07-29 late) ===
 State: branch unpair-rebase @ 4c6aa1a. Accuracy round 2 landed: TRUE
 SHADOW DARKENING for standard shadow sprites (nearest-darker CRAM via
