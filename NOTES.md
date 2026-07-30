@@ -1345,6 +1345,44 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-31) — ATTRACT STALL PINNED TO ONE GATE ===
+State: unpair-rebase @ bd48d00 + uncommitted md_main.c (rowscroll
+priority streaming, 16 batches) — commit with the fix.
+MIKE'S REPORT: first eye animation correct, consecutive ones broken,
+loops until coin. FULLY CHARACTERIZED via synchronized state logging
+(synclog.lua: f026/f02A/f031 + pages/xs same-run):
+- Timeline IDENTICAL to arcade through scream (AAAA) + eye hold
+  (pages 0101, xs 0x140, f031=0x10, f02A frozen 0x2BA = WAIT state).
+- ARCADE at hold+146 frames: sequencer fires — f02A reset 0, f031
+  0x10->0x14 (writer = 0x1E4E block, the game-mode entry with stack
+  reset at 0x901E5A) -> demo replay runs (index +1/frame, script #
+  from f031 bits 3-4 via pointer table 0x1834 -> scripts 0x3E4B0/
+  0x3EDB0/0x3F6B0 — all verified byte-identical, pointers correctly
+  rebased).
+- OURS: THE TRANSITION NEVER FIRES. f02A/f031 frozen; at hold+160
+  the scream-scene camera resumes panning -12px/frame FOREVER
+  (pages cycle 0101->1212->2323->3434->4040 every ~340 frames = the
+  runaway "broken animations"). Demo replay never starts (player
+  would run right if it did — actually the world scrolls with NO
+  demo at all).
+- Input mailboxes verified idle (0xFF); poison sweep of the window
+  CLEAN; demo scripts unmodified.
+NEXT PROBE (one wp-chain): find the eye-hold TIMER — wp READ on
+fff031 during the hold names the sequencer poll PC; dasm it; its
+timer/condition variable RAM-diffed ours-vs-arcade at hold start;
+expect ONE corrupted duration/trigger value (the +0x90 family) or a
+condition on a subsystem we stub (RULED OUT by sndlog probe: sound
+mailbox idle 0xFF, MCU_BUSY 0, f144 vint-lag counter frozen = main
+loop healthy — the stall is purely the sequencer's trigger). (the
+0x1E4E path resets SP — it's the mode bootstrap reached by a jump
+from the sequencer). DEFINITIVE NEXT STEP: trace-diff 5 frames
+around the arcade's hold-end (its f031 0x10->0x14 moment) vs ours at
+the same phase — the first divergent branch in the sequencer polling
+loop IS the broken condition. Use synchronized same-run frame
+anchors, not -debug-skewed windows.
+Timing note: -debug shifts attract timing by frames — synchronized
+same-run logs only; separate wp runs have skewed windows.
+
 ## === RESUME POINT (2026-07-30d) — EYE GEOMETRY EXACT ===
 State: branch unpair-rebase @ 688a9e5. Eye-sequence geometry now
 PIXEL-MATCHED to the arcade at register-matched frames. Three fixes

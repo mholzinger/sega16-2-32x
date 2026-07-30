@@ -227,15 +227,22 @@ window_done: ;
 				if (*mars_comm0)
 					break;               // SH-2 busy; resume next frame
 			}
-			// PRIORITY: the layer-register block (pages/scrolls,
-			// words 0x740-0x753) ships EVERY vint as the first four
-			// batches. The rotating refresh gave each word 0-6.4
-			// frames of staleness — fine for static scenes, but the
-			// attract eye-pan scrolls fast with page cycling, and a
-			// pages word fresher than its xscroll neighbor produced
-			// jumps and seams. Everything else still rotates.
-			uint16_t idx = (burst < 4) ? (uint16_t)(0x740 + burst * 5)
-			                           : txt_idx;
+			// PRIORITY: the layer-register block (0x740-0x753) AND
+			// the ROWSCROLL tables (0x7C0-0x7FB) ship EVERY vint as
+			// the first 16 batches. The rotating refresh gave each
+			// word 0-6.4 frames of staleness — fine for static
+			// scenes, but fast pans compose mismatched pages/scroll
+			// (jumps, seams) and the loop-2+ attract water RIPPLE
+			// (per-row xscroll) tore into displaced strips when its
+			// table words lagged randomly. Rest still rotates (full
+			// text refresh every ~8.5 frames).
+			uint16_t idx;
+			if (burst < 4)
+				idx = (uint16_t)(0x740 + burst * 5);
+			else if (burst < 16)
+				idx = (uint16_t)(0x7C0 + (burst - 4) * 5);
+			else
+				idx = txt_idx;
 			volatile uint16_t *t = (volatile uint16_t*)0xFF8000 + idx;
 			*mars_comm2  = t[0];
 			*mars_comm4  = t[1];
@@ -243,7 +250,7 @@ window_done: ;
 			*mars_comm8  = t[3];
 			*mars_comm10 = t[4];
 			*mars_comm0  = 0x4000 | idx;
-			if (burst >= 4) {
+			if (burst >= 16) {
 				txt_idx += 5;
 				if (txt_idx >= 2045)
 					txt_idx = 0;
