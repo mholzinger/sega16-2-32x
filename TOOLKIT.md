@@ -97,6 +97,21 @@ Cross-check ledger: verify m_main.c compose against the punch-through
 and fallback rules (pp3/amb exactness work item); rebuild shadow_lut
 to target ×0.75 + bit-15 exemption.
 
+## ares savestate forensics (no scripting needed on the slowest target)
+
+ares writes slot states next to the ROM (`rom/s16.bs1` = slot 1).
+Format: `BST1` header; the 32X SDRAM image is stored RAW but 16-BIT
+BYTESWAPPED, near the file head (this build: SDRAM[0] at file offset
+0x23B — relocate by searching for a 64-byte .ramtext probe from the
+ELF, swap16'd). Recipe: take `.ramtext` bytes from the ELF (objdump -h
+for file offsets), swap16, find in the state file, subtract the VMA
+offset → SDRAM base; then read DIAG/queue/any SDRAM region with
+swap16+big-endian. Ask Mike to save a state MID-ARTIFACT; states are
+only valid for the exact ROM build they were taken on. First use:
+proved ares drops bands steadily in attract (DIAG[13]=864) while the
+rotation fix keeps the read clean — measured the acceptance-gate
+emulator's real operating point from a play-test session.
+
 ## Hard-won invariants the kit must encode (see NOTES.md for full log)
 
 - RV=1 forbids SH-2 cart access → all hot code in .ramtext, tile/

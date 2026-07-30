@@ -1345,6 +1345,18 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === MILESTONE (2026-07-30b) — ARES CLEAN READ ON THE ATTRACT ===
+Mike: "the eyes are working without the issues! only screen tearing,
+but thats on the roadmap. we have a clean read!" — the full attract
+rotation (title -> eyes -> demo -> (C)SEGA) passes the acceptance
+gate. His ares savestate (rom/s16.bs1, parsed per TOOLKIT recipe)
+shows DIAG[13]=864: ares drops bands steadily in attract and the
+rotating drop-resume absorbs it invisibly — diagnosis confirmed on
+the gate emulator itself. Ares pp3=1034/amb=9: priority-exactness
+work is live next. OPEN (ordered): tearing (atomic-ship umbrella),
+shadow x0.75 + pal bit-15 exemption (jts16_colmix.v), priority
+punch-through/fallback (jts16_prio.v), attract pacing debt.
+
 ## === RESUME POINT (2026-07-30) — EYE "WHITE BAND" = LOCKED DROP ===
 Mike's ares report post-TAS-fix: attract rotates, but the eye scene
 has a moving white band stripe. DIAGNOSED: drop-oldest under ares's
