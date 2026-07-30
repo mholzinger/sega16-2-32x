@@ -123,6 +123,18 @@ static uint8_t pr_key[16], pr_age[16];
  * 0 so sprite-over-sprite remains hardware list-order overwrite. */
 static uint8_t pri_lut[2][256];
 static uint8_t pri_max[2];                  /* max level in pri_lut[par] */
+/* SHADOW sprites (color 0x3F): the arcade darkens the UNDERLYING
+ * pixel via a shadowed copy of the whole palette (segas16b_v:
+ * dest[x] += palette_entries). 32X CRAM has no spare bank, so we
+ * remap through shadow_lut: each CRAM index -> the existing entry
+ * closest to half its brightness. Rebuilt lazily (idle loop, 64
+ * entries per visit) whenever apply_cram changes CRAM; silhouette
+ * fallback while dirty. cram_mirror exists because CRAM itself is
+ * unreadable outside the window (FM=0). */
+static uint16_t cram_mirror[256];
+static uint8_t shadow_lut[256];
+static volatile uint8_t shadow_dirty = 1;
+static uint8_t shadow_cur;                  /* rebuild chunk cursor */
 /* Group 0 is NEVER assigned by the allocator, so no composed pixel is
  * ever VALUE 0 (the MD-through value) — replaces the old BG0 alias. */
 
@@ -517,6 +529,16 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
     }
 }
 
+__attribute__((always_inline))
+static inline void cram_set(volatile uint16_t *dst, int idx, uint16_t v)
+{
+    dst[0] = v;
+    if (cram_mirror[idx] != v) {
+        cram_mirror[idx] = v;
+        shadow_dirty = 1;
+    }
+}
+
 RAMCODE static void apply_cram(int par)
 {
     volatile uint16_t *cram = &MARS_CRAM;
@@ -527,7 +549,7 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
-            dst[p] = s16_to_mars(src[p]);
+            cram_set(dst + p, g * 8 + p, s16_to_mars(src[p]));
     }
     for (int c = 0; c < 8; c++) {
         uint8_t g = text_grp[par][c];
@@ -536,7 +558,7 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
-            dst[p] = s16_to_mars(src[p]);
+            cram_set(dst + p, g * 8 + p, s16_to_mars(src[p]));
     }
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
@@ -545,7 +567,7 @@ RAMCODE static void apply_cram(int par)
         volatile uint16_t *src = FB_PAL + 1024 + sc * 16;
         volatile uint16_t *dst = cram + pr * 16;
         for (int p = 0; p < 16; p++)
-            dst[p] = s16_to_mars(src[p]);
+            cram_set(dst + p, pr * 16 + p, s16_to_mars(src[p]));
     }
     /* Shadow ramp: when pair 15 has no real owner this frame, its
      * pens 1-14 go near-black so shadow sprites (and over-budget
@@ -756,19 +778,24 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         uint8_t pp = (uint8_t)((d4 >> 6) & 3);
         uint8_t thr = (uint8_t)(1u << pp);
         int gated = (pp <= 1) && (thr <= pmax);
+        int shad = 0;
         if (pp == 3)
             DIAG[16]++;
         uint8_t base;
         if ((d4 & 0x3F) == 0x3F) {
-            /* SHADOW sprites (color 0x3F = darken-underlying on real
-             * hardware) render as SOLID DARK SILHOUETTES via reserved
-             * pair 15 (CRAM 241-254 = dark, set in apply_cram). The
-             * arcade draws the whole intro cast this way — Zeus and
-             * the rise-from-grave player are shadow sprites, so the
-             * old skip-them approach deleted the entrance animations
-             * entirely. True 50%-darkening needs a per-pixel palette
-             * lookup; silhouette matches the arcade look closely. */
+            /* SHADOW sprites (color 0x3F): darken the UNDERLYING pixel
+             * via shadow_lut (nearest-darker CRAM entry — the arcade
+             * indexes a shadowed palette copy). While the LUT is
+             * rebuilding after a palette change, fall back to the
+             * pair-15 silhouette so the cast never vanishes. */
             base = 15 << 4;
+            /* true darkening for normal-size shadows (gameplay drop
+             * shadows); the HUGE cutscene actors (~2x per-pixel cost
+             * over thousands of pixels) saturated both CPUs into band
+             * staleness — worse inaccuracy than their silhouette,
+             * which is visually close. Sideband rework will lift the
+             * cap. */
+            shad = !shadow_dirty && (bottom - top) <= 48;
         } else {
             uint8_t pr = spr_pair[par][d4 & 0x3F];
             base = (uint8_t)((pr == 0xFF ? 15 : pr) << 4);
@@ -792,7 +819,40 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             int x = xpos;
             uint16_t o = addr;
             int pix = 0;
-            if (hzoom == 0 && !gated) {      /* gated (pp<=1) sprites take
+            if (shad) {
+                /* darken-underlying scalar loop (1:1 and zoom both:
+                 * hzoom==0 makes xacc a no-op) */
+                int xacc = 4 * hzoom;
+#define SNIB(PIX_EXPR)                                                      \
+                    pix = (PIX_EXPR);                                       \
+                    xacc = (xacc & 0x3F) + hzoom;                           \
+                    if (xacc < 0x40) {                                      \
+                        unsigned sx = (unsigned)(x - 184);                  \
+                        if (sx < 320 && pix != 0 && pix != 15)              \
+                            row[sx] = shadow_lut[urow[sx]];                 \
+                        x++;                                                \
+                    }
+                while (((xpos - x) & 0x1FF) != 1) {
+                    uint16_t w = sd[o];
+                    o = (uint16_t)(flip ? o - 1 : o + 1);
+                    if (!flip) {
+                        SNIB((w >> 12) & 0xF)
+                        SNIB((w >> 8) & 0xF)
+                        SNIB((w >> 4) & 0xF)
+                        SNIB(w & 0xF)
+                    } else {
+                        SNIB(w & 0xF)
+                        SNIB((w >> 4) & 0xF)
+                        SNIB((w >> 8) & 0xF)
+                        SNIB((w >> 12) & 0xF)
+                    }
+                    if (pix == 15)
+                        break;
+                    if (x >= 504)
+                        break;
+                }
+#undef SNIB
+            } else if (hzoom == 0 && !gated) {  /* gated (pp<=1) sprites take
                                               * the scalar path below —
                                               * the gate stays out of the
                                               * unrolled fast macros */
@@ -958,6 +1018,34 @@ RAMCODE static void compose_text(int row0, int row1, int par_text)
 
 /* Drain both miss queues: copy tiles ROM -> cache (in-window; RV=0).
  * Budgeted; duplicates and already-filled codes skipped by tag check. */
+/* One 4-entry chunk of the shadow LUT rebuild (~0.6ms: 4x256 distance
+ * evaluations with three multiplies each — a 64-entry chunk measured
+ * ~10ms and blew every gate whenever palettes churned). 64 chunks
+ * refresh the table; silhouette fallback covers the interim. */
+RAMCODE static void shadow_lut_chunk(void)
+{
+    unsigned lo = (unsigned)shadow_cur * 4;
+    for (unsigned i = lo; i < lo + 4; i++) {
+        uint16_t c = cram_mirror[i];
+        int tr = (c & 0x1F) >> 1;
+        int tg = ((c >> 5) & 0x1F) >> 1;
+        int tb = ((c >> 10) & 0x1F) >> 1;
+        unsigned best = i, bestd = 0xFFFFFFFFu;
+        for (unsigned j = 0; j < 256; j++) {
+            uint16_t e = cram_mirror[j];
+            int dr = (e & 0x1F) - tr;
+            int dg = ((e >> 5) & 0x1F) - tg;
+            int db = ((e >> 10) & 0x1F) - tb;
+            unsigned d = (unsigned)(dr * dr + dg * dg + db * db);
+            if (d < bestd) { bestd = d; best = j; }
+        }
+        shadow_lut[i] = (uint8_t)best;
+    }
+    shadow_cur = (uint8_t)((shadow_cur + 1) & 63);
+    if (shadow_cur == 0)
+        shadow_dirty = 0;                    /* full table fresh */
+}
+
 RAMCODE static void cache_fill(int budget)
 {
     for (int q = 0; q < 2; q++) {
@@ -1108,9 +1196,17 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
      * dominant in this game): tiles cat0, sprites, FG cat1, text.
      * pp<=1 sprites additionally gate per pixel via pri_lut so they
      * correctly hide behind BG-cat1/FG-cat0; pp=3 is approximated as
-     * pp=2 (counted in DIAG[16]) until the sideband rework. */
-    compose_sprites(lo, hi, par);
-    slave_service_stream();
+     * pp=2 (counted in DIAG[16]) until the sideband rework.
+     * Sprites in SHORT STRIPS with stream service between: one whole-
+     * half call of SNIB shadow actors ran ~5ms unserviced and the MD
+     * stalled mid-stream past its vint gate (458 skips by the intro). */
+    for (int y = lo; y < hi; y += 12) {      /* 12: finer strips multiply
+                                              * the full-height row-walk
+                                              * of tall zoomed actors */
+        int ye = (y + 12 > hi) ? hi : y + 12;
+        compose_sprites(y, ye, par);
+        slave_service_stream();
+    }
     compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
     slave_service_stream();
     compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
@@ -1227,6 +1323,14 @@ RAMCODE void m_main(void)
                 }
                 continue;
             }
+            if (!bq[bq_h].on && shadow_dirty) {
+                /* palette changed: refresh the shadow LUT, one chunk
+                 * per idle visit (silhouette fallback until fresh) */
+                uint16_t dt = (uint16_t)(frt() - t_vint);
+                if (dt <= 7000)
+                    shadow_lut_chunk();
+                continue;
+            }
             if (bq[bq_h].on) {
                 struct band *b = &bq[bq_h];
                 uint16_t dt = (uint16_t)(frt() - t_vint);
@@ -1243,8 +1347,9 @@ RAMCODE void m_main(void)
                  * wider pre-vint margin (mskips 311/run when it shared
                  * the tile strips' 11300 threshold; 10400 was too wide
                  * and starved throughput into block-drains). */
-                if (dt > (b->phase == 2 ? 10800 : 11300))
-                    continue;
+                if (dt > (b->phase == 2 ? 10300 : 11300))
+                    continue;               /* sprite strips: gated/shadow
+                                             * actors can run ~1.4ms */
                 if (b->phase >= 5 && dt > 8000)
                     continue;            /* defer heavy work past the vint
                                           * (build_maps ~4ms uninterruptible:
