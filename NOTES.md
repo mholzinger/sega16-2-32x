@@ -1345,6 +1345,29 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30e) — SPRITE LIST ON DREQ; FB DATA-FREE ===
+The DREQ FIFO sprite channel is IN (6466663): game sprite RAM
+remapped to MD RAM 0xFF7000 (ordered staged list, coherent
+readbacks); shim vint pushes 512 words via the Chaotix DREQ protocol
+(A15110 len, A15107=4 68S, FIFO-full sign-bit gating, bounded
+spins); master DMAC0 lands at SPR_LAND 0x28C00 (DMA-EXCLUSIVE KB —
+learned the hard way: allocator state parked there was clobbered
+every frame = all-black build); TE-gated snapshot, stale-beats-torn
+fallback, DIAG[17] counts incomplete frames. MAME: everything
+correct. The FB now carries ONLY tile staging + the blit.
+Sprite list timing: shim pushes BEFORE the game's IRQ code runs, so
+the pushed list is one vint stale — consistent, coherent.
+FIXED-BLOCK MAP (single source of truth in m_main.c comment):
+28000 DIAG | 28100 BM+alloc(28360) | 28400 SPR_SNAP | 28800 SYNC
+(+blank_tile 28840) | 28900 cram_mirror | 28B00 shadow_lut |
+28C00-28FFF SPR_LAND (DMA target, nothing else may live there).
+NEXT: Mike's ares verdict — sprites should finally hold together.
+Remaining: extreme-pressure maps-convergence garbage (capacity
+arc: chunked owed-builds converge ~1s under total saturation;
+ares's milder load should sit under it), tearing (atomic-ship on
+the DREQ channel — regs+palette+sprites as ONE frame packet),
+jts16_prio punch-through exactness, sound.
+
 ## === RESUME POINT (2026-07-30d) — TRANSPORT LAW + MAINTENANCE SLOT ===
 THE LAW (cost 5 hours to converge on; now in TOOLKIT): the FB window
 is NOT a valid MD->SH2 data channel — MD writes are DISCARDED while
