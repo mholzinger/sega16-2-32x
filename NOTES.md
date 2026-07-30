@@ -1373,7 +1373,23 @@ Any row written during the other bank's tenure is zeros in the bank
 apply_cram happens to snapshot -> black sprite pairs. SH-2 cannot
 read the other bank (single draw-bank window), so no SH-2-side
 fallback exists.
-FIXED (180de61): palette writes remapped to a stable MD RAM mirror
+SUPERSEDED by 24b799a — the FB copy below was ALSO dropped on ares
+(FB-window arbitration discards MD writes while SH-2 owns the FB;
+proven: mirror populated, FB rows still zero). Palette now rides the
+acked COMM stream (tag 0x4800) into PAL_SH at SDRAM 0x27000; MD
+diff-scans mirror quarters, FIFO dirty queue (LIFO starved rows
+under fade churn). VERIFIED: PAL_SH==mirror word-for-word; MAME
+gameplay actors correctly colored; eye scene clean.
+METHOD WARNING (cost a lot of this session): frame-number
+comparisons ACROSS BUILDS are invalid — mskips drift shifts the
+game timeline minutes apart; at f=1700 one build is in gameplay,
+another still in the eye hold. Scene-match or reg-match, always.
+REMAINING KNOWN (pre-existing, next arc): full-width band of
+repeated sprite blocks at deck level in gameplay (sprite-list
+decode/terminator suspect — visible in MAME, scene-stable);
+ares gameplay text-strip garbage; tearing (atomic-ship umbrella).
+
+OLD (superseded): palette writes remapped to a stable MD RAM mirror
 (0xFF9000); shim vint copies one 512-word quarter/vint into the
 staging bank's FB_PAL — both banks always complete, snapshot can
 never read never-written rows. Fade RMW reads hit real RAM. Known
