@@ -61,6 +61,25 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
+### Iteration 3 — ares cadence spiral: DIAGNOSED, fix attempt REVERTED
+
+ARES VERDICT (savestate d6ed14ac): speed pathology dead (blit skips
+0.7%, DREQ pristine) BUT the render cadence is starved — 145 cycles
+in 1317 vints (~7Hz effective): 67% of the MD's window posts fail the
+V-counter gate with MID-FRAME entries (B0FE V=0x95). MECHANISM: the
+k1 window blocks the 68K through latch + copy_pages(0,6) + apply_cram
++ blit (8-15ms on ares) — the vint handler overruns the frame, the
+next vint fires late, the gate rejects, retry: a latency spiral.
+FIX DIRECTION (attempted, deadlocked in MAME, reverted): split
+copy_pages in thirds across windows + move the DREQ harvest post-ack.
+Two ordering laws found and banked: (a) FM must outlive EVERY FB
+reader on BOTH CPUs (slave page-copies after its done-signal froze
+the pipeline; master acking before the slave's copy did too); (b)
+even with both waits there is a residual interlock that stalls at the
+scream tile-load — needs a dual-PC stall probe (master+slave PCs at
+hang) before the next attempt. The k1-shortening remains THE ares
+cadence fix; only its execution needs the probe first.
+
 ### Iteration 2 — 30Hz cadence retry: REVERTED (sharper negative result)
 
 The original 30Hz negative predates the sprite fast-forward, so it was
