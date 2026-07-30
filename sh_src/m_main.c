@@ -1508,8 +1508,11 @@ RAMCODE void m_main(void)
                     shadow_lut_chunk();
                 continue;
             }
-            if (bq[bq_h].on && !shadow_stole && (win_no & 1) == 0 &&
-                (maps_owed || shadow_dirty)) {
+            if (bq[bq_h].on && !shadow_stole &&
+                (maps_owed || ((win_no & 1) == 0 && shadow_dirty))) {
+                /* owed maps get a slot EVERY window (convergence is
+                 * user-visible color correctness); shadow chunks stay
+                 * at every 2nd */
                 /* MAINTENANCE SLOT: one bounded chunk of deferred work
                  * every 2nd window even when band work is pending.
                  * Under sustained overload the queue is NEVER empty, so
@@ -1773,6 +1776,32 @@ RAMCODE void m_main(void)
                 if (bq[bq_t].on) {
                     struct band *b = &bq[bq_h];
                     DIAG[13]++;              /* queue-full drops */
+                    /* VICTIM SELECTION: never drop the maps-carrying
+                     * band (rg==2, phase<=6) if any other queued band
+                     * can die instead. Owed (chunked) rebuilds take
+                     * ~20 windows under saturation; on ares's steady
+                     * drop rate that left the color maps PERPETUALLY
+                     * mid-convergence: group-1 garbage tiles + black
+                     * fallback sprites while the DREQ data was
+                     * perfect. Losing any other band costs one stale
+                     * strip for one cycle; losing R2-pre-maps costs a
+                     * second of wrong colors. */
+                    if (b->rg == 2 && b->phase <= 6) {
+                        for (int qi = 1; qi < 4; qi++) {
+                            struct band *c2 = &bq[(bq_h + qi) & 3];
+                            if (c2->on && !(c2->rg == 2 && c2->phase <= 6)) {
+                                /* field-wise swap: struct assignment
+                                 * emits memcpy (no libc at RV=1) */
+                                uint8_t t8;
+#define BSWAP(f) t8 = b->f; b->f = c2->f; c2->f = t8
+                                BSWAP(on); BSWAP(rg); BSWAP(bpar);
+                                BSWAP(bank); BSWAP(phase);
+                                BSWAP(s0); BSWAP(cnt);
+#undef BSWAP
+                                break;
+                            }
+                        }
+                    }
                     {   /* record the stale frontier for rotation */
                         uint8_t nsd = (b->rg == 2) ? 4 : 6;
                         uint8_t fi = (uint8_t)(b->s0 + b->cnt);
