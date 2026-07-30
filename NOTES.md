@@ -1345,6 +1345,26 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30b) — EYE DIAGNOSIS COMPLETE ===
+Root cause found via live reg logging (reglog.lua pattern): the eye
+TRANSITION loads the next eye into pages 0xA/0xB (regs flip to
+AAAA/BBBB, xscroll 0) while the old eye shows from pages 0/1. The
+arcade finishes that load fast enough that the intermediate state is
+never displayed (yarc_1200-1300 show only complete frames). OURS
+holds the mid-load state on screen for MANY frames — the 68K's tile
+writes go through the contended MD FB window and our render windows
+tax it ~15% — so the wrap-seam at xscroll 0 (the "black band") and
+the mismatched page/palette pairing (wrong pupil colors) are the
+VISIBLE LOADING STATE, not render bugs. Stream/decode/compose all
+verified correct (SH-2 shadow tracks MD regs with ~1-frame lag; page
+content byte-identical to arcade at scene-matched frames).
+CONSEQUENCE: the entire remaining accuracy ledger — eye transitions,
+attract pacing, band staleness, big-shadow cap, pp3-over-cat1, amb
+colors — funnels into ONE architectural item: the ATOMIC-SHIP +
+STAGING-STREAM re-plumb (shrink/eliminate 68K stalls, complete-frame
+handoff, per-pixel priority sideband). That is THE next work item,
+designed fresh at full context next session.
+
 ## === RESUME POINT (2026-07-30) — EYE-SCENE DEFECTS PINNED ===
 Mike's ares round on 4c6aa1a: eyes DECODING (quadrant fix ✓) but not
 MAME-matched. Both defects now REPRODUCED IN MAME on the FIRST
