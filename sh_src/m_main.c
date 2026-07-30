@@ -1341,9 +1341,21 @@ RAMCODE void slave_window_k(uint16_t cmd)
     int k = (cmd >> 4) & 3;
     int skip = (cmd >> 3) & 1;                   /* master lost vblank: no blit */
     cache_purge();
+    /* TWO-VBLANK SHIP (parity iteration 1b-lite): the whole coherent
+     * sbuf frame ships across w1+w2 vblanks (56 rows per CPU per
+     * window, ~0.8ms — inside vblank even at ares speed), w0 ships
+     * nothing. The old 3-window rolling sweep put an arbitrary
+     * 2-frame composite on screen at every instant; now the only
+     * temporal boundary is a FIXED mid-screen seam visible for one
+     * frame. Full eviction of staging (true double-buffer) is blocked
+     * by 68K read-backs: collision tst.w's (0x6936+) and the round-
+     * transition scratch save/restore in page 1 (0x1B760) — see
+     * LOOP.md iteration 1b findings. */
     if (!skip) {
-        int y0 = k * 75;
-        blit_half(y0, y0 + 37);
+        if (k == 1)
+            blit_half(0, 56);
+        else if (k == 2)
+            blit_half(112, 168);
     }
     SYNC[2] = 1;                                 /* master restores bank X */
     if (k == 1) {
@@ -1701,10 +1713,11 @@ RAMCODE void m_main(void)
                                        | bank1 | (skip ? 8 : 0));
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard;
+            int wblit = !skip && k != 0;     /* two-vblank ship: w0 idle */
             SYNC[2] = 0;
             SYNC[3] = 0;
             tp = frt();
-            if (!skip) {
+            if (wblit) {
                 guard = 2000000;
                 MARS_VDP_FBCTL = fs_x ^ 1;   /* -> display bank Y */
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_x ^ 1) && --guard) ;
@@ -1714,9 +1727,12 @@ RAMCODE void m_main(void)
             cache_purge();                   /* slice rows may hold the OTHER
                                               * CPU's composes from last cycle */
             tp = frt();
-            if (!skip) {
-                blit_half(y0 + 37, yend);
-                while (SYNC[2] < 1) ;        /* slave slice blitted */
+            if (wblit) {
+                if (k == 1)
+                    blit_half(56, 112);
+                else
+                    blit_half(168, 224);
+                while (SYNC[2] < 1) ;        /* slave half blitted */
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 guard = 2000000;
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
