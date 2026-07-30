@@ -1,4 +1,5 @@
 #include "common.h"
+#include "tile_thunks.h"
 
 // MD-side shim for the arcade game. Runs entirely from work RAM (.data):
 // once RV=1 the low ROM map belongs to the game and the 0x880000 window
@@ -252,7 +253,7 @@ window_done: ;
 		// (savestate-readable).
 		uint16_t spin = 800;
 		uint8_t ok = 1;
-		*(volatile uint16_t*)0xA15110 = 512;
+		*(volatile uint16_t*)0xA15110 = 516;  // 512 sprites + bitmap + pad
 		*ctrl = 4;                            // 68S: session start
 		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
 			while (*ctrl < 0 && --spin) ;
@@ -260,6 +261,16 @@ window_done: ;
 			fifo[0] = s[0]; fifo[0] = s[1];
 			fifo[0] = s[2]; fifo[0] = s[3];
 			s += 4;
+		}
+		if (ok) {                             // tail: dirty-page bitmap
+			while (*ctrl < 0 && --spin) ;
+			if (spin) {
+				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
+				fifo[0] = *bm;                // read...
+				*bm = 0;                      // ...and clear (thunks re-OR)
+				fifo[0] = 0; fifo[0] = 0; fifo[0] = 0;
+			} else
+				ok = 0;
 		}
 		if (!ok) {
 			*ctrl = 0;                        // abort session; retry next vint
@@ -526,6 +537,18 @@ void main(void) {
 		pm = (volatile uint32_t*)0xFF7000;    // sprite-list mirror
 		for (uint16_t i = 0; i < 512; i++)
 			pm[i] = 0;
+	}
+	// Tile dirty-bit thunks (generated: tile_thunks.h) at 0xFFB820 —
+	// low word 0xB820 >= 0x8000 so the game's jsr (x).w abs.w
+	// SIGN-EXTENDS into MD RAM (0x5E00.w would target low-ROM poison:
+	// instant crash at the first thunked site — the "ours never boots"
+	// parity run). Dirty bitmap at 0xFFB9FE starts ALL-DIRTY so the
+	// SH-2's first cycles sync every page once.
+	{
+		volatile uint16_t *td = (volatile uint16_t*)0xFFB820;
+		for (uint16_t i = 0; i < TILE_THUNK_WORDS; i++)
+			td[i] = tile_thunks[i];
+		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
 	}
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,

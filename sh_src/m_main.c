@@ -1369,7 +1369,9 @@ RAMCODE void slave_window_k(uint16_t cmd)
          * DISPLAY bank (zeros at 0x1E000) — short cutscene lists
          * vanished whole (the missing intro cast). The master is
          * ordered after its own restore by construction. */
-        copy_pages(6, NPAGES);
+        /* steady-state page copies retired (write-observer ring):
+         * the master syncs ONLY dirty pages from the DREQ-tail
+         * bitmap. The slave's whole k1 copy burden is gone. */
     }
 }
 
@@ -1504,6 +1506,10 @@ RAMCODE void m_main(void)
     uint8_t drop_s0[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
+    uint16_t pg_pending = 0x1FFF;        /* dirty tilemap pages awaiting
+                                          * copy (write-observer ring:
+                                          * bitmap rides the DREQ tail;
+                                          * boot = all pages once) */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
@@ -1764,6 +1770,7 @@ RAMCODE void m_main(void)
                         SPR_SNAP[i + 6] = SPR_LAND[i + 6];
                         SPR_SNAP[i + 7] = SPR_LAND[i + 7];
                     }
+                    pg_pending |= SPR_LAND[512];  /* DREQ-tail bitmap */
                 } else
                     DIAG[17]++;              /* incomplete DREQ frames */
                 /* re-arm for the NEXT vint's push (Chaotix sequence:
@@ -1772,12 +1779,43 @@ RAMCODE void m_main(void)
                 (void)SH2_DMA_CHCR0;
                 SH2_DMA_SAR0 = 0x20004012;   /* DREQ FIFO */
                 SH2_DMA_DAR0 = 0x26028C00;   /* SPR_LAND (uncached) */
-                SH2_DMA_TCR0 = 512;
+                SH2_DMA_TCR0 = 516;          /* 512 sprites + bitmap + pad */
                 SH2_DMA_DRCR0 = 0;
                 SH2_DMA_DMAOR = 1;
                 SH2_DMA_CHCR0 = 0x44E1;
+                /* NEWLY-mapped pages must be fresh before compose —
+                 * changed page regs only (unconditional ORing would
+                 * recopy every active page every cycle) */
+                {
+                    static uint8_t ppq[2][8] = {{0xFF}};
+                    for (int w2 = 0; w2 < 2; w2++)
+                        for (int q = 0; q < 4; q++) {
+                            if (snap[w2].pq[q] != ppq[w2][q]) {
+                                ppq[w2][q] = snap[w2].pq[q];
+                                pg_pending |= 1u << ppq[w2][q];
+                            }
+                            if (snap[w2].pq_a[q] != ppq[w2][q + 4]) {
+                                ppq[w2][q + 4] = snap[w2].pq_a[q];
+                                pg_pending |= 1u << ppq[w2][q + 4];
+                            }
+                        }
+                    pg_pending &= 0x1FFF;
+                }
+                /* DIRTY-ONLY page sync (write-observer ring): copy at
+                 * most 3 pending pages per k1 — steady state is ZERO
+                 * (1988 design preloads rounds; tile writes happen at
+                 * transitions). This replaces copy_pages(0,6) master +
+                 * (6,13) slave EVERY cycle: the k1 FM-hold drops from
+                 * 8-15ms on ares (the 67%-gate-reject cadence spiral,
+                 * ares verdict d6ed14ac) to ~2ms. */
                 tp = frt();
-                copy_pages(0, 6);
+                for (int pc = 0; pc < 3 && pg_pending; pc++) {
+                    int pg = 0;
+                    while (!(pg_pending & (1u << pg)))
+                        pg++;
+                    copy_pages(pg, pg + 1);
+                    pg_pending &= (uint16_t)~(1u << pg);
+                }
                 diag_add(0, tp);
                 par ^= 1;                    /* now composing the next frame */
                 tp = frt();
