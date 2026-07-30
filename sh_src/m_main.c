@@ -1515,10 +1515,14 @@ RAMCODE void m_main(void)
                 continue;
             }
             if (bq[bq_h].on && !shadow_stole &&
-                (maps_owed || ((win_no & 1) == 0 && shadow_dirty))) {
+                (maps_owed || ((win_no & 3) == 0 && shadow_dirty))) {
                 /* owed maps get a slot EVERY window (convergence is
-                 * user-visible color correctness); shadow chunks stay
-                 * at every 2nd */
+                 * user-visible color correctness); shadow chunks
+                 * throttled to every 4th — gameplay fades keep the
+                 * LUT perpetually dirty, and the every-2nd steal fed
+                 * the deferral rate (0.78/cycle on ares = the action
+                 * band at half cadence). Shadow staleness degrades to
+                 * silhouette fallback; band cadence is the game. */
                 /* MAINTENANCE SLOT: one bounded chunk of deferred work
                  * every 2nd window even when band work is pending.
                  * Under sustained overload the queue is NEVER empty, so
