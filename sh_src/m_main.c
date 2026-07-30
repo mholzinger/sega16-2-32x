@@ -248,7 +248,13 @@ RAMCODE static void latch_layer_regs(void)
         uint16_t ysc   = TEXT_C[0x748 + which] & 0x1FF;
         decode_pages(TEXT_C[0x740 + which], lr->pq);
         lr->xs_raw = xraw;
-        lr->vx0 = (0 - ((0xC0 - (xraw & 0x1FF)) & 0x3FF)) & 0x3FF;
+        lr->vx0 = ((0xC0 - (xraw & 0x1FF)) & 0x3FF);
+        /* X convention PINNED by the attract scream screen (art at
+         * cols 24-63 displayed full-bleed at xs=0): source vx =
+         * screen x + ((0xC0 - xs) & 0x3FF) — matching segaic16's
+         * effxscroll directly. The previously-negated form survived
+         * for weeks because the title is sign-agnostic (xs=0xC0 ->
+         * eff=0) and gameplay backgrounds are locally periodic. */
         /* MAME's tilemap scroll convention is ASYMMETRIC: the 16B driver
          * negates X itself (0xC0 - xsc) but passes Y raw — positive
          * scrolly moves the SOURCE WINDOW DOWN: vy = sy + ysc. The minus
@@ -258,8 +264,7 @@ RAMCODE static void latch_layer_regs(void)
         /* alternate set (text words +2) + per-band rowscroll table */
         decode_pages(TEXT_C[0x742 + which], lr->pq_a);
         lr->vy0_a = TEXT_C[0x74A + which] & 0x1FF;
-        lr->vx0_a = (0 - ((0xC0 - (TEXT_C[0x74E + which] & 0x1FF))
-                          & 0x3FF)) & 0x3FF;
+        lr->vx0_a = ((0xC0 - (TEXT_C[0x74E + which] & 0x1FF)) & 0x3FF);
         uint16_t any = xraw & 0x8000;
         for (int rw = 0; rw < 28; rw++) {
             uint16_t v = TEXT_C[0x7C0 + 0x20 * which + rw];
