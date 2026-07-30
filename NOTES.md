@@ -1345,6 +1345,44 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-30c) — BLACK ACTORS = SPRITE-PAIR CRAM ZEROS ===
+Mike's ares attract savestate (rom/s16.bs1, demo scene with ALL
+actors as black silhouettes, tiles/HUD fine — screenshots/2100.png):
+- shadow_dirty=1 after minutes: idle-only LUT rebuild STARVED under
+  ares load. FIXED this commit: guaranteed-progress steal (one chunk
+  per window even with the queue busy; full refresh <=3.2s any load).
+- CRAM entries 160-207 (sprite pairs 10-12) ALL ZERO -> actors
+  black. apply_cram's sprite loop reads FB_PAL+1024+sc*16 (palette
+  staging IN THE FRAMEBUFFER) via spr_pair[par][sc]. Suspect: the
+  palette snapshot reads the WRONG BANK at ares timing (the intro-
+  cast snapshot/bank-restore race family) — game wrote sprite rows
+  into bank A, snapshot read bank B (never-written = zeros).
+- Also confirmed: real palette data carries bit 15 (0xFFFF entries,
+  groups 1/4/12) — the jts16 shadow-exemption is live on real data.
+NEXT PROBE (savestate-only, no ares scripting): locate BOTH 32X
+DRAM framebuffers in the .bs1 (search for FB_PAL sprite rows with
+actor colors), diff FB_PAL region bank A vs bank B: colors-in-one/
+zeros-in-other proves the bank-skew read. _spr_pair from s16.lst
+gives the pair mapping to check which sc rows map to pairs 10-12.
+CONFIRMED (same savestate): reconstructed the S16 words for mirror
+group 12 (inverse s16_to_mars) and searched the state file: exactly
+TWO copies — the game's 68K work-RAM palette buffer (~MD 0xE5B0)
+and ONE framebuffer bank's FB_PAL. The other bank NEVER got those
+rows: palette writes land only in the bank staging at write time.
+Any row written during the other bank's tenure is zeros in the bank
+apply_cram happens to snapshot -> black sprite pairs. SH-2 cannot
+read the other bank (single draw-bank window), so no SH-2-side
+fallback exists.
+FIX DIRECTION (definitive): retire FB_PAL staging for palette; ship
+palette through the MD RAM sideband stream with dirty-row tracking
+(game's work-RAM palette buffer at ~0xFFE5B0 is the source of
+truth; MD vint diffs rows, streams changed rows like the reg
+batches). First client of the atomic-ship + sideband rework (the
+tearing umbrella).
+Savestate parse one-liners: sdram file base 0x23B (probe-relocate
+per TOOLKIT recipe); MD RAM base = find swap16(TAS thunk bytes
+4a38c02050f8c0204e75) minus 0xB380.
+
 ## === MILESTONE (2026-07-30b) — ARES CLEAN READ ON THE ATTRACT ===
 Mike: "the eyes are working without the issues! only screen tearing,
 but thats on the roadmap. we have a clean read!" — the full attract

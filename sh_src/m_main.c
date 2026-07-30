@@ -1325,6 +1325,7 @@ RAMCODE void m_main(void)
      * staleness to ~2 cycles. */
     uint8_t drop_s0[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
+    uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
 
@@ -1365,6 +1366,21 @@ RAMCODE void m_main(void)
                 if (dt <= 7000)
                     shadow_lut_chunk();
                 continue;
+            }
+            if (bq[bq_h].on && shadow_dirty && !shadow_stole) {
+                /* GUARANTEED PROGRESS: under sustained overload the
+                 * queue is never empty early-frame, so the idle-only
+                 * rebuild starved forever on ares (savestate:
+                 * shadow_dirty=1 after minutes -> permanent silhouette
+                 * fallback). Steal ONE chunk per window even when
+                 * band work is pending: full refresh in <=64 windows
+                 * (~3.2s) at any load, costing at most one strip. */
+                uint16_t dt = (uint16_t)(frt() - t_vint);
+                if (dt <= 7000) {
+                    shadow_lut_chunk();
+                    shadow_stole = 1;
+                    continue;
+                }
             }
             if (bq[bq_h].on) {
                 struct band *b = &bq[bq_h];
@@ -1446,6 +1462,7 @@ RAMCODE void m_main(void)
             uint16_t bank1 = MARS_SYS_COMM2 & 7;
             uint16_t tw = frt(), tp = tw;
             t_vint = tw;
+            shadow_stole = 0;
 
             if (tile_cmd) {                  /* concurrent third finished? */
                 slave_wait(tile_cmd);
