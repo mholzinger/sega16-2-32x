@@ -43,15 +43,20 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * 0x06040000; .bss ends well below 0x06018000 — checked per build) ----
  * Uncached (0x26..) views for cross-CPU/stream writes; cached (0x06..)
  * views for render reads after a purge. */
-#define TILEMAP_U   ((volatile uint16_t *)0x26018000)   /* 13 pages x 2K words */
-#define TILEMAP_C   ((const uint16_t *)0x06018000)      /* page 12 = blank */
-#define TEXT_U      ((volatile uint16_t *)0x26025000)   /* 2048 words */
-#define TEXT_C      ((const uint16_t *)0x06025000)
+/* Regions start at 0x19000: .bss had SILENTLY GROWN past 0x18000 and
+ * the cache-tag tail (later pri_lut) overlapped tilemap page 0 — the
+ * window page-copies stomped the tags every cycle (steady-state
+ * miss=9.9/window instead of ~0). The Makefile now FAILS the build if
+ * __end crosses SDRAM_BSS_LIMIT. */
+#define TILEMAP_U   ((volatile uint16_t *)0x26019000)   /* 13 pages x 2K words */
+#define TILEMAP_C   ((const uint16_t *)0x06019000)      /* page 12 = blank */
+#define TEXT_U      ((volatile uint16_t *)0x26026000)   /* 2048 words */
+#define TEXT_C      ((const uint16_t *)0x06026000)
 /* Palette: read straight from FB staging in-window — no shadow, no
  * stream (game palette writes are all word/long; zero-byte-drop safe). */
 #define FB_PAL      ((volatile uint16_t *)0x2401F000)   /* 2048 words */
-#define DIAG        ((volatile uint32_t *)0x26027000)   /* profiling, lua-read */
-#define SPR_SNAP    ((volatile uint16_t *)0x26027400)   /* 512-word sprite-list
+#define DIAG        ((volatile uint32_t *)0x26028000)   /* profiling, lua-read */
+#define SPR_SNAP    ((volatile uint16_t *)0x26028400)   /* 512-word sprite-list
                                                          * snapshot: FB staging
                                                          * is BANK-DEPENDENT and
                                                          * the access bank isn't
@@ -60,8 +65,8 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
                                                          * restore latch) — all
                                                          * sprite readers use
                                                          * this copy */
-#define SYNC        ((volatile uint16_t *)0x26027800)   /* [0] cmd  [1] echo */
-#define CACHE_C     ((uint8_t *)0x06028000)             /* 1024 slots x 64B */
+#define SYNC        ((volatile uint16_t *)0x26028800)   /* [0] cmd  [1] echo */
+#define CACHE_C     ((uint8_t *)0x06029000)             /* 1024 slots x 64B */
 
 #define FB_STAGING  ((volatile uint16_t *)0x24012000)   /* game tile RAM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
@@ -107,6 +112,17 @@ static uint8_t text_grp[2][8];              /* text colors: on-demand too */
  * last seen on screen. */
 static uint8_t grp_key[32], grp_kind[32], grp_age[32];
 static uint8_t pr_key[16], pr_age[16];
+/* PER-PIXEL SPRITE/TILE PRIORITY (segas16b_v.cpp screen_update):
+ * tile pixels carry a level — BG cat0=1, BG cat1=2, FG cat0=2,
+ * FG cat1=4, text cat0=4, text cat1=8 — and a sprite pixel draws iff
+ * (1 << its 2-bit priority field) > level. We recover the level from
+ * the composed pixel VALUE via a 256-entry LUT: the allocator knows
+ * which CRAM group serves which color, and the prescan records each
+ * color's level. Exact except when one color is used at two levels in
+ * the same frame (counted in DIAG[15]); sprite-pair groups stay level
+ * 0 so sprite-over-sprite remains hardware list-order overwrite. */
+static uint8_t pri_lut[2][256];
+static uint8_t pri_max[2];                  /* max level in pri_lut[par] */
 /* Group 0 is NEVER assigned by the allocator, so no composed pixel is
  * ever VALUE 0 (the MD-through value) — replaces the old BG0 alias. */
 
@@ -249,9 +265,11 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
 {
     uint16_t tcount[128];
     uint8_t sused[64], txused[8];
-    for (int i = 0; i < 128; i++) tcount[i] = 0;
+    uint8_t col_lvl[128], txt_lvl[8];       /* max priority level per color */
+    uint8_t amb_col[128];                   /* color seen at 2+ levels */
+    for (int i = 0; i < 128; i++) { tcount[i] = 0; col_lvl[i] = 0; amb_col[i] = 0; }
     for (int i = 0; i < 64; i++) sused[i] = 0;
-    for (int i = 0; i < 8; i++) txused[i] = 0;
+    for (int i = 0; i < 8; i++) { txused[i] = 0; txt_lvl[i] = 0; }
     (void)bank1;
 
     for (int which = 0; which < 2; which++) {
@@ -276,7 +294,20 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
                     int vx = ((vx00 & ~7) + c * 8) & 0x3FF;
                     uint16_t w = TILEMAP_C[pq[qy + (((unsigned)vx >> 9) & 1)] * 0x800
                                            + trow * 64 + (((unsigned)vx >> 3) & 0x3F)];
-                    tcount[((unsigned)w >> 6) & 0x7F]++;
+                    unsigned cc = ((unsigned)w >> 6) & 0x7F;
+                    tcount[cc]++;
+                    /* priority level: which==1 is our BG layer (cat0=1,
+                     * cat1=2); which==0 FG (cat0=2, cat1=4) */
+                    if (w) {
+                        uint8_t lvl = which
+                            ? ((w & 0x8000) ? 2 : 1)
+                            : ((w & 0x8000) ? 4 : 2);
+                        if (col_lvl[cc] && col_lvl[cc] != lvl)
+                            amb_col[cc] = 1; /* color at two levels: LUT
+                                              * approximation engaged */
+                        if (lvl > col_lvl[cc])
+                            col_lvl[cc] = lvl;
+                    }
                 }
             }
         }
@@ -284,8 +315,13 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
     for (int row = 0; row < 28; row++)
         for (int col = 24; col < 64; col++) {
             uint16_t d = TEXT_C[row * 64 + col];
-            if ((d & 0x1FF) || (d & 0x0E00))
-                txused[((unsigned)d >> 9) & 7] = 1;
+            if ((d & 0x1FF) || (d & 0x0E00)) {
+                unsigned tc = ((unsigned)d >> 9) & 7;
+                txused[tc] = 1;
+                uint8_t lvl = (d & 0x8000) ? 8 : 4;  /* text cat1 : cat0 */
+                if (lvl > txt_lvl[tc])
+                    txt_lvl[tc] = lvl;
+            }
         }
     for (int i = 0; i < 64; i++) {
         volatile uint16_t *d = SPR_SNAP + i * 8;
@@ -440,6 +476,44 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
             if (shared_tile == 0xFF)
                 shared_tile = (uint8_t)g;
         }
+    }
+
+    /* Build the priority LUT for this parity: pens 1-7 of each group
+     * inherit the owning color's level; pen 0 (group base) stays 0 —
+     * matching MAME, where the opaque BG pass sets no priority and
+     * pen-0 pixels stay level 0. Sprite pairs never appear in
+     * tile_grp/text_grp, so their 16-entry blocks stay level 0. */
+    {
+        uint8_t *pl = pri_lut[par];
+        for (int i = 0; i < 256; i++)
+            pl[i] = 0;
+        for (int c = 0; c < 128; c++) {
+            uint8_t g = tile_grp[par][c];
+            if (g == 0xFF || !col_lvl[c])
+                continue;
+            for (int p = 1; p < 8; p++)
+                if (col_lvl[c] > pl[g * 8 + p])
+                    pl[g * 8 + p] = col_lvl[c];
+        }
+        for (int c = 0; c < 8; c++) {
+            uint8_t g = text_grp[par][c];
+            if (g == 0xFF || !txt_lvl[c])
+                continue;
+            for (int p = 1; p < 8; p++)
+                if (txt_lvl[c] > pl[g * 8 + p])
+                    pl[g * 8 + p] = txt_lvl[c];
+        }
+        unsigned na = 0;
+        for (int c = 0; c < 128; c++)
+            na += amb_col[c];
+        DIAG[15] = na;                       /* DISTINCT ambiguous colors
+                                              * this frame (not cumulative) */
+        uint8_t mx = 0;
+        for (int i = 0; i < 256; i++)
+            if (pl[i] > mx) mx = pl[i];
+        pri_max[par] = mx;                   /* sprites with thr > mx skip
+                                              * the per-pixel gate (and its
+                                              * dst read) entirely */
     }
 }
 
@@ -654,6 +728,12 @@ RAMCODE static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
  * Faithful to sega16sp.cpp; see NOTES. Row clip [ymin,ymax). */
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
+    /* Gated dst reads go through the UNCACHED sbuf alias: the SH-2
+     * cache is write-through/no-allocate, so the write-only fast path
+     * never fills lines — a cached gate read would pay a 16-byte line
+     * fill per miss just to check one byte. */
+    const uint8_t *pl = pri_lut[par];       /* tile level per pixel value */
+    uint8_t pmax = pri_max[par];
     for (int i = 0; i < 64; i++) {
         volatile uint16_t *e = SPR_SNAP + i * 8;
         uint16_t d2 = e[2];
@@ -669,6 +749,15 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         uint16_t addr = e[3];
         uint16_t d4 = e[4], d5 = e[5];
         const uint16_t *sd = altbeast_sprites + (((d4 >> 8) & 0xF) & 7) * 0x10000;
+        /* sprite pixel shows iff (1 << pp) > tile level (segas16b_v).
+         * pp=2 is exact via the layer ORDER (no reads); only pp<=1
+         * sprites gate per pixel (they hide behind BG-cat1/FG-cat0).
+         * pp=3 approximated as pp=2, occurrences counted. */
+        uint8_t pp = (uint8_t)((d4 >> 6) & 3);
+        uint8_t thr = (uint8_t)(1u << pp);
+        int gated = (pp <= 1) && (thr <= pmax);
+        if (pp == 3)
+            DIAG[16]++;
         uint8_t base;
         if ((d4 & 0x3F) == 0x3F) {
             /* SHADOW sprites (color 0x3F = darken-underlying on real
@@ -698,10 +787,15 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                 continue;
 
             uint8_t *row = sbuf + (8 + y) * SBUF_W + 8;
+            const uint8_t *urow = row;       /* gate reads (rare: pp<=1) */
+            (void)urow;
             int x = xpos;
             uint16_t o = addr;
             int pix = 0;
-            if (hzoom == 0) {
+            if (hzoom == 0 && !gated) {      /* gated (pp<=1) sprites take
+                                              * the scalar path below —
+                                              * the gate stays out of the
+                                              * unrolled fast macros */
                 /* 1:1 paths. NIB draws one nibble; when the sprite starts
                  * on-screen (xpos >= 184) the sx<320 test is implied by
                  * the x<504 loop bound — the NC variants drop it. */
@@ -773,26 +867,59 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             row[sx] = (uint8_t)(base + pix);                \
                         x++;                                                \
                     }
-                while (((xpos - x) & 0x1FF) != 1) {
-                    uint16_t w = sd[o];
-                    o = (uint16_t)(flip ? o - 1 : o + 1);
-                    if (!flip) {
-                        ZNIB((w >> 12) & 0xF)
-                        ZNIB((w >> 8) & 0xF)
-                        ZNIB((w >> 4) & 0xF)
-                        ZNIB(w & 0xF)
-                    } else {
-                        ZNIB(w & 0xF)
-                        ZNIB((w >> 4) & 0xF)
-                        ZNIB((w >> 8) & 0xF)
-                        ZNIB((w >> 12) & 0xF)
+#define ZNIB_G(PIX_EXPR)                                                    \
+                    pix = (PIX_EXPR);                                       \
+                    xacc = (xacc & 0x3F) + hzoom;                           \
+                    if (xacc < 0x40) {                                      \
+                        unsigned sx = (unsigned)(x - 184);                  \
+                        if (sx < 320 && pix != 0 && pix != 15               \
+                            && thr > pl[urow[sx]])                          \
+                            row[sx] = (uint8_t)(base + pix);                \
+                        x++;                                                \
                     }
-                    if (pix == 15)
-                        break;
-                    if (x >= 504)
-                        break;
+                if (!gated) {
+                    while (((xpos - x) & 0x1FF) != 1) {
+                        uint16_t w = sd[o];
+                        o = (uint16_t)(flip ? o - 1 : o + 1);
+                        if (!flip) {
+                            ZNIB((w >> 12) & 0xF)
+                            ZNIB((w >> 8) & 0xF)
+                            ZNIB((w >> 4) & 0xF)
+                            ZNIB(w & 0xF)
+                        } else {
+                            ZNIB(w & 0xF)
+                            ZNIB((w >> 4) & 0xF)
+                            ZNIB((w >> 8) & 0xF)
+                            ZNIB((w >> 12) & 0xF)
+                        }
+                        if (pix == 15)
+                            break;
+                        if (x >= 504)
+                            break;
+                    }
+                } else {
+                    while (((xpos - x) & 0x1FF) != 1) {
+                        uint16_t w = sd[o];
+                        o = (uint16_t)(flip ? o - 1 : o + 1);
+                        if (!flip) {
+                            ZNIB_G((w >> 12) & 0xF)
+                            ZNIB_G((w >> 8) & 0xF)
+                            ZNIB_G((w >> 4) & 0xF)
+                            ZNIB_G(w & 0xF)
+                        } else {
+                            ZNIB_G(w & 0xF)
+                            ZNIB_G((w >> 4) & 0xF)
+                            ZNIB_G((w >> 8) & 0xF)
+                            ZNIB_G((w >> 12) & 0xF)
+                        }
+                        if (pix == 15)
+                            break;
+                        if (x >= 504)
+                            break;
+                    }
                 }
 #undef ZNIB
+#undef ZNIB_G
             }
         }
     }
@@ -977,6 +1104,11 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
         compose_layer(y, ye, 1, 0, 0, bank1, par, 1);
         slave_service_stream();
     }
+    /* Layer order: EXACT per segas16b_v for pp=2 sprites (measured
+     * dominant in this game): tiles cat0, sprites, FG cat1, text.
+     * pp<=1 sprites additionally gate per pixel via pri_lut so they
+     * correctly hide behind BG-cat1/FG-cat0; pp=3 is approximated as
+     * pp=2 (counted in DIAG[16]) until the sideband rework. */
     compose_sprites(lo, hi, par);
     slave_service_stream();
     compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
@@ -1059,6 +1191,8 @@ RAMCODE void m_main(void)
     };
     struct band bq[4];
     int bq_h = 0, bq_t = 0;
+    int maps_owed = 0;                   /* build_maps from a dropped band */
+    uint8_t owed_par = 0, owed_bank = 0;
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
@@ -1083,6 +1217,16 @@ RAMCODE void m_main(void)
              * vint we stay light so window pickup latency is bounded
              * by one 12-row strip (else the vblank gate skips blits:
              * 923 mskips/run when build_maps sat on the pickup). */
+            if (!bq[bq_h].on && maps_owed) {
+                /* owed build_maps from a dropped band: run it self-
+                 * paced like any heavy phase (early-frame only) */
+                uint16_t dt = (uint16_t)(frt() - t_vint);
+                if (dt <= 8000) {
+                    build_maps(owed_par, owed_bank);
+                    maps_owed = 0;
+                }
+                continue;
+            }
             if (bq[bq_h].on) {
                 struct band *b = &bq[bq_h];
                 uint16_t dt = (uint16_t)(frt() - t_vint);
@@ -1109,6 +1253,7 @@ RAMCODE void m_main(void)
                 int hi = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
                 int y = b->y, ye = (y + 12 > hi) ? hi : y + 12;
                 uint16_t tq = frt();
+                /* Order exact for pp=2 sprites (see slave_concurrent_k) */
                 switch (b->phase) {
                 case 0:
                     compose_layer(y, ye, 0, 1, 1, b->bank, b->bpar, 0);
@@ -1293,8 +1438,15 @@ RAMCODE void m_main(void)
                 if (bq[bq_t].on) {
                     struct band *b = &bq[bq_h];
                     DIAG[13]++;              /* queue-full drops */
-                    if (b->rg == 2 && b->phase <= 6)
-                        build_maps(b->bpar ^ 1, b->bank);
+                    if (b->rg == 2 && b->phase <= 6) {
+                        /* build_maps still owed — but NOT here: inline
+                         * it ran right before the next pickup and
+                         * re-created the block-drain mskip cascade.
+                         * The idle branch runs it self-paced. */
+                        maps_owed = 1;
+                        owed_par = (uint8_t)(b->bpar ^ 1);
+                        owed_bank = b->bank;
+                    }
                     b->on = 0;
                     bq_h = (bq_h + 1) & 3;
                 }

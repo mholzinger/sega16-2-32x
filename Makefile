@@ -58,6 +58,12 @@ $(MDTARGET).lst: $(MDTARGET).elf
 
 $(TARGET).lst: $(TARGET).elf
 	$(SHNM) --plugin=$(SHPLUGIN) -n $< > $@
+	@end=$$(grep -E ' _end$$' $@ | head -1 | cut -c1-8); \
+	if [ $$((16#$$end)) -gt $$((16#06019000)) ]; then \
+	  echo "FATAL: SH-2 .bss end 0x$$end crosses SDRAM region base 0x06019000"; \
+	  echo "(tilemap shadow and friends live there — grow the region map instead)"; \
+	  rm -f $@; exit 1; \
+	fi
 
 $(MDTARGET).bin: $(MDTARGET).elf
 	@$(MDOBJC) -O binary $< $@

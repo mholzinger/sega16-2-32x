@@ -5,8 +5,8 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 {
 }
 
-#define TEXT_U      ((volatile uint16_t *)0x26025000)
-#define SYNC        ((volatile uint16_t *)0x26027800)
+#define TEXT_U      ((volatile uint16_t *)0x26026000)
+#define SYNC        ((volatile uint16_t *)0x26028800)
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
 extern void slave_concurrent_k(uint16_t cmd);
