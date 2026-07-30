@@ -380,6 +380,29 @@ void main(void) {
 		d = (volatile uint16_t*)0xFFB360;
 		for (unsigned i = 0; i < sizeof t4 / 2; i++) d[i] = t4[i];
 	}
+	// TAS thunks (see patch_game.py TAS_SITES): the MD bus drops the
+	// TAS write phase, so every tas/bne latch re-fires forever (broke
+	// the attract eye gate at 0x2268 — infinite title loop). Each TAS
+	// becomes jsr here: tst.b sets TAS's exact N/Z (V/C cleared), st
+	// sets the latch without touching CC, rts preserves CC.
+	{
+		static const uint16_t tt[] = {
+			// 0xFFB380: tas $c020.w
+			0x4A38, 0xC020, 0x50F8, 0xC020, 0x4E75,
+			// 0xFFB38A: tas $f15a.w
+			0x4A38, 0xF15A, 0x50F8, 0xF15A, 0x4E75,
+			// 0xFFB394: tas (0x3E,A0)
+			0x4A28, 0x003E, 0x50E8, 0x003E, 0x4E75,
+		};
+		static const uint16_t tt2[] = {
+			// 0xFFB3F6: tas (0x3C,A6)
+			0x4A2E, 0x003C, 0x50EE, 0x003C, 0x4E75,
+		};
+		volatile uint16_t *d = (volatile uint16_t*)0xFFB380;
+		for (unsigned i = 0; i < sizeof tt / 2; i++) d[i] = tt[i];
+		d = (volatile uint16_t*)0xFFB3F6;
+		for (unsigned i = 0; i < sizeof tt2 / 2; i++) d[i] = tt2[i];
+	}
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
 	// demo sounds on; DSW1 0xFF = 1 coin / 1 credit)

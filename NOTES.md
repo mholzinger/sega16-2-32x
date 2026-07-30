@@ -1345,6 +1345,48 @@ shell's cwd — the patcher once silently ran from the main worktree.
 NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
 the pause windows (cart readable at any time now).
 
+## === RESUME POINT (2026-07-29b) — ATTRACT STALL SOLVED: TAS ===
+ROOT CAUSE (not a patcher bug — a HARDWARE divergence): the game
+latches one-shots with tas/bne. On System 16B, TAS's locked
+read-modify-write works; on the Mega Drive/32X the bus arbiter DROPS
+THE WRITE PHASE of the 68K RMW cycle (the classic Gargoyles-era MD
+quirk — modeled by MAME, ares, and real hardware). Every TAS latch
+in the game silently never sets.
+THE STALL: attract gate at 0x2260 (script actor, record C100):
+  cmpi.w #$1001,$c00c ; bcc wait     <- eye-camera X must park
+  tas $c020 ; bne skip               <- once-only latch (BROKEN)
+  add.w #$c00,$c014                  <- kill velocity F400 -> 0000
+  tst.b $c0a0 ; beq wait             <- anim-done flag (set by the
+  jmp $1e54                             0x23DC driver's terminator)
+With TAS never latching, the velocity add fired TWICE (F400 -> 0C00
+= +12px/frame): the camera ran away past x=0x1001, and since x is
+tested BEFORE the done flag, the transition was locked out forever
+= infinite title/eye loop + the runaway pan ("broken consecutive
+animations"). Gate-variable logging (gatelog.lua pattern: c00c/
+c0a0/c0a1/c0a2/c014/f02d) proved it against the arcade: arcade adds
+once and parks; ours added twice and ran away.
+THE FIX: patch_game.py TAS_SITES — full-binary opcode scan found
+exactly 5 real TAS instructions (0x2268 $c020, 0xE098 $f15a, 0xEAC0
++ 0x150B6 (3E,A0), 0x12E84 (3C,A6); other 4AC8-4AFF words are
+data). Each 2-word TAS -> jsr to an MD-RAM thunk (md_main.c):
+tst.b (TAS's exact N/Z, clears V/C) + st (sets latch, no CC) + rts.
+Thunks at FFB380/FFB38A/FFB394/FFB3F6 (B3F6+10 = B400 boot copy,
+exact fit). VERIFIED: transition fires (f031 0x10->0x14, hold ends
+at c0a0=FF exactly like arcade), demo gameplay scene renders, loop
+cycles back to (C)SEGA — full arcade attract rotation. 5460-frame
+regression: 45 skips, no stalls.
+LESSON (toolkit-grade, whole-library): S16->32X ports must scan for
+and replace EVERY TAS; MD hardware breaks them all. Also: log the
+GATE VARIABLES of a stuck state machine side-by-side with the
+oracle before tracing — two 70-line logs named the bug in one look.
+ALSO NEW: srcref/jtcores (Jotego FPGA S16, GPL-3.0) is now the
+authoritative hardware spec — derive behavior from the Verilog,
+cite the .v file, never copy code (GPL). Key: jts16_prio.v,
+jts16_colmix.v, jts16_shadow.v, jts16_obj*.v, jts16b_mapper.v.
+NEXT: ares verdict on the attract rotation; then verify priority/
+shadow/sprite rules against jtcores Verilog (pp3/amb exactness),
+attract pacing debt (mskips ~900 heavy scenes), atomic-ship rework.
+
 ## === RESUME POINT (2026-07-31) — ATTRACT STALL PINNED TO ONE GATE ===
 State: unpair-rebase @ bd48d00 + uncommitted md_main.c (rowscroll
 priority streaming, 16 batches) — commit with the fix.

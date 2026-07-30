@@ -624,6 +624,28 @@ hrom[0xDBA8:0xDBAC] = bytes([0x4E, 0xB8, 0xB3, 0x40])
 assert hrom[0x30D0:0x30D4] == bytes([0x20, 0x6D, 0x00, 0x02])
 hrom[0x30D0:0x30D4] = bytes([0x4E, 0xB8, 0xB3, 0x60])
 
+# TAS REPLACEMENT: the MD bus arbiter drops the write phase of the
+# 68K's locked read-modify-write cycle, so TAS never sets its latch
+# on 32X (works on System 16B). Every tas/bne latch in the game
+# re-fires its one-shot forever. Proven live at 0x2268 (attract eye
+# gate): the camera-park velocity add ran twice, the eye scene panned
+# away, and the demo transition (x<0x1001 tested before the done
+# flag) was locked out — the infinite title/eye loop. Each 2-word TAS
+# becomes jsr to a shim-RAM thunk: tst.b (TAS's exact N/Z/V/C) then
+# st (no CC) then rts. Full-binary opcode scan found exactly these
+# five real sites (other 4AC8-4AFF words are data).
+TAS_SITES = [
+    (0x2268,  bytes([0x4A, 0xF8, 0xC0, 0x20]), 0xB380),  # tas $c020.w
+    (0xE098,  bytes([0x4A, 0xF8, 0xF1, 0x5A]), 0xB38A),  # tas $f15a.w
+    (0xEAC0,  bytes([0x4A, 0xE8, 0x00, 0x3E]), 0xB394),  # tas (3E,A0)
+    (0x150B6, bytes([0x4A, 0xE8, 0x00, 0x3E]), 0xB394),  # tas (3E,A0)
+    (0x12E84, bytes([0x4A, 0xEE, 0x00, 0x3C]), 0xB3F6),  # tas (3C,A6)
+]
+for off, want, thunk in TAS_SITES:
+    assert hrom[off:off+4] == want, f"TAS site {off:#x}: {hrom[off:off+4].hex()}"
+    hrom[off:off+4] = bytes([0x4E, 0xB8, thunk >> 8, thunk & 0xFF])
+# (shim installs the thunks at 0xFFB380/0xFFB38A/0xFFB394/0xFFB3F6)
+
 # Palette-cycle LAUNCH TABLE at 0x1A6FA ([id.w][script.l] x3): the
 # harvest pass caught entry 1 (0x1A70E) but missed entries 2/3, whose
 # 0x0001A78E script pointers stayed low — the launcher reads the
