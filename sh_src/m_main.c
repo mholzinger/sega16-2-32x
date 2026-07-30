@@ -1293,12 +1293,21 @@ RAMCODE void m_main(void)
      * ares "floating heads / split sprites" staleness). Now pickup
      * latency is bounded by one strip (~0.4ms). */
     struct band {
-        uint8_t on, rg, bpar, bank, phase, y;
+        uint8_t on, rg, bpar, bank, phase, s0, cnt;
     };
     struct band bq[4];
     int bq_h = 0, bq_t = 0;
     int maps_owed = 0;                   /* build_maps from a dropped band */
     uint8_t owed_par = 0, owed_bank = 0;
+    /* Per-region stale frontier: strip index where the last DROPPED
+     * band's compose had reached. The region's next band starts its
+     * strip walk here, so rows left stale by a drop are recomposed
+     * FIRST and the frontier rotates. Under sustained overload (ares
+     * heavy attract) the old drop-oldest policy victimized the same
+     * strips every cycle: a locked stale stripe crawling with the pan
+     * (the eye-scene "white band"). Rotation bounds any row's
+     * staleness to ~2 cycles. */
+    uint8_t drop_s0[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
@@ -1366,7 +1375,10 @@ RAMCODE void m_main(void)
                                           * a 9600 deadline overran the post) */
                 int lo = (b->rg == 2) ? 184 : (b->rg * 72 + 36);
                 int hi = (b->rg == 2) ? 224 : (b->rg * 72 + 72);
-                int y = b->y, ye = (y + 12 > hi) ? hi : y + 12;
+                int ns = (b->rg == 2) ? 4 : 6;
+                int idx = b->s0 + b->cnt;
+                if (idx >= ns) idx -= ns;
+                int y = lo + idx * 12, ye = (y + 12 > hi) ? hi : y + 12;
                 uint16_t tq = frt();
                 /* Order exact for pp=2 sprites (see slave_concurrent_k) */
                 switch (b->phase) {
@@ -1405,12 +1417,11 @@ RAMCODE void m_main(void)
                 }
                 if (b->phase >= 4) {         /* single-shot phases */
                     b->phase++;
-                    b->y = (uint8_t)lo;
-                } else if (ye >= hi) {
+                    b->cnt = 0;
+                } else if (++b->cnt >= ns) {
                     b->phase++;
-                    b->y = (uint8_t)lo;
-                } else
-                    b->y = (uint8_t)ye;
+                    b->cnt = 0;
+                }
             }
             continue;
         }
@@ -1553,6 +1564,12 @@ RAMCODE void m_main(void)
                 if (bq[bq_t].on) {
                     struct band *b = &bq[bq_h];
                     DIAG[13]++;              /* queue-full drops */
+                    {   /* record the stale frontier for rotation */
+                        uint8_t nsd = (b->rg == 2) ? 4 : 6;
+                        uint8_t fi = (uint8_t)(b->s0 + b->cnt);
+                        if (fi >= nsd) fi -= nsd;
+                        drop_s0[b->rg] = fi;
+                    }
                     if (b->rg == 2 && b->phase <= 6) {
                         /* build_maps still owed — but NOT here: inline
                          * it ran right before the next pickup and
@@ -1571,7 +1588,8 @@ RAMCODE void m_main(void)
                 nb->bpar = (uint8_t)par;
                 nb->bank = (uint8_t)bank1;
                 nb->phase = 0;
-                nb->y = (uint8_t)((rg == 2) ? 184 : (rg * 72 + 36));
+                nb->s0 = drop_s0[rg];        /* stale rows first */
+                nb->cnt = 0;
                 bq_t = (bq_t + 1) & 3;
             }
         }
