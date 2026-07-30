@@ -104,7 +104,9 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 
 /* Per-CPU miss queues: appended (write-through) during concurrent compose,
  * drained by the master in the next window. */
-static uint16_t missq[2][256];
+#define MISSQ_CAP 192   /* was 256; miss rates run 10-36/window,
+                         * cap trimmed to fit .bss under the guard */
+static uint16_t missq[2][MISSQ_CAP];
 static volatile uint16_t miss_n[2];
 
 /* Placeholder pixels for uncached tiles: all pen 0 -> the tile color's
@@ -208,7 +210,7 @@ static inline const uint8_t *tile_pixels(unsigned code, int cpu)
         if (cache_tag[s4 + w2] == code)
             return CACHE_C + (s4 + w2) * 64;
     uint16_t n = miss_n[cpu];
-    if (n < 256) {
+    if (n < MISSQ_CAP) {
         missq[cpu][n] = (uint16_t)code;
         miss_n[cpu] = (uint16_t)(n + 1);
     }
@@ -1460,6 +1462,12 @@ RAMCODE void m_main(void)
      * (the eye-scene "white band"). Rotation bounds any row's
      * staleness to ~2 cycles. */
     uint8_t drop_s0[3] = {0, 0, 0};
+    /* Consecutive-drop streak per region: protecting the maps band
+     * made the OTHER regions the permanent sacrifice — on ares one
+     * region starved to zero compute (rows 48-88 frozen on intro
+     * content for minutes). A region dropped 3 cycles running becomes
+     * temporarily undroppable, so sacrifice rotates. */
+    uint8_t drop_streak[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
@@ -1607,6 +1615,7 @@ RAMCODE void m_main(void)
                 default:
                     if (b->rg == 2)
                         build_maps(b->bpar ^ 1, b->bank);
+                    drop_streak[b->rg] = 0;  /* completed: fed this cycle */
                     b->on = 0;
                     bq_h = (bq_h + 1) & 3;
                     continue;
@@ -1790,10 +1799,12 @@ RAMCODE void m_main(void)
                      * perfect. Losing any other band costs one stale
                      * strip for one cycle; losing R2-pre-maps costs a
                      * second of wrong colors. */
-                    if (b->rg == 2 && b->phase <= 6) {
+                    if ((b->rg == 2 && b->phase <= 6) ||
+                        drop_streak[b->rg] >= 3) {
                         for (int qi = 1; qi < 4; qi++) {
                             struct band *c2 = &bq[(bq_h + qi) & 3];
-                            if (c2->on && !(c2->rg == 2 && c2->phase <= 6)) {
+                            if (c2->on && !(c2->rg == 2 && c2->phase <= 6)
+                                && drop_streak[c2->rg] < 3) {
                                 /* field-wise swap: struct assignment
                                  * emits memcpy (no libc at RV=1) */
                                 uint8_t t8;
@@ -1811,6 +1822,8 @@ RAMCODE void m_main(void)
                         uint8_t fi = (uint8_t)(b->s0 + b->cnt);
                         if (fi >= nsd) fi -= nsd;
                         drop_s0[b->rg] = fi;
+                        if (drop_streak[b->rg] < 255)
+                            drop_streak[b->rg]++;
                     }
                     if (b->rg == 2 && b->phase <= 6) {
                         /* build_maps still owed — but NOT here: inline

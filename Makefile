@@ -92,7 +92,10 @@ md_src/%.o: md_src/%.c
 	@echo "MDCC $<"
 	@$(MDCC) $(MDCCFLAGS) $(MDEXTRA) $(MDINCS) -MMD -MP -c $< -o $@
 
-$(TARGET).32x: $(TARGET).elf
+# .lst prerequisite = the .bss region guard runs BEFORE the rom is
+# emitted: a guard failure must never leave a fresh .32x behind (it
+# once shipped a build whose .bss overlapped the tilemap shadow).
+$(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@$(SHOBJC) -O binary $< temp.32x
 	@dd if=temp.32x of=$@ bs=8192 conv=sync 2>/dev/null
 	@rm -f temp.32x
