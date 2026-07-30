@@ -61,6 +61,37 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
+### Iteration 3b — stall probe verdict: splitting is not shrinking
+
+Dual-PC probe at the "deadlock": both CPUs healthy, composing
+continuously — the pipeline starves because window posts stop passing
+the V-gate ONCE k2/k0 lengthen (the split spread the 68K-blocked time
+without reducing it; the spiral reproduced in MAME). LAW: the ares
+cadence fix must REMOVE steady-state FM-hold work, not redistribute
+it.
+
+### Iteration 3c — THE plan: write-observer ring (1b, correctly scoped)
+
+The ring needs NO bank tricks and does NOT touch the read-back sites:
+thunked stores land in FB staging normally (game reads unaffected)
+AND append their offset to an MD-RAM ring. Loads (RLE/block fills)
+get entry/exit thunks: load_flag + dirty-page bitmap instead of
+per-word logging. MD vint ships ring+bitmap in the DREQ push tail.
+SH-2 k1: apply ring offsets (few in-window FB reads) and run page
+copies ONLY when the bitmap demands (post-load, display already
+held). copy_pages leaves the steady path -> k1 FM-hold ~2ms (blit
+0.75 + apply_cram 0.7 + ring apply) -> handler fits the frame ->
+20Hz cadence on ares. Store sites (enumerated, disassembled):
+- ring-tier: 0xD84 fill helper (+ inline 32BC singles 0xD60-0xD7A),
+  0x2AD4/2AE2/2AF0/2AFE vint corner words, 0x6836-cluster seam
+  writers (stores in helpers past 0x6966), 0x1BA1C/0x1BA2C fills,
+  0x1BA42/0x1BA4A words, 0x173C/40 + 0x1760/64 byte-pair loops
+- load-tier (entry/exit brackets): RLE 0x16AE/0x16B2 pair, block
+  blitter 0x258A, clears 0x36B0 and 0x1ACD8, 0xDA8 column blit,
+  0x1A52E/0x1A54C bonus fills, scratch save/restore 0x1B760/0x1B7A4
+  (bracket keeps its round-trip in one bank tenure — moot without
+  alternation, kept for the eventual double-buffer)
+
 ### Iteration 3 — ares cadence spiral: DIAGNOSED, fix attempt REVERTED
 
 ARES VERDICT (savestate d6ed14ac): speed pathology dead (blit skips
