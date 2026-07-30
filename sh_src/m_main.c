@@ -1528,7 +1528,12 @@ RAMCODE void m_main(void)
                  * the queue-busy maintenance slot below keeps it moving
                  * when idle never comes) */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
-                if (dt <= 8000) {
+                if (dt <= 4000) {   /* EARLY WINDOW ONLY: any chunk in
+                                     * flight when the window signal
+                                     * arrives delays pickup past the
+                                     * vblank gate — C-rom forensics:
+                                     * un-gated maintenance = 94% blit
+                                     * skips on ares vs 31% baseline */
                     if (build_maps_chunk(owed_par))
                         maps_owed = 0;
                 }
@@ -1538,7 +1543,7 @@ RAMCODE void m_main(void)
                 /* palette changed: refresh the shadow LUT, one chunk
                  * per idle visit (silhouette fallback until fresh) */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
-                if (dt <= 7000)
+                if (dt <= 4000)
                     shadow_lut_chunk();
                 continue;
             }
@@ -1560,7 +1565,7 @@ RAMCODE void m_main(void)
                  * group-1 red/white/blue garbage). Owed maps outrank
                  * the shadow LUT: wrong colors beat wrong shadows. */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
-                if (dt <= 7000) {
+                if (dt <= 4000) {
                     if (maps_owed) {
                         if (build_maps_chunk(owed_par))
                             maps_owed = 0;
