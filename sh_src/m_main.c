@@ -1333,7 +1333,13 @@ RAMCODE static void blit_half(int ylo, int yhi)
  * The global flip edges are synchronized through SYNC[2] (slave step:
  * 1 = first-bank blit done, 2 = second-bank blit done) and SYNC[3]
  * (master: flip latched, second bank writable). No stream servicing
- * inside the window — the 68K is stalled, no batches arrive. */
+ * inside the window — the 68K is stalled, no batches arrive.
+ * SYNC[4]/[5] (iter4): the PREEMPT-BLIT mailbox. The master posts the
+ * per-window blit command in SYNC[4] instead of draining the slave's
+ * concurrent compose first; the slave services SYNC[4] between compose
+ * strips (slave_service_stream) and echoes SYNC[5] when its blit path
+ * is done. This removes the full-compose slave_wait from the 68K's
+ * pre-ack critical path (LOOP.md iter4: retry-loop saturation). */
 /* ---- UNPAIR STEP 2: compose is fully CONCURRENT. Windows now hold
  * only what genuinely needs the 68K stopped: the vblank blit slices
  * and (window 0) the staging snapshot + CRAM. All composition — tile
@@ -1476,6 +1482,7 @@ RAMCODE void m_main(void)
         pr_age[i] = 0;
     }
     SYNC[0] = SYNC[1] = SYNC[2] = SYNC[3] = 0;
+    SYNC[4] = SYNC[5] = 0;              /* (iter4) preempt-blit mailbox */
 
     volatile uint16_t *cram = &MARS_CRAM;
     for (int i = 0; i < 256; i++)
@@ -1698,10 +1705,12 @@ RAMCODE void m_main(void)
             shadow_stole = 0;
             win_no++;
 
-            if (tile_cmd) {                  /* concurrent third finished? */
-                slave_wait(tile_cmd);
-                tile_cmd = 0;
-            }
+            /* (iter4) the previous window's concurrent compose is NO
+             * LONGER drained here: that slave_wait stalled the 68K for a
+             * whole compose (the retry-loop saturation, LOOP.md iter4).
+             * The wait moves POST-ACK (off the 68K's critical path), and
+             * the per-window blit reaches the slave via the SYNC[4]
+             * preempt mailbox — pickup latency <=1 compose strip. */
             diag_add(4, tp);
 
             /* vblank-critical part. If the third-wait ate the vblank,
@@ -1711,8 +1720,6 @@ RAMCODE void m_main(void)
              * written every ack-spin iteration): ares' FBCTL VBLK bit
              * proved untrustworthy (the field bursts of one black frame
              * per cycle — flips passing a stale/false vblank check). */
-            int y0 = k * 75;
-            int yend = (k == 2) ? 224 : y0 + 75;
             int skip;
             {
                 uint16_t md_v = MARS_SYS_COMM12;
@@ -1731,6 +1738,7 @@ RAMCODE void m_main(void)
             int wblit = !skip && k != 0;     /* two-vblank ship: w0 idle */
             SYNC[2] = 0;
             SYNC[3] = 0;
+            SYNC[5] = 0;                      /* (iter4) preempt-blit echo */
             tp = frt();
             if (wblit) {
                 guard = 2000000;
@@ -1738,25 +1746,45 @@ RAMCODE void m_main(void)
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_x ^ 1) && --guard) ;
             }
             diag_add(6, tp);
-            slave_cmd(scmd);
-            cache_purge();                   /* slice rows may hold the OTHER
-                                              * CPU's composes from last cycle */
             tp = frt();
             if (wblit) {
+                /* (iter4) PREEMPT MAILBOX: hand the slave its blit half
+                 * WITHOUT first draining its concurrent compose. The slave
+                 * services SYNC[4] between compose strips, so pickup
+                 * latency is <=1 strip instead of a whole compose. The
+                 * blitted rows and the region the slave is still composing
+                 * are DISJOINT by pipeline construction: Wk blits its
+                 * blit-set while the outstanding compose (launched at the
+                 * previous window) covers a different region band. */
+                SYNC[4] = scmd;
+                cache_purge();               /* slice rows may hold the OTHER
+                                              * CPU's composes from last cycle */
                 if (k == 1)
                     blit_half(56, 112);
                 else
                     blit_half(168, 224);
-                while (SYNC[2] < 1) ;        /* slave half blitted */
+                while (SYNC[2] < 1) ;        /* slave picked up + blitted */
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 guard = 2000000;
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
+                while (SYNC[5] != scmd) ;    /* slave blit path fully done */
+                SYNC[4] = 0;
             }
             diag_add(5, tp);
 
-            /* in-window work (game paused, RV=0): W1 = snapshot + CRAM
-             * only (post game-vint: the sprite list is complete);
-             * W0/W2 = nothing beyond the blit. */
+            /* PRE-ACK in-window work (game paused, FM=1). W1 only: the
+             * scroll/page latch, DREQ sprite-list harvest + DMA re-arm,
+             * dirty-page copy, and CRAM. These MUST run pre-ack:
+             *  - copy_pages reads the game's FB staging (0x24012000) —
+             *    only legal while the SH-2 owns the FB (FM=1);
+             *  - the DMA re-arm MUST precede the game's own DREQ push
+             *    (md_main), or the 68K blocks on a full FIFO write with
+             *    no armed drain — a hard mutual deadlock (measured: 68K
+             *    stuck at the fifo store, ent frozen). The iter4 win is
+             *    part (b) (the preempt-blit mailbox removed the full-
+             *    compose pre-blit wait) plus moving the compose launch/
+             *    drain/band enqueue POST-ACK; copy_pages stays the pre-ack
+             *    floor until a full write-log ring retires its FB read. */
             if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
                 /* sprite-list snapshot — DREQ FIFO DMA (the FB staging
@@ -1813,10 +1841,7 @@ RAMCODE void m_main(void)
                 /* DIRTY-ONLY page sync (write-observer ring): copy at
                  * most 3 pending pages per k1 — steady state is ZERO
                  * (1988 design preloads rounds; tile writes happen at
-                 * transitions). This replaces copy_pages(0,6) master +
-                 * (6,13) slave EVERY cycle: the k1 FM-hold drops from
-                 * 8-15ms on ares (the 67%-gate-reject cadence spiral,
-                 * ares verdict d6ed14ac) to ~2ms. */
+                 * transitions). Reads FB staging: FM-required, pre-ack. */
                 tp = frt();
                 {
                     /* ADAPTIVE: per-frame animators that mark ALL-dirty
@@ -1842,44 +1867,59 @@ RAMCODE void m_main(void)
                 tp = frt();
                 apply_cram(par);
                 diag_add(2, tp);
-            } else {
-                if (k == 2) {
-                    /* SKIP-RATE BARS (band-staleness debug):
-                     *   2 = total in-window time (1px = 87.7us)
-                     *   4 = master-side blit skips this cycle x16px
-                     *       (each = one band stale a full cycle)
-                     *   6 = cumulative master skips (x2px, cap 300) */
-                    static uint32_t p0, ps;
-                    uint32_t c0v = DIAG[8];
-                    int lens[3];
-                    lens[0] = (int)((c0v - p0) >> 6);
-                    p0 = c0v;
-                    lens[1] = (int)((DIAG[7] - ps) * 16);
-                    ps = DIAG[7];
-                    lens[2] = (int)(DIAG[7] * 2);
-                    ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
-                    for (int j = 0; j < 3; j++) {
-                        int len = lens[j];
-                        if (len > 300) len = 300;
-                        uint8_t *b = sbuf + (8 + 2 + 2 * j) * SBUF_W + 8;
-                        for (int i = 0; i < len; i++)
-                            b[i] = 0xFF;
-                    }
+            } else if (k == 2) {
+                /* SKIP-RATE BARS (band-staleness debug):
+                 *   2 = total in-window time (1px = 87.7us)
+                 *   4 = master-side blit skips this cycle x16px
+                 *       (each = one band stale a full cycle)
+                 *   6 = cumulative master skips (x2px, cap 300) */
+                static uint32_t p0, ps;
+                uint32_t c0v = DIAG[8];
+                int lens[3];
+                lens[0] = (int)((c0v - p0) >> 6);
+                p0 = c0v;
+                lens[1] = (int)((DIAG[7] - ps) * 16);
+                ps = DIAG[7];
+                lens[2] = (int)(DIAG[7] * 2);
+                ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
+                for (int j = 0; j < 3; j++) {
+                    int len = lens[j];
+                    if (len > 300) len = 300;
+                    uint8_t *b = sbuf + (8 + 2 + 2 * j) * SBUF_W + 8;
+                    for (int i = 0; i < len; i++)
+                        b[i] = 0xFF;
                 }
             }
 
+            /* ---- EARLY ACK (iter4): all FM-required work (blit, DREQ
+             * harvest+re-arm, copy_pages, CRAM) is done; release the game
+             * NOW — BEFORE the compose launch/drain/band enqueue, which are
+             * SDRAM-only and run concurrent with the game below. Combined
+             * with part (b) (the preempt-blit mailbox retired the full-
+             * compose pre-blit wait), the pre-ack stall drops to blit +
+             * copy_pages + apply_cram + the <=1-strip preempt wait; the
+             * compose-drain slave_wait leaves the 68K's critical path. */
+            if (k == 1)
+                DIAG[9]++;
+            MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+
+            /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
+            /* Drain the PREVIOUS window's concurrent compose before
+             * relaunching (SYNC[0] carries one command at a time). This
+             * WAS pre-ack (the retry-loop saturation); now it is off the
+             * 68K's critical path — the game is already running. */
             tp = frt();
-            slave_wait(scmd);
+            if (tile_cmd) {
+                slave_wait(tile_cmd);
+                tile_cmd = 0;
+            }
             diag_add(3, tp);
 
             /* launch band R(k)'s FULL concurrent compose (tiles then
-             * sprites, slave rows), ack the MD, then do our own rows. */
+             * sprites, slave rows), then do our own rows. */
             tile_cmd = (uint16_t)(CMD_TILE | (k << 4) | (par << 8) | bank1);
             slave_cmd(tile_cmd);
             diag_add(8, tw);
-            if (k == 1)
-                DIAG[9]++;
-            MARS_SYS_COMM0 = 0;              /* ack: MD restores FM/RV, game runs */
 
             {
                 int rg = (k + 2) % 3;        /* window k composes region:

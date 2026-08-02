@@ -60,6 +60,50 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 |------|-------|-------|--------|---------|------|-------|------|
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
+| 08-02 | e37885b | 41.0 | 90.8 | 3.3 | 48.4 | 20.2 | 40.7 | (iter4 BASELINE; scream now measured; MAME rig has drifted — ares is the gate)
+| 08-02 | iter4   | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
+
+### Iteration 4 IMPLEMENTATION LANDED — preempt-blit + early ack
+
+Shipped two of the plan's mechanisms; the third (copy_pages off the
+FM-hold) proved impossible without a new arc (below).
+
+(b) PREEMPT-BLIT MAILBOX (the core win). New SYNC[4]/[5] slots: the
+master posts the per-window blit in SYNC[4] instead of first draining
+the slave's whole concurrent compose (the old pre-blit
+`slave_wait(tile_cmd)` — the named retry-loop-saturation cause). The
+slave services SYNC[4] between compose strips (slave_service_stream),
+so blit pickup latency is <=1 strip (~0.4ms) instead of a full
+compose. SAFE BY CONSTRUCTION: the rows Wk blits and the region the
+slave is still composing are always DISJOINT (W1 blits 0-112 while
+R2/144-224 composes; W2 blits 112-224 while R0/0-72 composes) — single
+sbuf, no tear.
+
+(a) EARLY ACK, correctly scoped. The compose LAUNCH, the previous-
+compose DRAIN (slave_wait, now post-ack, off the 68K path), and the
+band enqueue moved after the COMM0 ack. copy_pages, the DREQ
+harvest+re-arm, apply_cram, and the blit stay PRE-ACK.
+
+DEAD END found the hard way (MAME deadlock, both CPUs frozen at
+scene 0x0C): moving copy_pages / DREQ re-arm post-ack is UNSAFE.
+copy_pages READS the game's FB staging (0x24012000) — legal only at
+FM=1 (pre-ack). And the DMA re-arm MUST precede the game's own DREQ
+sprite-list push, or the 68K blocks forever on a full FIFO write with
+no armed drain (measured: 68K stuck at the fifo store `fifo[0]=s[1]`,
+vint entries frozen). Both stay pre-ack. copy_pages (~2ms) is now the
+pre-ack FLOOR; retiring it needs the full write-LOG ring (iter 1b:
+thunks ship (offset,value), SH-2 applies to the shadow directly, no FB
+read) — a separate arc, NOT this iteration.
+
+ARES FALSIFIER (Mike, next pass): state_health.py before/after on
+build `iter4`. Predicted: V-gate rejects fall from the invariant
+64-67% band toward ~0; vints/cycle -> 3. If the band holds, the
+preempt latency (<=1 strip during heavy sprite strips) is itself the
+new binding constraint -> next probe shrinks slave strips or splits
+the blit off the compose CPU. MAME gates all pass (scoreboard
+identical; attract runs title->scream->eyehold->demo; PRESSURE holds
+shape) but MAME cannot see the FM-hold latency — the 64-67% band is
+the only verdict.
 
 ### Iteration 4 probe verdict — cart-bus DEAD; the retry loop IS the load
 

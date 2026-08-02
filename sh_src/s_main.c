@@ -19,6 +19,19 @@ extern void slave_concurrent_k(uint16_t cmd);
  * one consumes each kind). */
 __attribute__((section(".ramtext"))) void slave_service_stream(void)
 {
+    /* (iter4) PREEMPT-BLIT MAILBOX: the master hands the per-window blit
+     * here (SYNC[4]) instead of waiting for the whole concurrent compose
+     * to drain. This is polled at EVERY stream-service point — between the
+     * slave's compose strips and in the idle loop — so the master's blit
+     * pickup latency is bounded by one 12-row strip, not a full compose.
+     * Clear SYNC[4] BEFORE echoing so a re-entry never double-blits. */
+    uint16_t bc = SYNC[4];
+    if (bc) {
+        slave_window_k(bc);          /* blit slave half; SYNC[2] set inside */
+        SYNC[4] = 0;
+        SYNC[5] = bc;                /* echo: blit path complete */
+    }
+
     uint16_t c0 = MARS_SYS_COMM0;
     if (c0 & 0x4000) {                       /* text or palette batch */
         int idx = c0 & 0x7FF;
