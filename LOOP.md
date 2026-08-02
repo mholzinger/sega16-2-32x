@@ -61,7 +61,7 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 | 08-02 | e37885b | 41.0 | 90.8 | 3.3 | 48.4 | 20.2 | 40.7 | (iter4 BASELINE; scream now measured; MAME rig has drifted — ares is the gate)
-| 08-02 | iter4   | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
+| 08-02 | 59cdebf | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
 
 ### Iteration 4 IMPLEMENTATION LANDED — preempt-blit + early ack
 
