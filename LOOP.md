@@ -61,6 +61,33 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 54b227c | 71.5 | n/a | 51.4 | 47.8 | 22.4 | 48.3 | (instant anchors: latency-dominated)
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 
+### Iteration 4 probe verdict — cart-bus DEAD; the retry loop IS the load
+
+SPROBE run (sprites off, ares): V-gate rejects 65.9% — unchanged.
+The 64-67% band has now survived: three scheduler designs, the
+copy_pages hold, and the heaviest cart-bus reader. The only mechanism
+that self-stabilizes at a constant reject rate: THE GATE-REJECT RETRY
+LOOP SATURATES THE 68K. Rejected posts retry every vint; the master's
+pre-ack path includes slave_wait on the PREVIOUS concurrent compose
+(ms on ares); the handler chain runs near frame-length, so every
+entry is late, every post rejects, and the equilibrium re-forms no
+matter what is shaved elsewhere — which is exactly the observed
+invariance.
+
+ITERATION 4 IMPLEMENTATION (next session):
+(a) EARLY ACK: MD releases the game after FM-required work only
+    (blit ~0.75ms + apply_cram ~0.7ms); latch, DREQ harvest/re-arm,
+    and compose launches move post-ack (SDRAM/no-FM work).
+(b) PREEMPTIBLE SLAVE COMPOSE: the slave polls for window commands
+    inside its strip loop (it already calls slave_service_stream
+    there); on a window signal it pauses compose, performs its blit
+    duty, resumes. Master slave_wait shrinks from a full compose to
+    <=1 strip.
+Target: 68K per-window stall ~2ms; handler chain << frame; gate
+rejects -> ~0; ares cadence vints/cycle -> 3. Verify with
+state_health.py before/after — the invariant 64-67% band is the
+falsifier either way.
+
 ### Iteration 3c closed / 4 opened — the ring works; the drag is deeper
 
 Ring verdict (state_health on ares, build d6165d5d): dirty bitmap
