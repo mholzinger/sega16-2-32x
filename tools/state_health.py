@@ -63,17 +63,17 @@ def main():
     # end of the per-vint tail: DREQ push + palette scan + COMM stream).
     # Frame = 262. A whole-tail span at/over 262 on ares => the handler
     # overruns the frame -> the V-gate reject band. MAME floor ~227/120.
-    # last-vint (not max): total handler span (high byte) and window/ack
-    # span (low byte), scanlines. tail = total - window (same vint, valid).
+    # MAX total handler span (high byte) + the window/ack span of that
+    # same worst vint (low byte), scanlines. tail = total - window.
     packed = rdmd16(0xB0F4)
     total, win = packed >> 8, packed & 0xFF
     real_total = total if total >= win else total + 256  # wrap past 256
-    tail = (total - win) & 0xFF
-    verdict = ("OVERRAN this frame (next H-int late -> reject)"
-               if real_total >= 262 else
-               f"{262 - real_total} lines slack (fit this frame)")
-    print(f"handler span (last vint): total={real_total} window/ack={win} "
-          f"tail={tail} (frame=262) -> {verdict}")
+    tail = (real_total - win) & 0x1FF
+    dom = "WINDOW/ack-spin" if win > tail else "TAIL (DREQ+scan+stream)"
+    verdict = ("LAPS THE FRAME -> entry drifts -> reject band"
+               if real_total >= 262 else f"{262 - real_total} lines margin")
+    print(f"worst handler: total={real_total} window/ack={win} tail={tail} "
+          f"(frame=262) dominated by {dom} -> {verdict}")
 
 
 if __name__ == "__main__":

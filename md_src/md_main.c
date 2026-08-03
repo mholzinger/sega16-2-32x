@@ -395,17 +395,19 @@ window_done: ;
 	// fits and the reject cause is elsewhere.
 	(void)v_stream;
 	{
+		static uint8_t max_total, at_win;
 		uint8_t ev = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 		uint8_t total = (uint8_t)(ev - v_entry);   // TRUE entry -> here
 		uint8_t win = (uint8_t)(v_win - v_entry);  // window/ack-spin only
-		// F4 = (LAST-vint TOTAL handler span << 8) | WINDOW span, scanlines.
-		// LAST-vint (not max) so a savestate during a STEADY scene reads
-		// the steady operating point, not a scene-transition spike. Frame
-		// = 262. total >= 262 = the handler overran -> next H-int late ->
-		// V-gate reject. win = the ack-spin (SH-2-speed-bound = the ares
-		// divergence the post-window probe missed).
+		if (total > max_total) { max_total = total; at_win = win; }
+		// F4 = (MAX TOTAL handler span << 8) | the WINDOW span of THAT max
+		// vint, scanlines. Max catches the worst handler (the accepted,
+		// window-posting ones are longest); its paired window shows whether
+		// the ack-spin or the tail dominates the worst case. A steady
+		// eye/demo HOLD has no transitions, so its max is the steady
+		// worst-case. total>=262 => handlers lap -> entry drifts -> band.
 		*(volatile uint16_t*)0xFFB0F4 =
-			(uint16_t)(((uint16_t)total << 8) | win);
+			(uint16_t)(((uint16_t)max_total << 8) | at_win);
 	}
 
 	if (busy)
