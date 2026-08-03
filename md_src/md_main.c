@@ -71,6 +71,11 @@ void shim_vblank(void) {
 
 	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
 
+	// ITER5 TAIL PROBE: V at TRUE handler entry (before the window/ack-spin)
+	// so the span includes the window ack-wait — the part that scales with
+	// SH-2 speed (the MAME vs ares divergence the post-window probe missed).
+	uint8_t v_entry = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+
 	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
 	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
 	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
@@ -388,18 +393,19 @@ window_done: ;
 	// a span approaching one frame (~262 lines) = the handler exceeds a
 	// frame -> next H-int fires late -> reject. Small (<~120) = the tail
 	// fits and the reject cause is elsewhere.
+	(void)v_stream;
 	{
-		static uint8_t max_tail, max_stream;
 		uint8_t ev = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
-		uint8_t tail = (uint8_t)(ev - v_win);      // whole tail, wrap-safe
-		uint8_t strm = (uint8_t)(ev - v_stream);   // stream section only
-		if (tail > max_tail) max_tail = tail;
-		if (strm > max_stream) max_stream = strm;
-		// F4 = (max total-tail span << 8) | max stream span, both in
-		// scanlines. Frame = 262; a total-tail span crossing 262 on ares
-		// = the handler overruns the frame -> the V-gate reject band.
+		uint8_t total = (uint8_t)(ev - v_entry);   // TRUE entry -> here
+		uint8_t win = (uint8_t)(v_win - v_entry);  // window/ack-spin only
+		// F4 = (LAST-vint TOTAL handler span << 8) | WINDOW span, scanlines.
+		// LAST-vint (not max) so a savestate during a STEADY scene reads
+		// the steady operating point, not a scene-transition spike. Frame
+		// = 262. total >= 262 = the handler overran -> next H-int late ->
+		// V-gate reject. win = the ack-spin (SH-2-speed-bound = the ares
+		// divergence the post-window probe missed).
 		*(volatile uint16_t*)0xFFB0F4 =
-			(uint16_t)(((uint16_t)max_tail << 8) | max_stream);
+			(uint16_t)(((uint16_t)total << 8) | win);
 	}
 
 	if (busy)

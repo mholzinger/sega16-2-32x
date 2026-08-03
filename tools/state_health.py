@@ -45,8 +45,7 @@ def main():
     print(f"blit skips={skips} ({100.0 * skips / max(cycles, 1):.1f}% "
           f"of cycles)")
     print(f"deferrals={rd32(0x28000 + 13 * 4)} "
-          f"dreq_incomplete={rd32(0x28000 + 17 * 4)} "
-          f"push_aborts={rdmd16(0xB0F4)}")
+          f"dreq_incomplete={rd32(0x28000 + 17 * 4)}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
     # HV at the last blit-phase vint entry (md_main 0xFFB0FE, written
     # BEFORE the gate check). The gate accepts V in 0xDF..0xE2 (MAME-
@@ -64,14 +63,17 @@ def main():
     # end of the per-vint tail: DREQ push + palette scan + COMM stream).
     # Frame = 262. A whole-tail span at/over 262 on ares => the handler
     # overruns the frame -> the V-gate reject band. MAME floor ~227/120.
+    # last-vint (not max): total handler span (high byte) and window/ack
+    # span (low byte), scanlines. tail = total - window (same vint, valid).
     packed = rdmd16(0xB0F4)
-    tail, strm = packed >> 8, packed & 0xFF
-    dreq_scan = (tail - strm) & 0xFF
-    verdict = ("OVERRUNS FRAME (>=262 wrapped) -> tail IS the load"
-               if tail >= 250 or tail < strm else
-               f"{262 - tail} lines of frame slack left")
-    print(f"tail span: whole={tail} stream={strm} dreq+scan~{dreq_scan} "
-          f"(frame=262) -> {verdict}")
+    total, win = packed >> 8, packed & 0xFF
+    real_total = total if total >= win else total + 256  # wrap past 256
+    tail = (total - win) & 0xFF
+    verdict = ("OVERRAN this frame (next H-int late -> reject)"
+               if real_total >= 262 else
+               f"{262 - real_total} lines slack (fit this frame)")
+    print(f"handler span (last vint): total={real_total} window/ack={win} "
+          f"tail={tail} (frame=262) -> {verdict}")
 
 
 if __name__ == "__main__":
