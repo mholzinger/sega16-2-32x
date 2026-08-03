@@ -63,6 +63,44 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-02 | e37885b | 41.0 | 90.8 | 3.3 | 48.4 | 20.2 | 40.7 | (iter4 BASELINE; scream now measured; MAME rig has drifted — ares is the gate)
 | 08-02 | 59cdebf | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
 
+### Iteration 5 — BAND CRACKED: the per-vint HANDLER TAIL overruns the frame
+
+The 64-67% V-gate reject band is NOT a window-stall latency spiral. It
+is the shim's per-vint TAIL — the work AFTER the render window that runs
+on EVERY vint, gate-rejected or not: the DREQ sprite-list push, the
+512-word palette scan, and the text/palette COMM stream. Four iterations
+shortened the WINDOW (runs on the ~35% accepted vints); the band never
+moved because the tail (100% of vints) was untouched.
+
+MEASURED (tail-span probe, md_main 0xFFB0FE entry / 0xFFB0F4 packed
+max: high=whole tail, low=stream; state_health decodes). ares verdict
+59cdebf: rejects 65.5%, vints/cycle 8.69, and one accepted sample at
+V=0xE0 — so NOT a calibration shift (on-time vints exist), it is
+intermittent overrun. MAME floor (build 26d4148, 3x faster SH-2, gate
+rejects ~0%): whole-tail = 231 of 262 scanlines, split stream 120 /
+DREQ+scan ~111. The handler eats 88% of the frame EVEN ON MAME; it fits
+only because 231 < 262. On ares (slower) the tail crosses 262 -> the
+next H-int fires while the handler still runs -> late -> reject, every
+frame it overruns. That IS the band, and the ~7Hz crawl.
+
+ROOT: too much slow 68K<->32X bus traffic per vint. The palette scan is
+fast local RAM; the cost is (a) ~320+ COMM register writes + ack-spins
+in the stream (the MD waits on the slave, which is busy composing) and
+(b) the 516-word DREQ FIFO push gated on DMA drain. Both ~110 lines.
+
+ITERATION 5 FIX (design fork, next):
+- STREAM: stop re-sending the 16 priority batches (layer regs +
+  rowscroll) every vint when unchanged; static scenes then send ~0.
+  Motion scenes still pay — pair with moving the stream to a single
+  bulk DREQ transfer instead of per-word acked COMM.
+- DREQ: push the sprite list every OTHER vint (1-frame lag already
+  tolerated) to halve its cost, or fold text/palette into the same DMA.
+Target: whole-tail << 262 on ares with margin -> rejects collapse,
+vints/cycle -> 3. Falsifier: state_health tail span + reject %.
+Diagnostic build 26d4148+ carries the probe (F4 repurposed from the
+retired fs/torn tracer); it is NOT a fix — the band will still read
+~65% until the tail is cut.
+
 ### Iteration 4 IMPLEMENTATION LANDED — preempt-blit + early ack
 
 Shipped two of the plan's mechanisms; the third (copy_pages off the

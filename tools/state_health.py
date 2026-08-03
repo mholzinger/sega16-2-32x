@@ -48,6 +48,30 @@ def main():
           f"dreq_incomplete={rd32(0x28000 + 17 * 4)} "
           f"push_aborts={rdmd16(0xB0F4)}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
+    # HV at the last blit-phase vint entry (md_main 0xFFB0FE, written
+    # BEFORE the gate check). The gate accepts V in 0xDF..0xE2 (MAME-
+    # tuned). If V clusters just past 0xE2 with the handler otherwise
+    # fast -> the gate is mis-calibrated for ares (fires at ares's
+    # natural H-int V), NOT a latency overrun. If V is deep in-frame
+    # (0x00..0x20 / 0xF0+) -> genuine handler overrun. THE decider.
+    hv = rdmd16(0xB0FE)
+    v = hv >> 8
+    gated = "REJECT" if (v < 0xDF or v > 0xE2) else "accept"
+    print(f"HV at last vint={hv:04X} (V={v:02X} -> {gated}; "
+          f"gate accepts DF..E2)")
+    # ITER5 tail probe (0xFFB0F4): high byte = max whole-tail span, low
+    # byte = max stream-section span, both in scanlines (post-window ->
+    # end of the per-vint tail: DREQ push + palette scan + COMM stream).
+    # Frame = 262. A whole-tail span at/over 262 on ares => the handler
+    # overruns the frame -> the V-gate reject band. MAME floor ~227/120.
+    packed = rdmd16(0xB0F4)
+    tail, strm = packed >> 8, packed & 0xFF
+    dreq_scan = (tail - strm) & 0xFF
+    verdict = ("OVERRUNS FRAME (>=262 wrapped) -> tail IS the load"
+               if tail >= 250 or tail < strm else
+               f"{262 - tail} lines of frame slack left")
+    print(f"tail span: whole={tail} stream={strm} dreq+scan~{dreq_scan} "
+          f"(frame=262) -> {verdict}")
 
 
 if __name__ == "__main__":

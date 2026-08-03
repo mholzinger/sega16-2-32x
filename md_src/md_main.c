@@ -174,6 +174,8 @@ void shim_vblank(void) {
 window_done: ;
 	}
 
+	// ITER5 TAIL PROBE: V at the start of the per-vint tail (post-window).
+	uint8_t v_win = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 
 	// STAGED-PALETTE TRACER (temporary): border reports what the 68K sees
 	// in the FB-staged palette at handler entry (FM=0, access bank):
@@ -182,16 +184,9 @@ window_done: ;
 	//   RED    = tile half empty too
 	//   MAGENTA (sticky) = access-bank parity broke (bank tearing)
 	{
-		static uint16_t last_fs = 0xFFFF, torn;
 		uint16_t fs = *(volatile uint16_t*)0xA1518A & 1;   // FM=0 here: readable
-		if (last_fs != 0xFFFF && fs != last_fs)
-			torn = 1;
-		last_fs = fs;
-		// (palette-scan half of the tracer retired: ~96 staged-palette
-		// reads per vint of 68K time, and its border colors are visual
-		// noise now that the pipeline is trusted. Diagnosis via the
-		// SH-2 perf bar + 0xFFB0F4 state word instead.)
-		*(volatile uint16_t*)0xFFB0F4 = (uint16_t)((fs << 8) | torn);
+		// (fs/torn tracer retired; 0xFFB0F4 repurposed for the ITER5 TAIL
+		// PROBE — max shim-handler span in scanlines, see below.)
 		*(volatile uint16_t*)0xFFB0F6 = fs;  // steady FS: the render window's
 		                                     // exit gate waits for this value
 	}
@@ -314,6 +309,9 @@ window_done: ;
 	// 0xFF9000 and is copied into FB staging above — no palette
 	// COMM streaming.
 	// Text RAM (2048 words) fully refreshes every ~6.4 frames.
+	// ITER5 TAIL PROBE (split): V at the START of the STREAM section, to
+	// separate the COMM stream cost from the DREQ push + palette scan.
+	uint8_t v_stream = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 	{
 		static uint16_t txt_idx;
 		uint8_t pal_sent_now = 0;
@@ -379,6 +377,29 @@ window_done: ;
 					txt_idx = 0;
 			}
 		}
+	}
+
+	// ITER5 TAIL PROBE: shim-handler span in scanlines, entry V (0xFFB0FE,
+	// written at the window phase) -> here, the END of the per-vint tail
+	// (DREQ push + palette scan + text/palette stream). This tail runs on
+	// EVERY vint, gate-rejected or not; if it alone overruns the frame it
+	// is the steady-state 68K load that pins the V-gate reject band (the
+	// window-shortening fixes never touched it). Running MAX in 0xFFB0F4:
+	// a span approaching one frame (~262 lines) = the handler exceeds a
+	// frame -> next H-int fires late -> reject. Small (<~120) = the tail
+	// fits and the reject cause is elsewhere.
+	{
+		static uint8_t max_tail, max_stream;
+		uint8_t ev = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t tail = (uint8_t)(ev - v_win);      // whole tail, wrap-safe
+		uint8_t strm = (uint8_t)(ev - v_stream);   // stream section only
+		if (tail > max_tail) max_tail = tail;
+		if (strm > max_stream) max_stream = strm;
+		// F4 = (max total-tail span << 8) | max stream span, both in
+		// scanlines. Frame = 262; a total-tail span crossing 262 on ares
+		// = the handler overruns the frame -> the V-gate reject band.
+		*(volatile uint16_t*)0xFFB0F4 =
+			(uint16_t)(((uint16_t)max_tail << 8) | max_stream);
 	}
 
 	if (busy)
@@ -550,6 +571,7 @@ void main(void) {
 			td[i] = tile_thunks[i];
 		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
 	}
+	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
 	// demo sounds on; DSW1 0xFF = 1 coin / 1 credit)
