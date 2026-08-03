@@ -88,6 +88,16 @@ fast local RAM; the cost is (a) ~320+ COMM register writes + ack-spins
 in the stream (the MD waits on the slave, which is busy composing) and
 (b) the 516-word DREQ FIFO push gated on DMA drain. Both ~110 lines.
 
+CONFIRMED (ares fe8d590a, steady hold): worst handler total=227,
+window/ack=2, tail=225 — the WINDOW is negligible (iter1-4 all optimized
+~2 lines of 227). The 68K vint handler burns ~225 lines (~14ms) of a
+16.7ms frame EVERY vint, leaving the game ~2ms. The game can't complete
+its per-frame work, falls behind, and its IRQ-masked sections drift
+across vblank -> H-int serviced late (entry V=0x3C/0x5B, mid-frame) ->
+reject. MAME passes the same-length handler (doesn't model the
+starvation). The tail is ~320 per-word COMM register writes (~175
+cycles each on the slow 68K<->32X port) + the DREQ push. CUT THE TAIL.
+
 ITERATION 5 FIX (design fork, next):
 - STREAM: stop re-sending the 16 priority batches (layer regs +
   rowscroll) every vint when unchanged; static scenes then send ~0.
