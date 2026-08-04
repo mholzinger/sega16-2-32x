@@ -76,6 +76,12 @@ void shim_vblank(void) {
 	// SH-2 speed (the MAME vs ares divergence the post-window probe missed).
 	uint8_t v_entry = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 
+	// ITER5: the DREQ push only fires on vints whose window was ACCEPTED
+	// (posted + acked) — those are the vints the master re-armed the DMA
+	// on. On gate-rejected vints (65%) the master never runs, so pushing
+	// would fill the undrained FIFO and block the 68K. Set below.
+	uint8_t window_ok = 0;
+
 	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
 	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
 	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
@@ -176,6 +182,7 @@ void shim_vblank(void) {
 		}
 		// (unpair model: RV stays 0 — the game fetches through 0x900000)
 		(*(volatile uint16_t*)0xFFB0F2)++;       // diagnostics: windows completed
+		window_ok = 1;                           // master re-armed the DMA
 window_done: ;
 	}
 
@@ -232,7 +239,7 @@ window_done: ;
 	// 4-word groups gated on the FIFO-full sign bit. Bounded spins:
 	// if the SH-2 side isn't armed (boot, mskip), abort and retry
 	// next vint — the SH-2 keeps last frame's coherent list.
-	{
+	if (window_ok) {
 		// Source: the game's own STAGED, ORDERED list — its vint
 		// upload (0x2B1E) now lands in the MD RAM mirror at 0xFF7000
 		// (patch_game sprite remap; the order table at 0xEC80 is
@@ -251,9 +258,10 @@ window_done: ;
 		// exhausted budget aborts and retries next vint (the SH-2
 		// keeps last frame's coherent list). 0xFFB0F2 counts aborts
 		// (savestate-readable).
-		uint16_t spin = 800;
+		uint16_t spin = 1200;
 		uint8_t ok = 1;
-		*(volatile uint16_t*)0xA15110 = 516;  // 512 sprites + bitmap + pad
+		static uint16_t txt_dma_base;
+		*(volatile uint16_t*)0xA15110 = 770;  // 512 spr + bitmap + base + 256 txt
 		*ctrl = 4;                            // 68S: session start
 		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
 			while (*ctrl < 0 && --spin) ;
@@ -262,18 +270,33 @@ window_done: ;
 			fifo[0] = s[2]; fifo[0] = s[3];
 			s += 4;
 		}
-		if (ok) {                             // tail: dirty-page bitmap
+		if (ok) {                             // 512 bmp, 513 base, 514+ text
 			while (*ctrl < 0 && --spin) ;
 			if (spin) {
 				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
-				fifo[0] = *bm;                // read...
-				*bm = 0;                      // ...and clear (thunks re-OR)
-				fifo[0] = 0; fifo[0] = 0; fifo[0] = 0;
+				fifo[0] = *bm;
+				*bm = 0;
+				fifo[0] = txt_dma_base;
+				const uint16_t *tt = (const uint16_t*)0xFF8000 + txt_dma_base;
+				for (uint16_t tg = 0; tg < 64; tg++) {
+					while (*ctrl < 0 && --spin) ;
+					if (!spin) { ok = 0; break; }
+					fifo[0] = tt[0]; fifo[0] = tt[1];
+					fifo[0] = tt[2]; fifo[0] = tt[3];
+					tt += 4;
+				}
 			} else
 				ok = 0;
 		}
-		if (!ok) {
-			*ctrl = 0;                        // abort session; retry next vint
+		if (ok) {
+			// Rotate 0..1791 only: the last chunk (1792..2047) holds the
+			// layer regs (0x740) + rowscroll (0x7C0), which COMM ships
+			// EVERY vint. DMAing that region overwrote them with a stale
+			// snapshot -> scroll drift (scoreboard dx=+24). COMM owns it.
+			txt_dma_base = (uint16_t)(txt_dma_base + 256);
+			if (txt_dma_base >= 1792) txt_dma_base = 0;
+		} else {
+			*ctrl = 0;
 			(*(volatile uint16_t*)0xFFB0F2)++;
 		}
 	}

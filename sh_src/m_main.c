@@ -76,8 +76,13 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
 #define FB_STAGING  ((volatile uint16_t *)0x24012000)   /* game tile RAM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
-#define SPR_LAND    ((volatile uint16_t *)0x26028C00)   /* DREQ landing, 1KB
-                                                         * (0x28C00-0x28FFF) */
+#define SPR_LAND    ((volatile uint16_t *)0x26039000)   /* DREQ landing, 2KB
+                                                         * past CACHE_C (ends
+                                                         * 0x39000); stack top
+                                                         * 0x3FC00. 770 words:
+                                                         * 0..511 sprites, 512
+                                                         * bitmap, 513 text base,
+                                                         * 514..769 text chunk */
 #define NPAGES      12
 
 /* Slave commands (SYNC[0]; nonzero = pending; echo to SYNC[1] when done):
@@ -1446,6 +1451,22 @@ RAMCODE static void slave_wait(uint16_t cmd)
     SYNC[0] = 0;
 }
 
+/* Arm DMAC0 for the MD's DREQ push (Chaotix sequence: disable, read to
+ * clear TE, program, enable). Called EVERY window: the DMA drains one
+ * 770-word transfer then stops (TE), so the FIFO must have a fresh armed
+ * drain before each vint's push or the 68K blocks on a full FIFO. */
+RAMCODE static void dreq_rearm(void)
+{
+    SH2_DMA_CHCR0 = 0x44E0;
+    (void)SH2_DMA_CHCR0;
+    SH2_DMA_SAR0 = 0x20004012;          /* DREQ FIFO */
+    SH2_DMA_DAR0 = 0x26039000;          /* SPR_LAND (uncached) */
+    SH2_DMA_TCR0 = 770;                 /* 512 spr + bmp + base + 256 txt */
+    SH2_DMA_DRCR0 = 0;
+    SH2_DMA_DMAOR = 1;
+    SH2_DMA_CHCR0 = 0x44E1;
+}
+
 RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
@@ -1810,16 +1831,11 @@ RAMCODE void m_main(void)
                     pg_pending |= SPR_LAND[512];  /* DREQ-tail bitmap */
                 } else
                     DIAG[17]++;              /* incomplete DREQ frames */
-                /* re-arm for the NEXT vint's push (Chaotix sequence:
-                 * disable, read to clear TE, program, enable) */
-                SH2_DMA_CHCR0 = 0x44E0;
-                (void)SH2_DMA_CHCR0;
-                SH2_DMA_SAR0 = 0x20004012;   /* DREQ FIFO */
-                SH2_DMA_DAR0 = 0x26028C00;   /* SPR_LAND (uncached) */
-                SH2_DMA_TCR0 = 516;          /* 512 sprites + bitmap + pad */
-                SH2_DMA_DRCR0 = 0;
-                SH2_DMA_DMAOR = 1;
-                SH2_DMA_CHCR0 = 0x44E1;
+                /* (re-arm moved to dreq_rearm(), called EVERY window —
+                 * see below: the DMA drains one transfer then stops, so a
+                 * k1-only re-arm left k0/k2 pushes to fill the FIFO and
+                 * block the 68K mid-group-write. Debugger-confirmed:
+                 * TE=1, FIFO full, 68K stalled in the push.) */
                 /* NEWLY-mapped pages must be fresh before compose —
                  * changed page regs only (unconditional ORing would
                  * recopy every active page every cycle) */
@@ -1899,6 +1915,28 @@ RAMCODE void m_main(void)
              * compose pre-blit wait), the pre-ack stall drops to blit +
              * copy_pages + apply_cram + the <=1-strip preempt wait; the
              * compose-drain slave_wait leaves the 68K's critical path. */
+            /* Apply the DREQ TEXT chunk EVERY window (before re-arm clears
+             * TE / overwrites the buffer), not just at k1 — a k1-only apply
+             * refreshed text at 1/3 the push rate and the scoreboard
+             * regressed. 513 = base, 514..769 = 256 words -> text shadow. */
+            if (SH2_DMA_CHCR0 & 2) {
+                unsigned tb = SPR_LAND[513] & 0x7FF;
+                if (tb + 256 <= 2048)
+                    for (int i = 0; i < 256; i += 8) {
+                        TEXT_U[tb + i + 0] = SPR_LAND[514 + i + 0];
+                        TEXT_U[tb + i + 1] = SPR_LAND[514 + i + 1];
+                        TEXT_U[tb + i + 2] = SPR_LAND[514 + i + 2];
+                        TEXT_U[tb + i + 3] = SPR_LAND[514 + i + 3];
+                        TEXT_U[tb + i + 4] = SPR_LAND[514 + i + 4];
+                        TEXT_U[tb + i + 5] = SPR_LAND[514 + i + 5];
+                        TEXT_U[tb + i + 6] = SPR_LAND[514 + i + 6];
+                        TEXT_U[tb + i + 7] = SPR_LAND[514 + i + 7];
+                    }
+            }
+            /* Re-arm the DREQ DMA EVERY vint (pre-ack) so the FIFO always
+             * has a draining transfer when the MD pushes after the ack —
+             * the fix for the drains-once-then-blocks hang. */
+            dreq_rearm();
             if (k == 1)
                 DIAG[9]++;
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
