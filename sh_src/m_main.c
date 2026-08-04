@@ -1461,7 +1461,8 @@ RAMCODE static void dreq_rearm(void)
     (void)SH2_DMA_CHCR0;
     SH2_DMA_SAR0 = 0x20004012;          /* DREQ FIFO */
     SH2_DMA_DAR0 = 0x26039000;          /* SPR_LAND (uncached) */
-    SH2_DMA_TCR0 = 770;                 /* 512 spr + bmp + base + 256 txt */
+    SH2_DMA_TCR0 = 772;                 /* 512 spr + bmp + base + 256 txt + 2 pad
+                                         * (4-word aligned; see md_main push) */
     SH2_DMA_DRCR0 = 0;
     SH2_DMA_DMAOR = 1;
     SH2_DMA_CHCR0 = 0x44E1;

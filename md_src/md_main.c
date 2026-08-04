@@ -261,7 +261,11 @@ window_done: ;
 		uint16_t spin = 1200;
 		uint8_t ok = 1;
 		static uint16_t txt_dma_base;
-		*(volatile uint16_t*)0xA15110 = 770;  // 512 spr + bitmap + base + 256 txt
+		// 772 = 512 spr + bitmap + base + 256 txt + 2 pad. MUST be a multiple
+		// of 4: the DREQ FIFO drains in 4-word bursts, so a non-aligned count
+		// leaves the tail words un-drained -> DMA never completes (TE),
+		// sprites+text go stale (ares dreq_incomplete ~once/cycle at 770).
+		*(volatile uint16_t*)0xA15110 = 772;
 		*ctrl = 4;                            // 68S: session start
 		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
 			while (*ctrl < 0 && --spin) ;
@@ -285,6 +289,7 @@ window_done: ;
 					fifo[0] = tt[2]; fifo[0] = tt[3];
 					tt += 4;
 				}
+				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad 770->772 (4-align)
 			} else
 				ok = 0;
 		}
