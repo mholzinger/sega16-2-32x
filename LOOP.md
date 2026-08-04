@@ -63,6 +63,35 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-02 | e37885b | 41.0 | 90.8 | 3.3 | 48.4 | 20.2 | 40.7 | (iter4 BASELINE; scream now measured; MAME rig has drifted — ares is the gate)
 | 08-02 | 59cdebf | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
 
+### Iteration 5 LANDED — PLAYABLE. text stream -> DREQ DMA cut the tail
+
+MILESTONE (ares, build 5a04686e): the game is PLAYABLE — slow but
+accurate, real input, correct sprites/text. First time. The tail cut
+(moving the bulk text refresh off the slow per-word COMM stream onto the
+DREQ DMA packet) dropped the reject band for the first time in 5
+iterations: 65% -> 57%, tail 225 -> 151, vints/cycle 8.69 -> 7.01.
+
+Mechanism + the three bugs it took (all debugger-diagnosed via the SH-2
+DMAC registers, the tool that finally broke the guessing):
+- DREQ packet = 512 sprites + bitmap + text base + 256 text words + 2
+  pad (772, MUST be 4-aligned: the FIFO drains in 4-word bursts, a
+  non-multiple leaves the tail un-drained -> TE never sets -> stale;
+  ares dreq_incomplete 495 -> 23 once padded).
+- dreq_rearm() EVERY window + push ONLY on gate-accepted vints: the DMA
+  drains one transfer then stops, so off-cycle pushes hit an undrained
+  FIFO and BLOCK the 68K mid-group-write (two hard hangs before this).
+- text applied every window (fresh at the push rate).
+
+REMAINING (the strobing + the 7Hz): the band is 57%, not collapsed. The
+heavy ACCEPTED-vint handler (tail 151, + on k1 the copy_pages ~88-line
+FM-hold) overruns the frame, the next vint fires late -> reject -> the
+strobing/blank cadence. NEXT LEVERS: (a) retire copy_pages from the k1
+pre-ack via the write-log ring (iter 1b) — the biggest single chunk;
+(b) shrink the DREQ push (text 256->128) — small, costs HUD refresh
+rate; (c) push sprites once/cycle but text every accepted vint (split
+packet) — bigger cut, more complex. copy_pages (a) is the high-leverage
+one. Falsifier stays state_health: reject % and vints/cycle -> 3.
+
 ### Iteration 5 — BAND CRACKED: the per-vint HANDLER TAIL overruns the frame
 
 The 64-67% V-gate reject band is NOT a window-stall latency spiral. It
