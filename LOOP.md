@@ -1,5 +1,10 @@
 # The Parity Loop
 
+> ACTIVE ARC: **LOOP6.md** — retire copy_pages via the write-log ring
+> (band 57% -> ~20Hz cadence). LOOP 5 landed a PLAYABLE game; start the
+> next session there.
+
+
 Goal: `rom/s16.32x` renders like `mame altbeast` — sprites, caching,
 layering, background — measured, not felt. The loop does not stop until
 every scoreboard scene is under threshold and Mike's ares pass agrees.
