@@ -37,6 +37,20 @@ endif
 ifdef SPROBE
 SHCCFLAGS += -DSPRITES_OFF_TEST
 endif
+# `make TAILPROBE=1` = MD tail-split + mean handler-span probes (LOOP 6).
+# NEVER SHIP: the probes add per-vint work to the overloaded tail and
+# shift V-gate outcomes (measured demo 52.1 -> 54.6, demo2 20.9 -> 23.4).
+# Diagnose with them, ship without. Decoded by tools/win_probe.lua.
+ifdef TAILPROBE
+MDCCFLAGS += -DTAIL_PROBE
+endif
+# `make SPINPROBE=N` = LOOP 6d band experiment: cap the COMM stream's
+# ack-spin budget at N polls (N=0 never blocks on the slave at all).
+# NEVER SHIP — text/palette refresh is deliberately starved. Tests
+# whether that spin is the elastic sink pinning the 57% reject band.
+ifdef SPINPROBE
+MDCCFLAGS += -DSTREAM_SPIN=$(SPINPROBE)
+endif
 MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-optional
 SHASFLAGS  = -Ish_src --small
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
@@ -106,7 +120,7 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# BUILD STAMP at file offset 0x3C0 (unused header pad): git hash +
 	@# epoch + PRESSURE flag. Every savestate self-identifies its build
 	@# (tools/build_id.py) — no more provenance arguments.
-	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,normal))
+	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,$(if $(SPINPROBE),SPIN$(SPINPROBE),$(if $(TAILPROBE),TAILPROBE,normal))))
 	@python3 tools/build_id.py show $@
 
 $(TARGET).elf: $(SHOBJS) | $(ROMDIR)

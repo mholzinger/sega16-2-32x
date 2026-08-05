@@ -1,5 +1,22 @@
 # LOOP 6 — Retire copy_pages via the write-log ring
 
+> **STATUS: PREMISE FALSIFIED, ARC CLOSED (2026-08-04).** Do NOT build
+> the ring. Measurement first, as the loop demands: copy_pages costs
+> **0.005 ms/cycle** — 0.25% of the 2.0ms window, dirty bitmap 0000.
+> LOOP 3c's dirty-page bitmap already retired it. The "window/ack ~88
+> lines is dominated by copy_pages" claim below was an INFERENCE, never
+> a measurement, and it is wrong.
+>
+> The ring was also unbuildable as written: the 0xFFB820 thunks patch
+> ADDRESS-FORMATION sites (6-byte lea / move.l #imm), not the 2-byte
+> store instructions, so a thunk there never sees the stored VALUE.
+>
+> The real k1 pre-ack floor was **apply_cram** (0.679 ms/cycle,
+> unconditional ~2112-entry CRAM rewrite every k1). It is now gated and
+> memoized — see LOOP.md "Iteration 6 LANDED" for the mechanism, the
+> ordering law it cost, and the ares falsifier. The rest of this
+> document is kept as the record of the falsified hypothesis.
+
 Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md, then
 run. The prior session (LOOP 5) landed a PLAYABLE game; this arc takes it
 from ~7Hz/57%-reject to the ~20Hz cadence and kills the strobing.

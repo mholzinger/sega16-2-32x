@@ -1,8 +1,11 @@
 # The Parity Loop
 
-> ACTIVE ARC: **LOOP6.md** — retire copy_pages via the write-log ring
-> (band 57% -> ~20Hz cadence). LOOP 5 landed a PLAYABLE game; start the
-> next session there.
+> ACTIVE ARC: **LOOP7.md** — kill the tail (COMM -> DREQ, retire the
+> palette scan). LOOP 6 closed: it falsified its own kickoff, cut
+> apply_cram (ares window 88 -> 64 lines, exactly as predicted), and
+> then found why six iterations of cadence work failed — see "THE
+> BAND'S ORIGIN" below. The band is not a bug to revert; it was built,
+> and COMM is 20x more expensive per word than DREQ.
 
 
 Goal: `rom/s16.32x` renders like `mame altbeast` — sprites, caching,
@@ -67,6 +70,209 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 07-30 | 2d0d52c | 2.75 | n/a | 3.32 | 48.3 | 22.7 | 19.3 | (stable anchors: statics=render truth)
 | 08-02 | e37885b | 41.0 | 90.8 | 3.3 | 48.4 | 20.2 | 40.7 | (iter4 BASELINE; scream now measured; MAME rig has drifted — ares is the gate)
 | 08-02 | 59cdebf | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
+| 08-04 | d4abcb5 | 49.3 | 91.7 | 3.4 | 52.1 | 20.9 | 43.5 | (LOOP 6 BASELINE, re-measured)
+| 08-04 | iter6 | 49.3 | 91.7 | 3.4 | 52.1 | 20.9 | 43.5 | (LOOP 6 LANDED: apply_cram gated — MAME-neutral by construction, ares measures the win)
+
+### Iteration 6 LANDED — copy_pages was ALREADY dead; apply_cram was the floor
+
+LOOP6.md's premise is FALSIFIED. Measured on MAME (fresh DIAG probe;
+profile_32x.lua pointed at a stale base 0x27000, DIAG is 0x28000):
+
+    copy_pages   0.005 ms/cycle   (0.25% of the window; bitmap reads 0000)
+    apply_cram   0.679 ms/cycle
+    blit+preempt 1.056 ms/cycle
+    TOTAL window 2.013 ms/cycle
+
+LOOP 3c's dirty-page bitmap already retired copy_pages — the dirty
+bitmap drains to zero and the budgeted copy loop finds nothing to do.
+Building the write-LOG ring would have bought 0.005ms. It was also not
+reachable as specified: the 0xFFB820 thunks patch ADDRESS-FORMATION
+sites (lea / move.l #imm, 6 bytes), not the 2-byte store instructions,
+so a thunk there cannot see the VALUE being stored.
+
+THE REAL k1 pre-ack floor was apply_cram: a full ~2112-entry
+convert-and-store of every mapped CRAM group, EVERY k1, unconditionally,
+inside the FM-hold. Two mechanisms, both MAME-neutral by construction:
+
+- GATE THE STORES. cram_set already computed `cram_mirror[idx] != v`
+  and spent it only on shadow_dirty; the store now sits inside that
+  test. CRAM writes 2112 -> 29 per cycle. The two mirror-BYPASSING
+  writers had to be closed first or the gate goes stale: the shadow
+  ramp (241-254) now publishes what it wrote, and the k2 debug bar's
+  hijack of entry 255 (inside sprite pair 15) leaves the mirror holding
+  the TRUE color and is undone by a single write at the next apply.
+- MEMOIZE PER GROUP. Gating stores did NOT cut the s16_to_mars
+  arithmetic, which is the bulk of the cost. A whole-pass gate fails —
+  the allocator reshuffles the color->group mapping nearly every frame
+  (13 skips in 1195 cycles). So memoize per 8-entry CRAM slot on
+  (kind|color-set, that set's palette generation). The generation must
+  be PER COLOR-SET: attract color-cycles continuously, so one global
+  counter is bumped nearly every cycle and invalidates everything
+  (that version skipped only 4 groups/cycle vs 16 for per-set).
+  PAL_SETGEN[192] at 0x26028C00, slave-written / master-read-only
+  (monotonic, no cross-CPU RMW race). Note the SDRAM map comment
+  claimed 28C00-28FFF was SPR_LAND; SPR_LAND actually lives at 0x39000
+  and that KB is free.
+
+  ORDERING LAW (cost a real regression): the slave must bump the
+  generation STRICTLY AFTER storing the palette words. Bumping first
+  lets the master paint the OLD words and then record the NEW
+  generation, latching that group stale — demo2 20.9 -> 23.4 until the
+  bump moved after the stores.
+
+RESULT (MAME): apply_cram 0.679 -> 0.321 ms/cycle (-53%), total
+in-window 2.013 -> 1.623 ms (-19%). `cramwr` stays ~29/cycle across the
+change — the memo skips only work that would have written nothing, so
+CRAM contents are IDENTICAL. Scoreboard identical (demo2 20.86 ->
+20.93, demo 52.10 -> 52.13: anchor noise). Under `make PRESSURE=1` the
+new build is markedly BETTER than the PRESSURE baseline (demo2 48.2 ->
+28.3, mean 49.0 -> 45.5) — freed in-window time showing up exactly
+where the stress build binds.
+
+### Iteration 6b — the TAIL is now MAME-VISIBLE. Three negative results.
+
+New probe: `make TAILPROBE=1` + `tools/win_probe.lua`. The MD tail was
+only ever measured on ares; it is in fact visible on MAME, which turns
+tail work into something iterable without an ares round-trip.
+
+MAME (a16d97d): MD handler max total 224 / window 18 / tail 206 of 262
+lines; MEAN total 170, mean stream 70. Tail split (max spans): DREQ
+push 52, palette scan 85, COMM stream 117. The WINDOW is negligible on
+MAME (18) precisely because its SH-2 is 3x faster — which is why the
+window work iter6 cut can only be judged on ares.
+
+THREE NEGATIVES, all worth not repeating:
+
+1. THE COMM STREAM IS ACK-LATENCY BOUND, NOT WORK BOUND. Dirty-gating
+   the 16 priority batches and restructuring the text rotation cut
+   batches actually SENT from 64 to **11** per vint — and the stream
+   span did not move (117 -> 114 max, 70 -> 62 mean). The cost is the
+   68K spinning on COMM0 until the SLAVE services it, once per batch,
+   not the 68K's own register writes. Fewer batches cannot fix that;
+   only fewer ACK ROUND-TRIPS or a faster servicer can. Widening the
+   batch is not available either: of the 8 COMM registers, COMM0 is the
+   command/ack, COMM12 carries the V heartbeat the window depends on,
+   and COMM14 the sound log — 5 payload words is the ceiling.
+   REVERTED: 4% of mean handler span was not worth making 0..1791 text
+   depend on DREQ with only an 18-second COMM backstop (dreq_incomplete
+   is nonzero on ares) — accuracy before speed.
+
+2. A DIRTY-GATE THAT FREES BUDGET BUYS NOTHING. Gating the priority
+   block alone made the stream WORSE (117 -> 141): the loop is a
+   64-iteration budget, so skipped batches were simply refilled with
+   more text batches. Gating only pays if the total SENT is capped too.
+
+3. THE PROBES MOVE THE SCOREBOARD. Instrumentation in the vint path is
+   not free — it adds work to the exact path that is overloaded, shifts
+   V-gate outcomes, and therefore changes which frames ship: demo 52.1
+   -> 54.6, demo2 20.9 -> 23.4 from probes ALONE. This cost real time
+   here: an uncommitted probe left in m_main.c made iter6 look like a
+   demo2 regression (23.4) that did not exist. Hence TAILPROBE is a
+   build flag, the rom stamps as TAILPROBE, and:
+   **LAW: run every gate on a probe-free build, and CLEAN-build it.**
+   An incremental build also mis-measured this arc once. Clean-built,
+   both scoreboards are: baseline d4abcb5 demo2 20.86 / total 43.46;
+   iter6 a16d97d demo2 20.93 / total 43.48 — no regression.
+
+WHERE THE TIME ACTUALLY IS NOW (MAME, per k1 cycle):
+  window 1.62ms = master blit 1.03 + apply_cram 0.32 + ~0.27 rest
+  The blit is 100% master blit_half — the SYNC[2]/SYNC[5] slave waits
+  measure ~0.000ms, so the preempt mailbox is doing its job and there
+  is no sync stall left to reclaim. Shrinking the blit means shipping
+  fewer pixels (dirty-row blitting) or moving it off the pre-ack path,
+  not micro-optimizing it.
+
+MEAN tail split (of 262 lines, the numbers that matter — maxima are
+spiky): COMM stream 70, DREQ push 49, PALETTE SCAN 45. The palette
+scan is SUSTAINED, not a fade-only spike.
+
+### THE BAND'S ORIGIN — it was BUILT, in three commits (dated by savestate)
+
+Field report: "running too slow, frames flashing." Both are ONE cause,
+and the old savestates in rom/ date it exactly:
+
+| build      | vints/cycle | V-gate rejects |
+|------------|-------------|----------------|
+| a4b51d0    | 3.02        | 0.4%           |
+| 8b4ecc2    | 3.10        | 3.1%           |
+| ~7215209   | 8.78        | 65.9%          |
+| 1152c7d1   | 6.99        | 57.1%          |
+
+Healthy at 8b4ecc2, band present by 7215209. Three commits in that
+window moved a data channel INTO the 68K vint handler, and their costs
+are exactly the tail split measured in iter6b/6c:
+
+  180de61 palette MD-RAM mirror + rotating copy -> palette scan 45 lines
+  24b799a palette over COMM                     -> COMM stream   70 lines
+  6466663 sprite list over DREQ FIFO            -> DREQ push     49 lines
+                                                   TOTAL        164 lines
+(measured mean handler: 170 of 262. The tail IS these three.)
+
+Every one was individually RIGHT — the FB cannot carry this data, ares
+discards MD FB-window writes (savestate-proven torn sprite records,
+zeroed palette rows). Nothing to revert. But cumulatively they turned a
+3.0-vints/cycle machine into a 7.0 one, and that is the whole band:
+7 vints per shipped frame ~= 8.5Hz ("too slow"), and with 57% of vints
+rejected the two-vblank ship frequently lands only ONE half of the
+frame ("flashing"). The anti-flash V-gate (bab5f74/9fbb03e) is working
+correctly — it is rejecting, which is the symptom, not the bug.
+
+THE DECISIVE RATIO (why the fix is obvious once measured):
+    COMM   70 lines for  ~55 words = 1.27   lines/word
+    DREQ   49 lines for   772 words = 0.063 lines/word
+COMM is TWENTY TIMES more expensive per word, because its cost is an
+ACK ROUND-TRIP per 5-word batch, not the payload. That is why spin0
+moved the band (57 -> 39%) when five iterations of shaving had not.
+
+=> ARC: move every COMM payload onto the DREQ packet, and replace the
+palette scan with write-thunks. Projected: tail 164 -> ~66, handler
+241 -> ~136, which is the budget a 3-vints/cycle cadence needs.
+
+### Iteration 6c — the palette scan is BUS-bound. Two more negatives.
+
+4. THE PALETTE SCAN IS NOT DIVISION-BOUND (I predicted it was, above —
+   wrong, and corrected here before anyone acts on it). `(qbase+i)/5`
+   compiles to a reciprocal multiply: `m68k-elf-objdump -d md_main.o |
+   grep divu` finds ZERO. Check the generated code before optimizing
+   for a 68000 instruction cost.
+
+5. LONG COMPARES DO NOT HELP ON A 16-BIT BUS. Rewriting the 4-word
+   group compare as two 32-bit compares (both bases are 4-byte aligned
+   at every group offset, so it was legal and semantically identical)
+   left the cost UNCHANGED: mean 45.1 -> 45.7. On the 68000 a 32-bit
+   load is TWO bus cycles, so 4 long reads cost exactly what 8 word
+   reads cost; only the instruction count fell, and the loop is
+   bus-bound, not issue-bound. REVERTED as neutral.
+   ABLATION (the decisive test): with the loop body disabled the span
+   goes 45.1 -> 0.1, so the loop really is the whole cost — it is just
+   1024 unavoidable MD-RAM reads (512 mirror + 512 sent-copy) per vint.
+
+   => The scan cannot be micro-optimized; it has to STOP EXISTING.
+   The structural fix is to THUNK THE GAME'S PALETTE WRITES, exactly as
+   LOOP 3c did for tiles: the palette is already remapped to the
+   0xFF9000 mirror by patch_game.py, so the write sites are enumerable
+   the same way, and a dirty bitmap replaces the whole diff. That
+   deletes ~45 of 262 lines from EVERY vint. This is a real arc (the
+   tile version took one), not a quick win — but it is the only lever
+   on this term, and unlike the LOOP 6 kickoff's ring it is reachable:
+   these are ADDRESS-FORMATION sites feeding ordinary stores, which is
+   what the existing thunk machinery already handles.
+
+NEXT LEVERS, ranked: (a) palette write-thunks (above) — 45 lines/vint,
+mechanism proven by the tile thunks. (b) slave stream-service latency,
+which sets the whole 70-line COMM cost (see negative 1: it is ack
+round-trips, so measure the per-batch wait distribution first).
+(c) dirty-row blitting for the 1.03ms in-window blit.
+
+ARES FALSIFIER (Mike, next pass): state_health.py. Predicted — worst-
+handler WINDOW span falls (it was ~88 lines, and apply_cram is now the
+one term measurably cut); rejects fall below 57%; vints/cycle below
+7.01. CRAM writes may cost more on ares than MAME shows (VDP contention
+is exactly the "MAME cannot see" class), so the store gate could pay
+more there than here. NEXT LEVER if the band holds: blit+preempt is now
+65% of the window (1.03 of 1.62 ms) and is the only remaining large
+term — it is real work, so cutting it means moving it off the pre-ack
+path, not shrinking it.
 
 ### Iteration 5 LANDED — PLAYABLE. text stream -> DREQ DMA cut the tail
 

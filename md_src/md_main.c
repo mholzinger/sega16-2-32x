@@ -1,6 +1,13 @@
 #include "common.h"
 #include "tile_thunks.h"
 
+// Stream ack-spin budget. 800 = shipped behaviour; `make SPINPROBE=N`
+// overrides it for the LOOP 6d band experiment (0 = never block on the
+// slave at all). See the spin declaration in shim_vblank.
+#ifndef STREAM_SPIN
+#define STREAM_SPIN 800
+#endif
+
 // MD-side shim for the arcade game. Runs entirely from work RAM (.data):
 // once RV=1 the low ROM map belongs to the game and the 0x880000 window
 // must stay untouched.
@@ -81,6 +88,9 @@ void shim_vblank(void) {
 	// on. On gate-rejected vints (65%) the master never runs, so pushing
 	// would fill the undrained FIFO and block the 68K. Set below.
 	uint8_t window_ok = 0;
+#ifdef TAIL_PROBE
+	uint8_t dreq_span = 0, palscan_span = 0;
+#endif
 
 	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
 	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
@@ -306,6 +316,29 @@ window_done: ;
 		}
 	}
 
+#ifdef TAIL_PROBE
+	// LOOP 6 TAIL SPLIT (`make TAILPROBE=1`, NEVER shipped — see below).
+	// The tail is the dominant term on BOTH machines and, unlike the
+	// window, it is MAME-VISIBLE, so it can be iterated against a real
+	// falsifier instead of ares round-trips. Max spans, scanlines:
+	//   0xFFB0E8 = DREQ push   0xFFB0EA = palette scan   0xFFB0EC = stream
+	// Measured a16d97d: total 224 / window 18 / tail 206 of 262;
+	// dreq 52, palscan 85, stream 117; mean total 170, mean stream 70.
+	//
+	// THESE PROBES ARE NOT FREE. They add per-vint work to the very path
+	// that is overloaded, which shifts V-gate outcomes and therefore
+	// which frames ship: measured cost is demo 52.1 -> 54.6 and demo2
+	// 20.9 -> 23.4 on the scoreboard. Diagnose with them, ship without.
+	{
+		uint8_t dv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t sp2 = (uint8_t)(dv - v_win);
+		dreq_span = sp2;
+		if (sp2 > *(volatile uint8_t*)0xFFB0E8)
+			*(volatile uint8_t*)0xFFB0E8 = sp2;
+	}
+	uint8_t v_scan = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+#endif
+
 	// Palette dirty scan: the mirror (0xFF9000, game writes) is diffed
 	// against the sent-copy (0xFFA000) one 512-word quarter per vint;
 	// dirty 5-word batches queue for the COMM stream below. The FB
@@ -335,6 +368,15 @@ window_done: ;
 		}
 		scan_q = (uint8_t)((scan_q + 1) & 3);
 	}
+#ifdef TAIL_PROBE
+	{
+		uint8_t sv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t sp2 = (uint8_t)(sv - v_scan);
+		palscan_span = sp2;
+		if (sp2 > *(volatile uint8_t*)0xFFB0EA)
+			*(volatile uint8_t*)0xFFB0EA = sp2;
+	}
+#endif
 
 	// Stage C shadow streaming — independent of the MCU busy/screen-sync
 	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
@@ -352,13 +394,30 @@ window_done: ;
 		// TOTAL ack-wait budget for the whole stream section, not per
 		// batch (see NOTES: per-batch spins trickled 60+ms handler
 		// entries when the SH-2s ack slowly — the freeze spiral).
-		uint16_t spin = 800;
+		// LOOP 6d SPIN PROBE (`make SPINPROBE=64` / `=0`, NEVER shipped).
+		// ares f27dbe9d showed the window cut (88 -> 64 lines) came back
+		// ENTIRELY as tail (151 -> 177): total 239 -> 241, rejects 57.2
+		// -> 57.1%. This ack-spin is the suspected ELASTIC SINK — the
+		// 68K waits here for the SLAVE to service COMM0, so finishing the
+		// window sooner just means arriving here sooner and waiting
+		// longer. If that is the band, capping the budget moves the
+		// reject rate; nothing else in the handler changes.
+		uint16_t spin = STREAM_SPIN;
 
 		for (uint16_t burst = 0; burst < 64; burst++) {
 			if (burst) {
+#if STREAM_SPIN == 0
+				// NEVER WAIT: post only when the slave has already
+				// acked. (Written as its own branch because the normal
+				// path's `--spin` would underflow to 65535 at a zero
+				// budget — an unbounded spin, the exact opposite.)
+				if (*mars_comm0)
+					break;
+#else
 				while (*mars_comm0 && --spin) ;
 				if (*mars_comm0)
 					break;               // SH-2 busy; resume next frame
+#endif
 			}
 			// PRIORITY: the layer-register block (0x740-0x753) AND
 			// the ROWSCROLL tables (0x7C0-0x7FB) ship EVERY vint as
@@ -421,13 +480,34 @@ window_done: ;
 	// a span approaching one frame (~262 lines) = the handler exceeds a
 	// frame -> next H-int fires late -> reject. Small (<~120) = the tail
 	// fits and the reject cause is elsewhere.
+#ifdef TAIL_PROBE
+	{
+		uint8_t sv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t sp2 = (uint8_t)(sv - v_stream);
+		if (sp2 > *(volatile uint8_t*)0xFFB0EC)
+			*(volatile uint8_t*)0xFFB0EC = sp2;
+	}
+#else
 	(void)v_stream;
+#endif
 	{
 		static uint8_t max_total, at_win;
 		uint8_t ev = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 		uint8_t total = (uint8_t)(ev - v_entry);   // TRUE entry -> here
 		uint8_t win = (uint8_t)(v_win - v_entry);  // window/ack-spin only
 		if (total > max_total) { max_total = total; at_win = win; }
+#ifdef TAIL_PROBE
+		// LOOP 6 TAIL METRICS. The max span is dominated by rare worst
+		// frames and barely moves under changes that cut real work by 6x
+		// (gating COMM sends 64 -> 11 left the max stream span at ~120),
+		// so accumulate MEANS too — sustained load is what starves the
+		// game. 0xFFB0D0 = sum of total spans, 0xFFB0D4 = sum of stream
+		// spans, over 0xFFB0F0 vints. Mean = sum / vints.
+		*(volatile uint32_t*)0xFFB0D0 += total;
+		*(volatile uint32_t*)0xFFB0D4 += (uint8_t)(ev - v_stream);
+		*(volatile uint32_t*)0xFFB0D8 += dreq_span;
+		*(volatile uint32_t*)0xFFB0DC += palscan_span;
+#endif
 		// F4 = (MAX TOTAL handler span << 8) | the WINDOW span of THAT max
 		// vint, scanlines. Max catches the worst handler (the accepted,
 		// window-posting ones are longest); its paired window shows whether
@@ -608,6 +688,15 @@ void main(void) {
 		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
 	}
 	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span
+#ifdef TAIL_PROBE
+	*(volatile uint32_t*)0xFFB0D0 = 0;   // LOOP 6: sum of total spans
+	*(volatile uint32_t*)0xFFB0D4 = 0;   //   sum of stream spans
+	*(volatile uint32_t*)0xFFB0D8 = 0;   //   sum of DREQ-push spans
+	*(volatile uint32_t*)0xFFB0DC = 0;   //   sum of palette-scan spans
+	*(volatile uint8_t*)0xFFB0E8 = 0;    //   tail split: DREQ push
+	*(volatile uint8_t*)0xFFB0EA = 0;    //   palette scan
+	*(volatile uint8_t*)0xFFB0EC = 0;    //   COMM stream
+#endif
 
 	// I/O mailboxes: idle inputs, DIP defaults (DSW2 0xFD = 3 lives, normal,
 	// demo sounds on; DSW1 0xFF = 1 coin / 1 credit)

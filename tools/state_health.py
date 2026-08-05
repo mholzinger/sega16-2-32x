@@ -19,6 +19,22 @@ def swap16(b):
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "rom/s16.bs1"
     st = open(path, "rb").read()
+    # STALENESS GUARD. The default path silently reads an OLD state when
+    # you meant the probe rom you just launched — the readings then look
+    # plausible and identical, and the only tell is the BUILD hash. Name
+    # the file, and shout if a rom is newer than the state being read.
+    import glob
+    import os
+    age = os.path.getmtime(path)
+    newer = [r for r in glob.glob("rom/*.32x") if os.path.getmtime(r) > age]
+    print(f"STATE: {path}")
+    if newer:
+        print(f"  !! WARNING: this state is OLDER than {len(newer)} rom(s) "
+              f"({', '.join(os.path.basename(r) for r in sorted(newer)[:4])}"
+              f"{'...' if len(newer) > 4 else ''}).")
+        print("     If you meant a probe rom, pass ITS state explicitly, "
+              "e.g. state_health.py rom/PROBE_spin0.bs1 — and check the "
+              "BUILD line below matches the rom you ran.")
     sd = 0x23B
     sig = swap16(bytes.fromhex("4a38c02050f8c0204e75"))
     i = st.find(sig)
@@ -47,6 +63,21 @@ def main():
     print(f"deferrals={rd32(0x28000 + 13 * 4)} "
           f"dreq_incomplete={rd32(0x28000 + 17 * 4)}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
+    # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
+    # pickup and SYNC[5] echo waits used to be unbounded: if the slave
+    # failed to answer, the master spun forever with FM=1 and took the
+    # 68K down with it — a dead machine. They are bounded now, so a
+    # NONZERO count here is the hang, caught and survived: it says the
+    # slave missed the preempt mailbox and the frame dropped instead.
+    # Zero on a healthy run, so this is the hang localiser.
+    t_pick = rd32(0x28000 + 21 * 4)
+    t_echo = rd32(0x28000 + 22 * 4)
+    if t_pick or t_echo:
+        print(f"!! preempt-blit TIMEOUTS: pickup(SYNC2)={t_pick} "
+              f"echo(SYNC5)={t_echo} — the slave missed the preempt "
+              f"mailbox. Pre-1152c7d1 this was an unrecoverable HANG.")
+    else:
+        print(f"preempt-blit timeouts=0 (pickup/echo both answered)")
     # HV at the last blit-phase vint entry (md_main 0xFFB0FE, written
     # BEFORE the gate check). The gate accepts V in 0xDF..0xE2 (MAME-
     # tuned). If V clusters just past 0xE2 with the handler otherwise

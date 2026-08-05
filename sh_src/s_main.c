@@ -8,6 +8,19 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 #define TEXT_U      ((volatile uint16_t *)0x26026000)
 #define PAL_U       ((volatile uint16_t *)0x26027000)  /* 2048 words */
 #define SYNC        ((volatile uint16_t *)0x26028800)
+/* LOOP 6: PER-COLOR-SET palette generations, bumped here on every palette
+ * batch and read by the master's apply_cram per-group memo. Uncached,
+ * slave-written / master-read-only — monotonic counters, so no cross-CPU
+ * RMW race. Indexed 0..127 = the 8-word tile/text color-sets, 128..191 =
+ * the 16-word sprite color-sets. Per-SET (not one global counter) because
+ * attract color-cycles continuously: a single global generation is bumped
+ * nearly every cycle and invalidates every group's memo. */
+#define PAL_SETGEN  ((volatile uint16_t *)0x26028C00)   /* 192 entries */
+
+static inline unsigned pal_set_of(unsigned w)
+{
+    return (w < 1024) ? (w >> 3) : (128 + ((w - 1024) >> 4));
+}
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
 extern void slave_concurrent_k(uint16_t cmd);
@@ -52,6 +65,21 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
             if (idx + 1 < 2048) dst[idx + 1] = w1;
             if (idx + 2 < 2048) dst[idx + 2] = w2;
             if (idx + 3 < 2048) dst[idx + 3] = w3;
+        }
+        if (c0 & 0x0800) {
+            /* LOOP 6: mark the color-set(s) this 5-word batch touched.
+             * STRICTLY AFTER the stores above — bumping first lets the
+             * master paint the OLD words and then record the NEW
+             * generation, latching that group stale until the next bump
+             * (measured: demo2 parity 20.9 -> 23.4).
+             * A 5-word span is shorter than the smallest (8-word) set, so
+             * it covers at most two ADJACENT sets — endpoints suffice, and
+             * that holds across the 1024 tile/sprite boundary too. */
+            unsigned s0 = pal_set_of((unsigned)idx);
+            unsigned s1 = pal_set_of((unsigned)(idx + 4 < 2047 ? idx + 4 : 2047));
+            PAL_SETGEN[s0]++;
+            if (s1 != s0)
+                PAL_SETGEN[s1]++;
         }
         MARS_SYS_COMM0 = 0;
     }

@@ -119,8 +119,9 @@ static volatile uint16_t miss_n[2];
 /* fixed SDRAM: .bss squeezed by the 0x19000 region guard. LAYOUT:
  * 28000 DIAG | 28100 BM (+alloc state at 28360) | 28400 SPR_SNAP |
  * 28800 SYNC (+blank_tile 28840) | 28900 cram_mirror | 28B00
- * shadow_lut | 28C00-28FFF SPR_LAND (DREQ DMA target - EXCLUSIVE:
- * the DMA rewrites this whole KB every frame).
+ * shadow_lut | 28C00 PAL_SETGEN (192 words, LOOP 6) | 28D00-28FFF free.
+ * (SPR_LAND, the DREQ DMA target, is NOT here — it lives at 0x39000;
+ * this comment claimed 28C00-28FFF for it, which was wrong.)
  * blank_tile is constant zeros after master init (coherent for both
  * CPUs); the grp/pr allocator state is master-only (bm_tail). */
 #define blank_tile ((uint8_t *)0x06028840)              /* 64B, after SYNC */
@@ -685,22 +686,79 @@ __attribute__((always_inline))
 /* v carries the S16 word's bit 15 in bit 15 of the MIRROR only: it is
  * the hardware's shadow-exempt flag (jts16_colmix.v: shadow & ~pal[15]).
  * Real CRAM gets bits 0-14 only — bit 15 there is the 32X through-bit. */
+/* LOOP 6: the store is GATED on the mirror. apply_cram rewrote all
+ * ~2112 mapped CRAM entries every k1 — unconditionally, pre-ack, inside
+ * the FM-hold — while this exact compare was already being computed and
+ * spent only on shadow_dirty. CRAM is real retaining RAM and these are
+ * its ONLY writers (the two mirror-bypassing paths below now keep the
+ * mirror coherent), so gating produces BYTE-IDENTICAL CRAM contents and
+ * simply deletes the redundant traffic. Steady state (no fade) = zero
+ * CRAM writes. This is removed FM-hold work, not redistributed —
+ * LOOP.md's law for the ares cadence fix. */
 static inline void cram_set(volatile uint16_t *dst, int idx, uint16_t v)
 {
-    dst[0] = (uint16_t)(v & 0x7FFF);
     if (cram_mirror[idx] != v) {
         cram_mirror[idx] = v;
+        dst[0] = (uint16_t)(v & 0x7FFF);
         shadow_dirty = 1;
+        DIAG[19]++;                     /* CRAM writes actually performed */
     }
+}
+
+/* LOOP 6 PER-GROUP MEMO. apply_cram ran its full ~2112-entry convert-and-
+ * store every k1, pre-ack, inside the FM-hold. Gating the STORES alone
+ * (cram_set) killed 98% of the CRAM traffic but not the s16_to_mars
+ * arithmetic, which is the bulk of the 0.67ms/cycle MAME measures. A
+ * whole-pass gate does not work either: the allocator reshuffles the
+ * color->group MAPPING nearly every frame (measured: 13 skips in 1195
+ * cycles), even though ~29 of 2112 entries actually change.
+ *
+ * So memoize PER CRAM GROUP: a group's 8/16 entries can only differ if a
+ * DIFFERENT color-set now owns it, or the source palette moved (PAL_GEN,
+ * bumped by the slave on every COMM palette batch — zero in steady state).
+ * Indexed by 8-entry CRAM slot (32 of them); a sprite pair covers two.
+ * The key carries a KIND tag so tile set 3, text set 3 and sprite set 3
+ * can never alias into a false hit. cram_set's mirror still backstops
+ * correctness, so an over-eager memo can only ever cost work, not truth. */
+#define PAL_SETGEN ((volatile uint16_t *)0x26028C00) /* slave-written, 192 */
+#define CK_TILE 0x0000u
+#define CK_TEXT 0x1000u
+#define CK_SPR  0x2000u
+static uint16_t cram_key[32];               /* (kind|color-set) per slot */
+static uint16_t cram_keygen[32];            /* that set's gen when painted */
+static volatile uint8_t cram_hijacked;      /* k2 debug bar clobbered CRAM 255 */
+
+/* Returns 1 if slot already holds color-set `set` at its current
+ * generation. The generation is PER SET, so a fade on one color-set no
+ * longer invalidates every other group's memo. */
+static inline int cram_memo(int slot, uint16_t key, unsigned set)
+{
+    uint16_t gen = PAL_SETGEN[set];
+    if (cram_key[slot] == key && cram_keygen[slot] == gen)
+        return 1;
+    cram_key[slot] = key;
+    cram_keygen[slot] = gen;
+    return 0;
 }
 
 RAMCODE static void apply_cram(int par)
 {
+    /* Undo the k2 debug-bar hijack of entry 255 from the mirror (which
+     * still holds the true color) — one write, outside the memo. */
+    if (cram_hijacked) {
+        ((volatile uint16_t *)&MARS_CRAM)[255] = (uint16_t)(cram_mirror[255]
+                                                            & 0x7FFF);
+        cram_hijacked = 0;
+    }
     volatile uint16_t *cram = &MARS_CRAM;
     for (int c = 0; c < 128; c++) {
         uint8_t g = tile_grp[par][c];
         if (g == 0xFF)
             continue;
+        if (cram_memo(g, (uint16_t)(CK_TILE | c), (unsigned)c)) {
+            DIAG[20]++;                      /* groups skipped */
+            continue;
+        }
         volatile uint16_t *src = PAL_SH + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
@@ -711,6 +769,10 @@ RAMCODE static void apply_cram(int par)
         uint8_t g = text_grp[par][c];
         if (g == 0xFF)
             continue;
+        if (cram_memo(g, (uint16_t)(CK_TEXT | c), (unsigned)c)) {
+            DIAG[20]++;
+            continue;
+        }
         volatile uint16_t *src = PAL_SH + c * 8;
         volatile uint16_t *dst = cram + g * 8;
         for (int p = 0; p < 8; p++)
@@ -721,6 +783,14 @@ RAMCODE static void apply_cram(int par)
         uint8_t pr = spr_pair[par][sc];
         if (pr == 0xFF)
             continue;
+        /* a 16-entry pair spans two 8-entry slots; both must agree */
+        uint16_t key = (uint16_t)(CK_SPR | sc);
+        int hit = cram_memo(pr * 2, key, (unsigned)(128 + sc));
+        hit &= cram_memo(pr * 2 + 1, key, (unsigned)(128 + sc));
+        if (hit) {
+            DIAG[20]++;
+            continue;
+        }
         volatile uint16_t *src = PAL_SH + 1024 + sc * 16;
         volatile uint16_t *dst = cram + pr * 16;
         for (int p = 0; p < 16; p++)
@@ -734,9 +804,21 @@ RAMCODE static void apply_cram(int par)
     int p15_used = 0;
     for (int sc = 0; sc < 64; sc++)
         if (spr_pair[par][sc] == 15) { p15_used = 1; break; }
-    if (!p15_used)
+    /* MIRROR-COHERENT (LOOP 6): the ramp writes CRAM directly, so it must
+     * publish what it wrote — otherwise the gated cram_set above would
+     * later see a stale "already correct" mirror for 241-254 and skip
+     * restoring pair 15's real colors when a sprite reclaims it. */
+    if (!p15_used) {
         for (int p = 1; p < 15; p++)
-            cram[240 + p] = 0x0842;
+            if (cram_mirror[240 + p] != 0x0842) {
+                cram_mirror[240 + p] = 0x0842;
+                cram[240 + p] = 0x0842;
+                shadow_dirty = 1;
+            }
+        /* the ramp owns slots 30/31 now — drop their memo so a sprite
+         * that later reclaims pair 15 is guaranteed to repaint them */
+        cram_key[30] = cram_key[31] = 0xFFFF;
+    }
 }
 
 /* Compose one tile layer's SCREEN ROW RANGE [ylo,yhi) into sbuf from the
@@ -1513,6 +1595,14 @@ RAMCODE void m_main(void)
     SH2_FRT_TCR = 1;
     for (int i = 0; i < 16; i++)
         DIAG[i] = 0;
+    DIAG[19] = 0;                       /* CRAM writes performed (LOOP 6) */
+    DIAG[20] = 0;                       /* apply_cram groups skipped */
+    DIAG[21] = 0;                       /* preempt-blit pickup timeouts */
+    DIAG[22] = 0;                       /* preempt-blit echo timeouts */
+    for (int i = 0; i < 192; i++)
+        PAL_SETGEN[i] = 0;              /* before the slave is released */
+    for (int i = 0; i < 32; i++)
+        cram_key[i] = 0xFFFF;           /* .bss zeros would alias tile set 0 */
 
     /* Master is SDRAM-resident from here on: the MD may set RV=1 now. */
     MARS_SYS_COMM14 = 0x600D;
@@ -1785,11 +1875,24 @@ RAMCODE void m_main(void)
                     blit_half(56, 112);
                 else
                     blit_half(168, 224);
-                while (SYNC[2] < 1) ;        /* slave picked up + blitted */
+                /* LOOP 6d: BOUNDED. These two were the only unguarded
+                 * spins in this function — every neighbouring wait
+                 * carries guard=2000000. If the slave ever fails to
+                 * answer the preempt mailbox the master used to spin
+                 * here FOREVER with FM=1, which hangs the 68K too: a
+                 * dead machine instead of a dropped frame. Time out into
+                 * the already-supported "slave half missing this frame"
+                 * state and count it; DIAG[21]/[22] are zero on a healthy
+                 * run, so a nonzero value localises the hang exactly. */
+                guard = 2000000;
+                while (SYNC[2] < 1 && --guard) ;   /* slave picked up */
+                if (!guard) DIAG[21]++;
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 guard = 2000000;
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
-                while (SYNC[5] != scmd) ;    /* slave blit path fully done */
+                guard = 2000000;
+                while (SYNC[5] != scmd && --guard) ;  /* slave path done */
+                if (!guard) DIAG[22]++;
                 SYNC[4] = 0;
             }
             diag_add(5, tp);
@@ -1898,7 +2001,17 @@ RAMCODE void m_main(void)
                 lens[1] = (int)((DIAG[7] - ps) * 16);
                 ps = DIAG[7];
                 lens[2] = (int)(DIAG[7] * 2);
+                /* debug-bar hijack of entry 255: publish it to the mirror
+                 * (LOOP 6) — 255 lies inside pair 15's range, so a stale
+                 * mirror would make the gated cram_set skip repainting it. */
+                /* Entry 255 lies inside sprite pair 15's range, so this
+                 * hijack can clobber a real color. Leave the MIRROR holding
+                 * the true value and just flag it: the next apply_cram
+                 * restores entry 255 with a single write, instead of the
+                 * skip gate having to run a full 2112-entry pass (or worse,
+                 * leaving 255 debug-white). */
                 ((volatile uint16_t *)&MARS_CRAM)[255] = 0x7FFF;
+                cram_hijacked = 1;
                 for (int j = 0; j < 3; j++) {
                     int len = lens[j];
                     if (len > 300) len = 300;
