@@ -44,6 +44,12 @@ endif
 ifdef TAILPROBE
 MDCCFLAGS += -DTAIL_PROBE
 endif
+# `make TAILBURN=1` = LOOP 7 diagnostic: pad the MD handler back out to
+# its pre-LOOP-7 length. NEVER SHIP — it exists only to separate "the
+# channel changed" from "the 68K now runs more" when reading blit skips.
+ifdef TAILBURN
+MDCCFLAGS += -DTAIL_BURN
+endif
 # `make SPINPROBE=N` = LOOP 6d band experiment: cap the COMM stream's
 # ack-spin budget at N polls (N=0 never blocks on the slave at all).
 # NEVER SHIP — text/palette refresh is deliberately starved. Tests

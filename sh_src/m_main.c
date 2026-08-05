@@ -76,13 +76,21 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
 #define FB_STAGING  ((volatile uint16_t *)0x24012000)   /* game tile RAM */
 #define FB_SPR      ((volatile uint16_t *)0x2401E000)   /* game sprite RAM */
-#define SPR_LAND    ((volatile uint16_t *)0x26039000)   /* DREQ landing, 2KB
-                                                         * past CACHE_C (ends
+#define SPR_LAND    ((volatile uint16_t *)0x26039000)   /* DREQ landing, past
+                                                         * CACHE_C (ends
                                                          * 0x39000); stack top
-                                                         * 0x3FC00. 770 words:
+                                                         * 0x3FC00, so ~27KB
+                                                         * of room. LOOP 7:
+                                                         * 852 words (1704B,
+                                                         * ends 0x396A8) —
                                                          * 0..511 sprites, 512
                                                          * bitmap, 513 text base,
-                                                         * 514..769 text chunk */
+                                                         * 514..769 text chunk,
+                                                         * 770..789 layer regs
+                                                         * (0x740-0x753),
+                                                         * 790..849 rowscroll
+                                                         * (0x7C0-0x7FB),
+                                                         * 850..851 pad */
 #define NPAGES      12
 
 /* Slave commands (SYNC[0]; nonzero = pending; echo to SYNC[1] when done):
@@ -197,6 +205,20 @@ static inline void diag_add(int slot, uint16_t t0)
 static inline void cache_purge(void)
 {
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
+}
+
+/* Invalidate `n` consecutive 16-byte cache lines. ORing an address with
+ * 0x40000000 selects the cache PURGE AREA: the written value is ignored,
+ * only the address tag matters, ~2 cycles each. Use when this CPU is
+ * about to READ through the cached alias something just written through
+ * the uncached one — a targeted alternative to cache_purge(), which
+ * dumps all 4KB. (SH-2 caches are write-through, so the reverse
+ * direction — write cached, read remote — needs nothing.) */
+static inline void purge_lines(const void *p, unsigned n)
+{
+    uintptr_t a = ((uintptr_t)p) | 0x40000000;
+    for (unsigned i = 0; i < n; i++, a += 16)
+        *(volatile uintptr_t *)a = 0;
 }
 
 /* Cache lookup during compose. Returns pixel pointer; on miss, queues the
@@ -1543,8 +1565,10 @@ RAMCODE static void dreq_rearm(void)
     (void)SH2_DMA_CHCR0;
     SH2_DMA_SAR0 = 0x20004012;          /* DREQ FIFO */
     SH2_DMA_DAR0 = 0x26039000;          /* SPR_LAND (uncached) */
-    SH2_DMA_TCR0 = 772;                 /* 512 spr + bmp + base + 256 txt + 2 pad
-                                         * (4-word aligned; see md_main push) */
+    SH2_DMA_TCR0 = 852;                /* LOOP 7: 512 spr + bmp + base + 256
+                                         * txt + 20 layer regs + 60 rowscroll
+                                         * + 2 pad (4-word aligned; see the
+                                         * md_main push) */
     SH2_DMA_DRCR0 = 0;
     SH2_DMA_DMAOR = 1;
     SH2_DMA_CHCR0 = 0x44E1;
@@ -1816,6 +1840,12 @@ RAMCODE void m_main(void)
             t_vint = tw;
             shadow_stole = 0;
             win_no++;
+            /* LOOP 7 NEGATIVE: anchoring t_vint to the MD's V heartbeat
+             * (back-dating tw by the lines elapsed since 0xDF, ~46 FRT
+             * ticks/line) instead of the pickup instant changed NOTHING —
+             * skips 153 vs 155, and blit_preempt got worse (0.99 ->
+             * 1.14ms). The late pickups are therefore NOT a phase latch in
+             * the quiet zone; do not re-run this. */
 
             /* (iter4) the previous window's concurrent compose is NO
              * LONGER drained here: that slave_wait stalled the 68K for a
@@ -1840,8 +1870,17 @@ RAMCODE void m_main(void)
                     skip = (v < 0xDF || v > 0xE4);
                 } else
                     skip = !(MARS_VDP_FBCTL & 0x8000);
-                if (skip)
+                if (skip) {
                     DIAG[7]++;               /* master-side silent skips */
+                    /* LOOP 7 diagnosis: WHICH side of the window. 23 =
+                     * picked up late enough that V ran past 0xE4 (or
+                     * wrapped, which lands in the <0xDF bucket); 24 =
+                     * heartbeat absent/stale. */
+                    if ((md_v & 0xFF00) == 0xD000)
+                        DIAG[23 + ((md_v & 0xFF) < 0xDF ? 0 : 1)]++;
+                    else
+                        DIAG[25]++;
+                }
             }
             uint16_t scmd = (uint16_t)(0x3000 | (k << 4) | (par << 8)
                                        | bank1 | (skip ? 8 : 0));
@@ -1910,6 +1949,65 @@ RAMCODE void m_main(void)
              *    compose pre-blit wait) plus moving the compose launch/
              *    drain/band enqueue POST-ACK; copy_pages stays the pre-ack
              *    floor until a full write-log ring retires its FB read. */
+            /* Apply the DREQ TEXT/REG tail EVERY window (before re-arm
+             * clears TE / overwrites the buffer), not just at k1 — a
+             * k1-only apply refreshed text at 1/3 the push rate and the
+             * scoreboard regressed. LOOP 7 moved this AHEAD of
+             * latch_layer_regs(): the layer regs and rowscroll now arrive
+             * in this packet, and latching before applying would hand the
+             * compose the PREVIOUS window's scroll.
+             *   513 = text base, 514..769 = 256 words -> text shadow
+             *   770..789 = layer regs 0x740-0x753
+             *   790..849 = rowscroll  0x7C0-0x7FB
+             * The regs are applied AFTER the rotating chunk so the pass
+             * that overlaps them (base 1792) cannot leave a stale copy —
+             * both come from the same MD snapshot instant, so the values
+             * agree anyway; the order just makes that independent of the
+             * rotation phase. */
+            /* LONGWORD copies. Unlike the 68000 (16-bit bus — LOOP 6
+             * negative 5: 32-bit compares bought nothing there), the SH-2
+             * moves 32 bits per SDRAM transaction, so this halves the
+             * per-window cost of a payload that just grew 336 words.
+             * ALIGNMENT (all four operands, checked): SPR_LAND+514 = byte
+             * 1028, +1026 = 2052, +1046 = 2092; TEXT_U+tb with tb a
+             * multiple of 512 = byte 1024k; TEXT_U+0x740 = 0xE80,
+             * +0x7C0 = 0xF80. Every one is 4-byte aligned. */
+            if (SH2_DMA_CHCR0 & 2) {
+                unsigned tb = SPR_LAND[513] & 0x7FF;
+                if (tb + 256 <= 2048 && !(tb & 1)) {
+                    volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + tb);
+                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 514);
+                    for (int i = 0; i < 128; i += 4) {
+                        d[i + 0] = s[i + 0];
+                        d[i + 1] = s[i + 1];
+                        d[i + 2] = s[i + 2];
+                        d[i + 3] = s[i + 3];
+                    }
+                }
+                {
+                    volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + 0x740);
+                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 770);
+                    for (int i = 0; i < 10; i++)
+                        d[i] = s[i];
+                }
+                {
+                    volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + 0x7C0);
+                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 790);
+                    for (int i = 0; i < 30; i++)
+                        d[i] = s[i];
+                }
+                /* latch_layer_regs() reads these through the CACHED alias
+                 * (TEXT_C) on the very next line, and the full cache_purge()
+                 * does not run until POST-ack — so without this the latch
+                 * picks up the PREVIOUS window's scroll. Measured cost of
+                 * getting it wrong: scream 91.7 -> 47.2%, dx=+12; title
+                 * dx=+8. Same one-window-stale scroll drift the old
+                 * DMA-vs-COMM ordering bug produced (dx=+24), reached by a
+                 * different route. 20 words = 3 lines from 0xE80, 60 words
+                 * = 8 lines from 0xF80; round up for the unaligned tail. */
+                purge_lines((const void *)(TEXT_C + 0x740), 3);
+                purge_lines((const void *)(TEXT_C + 0x7C0), 8);
+            }
             if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
                 /* sprite-list snapshot — DREQ FIFO DMA (the FB staging
@@ -2029,24 +2127,6 @@ RAMCODE void m_main(void)
              * compose pre-blit wait), the pre-ack stall drops to blit +
              * copy_pages + apply_cram + the <=1-strip preempt wait; the
              * compose-drain slave_wait leaves the 68K's critical path. */
-            /* Apply the DREQ TEXT chunk EVERY window (before re-arm clears
-             * TE / overwrites the buffer), not just at k1 — a k1-only apply
-             * refreshed text at 1/3 the push rate and the scoreboard
-             * regressed. 513 = base, 514..769 = 256 words -> text shadow. */
-            if (SH2_DMA_CHCR0 & 2) {
-                unsigned tb = SPR_LAND[513] & 0x7FF;
-                if (tb + 256 <= 2048)
-                    for (int i = 0; i < 256; i += 8) {
-                        TEXT_U[tb + i + 0] = SPR_LAND[514 + i + 0];
-                        TEXT_U[tb + i + 1] = SPR_LAND[514 + i + 1];
-                        TEXT_U[tb + i + 2] = SPR_LAND[514 + i + 2];
-                        TEXT_U[tb + i + 3] = SPR_LAND[514 + i + 3];
-                        TEXT_U[tb + i + 4] = SPR_LAND[514 + i + 4];
-                        TEXT_U[tb + i + 5] = SPR_LAND[514 + i + 5];
-                        TEXT_U[tb + i + 6] = SPR_LAND[514 + i + 6];
-                        TEXT_U[tb + i + 7] = SPR_LAND[514 + i + 7];
-                    }
-            }
             /* Re-arm the DREQ DMA EVERY vint (pre-ack) so the FIFO always
              * has a draining transfer when the MD pushes after the ack —
              * the fix for the drains-once-then-blocks hang. */

@@ -43,8 +43,9 @@ emu.register_frame_done(function()
         line = line .. string.format(' %s=%.3fms', s[2], d(s[1]) / n * ms)
     end
     line = line .. string.format(
-        ' dreq_inc=%d skips=%d cramwr/cyc=%.1f grpskip/cyc=%.1f',
-        d(17), d(7), d(19) / n, d(20) / n)
+        ' dreq_inc=%d skips=%d(wrap=%d late=%d nohb=%d)'
+        .. ' cramwr/cyc=%.1f grpskip/cyc=%.1f',
+        d(17), d(7), d(23), d(24), d(25), d(19) / n, d(20) / n)
     -- MD handler span (frame = 262 lines); same metric state_health
     -- decodes from an ares savestate. TAILPROBE builds for the extras.
     local packed = md:read_u16(0xFFB0F4)

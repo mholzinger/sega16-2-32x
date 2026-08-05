@@ -72,6 +72,80 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-02 | 59cdebf | 41.0 | 90.8 | 3.3 | 48.3 | 20.2 | 40.7 | (iter4 LANDED: MAME-neutral by construction — latency-only change, ares measures the win)
 | 08-04 | d4abcb5 | 49.3 | 91.7 | 3.4 | 52.1 | 20.9 | 43.5 | (LOOP 6 BASELINE, re-measured)
 | 08-04 | iter6 | 49.3 | 91.7 | 3.4 | 52.1 | 20.9 | 43.5 | (LOOP 6 LANDED: apply_cram gated — MAME-neutral by construction, ares measures the win)
+| 08-05 | fbb31c4 | 49.3 | 91.7 | 3.4 | 52.1 | 23.4 | 44.0 | (LOOP 7 BASELINE, re-measured. scream's 91.7 is OURS RENDERING A BLACK FRAME — see iter7a)
+| 08-05 | iter7a | 48.3 | 47.2 | 3.1 | 52.9 | 22.0 | **34.7** | (LOOP 7a LANDED: COMM -> DREQ. 4 of 5 scenes improve; scream stops being blank)
+
+### Iteration 7a LANDED — COMM payloads onto the DREQ packet
+
+Did what LOOP7.md step 1 specified. Layer regs (0x740-0x753), the
+rowscroll tables (0x7C0-0x7FB) and the full 0..2047 text rotation all
+ride the DREQ packet now (772 -> 852 words, still 4-aligned); COMM
+carries the palette and nothing else, and its loop EXITS IMMEDIATELY
+when the dirty queue is empty — which is the steady state, so the
+common vint now pays ZERO ack round-trips.
+
+MEASURED (`make TAILPROBE=1` + win_probe.lua, means over 3591 vints):
+
+    term        before   after
+    total        170.6    115.1
+    stream        70.0      9.3     <- the elastic ack-spin, gone
+    dreq          49.0     54.4
+    palscan       45.1     45.0     <- untouched; that is step 2
+
+Clean probe-free build: worst-case handler 224 -> 177 of 262, its
+window span 18 -> 5, tail 206 -> 172. Scoreboard mean 44.0 -> 34.7.
+
+THE SCOREBOARD MOVED FOR A REASON WORTH READING. scream's baseline
+"91.7" was OUR SIDE RENDERING A BLACK FRAME: at anchor+45 the game had
+not drawn the scene yet. It draws now. Four of five scenes improve;
+demo alone rises 52.1 -> 52.9, and its diff is structurally identical
+to the baseline's except the INSERT COIN text block — text-refresh
+latency, because the COMM text rotation is gone and DREQ refreshes the
+full 2048 words in 8 pushes instead of ~4.
+
+NEGATIVE RESULTS (do not re-run these):
+
+6. THE BLIT-SKIP RISE IS THE 68K, NOT THE CHANNEL. Skips looked like
+   49 -> 155/run, every one on the LATE side (v > 0xE4, none wrapped —
+   the DIAG[23..25] split says so). `make TAILBURN=1` pads the MD
+   handler back to its old ~170 lines with everything else identical:
+   skips fall to 58. So it is "the 68K now runs more", i.e. the WIN,
+   not a transport bug. On the shipped probe-free build the real
+   numbers are 50 -> 55 of 3591 windows; the 155 was a TAILPROBE
+   artifact (probes move the scoreboard — measure gates clean).
+7. THE QUIET-ZONE PHASE REFERENCE IS NOT THE PROBLEM. Anchoring
+   t_vint to the MD's V heartbeat (back-dating the pickup by the lines
+   elapsed since 0xDF, ~46 FRT ticks/line) instead of the pickup
+   instant — so one late pickup cannot latch the loop late — changed
+   NOTHING (153 vs 155) and made blit_preempt worse (0.99 -> 1.14ms).
+   Tightening the strip thresholds 11300/10300 -> 10600/9600 was
+   likewise near-null (155 -> 146). Reverted both.
+8. THE CACHE WAS NOT THE SCROLL DRIFT. First cut scored scream 47.2 at
+   dx=+12 and I assumed latch_layer_regs was reading stale TEXT_C
+   (it reads the CACHED alias, and the full cache_purge only runs
+   POST-ack). Added targeted purge_lines() over the two reg blocks:
+   output was BIT-IDENTICAL. The post-ack purge already leaves those
+   lines cold every window. The purge stays — it is correct and nearly
+   free — but it fixed nothing, and the dx was never drift at all:
+   `tools/reg_probe.lua` compares the MD mirror against the SH-2
+   shadow word by word and they agree EXACTLY on every reg, every
+   sample. Verify the transport before theorising about the consumer.
+9. A 512-WORD TEXT CHUNK IS NOT YET AFFORDABLE. It refreshes text
+   twice as fast and rendered the TITLE near-perfectly (48.3 -> 2.7%
+   mismatch), but the scream scene came back as group-1 red/white/blue
+   fallback — the documented starved-prescan signature. The game now
+   loads scenes faster than the 8-batch/vint COMM palette channel can
+   feed them. Shipped at 256; revisit after step 2.
+
+=> THE PALETTE IS NOW THE BOTTLENECK, which is exactly LOOP 7 step 2.
+It is the last COMM tenant, it is the 45-line scan, and it is what
+caps the text chunk. Everything in this arc points at it.
+
+LEAD (unchased): `make PRESSURE=1` runs this build at skips=1, not 55.
+Its quiet zone is 6000/6500 against the shipped 11300/10300. The
+shipped thresholds were tuned for the OLD 68K load; a middle setting
+may buy the skips back. Measure before believing it — negative 7 says
+this dial is less powerful than it looks.
 
 ### Iteration 6 LANDED — copy_pages was ALREADY dead; apply_cram was the floor
 

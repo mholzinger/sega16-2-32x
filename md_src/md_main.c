@@ -268,14 +268,17 @@ window_done: ;
 		// exhausted budget aborts and retries next vint (the SH-2
 		// keeps last frame's coherent list). 0xFFB0F2 counts aborts
 		// (savestate-readable).
-		uint16_t spin = 1200;
+		// Budget scaled with the LOOP 7 packet growth (772 -> 852 words,
+		// 192 -> 212 group waits) so the per-group headroom is unchanged.
+		uint16_t spin = 1330;
 		uint8_t ok = 1;
 		static uint16_t txt_dma_base;
-		// 772 = 512 spr + bitmap + base + 256 txt + 2 pad. MUST be a multiple
-		// of 4: the DREQ FIFO drains in 4-word bursts, so a non-aligned count
-		// leaves the tail words un-drained -> DMA never completes (TE),
-		// sprites+text go stale (ares dreq_incomplete ~once/cycle at 770).
-		*(volatile uint16_t*)0xA15110 = 772;
+		// LOOP 7: 852 = 512 spr + bitmap + base + 256 txt + 20 layer regs
+		// + 60 rowscroll + 2 pad. MUST be a multiple of 4: the DREQ FIFO
+		// drains in 4-word bursts, so a non-aligned count leaves the tail
+		// words un-drained -> DMA never completes (TE), sprites+text go
+		// stale (ares dreq_incomplete ~once/cycle at 770).
+		*(volatile uint16_t*)0xA15110 = 852;
 		*ctrl = 4;                            // 68S: session start
 		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
 			while (*ctrl < 0 && --spin) ;
@@ -299,17 +302,51 @@ window_done: ;
 					fifo[0] = tt[2]; fifo[0] = tt[3];
 					tt += 4;
 				}
-				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad 770->772 (4-align)
+				// LOOP 7: the two COMM-owned blocks now ride the packet.
+				// They are pushed AFTER the rotating text chunk and applied
+				// after it on the SH-2 side, so the chunk that overlaps them
+				// (base 1536) cannot leave a stale copy behind — and unlike
+				// the old COMM/DMA split, both come from the SAME snapshot
+				// instant, so there is no ordering race to lose.
+				//   770..789 = layer regs  0x740-0x753 (20 words, 5 groups)
+				//   790..849 = rowscroll   0x7C0-0x7FB (60 words, 15 groups)
+				if (ok) {
+					const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
+					for (uint16_t lg = 0; lg < 5; lg++) {
+						while (*ctrl < 0 && --spin) ;
+						if (!spin) { ok = 0; break; }
+						fifo[0] = lr[0]; fifo[0] = lr[1];
+						fifo[0] = lr[2]; fifo[0] = lr[3];
+						lr += 4;
+					}
+				}
+				if (ok) {
+					const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
+					for (uint16_t rg = 0; rg < 15; rg++) {
+						while (*ctrl < 0 && --spin) ;
+						if (!spin) { ok = 0; break; }
+						fifo[0] = rs[0]; fifo[0] = rs[1];
+						fifo[0] = rs[2]; fifo[0] = rs[3];
+						rs += 4;
+					}
+				}
+				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad 850->852 (4-align)
 			} else
 				ok = 0;
 		}
 		if (ok) {
-			// Rotate 0..1791 only: the last chunk (1792..2047) holds the
-			// layer regs (0x740) + rowscroll (0x7C0), which COMM ships
-			// EVERY vint. DMAing that region overwrote them with a stale
-			// snapshot -> scroll drift (scoreboard dx=+24). COMM owns it.
+			// LOOP 7: rotate the FULL 0..2047 range in 512-word chunks.
+			// The old 0..1791 restriction existed because COMM shipped the
+			// 1792..2047 regs every vint and a DMAed stale snapshot fought
+			// it (scoreboard dx=+24); COMM no longer carries them. 512-word
+			// 256-word chunks: a 512-word chunk refreshes text twice as
+			// fast and rendered the TITLE near-perfectly (parity 48.3 ->
+			// 2.7% mismatch), but it pushed the master past its budget in
+			// the scream scene — group-1 red/white/blue fallback, the
+			// documented starved-prescan signature. Revisit once the
+			// palette leaves COMM (LOOP 7 step 2).
 			txt_dma_base = (uint16_t)(txt_dma_base + 256);
-			if (txt_dma_base >= 1792) txt_dma_base = 0;
+			if (txt_dma_base >= 2048) txt_dma_base = 0;
 		} else {
 			*ctrl = 0;
 			(*(volatile uint16_t*)0xFFB0F2)++;
@@ -378,17 +415,21 @@ window_done: ;
 	}
 #endif
 
-	// Stage C shadow streaming — independent of the MCU busy/screen-sync
-	// state. Acked COMM protocol (SH-2 clears COMM0 per batch): alternating
-	// TEXT batches only: the palette lives in the MD RAM mirror at
-	// 0xFF9000 and is copied into FB staging above — no palette
-	// COMM streaming.
-	// Text RAM (2048 words) fully refreshes every ~6.4 frames.
+	// LOOP 7 — COMM IS NOW PALETTE-ONLY. Everything else moved to the DREQ
+	// packet above. THE RATIO THAT DROVE THIS: COMM cost 70 lines for ~55
+	// words (1.27 lines/word) against DREQ's 49 lines for 772 (0.063) —
+	// 20x, because COMM's cost is an ACK ROUND-TRIP per 5-word batch, not
+	// payload. Worse, that wait is ELASTIC: the 68K blocks until the SLAVE
+	// services COMM0, so every cycle freed elsewhere was reabsorbed here
+	// (which is why six iterations of shaving moved nothing, and why
+	// PROBE_spin0 moved the band 57.1 -> 39.4% on its own).
+	// Text + layer regs + rowscroll ride the DMA now; the palette stays on
+	// COMM until its write-thunks land (LOOP 7 step 2), and in steady state
+	// its queue is EMPTY — so the common vint pays zero ack round-trips.
 	// ITER5 TAIL PROBE (split): V at the START of the STREAM section, to
 	// separate the COMM stream cost from the DREQ push + palette scan.
 	uint8_t v_stream = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 	{
-		static uint16_t txt_idx;
 		uint8_t pal_sent_now = 0;
 
 		// TOTAL ack-wait budget for the whole stream section, not per
@@ -404,8 +445,21 @@ window_done: ;
 		// reject rate; nothing else in the handler changes.
 		uint16_t spin = STREAM_SPIN;
 
-		for (uint16_t burst = 0; burst < 64; burst++) {
-			if (burst) {
+		// cap 8 palette batches/vint: an uncapped flood stretched slave
+		// stream servicing and starved band compose on ares (group-1
+		// fallback garbage). 8/vint still converges a full palette reload
+		// in ~1s; typical fades fit one vint. With text/regs off COMM the
+		// loop now EXITS IMMEDIATELY when the dirty queue is empty, which
+		// is the steady state — zero ack round-trips on the common vint.
+		for (uint16_t burst = 0; burst < 8; burst++) {
+			if (pal_h == pal_t)
+				break;                       // nothing dirty: no wait at all
+			// The ack check now covers burst 0 too. It used to be skipped
+			// because burst 0 was a layer-reg batch, re-sent every vint —
+			// a clobbered unacked batch self-healed. A palette batch does
+			// NOT: it has already advanced the sent-copy and left the
+			// queue, so a clobber is a permanently wrong color.
+			{
 #if STREAM_SPIN == 0
 				// NEVER WAIT: post only when the slave has already
 				// acked. (Written as its own branch because the normal
@@ -419,57 +473,34 @@ window_done: ;
 					break;               // SH-2 busy; resume next frame
 #endif
 			}
-			// PRIORITY: the layer-register block (0x740-0x753) AND
-			// the ROWSCROLL tables (0x7C0-0x7FB) ship EVERY vint as
-			// the first 16 batches. The rotating refresh gave each
-			// word 0-6.4 frames of staleness — fine for static
-			// scenes, but fast pans compose mismatched pages/scroll
-			// (jumps, seams) and the loop-2+ attract water RIPPLE
-			// (per-row xscroll) tore into displaced strips when its
-			// table words lagged randomly. Rest still rotates (full
-			// text refresh every ~8.5 frames).
-			// batch order: layer regs + rowscroll (16) > dirty
-			// palette batches > rotating text refresh
-			uint16_t idx, tag = 0x4000;
-			const uint16_t *t;
-			if (burst < 4)
-				idx = (uint16_t)(0x740 + burst * 5);
-			else if (burst < 16)
-				idx = (uint16_t)(0x7C0 + (burst - 4) * 5);
-			else if (pal_h != pal_t && pal_sent_now < 8) {
-				// cap 8 palette batches/vint: an uncapped flood
-				// displaced text batches and stretched slave stream
-				// servicing, starving band compose on ares (group-1
-				// fallback garbage). 8/vint still converges a full
-				// palette reload in ~1s; typical fades fit one vint.
-				uint16_t b = palq[pal_h];      // FIFO: oldest first
-				pal_h = (uint8_t)((pal_h + 1) & 63);
-				idx = (uint16_t)(b * 5);
-				tag = 0x4800;                  // palette batch
-				pal_sent_now++;
-			} else
-				idx = txt_idx;
-			if (tag == 0x4800) {
-				const uint16_t *m = (const uint16_t*)0xFF9000 + idx;
-				uint16_t *s = (uint16_t*)0xFFA000 + idx;
-				s[0] = m[0]; s[1] = m[1]; s[2] = m[2];
-				s[3] = m[3]; s[4] = m[4];
-				t = m;
-			} else
-				t = (const uint16_t*)0xFF8000 + idx;
-			*mars_comm2  = t[0];
-			*mars_comm4  = t[1];
-			*mars_comm6  = t[2];
-			*mars_comm8  = t[3];
-			*mars_comm10 = t[4];
-			*mars_comm0  = tag | idx;
-			if (tag == 0x4000 && burst >= 16) {
-				txt_idx += 5;
-				if (txt_idx >= 2045)
-					txt_idx = 0;
-			}
+			uint16_t b = palq[pal_h];              // FIFO: oldest first
+			pal_h = (uint8_t)((pal_h + 1) & 63);
+			uint16_t idx = (uint16_t)(b * 5);
+			const uint16_t *m = (const uint16_t*)0xFF9000 + idx;
+			uint16_t *s = (uint16_t*)0xFFA000 + idx;
+			s[0] = m[0]; s[1] = m[1]; s[2] = m[2];
+			s[3] = m[3]; s[4] = m[4];
+			*mars_comm2  = m[0];
+			*mars_comm4  = m[1];
+			*mars_comm6  = m[2];
+			*mars_comm8  = m[3];
+			*mars_comm10 = m[4];
+			*mars_comm0  = (uint16_t)(0x4800 | idx);   // palette batch
+			pal_sent_now++;
 		}
+		(void)pal_sent_now;
 	}
+
+#ifdef TAIL_BURN
+	// LOOP 7 DIAGNOSTIC ONLY (never shipped): burn back the ~55 scanlines
+	// the COMM->DREQ move freed, so the handler costs what it used to.
+	// Isolates "the channel changed" from "the 68K now runs more".
+	{
+		volatile uint16_t *hv = (volatile uint16_t*)0xC00008;
+		uint8_t v0 = (uint8_t)(*hv >> 8);
+		while ((uint8_t)((uint8_t)(*hv >> 8) - v0) < 55) ;
+	}
+#endif
 
 	// ITER5 TAIL PROBE: shim-handler span in scanlines, entry V (0xFFB0FE,
 	// written at the window phase) -> here, the END of the per-vint tail
