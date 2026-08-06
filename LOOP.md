@@ -1,5 +1,13 @@
 # The Parity Loop
 
+> **MILESTONE 2026-08-05 (fa07dced): CADENCE TARGET MET — vints/cycle
+> 3.02, V-gate rejects 0.7%.** The band that sat at 57-66% for six
+> iterations is GONE, and Mike has a full level-1 playthrough. See
+> iteration 7e. Remaining: the strobe is bursty (1.19% of frames,
+> load-correlated) and dreq_incomplete is 20.7% with push_aborts=0
+> (the packet needs SPLITTING). The palette scan is still untouched —
+> step 2 was never needed to reach cadence.
+
 > ACTIVE ARC: **LOOP7.md** — kill the tail (COMM -> DREQ, retire the
 > palette scan). LOOP 6 closed: it falsified its own kickoff, cut
 > apply_cram (ares window 88 -> 64 lines, exactly as predicted), and
@@ -75,6 +83,59 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-05 | fbb31c4 | 49.3 | 91.7 | 3.4 | 52.1 | 23.4 | 44.0 | (LOOP 7 BASELINE, re-measured. scream's 91.7 is OURS RENDERING A BLACK FRAME — see iter7a)
 | 08-05 | iter7a | 48.3 | 47.2 | 3.1 | 52.9 | 22.0 | **34.7** | (LOOP 7a LANDED: COMM -> DREQ. 4 of 5 scenes improve; scream stops being blank)
 | 08-05 | iter7d | 49.7 | 45.1 | 3.1 | 49.5 | 13.0 | **32.1** | (LOOP 7d: blit in THIRDS — the flip/restore pair overran vblank on 100% of windows)
+
+### Iteration 7e — THE BAND IS GONE. Falsifier met in full.
+
+ares on fa07dced, with a full level-1 playthrough behind it:
+
+    metric              LOOP 7 start   7c      7d(this)   target
+    vints/cycle             6.99       4.91     3.02      ~3     MET
+    V-gate rejects         57.1%      39.0%     0.7%      ->0    MET
+    restore past vblank      n/a     100.0%     0.6%      0
+    band-queue deferrals     n/a        593      48
+    worst handler            241        221      224
+
+Thirds worked: the flip/restore pair went from overrunning vblank on
+EVERY window to 0.6% of them. Deferrals collapsed 593 -> 48, so the
+band queue is no longer saturated. And note what did NOT happen — the
+palette scan is still there, all 45 lines of it. Step 2 was never
+needed to reach cadence; step 1 plus the blit partition did it.
+
+THE STROBE IS NOW LOAD-CORRELATED, AND THAT CHANGES THE FIX. A census
+over Mike's 9916-frame ares capture (`tools/strobe_scan.py`, new — it
+separates black frames by FILE SIZE, no PNG decode, because a black
+frame compresses ~100x smaller) says:
+
+    118 black frames = 1.19%, in 17 BURSTS, dominant gap 4 frames
+    (= 3 good then 1 black, the 3-window cycle plus one)
+    bursts run 9-40% black internally and get denser in late gameplay
+
+Bursty, not uniform. So the mean is fixed and the WORST CASE is not:
+worst restore span is 74 lines against a 38-line budget, on a blit that
+is now only ~36 rows per CPU. Cutting rows further cannot explain or
+fix a 74-line span.
+
+HYPOTHESIS FOR THE NEXT PASS (unverified, cheapest first): the span is
+blit + a FIXED part, and the fixed part contains `while (SYNC[2] < 1)`
+— the master waiting for the SLAVE to pick up the preempt mailbox,
+INSIDE the vblank-critical section. Pickup is bounded by one compose
+strip, and sprite strips are documented at ~1.4ms = ~65 lines on ares.
+That is the whole 74-line worst case, it is load-correlated exactly as
+the bursts are, and no amount of row-splitting touches it. The master
+cannot simply restore first (the slave would blit the wrong bank), so
+the candidates are: (a) have the master blit the whole band alone —
+doubles its rows but removes the sync wait entirely, and B is small
+now; (b) shorten sprite strips so pickup latency drops; (c) a
+finer-grained slave poll.
+
+RANKED REMAINING WORK:
+1. the burst strobe (above) — the last visible artifact.
+2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with
+   push_aborts=0 has now said the same thing three passes running: the
+   68K pushes all 852 words and the DMA does not drain.
+3. blit skips 21.0% of cycles (was 10.5%) — each is a stale third.
+4. the palette scan (LOOP 7 step 2), now a pure-throughput win rather
+   than a cadence one.
 
 ### Iteration 7a LANDED — COMM payloads onto the DREQ packet
 
