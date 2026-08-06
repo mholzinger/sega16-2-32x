@@ -745,6 +745,192 @@ with open(ROOT / 'md_src' / 'tile_thunks.h', 'w') as th:
                  + ",\n")
     th.write("};\n")
 
+# ==== PALETTE DIRTY-BIT THUNKS (LOOP 8) ====
+# Retires the 512-word/vint palette diff scan: 45 of the MD handler's 92
+# tail scanlines, run on EVERY vint, finding NOTHING in steady state
+# (1024 MD-RAM reads to discover that nothing changed). LOOP 6 negatives
+# 3-5 proved it cannot be micro-optimised — with the loop body disabled
+# the span goes 45.1 -> 0.1 lines, so the loop IS the whole cost. It has
+# to stop existing, and the only way is to observe the WRITES instead.
+#
+# Same mechanism as TILE_DIRTY_SITES above: each site becomes a jsr into
+# an MD-RAM thunk that ORs its region bits into a 16-bit dirty word at
+# 0xFFB9FC, then runs the displaced instruction and returns. One bit per
+# 128-word (256-byte) region of the 2048-word palette; the shim ships
+# dirty regions on the DREQ TEXT packet and clears the bit.
+#
+# EXTENTS ARE MEASURED, NOT ASSUMED. An ALL-dirty (0xFFFF) mask is the
+# thing to avoid — the tile thunks' ALL-dirty flood cost title parity
+# 63-70% before 0x258A got a precise thunk. Every mask here is derived
+# from the disassembled loop bound and CROSS-CHECKED against a live
+# region census (tools/pal_tap.lua, 3000 frames of attract + play):
+#   PC 902628 (the 0x2612 copy helper, shared by four callers) observed
+#   region mask 0085 = exactly the union of the four per-caller masks
+#   below (7 | 2 | 0); PC 903976 (site 3952) observed 00FF, exactly its
+#   static mask. Table-driven sites take the union over the FIVE round
+#   entries of their extent table (0x326E / 0x1724C).
+#
+# THE STATIC SITE LIST FROM patch_report IS NOT COMPLETE, and only the
+# census showed it: 0x3C20 forms 0xFF9800+2+d0*32 and merely QUEUES the
+# pointer at 0xFFF402 — the actual writers are the register-indirect
+# loops at 0x2DC8 / 0x3C5A (observed regions 8-9), which no
+# address-formation scan can attribute. They get a runtime thunk that
+# derives the region from A1. 0x3C20 itself needs no thunk: marking at
+# POINTER-FORMATION time would let the shim ship and clear the region
+# before the write it predicted ever lands.
+PAL_DIRTY = 0xB9FC                   # dirty word, abs.w (>=0x8000: 68K
+                                     # abs.w SIGN-EXTENDS — see tiles)
+PAL_THUNK_BASE = 0xBA00              # 0xFFBA00: free (tile thunks end at
+                                     # 0xFFB9E8, bitmap 0xFFB9FE, game RAM
+                                     # starts 0xFFC000). The boot stack top
+                                     # is 0xFFBFF0 and the game runs on its
+                                     # OWN stack (0xFFFFFF00), so only boot
+                                     # shares this page — and only its top.
+# (site, displaced length, region mask, note)
+PAL_DIRTY_SITES = [
+    (0x01EF2, 6, 0x0001, "clr.w 0xFF9000"),
+    (0x01F80, 6, 0x0001, "clr.w 0xFF9000"),
+    (0x020A0, 6, 0x0001, "clr.w 0xFF9000"),
+    # Two straight-line blocks of twelve move.w #imm,abs.l, all inside
+    # region 0 (0x000-0x026). Thunked INDIVIDUALLY rather than marking
+    # once at the head of each block: a vint landing mid-block would
+    # otherwise ship and clear region 0 between the mark and the
+    # remaining eleven stores, losing them.
+    (0x1A934, 8, 0x0001, "move.w #imm,0xFF9000"),
+    (0x1A93C, 8, 0x0001, "move.w #imm,0xFF9002"),
+    (0x1A944, 8, 0x0001, "move.w #imm,0xFF9004"),
+    (0x1A94C, 8, 0x0001, "move.w #imm,0xFF9006"),
+    (0x1A954, 8, 0x0001, "move.w #imm,0xFF9010"),
+    (0x1A95C, 8, 0x0001, "move.w #imm,0xFF9012"),
+    (0x1A964, 8, 0x0001, "move.w #imm,0xFF9014"),
+    (0x1A96C, 8, 0x0001, "move.w #imm,0xFF9016"),
+    (0x1A974, 8, 0x0001, "move.w #imm,0xFF9020"),
+    (0x1A97C, 8, 0x0001, "move.w #imm,0xFF9022"),
+    (0x1A984, 8, 0x0001, "move.w #imm,0xFF9024"),
+    (0x1A98C, 8, 0x0001, "move.w #imm,0xFF9026"),
+    (0x1B0E6, 8, 0x0001, "move.w #imm,0xFF9000"),
+    (0x1B0EE, 8, 0x0001, "move.w #imm,0xFF9002"),
+    (0x1B0F6, 8, 0x0001, "move.w #imm,0xFF9004"),
+    (0x1B0FE, 8, 0x0001, "move.w #imm,0xFF9006"),
+    (0x1B106, 8, 0x0001, "move.w #imm,0xFF9010"),
+    (0x1B10E, 8, 0x0001, "move.w #imm,0xFF9012"),
+    (0x1B116, 8, 0x0001, "move.w #imm,0xFF9014"),
+    (0x1B11E, 8, 0x0001, "move.w #imm,0xFF9016"),
+    (0x1B126, 8, 0x0001, "move.w #imm,0xFF9020"),
+    (0x1B12E, 8, 0x0001, "move.w #imm,0xFF9022"),
+    (0x1B136, 8, 0x0001, "move.w #imm,0xFF9024"),
+    (0x1B13E, 8, 0x0001, "move.w #imm,0xFF9026"),
+    # Loop bases. Extent = the loop bound at the site, in BYTES from the
+    # lea target; region = byte offset >> 8.
+    (0x025BA, 6, 0x0080, "0x2612 helper, d1=12: 13*16B at 0x720 -> 0x7EF"),
+    (0x025E8, 6, 0x0004, "0x2612 helper, d1=9: 10*16B at 0x250 -> 0x2EF"),
+    (0x025F0, 6, 0x0001, "0x2612 helper, d1=0: 16B at 0x0B0 -> 0x0BF"),
+    (0x0263C, 6, 0x0004, "0x2612 helper, d1=9: 10*16B at 0x250 -> 0x2EF"),
+    (0x02B7E, 6, 0x00F0, "table 0x326E rounds 0-4: 0x400 -> 0x71F"),
+    (0x02B94, 6, 0x0001, "single move.w at 0x2BA4 -> 0x06C"),
+    (0x02BB8, 6, 0x0001, "32 longs = 128B at 0x000 -> 0x07F"),
+    (0x03116, 6, 0x0001, "8 longs = 32B at 0x040 -> 0x05F"),
+    (0x03846, 6, 0x0001, "8 longs = 32B at 0x040 -> 0x05F"),
+    # 0x3952 falls through into the 0x3972 loop TWICE (the second entry
+    # at 0x3960 re-points A1 only — A0 keeps running), so it is 2048B,
+    # not the 1024B the single visible bound suggests. The census read
+    # 00FF at PC 903976, which is what caught it.
+    (0x03952, 6, 0x00FF, "2 x 256 longs = 2048B at 0x000 -> 0x7FF"),
+    (0x04544, 6, 0x0001, "20 longs = 80B at 0x010 -> 0x05F"),
+    (0x170BA, 6, 0x00F0, "table 0x1724C rounds 0-4: 0x400 -> 0x71F"),
+    (0x1A4F0, 6, 0x0030, "19*16B at 0x490 -> 0x5BF"),
+    (0x1B742, 6, 0x0001, "7*16B at 0x010 -> 0x07F"),
+    (0x1BAB6, 6, 0x0007, "40*8 words = 640B at 0x080 -> 0x2FF"),
+]
+pal_words = []
+pal_report = []
+for pi, (off, dlen, bits, note) in enumerate(PAL_DIRTY_SITES):
+    disp = list(struct.unpack_from(f'>{dlen // 2}H', hrom, off))
+    tgt = (disp[-2] << 16) | disp[-1]
+    assert 0xFF9000 <= tgt < 0xFFA000, f"pal site {off:#x}: target {tgt:#x}"
+    taddr = PAL_THUNK_BASE + pi * 16
+    # jsr (taddr).w over the displaced instruction, nop-padded to length
+    struct.pack_into('>HH', hrom, off, 0x4EB8, taddr)
+    for k in range(4, dlen, 2):
+        struct.pack_into('>H', hrom, off + k, 0x4E71)
+    # thunk: ori.w #bits,(PAL_DIRTY).w ; <displaced> ; rts ; pad to 16
+    body = [0x0078, bits, PAL_DIRTY] + disp + [0x4E75]
+    pal_words += body + [0x4E71] * (8 - len(body))
+    pal_report.append(f"P {off:06X}: mask {bits:04X} -> thunk {taddr:04X}  {note}")
+
+# PRECISE THUNK A — 0x30C2, the colour-cycle engine and by far the
+# busiest writer (8818 writes over 3000 frames, ~3 per frame). Its lea
+# base is 0xFF9000 but the write lands at +((D0 & 0x7F) << 4), so a
+# static mask would be 00FF — eight regions marked EVERY FRAME, i.e. the
+# whole palette shipped forever. The census read 0002: one region at a
+# time, which is exactly what a runtime mask delivers. The 16-byte write
+# is 16-byte aligned, so it can never straddle a 256-byte region.
+# D0 is live (0x30C8 re-uses it); D1 is dead here but may be live in the
+# CALLER, so it is saved.
+pal_a = PAL_THUNK_BASE + len(PAL_DIRTY_SITES) * 16
+want = struct.pack('>HHH', 0x43F9, 0x00FF, 0x9000)
+assert hrom[0x30C2:0x30C8] == want, hrom[0x30C2:0x30C8].hex()
+struct.pack_into('>HHH', hrom, 0x30C2, 0x4EB8, pal_a, 0x4E71)
+ta = [0x43F9, 0x00FF, 0x9000,   # displaced lea 0xFF9000,A1
+      0x2F01,                   # move.l D1,-(SP)
+      0x3200,                   # move.w D0,D1
+      0x0241, 0x007F,           # andi.w #0x7F,D1
+      0xE849,                   # lsr.w #4,D1      D1 = region 0..7
+      0xD241,                   # add.w D1,D1      word index
+      0x323B, 0x0000,           # move.w (d8,PC,D1.w),D1   [disp below]
+      0x8378, PAL_DIRTY,        # or.w D1,(PAL_DIRTY).w
+      0x221F,                   # move.l (SP)+,D1
+      0x4E75]                   # rts
+# Brief extension word: index register D1.w (0x1000) + the displacement
+# from the extension word itself (PC base) to the table after the body.
+ta[10] = 0x1000 | ((len(ta) - 10) * 2)
+pal_words += ta + [1 << r for r in range(16)]
+
+# PRECISE THUNK B — the queued-pointer palette writers at 0x2DC8 and
+# 0x3C5A (identical duplicated routines). The region is only knowable
+# from A1 at write time, so the thunk derives it: region = (A1 >> 8) & 15.
+# Each site's `moveal (A2)+,A1 ; moveal (A2)+,A0` pair is 4 bytes — the
+# exact size of a jsr (xxx).w, which is why the pair is displaced rather
+# than the 2-byte store alone. The body writes 7 longs (28 bytes) from
+# A1, so it can straddle one region boundary: the table marks r and r+1.
+# Flags: the displaced moveals set none, and nothing between here and
+# the next flag-setter (0x2DE8 subq.b) reads CCR, so the thunk's
+# arithmetic is free to clobber it.
+pal_b = pal_a + (len(ta) + 16) * 2
+tb = [0x225A,                   # displaced: moveal (A2)+,A1
+      0x205A,                   # displaced: moveal (A2)+,A0
+      0x2F00,                   # move.l D0,-(SP)
+      0x2009,                   # move.l A1,D0
+      0xE088,                   # lsr.l #8,D0
+      0x0240, 0x000F,           # andi.w #15,D0    D0 = region
+      0xD040,                   # add.w D0,D0
+      0x303B, 0x0000,           # move.w (d8,PC,D0.w),D0   [disp below]
+      0x8178, PAL_DIRTY,        # or.w D0,(PAL_DIRTY).w
+      0x201F,                   # move.l (SP)+,D0
+      0x4E75]                   # rts
+tb[9] = 0x0000 | ((len(tb) - 9) * 2)      # index D0.w
+pal_words += tb + [(1 << r) | (1 << min(r + 1, 15)) for r in range(16)]
+for off in (0x2DC8, 0x3C5A):
+    assert hrom[off:off+4] == b'\x22\x5a\x20\x5a', hrom[off:off+4].hex()
+    struct.pack_into('>HH', hrom, off, 0x4EB8, pal_b)
+    pal_report.append(f"P {off:06X}: runtime mask from A1 -> thunk {pal_b:04X}")
+pal_report.append(f"P 0030C2: runtime mask from D0 -> thunk {pal_a:04X}")
+
+with open(ROOT / 'md_src' / 'pal_thunks.h', 'w') as th:
+    th.write("/* generated by patch_game.py — palette dirty-bit thunks\n"
+             f" * (LOOP 8), installed at 0xFF{PAL_THUNK_BASE:04X} by"
+             " md_main.c.\n"
+             f" * Dirty word: 0xFF{PAL_DIRTY:04X}, one bit per 128-word"
+             " region. */\n")
+    th.write(f"#define PAL_THUNK_WORDS {len(pal_words)}\n")
+    th.write("static const unsigned short pal_thunks[] = {\n")
+    for i in range(0, len(pal_words), 8):
+        th.write("    " + ", ".join(f"0x{w:04X}" for w in pal_words[i:i+8])
+                 + ",\n")
+    th.write("};\n")
+print(f"pal_thunks.h: {len(PAL_DIRTY_SITES) + 3} sites, "
+      f"{len(pal_words) * 2} bytes at 0xFF{PAL_THUNK_BASE:04X}")
+
 # Palette-cycle LAUNCH TABLE at 0x1A6FA ([id.w][script.l] x3): the
 # harvest pass caught entry 1 (0x1A70E) but missed entries 2/3, whose
 # 0x0001A78E script pointers stayed low — the launcher reads the
@@ -786,7 +972,9 @@ for lo, hi_ in REBASE_EXCLUDE:
 
 (ROOT / 'md_src' / 'game_high.bin').write_bytes(hrom[:0x40000])
 (ROOT / 'tools' / 'rebase_report.txt').write_text(
-    f"{reb} refs rebased (+{REBASE:#x})\n\n" + "\n".join(reb_report)
+    f"{reb} refs rebased (+{REBASE:#x})\n\n"
+    + "PALETTE DIRTY-BIT THUNKS (LOOP 8):\n" + "\n".join(pal_report) + "\n\n"
+    + "\n".join(reb_report)
     + "\n\nSKIPPED long immediates (burn-down candidates):\n"
     + "\n".join(skipped_imm) + "\n")
 print(f"game_high.bin: {reb} refs rebased, {len(skipped_imm)} immediates "

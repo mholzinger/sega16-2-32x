@@ -1,7 +1,9 @@
 -- Coin+start the 32X build (proven pattern: two 40-frame coin presses,
 -- then start), sample health counters, screenshot gameplay.
 local frames = 0
-local out = assert(io.open('/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/821761a1-b62c-404f-824a-6f25c3a157b9/scratchpad/coinhang.txt', 'w'))
+-- (was a hard-coded per-session scratchpad path, which broke the tool the
+-- moment that session ended; PLAY_OUT overrides.)
+local out = assert(io.open(os.getenv('PLAY_OUT') or '/tmp/coinhang.txt', 'w'))
 local fields = {}
 local last_ent, stall = -1, 0
 local inited = false

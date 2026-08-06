@@ -1,5 +1,22 @@
 # LOOP 8 — Retire the palette scan (LOOP 7 step 2)
 
+> **STATUS: DONE. Falsifier met (tail 92.4 -> 48.2, palscan 45.1 -> 0.1,
+> COMM stream retired with it), and ares confirms on a full level-1
+> playthrough — every counter improved or held, no colour fault anywhere.
+> See "Iteration 8" in LOOP.md. The one MAME `PRESSURE=1` artifact does
+> not reproduce on ares; its mechanism and fix are recorded there.**
+>
+> Two corrections to this document, both measured:
+>  - "44 sites total" was WRONG, and not by an accident of counting: the
+>    real writers behind 0x3C20 are the register-indirect loops at 0x2DC8
+>    and 0x3C5A, which an address-formation scan structurally cannot see.
+>    45 sites are thunked. Use `tools/pal_tap.lua` before trusting any
+>    future site enumeration taken from patch_report.
+>  - "Only 17 are loop bases needing ALL-dirty (0xFFFF)" was too
+>    pessimistic. Every loop bound is derivable from the disassembly, so
+>    NO site ships an ALL-dirty mask; the two that genuinely cannot be
+>    known statically compute their region at runtime instead.
+
 Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md
 (iterations 7a-7k and the negatives list), then run.
 

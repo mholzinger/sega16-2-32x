@@ -1,12 +1,6 @@
 #include "common.h"
 #include "tile_thunks.h"
-
-// Stream ack-spin budget. 800 = shipped behaviour; `make SPINPROBE=N`
-// overrides it for the LOOP 6d band experiment (0 = never block on the
-// slave at all). See the spin declaration in shim_vblank.
-#ifndef STREAM_SPIN
-#define STREAM_SPIN 800
-#endif
+#include "pal_thunks.h"
 
 // MD-side shim for the arcade game. Runs entirely from work RAM (.data):
 // once RV=1 the low ROM map belongs to the game and the 0x880000 window
@@ -226,16 +220,19 @@ window_done: ;
 		MCU_SNDCMD = 0xFF;
 	}
 
-	// Dirty palette batch queue: FIFO ring. LIFO consumption starved
-	// old entries forever while fades re-dirtied rows every frame
-	// (zombie sprite rows queued once, buried, never sent).
-	static uint16_t palq[64];
-	static uint8_t pal_h, pal_t;
-	#define PALQ_CNT ((uint8_t)((pal_t - pal_h) & 63))
-	#define PALQ_PUSH(b) do { \
-		if (((uint8_t)((pal_t + 1) & 63)) != pal_h) { \
-			palq[pal_t] = (b); pal_t = (uint8_t)((pal_t + 1) & 63); } \
-	} while (0)
+	// LOOP 8 — PALETTE DIRTY WORD (0xFFB9FC), one bit per 128-word region
+	// of the 2048-word mirror. The game's own palette writes set the bits
+	// (patch_game.py PAL_DIRTY_SITES: 45 write sites become jsr into MD-RAM
+	// thunks that OR their region mask in, then run the displaced
+	// instruction); the DREQ push below clears a bit as it ships that
+	// region. This REPLACED a 512-word-per-vint diff scan of the mirror
+	// against a 4KB sent-copy — 45 of the handler's 92 tail scanlines,
+	// spent on 1024 MD-RAM reads that in steady state found nothing.
+	// LOOP 6 negatives 3-5 closed every cheaper option (not division-
+	// bound; long compares are free on a 16-bit bus; ablating the loop
+	// body took the span 45.1 -> 0.1, so the loop WAS the whole cost).
+	// (the word is read, and the shipped bit cleared, in the DREQ push
+	// below — a region must only be cleared when it has actually gone.)
 
 	// SPRITE LIST over DREQ FIFO: the game's own vint upload writes
 	// sprite RAM through the FB window (remap 0x85E000) exactly while
@@ -315,7 +312,83 @@ window_done: ;
 		// nothing. A tag would also have to survive truncation to be worth
 		// anything, and it would break the longword alignment above.
 		uint16_t kk = wskip;                  // the k just posted+acked
-		*(volatile uint16_t*)0xA15110 = (kk == 0) ? 596 : 340;
+		// LOOP 8 — the palette rides in the TEXT packet AHEAD of the text
+		// chunk: an aligned PAIR of 128-word regions takes words 82..337
+		// and the full 256-word text chunk follows, so a TEXT push is 596
+		// words when anything is dirty and 340 when nothing is.
+		//
+		// IT TOOK THREE SHAPES TO GET HERE, and the two rejects are the
+		// reason this one is right:
+		//  - ONE region, packet held at 340, taking HALF the text chunk.
+		//    No length change at all, which looked safest given 7g split
+		//    the packet precisely because dreq_incomplete said it was too
+		//    big. It cost text refresh: 22.09 -> 23.57, spread exactly
+		//    like LOOP 7a's text-latency signature (demo 48.7 -> 50.9,
+		//    the INSERT COIN block).
+		//  - ONE region ALONGSIDE a full text chunk, packet 468. Title
+		//    went back to pixel-exact (2.43%) and the transport was fine
+		//    (dreq_incomplete still 0), but scream went 37.6 -> 52.9 with
+		//    the ALTERED BEAST logo rendering WHITE instead of red.
+		//    tools/pal_probe.lua named the cause: regions 0 and 1 — the
+		//    colour-cycling tile/text sets — were out of sync with the
+		//    SH-2 shadow in 66% and 82% of samples, while every other
+		//    region sat at 0%. One region per push is ~0.67 regions/vint
+		//    against a cycle that rewrites those sets EVERY vint, so the
+		//    hot regions could never converge. The old COMM stream kept
+		//    up because it shipped the CHANGED WORDS (8 batches x 5);
+		//    a region channel has to make up for that in bulk.
+		// Shipping the aligned PAIR fixes it for one tag bit and no extra
+		// state: regions 0 and 1 are pair 0, so both hot sets go on every
+		// push. 82 + 256 + 256 + 2 = 596 words — the exact size of the
+		// sprite push that has landed every cycle since 7g, so this asks
+		// nothing new of the DMA.
+		//
+		// THE TAG LIVES IN THE PREFIX (word 81), not in the pad. A tag
+		// after the payload is worthless under truncation — the master
+		// would read a short transfer's missing tag as "no palette" and
+		// copy palette words into text RAM. txt_dma_base is a multiple of
+		// 256, so bits 0-10 hold it and the top bits are free:
+		//   bit 15     = a palette pair is present
+		//   bits 13-11 = which pair (regions 2p and 2p+1)
+		//
+		// EVERY DIRTY REGION SHIPS TWICE (pal_retry). The thunks have an
+		// inherent race that cannot be closed at the ~17 LOOP-BASE sites:
+		// the thunk marks its region and only THEN does the loop run its
+		// stores, so a vint landing in between ships the region, clears
+		// the bit, and the stores that follow are never marked again — a
+		// permanently wrong colour, which is the one failure class this
+		// port refuses. The window is a few instructions wide, so the
+		// cheap fix is to ship each freshly-marked region a second time
+		// one push later: the loop has certainly finished by then. Costs
+		// two words of state and no MD-RAM reads at all, which is why the
+		// scan does not need to survive as a backstop sweep.
+		//
+		// SELECTION IS ROUND-ROBIN, NOT LOWEST-BIT-FIRST. Lowest-first
+		// STARVES: the attract colour-cycles run in regions 0-7 (the
+		// tile/text half) and re-dirty them every frame, so regions 8-15
+		// — the entire SPRITE palette — never came up. Measured with
+		// tools/pal_rate.lua: regions 8-15 dirty 99.6% of 2000 frames and
+		// never once shipped, which cost every scene on the scoreboard
+		// (33.47% mean, title 2.4 -> 50.9). Rotating the start point
+		// bounds each region's wait at 16 pushes.
+		static uint16_t pal_retry;
+		static uint8_t pal_next;
+		uint16_t pal_pr = 0;                  // 1 + pair index, 0 = none
+		if (kk != 0) {
+			uint16_t sel = (uint16_t)(*(volatile uint16_t*)0xFFB9FC
+						  | pal_retry);
+			if (sel) {
+				uint8_t r = pal_next;
+				while (!(sel & (1u << r)))
+					r = (uint8_t)((r + 1) & 15);
+				pal_next = (uint8_t)((r + 2) & 15);
+				pal_pr = (uint16_t)((r >> 1) + 1);
+			}
+		}
+		// Length must be published BEFORE the session starts, so the
+		// pair is chosen here rather than at the point it is pushed.
+		*(volatile uint16_t*)0xA15110 = (kk == 0) ? 596
+					      : (pal_pr ? 596 : 340);
 		*ctrl = 4;                            // 68S: session start
 		// Two loops, not one with an index test: a per-group branch here
 		// costs ~1 scanline of tail, and the master's window-pickup slack
@@ -340,22 +413,36 @@ window_done: ;
 				rs += 4;
 			}
 		}
-		if (ok) {                             // 80 bitmap, 81 text base
+		if (ok) {                             // 80 bitmap, 81 text base+tag
 			while (*ctrl < 0 && --spin) ;
 			if (spin) {
 				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
 				fifo[0] = *bm;
 				*bm = 0;
-				fifo[0] = txt_dma_base;
+				fifo[0] = pal_pr
+					? (uint16_t)(txt_dma_base | ((pal_pr - 1) << 11) | 0x8000)
+					: txt_dma_base;
 				// Body: the sprite list after w0 (so it LANDS for w1,
 				// where the harvest is — the game's vint handler rebuilds
-				// the list after our window in the IRQ chain), the
-				// rotating text chunk otherwise. One loop, one source
-				// pointer, one count: the phases differ only in those.
+				// the list after our window in the IRQ chain), else the
+				// optional palette region followed by the rotating text
+				// chunk. One loop, one source pointer, one count: the
+				// phases differ only in those.
+				if (pal_pr) {
+					const uint16_t *p = (const uint16_t*)0xFF9000
+						+ ((pal_pr - 1) << 8);
+					for (uint16_t g = 0; g < 64; g++) {
+						while (*ctrl < 0 && --spin) ;
+						if (!spin) { ok = 0; break; }
+						fifo[0] = p[0]; fifo[0] = p[1];
+						fifo[0] = p[2]; fifo[0] = p[3];
+						p += 4;
+					}
+				}
 				const uint16_t *b = (kk == 0)
 					? s : (const uint16_t*)0xFF8000 + txt_dma_base;
 				uint16_t ng = (kk == 0) ? 128 : 64;
-				for (uint16_t g = 0; g < ng; g++) {
+				for (uint16_t g = 0; ok && g < ng; g++) {
 					while (*ctrl < 0 && --spin) ;
 					if (!spin) { ok = 0; break; }
 					fifo[0] = b[0]; fifo[0] = b[1];
@@ -379,10 +466,24 @@ window_done: ;
 			// Only a TEXT packet consumed a chunk — advancing on the
 			// sprite phase too would skip a third of the text RAM
 			// forever (rotation and push phase are coprime by accident,
-			// not by design: 3 phases, 8 chunks).
+			// not by design: 3 phases, 8 chunks). Advance by what was
+			// actually SENT — a full 256-word chunk either way now.
 			if (kk != 0) {
 				txt_dma_base = (uint16_t)(txt_dma_base + 256);
 				if (txt_dma_base >= 2048) txt_dma_base = 0;
+				// Consume the region ONLY on a completed push. An aborted
+				// push leaves both the mark and the retry alone, so the
+				// region simply goes next time — the same stale-beats-
+				// lost rule the sprite list follows. A region that was
+				// FRESHLY marked earns one repeat (the race above); one
+				// that arrived here only as a repeat is now done.
+				if (pal_pr) {
+					volatile uint16_t *pdw = (volatile uint16_t*)0xFFB9FC;
+					uint16_t bit = (uint16_t)(3u << ((pal_pr - 1) << 1));
+					uint16_t fresh = (uint16_t)(*pdw & bit);
+					*pdw &= (uint16_t)~bit;
+					pal_retry = (uint16_t)((pal_retry & ~bit) | fresh);
+				}
 			}
 		} else {
 			*ctrl = 0;
@@ -413,35 +514,13 @@ window_done: ;
 	uint8_t v_scan = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
 #endif
 
-	// Palette dirty scan: the mirror (0xFF9000, game writes) is diffed
-	// against the sent-copy (0xFFA000) one 512-word quarter per vint;
-	// dirty 5-word batches queue for the COMM stream below. The FB
-	// CANNOT carry palette: MD FB-window writes are silently dropped
-	// when the SH-2 owns the framebuffer (ares/hardware arbitration —
-	// proven by savestate: mirror populated, FB rows still zero), and
-	// the vint copy overlapped the blit window near-always. COMM is
-	// the one arbitration-free channel and its acked protocol already
-	// delivers text reliably on ares. Full-palette convergence after a
-	// scene load: <=8 vints; steady state: zero palette batches.
-	{
-		static uint8_t scan_q;
-		const uint16_t *mir  = (const uint16_t*)(0xFF9000 + (uint32_t)scan_q * 1024);
-		uint16_t *sent = (uint16_t*)(0xFFA000 + (uint32_t)scan_q * 1024);
-		uint16_t qbase = (uint16_t)(scan_q * 512);
-		for (uint16_t i = 0; i < 512; i += 4) {
-			if (mir[i] != sent[i] || mir[i+1] != sent[i+1] ||
-			    mir[i+2] != sent[i+2] || mir[i+3] != sent[i+3]) {
-				uint16_t b0 = (uint16_t)((qbase + i) / 5);
-				uint16_t b1 = (uint16_t)((qbase + i + 3) / 5);
-				if (pal_h == pal_t ||
-				    palq[(uint8_t)((pal_t - 1) & 63)] != b0)
-					PALQ_PUSH(b0);
-				if (b1 != b0)
-					PALQ_PUSH(b1);
-			}
-		}
-		scan_q = (uint8_t)((scan_q + 1) & 3);
-	}
+	// THE PALETTE SCAN USED TO BE HERE — 512 words of the mirror diffed
+	// against a 4KB sent-copy at 0xFFA000, EVERY vint, 1024 MD-RAM reads
+	// to discover in steady state that nothing had changed. 45 of the 92
+	// tail scanlines. The write-thunks mark dirty regions directly now and
+	// the DREQ push ships them, so there is nothing left here at all — and
+	// 0xFFA000 is free MD RAM (see pal_retry for why no backstop sweep is
+	// needed to keep it honest).
 #ifdef TAIL_PROBE
 	{
 		uint8_t sv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
@@ -452,81 +531,20 @@ window_done: ;
 	}
 #endif
 
-	// LOOP 7 — COMM IS NOW PALETTE-ONLY. Everything else moved to the DREQ
-	// packet above. THE RATIO THAT DROVE THIS: COMM cost 70 lines for ~55
-	// words (1.27 lines/word) against DREQ's 49 lines for 772 (0.063) —
-	// 20x, because COMM's cost is an ACK ROUND-TRIP per 5-word batch, not
-	// payload. Worse, that wait is ELASTIC: the 68K blocks until the SLAVE
-	// services COMM0, so every cycle freed elsewhere was reabsorbed here
-	// (which is why six iterations of shaving moved nothing, and why
-	// PROBE_spin0 moved the band 57.1 -> 39.4% on its own).
-	// Text + layer regs + rowscroll ride the DMA now; the palette stays on
-	// COMM until its write-thunks land (LOOP 7 step 2), and in steady state
-	// its queue is EMPTY — so the common vint pays zero ack round-trips.
-	// ITER5 TAIL PROBE (split): V at the START of the STREAM section, to
-	// separate the COMM stream cost from the DREQ push + palette scan.
+	// LOOP 8 — COMM HAS NO TENANTS LEFT, so the stream section is gone.
+	// LOOP 7a moved text, layer regs and rowscroll onto the DREQ packet
+	// and left the palette here as COMM's last payload; the write-thunks
+	// have now moved that too. THE RATIO THAT DROVE BOTH MOVES: COMM cost
+	// 70 lines for ~55 words (1.27 lines/word) against DREQ's 49 lines for
+	// 772 (0.063) — 20x, because COMM's cost is an ACK ROUND-TRIP per
+	// 5-word batch, not payload. Worse, that wait was ELASTIC: the 68K
+	// blocked until the SLAVE serviced COMM0, so every cycle freed
+	// elsewhere was reabsorbed here (which is why six iterations of
+	// shaving moved nothing, and why PROBE_spin0 moved the band
+	// 57.1 -> 39.4% on its own). COMM0 now carries only the window
+	// command/ack, COMM12 the V heartbeat and COMM14 the sound log.
+	// (STREAM_SPIN and `make SPINPROBE=N` retired with it.)
 	uint8_t v_stream = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
-	{
-		uint8_t pal_sent_now = 0;
-
-		// TOTAL ack-wait budget for the whole stream section, not per
-		// batch (see NOTES: per-batch spins trickled 60+ms handler
-		// entries when the SH-2s ack slowly — the freeze spiral).
-		// LOOP 6d SPIN PROBE (`make SPINPROBE=64` / `=0`, NEVER shipped).
-		// ares f27dbe9d showed the window cut (88 -> 64 lines) came back
-		// ENTIRELY as tail (151 -> 177): total 239 -> 241, rejects 57.2
-		// -> 57.1%. This ack-spin is the suspected ELASTIC SINK — the
-		// 68K waits here for the SLAVE to service COMM0, so finishing the
-		// window sooner just means arriving here sooner and waiting
-		// longer. If that is the band, capping the budget moves the
-		// reject rate; nothing else in the handler changes.
-		uint16_t spin = STREAM_SPIN;
-
-		// cap 8 palette batches/vint: an uncapped flood stretched slave
-		// stream servicing and starved band compose on ares (group-1
-		// fallback garbage). 8/vint still converges a full palette reload
-		// in ~1s; typical fades fit one vint. With text/regs off COMM the
-		// loop now EXITS IMMEDIATELY when the dirty queue is empty, which
-		// is the steady state — zero ack round-trips on the common vint.
-		for (uint16_t burst = 0; burst < 8; burst++) {
-			if (pal_h == pal_t)
-				break;                       // nothing dirty: no wait at all
-			// The ack check now covers burst 0 too. It used to be skipped
-			// because burst 0 was a layer-reg batch, re-sent every vint —
-			// a clobbered unacked batch self-healed. A palette batch does
-			// NOT: it has already advanced the sent-copy and left the
-			// queue, so a clobber is a permanently wrong color.
-			{
-#if STREAM_SPIN == 0
-				// NEVER WAIT: post only when the slave has already
-				// acked. (Written as its own branch because the normal
-				// path's `--spin` would underflow to 65535 at a zero
-				// budget — an unbounded spin, the exact opposite.)
-				if (*mars_comm0)
-					break;
-#else
-				while (*mars_comm0 && --spin) ;
-				if (*mars_comm0)
-					break;               // SH-2 busy; resume next frame
-#endif
-			}
-			uint16_t b = palq[pal_h];              // FIFO: oldest first
-			pal_h = (uint8_t)((pal_h + 1) & 63);
-			uint16_t idx = (uint16_t)(b * 5);
-			const uint16_t *m = (const uint16_t*)0xFF9000 + idx;
-			uint16_t *s = (uint16_t*)0xFFA000 + idx;
-			s[0] = m[0]; s[1] = m[1]; s[2] = m[2];
-			s[3] = m[3]; s[4] = m[4];
-			*mars_comm2  = m[0];
-			*mars_comm4  = m[1];
-			*mars_comm6  = m[2];
-			*mars_comm8  = m[3];
-			*mars_comm10 = m[4];
-			*mars_comm0  = (uint16_t)(0x4800 | idx);   // palette batch
-			pal_sent_now++;
-		}
-		(void)pal_sent_now;
-	}
 
 #ifdef TAIL_BURN
 	// LOOP 7 DIAGNOSTIC ONLY (never shipped): burn back the ~55 scanlines
@@ -732,12 +750,13 @@ void main(void) {
 		for (unsigned i = 0; i < sizeof tt2 / 2; i++) d[i] = tt2[i];
 	}
 
-	// Palette mirror (0xFF9000) and sent-copy (0xFFA000) start zeroed
-	// and equal: boot RAM is random, and the dirty scan must not
-	// stream garbage before the game's first palette upload
+	// Palette mirror (0xFF9000) starts zeroed: boot RAM is random and the
+	// first shipped region must not be garbage. Only 4KB now — LOOP 8
+	// retired the 0xFFA000 sent-copy along with the diff scan that needed
+	// it, so this loop no longer runs over 8KB.
 	{
 		volatile uint32_t *pm = (volatile uint32_t*)0xFF9000;
-		for (uint16_t i = 0; i < 2048; i++)
+		for (uint16_t i = 0; i < 1024; i++)
 			pm[i] = 0;
 		pm = (volatile uint32_t*)0xFF7000;    // sprite-list mirror
 		for (uint16_t i = 0; i < 512; i++)
@@ -754,6 +773,19 @@ void main(void) {
 		for (uint16_t i = 0; i < TILE_THUNK_WORDS; i++)
 			td[i] = tile_thunks[i];
 		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
+	}
+	// Palette dirty-bit thunks (generated: pal_thunks.h) at 0xFFBA00, the
+	// same abs.w sign-extension rule as the tile thunks above. This block
+	// ends at 0xFFBD1A and the boot stack starts at 0xFFBFF0 — they share
+	// this page, but only during boot: the game runs on its own stack at
+	// 0xFFFFFF00, and our vint handler is entered in the game's context.
+	// The dirty word at 0xFFB9FC starts ALL-DIRTY so the whole palette
+	// ships once before the game's first upload.
+	{
+		volatile uint16_t *pt = (volatile uint16_t*)0xFFBA00;
+		for (uint16_t i = 0; i < PAL_THUNK_WORDS; i++)
+			pt[i] = pal_thunks[i];
+		*(volatile uint16_t*)0xFFB9FC = 0xFFFF;
 	}
 	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span
 	*(volatile uint16_t*)0xFFB0E0 = 0;   // LOOP 7b: DREQ push aborts (own

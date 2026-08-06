@@ -50,13 +50,9 @@ endif
 ifdef TAILBURN
 MDCCFLAGS += -DTAIL_BURN
 endif
-# `make SPINPROBE=N` = LOOP 6d band experiment: cap the COMM stream's
-# ack-spin budget at N polls (N=0 never blocks on the slave at all).
-# NEVER SHIP — text/palette refresh is deliberately starved. Tests
-# whether that spin is the elastic sink pinning the 57% reject band.
-ifdef SPINPROBE
-MDCCFLAGS += -DSTREAM_SPIN=$(SPINPROBE)
-endif
+# (SPINPROBE retired in LOOP 8 with the COMM stream it capped. It did its
+# job: N=0 moved the reject band 57.1 -> 39.4% on its own, which is what
+# identified the ack-spin as the elastic sink and set this whole arc off.)
 MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-optional
 SHASFLAGS  = -Ish_src --small
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
@@ -126,7 +122,7 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# BUILD STAMP at file offset 0x3C0 (unused header pad): git hash +
 	@# epoch + PRESSURE flag. Every savestate self-identifies its build
 	@# (tools/build_id.py) — no more provenance arguments.
-	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,$(if $(SPINPROBE),SPIN$(SPINPROBE),$(if $(TAILPROBE),TAILPROBE,normal))))
+	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,$(if $(TAILPROBE),TAILPROBE,normal)))
 	@python3 tools/build_id.py show $@
 
 $(TARGET).elf: $(SHOBJS) | $(ROMDIR)

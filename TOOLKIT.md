@@ -17,6 +17,11 @@ what must be parameterized.
      byte-write→word-write RLE patch pattern.
    - Per-game: the address map itself, boot-region redirects,
      excluded data tables (spawn scripts etc.), byte-writer sites.
+   - Also reusable: the WRITE-OBSERVER THUNK EMITTER (two families
+     now — `TILE_DIRTY_SITES`, `PAL_DIRTY_SITES`). See "Trapping the
+     game's writes" below; this is the kit's answer to any hardware
+     region the 32X cannot mirror cheaply, and it generalizes to
+     every S16 title.
    - TODO for kit: move per-game facts into a declarative per-title
      config (`games/<title>.toml`) consumed by a generic patcher.
 
@@ -48,9 +53,81 @@ what must be parameterized.
      object-slot differ against the reference arcade driver, FRT
      profiler readout, PIL/numpy frame-scan for artifact classes,
      on-screen perf bars for ares ground truth.
+   - `tools/pal_tap.lua` — per-PC write census over any address range
+     (site list + extents + region masks). Run this BEFORE trusting any
+     statically-enumerated write-site list; see "Trapping the game's
+     writes". Game-agnostic: point it at a range via env vars.
+   - `tools/pal_probe.lua` — diffs an MD mirror against the SH-2 shadow
+     per region, so a transport fault can be separated from a fault in
+     the consumer. ALWAYS run it on the BASELINE too: the "hot regions
+     never converge" reading that sent one fix down the wrong road was
+     NORMAL — a 60Hz colour-cycle against a ~20Hz channel is
+     permanently mid-flight, and the baseline was worse.
+   - `tools/pal_rate.lua` — dirty-bitmap occupancy per unit over time;
+     how starvation and ship-rate problems become visible.
+   - `tools/strobe_scan.py` — black-frame census over an ares capture
+     by FILE SIZE (no PNG decode). Feed it RAW captures; dedup inflates
+     the rate by the dedup ratio.
    - TODO for kit: promote the screenshot scanners out of the session
      scratchpad into `tools/scan_frames.py`; make the lua harness
      read per-title input scripts.
+
+## Trapping the game's writes (the write-observer pattern) — KIT-CORE
+
+The single most reusable structure this project has produced, and the
+one every S16 title will need. THE PROBLEM IS UNIVERSAL: an arcade 68K
+writes freely to hardware (tile RAM, palette, sprite list) that on the
+32X lives somewhere the MD cannot cheaply hand to the SH-2s. Mirroring
+the writes into MD RAM is easy; knowing WHAT CHANGED is not, and the
+naive answer — diff the mirror every vint — is ruinous. Altered Beast's
+palette diff cost 45 of the MD vint handler's 92 scanlines to discover,
+in steady state, that nothing had changed (LOOP 6 negatives 3-5: not
+division-bound, long compares are free on a 16-bit bus, and ablating the
+loop body took 45.1 lines -> 0.1, so the loop WAS the entire cost).
+
+THE PATTERN. Patch each write site to `jsr (xxx).w` into a small thunk
+in MD RAM that ORs a dirty mask into a bitmap word, runs the displaced
+instruction, and returns. The shim ships only dirty units and clears
+the bit. Applied twice now: tile pages (LOOP 3c) and palette regions
+(LOOP 8, which retired the scan outright — MD tail 92.4 -> 48.2 mean
+scanlines, palette term 45.1 -> 0.1).
+
+RULES, each one paid for:
+- **Thunk addresses must have low word >= 0x8000.** 68K `abs.w`
+  SIGN-EXTENDS, so 0x5E00.w targets low ROM and crashes at the first
+  thunked site. Both families hit this.
+- **A `jsr (xxx).w` is 4 bytes**, so it can displace a 6- or 8-byte
+  instruction directly, or a PAIR of 2-byte ones (that is how the
+  register-indirect palette writers were trapped).
+- **Never mark ALL-dirty if the extent is derivable.** An ALL-dirty
+  mask on a per-frame animator floods the ship budget and lags the
+  content (title parity 63-70% on the tile side before 0x258A got a
+  precise thunk). Disassemble the loop bound; every Altered Beast
+  palette site turned out to be derivable.
+- **When the extent is only knowable at runtime, compute it in the
+  thunk.** Derive the unit index from the address/index register, index
+  a PC-relative mask table, save/restore any scratch register. Cheaper
+  than it sounds and far cheaper than over-marking.
+- **Mark BEFORE the store, and expect a race.** For loop bases the
+  thunk marks, then the loop stores; a vint landing between them ships
+  and clears the unit, losing the stores. Fix without a backstop scan:
+  ship each freshly-marked unit TWICE (one repeat, two words of state,
+  zero RAM reads). The loop has certainly finished a push later.
+- **Round-robin the selection, never lowest-bit-first.** Hot units
+  starve the rest forever: lowest-bit selection left Altered Beast's
+  ENTIRE sprite palette unshipped, dirty in 99.6% of frames.
+
+THE ENUMERATION IS THE DANGEROUS PART, and a static scan is NOT
+sufficient. Address-formation scans (`patch_report.txt`) see `lea`/
+`move.l #imm` but CANNOT see a writer that took its pointer from a
+queue: Altered Beast forms a palette pointer at one site, stores it to
+a table, and writes through it from two unrelated loops. Nothing static
+attributes those. **Always run a write-tap census first**
+(`tools/pal_tap.lua` — a memory tap, not a debugger watchpoint, which
+is far too slow for hundreds of writes per frame). It reports per-PC
+address ranges AND a per-unit region mask, which both finds the missing
+writers and VALIDATES every hand-derived extent: the shared copy helper
+observed exactly the union of its four callers' static masks.
 
 ## MD-hardware landmines for arcade 68K code (kit-critical)
 
@@ -144,6 +221,18 @@ T-MEK:
   slice size must carry 2×+ vblank margin.
 - One bank stages, the other displays; staging is never deselected
   while the game runs.
+- A CHANNEL'S RATE MATTERS AS MUCH AS ITS COST PER WORD. The MD->SH-2
+  channels are not interchangeable even after cost is equalised: the
+  COMM stream ran on EVERY vint, while the DREQ packet is pushed only
+  on GATE-ACCEPTED vints. Moving a payload from one to the other
+  silently makes its delivery WINDOW-rate-limited, which is invisible
+  at a healthy cadence and bites under load. Weigh rate, not just the
+  lines/word ratio, before moving any per-vint payload onto the packet.
+- PACKET SIZE IS ONLY MEANINGFUL AGAINST AVAILABLE 68K TIME. A packet
+  that failed to drain at one tail length drained FINE at 75% larger
+  once the tail was cut (dreq_incomplete 9.3% -> 5.8% while the text
+  packet went 340 -> 596 words). Re-measure size limits after any
+  change to handler load; do not inherit them.
 
 ## Diagnosis methodology (proven on the unpair burn-down + title hunt)
 
@@ -203,6 +292,18 @@ gate for everything.
 3. Generalize patcher + asset converters against that config.
 4. Second title (e.g. Golden Axe / Shinobi — S16B, similar boards)
    as the proof the kit holds.
+
+Per-title work the write-observer pattern implies (do it in this
+order, it is the cheapest path):
+  a. Run the write-tap census on every mirrored hardware range BEFORE
+     writing any thunk table — it yields the site list, the real
+     extents, and the indirect writers a static scan cannot see.
+  b. Derive each site's mask from its loop bound; runtime masks only
+     where the disassembly genuinely cannot say.
+  c. Size the delivery unit against how much the game actually changes
+     per frame, not against what is convenient to address. Altered
+     Beast needed a PAIR of 128-word regions per push because its
+     colour-cycling sets are rewritten every vint.
 
 ## Geometry-convention rule (learned the hard way, 2026-07-30)
 

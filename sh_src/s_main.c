@@ -5,31 +5,17 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 {
 }
 
-#define TEXT_U      ((volatile uint16_t *)0x26026000)
-#define PAL_U       ((volatile uint16_t *)0x26027000)  /* 2048 words */
 #define SYNC        ((volatile uint16_t *)0x26028800)
-/* LOOP 6: PER-COLOR-SET palette generations, bumped here on every palette
- * batch and read by the master's apply_cram per-group memo. Uncached,
- * slave-written / master-read-only — monotonic counters, so no cross-CPU
- * RMW race. Indexed 0..127 = the 8-word tile/text color-sets, 128..191 =
- * the 16-word sprite color-sets. Per-SET (not one global counter) because
- * attract color-cycles continuously: a single global generation is bumped
- * nearly every cycle and invalidates every group's memo. */
-#define PAL_SETGEN  ((volatile uint16_t *)0x26028C00)   /* 192 entries */
-
-static inline unsigned pal_set_of(unsigned w)
-{
-    return (w < 1024) ? (w >> 3) : (128 + ((w - 1024) >> 4));
-}
+/* (TEXT_U / PAL_U / PAL_SETGEN / pal_set_of retired with the COMM stream
+ * in LOOP 8 — the master owns all three now, off the DREQ packet.) */
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
 extern void slave_concurrent_k(uint16_t cmd);
 
-/* MD stream servicing lives on the SLAVE now: the master spends the
- * inter-window gap composing tiles, so it can't poll COMM0. Batches are
- * MD-written COMM payloads; acking = clearing COMM0. The 0x2000 render
- * command is left for the master (distinct pattern; both CPUs poll, only
- * one consumes each kind). */
+/* The preempt-blit mailbox poll. It kept the name from when it also
+ * serviced the MD's COMM stream; that stream is gone (LOOP 8), so the
+ * 0x2000-family render command on COMM0 is now COMM's only traffic and
+ * the master consumes it. */
 __attribute__((section(".ramtext"))) void slave_service_stream(void)
 {
     /* (iter4) PREEMPT-BLIT MAILBOX: the master hands the per-window blit
@@ -45,44 +31,16 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
         SYNC[5] = bc;                /* echo: blit path complete */
     }
 
-    uint16_t c0 = MARS_SYS_COMM0;
-    if (c0 & 0x4000) {                       /* text or palette batch */
-        int idx = c0 & 0x7FF;
-        /* bit 11 routes: 0x4000|idx = text RAM, 0x4800|idx = palette
-         * (COMM palette stream — the FB can't carry palette: MD FB
-         * writes drop under ares/hardware arbitration; see md_main) */
-        volatile uint16_t *dst = (c0 & 0x0800) ? PAL_U : TEXT_U;
-        uint16_t w0 = MARS_SYS_COMM2, w1 = MARS_SYS_COMM4, w2 = MARS_SYS_COMM6;
-        uint16_t w3 = MARS_SYS_COMM8, w4 = MARS_SYS_COMM10;
-        if (idx + 4 < 2048) {
-            dst[idx + 0] = w0;
-            dst[idx + 1] = w1;
-            dst[idx + 2] = w2;
-            dst[idx + 3] = w3;
-            dst[idx + 4] = w4;
-        } else if (idx < 2048) {             /* tail batch (palette 2045+) */
-            dst[idx] = w0;
-            if (idx + 1 < 2048) dst[idx + 1] = w1;
-            if (idx + 2 < 2048) dst[idx + 2] = w2;
-            if (idx + 3 < 2048) dst[idx + 3] = w3;
-        }
-        if (c0 & 0x0800) {
-            /* LOOP 6: mark the color-set(s) this 5-word batch touched.
-             * STRICTLY AFTER the stores above — bumping first lets the
-             * master paint the OLD words and then record the NEW
-             * generation, latching that group stale until the next bump
-             * (measured: demo2 parity 20.9 -> 23.4).
-             * A 5-word span is shorter than the smallest (8-word) set, so
-             * it covers at most two ADJACENT sets — endpoints suffice, and
-             * that holds across the 1024 tile/sprite boundary too. */
-            unsigned s0 = pal_set_of((unsigned)idx);
-            unsigned s1 = pal_set_of((unsigned)(idx + 4 < 2047 ? idx + 4 : 2047));
-            PAL_SETGEN[s0]++;
-            if (s1 != s0)
-                PAL_SETGEN[s1]++;
-        }
-        MARS_SYS_COMM0 = 0;
-    }
+    /* LOOP 8: THE COMM STREAM IS GONE. Text and the layer/rowscroll regs
+     * moved to the DREQ packet in LOOP 7a; the palette batch (0x4800|idx)
+     * was COMM's last tenant and the write-thunks retired it — the MD now
+     * marks dirty 128-word regions and the master applies them straight
+     * off the DREQ packet, PAL_SETGEN included. So COMM0 carries only the
+     * window command/ack (consumed by the master), and this function is
+     * now purely the preempt-blit mailbox poll it shares the name with.
+     * That is the whole point of the arc: COMM cost 1.27 lines per word
+     * against DREQ's 0.063, because its cost was an ack round-trip per
+     * 5-word batch and the 68K BLOCKED on the slave for every one. */
 }
 
 /* Secondary SH-2: boot heartbeat on COMM6 until the MD's 0xB007 beacon

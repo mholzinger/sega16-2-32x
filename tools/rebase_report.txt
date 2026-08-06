@@ -1,4 +1,51 @@
-2247 refs rebased (+0x900000)
+2173 refs rebased (+0x900000)
+
+PALETTE DIRTY-BIT THUNKS (LOOP 8):
+P 001EF2: mask 0001 -> thunk BA00  clr.w 0xFF9000
+P 001F80: mask 0001 -> thunk BA10  clr.w 0xFF9000
+P 0020A0: mask 0001 -> thunk BA20  clr.w 0xFF9000
+P 01A934: mask 0001 -> thunk BA30  move.w #imm,0xFF9000
+P 01A93C: mask 0001 -> thunk BA40  move.w #imm,0xFF9002
+P 01A944: mask 0001 -> thunk BA50  move.w #imm,0xFF9004
+P 01A94C: mask 0001 -> thunk BA60  move.w #imm,0xFF9006
+P 01A954: mask 0001 -> thunk BA70  move.w #imm,0xFF9010
+P 01A95C: mask 0001 -> thunk BA80  move.w #imm,0xFF9012
+P 01A964: mask 0001 -> thunk BA90  move.w #imm,0xFF9014
+P 01A96C: mask 0001 -> thunk BAA0  move.w #imm,0xFF9016
+P 01A974: mask 0001 -> thunk BAB0  move.w #imm,0xFF9020
+P 01A97C: mask 0001 -> thunk BAC0  move.w #imm,0xFF9022
+P 01A984: mask 0001 -> thunk BAD0  move.w #imm,0xFF9024
+P 01A98C: mask 0001 -> thunk BAE0  move.w #imm,0xFF9026
+P 01B0E6: mask 0001 -> thunk BAF0  move.w #imm,0xFF9000
+P 01B0EE: mask 0001 -> thunk BB00  move.w #imm,0xFF9002
+P 01B0F6: mask 0001 -> thunk BB10  move.w #imm,0xFF9004
+P 01B0FE: mask 0001 -> thunk BB20  move.w #imm,0xFF9006
+P 01B106: mask 0001 -> thunk BB30  move.w #imm,0xFF9010
+P 01B10E: mask 0001 -> thunk BB40  move.w #imm,0xFF9012
+P 01B116: mask 0001 -> thunk BB50  move.w #imm,0xFF9014
+P 01B11E: mask 0001 -> thunk BB60  move.w #imm,0xFF9016
+P 01B126: mask 0001 -> thunk BB70  move.w #imm,0xFF9020
+P 01B12E: mask 0001 -> thunk BB80  move.w #imm,0xFF9022
+P 01B136: mask 0001 -> thunk BB90  move.w #imm,0xFF9024
+P 01B13E: mask 0001 -> thunk BBA0  move.w #imm,0xFF9026
+P 0025BA: mask 0080 -> thunk BBB0  0x2612 helper, d1=12: 13*16B at 0x720 -> 0x7EF
+P 0025E8: mask 0004 -> thunk BBC0  0x2612 helper, d1=9: 10*16B at 0x250 -> 0x2EF
+P 0025F0: mask 0001 -> thunk BBD0  0x2612 helper, d1=0: 16B at 0x0B0 -> 0x0BF
+P 00263C: mask 0004 -> thunk BBE0  0x2612 helper, d1=9: 10*16B at 0x250 -> 0x2EF
+P 002B7E: mask 00F0 -> thunk BBF0  table 0x326E rounds 0-4: 0x400 -> 0x71F
+P 002B94: mask 0001 -> thunk BC00  single move.w at 0x2BA4 -> 0x06C
+P 002BB8: mask 0001 -> thunk BC10  32 longs = 128B at 0x000 -> 0x07F
+P 003116: mask 0001 -> thunk BC20  8 longs = 32B at 0x040 -> 0x05F
+P 003846: mask 0001 -> thunk BC30  8 longs = 32B at 0x040 -> 0x05F
+P 003952: mask 00FF -> thunk BC40  2 x 256 longs = 2048B at 0x000 -> 0x7FF
+P 004544: mask 0001 -> thunk BC50  20 longs = 80B at 0x010 -> 0x05F
+P 0170BA: mask 00F0 -> thunk BC60  table 0x1724C rounds 0-4: 0x400 -> 0x71F
+P 01A4F0: mask 0030 -> thunk BC70  19*16B at 0x490 -> 0x5BF
+P 01B742: mask 0001 -> thunk BC80  7*16B at 0x010 -> 0x07F
+P 01BAB6: mask 0007 -> thunk BC90  40*8 words = 640B at 0x080 -> 0x2FF
+P 002DC8: runtime mask from A1 -> thunk BCDE
+P 003C5A: runtime mask from A1 -> thunk BCDE
+P 0030C2: runtime mask from D0 -> thunk BCA0
 
 R 0004AA: 0001A88C -> 0091A88C | 4a8:	4eb9 0001 a88c 	jsr 0x1a88c
 R 0004FA: 00001996 -> 00901996 | 4f8:	41f9 0000 1996 	lea 0x1996,%a0
@@ -2167,78 +2214,10 @@ R 01D31A: table entry 00016484 -> 00916484
 R 01D31E: table entry 00013AA6 -> 00913AA6
 R 01D322: table entry 0001435C -> 0091435C
 R 01D326: table entry 000152E2 -> 009152E2
-R 004752: harvested handler 00010000 -> 00910000
-R 005802: harvested handler 00010000 -> 00910000
-R 005878: harvested handler 00010000 -> 00910000
-R 006602: harvested handler 00010000 -> 00910000
-R 00662A: harvested handler 00010000 -> 00910000
-R 0066D6: harvested handler 00010000 -> 00910000
-R 0067D6: harvested handler 00010000 -> 00910000
-R 007358: harvested handler 00000104 -> 00900104
-R 007368: harvested handler 00000106 -> 00900106
-R 00737A: harvested handler 00000106 -> 00900106
-R 00738A: harvested handler 00000104 -> 00900104
-R 00739C: harvested handler 00000102 -> 00900102
 R 0073EE: harvested handler 000049BA -> 009049BA
 R 007402: harvested handler 000049BA -> 009049BA
-R 007596: harvested handler 00010000 -> 00910000
-R 0075B6: harvested handler 00010000 -> 00910000
-R 0076CC: harvested handler 00010000 -> 00910000
-R 0076FC: harvested handler 00010000 -> 00910000
-R 007726: harvested handler 00010000 -> 00910000
-R 007776: harvested handler 00010000 -> 00910000
 R 0083B4: harvested handler 000049BA -> 009049BA
 R 0083C8: harvested handler 000049BA -> 009049BA
-R 0092B2: harvested handler 00010000 -> 00910000
-R 009580: harvested handler 00010000 -> 00910000
-R 009B02: harvested handler 00010000 -> 00910000
-R 009B0E: harvested handler 00010000 -> 00910000
-R 009B1A: harvested handler 00010000 -> 00910000
-R 009B26: harvested handler 00010000 -> 00910000
-R 009B32: harvested handler 00010000 -> 00910000
-R 009B3E: harvested handler 00010000 -> 00910000
-R 009B4A: harvested handler 00010000 -> 00910000
-R 009B56: harvested handler 00010000 -> 00910000
-R 009B62: harvested handler 00010000 -> 00910000
-R 009B6E: harvested handler 00010000 -> 00910000
-R 009B7A: harvested handler 00010000 -> 00910000
-R 009B86: harvested handler 00010000 -> 00910000
-R 009B92: harvested handler 00010000 -> 00910000
-R 009B9E: harvested handler 00010000 -> 00910000
-R 009C48: harvested handler 00010000 -> 00910000
-R 009C54: harvested handler 00010000 -> 00910000
-R 009C60: harvested handler 00010000 -> 00910000
-R 009C6C: harvested handler 00010000 -> 00910000
-R 009C78: harvested handler 00010000 -> 00910000
-R 009C84: harvested handler 00010000 -> 00910000
-R 009C90: harvested handler 00010000 -> 00910000
-R 009C9C: harvested handler 00010000 -> 00910000
-R 009CA8: harvested handler 00010000 -> 00910000
-R 009CB4: harvested handler 00010000 -> 00910000
-R 009CC0: harvested handler 00010000 -> 00910000
-R 009CCC: harvested handler 00010000 -> 00910000
-R 009CD8: harvested handler 00010000 -> 00910000
-R 009CE4: harvested handler 00010000 -> 00910000
-R 009D8E: harvested handler 00010000 -> 00910000
-R 009D9A: harvested handler 00010000 -> 00910000
-R 009DA6: harvested handler 00010000 -> 00910000
-R 009DB2: harvested handler 00010000 -> 00910000
-R 009DBE: harvested handler 00010000 -> 00910000
-R 009DCA: harvested handler 00010000 -> 00910000
-R 009DD6: harvested handler 00010000 -> 00910000
-R 009DE2: harvested handler 00010000 -> 00910000
-R 009DEE: harvested handler 00010000 -> 00910000
-R 009DFA: harvested handler 00010000 -> 00910000
-R 009E06: harvested handler 00010000 -> 00910000
-R 009E12: harvested handler 00010000 -> 00910000
-R 009E1E: harvested handler 00010000 -> 00910000
-R 009E2A: harvested handler 00010000 -> 00910000
-R 00A320: harvested handler 00010000 -> 00910000
-R 00A32E: harvested handler 00010000 -> 00910000
-R 00C086: harvested handler 00010000 -> 00910000
-R 00C0A6: harvested handler 00010000 -> 00910000
-R 00CC46: harvested handler 00010000 -> 00910000
-R 00CC54: harvested handler 00010000 -> 00910000
 R 00DCEA: harvested handler 0000DABC -> 0090DABC
 R 00DE46: harvested handler 0000DABC -> 0090DABC
 R 00DE56: harvested handler 0000DABC -> 0090DABC
@@ -2246,28 +2225,20 @@ R 00DE66: harvested handler 0000DABC -> 0090DABC
 R 00DE76: harvested handler 0000DABC -> 0090DABC
 R 00EC32: harvested handler 0003000A -> 0093000A
 R 00EC42: harvested handler 0003000A -> 0093000A
-R 00ECAC: harvested handler 00010000 -> 00910000
 R 00F56C: harvested handler 0000EE80 -> 0090EE80
 R 010114: harvested handler 0000F90A -> 0090F90A
 R 010120: harvested handler 0000FD6C -> 0090FD6C
 R 01012C: harvested handler 0000FD6C -> 0090FD6C
 R 01098A: harvested handler 000103E0 -> 009103E0
 R 010996: harvested handler 00010824 -> 00910824
-R 01205C: harvested handler 00010000 -> 00910000
-R 01238A: harvested handler 00010000 -> 00910000
 R 013008: harvested handler 00012CBA -> 00912CBA
 R 013014: harvested handler 00012F0A -> 00912F0A
 R 013020: harvested handler 00012F0A -> 00912F0A
 R 01302C: harvested handler 00012F0A -> 00912F0A
 R 013936: harvested handler 00013374 -> 00913374
 R 013942: harvested handler 000137CC -> 009137CC
-R 0151B4: harvested handler 00010000 -> 00910000
-R 016A76: harvested handler 00010000 -> 00910000
-R 016AC0: harvested handler 00010000 -> 00910000
-R 017640: harvested handler 00010000 -> 00910000
-R 017660: harvested handler 00010000 -> 00910000
 R 01A6FE: harvested handler 0001A70E -> 0091A70E
-(harvested-handler pass: 100 sites from 43 live values)
+(harvested-handler pass: 24 sites from 39 live values)
 R 001CE4: stride-rec 00029E00 -> 00929E00
 R 001CEA: stride-rec 0002EF10 -> 0092EF10
 R 001CF0: stride-rec 000324D0 -> 009324D0
@@ -2278,7 +2249,11 @@ R 014932: low-vector ref 0 -> 00900000
 R 01493E: low-vector ref 0 -> 00900000
 R 00307A: low-vector ref 0 -> 00900000
 R 00ABC4: low-vector ref 0 -> 00900000
+R 01A704: palette launch entry -> 0091A78E
+R 01A70A: palette launch entry -> 0091A78E
 REVERT 006DC0-006DCA: excluded region restored
+REVERT 01AD10-01AD34: excluded region restored
+REVERT 00EC32-00EC46: excluded region restored
 
 SKIPPED long immediates (burn-down candidates):
 002DE4: 00000200 | 2de2:	95fc 0000 0200 	subal #512,%a2

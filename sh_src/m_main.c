@@ -1601,7 +1601,17 @@ RAMCODE static void slave_wait(uint16_t cmd)
  * drain, i.e. the transfer was simply too big. Mean payload 852 -> 425,
  * and most of that is free — the sprite list was pushed on all three
  * phases and consumed on exactly one. */
-#define DREQ_LEN(k)  ((k) == 0 ? 596u : 340u)
+/* LOOP 8: BOTH packets are now 596 words, so the arm is unconditional.
+ *   k==0  SPRITE: 82 prefix + 512 list + 2 pad
+ *   else  TEXT:   82 prefix + 256 palette pair + 256 text + 2 pad
+ * The MD pushes only 340 of the TEXT packet when no palette region is
+ * dirty, and that needs no agreement here: a short push leaves TE clear
+ * and TCR holding the remainder, which is exactly the partial-apply path
+ * below (landed = armed - TCR is the truth either way). Arming the max
+ * and letting `landed` speak is what makes the palette payload OPTIONAL
+ * without a second length protocol. 596 is not a new size for the DMA —
+ * it is what the sprite push has drained every cycle since 7g. */
+#define DREQ_LEN(k)  (596u)
 
 RAMCODE static void dreq_rearm(int k)
 {
@@ -2145,10 +2155,57 @@ RAMCODE void m_main(void)
             if (landed >= 81)
                 pg_pending |= SPR_LAND[80];
             if (!got_spr && landed >= 338) {
-                unsigned tb = SPR_LAND[81] & 0x7FF;
-                if (tb + 256 <= 2048 && !(tb & 1)) {
+                /* LOOP 8: word 81 is text base (bits 0-10, always a
+                 * multiple of 256) plus an optional palette tag —
+                 * bit 15 = present, bits 13-11 = which aligned PAIR of
+                 * 128-word regions. When set, the pair occupies words
+                 * 82..337 and the full 256-word text chunk follows at 338
+                 * (packet 596); when clear the text chunk sits at 82
+                 * (packet 340). The tag rides in the PREFIX because a tag
+                 * after the payload is worthless under truncation — a
+                 * short transfer would drop it and the palette words
+                 * would land in text RAM.
+                 * PAIRS, not single regions: one region per push is
+                 * ~0.67/vint and the colour-cycling sets in regions 0-1
+                 * are rewritten EVERY vint, so they never converged
+                 * (pal_probe: 66%/82% of samples out of sync, every other
+                 * region 0%; on screen, a white ALTERED BEAST logo). */
+                unsigned w81 = SPR_LAND[81];
+                unsigned tb = w81 & 0x7FF, src = 82, need = 338;
+                /* LAYOUT COMES FROM THE TAG, COMPLETENESS FROM `landed`.
+                 * The palette region is laid out FIRST, so a truncated
+                 * push that dropped the text still has palette words at
+                 * 82 — reading the layout off `landed` instead would copy
+                 * them into text RAM. */
+                if (w81 & 0x8000) {
+                    unsigned r = ((w81 >> 11) & 7) << 1;   /* pair -> region */
+                    volatile uint32_t *d =
+                        (volatile uint32_t *)(PAL_SH + (r << 7));
+                    volatile uint32_t *s =
+                        (volatile uint32_t *)(SPR_LAND + 82);
+                    for (int i = 0; i < 128; i++)
+                        d[i] = s[i];
+                    /* Bump every colour-set the region covers, STRICTLY
+                     * AFTER the stores: bumping first lets apply_cram
+                     * paint the OLD words and then record the NEW
+                     * generation, latching that group stale (measured in
+                     * LOOP 6 as demo2 parity 20.9 -> 23.4). A region is
+                     * 16 tile/text sets (8 words each) below word 1024,
+                     * or 8 sprite sets (16 words each) above it. The
+                     * generations are MASTER-written now — the slave's
+                     * COMM palette path that used to own them is gone,
+                     * so there is no cross-CPU RMW race left to argue. */
+                    unsigned s0, ns;
+                    if (r < 8) { s0 = r << 4; ns = 32; }
+                    else       { s0 = 128 + ((r - 8) << 3); ns = 16; }
+                    for (unsigned i = 0; i < ns; i++)
+                        PAL_SETGEN[s0 + i]++;
+                    src = 338;
+                    need = 594;
+                }
+                if (landed >= need && tb + 256 <= 2048 && !(tb & 1)) {
                     volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + tb);
-                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 82);
+                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + src);
                     for (int i = 0; i < 128; i += 4) {
                         d[i + 0] = s[i + 0];
                         d[i + 1] = s[i + 1];

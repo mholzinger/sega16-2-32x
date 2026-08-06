@@ -8,6 +8,21 @@
 > (the packet needs SPLITTING). The palette scan is still untouched —
 > step 2 was never needed to reach cadence.
 
+> **MILESTONE 2026-08-06: LOOP 8 LANDED AND ares AGREES.** The palette
+> scan is gone, the tail nearly halved (92.4 -> 48.2 mean lines; palscan
+> 45.1 -> 0.1, stream 15.1 -> 0.2 — COMM HAS NO TENANTS LEFT), and Mike
+> has a full level-1 playthrough with every colour correct. ares improved
+> or held on every counter, including dreq_incomplete 9.3 -> 5.8% DESPITE
+> the TEXT packet growing 340 -> 596 words, and the strobe 7.04 -> 5.78%.
+> The MAME `PRESSURE=1` colour artifacts did NOT reproduce there — see
+> "the PRESSURE artifact" in iteration 8 for why, and for the real lever
+> it exposed.
+>
+> **THE TAIL ERA IS OVER.** Worst handler is now total=246 with
+> window/ack=202 and tail=44: six iterations of tail work have moved the
+> bottleneck to the 68K's wait on the SH-2 window. Next arc starts there
+> (and at the strobe, which is still a load ceiling).
+
 > ACTIVE ARC: **LOOP8.md** — retire the palette scan (LOOP 7 step 2).
 > 45 of the 92 remaining tail lines, run every vint, finding nothing in
 > steady state. 44 write sites enumerated, 27 of them precise single-word
@@ -95,6 +110,142 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-05 | iter7d | 49.7 | 45.1 | 3.1 | 49.5 | 13.0 | **32.1** | (LOOP 7d: blit in THIRDS — the flip/restore pair overran vblank on 100% of windows)
 | 08-05 | iter7g | 2.4 | 37.6 | 3.4 | 48.7 | 21.8 | **22.8** | (LOOP 7g: DREQ packet SPLIT by phase. title 49.7 -> 2.4)
 | 08-05 | iter7h | 2.4 | 37.6 | 3.1 | 48.7 | 18.7 | **22.1** | (LOOP 7h: missq out of .bss, MISSQ_CAP back to 192)
+| 08-06 | LOOP 8 | 2.44 | 53.9 | 3.06 | 50.6 | 21.9 | 26.4 | (palette scan RETIRED. statics pixel-identical; motion scenes are the negative-10 phase noise ares overrules — see iteration 8) |
+
+### Iteration 8 — the scan is DEAD (tail 92.4 -> 48.2). One gate fails.
+
+The falsifier passed, and better than the kickoff predicted, because the
+COMM stream died with the scan rather than after it:
+
+    term        7g/7h   LOOP 8   (MAME, TAILPROBE means over 3592 vints)
+    MEANtotal    92.4     48.2
+    MEANpalscan  45.1      0.1   <- the arc's target
+    MEANstream   15.1      0.2   <- COMM has NO tenants left
+    MEANdreq     24.0     38.6   <- what the palette now costs
+    cycles/3600f 1197     1197   <- cadence unmoved on MAME
+
+45 write sites become `jsr` into MD-RAM thunks (0xFFBA00, 794 bytes) that
+OR a 16-bit region mask into a dirty word at 0xFFB9FC; the DREQ TEXT
+packet carries an aligned PAIR of 128-word regions and the master applies
+it to PAL_U with PAL_SETGEN bumped per set. 0xFFA000 (the 4KB sent-copy)
+is free, STREAM_SPIN and `make SPINPROBE=N` are retired, and the SH-2
+region guard GAINED headroom (720 -> 896 bytes).
+
+**THE STATIC SITE LIST WAS INCOMPLETE, AND ONLY A CENSUS FOUND IT.** The
+kickoff enumerated 44 sites by grepping patch_report for `-> 00FF9`. That
+scan sees ADDRESS FORMATION, and 0x3C20 forms `0xFF9800+2+d0*32` only to
+QUEUE the pointer at 0xFFF402 — the real writers are the register-indirect
+loops at 0x2DC8 / 0x3C5A, observed writing regions 8-9. No static pass can
+attribute those. `tools/pal_tap.lua` (a write tap, not a debugger
+watchpoint — palette writes run in the hundreds per frame) reports per-PC
+region masks over 3000 frames of attract + play, and it also VALIDATED the
+hand-derived extents: the shared 0x2612 copy helper observed mask 0085,
+exactly the union of its four callers' static masks (7|2|0), and site
+0x3952 observed 00FF, exactly its static mask. Two sites needed runtime
+masks instead of static ones (0x30C2's colour-cycle engine, which is the
+busiest writer at ~3/frame, and the indirect pair), the same treatment
+0x258A got on the tile side.
+
+17. **PRIORITY SELECTION STARVES; ROTATE.** First cut picked the lowest
+    set dirty bit. The attract colour-cycles live in regions 0-7 and
+    re-dirty them every frame, so regions 8-15 — the entire SPRITE
+    palette — were never once shipped: dirty in 99.6% of 2000 frames
+    (`tools/pal_rate.lua`), scoreboard 33.47, title 2.4 -> 50.9. Round-
+    robin bounds the wait at 16 pushes and took it to 23.57 immediately.
+
+18. **A CHANNEL'S RATE MATTERS AS MUCH AS ITS COST.** The old palette
+    stream ran on EVERY vint. The DREQ packet is pushed only on
+    GATE-ACCEPTED vints, so palette delivery is now window-rate-limited
+    where it used to be vint-rate-limited. That is invisible at MAME's
+    3.0 vints/cycle and it is exactly what `PRESSURE=1` is built to
+    expose. Worth weighing before moving any other per-vint payload onto
+    the packet.
+
+PACKET SHAPE, third attempt (the first two are worth not repeating):
+  - ONE region, packet held at 340, taking HALF the text chunk. No length
+    change, which looked safest. Cost text refresh: 22.09 -> 23.57 with
+    LOOP 7a's text-latency signature (demo 48.7 -> 50.9, INSERT COIN).
+  - ONE region ALONGSIDE a full text chunk, packet 468. Title back to
+    pixel-exact and dreq_incomplete still 0, but scream 37.6 -> 52.9 with
+    the ALTERED BEAST logo rendering WHITE.
+  - PAIR of regions + full text chunk, packet 596 — the exact size of the
+    sprite push that has landed every cycle since 7g, so it asks nothing
+    new of the DMA. Logo red again, statics pixel-identical.
+
+**ares VERDICT (savestate + 9757-frame RAW capture, whole of level 1).**
+Every counter improved or held, against the 7k gameplay session:
+
+    metric               7k gameplay   LOOP 8
+    vints/cycle              3.24        3.18
+    V-gate rejects           7.5%        5.6%
+    band deferrals      33% of cycles   18.6%
+    dreq_incomplete          9.3%        5.8%   <- best ever
+    restore past vblank      6.9%        5.6%
+    FS latch mean          17 ticks    15 ticks
+    push_aborts                 0           0
+    BLACK (raw capture)     7.04%       5.78%
+
+dreq_incomplete FALLING while the TEXT packet grew 340 -> 596 words is the
+result worth keeping: the constraint on that packet was never its size in
+isolation, it was size against the 68K time available to push it. Freeing
+45 lines/vint bought more than the extra 256 words cost. The two earlier
+packet shapes were both designed around a fear that measurement has now
+retired.
+
+19. **THE TAIL ERA IS OVER.** Worst handler: total=246, window/ack=202,
+    tail=44, 16 lines of margin. Six iterations attacked the tail; it is
+    now 18% of the worst handler and the 68K's wait on the SH-2 WINDOW is
+    82%. Every future "the 68K is late" hypothesis should start there.
+
+**THE PRESSURE ARTIFACT — a MAME-stress artifact with a real lever behind
+it.** `make PRESSURE=1` does not hold shape: demo2 renders PURPLE GRASS
+and a white logo (baseline PRESSURE renders both correctly), mean 28.55 ->
+34.36. It does NOT reproduce on ares — a full level-1 capture has correct
+grass, correct logo, correct boss-death greyscale flash, no colour fault
+anywhere. PRESSURE cuts the quiet zone to 6000/6500 against the shipped
+11300/10300, which starves the WINDOW RATE far below anything ares
+produces, and that is precisely what this arc made the palette depend on
+(negative 18). So it is not a blocker — but it is a genuine early warning,
+and the mechanism is understood: the palette lands at k0/k2 while
+apply_cram runs only at k1, so a shipped pair reaches CRAM up to a full
+cycle late, and the per-set memo holds the stale paint until the next
+generation bump. Disabling the memo restores the grass and takes PRESSURE
+demo2 40.30 -> 28.47. THE FIX, when the window rate ever gets tight
+enough to matter: paint the shipped sets into CRAM in the SAME window the
+pair lands (it is already pre-ack, so it is legal there) instead of
+waiting for k1.
+
+MAME scoreboard: title 2.44 (was 2.43) and eyehold 3.06 (was 3.06) are
+pixel-identical; the motion scenes read worse (scream 37.59 -> 53.95, demo
+48.66 -> 50.61, demo2 18.73 -> 21.85, mean 22.09 -> 26.38). Negative 10
+says not to tune against those scene percentages in this arc, and ares —
+the acceptance gate — disagrees with them outright.
+
+WHAT THE MEASUREMENTS ALREADY RULE OUT — do not re-run these:
+  - NOT the transport. `tools/pal_probe.lua` diffs the MD mirror against
+    PAL_U per region: regions 2-15 are out of sync in 0-2% of samples on
+    BOTH builds, and the hot cycling regions 0/1 are the same or BETTER
+    than baseline (region 0: 52% vs baseline 96.8%; region 1: 81.6% vs
+    81.2%). Those high rates are NORMAL — a 60Hz colour-cycle against a
+    ~20Hz channel is permanently mid-flight. Measuring the baseline is
+    what killed the "regions 0/1 never converge" theory, which had
+    already sent one fix (region pairs) down the wrong road.
+  - NOT dreq_incomplete. It reads 0 on MAME at every packet size tried.
+  - NOT cadence. 1197 cycles per 3600 frames on both builds.
+  - IT IS THE apply_cram MEMO. Disabling it (`if (0 && ...)` in
+    cram_memo) restores the green grass and takes PRESSURE demo2 40.30
+    -> 28.47. The memo is keyed on PAL_SETGEN, whose semantics this arc
+    changed: the slave used to bump 1-2 sets per 5-word batch that had
+    ACTUALLY CHANGED (the batches came from the diff scan), whereas the
+    master now bumps 32 sets whenever a pair SHIPS. The set coverage was
+    re-derived and is correct in both halves of the split (pairs never
+    straddle the 1024-word tile/sprite boundary), so the fault is not the
+    index arithmetic — the likely mechanism is WHEN rather than WHICH:
+    the palette lands at k0/k2 but apply_cram only runs at k1, so a
+    shipped pair reaches CRAM up to a full cycle later, and under
+    PRESSURE a cycle is long. The obvious next move is to paint the
+    shipped sets into CRAM in the SAME window the pair lands (it is
+    already pre-ack, so it is legal there) instead of waiting for k1.
 
 ### Iteration 7e — THE BAND IS GONE. Falsifier met in full.
 
