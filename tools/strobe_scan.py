@@ -29,7 +29,7 @@ from collections import Counter
 def main():
     d = sys.argv[1] if len(sys.argv) > 1 else "screenshots"
     pat = sys.argv[2] if len(sys.argv) > 2 else "frame_*.png"
-    fs = sorted(glob.glob(os.path.join(d, pat)))
+    fs = glob.glob(os.path.join(d, pat))
     if not fs:
         print(f"no frames matching {pat} in {d}")
         return
@@ -38,7 +38,10 @@ def main():
         b = "".join(c if c.isdigit() else " " for c in os.path.basename(p))
         return int(b.split()[0]) if b.split() else 0
 
-    sz = [(idx_of(f), os.path.getsize(f)) for f in fs]
+    # SORT NUMERICALLY, not lexically. Captures named 1.png/10.png/100.png
+    # sort as strings into 1,10,100,1000,1001,... so frame indices come out
+    # non-monotonic and the burst grouping below reports negative spans.
+    sz = sorted((idx_of(f), os.path.getsize(f)) for f in fs)
     med = statistics.median(s for _, s in sz)
     thr = med * 0.06
     dark = [i for i, s in sz if s < thr]

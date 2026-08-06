@@ -84,6 +84,7 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-05 | iter7a | 48.3 | 47.2 | 3.1 | 52.9 | 22.0 | **34.7** | (LOOP 7a LANDED: COMM -> DREQ. 4 of 5 scenes improve; scream stops being blank)
 | 08-05 | iter7d | 49.7 | 45.1 | 3.1 | 49.5 | 13.0 | **32.1** | (LOOP 7d: blit in THIRDS — the flip/restore pair overran vblank on 100% of windows)
 | 08-05 | iter7g | 2.4 | 37.6 | 3.4 | 48.7 | 21.8 | **22.8** | (LOOP 7g: DREQ packet SPLIT by phase. title 49.7 -> 2.4)
+| 08-05 | iter7h | 2.4 | 37.6 | 3.1 | 48.7 | 18.7 | **22.1** | (LOOP 7h: missq out of .bss, MISSQ_CAP back to 192)
 
 ### Iteration 7e — THE BAND IS GONE. Falsifier met in full.
 
@@ -231,6 +232,53 @@ TWO IMPLEMENTATION NOTES worth keeping:
 => THE PALETTE SCAN IS NOW THE WHOLE GAME. 45 of 92 tail lines, and the
 only untouched term left. LOOP 7 step 2 (write-thunks) finally has
 nothing in front of it.
+
+### Iteration 7h — the region guard made me break something else
+
+ares on 21f11fba. The split did its job — dreq_incomplete 20.7 -> 11.1%
+of cycles, push_aborts still 0 — and the rest of the state went
+BACKWARDS against the milestone:
+
+    metric               milestone   7g
+    V-gate rejects           0.7%    8.0%
+    vints/cycle              3.02    3.26
+    blit skips              21.0%   37.4%
+    band-queue deferrals       48     551
+    restore past vblank      0.6%    9.0%
+    black frames (capture)  1.19%   5.10%
+
+Deferrals up ELEVEN-FOLD is the tell, and it points at the one thing
+7g changed that was never about the packet: MISSQ_CAP 192 -> 128,
+taken purely to fit the new apply code under the 0x19000 region guard.
+Dropped tile fills become repeated misses, the queue saturates, compose
+falls behind. Note the adaptive cache_fill drain escalates above 96
+COMBINED misses — so bursts genuinely exceed a 128 cap, and "3.5x the
+observed peak" was reasoning from a steady-state figure that did not
+describe the bursts.
+
+13. A SPACE HACK IS A CHANGE. MISSQ_CAP was trimmed as build-fitting
+    housekeeping, mentioned in passing, and it cost more than the
+    feature gained. If the guard forces a shave to land a change, that
+    shave needs its own line in the gate — or, better, do not shave.
+
+FIX: get missq OUT of .bss instead of shrinking it. It now lives at a
+fixed SDRAM address (0x0603A000, above SPR_LAND which needs only 596
+words now, ~23KB below the stack top) — the same pattern cache_rot and
+blank_tile already use, with the same coherency story (cached alias,
+full cache_purge every window). No init needed: entries are always
+written before read and miss_n is still zeroed .bss.
+
+    _end 0x06018fb8 (72 bytes headroom) -> 0x06018d30 (720 bytes)
+
+Also retired to buy .ramtext honestly rather than by shaving data:
+DIAG[23..25] (the skip-cause split — it answered its question: every
+skip is LATE, never wrapped, never a missing heartbeat) and the
+purge_lines calls (negative 8 proved them bit-identical dead code).
+And DIAG[27] now stores FRT TICKS, not lines — `/46` pulled in a libgcc
+divide helper because the SH-2 has none; state_health converts.
+
+MAME: parity 22.78 -> 22.09 (eyehold back to 3.06, demo2 21.8 -> 18.7),
+blit_preempt 1.155 -> 1.013ms, MD tail 92.3, dreq 24.1, palscan 45.1.
 
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.

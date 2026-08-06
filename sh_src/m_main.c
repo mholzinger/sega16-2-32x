@@ -120,16 +120,23 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 
 /* Per-CPU miss queues: appended (write-through) during concurrent compose,
  * drained by the master in the next window. */
-#define MISSQ_CAP 128   /* was 256, then 192; miss rates run 10-36/window,
-                         * so this is still ~3.5x the observed peak. Trimmed
-                         * again in LOOP 7g to fit the split-packet apply
-                         * under the 0x19000 region guard — .ramtext counts
-                         * toward _end and there were 72 bytes of headroom.
-                         * Overflow costs dropped tile fills (white
-                         * placeholders), which the adaptive cache_fill drain
-                         * already absorbs; if it ever shows, grow the region
-                         * map rather than putting this back. */
-static uint16_t missq[2][MISSQ_CAP];
+#define MISSQ_CAP 192   /* was 256; miss rates run 10-36/window.
+                         * LOOP 7g trimmed this to 128 for .ramtext space and
+                         * ares answered with band-queue deferrals 48 -> 551
+                         * and blit skips 21 -> 37% of cycles: dropped fills
+                         * become repeated misses and the queue saturates.
+                         * 128 IS TOO SMALL — the adaptive cache_fill drain
+                         * escalates above 96 COMBINED, so bursts genuinely
+                         * exceed it. Free .ramtext instead of this. */
+/* FIXED SDRAM, not .bss. The 0x19000 region guard (.bss + .ramtext must
+ * not reach the tilemap shadow) had 72 bytes of headroom and LOOP 7g's
+ * split-packet apply needed 328; shaving the cap to 128 bought the space
+ * and cost band-queue deferrals 48 -> 551 on ares. So move the array out
+ * instead of shrinking it. 0x3A000 sits above SPR_LAND (which now needs
+ * only 596 words) and ~23KB below the stack top at 0x3FC00 — the same
+ * fixed-address pattern as cache_rot and blank_tile, and the cached alias
+ * keeps the existing coherency story (full cache_purge every window). */
+#define missq ((uint16_t (*)[MISSQ_CAP])0x0603A000)
 static volatile uint16_t miss_n[2];
 
 /* Placeholder pixels for uncached tiles: all pen 0 -> the tile color's
@@ -215,20 +222,6 @@ static inline void diag_add(int slot, uint16_t t0)
 static inline void cache_purge(void)
 {
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
-}
-
-/* Invalidate `n` consecutive 16-byte cache lines. ORing an address with
- * 0x40000000 selects the cache PURGE AREA: the written value is ignored,
- * only the address tag matters, ~2 cycles each. Use when this CPU is
- * about to READ through the cached alias something just written through
- * the uncached one — a targeted alternative to cache_purge(), which
- * dumps all 4KB. (SH-2 caches are write-through, so the reverse
- * direction — write cached, read remote — needs nothing.) */
-static inline void purge_lines(const void *p, unsigned n)
-{
-    uintptr_t a = ((uintptr_t)p) | 0x40000000;
-    for (unsigned i = 0; i < n; i++, a += 16)
-        *(volatile uintptr_t *)a = 0;
 }
 
 /* Cache lookup during compose. Returns pixel pointer; on miss, queues the
@@ -1918,17 +1911,12 @@ RAMCODE void m_main(void)
                     skip = (v < 0xDF || v > 0xE4);
                 } else
                     skip = !(MARS_VDP_FBCTL & 0x8000);
-                if (skip) {
+                /* (LOOP 7a's DIAG[23..25] skip-cause split is RETIRED: it
+                 * answered its question — every skip is on the LATE side,
+                 * never wrapped, never a missing heartbeat — and .ramtext
+                 * is the scarce resource now.) */
+                if (skip)
                     DIAG[7]++;               /* master-side silent skips */
-                    /* LOOP 7 diagnosis: WHICH side of the window. 23 =
-                     * picked up late enough that V ran past 0xE4 (or
-                     * wrapped, which lands in the <0xDF bucket); 24 =
-                     * heartbeat absent/stale. */
-                    if ((md_v & 0xFF00) == 0xD000)
-                        DIAG[23 + ((md_v & 0xFF) < 0xDF ? 0 : 1)]++;
-                    else
-                        DIAG[25]++;
-                }
             }
             uint16_t scmd = (uint16_t)(0x3000 | (k << 4) | (par << 8)
                                        | bank1 | (skip ? 8 : 0));
@@ -2003,12 +1991,17 @@ RAMCODE void m_main(void)
                  *   DIAG[28] blit windows total (for the rate)
                  * ~46 FRT ticks per scanline. */
                 {
-                    unsigned lines = (uint16_t)(frt() - t_vint) / 46u;
+                    /* TICKS, not lines: the SH-2 has NO DIVIDE, so `/46`
+                     * dragged in a libgcc helper — worth ~64 bytes of the
+                     * .ramtext this build could not spare. 38 lines of
+                     * vblank x ~46 ticks/line = 1748. state_health does the
+                     * conversion in python, where division is free. */
+                    uint16_t el = (uint16_t)(frt() - t_vint);
                     DIAG[28]++;
-                    if (lines > 38) {
+                    if (el > 1748) {
                         DIAG[26]++;
-                        if (lines > DIAG[27])
-                            DIAG[27] = lines;
+                        if (el > DIAG[27])
+                            DIAG[27] = el;
                     }
                 }
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
@@ -2097,15 +2090,11 @@ RAMCODE void m_main(void)
                     for (int i = 0; i < 30; i++)
                         d[i] = s[i];
                 }
-                /* latch_layer_regs() reads these through the CACHED alias
-                 * (TEXT_C) on the very next line, and the full cache_purge()
-                 * does not run until POST-ack. 20 words = 3 lines from
-                 * 0xE80, 60 words = 8 lines from 0xF80. (LOOP 7a negative
-                 * 8: this was NOT the dx drift — the post-ack purge already
-                 * leaves the lines cold. Kept because it is correct and
-                 * nearly free, not because it fixed anything.) */
-                purge_lines((const void *)(TEXT_C + 0x740), 3);
-                purge_lines((const void *)(TEXT_C + 0x7C0), 8);
+                /* (No cache purge here. LOOP 7a negative 8 proved these
+                 * lines are ALREADY cold when latch_layer_regs reads them —
+                 * the post-ack full cache_purge() runs every window — and
+                 * the targeted purge was bit-identical either way. It was
+                 * dead code kept out of caution; .ramtext is scarcer.) */
             }
             /* Shared prefix: bitmap at 80, text base at 81, in BOTH
              * layouts. The bitmap is applied every window either way — a

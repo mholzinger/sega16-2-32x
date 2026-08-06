@@ -85,11 +85,13 @@ def main():
     # overrun still gave 0), so these counters are the only way to see it.
     # A nonzero rate here IS the strobe, and `worst` says how many lines
     # of blit have to come off to stop it.
+    # DIAG[27] is in FRT TICKS, not lines: the SH-2 has no divide, so the
+    # conversion moved here (~46 ticks/scanline, 38 lines of vblank = 1748).
     late, worst, tot = (rd32(0x28000 + i * 4) for i in (26, 27, 28))
     if tot:
         print(f"restore past vblank={late}/{tot} "
               f"({100.0 * late / tot:.1f}% of blit windows) "
-              f"worst={worst} lines (vblank=38) -> "
+              f"worst={worst / 46.0:.0f} lines (vblank=38) -> "
               f"{'STROBE CONFIRMED' if late else 'not the strobe'}")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
