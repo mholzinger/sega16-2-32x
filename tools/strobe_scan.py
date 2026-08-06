@@ -14,6 +14,16 @@ against ~570KB for a content frame, so file size alone separates them
 by two orders of magnitude — 10k frames scan in under a second instead
 of the minutes a pure-python decoder would take.
 
+FEED IT A **RAW** CAPTURE, NOT A DEDUPED ONE. Our display ships at ~20Hz
+(3 vints per cycle), so in a raw 60Hz capture each good frame repeats ~3
+times. Dedup collapses those to one entry, while a black frame differs
+from both neighbours and always survives as its own entry — so it
+deflates the denominator and inflates black% by roughly the dedup ratio.
+That is not hypothetical: a deduped run read 10.97% against a
+restore-past-vblank counter of 3.3%, and the 3.3x "discrepancy" was
+entirely this. The gap histogram is affected the same way — a gap of 4
+in a deduped stream is NOT 4 real frames, so do not read it as a period.
+
 Prints the overall rate, then groups blacks into BURSTS (>1s apart).
 That grouping is the useful part: a uniform rate would mean a constant
 overrun, whereas bursts mean the overrun is LOAD-CORRELATED and the fix
