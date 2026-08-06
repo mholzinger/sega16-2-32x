@@ -5,6 +5,21 @@
 #   ./capture.sh 00:01:30             # first 1m30s only
 #   ./capture.sh 00:00:10 00:01:00    # from 10s to 1m
 #   ./capture.sh dedup                # just dedup existing frames (skip extract)
+#   ./capture.sh raw [start] [end]    # NO dedup, keep frame_NNNNNN.png — for TIMING
+#
+# WHICH MODE?
+#   default (dedup) -> VISUAL debugging. Hunting a seam, a wrong tile, a ghost
+#                      row. Duplicate frames are noise; killing them makes the
+#                      interesting frames easy to page through.
+#   raw             -> TIMING / tools/frame_profiler.py. Dedup BIASES that
+#                      measurement: the profiler counts red-bordered (overrun)
+#                      frames, and the border flipping black<->red is itself a
+#                      visual difference, so overrun frames always survive dedup
+#                      while static ok-frames get deleted. The surviving set is
+#                      enriched for exactly the thing being counted, and the
+#                      resulting percentage is not a per-frame overrun rate.
+#                      raw keeps every recorded frame, so the number means what
+#                      it says.
 
 set -euo pipefail
 
@@ -13,11 +28,17 @@ SSDIR="$DIR/screenshots"
 mkdir -p "$SSDIR"
 
 dedup_only=false
+raw=false
 start="00:00:00"
 end="00:02:50"
 
 if [[ "${1:-}" == "dedup" ]]; then
     dedup_only=true
+elif [[ "${1:-}" == "raw" ]]; then
+    raw=true
+    shift
+    [[ $# -ge 1 ]] && end="$1"
+    [[ $# -ge 2 ]] && { start="$1"; end="$2"; }
 elif [[ $# -eq 1 ]]; then
     end="$1"
 elif [[ $# -eq 2 ]]; then
@@ -37,8 +58,21 @@ if [[ "$dedup_only" == false ]]; then
     fi
     mv "$newest" "$SSDIR/capture.mov"
     echo "Extracting frames ($start → $end)..."
+    # -fps_mode passthrough: emit exactly the frames stored in the .mov, no
+    # duplication or dropping to hit a constant rate. macOS screen recordings are
+    # variable-frame-rate, and for timing work an ffmpeg-invented duplicate frame
+    # would read as a real emulator frame.
     ffmpeg -hide_banner -loglevel error -ss "$start" -to "$end" \
-        -i "$SSDIR/capture.mov" "$SSDIR/frame_%06d.png"
+        -i "$SSDIR/capture.mov" -fps_mode passthrough "$SSDIR/frame_%06d.png" 2>/dev/null \
+    || ffmpeg -hide_banner -loglevel error -ss "$start" -to "$end" \
+        -i "$SSDIR/capture.mov" -vsync 0 "$SSDIR/frame_%06d.png"
+fi
+
+if [[ "$raw" == true ]]; then
+    n=$(ls "$SSDIR"/frame_*.png 2>/dev/null | wc -l | tr -d ' ')
+    echo "raw mode: $n frames kept (no dedup, no renumber)."
+    echo "  python3 tools/frame_profiler.py screenshots/"
+    exit 0
 fi
 
 # --- Dedup visually identical consecutive frames ---
