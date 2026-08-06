@@ -268,26 +268,70 @@ window_done: ;
 		// exhausted budget aborts and retries next vint (the SH-2
 		// keeps last frame's coherent list). 0xFFB0F2 counts aborts
 		// (savestate-readable).
-		// Budget scaled with the LOOP 7 packet growth (772 -> 852 words,
-		// 192 -> 212 group waits) so the per-group headroom is unchanged.
-		uint16_t spin = 1330;
+		// ~800 total polls ≈ 0.1ms hard ceiling; an exhausted budget aborts
+		// and retries next vint (the SH-2 keeps last frame's coherent list).
+		// LOOP 7b: raised 1200 -> 2600 (≈0.33ms). The packet grew 10% but
+		// ares' dreq_incomplete grew FIVE-fold (9.1% -> 47.2% of cycles),
+		// so the old budget was already marginal there and the growth
+		// pushed it over. We just freed the 68K ~55 lines/vint; spending up
+		// to 0.33ms of that to make the packet actually LAND is the trade.
+		// Aborts count at 0xFFB0E0 — NOT 0xFFB0F2, which is the
+		// windows-completed counter (they collided, so every abort figure
+		// read before LOOP 7b was meaningless; iteration 1a found this same
+		// collision once already).
+		uint16_t spin = 2600;
 		uint8_t ok = 1;
 		static uint16_t txt_dma_base;
-		// LOOP 7: 852 = 512 spr + bitmap + base + 256 txt + 20 layer regs
-		// + 60 rowscroll + 2 pad. MUST be a multiple of 4: the DREQ FIFO
-		// drains in 4-word bursts, so a non-aligned count leaves the tail
-		// words un-drained -> DMA never completes (TE), sprites+text go
-		// stale (ares dreq_incomplete ~once/cycle at 770).
+		// LOOP 7b PACKET ORDER — SMALLEST AND MOST CRITICAL FIRST:
+		//   0..19    layer regs 0x740-0x753 (20 words,   5 groups)
+		//   20..79   rowscroll  0x7C0-0x7FB (60 words,  15 groups)
+		//   80..591  sprite list           (512 words, 128 groups)
+		//   592      dirty-page bitmap
+		//   593      text chunk base
+		//   594..849 text chunk            (256 words,  64 groups)
+		//   850..851 pad
+		// = 852, a multiple of 4: the DREQ FIFO drains in 4-word bursts, so
+		// a non-aligned count leaves the tail un-drained -> TE never sets.
+		// The ORDER is the fix for "tilemap artifacts everywhere": before
+		// LOOP 7b the regs rode at the END, so a truncated transfer lost
+		// scroll AND pages AND rowscroll AND text — and with COMM no longer
+		// carrying them, nothing else did. Now the 80 words the compose
+		// cannot fake are the first 80 pushed, and the SH-2 applies
+		// whatever fully landed (see the TCR0 read in m_main).
 		*(volatile uint16_t*)0xA15110 = 852;
 		*ctrl = 4;                            // 68S: session start
-		for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
-			while (*ctrl < 0 && --spin) ;
-			if (!spin) { ok = 0; break; }
-			fifo[0] = s[0]; fifo[0] = s[1];
-			fifo[0] = s[2]; fifo[0] = s[3];
-			s += 4;
+		// Two loops, not one with an index test: a per-group branch here
+		// costs ~1 scanline of tail, and the master's window-pickup slack
+		// is only 2-5 lines — enough to flip MAME's blit-skip regime.
+		{
+			const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
+			for (uint16_t lg = 0; lg < 5; lg++) {
+				while (*ctrl < 0 && --spin) ;
+				if (!spin) { ok = 0; break; }
+				fifo[0] = lr[0]; fifo[0] = lr[1];
+				fifo[0] = lr[2]; fifo[0] = lr[3];
+				lr += 4;
+			}
 		}
-		if (ok) {                             // 512 bmp, 513 base, 514+ text
+		if (ok) {
+			const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
+			for (uint16_t rg = 0; rg < 15; rg++) {
+				while (*ctrl < 0 && --spin) ;
+				if (!spin) { ok = 0; break; }
+				fifo[0] = rs[0]; fifo[0] = rs[1];
+				fifo[0] = rs[2]; fifo[0] = rs[3];
+				rs += 4;
+			}
+		}
+		if (ok)
+			for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
+				while (*ctrl < 0 && --spin) ;
+				if (!spin) { ok = 0; break; }
+				fifo[0] = s[0]; fifo[0] = s[1];
+				fifo[0] = s[2]; fifo[0] = s[3];
+				s += 4;
+			}
+		if (ok) {                             // 592 bmp, 593 base, 594+ text
 			while (*ctrl < 0 && --spin) ;
 			if (spin) {
 				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
@@ -302,54 +346,25 @@ window_done: ;
 					fifo[0] = tt[2]; fifo[0] = tt[3];
 					tt += 4;
 				}
-				// LOOP 7: the two COMM-owned blocks now ride the packet.
-				// They are pushed AFTER the rotating text chunk and applied
-				// after it on the SH-2 side, so the chunk that overlaps them
-				// (base 1536) cannot leave a stale copy behind — and unlike
-				// the old COMM/DMA split, both come from the SAME snapshot
-				// instant, so there is no ordering race to lose.
-				//   770..789 = layer regs  0x740-0x753 (20 words, 5 groups)
-				//   790..849 = rowscroll   0x7C0-0x7FB (60 words, 15 groups)
-				if (ok) {
-					const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
-					for (uint16_t lg = 0; lg < 5; lg++) {
-						while (*ctrl < 0 && --spin) ;
-						if (!spin) { ok = 0; break; }
-						fifo[0] = lr[0]; fifo[0] = lr[1];
-						fifo[0] = lr[2]; fifo[0] = lr[3];
-						lr += 4;
-					}
-				}
-				if (ok) {
-					const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
-					for (uint16_t rg = 0; rg < 15; rg++) {
-						while (*ctrl < 0 && --spin) ;
-						if (!spin) { ok = 0; break; }
-						fifo[0] = rs[0]; fifo[0] = rs[1];
-						fifo[0] = rs[2]; fifo[0] = rs[3];
-						rs += 4;
-					}
-				}
 				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad 850->852 (4-align)
 			} else
 				ok = 0;
 		}
 		if (ok) {
-			// LOOP 7: rotate the FULL 0..2047 range in 512-word chunks.
-			// The old 0..1791 restriction existed because COMM shipped the
-			// 1792..2047 regs every vint and a DMAed stale snapshot fought
-			// it (scoreboard dx=+24); COMM no longer carries them. 512-word
-			// 256-word chunks: a 512-word chunk refreshes text twice as
-			// fast and rendered the TITLE near-perfectly (parity 48.3 ->
-			// 2.7% mismatch), but it pushed the master past its budget in
-			// the scream scene — group-1 red/white/blue fallback, the
-			// documented starved-prescan signature. Revisit once the
-			// palette leaves COMM (LOOP 7 step 2).
+			// Rotate the FULL 0..2047 range: the old 0..1791 restriction
+			// existed only because COMM shipped the 1792..2047 regs every
+			// vint and a DMAed stale snapshot fought it (dx=+24). Both come
+			// from the same snapshot instant now, and the explicit reg
+			// blocks are applied after the chunk, so the overlap is a
+			// no-op. 256-word chunks: 512 refreshes text twice as fast and
+			// rendered the TITLE near-perfectly (parity 48.3 -> 2.7%
+			// mismatch), but starved the scream scene into group-1
+			// red/white/blue fallback. Revisit after LOOP 7 step 2.
 			txt_dma_base = (uint16_t)(txt_dma_base + 256);
 			if (txt_dma_base >= 2048) txt_dma_base = 0;
 		} else {
 			*ctrl = 0;
-			(*(volatile uint16_t*)0xFFB0F2)++;
+			(*(volatile uint16_t*)0xFFB0E0)++;   // DREQ push aborts
 		}
 	}
 
@@ -719,6 +734,9 @@ void main(void) {
 		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
 	}
 	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span
+	*(volatile uint16_t*)0xFFB0E0 = 0;   // LOOP 7b: DREQ push aborts (own
+	                                     // address at last — 0xFFB0F2 is
+	                                     // windows-completed)
 #ifdef TAIL_PROBE
 	*(volatile uint32_t*)0xFFB0D0 = 0;   // LOOP 6: sum of total spans
 	*(volatile uint32_t*)0xFFB0D4 = 0;   //   sum of stream spans

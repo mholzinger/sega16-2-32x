@@ -141,6 +141,75 @@ NEGATIVE RESULTS (do not re-run these):
 It is the last COMM tenant, it is the 45-line scan, and it is what
 caps the text chunk. Everything in this arc points at it.
 
+### Iteration 7b — ares says 7a WORKED and BROKE THE PICTURE. Both true.
+
+Mike's ares pass on 876e51e4. The falsifier PASSED, precisely on the
+predicted number:
+
+    rejects   57.1% -> 39.5%   (step 1 target was spin0's 39.4%)
+    vints/cyc  6.99 -> 4.95    (spin0 measured 4.93)
+    worst handler 241 -> 174, window/ack 63, tail 177 -> 111
+    frame margin 21 -> 88 lines
+
+And the game was unplayable: "still flashes, and now has tilemap
+artifacts everywhere." Both halves are real, and they are separate.
+
+FLASHING IS NOT FIXED AND WAS NEVER GOING TO BE BY STEP 1. 39.5%
+rejects at 4.95 vints/cycle is ~12Hz with most vints rejected — the
+two-vblank ship still lands one half of the frame. The kickoff doc's
+own falsifier calls 39.4% the INTERMEDIATE target. Getting to ~0% and
+3.0 needs the palette scan gone too. Do not read "still flashes" as
+"step 1 failed"; read it as "step 1 of 2 landed".
+
+THE ARTIFACTS WERE MINE, and the kickoff doc warned about the exact
+trap: "dreq_incomplete is already 59 on ares. A bigger packet carries
+more payload per failure. If it climbs, SPLIT the packet." It climbed:
+
+    build       cycles  dreq_incomplete   rate
+    1152c7d1     650          59          9.1%
+    PROBE_spin0  122           2          1.6%
+    876e51e4     214         101         47.2%
+
+A 10% bigger packet, a FIVE-fold failure rate. And 7a had made that
+failure catastrophic: the SH-2 applied the packet all-or-nothing on
+TE, so an incomplete transfer now meant no scroll, no pages, no
+rowscroll and no text for the whole cycle — because COMM no longer
+carried any of them as a second path. That is the artifact field.
+MAME never showed a whisker of it: dreq_inc reads 0-1 there.
+
+FIX (7b), two parts, neither of which is "shrink it back":
+- PACKET REORDERED SMALLEST-AND-MOST-CRITICAL-FIRST. Layer regs and
+  rowscroll are the first 80 words, ahead of the 512-word sprite list.
+- PARTIAL APPLY. The master reads TCR0 for how many words actually
+  landed and applies every block that arrived WHOLE (>=80 regs,
+  >=593 sprites+bitmap, >=850 text) instead of gating on TE. A short
+  transfer now costs the sprite list, not the entire frame's geometry.
+Also: the push spin budget 1200 -> 2600 (~0.33ms), affordable now that
+the 68K has 55 lines/vint back.
+
+NEXT ARES PASS ANSWERS THE REMAINING QUESTION IN ONE READ. The abort
+counter finally has its own address (0xFFB0E0). It had been sharing
+0xFFB0F2 with windows-completed — the same collision iteration 1a
+found and supposedly fixed — so EVERY abort figure ever read from a
+state before 7b is meaningless, including the 0 you get from an old
+state. state_health.py now prints `push_aborts` next to a per-cycle
+dreq_incomplete rate, and the two causes need OPPOSITE fixes:
+    aborts > 0   the 68K ran out of spin budget mid-push
+                 -> raise it further, or shrink the packet
+    aborts == 0  the 68K pushed all 852 words and the DMA still did
+                 not drain -> SPLIT the packet; budget is irrelevant
+
+10. THE MAME RIG HAS STOPPED DISCRIMINATING FOR THIS ARC. The master's
+    window-pickup slack is 2-5 scanlines, so a ONE-LINE tail change
+    flips it between regimes. Proven: adding a single per-group branch
+    to the push loop moved clean-build blit skips 55 -> 169; removing
+    it moved them back to 55, scoreboard bit-identical either way
+    (34.69, every scene). The same bistability makes the scoreboard
+    flip scream between "drawn" (47%) and "blank" (86-92%) on changes
+    that cost nothing. USE THE TAIL SPLIT — it is stable and it moved
+    170.6 -> 115.1 -> 116.0. Do not tune against MAME skips or the
+    scene percentages in this arc; ares is the judge.
+
 LEAD (unchased): `make PRESSURE=1` runs this build at skips=1, not 55.
 Its quiet zone is 6000/6500 against the shipped 11300/10300. The
 shipped thresholds were tuned for the OLD 68K load; a middle setting

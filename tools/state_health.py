@@ -60,8 +60,21 @@ def main():
           f"of vints)")
     print(f"blit skips={skips} ({100.0 * skips / max(cycles, 1):.1f}% "
           f"of cycles)")
+    # dreq_incomplete is now PER-CYCLE-RATED and split against the MD's
+    # own abort counter, because the two causes need opposite fixes:
+    #   aborts>0   the 68K ran out of spin budget mid-push (raise it, or
+    #              shrink the packet)
+    #   aborts==0  the 68K pushed everything and the DMA still did not
+    #              drain (SPLIT the packet; a bigger budget is useless)
+    # LOOP 7b gave aborts their own address: 0xFFB0E0. Before that it
+    # shared 0xFFB0F2 with windows-completed, so EVERY abort figure read
+    # from an older state is meaningless — treat pre-7b aborts as unknown,
+    # not as zero.
+    inc = rd32(0x28000 + 17 * 4)
+    aborts = rdmd16(0xB0E0)
     print(f"deferrals={rd32(0x28000 + 13 * 4)} "
-          f"dreq_incomplete={rd32(0x28000 + 17 * 4)}")
+          f"dreq_incomplete={inc} ({100.0 * inc / max(cycles, 1):.1f}% "
+          f"of cycles) push_aborts={aborts}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
