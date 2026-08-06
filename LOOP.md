@@ -421,6 +421,27 @@ blit_half is a pure strided SDRAM->FB copy, 80 longwords per row, which
 is exactly what a DMAC burst is for. That is the next arc, and it is the
 same thing the shipped Sega 32X arcade ports do.
 
+16. SINGLE-SESSION NUMBERS VARY ~14x BY CONTENT. Two savestates, SAME
+    build d8d91454, no rebuild between them:
+
+        metric              gameplay (12555 vints)   light (1342 vints)
+        V-gate rejects            7.5%                    1.4%
+        vints/cycle               3.24                    3.04
+        band deferrals           33% of cycles            8%
+        restore past vblank       6.9%                    0.5%
+        FS latch mean            17 ticks                 5 ticks
+
+    In light scenes this build is AT MILESTONE QUALITY. Under sustained
+    gameplay it degrades 14x on the strobe. So the strobe is not a
+    constant defect to tune away — it is a LOAD CEILING, which is what
+    the burst structure said from the start.
+    CONSEQUENCE FOR THE METHOD: a single savestate cannot show a
+    regression unless the move is large or the content is matched. Some
+    of the "7g regressed cadence" reading earlier in this arc was
+    probably content, not code — the MISSQ_CAP fault was real (deferrals
+    551 vs 48 is an 11x move) but the smaller deltas around it were not
+    evidence. Compare like sessions, or compare only large moves.
+
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with
