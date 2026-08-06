@@ -8,7 +8,17 @@
 > (the packet needs SPLITTING). The palette scan is still untouched —
 > step 2 was never needed to reach cadence.
 
-> ACTIVE ARC: **LOOP7.md** — kill the tail (COMM -> DREQ, retire the
+> ACTIVE ARC: **LOOP8.md** — retire the palette scan (LOOP 7 step 2).
+> 45 of the 92 remaining tail lines, run every vint, finding nothing in
+> steady state. 44 write sites enumerated, 27 of them precise single-word
+> stores; mechanism proven by the LOOP 3c tile thunks. MAME-visible
+> falsifier, so it iterates without ares round-trips.
+>
+> LOOP 7 CLOSED: the band is gone (vints/cycle 6.99 -> 3.02, rejects
+> 57.1% -> 0.7-1.4%), tail 170.6 -> 92.4, parity 43.98 -> 22.09 with
+> title at 2.43%.
+>
+> PREVIOUS ARC: **LOOP7.md** — kill the tail (COMM -> DREQ, retire the
 > palette scan). LOOP 6 closed: it falsified its own kickoff, cut
 > apply_cram (ares window 88 -> 64 lines, exactly as predicted), and
 > then found why six iterations of cadence work failed — see "THE
