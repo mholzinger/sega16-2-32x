@@ -93,6 +93,17 @@ def main():
               f"({100.0 * late / tot:.1f}% of blit windows) "
               f"worst={worst / 46.0:.0f} lines (vblank=38) -> "
               f"{'STROBE CONFIRMED' if late else 'not the strobe'}")
+    # LOOP 7i: how long the FS RESTORE took to LATCH. ares defers an FBCTL
+    # write made outside vblank to the next vblank, and the master's
+    # readback spin does not fail on that — it BLOCKS, with FM=1, stalling
+    # the 68K too. A mean of a few ticks means latches are immediate; a
+    # mean in the thousands (a frame is ~12000 ticks, a scanline ~46) means
+    # the strobe and the slowness are the same bug.
+    lat, latn = rd32(0x28000 + 29 * 4), rd32(0x28000 + 30 * 4)
+    if tot:
+        print(f"FS restore latch: mean={lat / max(tot, 1):.0f} ticks "
+              f"({lat / max(tot, 1) / 46.0:.1f} lines), "
+              f"{latn}/{tot} waits >1 line ({100.0 * latn / tot:.1f}%)")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
     # failed to answer, the master spun forever with FM=1 and took the

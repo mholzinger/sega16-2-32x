@@ -2005,8 +2005,27 @@ RAMCODE void m_main(void)
                     }
                 }
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
-                guard = 2000000;
-                while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
+                /* LOOP 7i — TIME THE LATCH. Two measurements disagree by
+                 * 3.3x: restore-past-vblank says 3.3% of blit windows,
+                 * while a 4457-frame ares capture says 10.97% of FRAMES
+                 * are black (dominant gap 4 = the real strobe, not fades;
+                 * those files are 6.4KB against a 779KB median). So the
+                 * vblank overrun is not the whole story.
+                 * If ares really defers an out-of-vblank FBCTL write to the
+                 * NEXT vblank, this readback spin does not FAIL — it
+                 * BLOCKS, for up to a frame, with FM=1, stalling the 68K
+                 * with it. That would make the strobe and the slowness one
+                 * bug, and it is invisible to every counter we have.
+                 * DIAG[29] = total ticks waited, [30] = waits over ~1
+                 * scanline. ~46 ticks/line, ~12000/frame. */
+                {
+                    uint16_t w0 = frt();
+                    guard = 2000000;
+                    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
+                    uint16_t wt = (uint16_t)(frt() - w0);
+                    DIAG[29] += wt;
+                    if (wt > 46) DIAG[30]++;
+                }
                 guard = 2000000;
                 while (SYNC[5] != scmd && --guard) ;  /* slave path done */
                 if (!guard) DIAG[22]++;

@@ -280,6 +280,52 @@ divide helper because the SH-2 has none; state_health converts.
 MAME: parity 22.78 -> 22.09 (eyehold back to 3.06, demo2 21.8 -> 18.7),
 blit_preempt 1.155 -> 1.013ms, MD tail 92.3, dreq 24.1, palscan 45.1.
 
+### Iteration 7i — two instruments disagree 3.3x; measure, do not guess
+
+ares on fa25a024. The MISSQ_CAP diagnosis was RIGHT — everything that
+regressed with the 128 cap came back:
+
+    metric               milestone   7g      7h
+    band-queue deferrals       48    551      98
+    blit skips              21.0%  37.4%   20.6%
+    V-gate rejects           0.7%   8.0%    3.2%
+    vints/cycle              3.02   3.26    3.10
+    restore past vblank      0.6%   9.0%    3.3%
+    dreq_incomplete         20.7%  11.1%   19.0%
+
+But the capture says the strobe got WORSE, not better: 489 of 4457
+frames black = **10.97%**, dominant gap 4, files 6.4KB against a 779KB
+median (verified by sampling — real black frames, not fades, and no
+mixed-naming confound in the capture dir).
+
+3.3% of blit windows overrun vblank, but 11% of frames are black. THE
+COUNTER AND THE SCREEN DISAGREE BY 3.3x, so the vblank overrun is not
+the whole cause. Two passes have now been spent on changes that hit
+their target metric and lost the arc (7f, and 7g's space hack); this
+one buys a measurement instead.
+
+ALSO NOTE: dreq_incomplete read 11.1% on 7g and 19.0% on 7h with
+IDENTICAL packet code. These are different play sessions covering
+different content, so single-session deltas of a few points are not
+evidence. Only large moves (deferrals 551 -> 98) are.
+
+THE HYPOTHESIS WORTH TESTING. If ares defers an out-of-vblank FBCTL
+write to the next vblank, then the master's FS readback spin does not
+FAIL on it — it BLOCKS, for up to a frame, with FM=1, which stalls the
+68K too. That would make the strobe and "still a little slow" THE SAME
+BUG, and nothing we have measures it: the spin has guard=2000000, so it
+never trips a timeout and never appears in any counter.
+
+INSTRUMENT (ships): DIAG[29] = total ticks waited for the FS restore to
+latch, DIAG[30] = waits longer than one scanline. state_health prints
+mean ticks and lines. MAME baseline: **1 tick, 0 long waits** — it
+latches immediately, as it must. On ares:
+  - mean of a few ticks  -> latches are immediate, the strobe is
+                            something else and this line is closed
+  - mean in the thousands -> confirmed, and the fix target is the
+                            blocking wait itself, not the blit size
+                            (~46 ticks/scanline, ~12000/frame)
+
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with
