@@ -128,6 +128,40 @@ doubles its rows but removes the sync wait entirely, and B is small
 now; (b) shorten sprite strips so pickup latency drops; (c) a
 finer-grained slave poll.
 
+### Iteration 7f — the FG cat1 pass was the unbounded span
+
+The plan for this pass was "master blits the whole band alone, dropping
+the slave wait". WORKING THE ARITHMETIC KILLED IT BEFORE IT WAS WRITTEN,
+and the reasoning is worth keeping:
+
+  SYNC[2] is set AFTER the slave's blit, not at pickup — so the master's
+  pre-restore wait covers the slave's ENTIRE blit. Master-solo removes
+  that wait but serialises all 72 rows onto one CPU: ~48 lines,
+  DETERMINISTIC, against a 38-line budget. That is 100% overrun again —
+  strictly worse than today's 0.6%. The wait is not the cost. The
+  PICKUP LATENCY INSIDE IT is, which is why the strobe is bursty and
+  load-correlated rather than constant.
+
+So the target is the longest span the slave can be stuck in when the
+master posts the mailbox. Found it in slave_concurrent_k: the FG cat1
+pass ran as ONE uninterruptible `compose_layer(lo, hi, ...)` over the
+whole band — up to 40 rows with no service point inside — while every
+other pass in the same function (BG opaque, FG cat0, sprites) has
+always been striped 12 rows with `slave_service_stream()` between.
+Now striped identically. Same work, same order, only interleaved poll
+points.
+
+NOT touching the 12-row sprite strips: the comment there is right that
+finer strips multiply the full-height row-walk of tall zoomed actors.
+
+MAME CANNOT JUDGE THIS ONE. Its restore_late is already 0/3458, and the
+scoreboard moved 32.06 -> 32.58 (demo2 13.0 -> 15.5), which is inside
+the anchor-phase band demo2 has occupied all arc (13.0/15.5/19.3/22.0/
+24.9 across builds — see negative 10). blit_preempt 1.095 -> 1.096ms
+and TOTALwin 1.628 -> 1.633ms, so it costs nothing measurable. The
+verdict is `worst` in the ares restore counter and the burst count from
+tools/strobe_scan.py — nothing else.
+
 RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with

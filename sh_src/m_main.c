@@ -1557,8 +1557,23 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
         compose_sprites(y, ye, par);
         slave_service_stream();
     }
-    compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
-    slave_service_stream();
+    /* LOOP 7e: STRIPED, like every other pass above. This was one
+     * uninterruptible call over the WHOLE band (up to 40 rows) with no
+     * service point inside — the longest span the master could be stuck
+     * behind, and the master's pre-restore `while (SYNC[2] < 1)` wait
+     * sits INSIDE the vblank-critical section. That is the bursty black
+     * strobe: worst restore span 74 lines against a 38-line budget,
+     * load-correlated (17 bursts over a 9916-frame ares capture,
+     * tools/strobe_scan.py), while the mean already fits at 0.6%.
+     * Same work, same order, just interleaved poll points — the tile
+     * and sprite passes have always run this way. NOT touching the
+     * 12-row sprite strips: the comment above is right that finer
+     * strips multiply the full-height row-walk of tall zoomed actors. */
+    for (int y = lo; y < hi; y += 12) {
+        int ye = (y + 12 > hi) ? hi : y + 12;
+        compose_layer(y, ye, 1, 0, 0, bank1, par, 2);  /* FG cat1 OVER sprites */
+        slave_service_stream();
+    }
     compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
                  (rg == 0) ? 4 : (rg == 1) ? 13 : 23, par);
 }
