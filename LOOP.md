@@ -74,6 +74,7 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-04 | iter6 | 49.3 | 91.7 | 3.4 | 52.1 | 20.9 | 43.5 | (LOOP 6 LANDED: apply_cram gated — MAME-neutral by construction, ares measures the win)
 | 08-05 | fbb31c4 | 49.3 | 91.7 | 3.4 | 52.1 | 23.4 | 44.0 | (LOOP 7 BASELINE, re-measured. scream's 91.7 is OURS RENDERING A BLACK FRAME — see iter7a)
 | 08-05 | iter7a | 48.3 | 47.2 | 3.1 | 52.9 | 22.0 | **34.7** | (LOOP 7a LANDED: COMM -> DREQ. 4 of 5 scenes improve; scream stops being blank)
+| 08-05 | iter7d | 49.7 | 45.1 | 3.1 | 49.5 | 13.0 | **32.1** | (LOOP 7d: blit in THIRDS — the flip/restore pair overran vblank on 100% of windows)
 
 ### Iteration 7a LANDED — COMM payloads onto the DREQ packet
 
@@ -261,6 +262,52 @@ frame rather than black. (c) extend the skip gate to PREDICT the
 overrun from the previous blit's measured cost — but note the blit may
 simply not fit on ares at all, in which case (c) freezes the display
 instead of strobing it, which is not obviously better.
+
+### Iteration 7d — STROBE CONFIRMED at 100%, and the blit goes to thirds
+
+ares on b238bec6. The counter answered in one line:
+
+    restore past vblank = 845/845 (100.0% of blit windows)
+    worst = 55 lines (vblank = 38)
+
+Not intermittent — EVERY blit window finishes its flip/restore pair
+outside vblank. The comment in slave_window_k claimed "56 rows per CPU
+per window, ~0.8ms — inside vblank even at ares speed". That claim was
+never measured and it is false by 45%.
+
+THIS KILLS FIX OPTION (c) OUTRIGHT. Predicting the overrun and taking
+the skip path would skip 100% of flips and freeze the display. Good
+riddance — it was the cheapest-looking option and the data removed it
+before anyone spent a day on it.
+
+IT ALSO RULES OUT (b)/atomic ship, for the ORIGINAL iteration-1a
+reason, which is NOT retired: copy_pages still reads the game's tile
+staging in the FB (0x24012000), so alternating display banks still
+splits the game's writes across banks and the blind copy still loses
+half of them. Atomic ship stays blocked until the tile write-log ring
+logs VALUES (iteration 1b), not just dirty pages.
+
+So (a): make the blit fit. FIX = THIRDS. The same 224 rows per cycle
+spread over THREE windows instead of two, so each pair carries ~2/3
+the rows (~36-40 per CPU, was 56). w0 no longer idles. Aligned to the
+band regions and shipped one window after the window that composes
+them — W1 composes R0 and W2 ships it, W2 composes R1 and W0 ships it,
+W0 composes R2 and W1 ships it — so blit and concurrent compose stay
+disjoint exactly as before. Total blit work per cycle is UNCHANGED, so
+this is a redistribution and the 68K's per-cycle stall does not grow.
+Cost: two mid-screen seams for one frame instead of one.
+
+Scoreboard 34.69 -> 32.06, the best yet, with no seam damage:
+demo2 22.00 -> 13.00, demo 52.88 -> 49.46, scream 47.17 -> 45.10,
+eyehold 3.09 -> 3.06; title 48.30 -> 49.67 (the phase-noisy one).
+
+Whether it is ENOUGH is arithmetic ares has to settle. If the ares
+span is F (fixed: flip readback, cache_purge, slave pickup) plus B
+(blit), then 55 = F + B and the new span is F + 0.64B. That lands at
+38 only if F is small (~8 lines). The counters print the answer
+directly — `restore past vblank` and `worst` — and if it still
+overruns, the same lever goes to quarters or the blit itself has to
+get faster (DMAC channel 1 is free; channel 0 is the DREQ).
 
 LEAD (unchased): `make PRESSURE=1` runs this build at skips=1, not 55.
 Its quiet zone is 6000/6500 against the shipped 11300/10300. The

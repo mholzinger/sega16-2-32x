@@ -1478,11 +1478,28 @@ RAMCODE void slave_window_k(uint16_t cmd)
      * by 68K read-backs: collision tst.w's (0x6936+) and the round-
      * transition scratch save/restore in page 1 (0x1B760) — see
      * LOOP.md iteration 1b findings. */
+    /* LOOP 7d THIRDS. The claim above — "~0.8ms, inside vblank even at
+     * ares speed" — is MEASURED FALSE: 845 of 845 blit windows finished
+     * their flip/restore pair OUTSIDE vblank, worst 55 lines against a
+     * 38-line budget, and that overrun IS the black strobe frame (ares
+     * defers an out-of-vblank FBCTL write to the next vblank, putting the
+     * never-composed bank on screen for a whole frame).
+     * Same 224 rows per cycle, spread over THREE windows instead of two,
+     * so each pair carries ~2/3 the rows. Aligned to the band regions
+     * (R0=[0,72) R1=[72,144) R2=[144,224)) and shipped one window AFTER
+     * the window that composes them — W1 composes R0, W2 ships it; W2
+     * composes R1, W0 ships it; W0 composes R2, W1 ships it. Blit and
+     * concurrent compose stay disjoint by construction, exactly as
+     * before. Cost: two mid-screen seams for one frame instead of one.
+     * Total blit work per cycle is UNCHANGED — this is a redistribution,
+     * so the 68K's per-cycle stall does not grow. */
     if (!skip) {
-        if (k == 1)
-            blit_half(0, 56);
-        else if (k == 2)
-            blit_half(112, 168);
+        if (k == 2)
+            blit_half(0, 36);
+        else if (k == 0)
+            blit_half(72, 108);
+        else
+            blit_half(144, 184);
     }
     SYNC[2] = 1;                                 /* master restores bank X */
     if (k == 1) {
@@ -1889,7 +1906,12 @@ RAMCODE void m_main(void)
                                        | bank1 | (skip ? 8 : 0));
             uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
             uint32_t guard;
-            int wblit = !skip && k != 0;     /* two-vblank ship: w0 idle */
+            /* LOOP 7d: w0 no longer idles. THREE-vblank ship — the same
+             * 224 rows per cycle in thirds, so each flip/restore pair
+             * carries ~2/3 the rows and has a chance of fitting inside
+             * vblank's 38 lines. See blit_half's call site in
+             * slave_window_k for the measurement that forced this. */
+            int wblit = !skip;               /* three-vblank ship */
             SYNC[2] = 0;
             SYNC[3] = 0;
             SYNC[5] = 0;                      /* (iter4) preempt-blit echo */
@@ -1913,10 +1935,14 @@ RAMCODE void m_main(void)
                 SYNC[4] = scmd;
                 cache_purge();               /* slice rows may hold the OTHER
                                               * CPU's composes from last cycle */
-                if (k == 1)
-                    blit_half(56, 112);
+                /* LOOP 7d thirds — master takes the upper half of each
+                 * band, the slave the lower (see slave_window_k). */
+                if (k == 2)
+                    blit_half(36, 72);
+                else if (k == 0)
+                    blit_half(108, 144);
                 else
-                    blit_half(168, 224);
+                    blit_half(184, 224);
                 /* LOOP 6d: BOUNDED. These two were the only unguarded
                  * spins in this function — every neighbouring wait
                  * carries guard=2000000. If the slave ever fails to
