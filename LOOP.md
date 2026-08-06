@@ -326,6 +326,57 @@ latches immediately, as it must. On ares:
                             blocking wait itself, not the blit size
                             (~46 ticks/scanline, ~12000/frame)
 
+### Iteration 7j — THE STROBE IS A BLOCKING WAIT. One cause, confirmed.
+
+ares on 502abd10, against a RAW capture this time (Mike had been
+deduping — see below). The two instruments now AGREE:
+
+    restore past vblank = 238/2880 = 8.3% of blit windows
+    BLACK (raw capture) = 179/2472 = 7.24% of frames
+
+So the strobe has exactly ONE cause, the vblank overrun, and the 3.3x
+"second cause" from iteration 7i never existed.
+
+14. THE 3.3x DISCREPANCY WAS DEDUP, NOT A SECOND BUG. Our display ships
+    at ~20Hz, so a raw 60Hz capture repeats each good frame ~3 times.
+    Dedup collapses those while a black frame, differing from both
+    neighbours, always survives as its own entry — inflating black% by
+    about the dedup ratio (10.97% deduped vs 3.3% counter). The gap
+    histogram is skewed identically, so "gap 4" in a deduped stream is
+    NOT a period. strobe_scan.py now says this at the top. Validate what
+    a number counts before building a theory on it disagreeing.
+
+AND THE LATCH TIMER FOUND THE MECHANISM:
+
+    FS restore latch: mean=882 ticks (19.2 lines) over ALL windows,
+                      263/2880 waits >1 line (9.1%)
+
+Mean 882 across all windows puts each of the ~9% long waits at ~9600
+ticks = **0.8 of a FRAME**, held with FM=1, so the 68K is stopped for
+it too. ares defers an out-of-vblank FBCTL write to the next vblank and
+this spin did not fail on that — it BLOCKED. Nothing measured it
+because guard=2000000 never trips.
+
+That is POSITIVE FEEDBACK: a late restore steals most of a frame, so
+the next window starts later and is late too. It explains the bursts,
+and it explains why the rate bounced 0.6% -> 8.3% between sessions —
+the loop latches into a bad state and stays there. It is also SLOWNESS,
+not just strobe: ~19 lines per window of stalled 68K on average.
+
+FIX: bound the wait at 200 ticks (~4 lines; an undeferred latch takes
+ONE — MAME reads exactly 1). Past that we know it is deferred, and
+waiting cannot make it arrive sooner, so stop paying and let the loop
+recover. Everything else pre-ack is SDRAM-only EXCEPT copy_pages, which
+reads the game's staging THROUGH the FB and needs the bank actually
+selected — so that DEFERS when the latch is unsettled. Deferring is
+free: pg_pending is sticky and steady state is zero pending anyway.
+DIAG[31] counts unsettled exits.
+
+MAME-neutral: parity 22.09 scene-for-scene, skips unchanged, PRESSURE
+holds. Its `latch` baseline moves (1 -> ~305 ticks) purely because the
+loop condition now calls frt(); that is a measurement artifact of the
+bounded form, not new cost — TOTALwin and the scoreboard are unmoved.
+
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with

@@ -103,7 +103,8 @@ def main():
     if tot:
         print(f"FS restore latch: mean={lat / max(tot, 1):.0f} ticks "
               f"({lat / max(tot, 1) / 46.0:.1f} lines), "
-              f"{latn}/{tot} waits >1 line ({100.0 * latn / tot:.1f}%)")
+              f"{latn}/{tot} waits >1 line ({100.0 * latn / tot:.1f}%) "
+              f"unsettled={rd32(0x28000 + 31 * 4)}")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
     # failed to answer, the master spun forever with FM=1 and took the

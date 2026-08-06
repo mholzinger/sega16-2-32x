@@ -1928,6 +1928,11 @@ RAMCODE void m_main(void)
              * vblank's 38 lines. See blit_half's call site in
              * slave_window_k for the measurement that forced this. */
             int wblit = !skip;               /* three-vblank ship */
+            /* Cleared below if the FS restore is still pending when we stop
+             * waiting for it. Everything pre-ack is SDRAM-only EXCEPT
+             * copy_pages, which reads the game's staging THROUGH the FB and
+             * so needs the bank actually selected. */
+            int fs_settled = 1;
             SYNC[2] = 0;
             SYNC[3] = 0;
             SYNC[5] = 0;                      /* (iter4) preempt-blit echo */
@@ -2019,12 +2024,31 @@ RAMCODE void m_main(void)
                  * DIAG[29] = total ticks waited, [30] = waits over ~1
                  * scanline. ~46 ticks/line, ~12000/frame. */
                 {
+                    /* LOOP 7j — BOUNDED, and this is the whole strobe.
+                     * ares defers an FBCTL write made outside vblank to the
+                     * next vblank, and this spin did not FAIL on that, it
+                     * BLOCKED: measured mean 882 ticks across ALL windows,
+                     * which puts each of the ~9% long waits at ~9600 ticks
+                     * = 0.8 of a FRAME, held with FM=1 so the 68K is stopped
+                     * too. That is POSITIVE FEEDBACK — a late restore steals
+                     * most of a frame, so the next window starts later and
+                     * is late too — and it explains both the bursts and why
+                     * the rate bounced 0.6% -> 8.3% between sessions.
+                     * 200 ticks (~4 lines) is generous for a latch that
+                     * takes 1 tick when it is not deferred (MAME reads
+                     * exactly 1). Past that we KNOW it is deferred, and
+                     * waiting cannot make it arrive sooner — so stop paying
+                     * for it and let the loop recover. */
                     uint16_t w0 = frt();
-                    guard = 2000000;
-                    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;
+                    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x
+                           && (uint16_t)(frt() - w0) < 200) ;
                     uint16_t wt = (uint16_t)(frt() - w0);
                     DIAG[29] += wt;
                     if (wt > 46) DIAG[30]++;
+                    if ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x) {
+                        fs_settled = 0;
+                        DIAG[31]++;          /* left with a deferred latch */
+                    }
                 }
                 guard = 2000000;
                 while (SYNC[5] != scmd && --guard) ;  /* slave path done */
@@ -2196,7 +2220,13 @@ RAMCODE void m_main(void)
                      * static screens; cadence doesn't matter there);
                      * sparse dirt keeps the ~2ms fast path where
                      * cadence IS the game. */
-                    int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
+                    /* DEFER on an unsettled bank: copy_pages reads FB
+                     * staging, and reading it through the wrong bank would
+                     * write garbage into the tilemap shadow. Deferring is
+                     * free — pg_pending is sticky, so the pages simply go
+                     * next window. Steady state is ZERO pending anyway. */
+                    int budget = !fs_settled ? 0
+                               : (pg_pending >= 0x0FFF) ? 7 : 3;
                     for (int pc = 0; pc < budget && pg_pending; pc++) {
                         int pg = 0;
                         while (!(pg_pending & (1u << pg)))
