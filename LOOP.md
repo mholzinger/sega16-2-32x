@@ -377,6 +377,50 @@ holds. Its `latch` baseline moves (1 -> ~305 ticks) purely because the
 loop condition now calls frt(); that is a measurement artifact of the
 bounded form, not new cost — TOTALwin and the scoreboard are unmoved.
 
+### Iteration 7k — the block is gone; the strobe is NOT. Read carefully.
+
+ares on d8d91454, savestate + raw capture, 12555 vints (3.5x the
+previous session — do not compare MAXes across it).
+
+    FS restore latch  mean 882 -> **17 ticks** (19.2 -> 0.4 lines)
+    unsettled         790/10481 = 7.5% (we bail on a deferred latch)
+    dreq_incomplete   14.1% -> 9.3% of cycles (best yet)
+    restore past vbl  8.3% -> 6.9%
+    BLACK (raw)       7.24% -> **7.04%**   <- essentially UNCHANGED
+
+THE BOUNDED WAIT WORKED AND DID NOT FIX THE STROBE, and the reason is
+obvious in hindsight: bounding the wait stops us PAYING for the deferral,
+it does not PREVENT it. The FBCTL write still lands outside vblank, ares
+still defers it to the next vblank, and the never-composed bank is still
+on screen for that frame. What we recovered is 68K stall time — ~19 lines
+per window, which was real and worth having — not the black frame.
+
+15. "POSITIVE FEEDBACK" WAS THE WRONG STORY. The blocking spin looked
+    self-sustaining (late restore -> steals 0.8 frame -> next window
+    late), and removing it moved the strobe by 0.2 points. The block was
+    a SLOWNESS bug that happened to sit next to the strobe. Two separate
+    faults sharing one line of code.
+
+WHY (b) — "give the never-composed bank real content" — IS BLOCKED.
+Worth writing down because it looks so attractive. The bank displayed
+during the blit is the CPU-side bank, whose VISIBLE area (0x200 +
+320*224) is genuinely free — the game's staging starts at 0x12000, past
+it — so shadowing it would not disturb the game. But the SH-2 may only
+write the FB with FM=1, i.e. INSIDE the window: FM=0 hands the FB back
+to the game and SH-2 writes there are dropped by arbitration (the
+savestate-proven rule that started this whole arc). So a shadow blit
+cannot be done post-ack for free; it would double the IN-window blit,
+which is the exact thing overrunning vblank. Dead end unless FM changes.
+
+=> SO THE STROBE NEEDS (a): THE BLIT MUST FIT IN VBLANK. Worst restore
+span is 143 lines against a 38-line budget. Thirds got the MEAN inside;
+the tail is 3.7x over. Splitting further trades display cadence (5
+windows = 12Hz) and is not the answer. The answer is to make the blit
+itself faster: SH-2 DMAC CHANNEL 1 is free — channel 0 is the DREQ — and
+blit_half is a pure strided SDRAM->FB copy, 80 longwords per row, which
+is exactly what a DMAC burst is for. That is the next arc, and it is the
+same thing the shipped Sega 32X arcade ports do.
+
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with
