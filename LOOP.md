@@ -128,41 +128,62 @@ doubles its rows but removes the sync wait entirely, and B is small
 now; (b) shorten sprite strips so pickup latency drops; (c) a
 finer-grained slave poll.
 
-### Iteration 7f — the FG cat1 pass was the unbounded span
+### Iteration 7f — REVERTED. The cat1 pass is whole-band ON PURPOSE.
 
-The plan for this pass was "master blits the whole band alone, dropping
-the slave wait". WORKING THE ARITHMETIC KILLED IT BEFORE IT WAS WRITTEN,
-and the reasoning is worth keeping:
+The plan "master blits the whole band alone, dropping the slave wait"
+was killed on paper before it was written, and that reasoning stands:
 
-  SYNC[2] is set AFTER the slave's blit, not at pickup — so the master's
-  pre-restore wait covers the slave's ENTIRE blit. Master-solo removes
-  that wait but serialises all 72 rows onto one CPU: ~48 lines,
-  DETERMINISTIC, against a 38-line budget. That is 100% overrun again —
-  strictly worse than today's 0.6%. The wait is not the cost. The
-  PICKUP LATENCY INSIDE IT is, which is why the strobe is bursty and
-  load-correlated rather than constant.
+  SYNC[2] is set AFTER the slave's blit, not at pickup — so the
+  master's pre-restore wait already covers the slave's ENTIRE blit.
+  Master-solo removes the wait but serialises all 72 rows onto one CPU:
+  ~48 lines DETERMINISTIC against a 38-line budget = 100% overrun, far
+  worse than 0.6%. The wait is not the cost; the PICKUP LATENCY inside
+  it is, which is why the strobe is bursty rather than constant.
 
-So the target is the longest span the slave can be stuck in when the
-master posts the mailbox. Found it in slave_concurrent_k: the FG cat1
-pass ran as ONE uninterruptible `compose_layer(lo, hi, ...)` over the
-whole band — up to 40 rows with no service point inside — while every
-other pass in the same function (BG opaque, FG cat0, sprites) has
-always been striped 12 rows with `slave_service_stream()` between.
-Now striped identically. Same work, same order, only interleaved poll
-points.
+So the attempt was to bound that latency: in slave_concurrent_k the FG
+cat1 pass runs as ONE uninterruptible compose_layer over the whole band
+(up to 40 rows, no service point inside) while BG opaque, FG cat0 and
+sprites above are all striped 12 rows. Making it uniform looked free.
+It is not. ares, build 1ed3075f:
 
-NOT touching the 12-row sprite strips: the comment there is right that
-finer strips multiply the full-height row-walk of tall zoomed actors.
+    metric                  7e      7f      verdict
+    worst restore span      74      56      the TARGET, and it MOVED
+    restore past vblank    0.6%    3.4%     worse
+    V-gate rejects         0.7%    5.9%     worse
+    vints/cycle            3.02    3.18     worse
+    window/ack span          69      96     worse
+    black frames (capture) 1.19%   3.56%    worse
+    sprites                  ok  ARTIFACTS  worse
 
-MAME CANNOT JUDGE THIS ONE. Its restore_late is already 0/3458, and the
-scoreboard moved 32.06 -> 32.58 (demo2 13.0 -> 15.5), which is inside
-the anchor-phase band demo2 has occupied all arc (13.0/15.5/19.3/22.0/
-24.9 across builds — see negative 10). blit_preempt 1.095 -> 1.096ms
-and TOTALwin 1.628 -> 1.633ms, so it costs nothing measurable. The
-verdict is `worst` in the ares restore counter and the burst count from
-tools/strobe_scan.py — nothing else.
+12. THE HYPOTHESIS WAS RIGHT AND THE FIX STILL LOST. Striping DID bound
+    the pickup latency exactly as predicted — worst span 74 -> 56. It
+    lost on two independent counts anyway: (i) the extra service points
+    cost more compose time than the bounded pickup saved (window/ack 69
+    -> 96 lines, and the strobe RATE tripled even as its worst case
+    fell); (ii) cat1-over-sprites does not survive being cut into
+    strips — on-screen sprite artifacts, which is the acceptance gate.
+    A confirmed mechanism is not a licence to ship the first fix for it.
+    The whole-band call is now commented DO NOT STRIPE with these
+    numbers attached.
 
-RANKED REMAINING WORK:
+    Also note the shape: a change can improve the metric you aimed at
+    and lose the arc. Read the whole state, not the target line.
+
+REVERTED to the 7e code; scoreboard back to 32.06 scene-for-scene.
+
+NEXT for the strobe — the wait must be bounded WITHOUT adding service
+points or touching layer composition:
+  (a) DMAC channel 1 for blit_half (channel 0 is the DREQ). Cuts B for
+      both CPUs, shrinking the pair from the other side entirely.
+  (b) Post SYNC[4] EARLIER — at the previous window's post-ack rather
+      than inside this window — so the slave's pickup happens before
+      the vblank-critical section starts, not inside it. Needs the
+      slave to blit only after FS flips, so it would have to wait on a
+      flag the master sets at the flip.
+  (c) Accept the burst and hide it: give the never-composed bank real
+      content so a deferred restore shows a stale frame, not black.
+
+RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.
 2. SPLIT THE DREQ PACKET. dreq_incomplete 20.7% of cycles with
    push_aborts=0 has now said the same thing three passes running: the
