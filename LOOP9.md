@@ -1,7 +1,22 @@
 # LOOP 9 — Make it PLAY SMOOTHLY (the window, then the tearing)
 
-Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md
-(the negatives list, and iterations 7a-7k + 8), then run.
+## SUPERSEDED — START FROM LOOP10.md
+
+This is a RECORD of LOOP 9, not a plan. It was written as a kickoff and
+its opening premises did not survive the arc:
+
+- "THE ONE NUMBER" below (worst handler 246/202/44) is stale; it now
+  reads 149/104/45.
+- Mission 1's ranking is built on MAME window terms, and MAME turned out
+  to model NO framebuffer write cost at all — it understates the window
+  3.8x with a different factor per term, so it cannot rank them.
+- Mission 1 item 1 (the DMAC blit) is DEAD, measured 1.77x slower.
+- The strobe is not "the blit must FIT". It is the 80-row band's compose
+  overrunning its window gap. The blit is a fixed 0.744 lines/row floor.
+
+Read top-down and you get this arc's conclusions in reverse order behind
+premises they replaced. The corrections are inline further down, each
+next to the claim it replaces. **For the next session, read LOOP10.md.**
 
 MIKE'S PRIORITY ORDER for the whole remaining port: **framerate, screen
 tearing, sprites, sound** — and explicitly: *"right now it's just getting
