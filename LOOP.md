@@ -210,6 +210,58 @@ dreq_incomplete rate, and the two causes need OPPOSITE fixes:
     170.6 -> 115.1 -> 116.0. Do not tune against MAME skips or the
     scene percentages in this arc; ares is the judge.
 
+### Iteration 7c — the strobe is SH-2 TIMING, and MAME is structurally blind
+
+ares on 174e4548. 7b's fix worked and the picture came back: Mike's
+551-554 show three correct frames and one FULLY BLACK one.
+
+    dreq_incomplete  47.2% -> 20.3% of cycles
+    push_aborts      0
+    blit skips       10.3% -> 0.0%
+    preempt timeouts 0
+    rejects 40.1%, vints/cycle 5.01, tail 103, margin 94
+
+PUSH_ABORTS == 0 ANSWERS THE QUESTION THE COUNTER WAS BUILT FOR. The
+68K pushed all 852 words and the DMA still did not drain, one cycle in
+five. Raising the spin budget is therefore pointless — the packet has
+to be SPLIT. That is a directed, unambiguous next action.
+
+THE STROBE IS NOT THE SKIP PATH. blit skips read 0.0%: the master
+never declined a flip. Nor is it a hang — preempt timeouts 0.
+
+MECHANISM (measured by elimination; ares-only, and necessarily so).
+The flip/restore pair around the blit is a BLANKING INTERVAL over bank
+Y, which nothing ever composes into — the blit writes the CPU-side
+bank and the restore puts it back on screen. Harmless only while the
+whole pair fits inside vblank (38 lines). The ares SH-2 runs the blit
+~3x slower than MAME's, the pair overruns, and ares DEFERS an FBCTL
+write made outside vblank to the next vblank — so empty bank Y is
+displayed for a WHOLE FRAME. The skip gate cannot catch it: it tests V
+at PICKUP and never asks whether the blit will FIT.
+
+11. MAME CANNOT REPRODUCE THIS, AND NO PROBE WILL MAKE IT. 0 black
+    frames in 150 consecutive (tools/black_probe.lua; brightness dead
+    flat 124-132). `make BLITBURN=1400` forced ~30 lines of overrun and
+    still gave 0 — because MAME latches FBCTL IMMEDIATELY and never
+    defers, so the overrun it reproduces is not the bug. BLITBURN is
+    retired rather than left in the Makefile to mislead someone. When a
+    bug is a latch-timing difference, no amount of MAME time-shifting
+    will surface it; instrument and read it off ares instead.
+
+INSTRUMENT (ships, cheap): DIAG[26] restores landing past vblank,
+DIAG[27] worst lines from window start to restore, DIAG[28] blit
+windows. state_health prints the rate and the worst. MAME baseline is
+0/2339, worst 0 lines — as it must be. A nonzero rate on ares confirms
+the mechanism AND says exactly how many lines of blit have to come off.
+
+NEXT LEVERS for the strobe, ranked: (a) cut the blit so the pair fits
+in vblank — DIAG[27] gives the number. (b) make bank Y hold the last
+complete frame instead of nothing, so a deferred restore shows a stale
+frame rather than black. (c) extend the skip gate to PREDICT the
+overrun from the previous blit's measured cost — but note the blit may
+simply not fit on ares at all, in which case (c) freezes the display
+instead of strobing it, which is not obviously better.
+
 LEAD (unchased): `make PRESSURE=1` runs this build at skips=1, not 55.
 Its quiet zone is 6000/6500 against the shipped 11300/10300. The
 shipped thresholds were tuned for the OLD 68K load; a middle setting

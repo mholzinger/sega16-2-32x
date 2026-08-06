@@ -46,6 +46,11 @@ emu.register_frame_done(function()
         ' dreq_inc=%d skips=%d(wrap=%d late=%d nohb=%d)'
         .. ' cramwr/cyc=%.1f grpskip/cyc=%.1f',
         d(17), d(7), d(23), d(24), d(25), d(19) / n, d(20) / n)
+    -- LOOP 7c: where the FBCTL restore lands. MAME should read 0% here
+    -- (its blit fits inside vblank and it latches immediately anyway);
+    -- a nonzero rate on ares IS the black-frame strobe.
+    line = line .. string.format(' restore_late=%d/%d worst=%dln',
+        d(26), d(28), d(27))
     -- MD handler span (frame = 262 lines); same metric state_health
     -- decodes from an ares savestate. TAILPROBE builds for the extras.
     local packed = md:read_u16(0xFFB0F4)

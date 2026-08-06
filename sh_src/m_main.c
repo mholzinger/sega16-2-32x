@@ -1929,6 +1929,34 @@ RAMCODE void m_main(void)
                 guard = 2000000;
                 while (SYNC[2] < 1 && --guard) ;   /* slave picked up */
                 if (!guard) DIAG[21]++;
+                /* LOOP 7c — WHERE THE RESTORE LANDS. This flip/restore pair
+                 * is a BLANKING INTERVAL over bank Y, which nothing ever
+                 * composes into: the blit writes the CPU-side bank and the
+                 * restore puts it back on screen. That is harmless only
+                 * while the whole pair fits inside vblank (38 lines, NTSC
+                 * 224..261). Past that, ares DEFERS an FBCTL write made
+                 * outside vblank to the next vblank — so empty bank Y is
+                 * displayed for a WHOLE FRAME. That is the black strobe
+                 * frame in Mike's 551-554, and it explains why blit skips
+                 * read 0: the skip gate checks V at PICKUP and never asks
+                 * whether the blit will FIT.
+                 * MAME cannot see this at all — 0 black frames in 150, and
+                 * `make BLITBURN=1400` (~30 lines of forced overrun) still
+                 * produced 0, because MAME latches FBCTL immediately and
+                 * never defers. So this is measured, not reproduced:
+                 *   DIAG[26] restores landing past vblank
+                 *   DIAG[27] worst lines from window start to the restore
+                 *   DIAG[28] blit windows total (for the rate)
+                 * ~46 FRT ticks per scanline. */
+                {
+                    unsigned lines = (uint16_t)(frt() - t_vint) / 46u;
+                    DIAG[28]++;
+                    if (lines > 38) {
+                        DIAG[26]++;
+                        if (lines > DIAG[27])
+                            DIAG[27] = lines;
+                    }
+                }
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 guard = 2000000;
                 while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x && --guard) ;

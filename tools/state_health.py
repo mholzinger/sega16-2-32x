@@ -76,6 +76,21 @@ def main():
           f"dreq_incomplete={inc} ({100.0 * inc / max(cycles, 1):.1f}% "
           f"of cycles) push_aborts={aborts}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
+    # LOOP 7c — THE STROBE. The flip/restore pair blanks the screen over
+    # bank Y, which nothing composes into; it is only safe while the pair
+    # fits inside vblank (38 lines). ares DEFERS an FBCTL write made
+    # outside vblank to the next one, so an overrun puts empty bank Y on
+    # screen for a WHOLE FRAME — the black frame. MAME cannot show this
+    # (it latches immediately; 0 black frames in 150, and a forced 30-line
+    # overrun still gave 0), so these counters are the only way to see it.
+    # A nonzero rate here IS the strobe, and `worst` says how many lines
+    # of blit have to come off to stop it.
+    late, worst, tot = (rd32(0x28000 + i * 4) for i in (26, 27, 28))
+    if tot:
+        print(f"restore past vblank={late}/{tot} "
+              f"({100.0 * late / tot:.1f}% of blit windows) "
+              f"worst={worst} lines (vblank=38) -> "
+              f"{'STROBE CONFIRMED' if late else 'not the strobe'}")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
     # failed to answer, the master spun forever with FM=1 and took the
