@@ -50,6 +50,60 @@ endif
 ifdef TAILBURN
 MDCCFLAGS += -DTAIL_BURN
 endif
+# `make WINSPLIT=1` = LOOP 9 diagnostic: split the master's slot-5
+# `blit_preempt` term into blit-only ([23]), post-blit waits ([24]) and
+# rows blitted ([25]). NEVER SHIP. Decoded by tools/win_probe.lua and by
+# the savestate readers in tools/wait_split.py.
+# `make ROWSTALE=1` = LOOP 9: how many master rows are byte-identical to
+# the same row one cycle ago ([32] identical / [33] checked). Decides
+# whether a dirty-row blit is worth building. NEVER SHIP — it hashes
+# every row on top of blitting it.
+ifdef ROWSTALE
+SHCCFLAGS += -DROWSTALE_PROBE
+endif
+# `make SPANPROBE=1` = LOOP 9: pickup-V histogram ([34..41]) + blit-span
+# histogram ([42..49]) + late restores split by pickup half ([50]/[51]).
+# The mean span already fits vblank; this asks what the TAIL looks like
+# and whether a late pickup is what makes it. NEVER SHIP.
+ifdef SPANPROBE
+SHCCFLAGS += -DSPAN_PROBE
+endif
+# (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
+# blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
+# MAME models no FB write cost — neither is a build anyone should be
+# able to ship by accident. LOOP.md negatives 20 and 21.)
+# `make FMTEST=1` = LOOP 9: does an SH-2 write to the framebuffer land
+# while FM=0 (outside the window)? That assumption rules out BOTH the
+# shadow bank and composing straight into the FB, and was never tested.
+# Writes to dead FB space (0x11A00-0x12000), carries a positive control.
+# NEVER SHIP.
+ifdef FMTEST
+SHCCFLAGS += -DFM_TEST
+endif
+# `make WAITSPLIT=1` = LOOP 9: inside the pickup->restore span, split the
+# master's blit from its SYNC[2] wait on the slave, PER WINDOW. k=1 owns
+# 100% of the past-vblank restores and its excess over k=0/k=2 doubled
+# under load (3.6 -> 7.9 lines), which 4 extra rows cannot explain.
+# NEVER SHIP.
+ifdef WAITSPLIT
+SHCCFLAGS += -DWAIT_SPLIT_PROBE
+endif
+# `make PICKUPSRC=1` = LOOP 9: does the slave answer the preempt mailbox
+# from inside its concurrent compose (a DATA DEPENDENCY — it is composing
+# the very rows it is being asked to blit) or from the idle loop (a
+# polling delay)? The two want opposite fixes and 7f died on the wrong
+# one. NEVER SHIP.
+ifdef PICKUPSRC
+SHCCFLAGS += -DPICKUP_SRC_PROBE
+endif
+# (PIPE2 is now the DEFAULT — it won Mike's play pass and is folded in.
+# See slave_concurrent_k: compose a band two windows before shipping it.)
+# (BLITBAL retired in LOOP 9 — the even thirds LOST Mike's play pass on
+# the seams they cost. Retired rather than left here to mislead, the same
+# call BLITBURN got. LOOP.md negative 23.)
+ifdef WINSPLIT
+SHCCFLAGS += -DWIN_SPLIT_PROBE
+endif
 # (SPINPROBE retired in LOOP 8 with the COMM stream it capped. It did its
 # job: N=0 moved the reject band 57.1 -> 39.4% on its own, which is what
 # identified the ack-spin as the elastic sink and set this whole arc off.)
@@ -122,7 +176,7 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# BUILD STAMP at file offset 0x3C0 (unused header pad): git hash +
 	@# epoch + PRESSURE flag. Every savestate self-identifies its build
 	@# (tools/build_id.py) — no more provenance arguments.
-	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,$(if $(TAILPROBE),TAILPROBE,normal)))
+	@python3 tools/build_id.py stamp $@ $(if $(PRESSURE),PRESSURE,$(if $(SPROBE),SPROBE,$(if $(TAILPROBE),TAILPROBE,$(if $(WINSPLIT),WINSPLIT,normal))))
 	@python3 tools/build_id.py show $@
 
 $(TARGET).elf: $(SHOBJS) | $(ROMDIR)

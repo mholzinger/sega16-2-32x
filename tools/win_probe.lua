@@ -45,6 +45,23 @@ emu.register_frame_done(function()
     line = line .. string.format(
         ' dreq_inc=%d skips=%d cramwr/cyc=%.1f grpskip/cyc=%.1f',
         d(17), d(7), d(19) / n, d(20) / n)
+    -- LOOP 9 (`make WINSPLIT=1` only): slot 5 split into the master's
+    -- blit_half alone vs the post-blit waits it has always been bundled
+    -- with. us/row is the number a DMAC channel-1 rewrite has to beat;
+    -- blit_wait is the part it CANNOT touch. Zero on a normal build.
+    if d(25) > 0 then
+        line = line .. string.format(
+            ' || blit_only=%.3fms blit_wait=%.3fms rows/cyc=%.1f us/row=%.2f',
+            d(23) / n * ms, d(24) / n * ms, d(25) / n,
+            d(23) / d(25) * ms * 1000)
+    end
+    -- LOOP 9 (`make ROWSTALE=1` only): master rows byte-identical to the
+    -- same row one cycle ago. An FB write costs ~5x an SDRAM read on
+    -- ares, so a dirty-row blit pays above roughly 25% here.
+    if d(33) > 0 then
+        line = line .. string.format(' || rowsame=%d/%d (%.1f%%)',
+            d(32), d(33), 100.0 * d(32) / d(33))
+    end
     -- LOOP 7c: where the FBCTL restore lands. MAME should read 0% here
     -- (its blit fits inside vblank and it latches immediately anyway);
     -- a nonzero rate on ares IS the black-frame strobe.

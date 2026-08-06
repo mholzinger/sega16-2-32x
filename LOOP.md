@@ -203,6 +203,94 @@ retired.
     now 18% of the worst handler and the 68K's wait on the SH-2 WINDOW is
     82%. Every future "the 68K is late" hypothesis should start there.
 
+20. **MAME MODELS NO FRAMEBUFFER WRITE COST AT ALL, AND UNDERSTATES THE
+    WHOLE WINDOW BY 3.8x.** `make BLITUNC=1` points every FB store at the
+    uncached alias — the slow path by construction — and MAME reads it
+    BYTE-IDENTICAL to the cached path (9.43 us/row both). ares charges
+    47.34 cached / 47.46 uncached: also identical to each other, but 5x
+    MAME. Per-term, ares/MAME: blit 5.05x, copy_pages 8.92x, apply_cram
+    2.02x, unattributed rest 1.71x, TOTALwin 3.80x. Every term is
+    understated by a DIFFERENT factor, so MAME cannot even rank them.
+    Corollary: `blit_half`'s cached-alias comment is right about what
+    shipped ports do and wrong about why — the 4-deep write buffer buys
+    nothing measurable. 80% of the blit is a bus-stall floor (13.6 SH-2
+    cycles per longword, of which 2.7 is instruction issue = 6.76 MB/s).
+
+21. **DMAC CHANNEL 1 FOR THE BLIT: BUILT, CORRECT, AND 1.77x SLOWER.**
+    LOOP 9's ranked item 1, killed by measurement. Cycle-steal, longword,
+    auto-request, per-row (SAR/DAR/TCR/CHCR + a bounded TE poll).
+    Statics came out PIXEL-IDENTICAL to the CPU blit, so this is a real
+    comparison and not a broken one.
+
+        us/row   blit_only   restore past vblank
+        47.34    5.037 ms    0.4-2.2%    CPU stores
+        83.95    9.126 ms    14.1%       DMAC ch1   (worst 238 lines)
+
+    534 of 3696 rows (14%) never raised TE and were dropped on the guard;
+    that is the unplayability, not a hang. MAME called the same change 18%
+    FASTER (0.824 vs 1.005 ms) because the only thing it models is the
+    instruction stream the DMA removes — see negative 20. Probable
+    mechanism, UNCONFIRMED: both SH-2s arm their own channel 1 against one
+    FB port while the VDP is also fetching from it. Serializing them would
+    double the span, so no variant of this wins. Two implementation traps
+    worth keeping: CHCR's TS bits are 00=byte / 10=longword and getting
+    them backwards moves 80 bytes per row while running perfectly cleanly
+    (cross-check against CHCR0=0x44E1, known good); and DMAOR is PER-CPU,
+    so the slave needs its own DME — `dreq_rearm` sets it on the master
+    only, and only at k1 pre-ack, after the first blit has already run.
+
+22. **DIRTY-ROW BLIT: THE SKIP RATE IS INVERTED AGAINST NEED.** An FB
+    write costs ~5x an SDRAM read, so comparing every row pays if >25% can
+    be skipped. Rows byte-identical to the same row one cycle ago:
+    94-99% on static screens, and **13-17% during horizontal scroll** —
+    the exact scenes that overrun vblank. Cumulative 55.4% looks like a
+    win and is a trap. A full-screen scroll changes every row by
+    definition. (`make ROWSTALE=1`.)
+
+23. **EVENING THE BLIT THIRDS: REVERTED ON THE PLAY PASS. This is 7f
+    again.** k=1 blits 40 master rows to k=0/k=2's 36 (bands 72/72/80,
+    tile-aligned, 224 does not divide by 3) and took **100% of the
+    restores landing past vblank** at mean span 31.2 lines against their
+    27.6. Both CPUs shed 2 rows to k=2 — 40/36/36 -> 38/38/36 — which is
+    worth 1.8 lines, not 3.6, because R2's tail can only defer to k=2
+    (k=0 composes R2) so the rows land on another window rather than
+    vanishing. Statics stayed pixel-identical, motion improved slightly
+    (TOTAL 26.38 -> 26.17), every mechanical gate passed.
+    **Mike's verdict: worse. "Slight flickering, banding, and screen
+    tearing" against BASE's "more color accuracy, less frame drop."**
+    The banding IS the predicted cost, confirmed by eye: rows 182-183
+    and 222-223 ship one window behind their neighbours, two more seams
+    of the kind 7d accepted at y=72 and y=144. 1.8 lines of margin does
+    not buy two permanent tear lines.
+    **AND THE METRIC NEVER ADJUDICATED IT.** The two A/B savestates read
+    0.2% vs 10.1% restore-past-vblank, which looks like a rout and is
+    noise: 288 cycles at 0.5% V-gate rejects against 697 at 9.3% — a
+    light scene against a heavy one, inside the documented ~14x content
+    variance (negative 16). An A/B is only an A/B if the content matches.
+    Retired from the Makefile rather than left behind a flag, the same
+    call BLITBURN got.
+
+24. **"THE SH-2 MAY ONLY WRITE THE FB WITH FM=1" IS NOT ABSOLUTE — AND
+    THAT IS WORSE THAN IF IT WERE.** The assumption rules out the shadow
+    bank AND composing straight into the FB (which would delete the blit
+    rather than shrink it — the only 2x-class lever anyone had left), and
+    it had never been tested. `make FMTEST=1` writes a window-numbered
+    pattern to dead FB space (0x11A00-0x12000, past the image, below the
+    game's tile staging) post-ack with FM=0, reads it back at the next
+    pickup with FM=1 and BEFORE the flip — after the flip the CPU-side
+    bank is the other one and the test would report a false negative for
+    reasons unrelated to FM. ares, with a positive control at 37400/37400:
+
+        FM=0 writes that landed    85.8%
+        FM=0 reads that were right 41.5%
+
+    So writes mostly work and are unreliable, which is unusable: 14% of
+    composed pixels never arriving is permanent speckle traded for a
+    strobe. There is no partial-credit version — you cannot compose into
+    memory that drops one write in seven. MAME reports 100%/100%; it does
+    not model FM enforcement, the fourth thing it got wrong about the
+    framebuffer in one session (see negative 20).
+
 **THE PRESSURE ARTIFACT — a MAME-stress artifact with a real lever behind
 it.** `make PRESSURE=1` does not hold shape: demo2 renders PURPLE GRASS
 and a white logo (baseline PRESSURE renders both correctly), mean 28.55 ->

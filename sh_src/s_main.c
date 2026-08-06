@@ -16,6 +16,11 @@ extern void slave_concurrent_k(uint16_t cmd);
  * serviced the MD's COMM stream; that stream is gone (LOOP 8), so the
  * 0x2000-family render command on COMM0 is now COMM's only traffic and
  * the master consumes it. */
+#ifdef PICKUP_SRC_PROBE
+#define PSRC ((volatile uint32_t *)0x26028F50)
+volatile uint8_t slave_in_compose;
+#endif
+
 __attribute__((section(".ramtext"))) void slave_service_stream(void)
 {
     /* (iter4) PREEMPT-BLIT MAILBOX: the master hands the per-window blit
@@ -26,6 +31,13 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
      * Clear SYNC[4] BEFORE echoing so a re-entry never double-blits. */
     uint16_t bc = SYNC[4];
     if (bc) {
+#ifdef PICKUP_SRC_PROBE
+        /* Which side of the dependency are we on? An in-compose pickup
+         * means the master is waiting for rows this CPU has not finished
+         * composing; an idle-loop pickup means the compose was already
+         * done and the mailbox was answered immediately. */
+        PSRC[(slave_in_compose ? 0 : 3) + ((bc >> 4) & 3)]++;
+#endif
         slave_window_k(bc);          /* blit slave half; SYNC[2] set inside */
         SYNC[4] = 0;
         SYNC[5] = bc;                /* echo: blit path complete */

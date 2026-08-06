@@ -129,6 +129,60 @@ address ranges AND a per-unit region mask, which both finds the missing
 writers and VALIDATES every hand-derived extent: the shared copy helper
 observed exactly the union of its four callers' static masks.
 
+## Your emulator may not model the framebuffer at all — KIT-CORE
+
+Every 32X port's hot loop is an SDRAM->framebuffer blit, so the cost of
+an FB write is the single most load-bearing number in the whole project.
+MAME does not model it. Measured on Altered Beast, one session, four
+independent proofs:
+
+    cached vs uncached FB alias    MAME: byte-identical    ares: also equal
+    us/row, same instruction stream MAME: 9.43            ares: 47.34  (5.0x)
+    DMAC ch1 blit vs CPU stores     MAME: 18% FASTER      ares: 77% SLOWER
+    SH-2 FB write with FM=0         MAME: 100% land       ares: 85.8%
+
+Per-term, ares/MAME on the same build: blit 5.05x, copy_pages 8.92x,
+apply_cram 2.02x, TOTALwin 3.80x. **Every term is understated by a
+DIFFERENT factor, so the fast emulator cannot even RANK them** — which
+is worse than being uniformly wrong, because a ranking is exactly what
+you use it for.
+
+THE KIT RULE: before optimising anything that touches the framebuffer,
+run the cached-vs-uncached null test (same instruction stream, swap
+0x04000000 for 0x24000000). If your fast emulator reads them identical,
+it is not modelling FB cost, and every window measurement it gives you
+is fiction. Iterate on it for CORRECTNESS (parity of statics) and take
+every timing verdict from the accurate target. Budget for the round
+trip; it is not optional.
+
+Corollary for probes: put counters in a fixed SDRAM block the savestate
+reader can find, not just in emulator-scripting hooks — the accurate
+target is usually the one you cannot script. See `tools/state_health.py`,
+`span_hist.py`, `wait_split.py`.
+
+## Compose-to-ship pipelines: the gap must fit the BIGGEST band — KIT-CORE
+
+Any port that composes into a staging buffer and blits to the FB in
+slices runs a pipeline: band composed at window k, shipped at window
+k+n. Two rules this port paid for:
+
+1. **State the invariant, then MEASURE it.** This code asserted for nine
+   iterations that the blit set and the outstanding compose were
+   "DISJOINT by pipeline construction". They were the same band, in all
+   three windows, the whole time. A comment is not a measurement.
+2. **Size the gap for the biggest band, not the average.** 224 rows is
+   28 tile rows; 28 does not divide by three, so bands are 72/72/80. The
+   72s finish inside one window gap and the 80 does not — so ONE window
+   in three pays a wait that scales with scene load, and that window is
+   the whole strobe. Widening the gap to two windows (compose k -> ship
+   k+2) costs one window of latency applied UNIFORMLY, which leaves the
+   band-to-band SPREAD unchanged — and the spread is what seams are made
+   of, so it adds no new seam.
+
+Do not fix a compose overrun with more mailbox-poll points. Polling more
+often cannot shorten work that has not been done; it costs more compose
+time than the bounded latency saves (LOOP.md iteration 7f, reverted).
+
 ## MD-hardware landmines for arcade 68K code (kit-critical)
 
 - **TAS never latches on MD/32X**: the MD bus arbiter drops the write

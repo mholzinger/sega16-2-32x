@@ -1413,10 +1413,93 @@ RAMCODE static void copy_pages(int p0, int p1)
     }
 }
 
+/* LOOP 9 ROWSTALE_PROBE — is a dirty-row blit worth building?
+ * MEASURED ON ARES: the blit costs 13.6 SH-2 cycles per longword, of
+ * which only 2.7 is instruction issue (that is the whole MAME figure).
+ * Cached and uncached FB writes read 47.34 vs 47.46 us/row — the write
+ * buffer buys nothing, so 80% of the blit is a bus-stall floor that no
+ * instruction-side rewrite (DMAC included) can move. The only lever
+ * left is writing FEWER BYTES, and an SDRAM read is ~5x cheaper than an
+ * FB write, so comparing every row pays for itself if more than ~25%
+ * of rows can be skipped.
+ * This counts, per master row, whether the composed content is
+ * IDENTICAL to the same row one k1 cycle ago. It changes no behaviour
+ * — it only tells us whether the skip rate clears that 25% bar.
+ * [32] rows identical, [33] rows checked. 32-bit hash so a collision
+ * cannot fake an "unchanged" row (which would bias the answer toward
+ * yes, the direction that costs a wasted arc). Master rows only —
+ * 36..71, 108..143, 184..223 fold to 0..111, 448B in the 28D00 hole. */
+#define ROWHASH ((uint32_t *)0x06028D00)          /* 112 entries, 448B */
+/* LOOP 9 FM_TEST results. NOT in DIAG: that block is 0x28000..0x280FF,
+ * 64 slots, and slot 61 is the last one free. This lives in the
+ * 28D00-28FFF hole above ROWHASH, uncached so lua/python read it the
+ * same way. [0] FM=0 writes that landed, [1] attempts, [2] the FM=1
+ * positive control, [3] FM=0 reads that returned the right value. */
+#define FMT ((volatile uint32_t *)0x26028F00)
+/* LOOP 9 WAIT_SPLIT_PROBE. k=0 and k=2 hold at 27.3-27.6 lines of span
+ * across a light session and a heavy one; k=1 went 31.2 -> 35.2 and owns
+ * 100% of the past-vblank restores in both. Four extra rows is a FIXED
+ * ~3 lines, so a penalty that doubles under load is not the row count.
+ * Inside the pickup->restore span, k=1 differs from the others in only
+ * two ways: those 4 rows, and the master's wait on SYNC[2] for the slave
+ * to pick up the preempt mailbox — which the slave services BETWEEN
+ * COMPOSE STRIPS, making it load-dependent by construction.
+ * [0..2] master blit ticks by k, [3..5] SYNC[2] wait ticks by k,
+ * [6..8] windows by k. 36 bytes at 28F20, inside the 28D00-28FFF hole. */
+#define WSPL ((volatile uint32_t *)0x26028F20)
+/* LOOP 9 PICKUP_SRC_PROBE. WHERE does the slave answer SYNC[4] from?
+ * m_main.c:1677 maps the compose launched at window k to band R((k+2)%3),
+ * so the compose running during window k=1 is R2 — rows 144-184 on the
+ * slave — and slave_window_k at k=1 blits rows 144-184. THE SAME ROWS.
+ * That makes the k=1 wait a DATA DEPENDENCY (finish composing R2 before
+ * you may blit it), not a mailbox-polling delay, and the two want
+ * opposite fixes: more service points cannot help a dependency, which
+ * is exactly how 7f failed at "bound the pickup latency".
+ * [0..2] pickups from INSIDE the concurrent compose, by k;
+ * [3..5] pickups from the s_main IDLE loop (compose already done), by k.
+ * Idle-loop pickups at k=0/k=2 and in-compose pickups at k=1 confirm it. */
+#define PSRC ((volatile uint32_t *)0x26028F50)
+extern volatile uint8_t slave_in_compose;
+/* blit_half runs on BOTH CPUs (the slave owns 0..35, 72..107, 144..183),
+ * so the probe must fold master rows only — a slave row would index the
+ * table out of range and both CPUs would race the same DIAG words. */
+#ifdef ROWSTALE_PROBE
+__attribute__((always_inline))
+static inline int rowslot(int y)
+{
+    if (y >= 36 && y < 72)   return y - 36;       /* 36..71   -> 0..35  */
+    if (y >= 108 && y < 144) return y - 108 + 36; /* 108..143 -> 36..71 */
+    if (y >= 184 && y < 224) return y - 184 + 72; /* 184..223 -> 72..111 */
+    return -1;                                    /* slave row: skip */
+}
+#endif
+
+/* DMAC CHANNEL 1 FOR THIS BLIT IS RETIRED, NOT UNTRIED: built, correct
+ * (statics pixel-identical), and 1.77x SLOWER on ares — 47.34 -> 83.95
+ * us/row with 14% of rows never raising TE. Retired from the tree rather
+ * than left behind a flag that would hand someone a 1.77x-slower rom;
+ * LOOP.md negative 21 carries the numbers and the two traps (CHCR TS
+ * bits, per-CPU DMAOR) so it does not have to be rebuilt to be believed.
+ * Likewise BLITUNC: cached and uncached FB writes measure 47.34 vs 47.46
+ * on ares, so the write-buffer premise below is false — but the CONCLUSION
+ * (blit with CPU stores) is right. */
 RAMCODE static void blit_half(int ylo, int yhi)
 {
     for (int y = ylo; y < yhi; y++) {
         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+#ifdef ROWSTALE_PROBE
+        {
+            int sl = rowslot(y);
+            if (sl >= 0) {
+                uint32_t h = 0;
+                for (int i = 0; i < 80; i++)
+                    h = (h << 5) - h + src[i];    /* h*31 + v, no libgcc */
+                DIAG[33]++;
+                if (ROWHASH[sl] == h) DIAG[32]++;
+                ROWHASH[sl] = h;
+            }
+        }
+#endif
         /* CACHED-AREA FB WRITES (0x04000000 alias): every shipped Sega
          * 32X arcade port (Space Harrier/After Burner/T-MEK literal
          * pools: 111-125 cached FB refs vs a handful uncached) blits
@@ -1528,9 +1611,28 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     int k = (cmd >> 4) & 3;
     int par = (cmd >> 8) & 1;
     uint16_t bank1 = cmd & 7;
-    int rg = (k + 2) % 3;                        /* W1->R0, W2->R1, W0->R2 */
+    /* LOOP 9 — COMPOSE_LEAD2. The comment at slave_window_k claims the
+     * blit set and the outstanding compose are "DISJOINT by pipeline
+     * construction". MEASURED FALSE, and it is the strobe: window k
+     * ships R((k+1)%3), and the compose launched at k-1 covers
+     * R((k-1+2)%3) — the SAME BAND, in all three windows. k=0 and k=2
+     * only get away with it because their 72-row bands finish inside one
+     * window gap; R2 is 80 rows and does not, so 32.2% of k=1 windows
+     * pick up mid-compose and the master sits on SYNC[2] (6.39 lines
+     * against 0.21 for the other two — LOOP.md negative 25).
+     * rg = k instead: the outstanding compose is then R(k-1) against a
+     * ship of R(k+1), disjoint in every window, and each band gets TWO
+     * window-gaps to compose. No second compose slot is needed — the
+     * post-ack drain still bounds it after one gap; only the SHIP moves
+     * a window later. Cost: one window (~1 frame) of extra latency,
+     * applied UNIFORMLY, so the spread between bands — which is what the
+     * seams are made of — is unchanged. */
+    int rg = k;                                  /* W0->R0, W1->R1, W2->R2 */
     int lo = rg * 72;
     int hi = (rg == 2) ? 184 : lo + 36;          /* slave rows of R(rg) */
+#ifdef PICKUP_SRC_PROBE
+    slave_in_compose = 1;
+#endif
     cache_purge();
     for (int y = lo; y < hi; y += 12) {
         int ye = (y + 12 > hi) ? hi : y + 12;
@@ -1573,6 +1675,9 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     slave_service_stream();
     compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
                  (rg == 0) ? 4 : (rg == 1) ? 13 : 23, par);
+#ifdef PICKUP_SRC_PROBE
+    slave_in_compose = 0;
+#endif
 }
 
 RAMCODE static void slave_cmd(uint16_t cmd)
@@ -1674,6 +1779,29 @@ RAMCODE void m_main(void)
     DIAG[20] = 0;                       /* apply_cram groups skipped */
     DIAG[21] = 0;                       /* preempt-blit pickup timeouts */
     DIAG[22] = 0;                       /* preempt-blit echo timeouts */
+#ifdef WIN_SPLIT_PROBE
+    DIAG[23] = DIAG[24] = DIAG[25] = 0; /* LOOP 9 blit / wait / rows split */
+#endif
+#ifdef FM_TEST
+    FMT[0] = FMT[1] = FMT[2] = FMT[3] = 0;
+#endif
+#ifdef WAIT_SPLIT_PROBE
+    for (int i = 0; i < 9; i++)
+        WSPL[i] = 0;
+#endif
+#ifdef PICKUP_SRC_PROBE
+    for (int i = 0; i < 6; i++)
+        PSRC[i] = 0;
+#endif
+#ifdef SPAN_PROBE
+    for (int i = 34; i <= 60; i++)
+        DIAG[i] = 0;                    /* LOOP 9 pickup-V + span histograms */
+#endif
+#ifdef ROWSTALE_PROBE
+    DIAG[32] = DIAG[33] = 0;            /* LOOP 9 rows identical / checked */
+    for (int i = 0; i < 112; i++)
+        ROWHASH[i] = 0xFFFFFFFFu;       /* 0 is a plausible row hash */
+#endif
     for (int i = 0; i < 192; i++)
         PAL_SETGEN[i] = 0;              /* before the slave is released */
     for (int i = 0; i < 32; i++)
@@ -1891,6 +2019,32 @@ RAMCODE void m_main(void)
             t_vint = tw;
             shadow_stole = 0;
             win_no++;
+#ifdef FM_TEST
+            /* Read back HERE — at pickup, FM=1, and crucially BEFORE the
+             * flip. Outside the window the CPU-side bank is Y; the flip
+             * makes it X and the restore puts it back. Reading after the
+             * flip would read the OTHER bank and report a false negative
+             * for reasons that have nothing to do with FM.
+             * The post-ack write used the pre-increment win_no. */
+            {
+                volatile uint32_t *sa = (volatile uint32_t *)0x24011C00;
+                uint32_t want = 0xA5A50000u | (uint16_t)(win_no - 1);
+                for (int i = 0; i < 8; i++) {
+                    FMT[1]++;
+                    if (sa[i] == want + i) FMT[0]++;
+                }
+                /* POSITIVE CONTROL. Same scratch, same instruction shapes,
+                 * but written and read entirely inside the window. If this
+                 * does not read 8/8 the harness is broken and a zero above
+                 * means nothing. */
+                volatile uint32_t *sb = (volatile uint32_t *)0x24011D00;
+                uint32_t pat = 0x5A5A0000u | (uint16_t)win_no;
+                for (int i = 0; i < 8; i++)
+                    sb[i] = pat + i;
+                for (int i = 0; i < 8; i++)
+                    if (sb[i] == pat + i) FMT[2]++;
+            }
+#endif
             /* LOOP 7 NEGATIVE: anchoring t_vint to the MD's V heartbeat
              * (back-dating tw by the lines elapsed since 0xDF, ~46 FRT
              * ticks/line) instead of the pickup instant changed NOTHING —
@@ -1914,13 +2068,38 @@ RAMCODE void m_main(void)
              * proved untrustworthy (the field bursts of one black frame
              * per cycle — flips passing a stale/false vblank check). */
             int skip;
+#ifdef SPAN_PROBE
+            /* LOOP 9 — WHERE PICKUP LANDS, and how the blit span is
+             * DISTRIBUTED. The existing span counter starts at t_vint
+             * (window pickup), so a LATE PICKUP is invisible to it and
+             * yet eats the same vblank: the gate accepts anywhere in
+             * V=DF..E4, a 6-line spread, and under load the master is
+             * mid-compose-strip when the window arrives. If pickup
+             * drifts late as scenes get busier, that is "starts fast,
+             * then devolves" and no counter we had could see it.
+             * [34] V<DF  [35..40] V=DF..E4  [41] V>E4 / no heartbeat.
+             * Also splits late restores by pickup half ([50] late
+             * pickup E3/E4, [51] early pickup DF..E2) — that is the
+             * correlation the histograms exist to test. */
+            int pick_late = 0;
+#endif
             {
                 uint16_t md_v = MARS_SYS_COMM12;
                 if ((md_v & 0xFF00) == 0xD000) {
                     unsigned v = md_v & 0xFF;
                     skip = (v < 0xDF || v > 0xE4);
-                } else
+#ifdef SPAN_PROBE
+                    if (v < 0xDF)      DIAG[34]++;
+                    else if (v > 0xE4) DIAG[41]++;
+                    else               DIAG[35 + (v - 0xDF)]++;
+                    pick_late = (v >= 0xE3);
+#endif
+                } else {
                     skip = !(MARS_VDP_FBCTL & 0x8000);
+#ifdef SPAN_PROBE
+                    DIAG[41]++;                  /* no heartbeat */
+#endif
+                }
                 /* (LOOP 7a's DIAG[23..25] skip-cause split is RETIRED: it
                  * answered its question — every skip is on the LATE side,
                  * never wrapped, never a missing heartbeat — and .ramtext
@@ -1966,14 +2145,34 @@ RAMCODE void m_main(void)
                 SYNC[4] = scmd;
                 cache_purge();               /* slice rows may hold the OTHER
                                               * CPU's composes from last cycle */
+#ifdef WAIT_SPLIT_PROBE
+                uint16_t tws = frt();
+#endif
+                /* LOOP 9 WIN_SPLIT_PROBE: slot 5 (`blit_preempt`) has always
+                 * bundled the master's blit_half WITH the post-blit waits
+                 * (SYNC[2] pickup, the FBCTL restore + its latch spin, the
+                 * SYNC[5] echo). Mission 1 needs the blit ALONE — a DMAC
+                 * channel-1 rewrite can only move that term, and if the
+                 * waits dominate, the DMA cannot win no matter how fast it
+                 * is. [23] blit ticks, [24] post-blit wait ticks, [25] rows
+                 * blitted (per-row cost = [23]/[25]). */
+#ifdef WIN_SPLIT_PROBE
+                uint16_t tb = frt();
+#endif
                 /* LOOP 7d thirds — master takes the upper half of each
-                 * band, the slave the lower (see slave_window_k). */
+                 * band, the slave the lower (see slave_window_k).
+                 * DO NOT EVEN THESE THIRDS — LOOP.md negative 23. */
                 if (k == 2)
                     blit_half(36, 72);
                 else if (k == 0)
                     blit_half(108, 144);
                 else
                     blit_half(184, 224);
+#ifdef WIN_SPLIT_PROBE
+                diag_add(23, tb);
+                DIAG[25] += (k == 1) ? 40 : 36;
+                tb = frt();
+#endif
                 /* LOOP 6d: BOUNDED. These two were the only unguarded
                  * spins in this function — every neighbouring wait
                  * carries guard=2000000. If the slave ever fails to
@@ -1983,9 +2182,17 @@ RAMCODE void m_main(void)
                  * the already-supported "slave half missing this frame"
                  * state and count it; DIAG[21]/[22] are zero on a healthy
                  * run, so a nonzero value localises the hang exactly. */
+#ifdef WAIT_SPLIT_PROBE
+                WSPL[k] += (uint32_t)(uint16_t)(frt() - tws);   /* blit only */
+                tws = frt();
+#endif
                 guard = 2000000;
                 while (SYNC[2] < 1 && --guard) ;   /* slave picked up */
                 if (!guard) DIAG[21]++;
+#ifdef WAIT_SPLIT_PROBE
+                WSPL[3 + k] += (uint32_t)(uint16_t)(frt() - tws);  /* the wait */
+                WSPL[6 + k]++;
+#endif
                 /* LOOP 7c — WHERE THE RESTORE LANDS. This flip/restore pair
                  * is a BLANKING INTERVAL over bank Y, which nothing ever
                  * composes into: the blit writes the CPU-side bank and the
@@ -2018,6 +2225,36 @@ RAMCODE void m_main(void)
                         if (el > DIAG[27])
                             DIAG[27] = el;
                     }
+#ifdef SPAN_PROBE
+                    /* SPAN DISTRIBUTION, not just the max. The mean span
+                     * is 26.7 lines against 38 available, so the mean
+                     * ALREADY FITS — the strobe is the tail, and a max
+                     * alone cannot say whether that tail is a rare 2.3x
+                     * spike or a fat shoulder sitting just past 38.
+                     * Those two want opposite fixes. Thresholds in FRT
+                     * ticks at ~46/line: 20/30/38/45/55/70/100 lines. */
+                    if      (el <=  920) DIAG[42]++;   /* <=20 lines */
+                    else if (el <= 1380) DIAG[43]++;   /*  21-30    */
+                    else if (el <= 1748) DIAG[44]++;   /*  31-38 in vblank */
+                    else if (el <= 2070) DIAG[45]++;   /*  39-45 just over */
+                    else if (el <= 2530) DIAG[46]++;   /*  46-55    */
+                    else if (el <= 3220) DIAG[47]++;   /*  56-70    */
+                    else if (el <= 4600) DIAG[48]++;   /*  71-100   */
+                    else                 DIAG[49]++;   /*  >100     */
+                    if (el > 1748)
+                        DIAG[pick_late ? 50 : 51]++;
+                    /* PER-WINDOW SPLIT. The blit thirds are 36/36/40
+                     * rows, because 224 rows do not divide into three
+                     * tile-aligned bands — so k=1 carries 4 extra rows,
+                     * ~3 lines, against a deficit of ~8. If the
+                     * overruns are all k=1 then a third of the problem
+                     * is the uneven split and costs nothing to fix.
+                     * [52..54] overruns by k, [55..57] windows by k,
+                     * [58..60] summed span ticks by k (-> mean). */
+                    DIAG[55 + k]++;
+                    DIAG[58 + k] += el;
+                    if (el > 1748) DIAG[52 + k]++;
+#endif
                 }
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 /* LOOP 7i — TIME THE LATCH. Two measurements disagree by
@@ -2064,6 +2301,9 @@ RAMCODE void m_main(void)
                 while (SYNC[5] != scmd && --guard) ;  /* slave path done */
                 if (!guard) DIAG[22]++;
                 SYNC[4] = 0;
+#ifdef WIN_SPLIT_PROBE
+                diag_add(24, tb);
+#endif
             }
             diag_add(5, tp);
 
@@ -2348,6 +2588,33 @@ RAMCODE void m_main(void)
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
 
             /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
+#ifdef FM_TEST
+            /* LOOP 9 — IS "THE SH-2 MAY ONLY WRITE THE FB WITH FM=1"
+             * ACTUALLY TRUE? It rules out the shadow bank AND composing
+             * straight into the FB (which would delete the blit outright
+             * — the only 2x-class lever left), and it has never been
+             * tested. The MD really does clear FM after every ack
+             * (md_main.c:177), so the premise is real; the question is
+             * only what a write does while it is clear.
+             * SCRATCH: 0x24011A00..0x24012000 is 1536 bytes of genuine
+             * dead space — past the image (ends 0x11A00) and below the
+             * game's tile staging (starts 0x12000). Nothing reads it, so
+             * a failed test cannot corrupt the picture.
+             * The pattern carries the cycle counter, so a match proves
+             * THIS cycle's write landed rather than a stale one. */
+            {
+                volatile uint32_t *sa = (volatile uint32_t *)0x24011C00;
+                uint32_t pat = 0xA5A50000u | (uint16_t)win_no;
+                for (int i = 0; i < 8; i++)
+                    sa[i] = pat + i;
+                /* Does a READ work while FM=0? Read back scratch B, which
+                 * was written AND verified inside this same window. */
+                volatile uint32_t *sb = (volatile uint32_t *)0x24011D00;
+                uint32_t want = 0x5A5A0000u | (uint16_t)win_no;
+                for (int i = 0; i < 8; i++)
+                    if (sb[i] == want + i) FMT[3]++;
+            }
+#endif
             /* Drain the PREVIOUS window's concurrent compose before
              * relaunching (SYNC[0] carries one command at a time). This
              * WAS pre-ack (the retry-loop saturation); now it is off the
@@ -2366,8 +2633,10 @@ RAMCODE void m_main(void)
             diag_add(8, tw);
 
             {
-                int rg = (k + 2) % 3;        /* window k composes region:
-                                              * W1->R0, W2->R1, W0->R2 */
+                /* COMPOSE_LEAD2: see slave_concurrent_k. Both sides
+                 * must use the same mapping or the CPUs compose
+                 * different bands. */
+                int rg = k;                  /* W0->R0, W1->R1, W2->R2 */
                 cache_purge();               /* pages/maps changed in-window:
                                               * cached lines are stale */
                 /* COMPLETE-OR-DEFER (accuracy mandate): when the queue
