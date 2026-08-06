@@ -282,23 +282,40 @@ window_done: ;
 		uint16_t spin = 2600;
 		uint8_t ok = 1;
 		static uint16_t txt_dma_base;
-		// LOOP 7b PACKET ORDER — SMALLEST AND MOST CRITICAL FIRST:
-		//   0..19    layer regs 0x740-0x753 (20 words,   5 groups)
-		//   20..79   rowscroll  0x7C0-0x7FB (60 words,  15 groups)
-		//   80..591  sprite list           (512 words, 128 groups)
-		//   592      dirty-page bitmap
-		//   593      text chunk base
-		//   594..849 text chunk            (256 words,  64 groups)
-		//   850..851 pad
-		// = 852, a multiple of 4: the DREQ FIFO drains in 4-word bursts, so
-		// a non-aligned count leaves the tail un-drained -> TE never sets.
-		// The ORDER is the fix for "tilemap artifacts everywhere": before
-		// LOOP 7b the regs rode at the END, so a truncated transfer lost
-		// scroll AND pages AND rowscroll AND text — and with COMM no longer
-		// carrying them, nothing else did. Now the 80 words the compose
-		// cannot fake are the first 80 pushed, and the SH-2 applies
-		// whatever fully landed (see the TCR0 read in m_main).
-		*(volatile uint16_t*)0xA15110 = 852;
+		// LOOP 7g — THE PACKET IS SPLIT, BY WINDOW PHASE. push_aborts has
+		// read 0 for three ares passes running while dreq_incomplete sat at
+		// 14-21% of cycles: the 68K pushes every word and the DMA still
+		// fails to drain, so the transfer is simply too big. Splitting is
+		// the fix the kickoff doc named ("if it climbs, SPLIT the packet
+		// rather than grow it") and it is close to free, because 512 of the
+		// 852 words were being THROWN AWAY two pushes in three — the sprite
+		// list is only harvested at window k==1.
+		//
+		// The two layouts share an 82-WORD PREFIX so the SH-2 needs
+		// almost no branching to decode them (and the added code has to
+		// fit: .ramtext counts toward the 0x19000 region guard, which had
+		// 72 bytes of headroom):
+		//   0..19 regs | 20..79 rowscroll | 80 bitmap | 81 text base
+		//   after w0    -> SPRITE, 596: 82..593 list      | 594..595 pad
+		//   after w1/w2 -> TEXT,   340: 82..337 chunk     | 338..339 pad
+		//
+		// Mean payload 852 -> 425 words. Both lengths are multiples of 4
+		// (149 and 85 groups): the FIFO drains in 4-word bursts and a
+		// non-aligned count leaves the tail un-drained -> TE never sets.
+		// Text at word 82 = byte 164 keeps the SH-2's longword copy aligned.
+		//
+		// The regs+rowscroll prefix is IDENTICAL in both, so the ordering
+		// fix from LOOP 7b still holds: the 80 words the compose cannot
+		// fake are the first 80 pushed, whatever the phase, and the SH-2
+		// applies whatever fully landed (see the TCR0 read in m_main).
+		//
+		// NO TAG WORD. The master knows the layout from the phase it last
+		// ran: pushes follow accepted windows 1:1 (window_ok is set only
+		// after the ack), so remembering the previous k is exact and costs
+		// nothing. A tag would also have to survive truncation to be worth
+		// anything, and it would break the longword alignment above.
+		uint16_t kk = wskip;                  // the k just posted+acked
+		*(volatile uint16_t*)0xA15110 = (kk == 0) ? 596 : 340;
 		*ctrl = 4;                            // 68S: session start
 		// Two loops, not one with an index test: a per-group branch here
 		// costs ~1 scanline of tail, and the master's window-pickup slack
@@ -323,30 +340,29 @@ window_done: ;
 				rs += 4;
 			}
 		}
-		if (ok)
-			for (uint16_t g = 0; g < 128; g++) {  // 128 groups of 4 words
-				while (*ctrl < 0 && --spin) ;
-				if (!spin) { ok = 0; break; }
-				fifo[0] = s[0]; fifo[0] = s[1];
-				fifo[0] = s[2]; fifo[0] = s[3];
-				s += 4;
-			}
-		if (ok) {                             // 592 bmp, 593 base, 594+ text
+		if (ok) {                             // 80 bitmap, 81 text base
 			while (*ctrl < 0 && --spin) ;
 			if (spin) {
 				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
 				fifo[0] = *bm;
 				*bm = 0;
 				fifo[0] = txt_dma_base;
-				const uint16_t *tt = (const uint16_t*)0xFF8000 + txt_dma_base;
-				for (uint16_t tg = 0; tg < 64; tg++) {
+				// Body: the sprite list after w0 (so it LANDS for w1,
+				// where the harvest is — the game's vint handler rebuilds
+				// the list after our window in the IRQ chain), the
+				// rotating text chunk otherwise. One loop, one source
+				// pointer, one count: the phases differ only in those.
+				const uint16_t *b = (kk == 0)
+					? s : (const uint16_t*)0xFF8000 + txt_dma_base;
+				uint16_t ng = (kk == 0) ? 128 : 64;
+				for (uint16_t g = 0; g < ng; g++) {
 					while (*ctrl < 0 && --spin) ;
 					if (!spin) { ok = 0; break; }
-					fifo[0] = tt[0]; fifo[0] = tt[1];
-					fifo[0] = tt[2]; fifo[0] = tt[3];
-					tt += 4;
+					fifo[0] = b[0]; fifo[0] = b[1];
+					fifo[0] = b[2]; fifo[0] = b[3];
+					b += 4;
 				}
-				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad 850->852 (4-align)
+				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad to 596 / 340
 			} else
 				ok = 0;
 		}
@@ -360,8 +376,14 @@ window_done: ;
 			// rendered the TITLE near-perfectly (parity 48.3 -> 2.7%
 			// mismatch), but starved the scream scene into group-1
 			// red/white/blue fallback. Revisit after LOOP 7 step 2.
-			txt_dma_base = (uint16_t)(txt_dma_base + 256);
-			if (txt_dma_base >= 2048) txt_dma_base = 0;
+			// Only a TEXT packet consumed a chunk — advancing on the
+			// sprite phase too would skip a third of the text RAM
+			// forever (rotation and push phase are coprime by accident,
+			// not by design: 3 phases, 8 chunks).
+			if (kk != 0) {
+				txt_dma_base = (uint16_t)(txt_dma_base + 256);
+				if (txt_dma_base >= 2048) txt_dma_base = 0;
+			}
 		} else {
 			*ctrl = 0;
 			(*(volatile uint16_t*)0xFFB0E0)++;   // DREQ push aborts

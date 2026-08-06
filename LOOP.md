@@ -83,6 +83,7 @@ Scenes: title, scream, eyehold, demo, demo2. Grow the list as rounds
 | 08-05 | fbb31c4 | 49.3 | 91.7 | 3.4 | 52.1 | 23.4 | 44.0 | (LOOP 7 BASELINE, re-measured. scream's 91.7 is OURS RENDERING A BLACK FRAME — see iter7a)
 | 08-05 | iter7a | 48.3 | 47.2 | 3.1 | 52.9 | 22.0 | **34.7** | (LOOP 7a LANDED: COMM -> DREQ. 4 of 5 scenes improve; scream stops being blank)
 | 08-05 | iter7d | 49.7 | 45.1 | 3.1 | 49.5 | 13.0 | **32.1** | (LOOP 7d: blit in THIRDS — the flip/restore pair overran vblank on 100% of windows)
+| 08-05 | iter7g | 2.4 | 37.6 | 3.4 | 48.7 | 21.8 | **22.8** | (LOOP 7g: DREQ packet SPLIT by phase. title 49.7 -> 2.4)
 
 ### Iteration 7e — THE BAND IS GONE. Falsifier met in full.
 
@@ -182,6 +183,54 @@ points or touching layer composition:
       flag the master sets at the flip.
   (c) Accept the burst and hide it: give the never-composed bank real
       content so a deferred restore shows a stale frame, not black.
+
+### Iteration 7g — the DREQ packet is SPLIT, and 2/3 of it was waste
+
+push_aborts read 0 across three ares passes while dreq_incomplete sat at
+14-21% of cycles. That combination only means one thing: the 68K pushes
+every word and the DMA still fails to drain, so the transfer is too big.
+Splitting is what the kickoff doc prescribed ("if it climbs, SPLIT the
+packet rather than grow it").
+
+THE FREE PART: 512 of the 852 words were the sprite list, and the sprite
+list is harvested at w1 ONLY — so it was being pushed on all three
+phases and consumed on one. Two of every three pushes threw 60% of the
+packet away. Splitting by phase deletes that outright.
+
+    after w0    -> SPRITE packet, 596 words (lands for w1's harvest)
+    after w1/w2 -> TEXT packet,   340 words
+    shared 82-word prefix: 0..19 regs | 20..79 rowscroll | 80 bitmap |
+                           81 text base
+    mean payload 852 -> 425 words
+
+MEASURED (MAME, TAILPROBE means over 3591 vints):
+
+    term        7a      7g
+    total     115.1    92.4
+    dreq       54.4    24.0     <- less than half
+    palscan    45.1    45.1     <- untouched, and now HALF the tail
+    stream      9.3    15.1
+
+Scoreboard 32.06 -> **22.78**, the best in the table, and title lands at
+**2.43%** — effectively pixel-exact. demo2 13.0 -> 21.8 is the bimodal
+anchor again (see negative 10); scream 45.1 -> 37.6, demo 49.5 -> 48.7.
+
+TWO IMPLEMENTATION NOTES worth keeping:
+- NO TAG WORD. The master derives the landed packet's layout from its
+  own phase: a gate-rejected vint leaves md_main's wskip UNADVANCED and
+  retries the same phase, so every window the master processes has
+  k = prev+1 mod 3. `prev_k = k ? k-1 : 2` — no state, no `%` (the SH-2
+  has no divide and the modulo pulled in a helper).
+- THE REGION GUARD IS THE REAL BUDGET NOW. .ramtext counts toward _end
+  and there were SEVENTY-TWO bytes of headroom; the first cut of this
+  change overflowed by 328. That is what forced the shared prefix (less
+  decode branching) and a MISSQ_CAP trim 192 -> 128. Before adding
+  in-window code, check `grep ' _end$' rom/s16.lst` — the guard fails the
+  build late, after the rom would otherwise have been written.
+
+=> THE PALETTE SCAN IS NOW THE WHOLE GAME. 45 of 92 tail lines, and the
+only untouched term left. LOOP 7 step 2 (write-thunks) finally has
+nothing in front of it.
 
 RANKED REMAINING WORK:RANKED REMAINING WORK:
 1. the burst strobe (above) — the last visible artifact.

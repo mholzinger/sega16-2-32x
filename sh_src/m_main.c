@@ -120,8 +120,15 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 
 /* Per-CPU miss queues: appended (write-through) during concurrent compose,
  * drained by the master in the next window. */
-#define MISSQ_CAP 192   /* was 256; miss rates run 10-36/window,
-                         * cap trimmed to fit .bss under the guard */
+#define MISSQ_CAP 128   /* was 256, then 192; miss rates run 10-36/window,
+                         * so this is still ~3.5x the observed peak. Trimmed
+                         * again in LOOP 7g to fit the split-packet apply
+                         * under the 0x19000 region guard — .ramtext counts
+                         * toward _end and there were 72 bytes of headroom.
+                         * Overflow costs dropped tile fills (white
+                         * placeholders), which the adaptive cache_fill drain
+                         * already absorbs; if it ever shows, grow the region
+                         * map rather than putting this back. */
 static uint16_t missq[2][MISSQ_CAP];
 static volatile uint16_t miss_n[2];
 
@@ -1591,16 +1598,25 @@ RAMCODE static void slave_wait(uint16_t cmd)
  * clear TE, program, enable). Called EVERY window: the DMA drains one
  * 770-word transfer then stops (TE), so the FIFO must have a fresh armed
  * drain before each vint's push or the 68K blocks on a full FIFO. */
-RAMCODE static void dreq_rearm(void)
+/* LOOP 7g: the packet is SPLIT BY WINDOW PHASE and this must match the
+ * md_main push exactly. `k` is the phase of the window being acked, and
+ * the MD pushes immediately after that ack:
+ *   k==0 -> SPRITE packet, 596 words (lands for w1, where the harvest is)
+ *   else -> TEXT packet,   340 words
+ * push_aborts read 0 for three ares passes while dreq_incomplete sat at
+ * 14-21% of cycles: the 68K pushed every word and the DMA still failed to
+ * drain, i.e. the transfer was simply too big. Mean payload 852 -> 425,
+ * and most of that is free — the sprite list was pushed on all three
+ * phases and consumed on exactly one. */
+#define DREQ_LEN(k)  ((k) == 0 ? 596u : 340u)
+
+RAMCODE static void dreq_rearm(int k)
 {
     SH2_DMA_CHCR0 = 0x44E0;
     (void)SH2_DMA_CHCR0;
     SH2_DMA_SAR0 = 0x20004012;          /* DREQ FIFO */
     SH2_DMA_DAR0 = 0x26039000;          /* SPR_LAND (uncached) */
-    SH2_DMA_TCR0 = 852;                /* LOOP 7: 512 spr + bmp + base + 256
-                                         * txt + 20 layer regs + 60 rowscroll
-                                         * + 2 pad (4-word aligned; see the
-                                         * md_main push) */
+    SH2_DMA_TCR0 = DREQ_LEN(k);
     SH2_DMA_DRCR0 = 0;
     SH2_DMA_DMAOR = 1;
     SH2_DMA_CHCR0 = 0x44E1;
@@ -2049,9 +2065,25 @@ RAMCODE void m_main(void)
              * SPR_LAND+0 = byte 0, +20 = 40, +594 = 1188; TEXT_U+tb with
              * tb a multiple of 256 = byte 512k; TEXT_U+0x740 = 0xE80,
              * +0x7C0 = 0xF80. Every one is 4-byte aligned. */
+            /* LOOP 7g: what LANDED is the packet pushed after the
+             * PREVIOUS window, so it carries that window's layout, not
+             * this one's. Pushes follow accepted windows 1:1 (md_main sets
+             * window_ok only after the ack), so remembering the last phase
+             * is exact — no tag word needed, and a tag would have to
+             * survive truncation to be worth anything anyway.
+             * No state needed to know it: a gate-rejected vint leaves
+             * md_main's wskip UNADVANCED and retries the same phase, so
+             * every window the master actually processes has k = prev+1
+             * mod 3. (A static here also pushed .bss over the 0x19000
+             * region guard.) Before the first push TE is clear and TCR
+             * still holds the armed length, so landed computes to 0 and
+             * nothing is decoded — the boot case needs no special-casing. */
+            int prev_k = k ? k - 1 : 2;   /* no %: SH-2 has no divide */
+            unsigned plen = DREQ_LEN(prev_k);
             unsigned landed = (SH2_DMA_CHCR0 & 2)
-                            ? 852u : (852u - (SH2_DMA_TCR0 & 0xFFFFFFu));
-            if (landed > 852u) landed = 0;   /* never trust a wild TCR0 */
+                            ? plen : (plen - (SH2_DMA_TCR0 & 0xFFFFFFu));
+            if (landed > plen) landed = 0;   /* never trust a wild TCR0 */
+            int got_spr = (prev_k == 0);
             if (landed >= 80) {
                 {
                     volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + 0x740);
@@ -2075,11 +2107,16 @@ RAMCODE void m_main(void)
                 purge_lines((const void *)(TEXT_C + 0x740), 3);
                 purge_lines((const void *)(TEXT_C + 0x7C0), 8);
             }
-            if (landed >= 850) {
-                unsigned tb = SPR_LAND[593] & 0x7FF;
+            /* Shared prefix: bitmap at 80, text base at 81, in BOTH
+             * layouts. The bitmap is applied every window either way — a
+             * dropped one loses tile writes permanently. */
+            if (landed >= 81)
+                pg_pending |= SPR_LAND[80];
+            if (!got_spr && landed >= 338) {
+                unsigned tb = SPR_LAND[81] & 0x7FF;
                 if (tb + 256 <= 2048 && !(tb & 1)) {
                     volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + tb);
-                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 594);
+                    volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 82);
                     for (int i = 0; i < 128; i += 4) {
                         d[i + 0] = s[i + 0];
                         d[i + 1] = s[i + 1];
@@ -2099,20 +2136,19 @@ RAMCODE void m_main(void)
                  * the DREQ FIFO; DMAC0 lands it at SPR_LAND. TE set =
                  * a complete coherent list; TE clear = keep last
                  * frame's list (stale beats torn). */
-                if (landed >= 593) {         /* whole list + bitmap arrived */
+                if (got_spr && landed >= 594) {   /* whole list arrived */
                     for (int i = 0; i < 512; i += 8) {
-                        SPR_SNAP[i + 0] = SPR_LAND[80 + i + 0];
-                        SPR_SNAP[i + 1] = SPR_LAND[80 + i + 1];
-                        SPR_SNAP[i + 2] = SPR_LAND[80 + i + 2];
-                        SPR_SNAP[i + 3] = SPR_LAND[80 + i + 3];
-                        SPR_SNAP[i + 4] = SPR_LAND[80 + i + 4];
-                        SPR_SNAP[i + 5] = SPR_LAND[80 + i + 5];
-                        SPR_SNAP[i + 6] = SPR_LAND[80 + i + 6];
-                        SPR_SNAP[i + 7] = SPR_LAND[80 + i + 7];
+                        SPR_SNAP[i + 0] = SPR_LAND[82 + i + 0];
+                        SPR_SNAP[i + 1] = SPR_LAND[82 + i + 1];
+                        SPR_SNAP[i + 2] = SPR_LAND[82 + i + 2];
+                        SPR_SNAP[i + 3] = SPR_LAND[82 + i + 3];
+                        SPR_SNAP[i + 4] = SPR_LAND[82 + i + 4];
+                        SPR_SNAP[i + 5] = SPR_LAND[82 + i + 5];
+                        SPR_SNAP[i + 6] = SPR_LAND[82 + i + 6];
+                        SPR_SNAP[i + 7] = SPR_LAND[82 + i + 7];
                     }
-                    pg_pending |= SPR_LAND[592];  /* DREQ-tail bitmap */
                 }
-                if (landed < 852)
+                if (landed < plen)
                     DIAG[17]++;              /* incomplete DREQ frames */
                 /* (re-arm moved to dreq_rearm(), called EVERY window —
                  * see below: the DMA drains one transfer then stops, so a
@@ -2211,7 +2247,7 @@ RAMCODE void m_main(void)
             /* Re-arm the DREQ DMA EVERY vint (pre-ack) so the FIFO always
              * has a draining transfer when the MD pushes after the ack —
              * the fix for the drains-once-then-blocks hang. */
-            dreq_rearm();
+            dreq_rearm(k);
             if (k == 1)
                 DIAG[9]++;
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
