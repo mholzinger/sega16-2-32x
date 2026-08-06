@@ -23,11 +23,17 @@
 > bottleneck to the 68K's wait on the SH-2 window. Next arc starts there
 > (and at the strobe, which is still a load ceiling).
 
-> ACTIVE ARC: **LOOP8.md** — retire the palette scan (LOOP 7 step 2).
-> 45 of the 92 remaining tail lines, run every vint, finding nothing in
-> steady state. 44 write sites enumerated, 27 of them precise single-word
-> stores; mechanism proven by the LOOP 3c tile thunks. MAME-visible
-> falsifier, so it iterates without ares round-trips.
+> ACTIVE ARC: **LOOP9.md** — make it PLAY SMOOTHLY: cut the render
+> WINDOW, then make the blit fit inside vblank. Mike's priority order for
+> the rest of the port is framerate, tearing, sprites, sound; this arc is
+> the first two. The defining number is `worst handler total=246
+> window/ack=202 tail=44` — the 68K's wait on the SH-2 is now 82% of the
+> worst case, and both the framerate and the strobe come down to the same
+> lever: the blit has to get faster (DMAC channel 1 is free).
+>
+> LOOP 8 CLOSED: the palette scan is retired and COMM has no tenants left
+> (tail 92.4 -> 48.2, palscan 45.1 -> 0.1); ares confirmed on a full
+> level-1 playthrough with every counter improved or held.
 >
 > LOOP 7 CLOSED: the band is gone (vints/cycle 6.99 -> 3.02, rejects
 > 57.1% -> 0.7-1.4%), tail 170.6 -> 92.4, parity 43.98 -> 22.09 with
