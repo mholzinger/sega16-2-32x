@@ -74,9 +74,16 @@ the 128 KB-per-frame blit it would let us delete.
 
    **95.8% of cycles the tilemap does not change.** Streaming a fifth of
    a page per cycle to delete a 128 KB-per-frame blit is not a close call.
-   STILL OWED: the same number from ares GAMEPLAY, not attract — Mike's
-   complaint is specifically "the first half of level gameplay", and a
-   scrolling-heavy stretch could differ from the demo scenes.
+   **CONFIRMED ON ares GAMEPLAY** (952 cycles, the scroll-heavy first half
+   of level 1 where Mike reports the worst framerate):
+
+       cycles with ANY dirty page   3.8%
+       pages copied per cycle       0.18
+
+   LOWER than attract, not higher. The reason is obvious in hindsight and
+   worth writing down: **System 16 scrolls with SCROLL REGISTERS, not by
+   rewriting tile RAM.** The scroll-heavy stretch is precisely where the
+   tilemap does NOT churn. GO.
 
    NOTE ON THE FIRST INSTRUMENT, which was WRONG. A MAME
    `install_write_tap` on the MD's 0x840000-0x85FFFF window reported ZERO
@@ -84,9 +91,35 @@ the 128 KB-per-frame blit it would let us delete.
    across frames 600/1200/1800, proving taps stop firing once the game
    runs through the rebased 0x900000 bank window. The zero meant nothing.
    Always run the control before believing a zero.
-2. **Move the tilemap to a streamed path.** Dirty pages go over DREQ or a
-   COMM channel into SDRAM, exactly as the palette does now. Retire
-   `copy_pages` and FB staging for tiles.
+2. **Move the tilemap to a streamed path.** SMALLER THAN IT LOOKS IN ONE
+   WAY AND LARGER IN ANOTHER — read both before starting.
+
+   SMALLER: **the interception already exists.** `patch_game.py` generates
+   `md_src/tile_thunks.h`, 228 words of 68K installed at 0xFF5E00. Every
+   tile-writing instruction in the arcade game was patched to call a thunk
+   that ORs a dirty-page bit into 0xFFB9FE and then performs the write.
+   That is how `pg_pending` is set today. We do not need to build write
+   detection; we need to redirect where the writes LAND.
+
+   LARGER, AND THIS IS THE OPEN DESIGN QUESTION: **the game READS its own
+   tile RAM.** A write-only ring buffer streamed over DREQ is therefore
+   not sufficient on its own — the 68K needs a READABLE tile RAM image,
+   and it can only read MD work RAM (64 KB, already largely spoken for by
+   the arcade game) or the framebuffer. `copy_pages` moves 13 pages at
+   0x800 stride, so the image is tens of KB. THAT is the real problem to
+   solve, and it was not visible when this doc was written.
+
+   Do not start step 2 until this is answered:
+     a. WHICH tile-RAM addresses does the game actually read back, and how
+        many bytes do they span? If reads touch only a small subset, only
+        that subset needs to stay readable and the rest can be write-only
+        and streamed. The thunk generator in `tools/patch_game.py` already
+        classifies the game's accesses — extend it to report READS.
+     b. If the readable subset is small, the split is: readable window in
+        MD RAM + write-only remainder streamed. If it is the whole image,
+        the tilemap cannot leave the framebuffer and THE PIVOT NEEDS A
+        DIFFERENT SHAPE — most likely arbitrating FM better rather than
+        eliminating it, which is what the library survey is looking for.
 3. **Relocate the two 68K FB READ-BACKS** — the collision `tst.w`s at
    `0x6936+` and the round-transition scratch in page 1 at `0x1B760`
    (LOOP.md iteration 1b). These are the last non-tilemap FB users.
