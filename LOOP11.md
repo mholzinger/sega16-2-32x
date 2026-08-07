@@ -139,11 +139,78 @@ for sprites and colour. It is the only shape in the commercial library
 that matches our constraints, and it changes the pass count — which per
 the number above is the only thing that can.
 
-THE COST, and it is real: the MD VDP gives 4 palettes x 16 colours on
-screen. System 16 uses 128 colour sets. Our CRAM allocator already
-squeezes those into 32 groups and already produces the miscoloured tree
-band and the shared-group artifacts. The MD VDP is tighter still, and the
-standing directive is accuracy before speed.
+### jtcores SPEC — VERDICT: GO, BUT THE FG LAYER MUST SPLIT ACROSS CHIPS
+
+Full capability table derived from the Verilog (see the commit that added
+this section). The headline results:
+
+**WHAT MOVES:** the two scroll layers, and only those. Every structural
+feature maps — two planes, 8x8 tiles, per-tile palette select, per-tile
+priority bit, whole-screen H/V scroll. Row scroll is per-8-line on S16
+(`jts16_mmr.v:67-68`, enabled by bit 15 of the H-scroll reg — our port's
+belief CONFIRMED) and the MD does per-LINE, so MD is strictly better.
+Column scroll is per-16px on both — an exact match. **MEASURED: Altered
+Beast never enables row or column scroll in 700 samples**, so round 1
+needs neither. Pattern residency fits: peak 599 scroll + 96 text distinct
+patterns is ~22 KB at 4bpp, plus 16 KB of name tables, inside 64 KB VRAM.
+
+**WHAT CANNOT MOVE:** sprites, categorically, on three independent hard
+stops — hardware zoom (shrink to ~0.5 in 32 steps, `jts16_obj_draw.v:70`,
+which the werewolf transformation rides on), ragged variable-width strips
+up to full-screen size (`jts16_obj_draw.v:107`), and the MD's 20-sprite /
+320-pixel-per-line ceiling. Not a fidelity argument, an expressibility one.
+
+**THE REAL BLOCKER IS PRIORITY, NOT COLOUR.** The 32X composites against
+MD video across exactly ONE boundary: per-pixel transparency plus a single
+global 32X-vs-MD selector. System 16 interleaves them ten deep:
+
+    T1 > S3 > T0 > F1 > S2 > F0 > B1 > S1 > B0 > S0      (jts16_prio.v:84-95)
+
+Sprites in the 32X framebuffer with both planes on the MD means every
+sprite is in front of everything or behind everything. The player would
+stop being occluded by foreground scenery.
+
+**THE ESCAPE, AND IT IS AFFORDABLE — MEASURED:** keep the FG layer's
+priority (cat-1) tiles in the 32X framebuffer, painted OVER the sprites,
+and let the MD draw only FG cat-0 plus the whole BG. In demo gameplay the
+FG carries 307-340 priority tiles of 1189 visible (~26% of the screen);
+the BG carries ~4 on average. **So the residual 32X pass is ~0.26 of a
+screen against our 1.6-pass budget, leaving ~1.3 passes for sprites.**
+That is the whole point of the exercise, and it fits.
+
+**COLOUR IS A GRIND, NOT A WALL — and the usual framing is wrong.** Not
+"128 sets vs 4". MEASURED peak demand is **21 distinct tile colour sets on
+screen at once** (12 FG + 16 BG, union 21) against an MD capacity of 8 —
+because S16 sets are 8 colours and MD palettes are 16, so one MD palette
+holds one FG/text set (pens 0-7, colour 0 transparent) AND one BG set
+(pens 8-15, since **BG colour 0 is OPAQUE** — `jts16_prio.v:87`, a real
+semantic difference). **2.6x, not 32x.** But it is a different 21 every
+scene, so it needs a per-scene 21->8 merge, not a static allocation. Plus
+5bpp -> 3bpp per channel on the moved layers: banding in the sky and cave
+gradients. The 32X framebuffer is 5-5-5, identical to S16, so the loss is
+confined to whatever moves.
+
+**TWO PORT BELIEFS CONFIRMED AGAINST THE RTL** — both load-bearing in
+compose and both previously unverified:
+  - the priority model (BG cat0=1, BG cat1=2, FG cat0=2, FG cat1=4, text
+    cat0=4, text cat1=8; sprite draws iff `1<<pp > level`) is EXACTLY
+    equivalent to `jts16_prio.v:84-95`. Nuance for the comments: a sprite
+    blocked by a priority tile at one layer can still win at a HIGHER
+    slot; the scalar-max formulation reproduces that correctly.
+  - shadow is `shadow & ~pal[15]` — `jts16_colmix.v:88`, line for line.
+    MEASURED: Altered Beast sets bit 15 on 89-119 of 1024 tile entries at
+    any moment, so it is not a dead feature.
+
+**TWO UNRESOLVED CONTRADICTIONS**, flagged rather than guessed:
+  - Is H scroll suppressed while column scroll is active? The hardware
+    notes say yes, jtcores says no (`jts16_scr.v:93`). Unresolved.
+  - Shadow arithmetic: jtcores does x0.75 with NO highlight path
+    (`jts16_colmix.v:80-89`); the notes describe 1/2 with a highlight.
+    We currently match jtcores/MAME. Revisit only if a real PCB disagrees.
+
+VERDICT: **the plan works, but the FG layer splits across both chips
+rather than moving wholesale.** If the split proves too complex, priority
+— not palette — is what forces the retreat.
 
 **HOLD THE FM PIVOT BELOW UNTIL THE CHAOTIX DISASSEMBLY LANDS.** If a
 busy 68000 can drive MD VDP planes while the SH-2s do sprites, that is a
