@@ -74,6 +74,14 @@ endif
 ifdef TILERATE
 SHCCFLAGS += -DTILE_RATE
 endif
+# `make IDLETOKEN=1` = LOOP 11 (a): Chaotix's idle-token + poll-and-skip
+# handshake instead of raise-FM-and-spin. Needs BOTH sides, so it also
+# goes to the 68K shim. Falsifier: MD window/ack span must fall well
+# below its ~200-line worst; watch blit skips do not run away.
+ifdef IDLETOKEN
+SHCCFLAGS += -DIDLE_TOKEN
+MDCCFLAGS += -DIDLE_TOKEN
+endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be

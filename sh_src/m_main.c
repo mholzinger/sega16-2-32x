@@ -1973,6 +1973,25 @@ RAMCODE void m_main(void)
     BM->active = 0;
     DIAG[18] = BUILD_HASH32;             /* savestates self-identify */
 
+#ifdef IDLE_TOKEN
+    /* LOOP 11 — CHAOTIX'S IDLE TOKEN. Chaotix's SH-2 publishes "I am
+     * parked in a loop touching only COMM0" by zeroing it, and its 68000
+     * then takes FM UNILATERALLY — no request, no ack, no round trip. Our
+     * MD instead raises FM, posts a command and SPINS for the ack, and the
+     * preack probe showed ~79 of the ~210-line window/ack span is the
+     * master not having STARTED yet. That is FM held for nothing.
+     * So: publish readiness on COMM4 (SH-2 -> MD, otherwise unused) and let
+     * the MD skip a window it would only have stalled in. Transition-only
+     * writes — the doorbell read is already ~166K MMIO/sec and this must
+     * not add to it. */
+    uint16_t tok_pub = 0;
+#define TOK(v) do { if (tok_pub != (uint16_t)(v)) {                       \
+                        tok_pub = (uint16_t)(v);                          \
+                        MARS_SYS_COMM4 = (uint16_t)(v); } } while (0)
+#define TOK_READY 0x0EAD
+#else
+#define TOK(v)    do { } while (0)
+#endif
     for (;;) {
         uint16_t c0 = MARS_SYS_COMM0;
 
@@ -2005,8 +2024,10 @@ RAMCODE void m_main(void)
                                      * vblank gate — C-rom forensics:
                                      * un-gated maintenance = 94% blit
                                      * skips on ares vs 31% baseline */
+                    TOK(0);                  /* busy: long, uninterruptible */
                     if (build_maps_chunk(owed_par))
                         maps_owed = 0;
+                    TOK(TOK_READY);
                 }
                 continue;
             }
@@ -2086,6 +2107,7 @@ RAMCODE void m_main(void)
                 if (idx >= ns) idx -= ns;
                 int y = lo + idx * 12, ye = (y + 12 > hi) ? hi : y + 12;
                 uint16_t tq = frt();
+                TOK(0);                          /* busy: a compose strip */
                 /* Order exact for pp=2 sprites (see slave_concurrent_k) */
                 switch (b->phase) {
                 case 0:
@@ -2124,6 +2146,7 @@ RAMCODE void m_main(void)
                     bq_h = (bq_h + 1) & 3;
                     continue;
                 }
+                TOK(TOK_READY);
                 if (b->phase >= 4) {         /* single-shot phases */
                     b->phase++;
                     b->cnt = 0;
@@ -2759,6 +2782,7 @@ RAMCODE void m_main(void)
             if (k == 1)
                 DIAG[9]++;
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+            TOK(0);                          /* busy: post-ack compose follows */
 
             /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
 #ifdef FM_TEST

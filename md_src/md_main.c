@@ -152,6 +152,28 @@ void shim_vblank(void) {
 			}
 		}
 		wskip = next;
+#ifdef IDLE_TOKEN
+		// LOOP 11 — POLL AND SKIP (Knuckles' Chaotix, per-frame path):
+		// `tst.w COMM0 / beq take-it / rts`. If the SH-2 is not parked and
+		// ready, DO NOT raise FM and spin — return and try the next vint.
+		// Chaotix's reasoning applies directly: a skipped update costs one
+		// frame of staleness, a blocking wait costs a frame of game logic,
+		// and ~79 of our ~210-line window/ack span is FM held while the
+		// master has not even started.
+		// STARVATION GUARD: the master is legitimately busy for long
+		// stretches (build_maps is ~4ms and uninterruptible), so after
+		// IDLE_SKIP_MAX consecutive skips take the window anyway and eat
+		// the stall. Without this a busy master freezes the display.
+		{
+			static uint16_t idle_skips = 0;
+			if (*mars_comm4 != 0x0EAD && idle_skips < 3) {
+				idle_skips++;
+				(*(volatile uint16_t*)0xFFB0FA)++;   // diag: idle-token skips
+				goto window_done;
+			}
+			idle_skips = 0;
+		}
+#endif
 		while (*mars_comm0) ;                    // drain any pending stream batch
 		// (unpair model: RV is 0 permanently — no toggle here)
 		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM

@@ -90,6 +90,27 @@ Ordered by (value / risk):
   a. **Invert the handshake** to the idle-token + poll-and-skip form. Our
      68K currently spins for the ack; Chaotix's never does. This alone
      targets the 200-scanline window/ack directly.
+     **FIRST ATTEMPT BUILT AND REJECTED — `make IDLETOKEN=1`, kept behind
+     the flag with the bug intact so the next attempt starts from the
+     diagnosis rather than from scratch.**
+
+         parity  title 66.39% (dx=+24)  scream 73.62%  demo2 51.87%
+                 TOTAL 45.12%  against a 24.26% reference
+
+     THE BUG, and it is a design flaw not a typo: the token is published
+     READY only at the END of a band-phase step or a build_maps chunk
+     (m_main.c:2030, :2149). **When the band queue is EMPTY the master
+     never enters those branches, so the token stays BUSY forever** after
+     the first ack at :2785. The MD then skips 3 of every 4 windows and
+     only takes one via the starvation guard.
+     THE FIX: readiness is a property of "nothing in flight", not "work
+     just finished". Publish READY on every path that reaches the poll
+     with no outstanding step — including the do-nothing path — and BUSY
+     only immediately before a heavy call. Every `continue` in that
+     branch is a path that must be covered.
+     LESSON, same shape as the miss-skip trap: I reasoned about the
+     states where work HAPPENS and never asked what the token reads when
+     there is no work at all. Enumerate the idle path first.
   b. **Move tile staging to DREQ+DMAC** (LOOP 11 step 2, unchanged) — now
      with a proven reference implementation for the SH-2 side.
   c. **Palette as a change queue** rather than whole region pairs.
