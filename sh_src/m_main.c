@@ -144,7 +144,8 @@ static volatile uint16_t miss_n[2];
 /* fixed SDRAM: .bss squeezed by the 0x19000 region guard. LAYOUT:
  * 28000 DIAG | 28100 BM (+alloc state at 28360) | 28400 SPR_SNAP |
  * 28800 SYNC (+blank_tile 28840) | 28900 cram_mirror | 28B00
- * shadow_lut | 28C00 PAL_SETGEN (192 words, LOOP 6) | 28D00-28FFF free.
+ * shadow_lut | 28C00 PAL_SETGEN (192 words = 384B, so it really runs to
+ * 28D80 — the old "28D00 free" here was off by 0x80) | 28D80-28FFF free.
  * (SPR_LAND, the DREQ DMA target, is NOT here — it lives at 0x39000;
  * this comment claimed 28C00-28FFF for it, which was wrong.)
  * blank_tile is constant zeros after master init (coherent for both
@@ -627,6 +628,25 @@ RAMCODE static void bm_tail(struct bm_state *a, int par)
         }
     }
 
+    /* LOOP 10 — PUBLISH STICKY OWNERSHIP THE PRESCAN DID NOT COUNT.
+     * The passes above only map colours this prescan actually SAW
+     * (tcount[c] != 0). Ownership, though, is sticky for ~90 cycles, so
+     * a colour that scrolled in late, or whose scan was owed, can still
+     * OWN a group while its map entry stays 0xFF. That was a deadlock:
+     * apply_cram paints only the groups tile_grp[par] names, so the
+     * group nobody mapped was never painted, and compose then fell back
+     * to group 1 — a live group holding an unrelated colour, which is
+     * where the white slabs in the tree band and the yellow gravestone
+     * flash came from. Measured with the PALMISS probe: 20% of prescan
+     * misses were colours that still owned a group nobody was painting.
+     * Publishing the ownership closes the loop — apply_cram paints the
+     * group AND compose finds it. */
+    for (int g = 1; g < 32; g++) {
+        uint8_t c = grp_key[g];
+        if (c != 0xFF && grp_kind[g] == 0 && tile_grp[par][c] == 0xFF)
+            tile_grp[par][c] = (uint8_t)g;
+    }
+
     /* Build the priority LUT for this parity: pens 1-7 of each group
      * inherit the owning color's level; pen 0 (group base) stays 0 —
      * matching MAME, where the opaque BG pass sets no priority and
@@ -730,6 +750,17 @@ static inline void cram_set(volatile uint16_t *dst, int idx, uint16_t v)
     }
 }
 
+/* Convert-and-store one colour-set's block: the inner half of apply_cram,
+ * factored out so the land-time painter below runs BYTE-IDENTICAL code
+ * rather than a second transcription of the same arithmetic. */
+RAMCODE static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
+                               int base, int n)
+{
+    for (int p = 0; p < n; p++)
+        cram_set(dst + p, base + p,
+                 (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
+}
+
 /* LOOP 6 PER-GROUP MEMO. apply_cram ran its full ~2112-entry convert-and-
  * store every k1, pre-ack, inside the FM-hold. Gating the STORES alone
  * (cram_set) killed 98% of the CRAM traffic but not the s16_to_mars
@@ -766,6 +797,39 @@ static inline int cram_memo(int slot, uint16_t key, unsigned set)
     return 0;
 }
 
+/* LOOP 10 — PAINT AT LAND TIME. apply_cram runs only at k1, but a palette
+ * region pair ships in whichever window it lands: at k0 or k2 the new
+ * words sat in PAL_SH while CRAM kept last generation's colours, and the
+ * per-set memo then held that stale paint until the NEXT bump. On ares
+ * that read as a purple hue on sprites — LOOP 8 logged it as a
+ * MAME-PRESSURE-only artifact, which was wrong.
+ * The land site is pre-ack (FM still held), so writing CRAM there is
+ * exactly as legal as apply_cram's own writes, and it goes through the
+ * same memo — so k1 then SKIPS what has already been painted rather than
+ * doing it twice. Only the sets that actually changed are touched.
+ * `par` here is the parity apply_cram painted at the last k1 and the one
+ * the slave is NOT rebuilding (it builds par^1), so the group mapping we
+ * read is the mapping CRAM currently holds.
+ * SPRITE SETS ONLY — see the caller for why tile/text stays at k1. */
+RAMCODE static void cram_paint_spr(int par, unsigned sc)
+{
+    DIAG[52]++;                          /* sprite sets painted at land time.
+                                          * 52, NOT 50: SPAN_PROBE owns
+                                          * [34..51] and a shipping counter
+                                          * sharing a probe slot corrupts
+                                          * both readings. */
+    uint8_t pr = spr_pair[par][sc];
+    if (pr == 0xFF)
+        return;
+    uint16_t key = (uint16_t)(CK_SPR | sc);
+    int hit = cram_memo(pr * 2, key, 128 + sc);
+    hit &= cram_memo(pr * 2 + 1, key, 128 + sc);  /* both slots, no shortcut */
+    if (!hit) {
+        volatile uint16_t *cram = &MARS_CRAM;
+        cram_paint(cram + pr * 16, PAL_SH + 1024 + sc * 16, pr * 16, 16);
+    }
+}
+
 RAMCODE static void apply_cram(int par)
 {
     /* Undo the k2 debug-bar hijack of entry 255 from the mirror (which
@@ -784,11 +848,7 @@ RAMCODE static void apply_cram(int par)
             DIAG[20]++;                      /* groups skipped */
             continue;
         }
-        volatile uint16_t *src = PAL_SH + c * 8;
-        volatile uint16_t *dst = cram + g * 8;
-        for (int p = 0; p < 8; p++)
-            cram_set(dst + p, g * 8 + p,
-                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
+        cram_paint(cram + g * 8, PAL_SH + c * 8, g * 8, 8);
     }
     for (int c = 0; c < 8; c++) {
         uint8_t g = text_grp[par][c];
@@ -798,11 +858,7 @@ RAMCODE static void apply_cram(int par)
             DIAG[20]++;
             continue;
         }
-        volatile uint16_t *src = PAL_SH + c * 8;
-        volatile uint16_t *dst = cram + g * 8;
-        for (int p = 0; p < 8; p++)
-            cram_set(dst + p, g * 8 + p,
-                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
+        cram_paint(cram + g * 8, PAL_SH + c * 8, g * 8, 8);
     }
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
@@ -816,11 +872,7 @@ RAMCODE static void apply_cram(int par)
             DIAG[20]++;
             continue;
         }
-        volatile uint16_t *src = PAL_SH + 1024 + sc * 16;
-        volatile uint16_t *dst = cram + pr * 16;
-        for (int p = 0; p < 16; p++)
-            cram_set(dst + p, pr * 16 + p,
-                     (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
+        cram_paint(cram + pr * 16, PAL_SH + 1024 + sc * 16, pr * 16, 16);
     }
     /* Shadow ramp: when pair 15 has no real owner this frame, its
      * pens 1-14 go near-black so shadow sprites (and over-budget
@@ -929,9 +981,26 @@ RAMCODE static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
                     code = (code & 0xFFF) + bank1 * 0x1000u;
                 tptr[c] = tile_pixels(code, cpu);
                 tmiss[c] = (tptr[c] == blank_tile);
-                uint8_t g = tg[((unsigned)w >> 6) & 0x7F];
-                if (g == 0xFF)
-                    g = 1;                          /* prescan miss: neutral */
+                unsigned tc = ((unsigned)w >> 6) & 0x7F;
+                uint8_t g = tg[tc];
+                if (g == 0xFF) {
+                    /* LOOP 10 — A MISS SKIPS THE TILE, BUT ONLY IN THE
+                     * NON-OPAQUE PASSES. Skipping renders nothing and
+                     * leaves last cycle's pixels, which beats drawing in
+                     * group 1 (a live group holding an unrelated colour —
+                     * the white slabs and yellow gravestones).
+                     * BUT SKIP MEANS NEVER UPDATE. The opaque BG pass is
+                     * the one that must write EVERY pixel; skip there and
+                     * a colour that keeps missing freezes whatever sbuf
+                     * held forever. One bad frame during an area
+                     * transition — tilemap mid-load, placeholder codes —
+                     * became permanent: a repeating glyph tiled over sky,
+                     * cliff and ground alike, on Mike's level-1 pass.
+                     * So: FG passes skip (stale beats wrong colour),
+                     * BG stays live (wrong colour beats frozen). */
+                    tmiss[c] = !opaque;
+                    g = 1;
+                }
                 tbase[c] = (uint32_t)(g << 3) * 0x01010101u;
             }
             /* CONSTANT-shift specialization per xf case. SH-2 has no
@@ -1602,6 +1671,15 @@ RAMCODE void slave_window_k(uint16_t cmd)
     }
 }
 
+/* LOOP 10: the band whose cat1+text is owed to the NEXT window gap.
+ * SLAVE-ONLY state — written and read exclusively inside
+ * slave_concurrent_k, so there is no cross-CPU coherency question. */
+#ifndef NOCAT1DEFER
+#define NOCAT1DEFER 0
+#endif
+static uint8_t cat1_valid, cat1_lo, cat1_hi, cat1_bank, cat1_par;
+static uint8_t cat1_t0, cat1_t1;
+
 RAMCODE void slave_concurrent_k(uint16_t cmd)
 {
     /* Full band compose, slave rows: tiles (BG opaque + FG cat0),
@@ -1634,6 +1712,34 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     slave_in_compose = 1;
 #endif
     cache_purge();
+    /* LOOP 10 — CAT1 RUNS AT THE HEAD OF THE GAP, NOT THE TAIL.
+     * MEASURED (tools/pk_pass.py, ares, Mike's dogs run): of the master's
+     * entire SYNC[2] pickup wait, 91.3% sits behind this ONE pass. 401 of
+     * 3820 pickups land inside it and each costs a mean of 45.50 lines —
+     * more than a whole vblank. Every other pass is noise: idle 0.34
+     * lines, text 7.58, sprites 14.38. 87.8% of pickups find the slave
+     * already idle.
+     * The reason is structural, not size: cat1 is the one pass with NO
+     * service point inside it, and it runs LAST, so it is still going
+     * when the next window's pickup arrives. The wait is simply whatever
+     * is left of it.
+     * DO NOT FIX THIS BY STRIPING IT — that is 7f, which hit its target
+     * and lost the play pass. Fix it by MOVING it: the previous band's
+     * cat1+text now run FIRST, immediately after the ack, where a whole
+     * window gap sits in front of them. The striped passes that follow
+     * are interruptible, so a late pickup costs one strip instead of the
+     * tail of an uninterruptible pass. Same total work, same order
+     * within a band (cat1 still lands after that band's sprites, one
+     * window later), and every band still completes before its ship:
+     * R0 striped at k0 / cat1 at k1 / ships k2; R1 at k1 / k2 / k0;
+     * R2 at k2 / k0 / k1. */
+    if (!NOCAT1DEFER && cat1_valid) {
+        compose_layer(cat1_lo, cat1_hi, 1, 0, 0, cat1_bank, cat1_par, 2);
+        slave_service_stream();
+        compose_text(cat1_t0, cat1_t1, cat1_par);
+        slave_service_stream();
+        cat1_valid = 0;
+    }
     for (int y = lo; y < hi; y += 12) {
         int ye = (y + 12 > hi) ? hi : y + 12;
         compose_layer(y, ye, 1, 1, 1, bank1, par, 0);
@@ -1671,10 +1777,26 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
      * service points cost more compose time than the bounded pickup
      * latency saved, and cat1-over-sprites does not survive being cut
      * into strips. Bound the master's wait some other way. */
-    compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);   /* FG cat1 OVER sprites */
-    slave_service_stream();
-    compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
-                 (rg == 0) ? 4 : (rg == 1) ? 13 : 23, par);
+    /* HAND THIS BAND'S cat1+text TO THE NEXT GAP (see the head of this
+     * function). Recorded, not run — the next command executes it first,
+     * with a full window gap in front of it. */
+    if (NOCAT1DEFER) {   /* A/B ARM: cat1+text inline at the TAIL, the
+                          * pre-LOOP-10 order. Costs the strobe win back;
+                          * exists only to test whether the deferral is
+                          * what took playability. */
+        compose_layer(lo, hi, 1, 0, 0, bank1, par, 2);
+        slave_service_stream();
+        compose_text((rg == 0) ? 0 : (rg == 1) ? 9 : 18,
+                     (rg == 0) ? 4 : (rg == 1) ? 13 : 23, par);
+        slave_service_stream();
+    }
+    cat1_lo   = (uint8_t)lo;
+    cat1_hi   = (uint8_t)hi;
+    cat1_bank = (uint8_t)bank1;
+    cat1_par  = (uint8_t)par;
+    cat1_t0   = (uint8_t)((rg == 0) ? 0 : (rg == 1) ? 9 : 18);
+    cat1_t1   = (uint8_t)((rg == 0) ? 4 : (rg == 1) ? 13 : 23);
+    cat1_valid = 1;
 #ifdef PICKUP_SRC_PROBE
     slave_in_compose = 0;
 #endif
@@ -2423,23 +2545,58 @@ RAMCODE void m_main(void)
                         (volatile uint32_t *)(PAL_SH + (r << 7));
                     volatile uint32_t *s =
                         (volatile uint32_t *)(SPR_LAND + 82);
-                    for (int i = 0; i < 128; i++)
-                        d[i] = s[i];
-                    /* Bump every colour-set the region covers, STRICTLY
-                     * AFTER the stores: bumping first lets apply_cram
-                     * paint the OLD words and then record the NEW
-                     * generation, latching that group stale (measured in
-                     * LOOP 6 as demo2 parity 20.9 -> 23.4). A region is
-                     * 16 tile/text sets (8 words each) below word 1024,
-                     * or 8 sprite sets (16 words each) above it. The
-                     * generations are MASTER-written now — the slave's
-                     * COMM palette path that used to own them is gone,
-                     * so there is no cross-CPU RMW race left to argue. */
-                    unsigned s0, ns;
-                    if (r < 8) { s0 = r << 4; ns = 32; }
-                    else       { s0 = 128 + ((r - 8) << 3); ns = 16; }
-                    for (unsigned i = 0; i < ns; i++)
-                        PAL_SETGEN[s0 + i]++;
+                    /* A region is 16 tile/text sets (8 words each) below
+                     * word 1024, or 8 sprite sets (16 words each) above
+                     * it; a pair is two regions, so 32 or 16 sets. */
+                    unsigned s0, ns, wps;
+                    if (r < 8) { s0 = r << 4;               ns = 32; wps = 4; }
+                    else       { s0 = 128 + ((r - 8) << 3); ns = 16; wps = 8; }
+                    /* LOOP 10 — COPY AND COMPARE PER SET. LOOP 8 bumped
+                     * every generation the pair covers whenever it shipped,
+                     * where the path before it bumped the 1-2 sets that
+                     * actually changed. Each spurious bump is a memo miss
+                     * and a full convert-and-store pass over a set whose
+                     * words are identical. The read costs 128 words; the
+                     * pass it skips costs 8-16 s16_to_mars conversions.
+                     * Bumping STRICTLY AFTER a set's stores still matters:
+                     * bumping first lets a paint read the OLD words and
+                     * then record the NEW generation, latching that group
+                     * stale (LOOP 6 measured it as demo2 20.9 -> 23.4).
+                     * The generations are MASTER-written — the slave's COMM
+                     * palette path that used to own them is gone — so there
+                     * is no cross-CPU RMW race left to argue. */
+                    for (unsigned t = 0; t < ns; t++) {
+                        uint32_t ch = 0;
+                        for (unsigned i = 0; i < wps; i++) {
+                            uint32_t v = s[i];
+                            ch |= v ^ d[i];
+                            d[i] = v;
+                        }
+                        s += wps;
+                        d += wps;
+                        if (!ch)
+                            continue;
+                        PAL_SETGEN[s0 + t]++;
+                        /* SPRITE SETS ONLY, and not at k1.
+                         * k1 flips par and runs the whole apply_cram a few
+                         * lines below, so painting here would use the OLD
+                         * parity's mapping to no purpose. k0 and k2 have no
+                         * such pass — they are the windows the hue came from.
+                         * TILE/TEXT (r < 8) IS DELIBERATELY EXCLUDED. A
+                         * cycle is three vints and the blitted image stays
+                         * on screen across all of them, so a CRAM write at
+                         * k0/k2 recolours pixels that were composed against
+                         * the PREVIOUS generation. Sprites re-land every
+                         * cycle and tolerate it; the colour-cycling tile
+                         * sets in regions 0-1 do not — measured on the
+                         * PRESSURE title static, which is exactly the
+                         * cycling ALTERED BEAST logo: 2.44% -> 9.72% with
+                         * tile/text painted here, 2.44% without, sprites
+                         * painted either way. Fidelity says leave them to
+                         * k1's single consistent update point. */
+                        if (k != 1 && r >= 8)
+                            cram_paint_spr(par, s0 + t - 128);
+                    }
                     src = 338;
                     need = 594;
                 }
