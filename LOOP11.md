@@ -219,6 +219,15 @@ it generalises to the WHOLE S16 LIBRARY, which is the actual deliverable.
 Every System 16 title has this same shape: two scrolling tile planes, a
 text layer, a sprite chip, 128 colour sets. Solve it once.
 
+# ---- BACKGROUND BELOW THIS LINE ----
+# Everything above is the current plan. Everything below is how it was
+# reached, INCLUDING A SUPERSEDED ONE. The FM-hold pivot in "THE PIVOT,
+# IN ORDER" was the plan until the Chaotix disassembly showed we do not
+# need to hold FM at all — only to make the window microseconds and
+# non-blocking. Read it as history, not as instructions. (LOOP9.md became
+# a trap exactly this way.) The sections that ARE still live down here:
+# MK2 TECHNIQUES, GATES, THE ares BASELINE, and THE METHOD LESSONS.
+
 ## WHY: the blit is the tax, and MK2 proves it is optional
 
 Mortal Kombat II (32X, 1995) — fully disassembled, see the technique list
@@ -276,7 +285,9 @@ that detects dirty pages already exists and already works. Streaming a
 handful of dirty pages at scene transitions is a far smaller problem than
 the 128 KB-per-frame blit it would let us delete.
 
-## THE PIVOT, IN ORDER
+## THE PIVOT, IN ORDER  *** SUPERSEDED — see WHAT THIS MEANS FOR THE
+##                          PIVOT, above. Step 1's measurement is still
+##                          good; steps 3-5 are the wrong target. ***
 
 1. **PREMISE VERIFIED (MAME attract, `make TILERATE=1`, 1197 cycles):**
 
