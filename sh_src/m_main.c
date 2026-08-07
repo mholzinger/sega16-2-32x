@@ -2681,7 +2681,23 @@ RAMCODE void m_main(void)
                      * next window. Steady state is ZERO pending anyway. */
                     int budget = !fs_settled ? 0
                                : (pg_pending >= 0x0FFF) ? 7 : 3;
+#ifdef TILE_RATE
+                    /* LOOP 11 step 1 — HOW OFTEN DOES THE TILEMAP CHANGE?
+                     * The pivot rests on it being rare: if the game's tile
+                     * RAM barely moves it can be STREAMED, like the sprite
+                     * list and the palette already are; the 68K then stops
+                     * needing the framebuffer, FM can be held, and the blit
+                     * disappears. MAME attract measured 4.2% of cycles
+                     * dirty, 0.22 pages copied per cycle — this exists to
+                     * get the same number out of ares GAMEPLAY, which is
+                     * where the framerate complaint lives. NEVER SHIP. */
+                    if (pg_pending) DIAG[55]++;      /* cycles with any dirt */
+                    DIAG[56] += (uint32_t)__builtin_popcount(pg_pending);
+#endif
                     for (int pc = 0; pc < budget && pg_pending; pc++) {
+#ifdef TILE_RATE
+                        DIAG[54]++;                  /* pages actually copied */
+#endif
                         int pg = 0;
                         while (!(pg_pending & (1u << pg)))
                             pg++;

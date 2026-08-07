@@ -68,6 +68,12 @@ endif
 ifdef SPANPROBE
 SHCCFLAGS += -DSPAN_PROBE
 endif
+# `make TILERATE=1` = LOOP 11: how often the game dirties a tilemap page
+# ([54] pages copied, [55] cycles with any dirt, [56] pages pending).
+# The MK2 pivot rests on this being rare. tools/tile_rate.py. NEVER SHIP.
+ifdef TILERATE
+SHCCFLAGS += -DTILE_RATE
+endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be
