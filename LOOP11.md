@@ -26,7 +26,85 @@ not enough for ONE layer. The 20 Hz cadence is not a design failure; it
 is that number. Any proposal that does not change the number of screen
 passes cannot change the framerate.
 
-## THE ARCHITECTURE QUESTION, WHICH OUTRANKS THE FM PIVOT
+## THE ANSWER — Knuckles' Chaotix, disassembled. COPY THIS PROTOCOL.
+
+**Three commercial titles keep a BUSY 68000 alongside SH-2 rendering:
+Knuckles' Chaotix, Virtua Racing Deluxe, Virtua Fighter.** In VRDX and VF
+the 68000 even owns the FBCTL frame flip. Every other title in the library
+is the MK2 model — FM set once by the SH-2, 68000 reduced to input+sound.
+So a busy 68000 is NOT the thing that forces our 200-scanline handoff.
+
+Chaotix runs a full Sonic engine, the MD VDP tile layers, MD sprite/scroll
+DMA, AND arbitrates the 32X framebuffer, every frame. Its FM window is a
+few HUNDRED 68000 cycles. Ours is ~200 scanlines ≈ 97,000 cycles. That is
+a factor of ~300, and it comes from five decisions, all copyable:
+
+**1. BULK DATA NEVER CROSSES THE FRAMEBUFFER.** Chaotix's entire per-frame
+sprite/display list goes 68000 -> DREQ FIFO (`$A15112`) -> SH-2 DMAC ch0
+-> SDRAM. The SH-2's CMD interrupt handler does NOT copy anything; it
+programs SAR0=`0x20004012`, DAR0=SDRAM, TCR0=length, CHCR0=`0x44E1`,
+DMAOR=1, and returns. The DMA drains in the background at zero CPU cost.
+VRDX does the same at 0x500 words/frame. **This is exactly the LOOP 11
+step-2 path, and it is what every busy-68000 title uses for staging.**
+
+**2. PALETTE IS A CHANGE QUEUE, NOT A BLIT.** The 68000 accumulates
+`(CRAM offset, colour)` pairs in MD RAM at `$FFFFD860` during the frame,
+then drains only those under FM=0. The window is ~40-60 cycles PER CHANGED
+COLOUR — a few hundred cycles typical, ~4 scanlines even at 32 changes,
+against ~31 scanlines for a full CRAM write. We already stream palette
+region PAIRS (256 words) whether or not they changed; LOOP 10 narrowed the
+GENERATION bump to changed sets but still ships the whole pair.
+
+**3. COMM0==0 IS AN IDLE TOKEN, NOT A REQUEST/GRANT.** The SH-2's idle
+loop zeroes COMM0, which publishes "I am parked in a loop touching ONLY
+COMM0 — nothing in the FB/VDP/CRAM aperture." The 68000 tests it and takes
+FM UNILATERALLY. No round trip, no ack, no negotiation latency. The only
+guard is that the SH-2 reads COMM0 twice and requires the two reads to
+match before acting on a command. **Our protocol is the opposite: the MD
+raises FM, signals, and SPINS for the ack. That spin IS the window/ack
+span.**
+
+**4. THE 68000 POLLS AND SKIPS; IT DOES NOT WAIT.** The per-frame path is
+`tst.w $A15120 / beq take-it / rts` — if the SH-2 is busy the 68000
+RETURNS and retries next frame. A missed palette update costs one frame of
+stale colours; a blocking wait costs a frame of Sonic physics. The
+blocking `bne`-spin form exists only in mode-setup and level-load code.
+
+**5. THE SH-2 IS ALLOWED TO STALL.** Chaotix's V-int handler writes CRAM
+and will simply block if it collides with a 68000 FM window. That is fine
+BECAUSE the windows are microseconds. Design for "the SH-2 occasionally
+eats a short stall", not for "the SH-2 must never be blocked."
+
+Also worth copying verbatim: FM is toggled with BYTE writes to the high
+byte of `$A15100` only, so ADEN and nRES are structurally unreachable from
+the arbitration code.
+
+### WHAT THIS MEANS FOR THE PIVOT
+
+**The FM-hold pivot is the wrong target.** We do not need to hold FM
+forever; we need the window to be microseconds and NON-BLOCKING. That is a
+far smaller change than eliminating the handoff, and it does not require
+solving the tile-RAM read-back problem first.
+
+Ordered by (value / risk):
+  a. **Invert the handshake** to the idle-token + poll-and-skip form. Our
+     68K currently spins for the ack; Chaotix's never does. This alone
+     targets the 200-scanline window/ack directly.
+  b. **Move tile staging to DREQ+DMAC** (LOOP 11 step 2, unchanged) — now
+     with a proven reference implementation for the SH-2 side.
+  c. **Palette as a change queue** rather than whole region pairs.
+
+NOTE FOR THE DREQ TRUNCATION (21% short lands, cause still unknown): VRDX
+pushes 0x500 words/frame through the same FIFO. Our packet is ~594 words.
+Volume is NOT the problem. Chaotix waits on the CMD-accepted bit
+(`btst #0,$A15103`) BEFORE pushing, and polls FIFO-full (`$A15107` bit 7)
+between every 4-word group. Compare against our push loop.
+
+BONUS: Chaotix repurposes the unused tail of the packed-pixel line table
+(`$8401F0-$8401FF`, lines 248-255, never displayed at 224) as a 16-byte
+bidirectional mailbox — free shared state beyond COMM0-7.
+
+## THE ARCHITECTURE QUESTION, WHICH RANKS BESIDE THE ABOVE
 
 Mike, on reading the above: "this is way faster hardware than the arcade,
 so much of this port would come for free." He is right about the thing
