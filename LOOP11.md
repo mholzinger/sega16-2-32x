@@ -7,6 +7,52 @@ not another optimisation — LOOP 10 ended with Mike saying the port is
 half is kind of ridiculous", and with four separate micro-optimisations
 killed by their own falsifiers. The box is full. Stop adding to it.
 
+## FIRST, THE NUMBER THAT JUSTIFIES ANY OF THIS
+
+Write it down once so nobody re-litigates it. We did not replace a 10 MHz
+68000 with 23 MHz SH-2s — we replaced DEDICATED RASTER HARDWARE with
+software. System 16 has a tilemap generator and a sprite chip that draw
+the screen free, in hardware, every frame. The 32X has a framebuffer, and
+every pixel is a CPU store.
+
+    32X framebuffer write bandwidth (measured)  6.76 MB/s
+    one pass over a 320x224 8bpp screen         71,680 bytes
+    that pass at 60 Hz                          4.30 MB/s
+
+**The entire framebuffer write port is ~1.6 passes over the screen per
+frame at 60 Hz.** The blit alone is one full pass. That leaves 0.6 passes
+for BG, FG, priority tiles, text and sprites composited with priority —
+not enough for ONE layer. The 20 Hz cadence is not a design failure; it
+is that number. Any proposal that does not change the number of screen
+passes cannot change the framerate.
+
+## THE ARCHITECTURE QUESTION, WHICH OUTRANKS THE FM PIVOT
+
+Mike, on reading the above: "this is way faster hardware than the arcade,
+so much of this port would come for free." He is right about the thing
+that matters — **we software-render tilemaps that the MD VDP could draw
+in hardware, with hardware scrolling, at 60 Hz, for zero CPU.** The Mega
+Drive shipped an official Altered Beast; the MD alone can draw these
+backgrounds. The 32X should be ADDING to that, not redrawing everything.
+
+That is Knuckles' Chaotix's architecture: MD VDP for the tile planes, 32X
+for sprites and colour. It is the only shape in the commercial library
+that matches our constraints, and it changes the pass count — which per
+the number above is the only thing that can.
+
+THE COST, and it is real: the MD VDP gives 4 palettes x 16 colours on
+screen. System 16 uses 128 colour sets. Our CRAM allocator already
+squeezes those into 32 groups and already produces the miscoloured tree
+band and the shared-group artifacts. The MD VDP is tighter still, and the
+standing directive is accuracy before speed.
+
+**HOLD THE FM PIVOT BELOW UNTIL THE CHAOTIX DISASSEMBLY LANDS.** If a
+busy 68000 can drive MD VDP planes while the SH-2s do sprites, that is a
+cheaper port than either the current architecture or the FM pivot — and
+it generalises to the WHOLE S16 LIBRARY, which is the actual deliverable.
+Every System 16 title has this same shape: two scrolling tile planes, a
+text layer, a sprite chip, 128 colour sets. Solve it once.
+
 ## WHY: the blit is the tax, and MK2 proves it is optional
 
 Mortal Kombat II (32X, 1995) — fully disassembled, see the technique list
