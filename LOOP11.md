@@ -726,3 +726,45 @@ and worst window/ack well below 210 — on a LONG ares state (>3000
 cycles; see the sample-length correction above, which cost a full round
 of wrong conclusions). MAME cannot rank this: its master is ~3x faster,
 so its pickup latency is small already.
+
+## CMDPROBE — built, working, and waiting on one ares state
+
+`make CMDPROBE=1`. The MD asserts CMD INT to the primary SH-2
+(`move.w #0x0001,0xA15102`, d32xr src-md/crt0.s:3143) immediately
+BEFORE posting COMM0; the master's `main_cmd_irq` — a stub until now —
+timestamps the arrival into DIAG[58] and counts fires in DIAG[57]; the
+main loop subtracts at pickup into DIAG[59] max / [60] sum / [61] n.
+**The ISR does no work and pickup is still by polling, so rendering is
+unchanged.** ~46 FRT ticks per scanline.
+
+MAME (3600 frames): ISR fires 3590, **mean 0.4 -> 1.3 lines, max 23.6
+-> 26.9 lines**, rising with load. Small, exactly as expected where the
+master is ~3x faster — MAME cannot answer this question, it can only
+prove the plumbing works. Which it now does.
+
+**THE ARES RUN THAT DECIDES THE ISR REWRITE:** play
+`rom/ARES_cmdprobe.32x` for ~3 minutes (>3000 cycles — anything shorter
+cannot see the tail, see the sample-length correction above), save a
+state, and read DIAG[59]/[60]/[61]. If the recovered budget is the
+~79 lines the preack probe implied, the ISR restructure is justified.
+If it is small, it is not, and that is a cheap no.
+
+CAVEAT, stated rather than buried: the probe is NOT free. Parity moves
+24.26 -> 26.62 (demo2 19.35 -> 31.60) from the extra per-vint MMIO
+write and the ISR entry, so it slightly perturbs the thing it measures.
+Good enough for a first-order "is there 79 lines here"; not a build to
+compare parity against. NEVER SHIP.
+
+THREE TRAPS THIS COST, all worth not repeating:
+  - **`SHASFLAGS` is assigned with `=` BELOW the flag blocks**, so a
+    `SHASFLAGS +=` written up there is silently discarded and the
+    assembler conditional compiles to nothing. Assembler flags must be
+    appended after the base assignment. Same shape as the flag-stamp
+    bug: a flag that looks set and is not.
+  - **gas needs `.ifdef`, not `#ifdef`** — `sh-elf-as` does not run cpp
+    on `.s` files.
+  - **ORDER: raise the interrupt BEFORE posting COMM0.** Raised after,
+    the master had already polled and picked up the window before the
+    68000 reached the write, so it read the PREVIOUS vint's stamp and
+    every sample came out at ~one frame (229 lines mean). The bug was
+    visible only because the number was absurd.

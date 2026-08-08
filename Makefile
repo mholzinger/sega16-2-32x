@@ -91,6 +91,16 @@ ifdef IDLEGRACE
 SHCCFLAGS += -DIDLE_TOKEN
 MDCCFLAGS += -DIDLE_TOKEN -DIDLE_GRACE
 endif
+# `make CMDPROBE=1` = LOOP 11: how many lines would interrupt-driven
+# window pickup recover? The MD asserts CMD INT after posting the
+# command; the SH-2 ISR only TIMESTAMPS (no work, no behaviour change);
+# the main loop subtracts at pickup. DIAG[59] max / [60] sum / [61] n,
+# ~46 FRT ticks per scanline. Falsifier for the ISR rewrite: if the
+# recovered budget is small, do not do it. NEVER SHIP.
+ifdef CMDPROBE
+SHCCFLAGS += -DCMD_PROBE
+MDCCFLAGS += -DCMD_PROBE
+endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be
@@ -132,6 +142,13 @@ endif
 # identified the ack-spin as the elastic sink and set this whole arc off.)
 MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-optional
 SHASFLAGS  = -Ish_src --small
+# NOTE: this is a plain `=` and it sits BELOW the flag blocks, so any
+# `SHASFLAGS +=` written up there is silently discarded. Assembler flags
+# must be appended HERE, after the base assignment. CMDPROBE lost its
+# --defsym to exactly that and the probe assembled to nothing.
+ifdef CMDPROBE
+SHASFLAGS += --defsym CMD_PROBE=1
+endif
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
 SHLDFLAGS  = -T sh_src/mars.ld -nostdlib
 

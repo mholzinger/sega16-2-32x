@@ -2188,6 +2188,22 @@ RAMCODE void m_main(void)
             int k = (c0 >> 4) & 3;
             uint16_t bank1 = MARS_SYS_COMM2 & 7;
             uint16_t tw = frt(), tp = tw;
+#ifdef CMD_PROBE
+            /* PICKUP LATENCY = (poll noticed) - (interrupt arrived).
+             * DIAG[59] max, DIAG[60] sum, DIAG[61] samples. ~46 FRT
+             * ticks per scanline, so lines = ticks / 46. This is the
+             * budget an interrupt-driven pickup could recover; if it is
+             * small, the ISR rewrite is not worth doing. */
+            {
+                uint16_t isr_t = (uint16_t)DIAG[58];
+                uint16_t d = (uint16_t)(tw - isr_t);
+                if (d < 20000) {          /* ignore the pre-first-ISR case */
+                    if (d > DIAG[59]) DIAG[59] = d;
+                    DIAG[60] += d;
+                    DIAG[61]++;
+                }
+            }
+#endif
             t_vint = tw;
             shadow_stole = 0;
             win_no++;

@@ -217,6 +217,19 @@ void shim_vblank(void) {
 		// stale slices).
 		*mars_comm12 = (uint16_t)(0xD000
 			| (*(volatile uint16_t*)0xC00008 >> 8));
+#ifdef CMD_PROBE
+		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
+		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the
+		// master still picks the window up by polling COMM0 exactly as
+		// before, and the ISR only timestamps.
+		// ORDER MATTERS AND THE FIRST VERSION HAD IT BACKWARDS: raised
+		// AFTER the COMM0 post, the master (fast on MAME) had already
+		// polled and picked the window up before the 68000 reached this
+		// write, so the stamp it read was the PREVIOUS vint's and every
+		// sample came out ~one frame (262 lines). Raise FIRST so the
+		// timestamp precedes the signal it is timing.
+		*(volatile uint16_t*)0xA15102 = 0x0001;
+#endif
 		*mars_comm0 = wcmd;
 		spin2 = 8000000UL;
 		while (*mars_comm0 && --spin2)
