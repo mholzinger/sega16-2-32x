@@ -648,3 +648,81 @@ everything.
 - **JUDGE AGAINST THE RANGE.** A single max from the longest run of a
   session is not a trend; it read as an 8-line crisis that 11800 windows
   then showed was a mean of 33.1 lines.
+
+# ---- GREEN TEARING: DIAGNOSED. IT IS THE SAME ROOT AS THE 210-LINE TAIL ----
+
+Mike, on the milestone build (`rom/s16.bs1`, base, 3709 cycles): "lots
+of green tearing but more stable than any build we have produced."
+
+## It is NOT the bank flip
+
+Ruled out with the frame itself, pulled straight out of the ares state:
+the 32X framebuffer at bank A renders correctly (stage 1 graveyard,
+grey stone, green grass), and **bank B is all zeros**. The port paints
+one bank only, so a missed restore shows BLACK, not green — which is
+what NOTES.md recorded years ago and what the counter says now:
+restore past vblank 67/10138 = **0.7%**, against 5.6% in LOOP 9. That
+path is at its best ever and cannot account for "lots".
+
+(Method note: the frame was recovered by reading the FB region out of
+the .bs1 and colouring it with `cram_mirror`, which lives at a FIXED
+SDRAM address, `0x06028900` — not in .bss, so it is in the state and
+easy to find. This is a cheap and repeatable way to see exactly what
+ares displayed. Bank A image sits at file offset ~0x062df0 in a
+1010331-byte BST1 state; bank B is +0x20000.)
+
+## It IS blit skips holding a stale band
+
+    blit skips 988/3709 cycles = 26.6%
+
+LOOP 10 already named this and the wording is exact: *"A skipped blit
+is a third that does not ship — the screen holds a stale band for a
+cycle. That is exactly tearing plus slowdown."* 26.6% sits inside the
+documented same-build range (23.5–43.5%), so this build did not
+regress; it is the standing defect.
+
+**Why GREEN: the stale band is a horizontal third, and in stage 1 the
+bottom third is grass.** A held-back bottom third against a moving
+scene reads as a green tear line. The colour is a property of the
+scene, not of a palette bug — the palette is fine, 229 live entries and
+the frame renders true.
+
+## The root cause is PICKUP LATENCY, and it is the 210-line tail
+
+The skip test is `v < 0xDF || v > 0xE4` on the MD heartbeat V at
+pickup. A skip means the master REACHED the window at the wrong
+scanline. The master polls `MARS_SYS_COMM0` at the top of its main loop
+(m_main.c:2011) — **there is no interrupt path for window pickup** — so
+pickup cannot happen until the strip in flight finishes. A strip is
+0.4–1.4 ms (6–22 scanlines) and build_maps is ~4 ms.
+
+That is the same ~79-line term that makes the MD's worst window/ack 210
+lines against the master's own 131. **The tearing and the 8-lines-of-
+margin tail are ONE defect measured two ways.** The pre-vint quiet zone
+(`dt > 11300 -> start nothing`) exists only to bound it, and it costs
+throughput to do so.
+
+## THE NEXT THING TO BUILD: interrupt-driven pickup
+
+Make the master take the window on the 32X CMD interrupt instead of
+discovering it at the next poll. Pickup latency stops being "however
+long the current strip has left" and becomes interrupt latency.
+
+**This is the one shape that satisfies the constraint part (a) died
+on.** The idle token needed the master to be idle; ours never is. An
+interrupt does not care that the master is busy — that is the entire
+point of an interrupt. And it is what Chaotix actually does: its SH-2
+services the 68000's command in the CMD interrupt handler and returns
+immediately (see the protocol section at the top of this doc).
+
+WHAT HAS TO BE SOLVED, and it is the real work: the ISR fires mid-strip,
+so either the strip must be resumable, or the ISR does only the
+FM-critical part (flip + blit + re-arm) and leaves compose to the main
+loop. The second is closer to what the code already separates at the
+early-ack point (m_main.c:2811).
+
+FALSIFIER, cheap and decisive: blit skips must fall well below 26.6%
+and worst window/ack well below 210 — on a LONG ares state (>3000
+cycles; see the sample-length correction above, which cost a full round
+of wrong conclusions). MAME cannot rank this: its master is ~3x faster,
+so its pickup latency is small already.
