@@ -82,6 +82,15 @@ ifdef IDLETOKEN
 SHCCFLAGS += -DIDLE_TOKEN
 MDCCFLAGS += -DIDLE_TOKEN
 endif
+# `make IDLEGRACE=1` = LOOP 11 (a): the dial between "spin forever"
+# (baseline) and "skip immediately" (IDLETOKEN). Before skipping the
+# window, poll COMM4 for as long as the flip stays legal (V<=0xE2, the
+# vblank gate's own bound). Implies IDLETOKEN. A skip costs a whole
+# frame; a grace poll costs the lines it actually waits.
+ifdef IDLEGRACE
+SHCCFLAGS += -DIDLE_TOKEN
+MDCCFLAGS += -DIDLE_TOKEN -DIDLE_GRACE
+endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be
@@ -134,9 +143,25 @@ MDOBJS += $(patsubst %.c,%.o,$(wildcard md_src/*.c))
 SHOBJS  = $(patsubst %.s,%.o,$(wildcard sh_src/*.s))
 SHOBJS += $(patsubst %.c,%.o,$(wildcard sh_src/*.c))
 
+# FLAG STAMP — objects must depend on the FLAG SET, not just on sources.
+# Without this, `make IDLETOKEN=1` right after a plain `make` reuses every
+# object whose .c file did not change, so half the build silently keeps
+# the old semantics. LOOP 11a lost a full measurement cycle to exactly
+# that: the SH-2 published idle tokens while md_main.o, untouched, had no
+# poll-and-skip in it at all — and the run scored a perfect 24.26 because
+# it WAS the baseline. Any flag build measured before this existed should
+# be re-measured before it is believed.
+FLAGSTAMP := .build_flags
+$(shell f='$(MDCCFLAGS) $(SHCCFLAGS)'; \
+        [ "$$(cat $(FLAGSTAMP) 2>/dev/null)" = "$$f" ] || printf '%s' "$$f" > $(FLAGSTAMP))
+# (the dependency itself is declared below `all:` — an explicit rule above
+# it would make md_src/font.o the default goal)
+
 .PHONY: all release debug clean
 
 all: release
+
+$(MDOBJS) $(SHOBJS): $(FLAGSTAMP)
 
 # build stamp header: git short hash as u32 -> DIAG[18] at boot, so every
 # savestate self-identifies its commit. Regenerated when HEAD changes.
@@ -243,3 +268,4 @@ clean:
 	rm -f $(MDTARGET).bin $(MDTARGET).elf $(MDTARGET).lst
 	rm -f $(TARGET).32x $(TARGET).elf $(TARGET).lst
 	rm -f sh_src/md_start.bin sh_src/tiles.bin sh_src/sprites.bin
+	rm -f $(FLAGSTAMP)

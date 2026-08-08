@@ -15,3 +15,5 @@ screenshots/
 rom/*.32x
 mame/
 sh_src/buildstamp.h
+.build_flags
+srcref/

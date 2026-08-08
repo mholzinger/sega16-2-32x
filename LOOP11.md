@@ -111,6 +111,180 @@ Ordered by (value / risk):
      LESSON, same shape as the miss-skip trap: I reasoned about the
      states where work HAPPENS and never asked what the token reads when
      there is no work at all. Enumerate the idle path first.
+
+     **SECOND ATTEMPT — THE PUBLISH BUG IS FIXED AND MEASURED. The
+     handshake now behaves; on MAME it COSTS parity, and MAME cannot see
+     what it is meant to buy. ares must rank it.**
+     ONE publish point, at the top of the no-window branch — the poll
+     itself — so every path through it, `continue` included, is covered
+     by construction; TOK(0) immediately before each heavy call and never
+     cleared, because the next poll visit clears it.
+
+         idle-token skips  4043/5392 vints (75%)  ->  546/5392 (10.1%)
+         parity  title 2.44  scream 65.82  eyehold 3.06
+                 demo 48.24  demo2 51.80   TOTAL 34.27
+                 (attempt (a) 45.12, reference 24.26 — title static is
+                  back to exact; the dynamic scenes carry the whole gap)
+
+     75% -> 10% is the diagnosis confirmed: the token now reads READY at
+     the poll instant nine times in ten. The residual 10% is the master
+     genuinely mid-strip, which is what the protocol is supposed to skip.
+     THE COST IS REAL AND IT IS THE SKIPS: 546 skipped windows is 546
+     deferred blit phases, the scene runs late against the anchor, and
+     scream/demo2 move 47->66 and 19->52. **On MAME that is pure loss —
+     its window is ~18 lines (LOOP.md iter6), so there are no held-FM
+     scanlines to hand back. The entire payoff is the ~79 lines of
+     not-yet-started FM that only ares holds.** This is the "MAME cannot
+     see the terms that matter" lesson arriving on schedule; do not read
+     34.27 as a verdict, and do not try to tune it on MAME.
+     ares A/B pair, both PRESSURE-stamped, same commit:
+         rom/PROBE_idletok2.32x       IDLETOKEN=1 PRESSURE=1
+         rom/PROBE_base_pressure.32x  PRESSURE=1
+     rom/s16.32x is left as the clean shipping build (re-measured after
+     all of this: 24.26 / title 2.44 / eyehold 3.37, _end 0x06018d70).
+     **ares, PRESSURE build, save slot 1: "extremely choppy" but "fast
+     though — so we have 1 win".** Speed is the thing the pivot is for,
+     and it moved. Chop is the 546 skipped windows: each one defers a
+     blit phase, so the 3-window cycle intermittently becomes 4 and the
+     cadence jumps 20 -> 15 Hz. NOTE: that build was PRESSURE-stamped,
+     which is a MAME-side proxy (it WIDENS the quiet zone to imitate the
+     ares operating point) and should never have gone to ares — it is a
+     deliberate handicap there, so "fast" was measured against a
+     headwind. All ares ROMs below are stamped `normal`.
+
+     **THE DIAL — `make IDLEGRACE=1`. Best of the three on MAME, and it
+     beats the shipping build.** Before skipping, poll COMM4 for as long
+     as the flip stays LEGAL — V<=0xE2, the vblank gate's own bound — so
+     a grace poll can never produce an illegal flip, and FM stays 0
+     throughout (68K time, not held FM, which is the whole distinction
+     the Chaotix protocol rests on).
+
+         build          skips/5392   parity TOTAL   title  eyehold
+         base                    0         24.26     2.44     3.37
+         IDLETOKEN=1           546         34.27     2.44     3.06
+         IDLEGRACE=1           492       **23.14**   2.44     3.37
+
+     **THE SKIP COUNT IS NOT WHAT DRIVES PARITY.** 546 -> 492 is a 10%
+     change in skips and an 11-point change in parity; both statics
+     return to exact. So the damage in the pure-skip form is not the
+     dropped windows themselves but WHEN the window gets taken, and that
+     mechanism is NOT yet explained — do not build on a theory of it
+     until someone measures it. Recorded as an open question, not a
+     result.
+     Grace is nearly a no-op on skip count for a structural reason worth
+     knowing: the poll runs after the V gate has already put us at
+     V=0xDF..0xE2, so there are only ~3 scanlines of legal grace left,
+     while a strip is 6-22. It almost never succeeds in WAITING — yet it
+     still wins. Another reason to distrust the skip-count story.
+
+     ares A/B, three ROMs, same commit, all stamped `normal`:
+         rom/ARES_base.32x       rom/ARES_idletok.32x
+         rom/ARES_idlegrace.32x
+     TRAP FOR THE A/B: an ares savestate contains SDRAM, and RAMCODE
+     lives in SDRAM — so a state saved under one build carries THAT
+     BUILD'S CODE into whatever ROM you load it against. Make a fresh
+     state per build or the comparison is measuring one binary three
+     times.
+
+  a-REOPENED. **The "DEAD" verdict below was drawn from samples too
+     short to contain the tail, and the tail is the whole point. Read
+     the correction at the end of this block before acting on it.**
+
+  a-DEAD (SUPERSEDED). **The premise is stale and the falsifier is
+     unambiguous: the FM window is not ack-bound, it is BLIT-bound, and
+     the idle token does not move it by one line.**
+     `tools/state_health.py` on two ares states — s16.bs1 (baseline,
+     BUILD 95d17bcf) and ARES_idlegrace.bs2 (BUILD 0faba162):
+
+                             baseline 95d17bcf   IDLEGRACE 0faba162
+         blit windows                    5603                  1200
+         MEAN window span           35.6 lines            35.6 lines
+           of which blit            28.4 lines            28.5 lines
+           of which cram             3.5 lines             3.3 lines
+         worst handler total              157                   156
+           window/ack                     110                   112
+         vints/cycle                     3.03                  3.22
+
+     Mean window span identical to 0.1 lines across 5603 vs 1200
+     windows — that is a per-window mean, so it is not a sample-size
+     artifact — and the worst case is identical too. **80% of the window
+     is the blit doing real work.** There is no ack latency left to
+     reclaim, so no handshake change can help: the only thing the idle
+     token produces is its cost, vints/cycle 3.03 -> 3.22.
+
+     **THE ~200-LINE WINDOW AND THE ~79-LINE PREACK STALL AT THE TOP OF
+     THIS DOC ARE STALE.** They come from b6620f4, and the ares baseline
+     block below still quotes "worst handler 253 of 262 (margin 9)". The
+     CURRENT baseline is 157 total / 110 window / margin 105. Something
+     between b6620f4 and 95d17bcf already fixed it. Every argument in
+     part (a) was built on a number nobody re-measured — including the
+     one that ranked this above the architecture work.
+
+     Corollary, and it points straight back at the main plan: the window
+     is 28.5 lines of blit. **The blit is the target, and the only thing
+     that shrinks it is drawing fewer pixels** — which is what moving BG
+     and FG cat-0 to the MD VDP does. Nothing in the handshake family
+     can compete with that.
+
+     ALSO NOTE, for whoever reads Mike's play reports: s16.bs1 is BUILD
+     95d17bcf, i.e. the "extremely choppy but fast" pass was on the OLD
+     SHIPPING BUILD, not on any idle-token rom. It was never a verdict
+     on this work. Read the BUILD line out of the state before believing
+     a play report is about the thing you just built.
+
+     KEPT, not reverted: IDLETOKEN and IDLEGRACE stay behind their flags
+     with these results attached, so nobody re-derives them. Neither is
+     in the shipping rom (`rom/s16.32x` = base, re-measured 24.26).
+
+     ---- CORRECTION, same day, from a LONG ares session ----
+
+     **The "DEAD" verdict above is wrong, and the way it is wrong is the
+     exact failure LOOP 10 warned about: JUDGE AGAINST THE RANGE.** It
+     rested on two ares states of 403 and 1889 cycles. A 3709-cycle
+     baseline state (`rom/s16.bs1`, BUILD 0faba162, vints/cycle 3.03 so
+     it IS the base build) says:
+
+                          MEAN window   worst window/ack   sample
+         morning states    35.6 lines        110-112       403 / 1889 cy
+         long session      38.2 lines      **210, margin 8**   3709 cy
+
+     Both readings are correct. **The MEAN is blit-bound — 28.8 of 38.2
+     lines — and no handshake change can touch it. The TAIL is 210
+     lines with 8 lines of margin, it is 5.5x the mean, and the excess
+     is NOT blit; it is the ack-spin.** The ~200-line window in this
+     doc's header was never stale. My samples were too short to contain
+     it, and I retracted a true statement.
+
+     The same state also reproduces the documented baseline that the
+     short samples contradicted: blit skips 26.6% (ref 31.5%),
+     dreq_incomplete 21.0% (ref 21.4%), restore past vblank 0.7% (ref
+     0.8%). The morning figures of 0.7% dreq_incomplete were an
+     artifact of sample length. **Treat every ares comparison made on
+     under ~3000 cycles as unreliable, including all of mine from that
+     round.**
+
+     WHAT THIS MEANS: the idle token targets the TAIL, not the mean, and
+     the tail is what a player feels as a hitch. Part (a) is reopened,
+     NOT resurrected — it still has to prove itself on a long-sample A/B.
+     THE MEASUREMENT THAT SETTLES IT: play `rom/ARES_idlegrace.32x` for
+     ~3 minutes, save a state, and compare worst window/ack against the
+     base state's 210 / margin 8. Anything shorter cannot answer it.
+
+     TWO TRAPS THIS COST, both of which invalidate earlier numbers:
+       - **0xFFB0FA WAS NEVER THE SKIP COUNTER.** 0xFFB0F8 is a LONG —
+         the interrupted game PC, md_start.s:254 — so it owns 0xFFB0FA
+         and rewrites it every vint. Attempt (a)'s counter read pure
+         garbage (14726, 55050, 14722...). Moved to 0xFFB0EE. Check the
+         WIDTH of the neighbours before claiming a free diag word.
+       - **`make FLAG=1` DID NOT REBUILD UNCHANGED OBJECTS.** Objects
+         depended on sources, never on the flag set, so a flag build
+         right after a plain build silently kept half the old semantics.
+         This produced a run that scored a perfect 24.26 with the SH-2
+         publishing tokens and md_main.o containing no poll at all — it
+         WAS the baseline, and I nearly wrote it up as a win. Fixed with
+         a .build_flags stamp every object depends on (Makefile). **Any
+         flag-build measurement taken before this commit should be
+         re-measured before it is believed.**
   b. **Move tile staging to DREQ+DMAC** (LOOP 11 step 2, unchanged) — now
      with a proven reference implementation for the SH-2 side.
   c. **Palette as a change queue** rather than whole region pairs.

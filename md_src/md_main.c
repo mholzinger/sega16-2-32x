@@ -166,9 +166,35 @@ void shim_vblank(void) {
 		// the stall. Without this a busy master freezes the display.
 		{
 			static uint16_t idle_skips = 0;
+#ifdef IDLE_GRACE
+			// GRACE WINDOW. Pure poll-and-skip forfeits a WHOLE window
+			// to a master that is usually one strip away from ready —
+			// measured 546 skips of 5392 vints, and on ares that reads
+			// as speed bought with chop. So wait, but only while the
+			// flip is STILL LEGAL: V<=0xE2 is the same bound the vblank
+			// gate above enforces, so a grace poll can never produce an
+			// illegal flip, and a master that lands one line late costs
+			// one line instead of a whole frame. FM is still 0 through
+			// all of this — 68K time, not held FM, which is the whole
+			// distinction the Chaotix protocol rests on. Compose
+			// windows (0x2100) do not flip and have no V bound, so a
+			// plain counter caps those.
+			{
+				uint32_t g = 40000UL;
+				while (*mars_comm4 != 0x0EAD && --g) {
+					if (wcmd != 0x2100 &&
+					    (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8) > 0xE2)
+						break;
+				}
+			}
+#endif
 			if (*mars_comm4 != 0x0EAD && idle_skips < 3) {
 				idle_skips++;
-				(*(volatile uint16_t*)0xFFB0FA)++;   // diag: idle-token skips
+				// 0xFFB0EE, NOT 0xFFB0FA: 0xFFB0F8 is a LONG (the
+				// interrupted game PC, md_start.s:254), so it owns
+				// 0xFFB0FA and overwrites it every vint. The first
+				// attempt's skip counter read pure garbage.
+				(*(volatile uint16_t*)0xFFB0EE)++;   // diag: idle-token skips
 				goto window_done;
 			}
 			idle_skips = 0;
@@ -813,6 +839,9 @@ void main(void) {
 	*(volatile uint16_t*)0xFFB0E0 = 0;   // LOOP 7b: DREQ push aborts (own
 	                                     // address at last — 0xFFB0F2 is
 	                                     // windows-completed)
+#ifdef IDLE_TOKEN
+	*(volatile uint16_t*)0xFFB0EE = 0;   // LOOP 11a: idle-token skips
+#endif
 #ifdef TAIL_PROBE
 	*(volatile uint32_t*)0xFFB0D0 = 0;   // LOOP 6: sum of total spans
 	*(volatile uint32_t*)0xFFB0D4 = 0;   //   sum of stream spans

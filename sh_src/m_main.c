@@ -1852,6 +1852,24 @@ RAMCODE static void dreq_rearm(int k)
     SH2_DMA_CHCR0 = 0x44E1;
 }
 
+#ifdef IDLE_TOKEN
+/* Out of line ON PURPOSE. As an inline macro in m_main's poll branch this
+ * cost 628 bytes of _m_main — GCC restructures the loop around the
+ * tok_pub test — and that overran the 0x06019000 region guard. A call is
+ * a few cycles against an MMIO write it usually skips. RAMCODE because
+ * the poll branch runs it every spin. */
+RAMCODE __attribute__((noinline)) static void tok_set(uint16_t v)
+{
+    static uint16_t tok_pub = 0;         /* transition-only: the doorbell
+                                          * read is already ~166K MMIO/sec
+                                          * and this must not add to it */
+    if (tok_pub != v) {
+        tok_pub = v;
+        MARS_SYS_COMM4 = v;
+    }
+}
+#endif
+
 RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
@@ -1984,10 +2002,7 @@ RAMCODE void m_main(void)
      * the MD skip a window it would only have stalled in. Transition-only
      * writes — the doorbell read is already ~166K MMIO/sec and this must
      * not add to it. */
-    uint16_t tok_pub = 0;
-#define TOK(v) do { if (tok_pub != (uint16_t)(v)) {                       \
-                        tok_pub = (uint16_t)(v);                          \
-                        MARS_SYS_COMM4 = (uint16_t)(v); } } while (0)
+#define TOK(v)    tok_set((uint16_t)(v))
 #define TOK_READY 0x0EAD
 #else
 #define TOK(v)    do { } while (0)
@@ -2012,6 +2027,17 @@ RAMCODE void m_main(void)
              * vint we stay light so window pickup latency is bounded
              * by one 12-row strip (else the vblank gate skips blits:
              * 923 mskips/run when build_maps sat on the pickup). */
+            /* IDLE TOKEN, published HERE and only here (LOOP 11a fix):
+             * readiness is "nothing in flight at the poll", not "work
+             * just finished". The first attempt published READY only at
+             * the END of a strip or a build_maps chunk, so an EMPTY band
+             * queue — which never enters those branches — left the token
+             * BUSY forever after the first ack and the MD skipped 3 of
+             * every 4 windows. Every path through this branch reaches
+             * this line, including the do-nothing one; BUSY is then set
+             * immediately before each heavy call below and never needs
+             * clearing, because the next poll visit clears it. */
+            TOK(TOK_READY);
             if (!bq[bq_h].on && maps_owed) {
                 /* owed build_maps from a dropped band: CHUNKED — one
                  * bounded slice per visit (idle drains it in ~9 visits;
@@ -2027,7 +2053,6 @@ RAMCODE void m_main(void)
                     TOK(0);                  /* busy: long, uninterruptible */
                     if (build_maps_chunk(owed_par))
                         maps_owed = 0;
-                    TOK(TOK_READY);
                 }
                 continue;
             }
@@ -2035,8 +2060,10 @@ RAMCODE void m_main(void)
                 /* palette changed: refresh the shadow LUT, one chunk
                  * per idle visit (silhouette fallback until fresh) */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
-                if (dt <= 4000)
+                if (dt <= 4000) {
+                    TOK(0);                  /* busy: a LUT chunk */
                     shadow_lut_chunk();
+                }
                 continue;
             }
             if (bq[bq_h].on && !shadow_stole &&
@@ -2058,6 +2085,7 @@ RAMCODE void m_main(void)
                  * the shadow LUT: wrong colors beat wrong shadows. */
                 uint16_t dt = (uint16_t)(frt() - t_vint);
                 if (dt <= 4000) {
+                    TOK(0);                  /* busy: a maintenance chunk */
                     if (maps_owed) {
                         if (build_maps_chunk(owed_par))
                             maps_owed = 0;
@@ -2146,7 +2174,6 @@ RAMCODE void m_main(void)
                     bq_h = (bq_h + 1) & 3;
                     continue;
                 }
-                TOK(TOK_READY);
                 if (b->phase >= 4) {         /* single-shot phases */
                     b->phase++;
                     b->cnt = 0;
