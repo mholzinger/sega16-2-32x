@@ -303,7 +303,8 @@ two states are 403 and 1889 cycles. A 3709-cycle baseline session
   that shrinks it is drawing fewer pixels — §4.
 - **The TAIL is ack-bound.** 210 lines is 5.5x the mean and the excess
   is not blit. It leaves 8 lines of margin in a 262-line frame, and it
-  is what a player feels as a hitch.
+  is what a player feels as a hitch. **It is still unsolved** — see the
+  note below on why the obvious fix does not work here.
 
 So the "~200-line window" that older docs cite was **never stale** — a
 short sample simply cannot contain it. I retracted it on 403- and
@@ -321,6 +322,34 @@ The blit is 28.5 lines because it moves 71,680 bytes. The only thing
 that shrinks it is **drawing fewer pixels.**
 
 ---
+
+### Why Chaotix's arbitration does not port, even though its rendering might
+
+Worth separating, because the library gives us two different lessons
+and only one of them transfers.
+
+The 68000-side protocol — idle token, poll-and-skip, never wait — was
+implemented faithfully and **fails on this port**: cadence 3.03 -> 7.48
+vints/cycle, 20 Hz down to roughly 8, "broken the second the game
+starts" on Mike's play pass.
+
+**The premise does not hold for us. Chaotix's SH-2 is PARKED most of
+the time; ours is SATURATED.** An idle token is free exactly when "is
+the master busy?" is usually NO — the 68000 takes FM unilaterally and
+never blocks. Our master software-renders every layer, so at the poll
+instant it is genuinely mid-strip: the MD either waits (spending 68000
+time it does not have) or skips (dropping a whole blit phase). Measured
+on ares, 20.5% of windows skipped.
+
+MAME inverted the usual trap here. Its SH-2 is ~3x faster, so the
+master looked parked — 10% skips — and the protocol looked viable.
+
+**The transferable lesson from Chaotix is section 4: put the tile
+planes on the VDP so the master stops being saturated.** Fix the
+workload and the arbitration question changes shape; renegotiate the
+arbitration while the master is still doing all the drawing and there
+is nothing to win. Reduce what crosses the boundary (DREQ+DMAC staging,
+a palette change queue) rather than renegotiating when it crosses.
 
 ## 4. The pivot: move the tile planes to the MD VDP
 

@@ -270,6 +270,55 @@ Ordered by (value / risk):
      ~3 minutes, save a state, and compare worst window/ack against the
      base state's 210 / margin 8. Anything shorter cannot answer it.
 
+     ---- THAT A/B WAS RUN. PART (a) IS CLOSED. ----
+
+     Mike, on `rom/ARES_idlegrace.32x`: **"broken the second the game
+     starts."** The state agrees, and the acceptance gate outranks every
+     metric above:
+
+                        vints/cycle   idle-skips   windows/vint
+         base (ares)        3.03          0            0.991
+         IDLEGRACE (ares)   7.48         20.5%         0.793
+
+     Cadence collapsed from 20 Hz to roughly 8 Hz.
+
+     **THE STRUCTURAL REASON, and it kills the whole family — not this
+     implementation of it. Chaotix's protocol assumes an SH-2 that is
+     PARKED most of the time. Ours is SATURATED.** The idle token is
+     only free when "is the master busy?" is usually NO, because then
+     the 68000 takes FM unilaterally and never waits. Our master is
+     rendering every layer of the screen in software; at the poll
+     instant it is genuinely mid-strip, so the MD either waits (burning
+     68000 time it did not have) or skips (dropping a blit phase). Both
+     lose, and the starvation cap turns a busy master into a 3-in-4
+     window drop.
+
+     MAME hid this exactly backwards from the usual direction: its SH-2
+     is ~3x faster, so the master LOOKED parked (10% skips) and the
+     protocol looked viable. On ares it is 20.5%, and each skip costs a
+     whole window. **A protocol whose premise is "the master is usually
+     idle" cannot be ported to a master that is the bottleneck.** No
+     amount of publish-point fixing or grace-window tuning changes that
+     premise.
+
+     So the FIRST "DEAD" verdict reached the right answer for the wrong
+     reason (it argued from the mean, which was never the target), and
+     the correction that reopened it was right about the tail and still
+     wrong about the conclusion. The tail IS ack-bound at 210 lines with
+     8 lines of margin — that part stands and still needs an answer —
+     but poll-and-skip is not it.
+
+     WHAT SURVIVES FOR WHOEVER PICKS UP THE TAIL PROBLEM: the 210-line
+     worst-case window is real and the margin is 8 lines. Any fix has to
+     work while the master is BUSY, because that is our steady state.
+     That rules out anything Chaotix-shaped and points at the two
+     remaining levers in this doc — DREQ+DMAC staging (b) and the
+     palette change queue (c) — which reduce what crosses the boundary
+     rather than renegotiating when it crosses.
+
+     IDLETOKEN=1 and IDLEGRACE=1 stay behind their flags, **NEVER SHIP**,
+     with this result attached so the family is not re-attempted.
+
      TWO TRAPS THIS COST, both of which invalidate earlier numbers:
        - **0xFFB0FA WAS NEVER THE SKIP COUNTER.** 0xFFB0F8 is a LONG —
          the interrupted game PC, md_start.s:254 — so it owns 0xFFB0FA
