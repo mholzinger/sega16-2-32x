@@ -574,3 +574,66 @@ only walked once.
   reading from it is ambiguous between "this title does not use tile
   planes" and "this title never left the menu". Screenshot before
   believing a null result.
+
+## 9. The tile-RAM read-back question — ANSWERED. It does not block the pivot.
+
+Section 7 listed this as the gate on step 2 (DREQ+DMAC tile staging):
+*which tile-RAM addresses does the game read back, and how many bytes
+do they span?* If the answer were "the whole 64 KB image", the tilemap
+could not leave the framebuffer and the pivot would need a different
+shape. Static analysis of the arcade binary (`m68k-elf-objdump -D` over
+`roms/altbeast/prog68k.bin`):
+
+**Tile RAM is written through pointers, never through absolute
+addresses.** Of 29 absolute operands in 0x400000-0x40FFFF, all but one
+are `lea` pointer setups. Tracing each pointer: **11 sites write-only,
+1 site reads.** But that scan UNDER-REPORTS, because the important
+reads happen in called subroutines, outside the trace window — worth
+knowing before trusting a similar sweep.
+
+The complete read set is two things:
+
+**1. Collision probes — ~15 KB, the real answer.** `lea 0x400000,%a0`
+at `0x683c`, then `bsr` into `0x6936+` where the tests live:
+
+    6936:  tstw %a0@(0,%d4:w)     6942:  tstw %a0@(0,%d5:w)
+    694e:  tstw %a0@(0,%d6:w)     695a:  tstw %a0@(0,%d7:w)
+
+63 indexed reads through a tile-RAM pointer across the binary. The
+index arithmetic at 0x6806-0x683a bounds them:
+
+    d1 = ((x & 0x600) << 3) | ((y & 0x1F8) >> 2)      max 0x307E
+    d2 = ((v & 0x0F8) << 4)                           max 0x0F80
+    d6 = d1 + d2                                      max 0x3FFE
+
+So the reads span **0x400000-0x403FFE, ~15 KB of the 64 KB** — the
+scroll-plane name tables, read a WORD AT A TIME to ask "is this cell
+solid?". Not a bulk transfer: a handful of `tst.w` per actor per frame.
+
+**2. Round-transition scratch — 1 KB, and it is not tilemap data at
+all.** At `0x1B76A`, 256 longs of the game's own work RAM at 0xFFFC00
+are stashed into tile RAM at 0x401000 and read straight back at
+`0x1B7A4` after the transition. The game is using video memory as a
+scratch buffer. It can be redirected anywhere readable; nothing else
+depends on it living there.
+
+### Why this UNBLOCKS the pivot rather than gating it
+
+Section 7 framed the read-back as the hard problem because the 32X
+framebuffer is not readable by the 68000 in any convenient way. **But
+the pivot moves these tables to MD VRAM, and the 68000 CAN read MD VRAM
+— through the VDP data port.** The collision sites are single-word
+reads, so the natural fix is to thunk those 63 sites to VDP-port reads
+(`tools/patch_game.py` already emits write-observer thunks; this is the
+read-side twin of a mechanism that exists).
+
+**The thing that made the read-back look fatal was the destination we
+had chosen, not the game.** Put the tilemap where the 68000 can read
+it and the problem dissolves. Remaining cost to size before building:
+a VDP-port read is far slower than a RAM read, and there are up to 63
+sites — but they fire a few times per actor per frame, not per pixel.
+
+Fallback if the port reads prove too slow: shadow the ~15 KB in MD work
+RAM (64 KB total, already largely spoken for) and read the shadow. The
+game writes that data itself, so a shadow is free to maintain — it is
+the same stream that feeds the VDP.
