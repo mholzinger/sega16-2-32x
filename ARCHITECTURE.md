@@ -143,6 +143,10 @@ point confirming the game state:
 | Mortal Kombat II | empty | empty | 0 | 0 | – | inert during play |
 | **this port** | empty | empty | 0 | 0 | – | inert, always |
 
+**[RETRACTED — the instrument was broken. See section 12. The corrected
+reading is that Space Harrier and MK2 also drive the MD VDP hard during
+gameplay, and the "one of four" conclusion below is wrong.]**
+
 **Of four gameplay-verified commercial titles, exactly ONE puts a live
 scrolling tile plane on the MD VDP — and it is the only one that shares
 Altered Beast's shape.** Space Harrier and MK2 are inert during play.
@@ -782,3 +786,60 @@ Remaining risks, stated so they are not forgotten:
   - These counts come from the composed 32X palette, not from the BG
     layer in isolation. The conclusion is directionally safe because the
     subset is strictly smaller, but the exact figure is not measured.
+
+## 12. CORRECTION: the plane reader was dropping every DMA'd write
+
+Mike asked whether Space Harrier and After Burner use the 68000 for
+background layering at reduced colour. Testing it exposed a bug in
+`tools/vdp_planes.lua` that invalidates most of section 7.
+
+**The bug.** The VDP control word composes a 6-bit code: CD3-CD0 select
+the destination, CD5/CD4 select DMA. The shadow compared the WHOLE
+composed code against 1/3/5, so any DMA'd transfer — where CD5 is set
+and the code reads 33/35/37 instead — fell through every branch and was
+silently discarded. **That is most of a Genesis game's VRAM traffic**,
+which the tool's own docstring says in as many words, immediately above
+the code that failed to do it.
+
+It surfaced only because the CRAM control read `cramNZ=2` for Chaotix,
+whose colourful MD background is visible in a screenshot. An absence
+that a known-positive control contradicts.
+
+**Corrected, gameplay-verified, DMA included:**
+
+| title | Plane A | Plane B | MD spr | window | churn |
+|---|---|---|---|---|---|
+| Space Harrier | 0.97, 325 tiles | 0.96, 410 tiles | 77 | 0.98 | 1120 / 1115 |
+| Mortal Kombat II | 1.00, 973 tiles | empty | 64 | 0.85 | 1120 |
+| Knuckles' Chaotix | 0.09, 42 | 0.80, 46 | 16 | – | 214 / scrolls |
+| After Burner | 0.57, 137 | 0.40, 115 | 19 | 0.62 | 3, scroll moving |
+| **this port** | **empty** | **empty** | **0** | **0** | **–** |
+
+**Space Harrier runs both planes essentially full and fully redrawn
+every sample, with 77 sprites and live scroll.** MK2 mid-fight runs a
+full Plane A with 973 distinct patterns and 64 sprites. Both were
+reported in section 7 as inert. They are not.
+
+### What this invalidates
+
+  - The section 7 plane table, and the "only one of four" conclusion.
+  - The MK2 retraction: "MK2 mid-fight draws NOTHING with the MD VDP"
+    was itself an artifact of this bug. MK2 uses the MD VDP heavily.
+  - The "pivot's evidence is a sample of ONE" framing. Several titles
+    drive the MD VDP during gameplay, so the pivot is BETTER supported
+    than the corrected-once story claimed, not worse.
+
+What survives untouched: **this port writes 0.2 VDP writes/frame and its
+name tables are empty** — no DMA is involved on our side, and slice 1a
+independently confirmed our planes were blank before we painted them.
+We are still the outlier.
+
+### Still unresolved
+
+`cramNZ` reads 0-1 for Space Harrier, After Burner and MK2, while
+Chaotix reads 54. A full plane with an empty palette cannot be visible,
+so either those three load MD CRAM by a route the shadow still misses,
+or their MD layers are drawn and then covered by the 32X. **Do not
+conclude "at reduced colour" from this yet** — that half of Mike's
+question is unanswered, and the honest reading of a 0 here is "the
+instrument has already been wrong once about exactly this".

@@ -24,7 +24,7 @@ local FRAMES = tonumber(os.getenv('SV_FRAMES') or '1800')
 local EVERY  = tonumber(os.getenv('SV_EVERY')  or '120')
 local out    = assert(io.open(os.getenv('SV_OUT'), 'w'))
 
-local vram, vsram, regs = {}, {}, {}
+local vram, vsram, regs, cram = {}, {}, {}, {}
 local addr, code, pend, inc = 0, 0, nil, 2
 local dma_words, dma_ops = 0, 0
 local TAPS = {}                 -- keep references: a collected tap stops firing
@@ -60,8 +60,13 @@ local function do_dma(data)
     for _ = 1, len do
       local ok, w = pcall(function() return cpu_space:read_u16(src) end)
       if not ok then break end
-      if code == 1 then vram[addr & 0xFFFE] = w
-      elseif code == 5 then vsram[addr & 0x7E] = w end
+      -- DESTINATION IS CD3..CD0; CD4/CD5 are the DMA selects. Comparing
+      -- the whole composed code against 1/3/5 silently dropped every
+      -- DMA'd word -- which is most of a Genesis game's VRAM traffic.
+      local dst = code & 0x0F
+      if dst == 1 then vram[addr & 0xFFFE] = w
+      elseif dst == 3 then cram[addr & 0x7E] = w
+      elseif dst == 5 then vsram[addr & 0x7E] = w end
       dma_words = dma_words + 1
       src  = (src + 2) & 0xFFFFFF
       addr = (addr + inc) & 0xFFFF
@@ -75,8 +80,10 @@ local function tap()
     function(off, data, mask)
       local a = off & 6
       if a == 0 then
-        if code == 1 then vram[addr & 0xFFFE] = data & 0xFFFF
-        elseif code == 5 then vsram[addr & 0x7E] = data & 0xFFFF end
+        local dst = code & 0x0F
+        if dst == 1 then vram[addr & 0xFFFE] = data & 0xFFFF
+        elseif dst == 3 then cram[addr & 0x7E] = data & 0xFFFF
+        elseif dst == 5 then vsram[addr & 0x7E] = data & 0xFFFF end
         addr = (addr + inc) & 0xFFFF
       elseif a == 4 then
         if pend == nil and (data & 0xE000) == 0x8000 then
@@ -157,6 +164,11 @@ emu.register_frame_done(function()
     -- A game can put pixels on the MD layer WITHOUT the scroll planes:
     -- via hardware sprites, or via the window plane. Empty name tables
     -- alone do not mean "the MD VDP draws nothing".
+    local cn, cl = 0, {}
+    for _, v in pairs(cram) do
+      if v ~= 0 then local k = v & 0x0EEE
+        if not cl[k] then cl[k] = true; cn = cn + 1 end end
+    end
     local sat = ((regs[5] or 0) & 0x7F) << 9
     local spr = 0
     for i = 0, 79 do
@@ -175,9 +187,9 @@ emu.register_frame_done(function()
     for _, v in pairs(vram) do if v ~= 0 then vram_nz = vram_nz + 1 end end
     out:write(string.format(
       'f=%4d vramNZ=%5d A@%04x fill=%.2f dist=%3d churn=%4d | B@%04x fill=%.2f dist=%3d churn=%4d'
-      .. ' | spr=%2d win=%.2f | vscrollA=%5d vscrollB=%5d | dma_ops=%d dma_words=%d\n',
+      .. ' | spr=%2d win=%.2f cramNZ=%2d | vscrollA=%5d vscrollB=%5d | dma_ops=%d dma_words=%d\n',
       frames, vram_nz, pa, fa, da, ca, pb, fb, db, cb,
-      spr, wfill / 1120.0,
+      spr, wfill / 1120.0, cn,
       (vsram[0] or 0) & 0x3FF, (vsram[2] or 0) & 0x3FF,
       dma_ops, dma_words))
     out:flush()
