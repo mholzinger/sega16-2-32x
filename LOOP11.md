@@ -952,3 +952,64 @@ parity alone; dump the counters first.**
 
 `rom/ARES_cmdint3.32x`. Same three outcomes as before, against base's
 26.6% skips / 3.03 vints-per-cycle / 342 deferrals.
+
+### CMDINT round 3 — RETIRED. NEVER SHIP. The prize was always smaller than the price.
+
+`rom/ARES_cmdint3.bs3`, 3823 cycles, with both bugs fixed and CMD
+masked across the window:
+
+    build       cyc   skips%  defer  yields    L0     L1
+    base       3709     26.6    342       0   7152   6688
+    CMDPROBE   3708     36.2    458       0   7200   6588
+    CMDINT r2  4021     70.1   1598     645   7850   6959
+    CMDINT r3  3823     66.3   1580     587   7588   6908
+
+Two bug fixes bought 94.8 -> 70.1 -> 66.3. It is still 2.5x the
+baseline skip rate, and the reject line was 36.2.
+
+**WHY IT CANNOT WORK, and this is the part worth keeping.** Deferrals
+are 4.6x base off only 587 yields — roughly two dropped bands per
+yield. A yielded strip needs another main-loop visit to finish, and
+that visit has to pass the quiet-zone and dt gates first. The band
+pipeline has NO SLACK: a band must finish all its strips before the
+window that ships it, so **interrupt pickup does not remove latency, it
+moves it from window-pickup to band-completion, and the pipeline cannot
+absorb it there.** Compose also runs ~5% dearer on ares from the extra
+per-chunk call setup (L0 7588 vs 7152) — invisible on MAME, where the
+faster master absorbs it entirely.
+
+**THE ARITHMETIC I SHOULD HAVE DONE BEFORE WRITING ANY OF IT:**
+
+    late pickups, BASE       8.8% of vints   <- the real prize
+    late pickups, CMDPROBE  11.9% of vints
+    price of the ISR alone   3.1 points, with no yield machinery at all
+
+I sized the prize at "12.1% of pickups" from a number measured INSIDE
+the CMDPROBE build — so ~3 of those points were the probe's own
+interrupt inflating the very thing it was measuring. The honest prize
+was <=8.8 points and the interrupt cost 3.1 of them before the
+restructure did anything. **CMDPROBE had already priced the mechanism
+and I read its output as justification instead of as a bill.** Measure
+the price and the prize in the same units, in the same build, before
+building.
+
+RETIRED, both flags NEVER SHIP: `CMDPROBE` keeps its value as the
+pickup-latency instrument (it answers a real question cheaply);
+`CMDINT` is dead. Do not re-attempt interrupt-driven pickup without
+first giving the band pipeline slack — while a band must complete
+within a fixed window count, ANY preemption costs more than it saves.
+
+### WHERE THE GREEN TEARING STANDS AFTER ALL THIS
+
+Unfixed, and the diagnosis is unchanged and still correct: stale bands
+from blit skips, root cause a strip in flight when the window arrives.
+What is now CLOSED is the whole family of fixes that attack the pickup
+side of it — Chaotix's handshake (part a), and preemption (this).
+
+What remains, and they attack the other side:
+  - **Shrink the blit.** 28.5 of the 38.2-line mean window is the blit
+    moving 71,680 bytes. Fewer pixels is the only thing that shrinks
+    it, which is section 4 of ARCHITECTURE.md — move BG and FG cat-0 to
+    the MD VDP. Every measurement in this loop keeps arriving here.
+  - **Give the pipeline slack** so a late band is not a dropped band.
+    Untried, and it is the precondition for ever revisiting preemption.
