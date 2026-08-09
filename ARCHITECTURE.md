@@ -991,13 +991,10 @@ fully-updating row reads ~2.85 frames between changes):
 lands on R2-slave plus the tail of R1-master. He read a real signal off
 the screen that no counter we had was reporting.
 
-**The actionable part: R2 slave 6.01 vs R1 slave 13.61.** Both bands
-carry moving scene content and both are composed by the same CPU in the
-same way, so a 2.3x spread between them is scheduling, not content. The
-band queue drops bands under load and `drop_s0` rotation is supposed to
-spread that staleness evenly across regions. It is not doing so. That is
-a concrete lead for the stale-band half of the green tearing, and it is
-independent of everything the pivot is doing.
+**~~The actionable part: R2 slave 6.01 vs R1 slave 13.61~~ — RETRACTED
+by the control capture, see below.** I claimed the R1/R2 spread was
+scheduling rather than content because "both bands take the same hit"
+from the probe. That reasoning was wrong and the control says so.
 
 **CONFOUNDS, which matter here more than usual:**
   - A row that never changes because nothing MOVES there is
@@ -1012,3 +1009,41 @@ independent of everything the pivot is doing.
   - What would settle it: the same capture on a clean shipping build.
     Then compare band-for-band between the two, which removes the
     content confound entirely.
+
+### The control capture: the imbalance was the probe, and the pipeline is fairly even
+
+Same measurement on a clean `rom/s16.32x` capture (8512 frames):
+
+    band          rows      CLEAN     MDBG probe
+    R0 slave       0- 35    12.75        5.02      <- sky, 9 rows static
+    R0 master     36- 71     6.71       53.79
+    R1 slave      72-107     3.72       13.61
+    R1 master    108-143     3.16        8.70
+    R2 slave     144-183     4.04        6.01
+    R2 master    184-223     5.81       10.57
+
+    Mike's box   130-181     3.67        5.54
+    everything else          6.39       14.35
+    play area 36-223         4.65                  (ideal 2.85)
+
+**R1 slave 3.72 against R2 slave 4.04 — the 2.3x spread is gone.** So
+the imbalance was an artifact of the MDBG probe, not a scheduling bug in
+the band queue, and the "drop_s0 rotation is not spreading staleness"
+lead is dead. My stated reason for believing the confound was survivable
+— "both bands take the same hit" — was simply false; the probe hit R1
+much harder than R2.
+
+What the control DOES establish, and it is worth having:
+  - **The clean pipeline is fairly even across the play area**, 3.16 to
+    5.81 against an ideal of 2.85. There is no starved band.
+  - **Mike's box is still the best region even on a clean build** (3.67
+    vs 6.39 elsewhere) — his eye was reading something real both times,
+    it just is not a defect.
+  - The remaining gap from 2.85 to 4.65 is the blit-skip rate showing up
+    as visible staleness: this session measured 39.1% skips, and ~4.65
+    is about what one-in-three dropped frames looks like.
+
+That last line is the useful one. **Per-band update rate is a direct
+visual proxy for the blit-skip counter**, so `tools/row_health.py` can
+score a build from a capture without a savestate — and unlike parity, it
+measures the thing the player actually perceives.
