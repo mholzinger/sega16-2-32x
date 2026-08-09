@@ -637,3 +637,56 @@ Fallback if the port reads prove too slow: shadow the ~15 KB in MD work
 RAM (64 KB total, already largely spoken for) and read the shadow. The
 game writes that data itself, so a shadow is free to maintain — it is
 the same stream that feeds the VDP.
+
+## 10. PIVOT SLICE 1a — MD video composites through the 32X layer. VERIFIED.
+
+The whole pivot rests on the 32X being able to leave holes for MD video
+to fill, and **nothing had ever tested it**. The port has driven the MD
+VDP at 0.2 writes/frame since it was written and both name tables read
+empty on hardware, so the compositing path had never once been
+exercised. Testing it cost an hour; assuming it would have cost a month.
+
+`make MDBG=1` paints a font-glyph pattern into MD Plane B (0xE000,
+already enabled by `md_start.s`) and has the SH-2 leave the BG rows at
+pixel 0 instead of composing them. **Result: the MD pattern appears,
+through the 32X image, exactly in the rows the BG vacated.**
+
+### The thing that was wrong, and it had been wrong from the start
+
+**Transparency on the 32X is bit 15 of the CRAM ENTRY, not "pixel index
+== 0".** `m_main.c` reserves group 0 so that "no composed pixel is ever
+VALUE 0 (the MD-through value)" — the slot was deliberately kept for
+this and then **never armed**, because `cram_mirror[0]` has always been
+`0x0000`: through-bit clear, i.e. opaque black.
+
+First attempt therefore painted the BG rows solid black rather than
+transparent, which is the same mechanism NOTES recorded years ago for
+dropped banks ("all zeros -> every pixel hits CRAM[0] = 0x0000,
+through-bit clear = opaque black"). One word — `cram[0] = 0x8000` — and
+the layer opens up.
+
+    cram[0] = 0x0000   index-0 pixels are opaque black   <- shipped state
+    cram[0] = 0x8000   index-0 pixels are MD video       <- what we need
+
+### What this buys beyond the pivot
+
+The strobe gets cheaper for free. A restore that misses vblank shows
+the un-painted bank, which today is 71,680 bytes of index 0 = solid
+black = the flash. Once the through bit is armed AND the BG lives on
+the MD VDP, that same dropped bank shows **the MD background** instead
+of black. The artifact degrades from a black flash to a missing
+foreground — still wrong, far less violent.
+
+### Where that leaves the pivot's assumptions
+
+    compositing works                 VERIFIED (this section)
+    read-back is affordable           ANSWERED (section 9, ~15 KB)
+    patterns fit in 64 KB VRAM        counted, not yet uploaded for real
+    priority split is affordable      MEASURED (0.26 of a pass)
+    21 -> 8 colour merge              UNSOLVED, and now the long pole
+
+Next slice is 1b: replace the font pattern with real System 16 BG tiles
+— convert the patterns to MD 4bpp planar, generate the name table from
+the game's tilemap, drive scroll from its registers. Colour stays wrong
+until the merge is built; a single-scene static allocation is enough to
+judge the geometry.

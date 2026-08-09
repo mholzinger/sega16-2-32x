@@ -66,9 +66,41 @@ static uint8_t md_to_arcade(uint16_t p) {
 	return (uint8_t)~a;
 }
 
+#ifdef MD_BG
+/* LOOP 11 PIVOT, SLICE 1a — can MD video show THROUGH our 32X layer?
+ * Everything downstream of the pivot assumes it can, and nothing has
+ * ever tested it: the port has driven the MD VDP with 0.2 writes/frame
+ * since it was written, and both name tables read empty on hardware.
+ * So before converting a single S16 tile, paint a recognisable pattern
+ * into Plane B (0xE000, 64x32, display already on from md_start.s) out
+ * of the font glyphs md_start.s already uploaded to VRAM 0, and have
+ * the SH-2 leave the BG rows at pixel 0 -- the documented MD-through
+ * value that the allocator deliberately never assigns.
+ * If this does not appear, the pivot is dead and we have spent an hour
+ * instead of a month. */
+__attribute__((section(".data")))
+static void md_bg_testpattern(void) {
+	for (uint16_t row = 0; row < 28; row++) {
+		uint32_t a = 0xE000u + (uint32_t)row * 128u;   /* 64-cell stride */
+		*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16) | ((a >> 14) & 3u);
+		for (uint16_t col = 0; col < 40; col++) {
+			/* font glyphs are tiles 1..44, colour 1 of palette 0 */
+			uint16_t t = (uint16_t)(1 + ((row + col) % 44));
+			*vdp_data_port = t;
+		}
+	}
+}
+#endif
+
 __attribute__((section(".data")))
 void shim_vblank(void) {
 	static uint16_t busy;
+#ifdef MD_BG
+	{
+		static uint8_t painted;
+		if (!painted) { painted = 1; md_bg_testpattern(); }
+	}
+#endif
 
 	(*(volatile uint16_t*)0xFFB0F0)++;   // diagnostics: handler entries
 

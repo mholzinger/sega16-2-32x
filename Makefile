@@ -109,6 +109,14 @@ endif
 # blit phase -- the stale band that reads as green tearing.
 # Falsifier: blit skips must fall well below 26.6% of cycles on a LONG
 # ares state, with parity statics unmoved.
+# `make MDBG=1` = LOOP 11 PIVOT slice 1a: paint a test pattern into MD
+# Plane B and leave the 32X BG rows at pixel 0 (the MD-through value).
+# Answers the one question the whole pivot rests on and has never been
+# tested: does MD video composite through our 32X layer at all?
+ifdef MDBG
+SHCCFLAGS += -DMD_BG
+MDCCFLAGS += -DMD_BG
+endif
 ifdef CMDINT
 SHCCFLAGS += -DCMD_INT
 MDCCFLAGS += -DCMD_INT

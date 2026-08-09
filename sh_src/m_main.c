@@ -855,6 +855,16 @@ RAMCODE static void apply_cram(int par)
         cram_hijacked = 0;
     }
     volatile uint16_t *cram = &MARS_CRAM;
+#ifdef MD_BG
+    /* PIVOT SLICE 1a — THE THROUGH BIT. On the 32X, transparency is
+     * bit 15 of the CRAM ENTRY, not "pixel index == 0". CRAM[0] has
+     * always been 0x0000 here, i.e. opaque black, which is exactly why
+     * a dropped bank shows as a black frame (NOTES: "through-bit clear
+     * = opaque black"). The allocator already reserves group 0 so no
+     * composed pixel is ever index 0 -- the slot was kept for this and
+     * never armed. Set the through bit and index 0 becomes MD video. */
+    cram[0] = 0x8000;
+#endif
     for (int c = 0; c < 128; c++) {
         uint8_t g = tile_grp[par][c];
         if (g == 0xFF)
@@ -2179,7 +2189,16 @@ RAMCODE void m_main(void)
                  * the CMD ISR ever initialises. */
                 switch (b->phase) {
                 case 0:
+#ifdef MD_BG
+                    /* PIVOT SLICE 1a: leave the BG rows at 0 so the MD
+                     * layer shows through, instead of composing them. */
+                    for (int r = y; r < ye; r++) {
+                        uint8_t *d = &sbuf[r * SBUF_W];
+                        for (int x = 0; x < SBUF_W; x++) d[x] = 0;
+                    }
+#else
                     compose_layer(y, ye, 0, 1, 1, b->bank, b->bpar, 0);
+#endif
                     diag_add(10, tq);
                     break;
                 case 1:
