@@ -690,3 +690,41 @@ Next slice is 1b: replace the font pattern with real System 16 BG tiles
 the game's tilemap, drive scroll from its registers. Colour stays wrong
 until the merge is built; a single-scene static allocation is enough to
 judge the geometry.
+
+### Slice 1b, step 1 — the pattern conversion, verified offline
+
+`tools/md_tiles.py`. S16 tiles are 3 bitplanes (pens 0-7); MD wants 4bpp
+packed, 32 bytes/tile, 4 bytes/row, **high nibble = LEFT pixel**. Pens
+0-7 drop straight into a nibble, which is exactly what leaves 8-15 free
+for the FG/BG palette pairing in section 4.
+
+    tools/md_tiles.py verify  ->  16384 tiles, 0 round-trip mismatches
+
+and rendering tiles 512-767 through the conversion shows the stage-1
+masonry, so the format is right in shape as well as in bits. Verified
+off-target before a line of on-target code, because a wrong pixel order
+would have shown up as "the pivot does not work" rather than as "the
+converter is byte-swapped".
+
+**VRAM budget, concrete.** `md_start.s` puts Window at 0xB000, Plane A
+at 0xC000, Plane B at 0xE000, hscroll 0xFC00, sprites 0xFE00. So
+patterns own **0x0000-0xAFFF = 45,056 bytes = 1408 tiles**, less the 45
+font tiles already there = **1363 available**. Peak measured demand is
+599 distinct scroll patterns (+96 text) — it fits roughly 2x over, which
+is the first time that claim has been checked against the actual VRAM
+map rather than against 64 KB.
+
+**Transport, decided.** The MD cannot read SH-2 SDRAM, so patterns have
+to cross somehow. Three options considered:
+  - *MD-planar copy in cart ROM* — +512 KB and needs bank management via
+    0xA15104 to reach it. Rejected for now.
+  - *SH-2 converts at runtime into FB scratch, MD uploads* — reuses the
+    established FB channel, no ROM or build changes. There is 1536 bytes
+    of documented dead FB space at 0x11A00-0x12000 (NOTES), which is 48
+    tiles per batch: ~13 batches to move 600 patterns. **Chosen.**
+  - *MD converts* — it has no source data. Not possible.
+
+Next step is that transport plus the name-table write; the tilemap word
+decode the MD needs is already established in `compose_layer_regs`:
+`code = w & 0x1FFF` (bank-remapped when bit 12 is set),
+`colour = (w >> 6) & 0x7F`.
