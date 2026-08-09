@@ -1047,3 +1047,67 @@ That last line is the useful one. **Per-band update rate is a direct
 visual proxy for the blit-skip counter**, so `tools/row_health.py` can
 score a build from a capture without a savestate — and unlike parity, it
 measures the thing the player actually perceives.
+
+## 15. What the pivot actually buys: tearing, not framerate
+
+Before building the background (slice 1c) I measured the payoff I had
+been assuming. It is not the one section 4 claims.
+
+**Moving the BG off the 32X does not shrink the blit by itself.** The
+blit ships the whole staging buffer regardless of content — 28.5 of the
+38-line window, and the reason a frame costs 3 vints. Compose writes
+SDRAM; only the blit touches the framebuffer. So a framerate win
+requires enough of the screen to go ENTIRELY transparent that the blit
+can skip it. Measured, with the layers actually removed:
+
+    configuration                      transparent AREA   32px blocks
+    BG off                                   18.1%           12.4%
+    BG + FG cat-0 off (section 4's plan)     31.1%           25.0%
+    BG + FG cat-0 + text off (ceiling)       31.8%           25.7%
+    fully transparent ROWS (BG off)           6.7%
+
+**Section 4 assumed a residual of 0.26 of a screen, i.e. 74%
+transparent. The real ceiling is 31.8%.** That figure came from counting
+FG cat-1 as 26% of visible TILES and treating it as the whole residual —
+it ignored sprites, which are scattered across nearly every row. Adding
+text to the migration moves the number by 0.7 points, so there is no
+further layer worth chasing.
+
+At a practical 32-pixel granularity only 25.7% is skippable, and LOOP 9
+put the dirty-blit break-even at ~25%. **A block-skipping blit would
+land on break-even. There is no framerate win here.**
+
+### But the load result is dramatic, and it is the one we needed
+
+Same builds, same 1197 cycles, probe disabled so the blit is honest:
+
+                  blit skips      composeL0   composeL1   blit
+    base          280 (23.4%)        6792        5720      719
+    pivot           2 ( 0.2%)        1494           0      777
+
+**Blit skips fall 23.4% -> 0.2%, a 100x reduction, with the blit itself
+unchanged (719 -> 777).** Compose load collapses: L0 6792 -> 1494, L1
+5720 -> 0.
+
+That is the whole tearing mechanism. Section 13 established the chain:
+blit skips -> a third of the screen holds a stale band for a cycle ->
+the green tear. Skips happen because the master is mid-strip when the
+window arrives, and the master is mid-strip because it is
+software-rendering two tile layers. Take those away and it is idle when
+the window comes.
+
+### So the pivot's case is now precise
+
+  - **Tearing: solved, and by a wide margin.** 23.4% -> 0.2% skips.
+  - **Framerate: unchanged at 20 Hz.** The blit is unmoved, and the
+    cadence is 3 windows per frame because a window can only ship 75
+    rows inside a 38-line vblank.
+  - **Effective framerate improves anyway**, because today 23-39% of
+    cycles drop their blit. A solid 20 Hz is better than a ragged one.
+
+That is still worth building — tearing is second on Mike's priority
+list and this kills it outright. But **the "20 Hz is the 1.6-pass
+number" story does not get solved by moving layers to the MD.** Going
+past 20 Hz needs the blit itself to change: ship more rows per vblank,
+or stop shipping whole frames. That is a separate problem and this work
+does not address it.

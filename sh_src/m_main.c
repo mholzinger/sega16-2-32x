@@ -1588,6 +1588,40 @@ RAMCODE static void blit_half(int ylo, int yhi)
 {
     for (int y = ylo; y < yhi; y++) {
         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+#ifdef MD_PAYOFF
+        /* PIVOT PAYOFF PROBE. Costs a full extra read pass over every
+         * row, so it INFLATES the blit -- never measure blit time with
+         * this on. Moving the BG to the MD does NOT shrink
+         * the blit on its own -- the blit ships the whole staging
+         * buffer regardless, and that is 28.5 of the 38-line window and
+         * the reason a frame costs 3 vints. The win only arrives if
+         * enough rows go ENTIRELY transparent (every pixel index 0, the
+         * MD-through value) that we can stop shipping them. Section 4
+         * assumes the residual falls to ~0.26 of a screen; LOOP 9's
+         * dirty-row blit found only 13-17% skippable, but that was with
+         * the BG still in the framebuffer dirtying everything.
+         * [62] rows checked, [63] rows fully transparent. */
+        {
+            /* [60]/[61] longs = transparent AREA (what section 4's
+             * "0.26 of a screen" actually refers to).
+             * [62]/[63] 32-pixel groups = what a blit could REALISTICALLY
+             * skip; per-long branching costs more than the store. */
+            uint32_t any = 0;
+            for (int g = 0; g < 10; g++) {
+                uint32_t ga = 0;
+                for (int i = 0; i < 8; i++) {
+                    uint32_t v = src[g * 8 + i];
+                    ga |= v;
+                    DIAG[60]++;
+                    if (!v) DIAG[61]++;
+                }
+                DIAG[62]++;
+                if (!ga) DIAG[63]++;
+                any |= ga;
+            }
+            (void)any;
+        }
+#endif
 #ifdef ROWSTALE_PROBE
         {
             int sl = rowslot(y);
@@ -2212,7 +2246,14 @@ RAMCODE void m_main(void)
                     diag_add(10, tq);
                     break;
                 case 1:
+#ifdef MD_BG_FG0
+                    /* PIVOT CONFIG: FG cat-0 moves to the MD too
+                     * (section 4: "the two scroll layers, and only
+                     * those"). Phase 0 already left these rows at 0, so
+                     * skipping is the same as leaving them transparent. */
+#else
                     compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 1);
+#endif
                     diag_add(11, tq);
                     break;
                 case 2:
@@ -2294,6 +2335,10 @@ RAMCODE void m_main(void)
                 case 3:
                     break;
                 case 4:
+#ifdef MD_BG_TEXT
+                    break;    /* text to the MD as well -- 96 distinct
+                               * patterns, tile-based, MD-friendly */
+#endif
                     compose_text((b->rg == 0) ? 4 : (b->rg == 1) ? 13 : 23,
                                  (b->rg == 0) ? 9 : (b->rg == 1) ? 18 : 28,
                                  b->bpar);

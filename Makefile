@@ -117,6 +117,23 @@ ifdef MDBG
 SHCCFLAGS += -DMD_BG
 MDCCFLAGS += -DMD_BG
 endif
+# MDBGFG0=1 = the FULL pivot configuration: BG *and* FG cat-0 off the
+# 32X, which is what section 4 actually proposes. Implies MDBG.
+ifdef MDBGFG0
+SHCCFLAGS += -DMD_BG -DMD_BG_FG0
+MDCCFLAGS += -DMD_BG
+endif
+# MDBGALL=1 = BG + FG cat-0 + TEXT off the 32X. Upper bound on what the
+# pivot can free: only sprites and FG cat-1 remain.
+ifdef MDBGALL
+SHCCFLAGS += -DMD_BG -DMD_BG_FG0 -DMD_BG_TEXT
+MDCCFLAGS += -DMD_BG
+endif
+# MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
+# every row a second time, so it inflates the blit -- diagnosis only.
+ifdef MDPAYOFF
+SHCCFLAGS += -DMD_PAYOFF
+endif
 ifdef CMDINT
 SHCCFLAGS += -DCMD_INT
 MDCCFLAGS += -DCMD_INT
