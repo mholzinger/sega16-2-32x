@@ -683,7 +683,7 @@ foreground — still wrong, far less violent.
     read-back is affordable           ANSWERED (section 9, ~15 KB)
     patterns fit in 64 KB VRAM        counted, not yet uploaded for real
     priority split is affordable      MEASURED (0.26 of a pass)
-    21 -> 8 colour merge              UNSOLVED, and now the long pole
+    21 -> 8 colour merge              MOSTLY DISSOLVES, see section 11
 
 Next slice is 1b: replace the font pattern with real System 16 BG tiles
 — convert the patterns to MD 4bpp planar, generate the name table from
@@ -728,3 +728,57 @@ Next step is that transport plus the name-table write; the tilemap word
 decode the MD needs is already established in `compose_layer_regs`:
 `code = w & 0x1FFF` (bank-remapped when bit 12 is set),
 `colour = (w >> 6) & 0x7F`.
+
+## 11. Colour is not the long pole. The depth loss does the merging for us.
+
+Section 4 framed this as "21 distinct tile colour sets against an MD
+capacity of 8, 2.6x, needs a per-scene merge". That framing counts SETS
+of 8 as if all 8 pens were distinct and no two sets overlapped. Measured
+against 28 real captured scenes (`cram_mirror` out of the ares states),
+neither holds.
+
+**1. The depth loss is invisible.** MD CRAM is 3 bits per channel
+against System 16's 5. Quantising the live palette from `rom/s16.bs1`:
+
+    5bpp -> 3bpp error, per channel, in 0..31 steps:  max 2,  mean 1.05
+
+Rendering the actual captured frame both ways side by side, the images
+are indistinguishable. ~3% error on a palette that is mostly greys and
+earth tones.
+
+**2. That same quantisation collapses the colour COUNT by a third.**
+Distinct colours per scene, before and after MD quantisation, over the
+28 states with a live palette:
+
+    mean   92 distinct at 5-bit   ->   58 at MD 3-bit
+    worst 133 distinct at 5-bit   ->   81 at MD 3-bit
+    MD total capacity = 64 (4 palettes x 16 pens)
+
+**The mean whole-frame demand lands UNDER the MD's entire 64-colour
+capacity once quantised** — and that is the whole frame, sprites
+included, when sprites are not even moving. The subset that actually
+migrates (BG + FG cat-0) is smaller again.
+
+The palette is far more redundant than a set count suggests: sets share
+colours, and 3-bit quantisation merges near-duplicates that were only
+ever distinct at 5-bit.
+
+### What this changes
+
+No runtime 21->8 merge algorithm. **Precompute the assignment**: we have
+the ROM and every palette state the game reaches, so the set->palette
+mapping and the quantised entries can be computed offline per scene and
+shipped as a table. Runtime cost becomes a CRAM upload, not a search.
+
+Remaining risks, stated so they are not forgotten:
+  - The worst scenes still quantise to 81 whole-frame. If the migrating
+    subset exceeds 64 in any scene, that scene needs a real merge —
+    measure the BG+FG-cat0 subset specifically before assuming it does
+    not.
+  - Colour CYCLING. LOOP 8 found regions 0 and 1 are rewritten every
+    vint by the cycling sets. A precomputed static table cannot follow
+    that; those sets need a live CRAM path, which the MD has (a change
+    queue, Chaotix-style — section 2 model B item 2).
+  - These counts come from the composed 32X palette, not from the BG
+    layer in isolation. The conclusion is directionally safe because the
+    subset is strictly smaller, but the exact figure is not measured.
