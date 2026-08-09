@@ -768,3 +768,49 @@ THREE TRAPS THIS COST, all worth not repeating:
     68000 reached the write, so it read the PREVIOUS vint's stamp and
     every sample came out at ~one frame (229 lines mean). The bug was
     visible only because the number was absurd.
+
+### CMDPROBE ON ares — THE ISR REWRITE IS JUSTIFIED, and the mean nearly hid it
+
+`rom/ARES_cmdprobe.bs1`, 3708 cycles, 11125 sampled pickups:
+
+    CMD ISR fires        11125  (one per vint, plumbing good)
+    MEAN pickup latency  83 ticks = 1.8 lines
+    MAX                  UNUSABLE — 279 lines, longer than a frame
+
+**Read the mean alone and you kill the rewrite. That would be wrong.**
+1.8 lines says "the master notices almost immediately", and for 88% of
+windows it does. The defect lives in the other 12%, and the same state
+measures it: `blit skips = 1342` against 11125 pickups = **12.1% of
+pickups are late enough to miss the master's `v > 0xE4` accept bound**.
+
+Decomposing the mean over those two populations (robust to the
+assumption — prompt pickup 0.1/0.2/0.4 lines gives 14.2/13.5/12.0):
+
+    88% of pickups   prompt, an interrupt would gain nothing
+    12% of pickups   ~13 lines late  <- exactly a compose strip in
+                                        flight (strips run 6-22 lines)
+
+**Those 12% ARE the blit skips, which are the stale bands, which are
+the green tearing.** An interrupt preempts the strip; polling cannot.
+This is the one lever that reaches the defect, and unlike part (a) it
+does not care that the master is saturated.
+
+The accept window is only 6 lines wide (`skip = v < 0xDF || v > 0xE4`,
+m_main.c:2278) and the MD's own gate posts inside V 0xDF..0xE2, so a
+pickup has 2-5 lines of headroom. A 13-line strip overruns it every
+time. Widening the bound instead was already tried and rejected: V of
+0xE5-0xE6 left ~1.7ms of vblank and missed the restore, which is why
+the gate's upper bound was tightened to 0xE2 in the first place.
+
+MAX WAS CONTAMINATED and the fix is in: the guard was `d < 20000`
+(435 lines), so a window the MD never posted or the master never picked
+up left a delta spanning frames, and the 16-bit FRT wraps every ~1425
+lines. Bound is now one frame (12052 ticks). Added DIAG[62] (> 3 lines)
+and DIAG[63] (> 10 lines) so the next run reports the SHAPE directly
+instead of requiring the decomposition above — `rom/ARES_cmdprobe2.32x`.
+
+NOTE the probe's own cost is visible here too: blit skips read 36.2% of
+cycles in this state against 26.6% in the base state, and V-gate
+rejects 1.3% against 0.9%. Its per-vint MMIO write and ISR entry make
+the thing it measures worse, so treat 12.1% as an upper bound on the
+prize and re-check against a base state.

@@ -2197,10 +2197,22 @@ RAMCODE void m_main(void)
             {
                 uint16_t isr_t = (uint16_t)DIAG[58];
                 uint16_t d = (uint16_t)(tw - isr_t);
-                if (d < 20000) {          /* ignore the pre-first-ISR case */
+                /* BOUND IS ONE FRAME (262 lines = 12052 ticks), not
+                 * 20000: a window the MD never posts (V-gate reject) or
+                 * the master never picks up leaves the delta spanning
+                 * multiple frames, and the 16-bit FRT wraps every ~1425
+                 * lines. The first cut used 20000 and DIAG[59] came back
+                 * as 279 lines -- longer than a frame, i.e. nonsense. */
+                if (d < 12052) {
                     if (d > DIAG[59]) DIAG[59] = d;
                     DIAG[60] += d;
                     DIAG[61]++;
+                    /* the mean hides the shape: what matters is the
+                     * FRACTION of pickups late enough to miss the
+                     * master's V<=0xE4 accept bound. [62] > 3 lines,
+                     * [63] > 10 lines (a compose strip in flight). */
+                    if (d > 138) DIAG[62]++;
+                    if (d > 460) DIAG[63]++;
                 }
             }
 #endif
