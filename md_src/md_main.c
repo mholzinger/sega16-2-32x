@@ -217,7 +217,7 @@ void shim_vblank(void) {
 		// stale slices).
 		*mars_comm12 = (uint16_t)(0xD000
 			| (*(volatile uint16_t*)0xC00008 >> 8));
-#ifdef CMD_PROBE
+#if defined(CMD_PROBE) || defined(CMD_INT)
 		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
 		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the
 		// master still picks the window up by polling COMM0 exactly as

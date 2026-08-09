@@ -101,6 +101,24 @@ ifdef CMDPROBE
 SHCCFLAGS += -DCMD_PROBE
 MDCCFLAGS += -DCMD_PROBE
 endif
+# `make CMDINT=1` = LOOP 11: interrupt-driven window pickup. The MD
+# raises CMD INT before posting; the SH-2 ISR sets a yield flag (it does
+# NO window work); compose strips test it between YIELD_ROWS-row chunks
+# and resume where they stopped. Targets the MEASURED 12.1% of ares
+# pickups that land past the master's v<=0xE4 accept bound and drop a
+# blit phase -- the stale band that reads as green tearing.
+# Falsifier: blit skips must fall well below 26.6% of cycles on a LONG
+# ares state, with parity statics unmoved.
+ifdef CMDINT
+SHCCFLAGS += -DCMD_INT
+MDCCFLAGS += -DCMD_INT
+endif
+# `make YIELDROWS=n` = chunk size for the yieldable strips. 12 = one
+# chunk = no yielding, which isolates the restructure's own cost from
+# the cost of chunking.
+ifdef YIELDROWS
+SHCCFLAGS += -DYIELD_ROWS=$(YIELDROWS)
+endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be
@@ -148,6 +166,9 @@ SHASFLAGS  = -Ish_src --small
 # --defsym to exactly that and the probe assembled to nothing.
 ifdef CMDPROBE
 SHASFLAGS += --defsym CMD_PROBE=1
+endif
+ifdef CMDINT
+SHASFLAGS += --defsym CMD_INT=1
 endif
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
 SHLDFLAGS  = -T sh_src/mars.ld -nostdlib

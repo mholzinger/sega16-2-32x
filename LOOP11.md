@@ -814,3 +814,61 @@ cycles in this state against 26.6% in the base state, and V-gate
 rejects 1.3% against 0.9%. Its per-vint MMIO write and ISR entry make
 the thing it measures worse, so treat 12.1% as an upper bound on the
 prize and re-check against a base state.
+
+## CMDINT — interrupt-driven pickup, BUILT. `make CMDINT=1 YIELDROWS=6`
+
+**Design, and it is deliberately NOT "move the window body into the
+ISR".** That would mean 640 lines of blit/CRAM/copy_pages running
+re-entrantly against a half-finished strip, and it is not necessary.
+The ISR does no window work at all:
+
+  1. MD raises CMD INT (`0xA15102`) immediately before posting COMM0.
+  2. `main_cmd_irq` sets ONE byte — `win_pend` at 0x26028D80, uncached
+     so the strip loop sees it without a purge — and returns.
+  3. The row phases (0-3) are RANGE calls, so the strip is cut into
+     YIELD_ROWS-row chunks AT THE CALL SITE and the flag is tested
+     between them. **The hot inner loops are untouched.**
+  4. `b->sub` records rows completed, so a yielded strip RESUMES rather
+     than recomputing. Phases 4/5/default stay atomic.
+
+Pickup latency becomes one chunk instead of one strip. That is the
+whole mechanism, and it works while the master is saturated — the
+condition part (a) died on.
+
+STARVATION GUARD, written before shipping the bug this time: the ISR
+fires microseconds BEFORE COMM0 is written, so win_pend is briefly set
+with no command visible — expected. A raise with no post EVER following
+would make every strip yield forever and stop compose dead, so after 64
+fruitless yields the flag is cleared. DIAG[63] counts trips and should
+read ~0; nonzero means raises without posts. DIAG[62] counts yields.
+
+### MAME can only show the COST. Ablation, since that is what it is good for:
+
+    baseline                         24.26
+    YIELDROWS=12 (no yielding)       26.20   <- ISR + MD write overhead
+    YIELDROWS=6                      26.74   <- yielding itself: +0.5
+    YIELDROWS=4                      30.52   <- too fine, round-trip dominates
+
+So the restructure's fixed cost is ~2 points (the same ~2 CMDPROBE
+showed for the identical ISR + MMIO overhead) and chunking at 6 rows
+adds only half a point. 4 rows is past the knee — each yield costs a
+full main-loop round trip through the quiet-zone and dt checks, and
+three of them per strip is worse than the latency it saves.
+**title stays 2.44 exact at every setting**, which is the correctness
+gate; the dynamic scenes move with cadence and cannot rank this.
+
+`YIELDROWS=6` shipped as `rom/ARES_cmdint.32x`.
+
+### THE ares RUN THAT DECIDES IT
+
+Play `rom/ARES_cmdint.32x` >3 minutes, save a state. Compare against the
+base state `rom/s16.bs1`:
+
+    blit skips        26.6% of cycles   <- MUST fall well below this
+    worst window/ack  208 lines, margin 8
+    vints/cycle       3.03              <- must NOT rise (that was
+                                           IDLEGRACE's failure mode)
+
+Plus DIAG[62] (yields happening at all) and DIAG[63] (~0 expected).
+If blit skips do not move, the 12.1%-late decomposition was wrong and
+this comes out with the same NEVER SHIP marking as part (a).

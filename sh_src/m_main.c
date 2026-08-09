@@ -152,6 +152,14 @@ static volatile uint16_t miss_n[2];
  * CPUs); the grp/pr allocator state is master-only (bm_tail). */
 #define blank_tile ((uint8_t *)0x06028840)              /* 64B, after SYNC */
 
+/* LOOP 11 — YIELD FLAG for interrupt-driven window pickup. Set by the
+ * CMD ISR (mars_start.s main_cmd_irq) the instant the 68000 signals a
+ * window; cleared when the window is picked up. UNCACHED alias on both
+ * sides: same CPU, but the ISR writes and the strip loop reads, and a
+ * cached read would sit on a stale line until the next purge.
+ * Lives in the documented 28D80-28FFF free block. */
+#define win_pend ((volatile uint8_t *)0x26028D80)
+
 /* Color maps, double-buffered by window parity (slave prescans par^1
  * during window N; both CPUs compose frame N+1 from par^1 after the
  * toggle). */
@@ -194,6 +202,13 @@ static volatile uint8_t shadow_dirty = 1;
 static uint8_t shadow_cur;                  /* rebuild chunk cursor */
 /* Group 0 is NEVER assigned by the allocator, so no composed pixel is
  * ever VALUE 0 (the MD-through value) — replaces the old BG0 alias. */
+
+/* Rows of a compose strip run between yield checks. 12 = the old
+ * atomic strip (no yielding). 4 bounds the overrun to ~1/3 of a strip
+ * at the cost of two extra call setups per strip. */
+#ifndef YIELD_ROWS
+#define YIELD_ROWS 4
+#endif
 
 #define SBUF_W 336
 #define SBUF_H 240
@@ -1961,6 +1976,9 @@ RAMCODE void m_main(void)
      * latency is bounded by one strip (~0.4ms). */
     struct band {
         uint8_t on, rg, bpar, bank, phase, s0, cnt;
+        uint8_t sub;      /* rows of the current strip already composed:
+                           * a strip that yielded to the window RESUMES
+                           * here instead of recomputing from its start */
     };
     struct band bq[4];
     int bq_h = 0, bq_t = 0;
@@ -1982,6 +2000,7 @@ RAMCODE void m_main(void)
                                           * bitmap rides the DREQ tail;
                                           * boot = all pages once) */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
+    uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
     for (int i = 0; i < 4; i++)
         bq[i].on = 0;
     for (int i = 0; i < 256; i++) {      /* fixed blocks aren't .bss-zeroed */
@@ -2136,22 +2155,77 @@ RAMCODE void m_main(void)
                 int y = lo + idx * 12, ye = (y + 12 > hi) ? hi : y + 12;
                 uint16_t tq = frt();
                 TOK(0);                          /* busy: a compose strip */
-                /* Order exact for pp=2 sprites (see slave_concurrent_k) */
+                /* ---- YIELDABLE STRIP (LOOP 11, interrupt pickup) ----
+                 * A 12-row strip runs 6-22 scanlines, and the master's
+                 * accept bound is only 6 lines wide (v<0xDF||v>0xE4)
+                 * with the MD posting inside 0xDF..0xE2. So a strip in
+                 * flight overruns the window every time: MEASURED on
+                 * ares, 12.1% of pickups land late and each one drops a
+                 * blit phase — the stale band that reads as the green
+                 * tear.
+                 * The row phases are RANGE calls, so they can be cut
+                 * into YIELD_ROWS chunks at the CALL SITE and the flag
+                 * tested between them. The hot inner loops are not
+                 * touched, and b->sub resumes the strip where it
+                 * stopped rather than recomputing it.
+                 * Phases 4/5/default are single-shot and stay atomic. */
+                {
+                int yc = y + b->sub;
+                int yielded = 0;
+                while (yc < ye) {
+                    int yn = yc + YIELD_ROWS;
+                    if (yn > ye) yn = ye;
+                    switch (b->phase) {
+                    case 0:
+                        compose_layer(yc, yn, 0, 1, 1, b->bank, b->bpar, 0);
+                        break;
+                    case 1:
+                        compose_layer(yc, yn, 0, 0, 0, b->bank, b->bpar, 1);
+                        break;
+                    case 2:
+                        compose_sprites(yc, yn, b->bpar);
+                        break;
+                    default:
+                        compose_layer(yc, yn, 0, 0, 0, b->bank, b->bpar, 2);
+                        break;
+                    }
+                    yc = yn;
+                    if (yc < ye && *win_pend) { yielded = 1; break; }
+                }
+                /* STARVATION GUARD, and it is the LOOP 11a lesson applied
+                 * before shipping the bug this time: the ISR fires a few
+                 * microseconds BEFORE the 68000 writes COMM0, so there is
+                 * always a brief window where win_pend is set and no
+                 * command is visible yet. That is fine and expected. What
+                 * is NOT fine is a raise with no post ever following (a
+                 * timed-out ack, a missed write): every strip would yield
+                 * forever and the master would stop composing entirely.
+                 * Bound it — after this many fruitless yields, clear the
+                 * flag and get back to work. */
+                if (yielded) {
+                    DIAG[62]++;                    /* strips yielded */
+                    if (++yield_spin > 64) {
+                        yield_spin = 0; *win_pend = 0;
+                        DIAG[63]++;                /* guard trips: should
+                                                    * be ~0; nonzero means
+                                                    * raises without posts */
+                    }
+                } else {
+                    yield_spin = 0;
+                }
+                b->sub = (uint8_t)(yc - y);
+                if (yielded)
+                    continue;            /* resume this strip next visit */
+                b->sub = 0;
+                if (b->phase == 0)      diag_add(10, tq);
+                else if (b->phase == 1) diag_add(11, tq);
+                else if (b->phase == 2) diag_add(12, tq);
+                }
                 switch (b->phase) {
                 case 0:
-                    compose_layer(y, ye, 0, 1, 1, b->bank, b->bpar, 0);
-                    diag_add(10, tq);
-                    break;
                 case 1:
-                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 1);
-                    diag_add(11, tq);
-                    break;
                 case 2:
-                    compose_sprites(y, ye, b->bpar);
-                    diag_add(12, tq);
-                    break;
                 case 3:
-                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 2);
                     break;
                 case 4:
                     compose_text((b->rg == 0) ? 4 : (b->rg == 1) ? 13 : 23,
@@ -2188,6 +2262,8 @@ RAMCODE void m_main(void)
             int k = (c0 >> 4) & 3;
             uint16_t bank1 = MARS_SYS_COMM2 & 7;
             uint16_t tw = frt(), tp = tw;
+            *win_pend = 0;               /* window taken: strips run on */
+            yield_spin = 0;
 #ifdef CMD_PROBE
             /* PICKUP LATENCY = (poll noticed) - (interrupt arrived).
              * DIAG[59] max, DIAG[60] sum, DIAG[61] samples. ~46 FRT

@@ -334,7 +334,11 @@ mcont:
 				       vbi|cmd); CMD is level 8 and SR is set to
 				       level 2 below, so it is accepted */
 .else
+.ifdef CMD_INT
+		mov     #0x02,r0    /* bit1 = CMD int */
+.else
 		mov     #0x00,r0
+.endif
 .endif
 		mov.b   r0,@(1,r1)  /* set int enables */
 		mov     #0x20,r0
@@ -561,6 +565,16 @@ main_cmd_irq:
 		mov.l   r2,@r1          /* DIAG[57] = ISR fire count */
 		mov.l   @r15+,r2
 .endif
+.ifdef CMD_INT
+		! LOOP 11 — YIELD SIGNAL. The window is announced here, the
+		! instant the 68000 raises it, instead of whenever the strip
+		! in flight happens to end. The ISR still does NO window work:
+		! it raises a flag the compose loop tests between row chunks,
+		! so pickup latency becomes one chunk instead of one strip.
+		mov.l   mci_winpend,r1
+		mov     #1,r0
+		mov.b   r0,@r1
+.endif
 
 		mov.l   @r15+,r1
 		mov.l   @r15+,r0
@@ -570,6 +584,10 @@ main_cmd_irq:
 		.align  2
 mci_mars_adapter:
 		.long   0x20004000
+.ifdef CMD_INT
+mci_winpend:
+		.long   0x26028D80      /* win_pend, uncached */
+.endif
 .ifdef CMD_PROBE
 mci_frt_frch:
 		.long   0xFFFFFE12
