@@ -2171,6 +2171,32 @@ RAMCODE void m_main(void)
                  * touched, and b->sub resumes the strip where it
                  * stopped rather than recomputing it.
                  * Phases 4/5/default are single-shot and stay atomic. */
+#ifndef CMD_INT
+                /* CMDINT IS RETIRED (see LOOP11.md): the shipping build
+                 * keeps the original ATOMIC strip. The yieldable form
+                 * below costs ~5% of compose on ares for a preemption
+                 * that nothing sets, and it reads win_pend, which only
+                 * the CMD ISR ever initialises. */
+                switch (b->phase) {
+                case 0:
+                    compose_layer(y, ye, 0, 1, 1, b->bank, b->bpar, 0);
+                    diag_add(10, tq);
+                    break;
+                case 1:
+                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 1);
+                    diag_add(11, tq);
+                    break;
+                case 2:
+                    compose_sprites(y, ye, b->bpar);
+                    diag_add(12, tq);
+                    break;
+                case 3:
+                    compose_layer(y, ye, 0, 0, 0, b->bank, b->bpar, 2);
+                    break;
+                default:
+                    break;
+                }
+#else
                 if (b->phase <= 3) {
                 /* PHASES 0-3 ONLY. The first cut ran this block for every
                  * phase, so `default:` swept up phases 4 (text), 5
@@ -2231,6 +2257,7 @@ RAMCODE void m_main(void)
                 else if (b->phase == 1) diag_add(11, tq);
                 else if (b->phase == 2) diag_add(12, tq);
                 }
+#endif
                 switch (b->phase) {
                 case 0:
                 case 1:
