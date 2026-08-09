@@ -2001,8 +2001,10 @@ RAMCODE void m_main(void)
                                           * boot = all pages once) */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
+        bq[i].sub = 0;
+    }
     for (int i = 0; i < 256; i++) {      /* fixed blocks aren't .bss-zeroed */
         cram_mirror[i] = 0;
         shadow_lut[i] = (uint8_t)i;      /* identity until first rebuild */
@@ -2272,6 +2274,18 @@ RAMCODE void m_main(void)
             uint16_t tw = frt(), tp = tw;
             *win_pend = 0;               /* window taken: strips run on */
             yield_spin = 0;
+#ifdef CMD_INT
+            /* MASK CMD ACROSS THE WINDOW. The interrupt exists to
+             * preempt a compose strip; inside the window body it can
+             * only land in the middle of the blit, which is the one
+             * place with 8 lines of margin. CMDPROBE measured that cost
+             * on its own: blit skips 26.6% -> 36.2% with no other
+             * change. CMD is level 8, so masking at 8 blocks it while
+             * leaving VRES (14) and V (12) alone; a CMD raised here
+             * stays pending and fires the moment the mask drops. */
+            __asm__ __volatile__("mov #-128,r0\n\tldc r0,sr"
+                                 ::: "r0", "memory");
+#endif
 #ifdef CMD_PROBE
             /* PICKUP LATENCY = (poll noticed) - (interrupt arrived).
              * DIAG[59] max, DIAG[60] sum, DIAG[61] samples. ~46 FRT
@@ -2921,6 +2935,10 @@ RAMCODE void m_main(void)
             if (k == 1)
                 DIAG[9]++;
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+#ifdef CMD_INT
+            __asm__ __volatile__("mov #32,r0\n\tldc r0,sr"
+                                 ::: "r0", "memory");  /* back to level 2 */
+#endif
             TOK(0);                          /* busy: post-ack compose follows */
 
             /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
@@ -2999,6 +3017,17 @@ RAMCODE void m_main(void)
                     nb->phase = 0;
                     nb->s0 = drop_s0[rg];    /* resume rotation point */
                     nb->cnt = 0;
+                    nb->sub = 0;             /* MUST reset: a band that
+                                              * yielded mid-strip and was
+                                              * then dropped leaves a
+                                              * non-zero cursor in the
+                                              * slot, and the next band to
+                                              * land there would start its
+                                              * phase-0 strip part-way in
+                                              * and never compose those
+                                              * rows. bq[] is a stack
+                                              * local, so at boot it is
+                                              * garbage too. */
                     bq_t = (bq_t + 1) & 3;
                 }
             }

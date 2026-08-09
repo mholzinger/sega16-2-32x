@@ -907,3 +907,48 @@ own.** Whatever interrupt-driven pickup wins, it must win more than
 that before it is worth anything. If round 2 lands between 26.6% and
 36.2% the mechanism works but does not pay for its own interrupt, and
 the answer is to raise CMD INT only when it can help — not every vint.
+
+### CMDINT round 2 — REJECTED, second bug, also mine
+
+`rom/ARES_cmdint2.bs2`, 4021 cycles: blit skips **70.1%** (base 26.6%),
+deferrals 1598 (base 342). Better than round 1's 94.8% — the extra
+compose pass was real and fixing it recovered 25 points — but still far
+past the 36.2% line I set as the reject threshold.
+
+The counters isolated it again. Per-cycle compose cost came back to
+baseline (L0 7850 vs base 7152, L1 6959 vs 6688) and yields stayed rare
+(645, 0.16/cycle, guard 0), so the remaining damage was not the
+chunking and not the yielding.
+
+**BUG 2: `nb->sub` was never reset at band enqueue.** A band that
+yielded mid-strip and was then DROPPED left a non-zero resume cursor in
+its queue slot; the next band to land there started its phase-0 strip
+part-way in and never composed those rows. And `bq[]` is a STACK local
+in `m_main`, with only `.on` cleared at boot, so the cursor began as
+garbage. Fixed at both places.
+
+**Also fixed: CMD is now masked across the FM-critical window body.**
+The interrupt exists to preempt a compose strip. Inside the window it
+can only land in the middle of the blit — the one place with 8 lines of
+margin — and CMDPROBE had already measured that cost alone at
+26.6% -> 36.2%. CMD is level 8, so masking at 8 blocks it and leaves
+VRES (14) and V (12) alone; a CMD raised during the window stays
+pending and fires as the mask drops.
+
+### MAME PRE-SCREEN, added because parity alone missed both bugs
+
+Parity moves with cadence and reported the first bug as ~2 points.
+Dumping the SAME counters the ares state reports would have caught it
+instantly, so that is now the pre-screen (`diagdump.lua` pattern):
+
+                cycles  skips          defer  yields  L0     L1
+    base         1197   441 (36.8%)      4      0     8672   7045
+    CMDINT r3    1197   384 (32.1%)      8     63     8660   6992
+
+Compose cost is identical to base — the extra pass is gone — and skips
+improve slightly even on MAME, where pickup latency is already ~1 line
+and there is almost nothing to win. **Never hand over another build on
+parity alone; dump the counters first.**
+
+`rom/ARES_cmdint3.32x`. Same three outcomes as before, against base's
+26.6% skips / 3.03 vints-per-cycle / 342 deferrals.
