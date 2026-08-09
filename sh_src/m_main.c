@@ -210,6 +210,13 @@ static uint8_t shadow_cur;                  /* rebuild chunk cursor */
 #define YIELD_ROWS 4
 #endif
 
+/* PIVOT: tiles shipped per window, and how many to ship in total. 40
+ * tiles = 1280 bytes + a 4-byte header, inside the 1536-byte dead FB
+ * block. 1120 covers the visible 40x28 grid; VRAM holds 1363 below the
+ * name tables at 0xB000. */
+#define MD_BATCH     40
+#define MD_TILE_MAX  1120
+
 #define SBUF_W 336
 #define SBUF_H 240
 static uint8_t sbuf[SBUF_W * SBUF_H] __attribute__((aligned(4)));
@@ -2011,6 +2018,9 @@ RAMCODE void m_main(void)
                                           * boot = all pages once) */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
+#ifdef MD_BG
+    uint16_t md_up_cur = 0;              /* next S16 tile code to ship to MD */
+#endif
     for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
         bq[i].sub = 0;
@@ -2980,6 +2990,37 @@ RAMCODE void m_main(void)
             dreq_rearm(k);
             if (k == 1)
                 DIAG[9]++;
+#ifdef MD_BG
+            /* PIVOT SLICE 1b — SHIP TILE PATTERNS TO THE MD.
+             * Still FM=1 here, so the framebuffer is ours. Convert a
+             * batch of S16 tiles to MD 4bpp planar into the documented
+             * dead FB space at 0x11A00 (1536 bytes past the image, below
+             * the game's tile staging at 0x12000).
+             * SELF-DESCRIBING AND IDEMPOTENT ON PURPOSE: FB staging is
+             * PER-BANK, and that bank skew is exactly what broke the
+             * palette path once already (see patch_game.py's 0x840000
+             * note). Rather than reason about which bank the MD will
+             * see, the packet carries its own base code; a stale read
+             * just re-uploads tiles the MD already has, which costs a
+             * VRAM write and corrupts nothing. */
+            {
+                volatile uint16_t *sc = (volatile uint16_t *)0x24011A00;
+                if (md_up_cur < MD_TILE_MAX) {
+                    volatile uint8_t *d = (volatile uint8_t *)(sc + 2);
+                    for (int i = 0; i < MD_BATCH; i++) {
+                        const uint8_t *px = tile_pixels(md_up_cur + i, 0);
+                        for (int y = 0; y < 8; y++) {
+                            const uint8_t *r = px + y * 8;
+                            for (int k = 0; k < 4; k++)
+                                *d++ = (uint8_t)((r[k * 2] << 4) | r[k * 2 + 1]);
+                        }
+                    }
+                    sc[1] = md_up_cur;
+                    sc[0] = 0xB6B6;          /* magic LAST: header valid */
+                    md_up_cur += MD_BATCH;
+                }
+            }
+#endif
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
 #ifdef CMD_INT
             __asm__ __volatile__("mov #32,r0\n\tldc r0,sr"

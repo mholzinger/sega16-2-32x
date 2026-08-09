@@ -869,3 +869,60 @@ reconstructing it, which MAME does not expose for `:gen_vdp` any more
 than it exposes VRAM (section 8). It is also not on the pivot's critical
 path: our own colour budget is measured from our own savestates
 (section 11), and does not depend on what Space Harrier does.
+
+## 13. PIVOT SLICE 1b — real S16 tiles reach MD VRAM through the framebuffer
+
+`make MDBG=1` now ships actual Altered Beast patterns to the Mega Drive
+and displays them under the 32X layer.
+
+**The transport.** Inside the window (FM=1) the SH-2 converts a batch of
+40 S16 tiles to MD 4bpp planar straight into the dead FB block at
+0x11A00 — 1280 bytes of payload plus a 4-byte header, inside the 1536
+available. After the ack (FM=0) the MD reads the same block through its
+0x840000 window and pushes 640 words to VRAM.
+
+**Self-describing and idempotent, deliberately.** FB staging is
+PER-BANK, and that skew is exactly what broke the palette path once
+before (`patch_game.py`, the 0x840000 note). Rather than reason about
+which bank the MD will see, the packet carries its own base tile code
+and the magic word is written LAST. A stale read re-uploads tiles the
+MD already has: one wasted VRAM write, nothing corrupted. **No bank
+reasoning anywhere in the path.**
+
+**Result: recognisable Altered Beast artwork appears on the MD layer**,
+in the rows the 32X BG vacates. Same code path as slice 1a, different
+data source — the only change is that the pixels now come from the S16
+tile ROM across the framebuffer, so their appearance IS the proof that
+the transport works.
+
+    SH-2  tile_pixels() -> 4bpp planar -> FB 0x11A00   (FM=1, in window)
+    MD    FB 0x851A00 -> VDP VRAM slot = code*32       (FM=0, post-ack)
+    MD    Plane B cell N = slot N                      (a tile sheet)
+
+**Cost, measured:** 40 tiles/window is 2560 pixel conversions inside the
+FM window, and 640 VDP writes in the MD tail. The shipping build is
+untouched (parity 24.26, _end 0x06018d38) because all of it is behind
+`#ifdef MD_BG`, but that per-window cost is real and will need pricing
+when this stops being a probe — the window is the thing we are trying
+to shrink.
+
+**One disagreement on the record.** `tools/vdp_planes.lua` reads this
+build as `fill=1.00 dist=1` — one repeated tile — which the screenshot
+plainly contradicts, and `vramNZ=32737` claims essentially all of VRAM
+is populated when the uploads provably stop below 0xB000. The plane
+reader has now been wrong three times (missed DMA, missed boot traffic,
+and this), so the screenshot is the evidence here and the reader is
+not. **Do not use it to judge our own builds until it earns it back.**
+
+### What is still missing before this is a real background
+
+  1. The name table is a tile SHEET, not the game's tilemap. Wiring it
+     means the MD reading tilemap words (`code = w & 0x1FFF`,
+     bank-remapped on bit 12) and mapping S16 code -> VRAM slot.
+  2. No slot allocator. Slot == code works only while codes stay under
+     1363; peak distinct demand is 599, so a first-come allocator with
+     no eviction is enough, but it does not exist yet.
+  3. No scroll. The registers are snapshotted on the SH-2 side and have
+     to reach the MD.
+  4. Colour is a grey ramp in palette 0, not the game's sets — section
+     11 says precompute the assignment, which is not built either.

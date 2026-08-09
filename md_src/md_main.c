@@ -78,15 +78,29 @@ static uint8_t md_to_arcade(uint16_t p) {
  * value that the allocator deliberately never assigns.
  * If this does not appear, the pivot is dead and we have spent an hour
  * instead of a month. */
+/* Grey ramp in palette 0, pens 0-7 -- S16 tiles are 3bpp so pens 0-7 is
+ * all they use. Matches the ramp tools/md_tiles.py renders with, so the
+ * on-screen result can be compared directly against the offline PNG. */
+__attribute__((section(".data")))
+static void md_bg_palette(void) {
+	static const uint16_t ramp[8] = {
+		0x0000, 0x0222, 0x0444, 0x0666, 0x0888, 0x0AAA, 0x0CCC, 0x0EEE };
+	for (uint16_t i = 0; i < 8; i++)
+		vdp_color(i, ramp[i]);
+}
+
 __attribute__((section(".data")))
 static void md_bg_testpattern(void) {
 	for (uint16_t row = 0; row < 28; row++) {
 		uint32_t a = 0xE000u + (uint32_t)row * 128u;   /* 64-cell stride */
 		*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16) | ((a >> 14) & 3u);
 		for (uint16_t col = 0; col < 40; col++) {
-			/* font glyphs are tiles 1..44, colour 1 of palette 0 */
-			uint16_t t = (uint16_t)(1 + ((row + col) % 44));
-			*vdp_data_port = t;
+			/* SLICE 1b: show VRAM slot N in cell N, so the plane is a
+			 * tile SHEET of whatever the SH-2 has shipped so far. A
+			 * correct transport paints recognisable Altered Beast
+			 * artwork; a broken one paints noise, and the difference
+			 * needs no interpretation. */
+			*vdp_data_port = (uint16_t)(row * 40 + col);
 		}
 	}
 }
@@ -98,7 +112,7 @@ void shim_vblank(void) {
 #ifdef MD_BG
 	{
 		static uint8_t painted;
-		if (!painted) { painted = 1; md_bg_testpattern(); }
+		if (!painted) { painted = 1; md_bg_palette(); md_bg_testpattern(); }
 	}
 #endif
 
@@ -268,6 +282,29 @@ void shim_vblank(void) {
 			*mars_comm12 = (uint16_t)(0xD000
 				| (*(volatile uint16_t*)0xC00008 >> 8));
 		*(volatile uint16_t*)0xA15100 &= 0x7FFF; // FM=0: game owns FB staging
+#ifdef MD_BG
+		// PIVOT SLICE 1b — RECEIVE A TILE BATCH AND PUSH IT TO VRAM.
+		// FM is 0, so the FB window at 0x840000 is ours to read. The
+		// packet is self-describing; re-uploading a batch we already
+		// have is harmless, which is what makes this immune to the
+		// per-bank staging skew that bit the palette path.
+		{
+			volatile uint16_t *sc = (volatile uint16_t*)0x851A00;
+			static uint16_t md_last_base = 0xFFFF;
+			if (sc[0] == 0xB6B6 && sc[1] != md_last_base) {
+				uint16_t base = sc[1];
+				uint32_t va = (uint32_t)base * 32u;
+				if (va + 40u * 32u <= 0xB000u) {   // stay below the name tables
+					md_last_base = base;
+					*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
+					               | ((va >> 14) & 3u);
+					volatile uint16_t *src = sc + 2;
+					for (uint16_t i = 0; i < 40u * 16u; i++)
+						*vdp_data_port = src[i];
+				}
+			}
+		}
+#endif
 		// The SH-2's final FS restore may LATCH only at the next vblank
 		// (ares/hardware defer FBCTL writes made outside vblank). The game
 		// must not resume while its staging bank is deselected — hold here
