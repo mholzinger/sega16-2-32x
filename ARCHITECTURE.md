@@ -837,9 +837,35 @@ We are still the outlier.
 ### Still unresolved
 
 `cramNZ` reads 0-1 for Space Harrier, After Burner and MK2, while
-Chaotix reads 54. A full plane with an empty palette cannot be visible,
-so either those three load MD CRAM by a route the shadow still misses,
-or their MD layers are drawn and then covered by the 32X. **Do not
-conclude "at reduced colour" from this yet** — that half of Mike's
-question is unanswered, and the honest reading of a 0 here is "the
-instrument has already been wrong once about exactly this".
+Chaotix reads 54.
+
+**I went after this and could not settle it. Writing down where it
+stops rather than guessing a third time.**
+
+Counting the two CRAM write paths separately: Chaotix does 3910
+data-port + 96320 DMA writes and ends with a real 54-colour palette.
+Space Harrier does **1** CRAM write in 2000 frames of gameplay, value
+0x0010 into entry 0, with both planes at 0.97/0.96 fill and 77 sprites.
+A full plane with a black palette cannot be on screen.
+
+But the shadow **installs its tap on the first `frame_done`, so all VDP
+traffic during boot is invisible to it.** A game that loads its palette
+once at startup and never touches it again is indistinguishable from
+one that never loads a palette. Installing the tap at script load
+instead was tried and is strictly worse: it desyncs the two-word
+control state machine (vramNZ collapsed 31112 -> 2, CRAM writes 1 ->
+16425, palette still all zero).
+
+So there are two live explanations and this tool cannot separate them:
+  1. SH/AB/MK2 load MD CRAM at boot, before the tap exists, and their
+     MD layers ARE visible — in which case Mike's "background layering
+     on the 68000" reading is right and they are doing it in colour.
+  2. Their MD layers are genuinely unpalettised and invisible, drawn
+     into VRAM and covered by the 32X.
+
+**Treat `cramNZ == 0` as UNMEASURED, not as absence.** Settling it needs
+a different instrument — reading CRAM out of the emulator rather than
+reconstructing it, which MAME does not expose for `:gen_vdp` any more
+than it exposes VRAM (section 8). It is also not on the pivot's critical
+path: our own colour budget is measured from our own savestates
+(section 11), and does not depend on what Space Harrier does.

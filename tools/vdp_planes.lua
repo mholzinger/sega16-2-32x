@@ -27,6 +27,14 @@ local out    = assert(io.open(os.getenv('SV_OUT'), 'w'))
 local vram, vsram, regs, cram = {}, {}, {}, {}
 local addr, code, pend, inc = 0, 0, nil, 2
 local dma_words, dma_ops = 0, 0
+local cram_wp, cram_wd = 0, 0   -- CRAM writes: data-port vs DMA
+-- NOTE: the tap installs on the first frame_done, so ANY VDP traffic
+-- during boot is invisible to this shadow. Installing it at script load
+-- instead was tried and is WORSE -- it desyncs the two-word control
+-- state machine (vramNZ collapsed 31112 -> 2, CRAM writes 1 -> 16425
+-- with an all-zero palette). A game that loads its palette once at
+-- startup is therefore indistinguishable here from one that never
+-- loads a palette at all. Do not read cramNZ as evidence of absence.
 local TAPS = {}                 -- keep references: a collected tap stops firing
 local frames, inited = 0, false
 local fields, prev = {}, {}
@@ -65,7 +73,7 @@ local function do_dma(data)
       -- DMA'd word -- which is most of a Genesis game's VRAM traffic.
       local dst = code & 0x0F
       if dst == 1 then vram[addr & 0xFFFE] = w
-      elseif dst == 3 then cram[addr & 0x7E] = w
+      elseif dst == 3 then cram[addr & 0x7E] = w; cram_wd = cram_wd + 1
       elseif dst == 5 then vsram[addr & 0x7E] = w end
       dma_words = dma_words + 1
       src  = (src + 2) & 0xFFFFFF
@@ -82,7 +90,7 @@ local function tap()
       if a == 0 then
         local dst = code & 0x0F
         if dst == 1 then vram[addr & 0xFFFE] = data & 0xFFFF
-        elseif dst == 3 then cram[addr & 0x7E] = data & 0xFFFF
+        elseif dst == 3 then cram[addr & 0x7E] = data & 0xFFFF; cram_wp = cram_wp + 1
         elseif dst == 5 then vsram[addr & 0x7E] = data & 0xFFFF end
         addr = (addr + inc) & 0xFFFF
       elseif a == 4 then
@@ -187,12 +195,17 @@ emu.register_frame_done(function()
     for _, v in pairs(vram) do if v ~= 0 then vram_nz = vram_nz + 1 end end
     out:write(string.format(
       'f=%4d vramNZ=%5d A@%04x fill=%.2f dist=%3d churn=%4d | B@%04x fill=%.2f dist=%3d churn=%4d'
-      .. ' | spr=%2d win=%.2f cramNZ=%2d | vscrollA=%5d vscrollB=%5d | dma_ops=%d dma_words=%d\n',
+      .. ' | spr=%2d win=%.2f cramNZ=%2d cwP=%d cwD=%d | vscrollA=%5d vscrollB=%5d | dma_ops=%d dma_words=%d\n',
       frames, vram_nz, pa, fa, da, ca, pb, fb, db, cb,
-      spr, wfill / 1120.0, cn,
+      spr, wfill / 1120.0, cn, cram_wp, cram_wd,
       (vsram[0] or 0) & 0x3FF, (vsram[2] or 0) & 0x3FF,
       dma_ops, dma_words))
     out:flush()
   end
-  if frames >= FRAMES then out:close(); manager.machine:exit() end
+  if frames >= FRAMES then
+    out:write('CRAM: ')
+    for i = 0, 62, 2 do out:write(string.format('%04x ', cram[i] or 0)) end
+    out:write('\n')
+    out:close(); manager.machine:exit()
+  end
 end)
