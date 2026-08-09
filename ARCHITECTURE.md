@@ -967,3 +967,48 @@ budgeted, not assumed free.
 wrong. Cross-checking the frame against the savestate cost two minutes
 and flipped the verdict from "transport failed" to "transport works".
 Read the memory, not the screen.
+
+## 14. Per-band update rate — Mike's eye found a real scheduling imbalance
+
+Mike boxed a horizontal band of a gameplay frame and said it "rendered
+frames, animations and timing perfectly through the entire
+playthrough". Measured against the 9738-frame ares capture with
+`tools/row_health.py` (capture is ~57fps of a 20Hz display, so a
+fully-updating row reads ~2.85 frames between changes):
+
+    band          rows      interval    never-updating
+    R0 slave       0- 35      5.02       1
+    R0 master     36- 71     53.79      22
+    R1 slave      72-107     13.61       0
+    R1 master    108-143      8.70       0
+    R2 slave     144-183      6.01       0
+    R2 master    184-223     10.57       8
+
+    Mike's box   130-181      5.54
+    everything else          14.35
+
+**His box updates 2.6x more often than the rest of the screen**, and it
+lands on R2-slave plus the tail of R1-master. He read a real signal off
+the screen that no counter we had was reporting.
+
+**The actionable part: R2 slave 6.01 vs R1 slave 13.61.** Both bands
+carry moving scene content and both are composed by the same CPU in the
+same way, so a 2.3x spread between them is scheduling, not content. The
+band queue drops bands under load and `drop_s0` rotation is supposed to
+spread that staleness evenly across regions. It is not doing so. That is
+a concrete lead for the stale-band half of the green tearing, and it is
+independent of everything the pivot is doing.
+
+**CONFOUNDS, which matter here more than usual:**
+  - A row that never changes because nothing MOVES there is
+    indistinguishable from a row the pipeline is starving. R0 master's
+    53.79 is largely sky — and worse, in THIS corpus it also contains
+    the static tile-sheet band that `MDBG` paints. That number is an
+    artifact of the probe, not a finding.
+  - The corpus is an MDBG build, which inflates blit skips 26.6% ->
+    61.4%. The absolute intervals are therefore pessimistic across the
+    board. **The R1-vs-R2 slave comparison survives this** because both
+    bands take the same hit.
+  - What would settle it: the same capture on a clean shipping build.
+    Then compare band-for-band between the two, which removes the
+    content confound entirely.
