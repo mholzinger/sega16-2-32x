@@ -926,3 +926,44 @@ not. **Do not use it to judge our own builds until it earns it back.**
      to reach the MD.
   4. Colour is a grey ramp in palette 0, not the game's sets — section
      11 says precompute the assignment, which is not built either.
+
+### Slice 1b CONFIRMED ON ares — and I nearly called it a failure
+
+`rom/ARES_mdbg.bs9`, 4134 cycles, plus a 2237-frame capture.
+
+**Visual:** the MD band renders "0123456789" and "ABCDEFGHIJKLMNO"
+straight through the 32X layer. My first read was that these were
+`md_start.s`'s boot font surviving at slots 0-44, i.e. the upload had
+never happened. **Wrong: S16 tile indices 0-255 ARE the game's own text
+font** (`tools/md_tiles.py png out.png 0` shows it). Those glyphs are
+our transported data.
+
+**Byte-exact confirmation, because the visual nearly fooled me:**
+searching the savestate for specific converted tiles finds S16 tile 400
+at 0xd9566 and tile 800 at 0xdc766 — exactly 400*32 apart, i.e. sitting
+in MD VRAM at `slot == code`, which is the mapping the MD uploader
+uses. The packet magic 0xB6B6 is in the state too.
+
+So the whole chain works on real hardware semantics:
+
+    SH-2 convert -> FB 0x11A00 (FM=1)  ->  MD read 0x851A00 (FM=0)
+      -> VDP VRAM slot=code  ->  Plane B  ->  visible through the 32X
+
+**The per-bank staging skew did not bite**, which is the design paying
+off: the packet is self-describing and re-uploading is harmless, so the
+path never has to know which bank it got.
+
+**Cost on ares, and it is heavy:** blit skips 26.6% -> 61.4% of cycles.
+40 tiles/window is 2560 pixel conversions inside the FM window — the
+window we are trying to shrink. Deferrals actually FELL (342 -> 162)
+and dreq_incomplete fell (21% -> 10.9%), so this is not general
+overload; it is specifically the window getting longer. A real
+implementation ships patterns only when the tilemap dirties them, not
+40 every window forever, so this number is a probe artifact rather than
+a projection — but it does mean the steady-state upload rate has to be
+budgeted, not assumed free.
+
+**Method note.** Two of my last three conclusions from a picture were
+wrong. Cross-checking the frame against the savestate cost two minutes
+and flipped the verdict from "transport failed" to "transport works".
+Read the memory, not the screen.
