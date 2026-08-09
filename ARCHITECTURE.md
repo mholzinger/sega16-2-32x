@@ -1111,3 +1111,53 @@ number" story does not get solved by moving layers to the MD.** Going
 past 20 Hz needs the blit itself to change: ship more rows per vblank,
 or stop shipping whole frames. That is a separate problem and this work
 does not address it.
+
+## 16. Slice 1c — WORK IN PROGRESS, not finished
+
+The full path is built and running; the MD plane does not yet show the
+game's background. Committed as-is so the next session starts from the
+state rather than from scratch. Shipping build untouched (24.26,
+_end 0x06018d38); everything is behind `MDBGALL`.
+
+**Built and verified running:**
+  - Packet format at the FB dead block: header (magic, type, param,
+    hscroll, vscroll, count) always valid, payload alternating one tile
+    batch to four name-table chunks (280 cells each, 1120 total).
+  - Name table generated from the REAL tilemap, using the same decode
+    as `compose_layer_regs` (`code = w & 0x1FFF`, bank-remapped on bit
+    12, page select from `bl->pq[]`).
+  - Hardware fine scroll shipped every window and written to the
+    hscroll table and VSRAM.
+  - MD receiver uploads tiles to VRAM and writes Plane B.
+
+**Two design errors found and fixed on the way, both worth keeping:**
+
+  1. **The render cache cannot be the MD allocator.** Reusing
+     `CACHE_SET`/`cache_tag` looked elegant — 1024 slots, eviction
+     already solved — but that cache is TRANSIENT. Slots got reassigned
+     under a name table that had already been written, so cells pointed
+     at whatever tile later took their slot, misses hit 263/cycle, and
+     the whole plane rendered as one repeated pattern. **MD VRAM needs
+     STABLE residency**: a code keeps its slot while it is on screen.
+     Now a separate `md_tag` at 0x27800, same set/way geometry,
+     first-come, no eviction (599 peak < 1024).
+  2. **Removing the BG compose removed the thing that populated the
+     cache.** With phase 0 gone nothing requested BG codes, so every
+     cell resolved blank. The name-table pass is now the demand source.
+
+**Where it stands:** structured MD output, real scene content visible
+through the transparent regions, repeated-tile artifact gone — but the
+plane shows horizontal bars of a wrong tile rather than the background.
+
+**Prime suspects, in order:**
+  1. `MD_BLANK_SLOT` is 1023, which is also a legitimately allocatable
+     slot. A cell that fails to allocate is indistinguishable from a
+     cell whose code legitimately owns slot 1023. Reserve a slot that
+     the allocator can never hand out.
+  2. Ordering: a name-table chunk can reference a slot whose tile has
+     not been shipped yet (1 tile batch per 4 name-table chunks, 40
+     tiles per batch). Early on, most referenced slots hold nothing.
+     Ship tiles ahead of the cells that reference them, or prioritise
+     the batch after a burst of new claims.
+  3. Scroll sign/offset — `-(vx0 & 7)` for hscroll and `+(vy0 & 7)` for
+     vscroll is a guess and has not been verified against a still frame.

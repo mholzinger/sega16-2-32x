@@ -112,7 +112,7 @@ void shim_vblank(void) {
 #ifdef MD_BG
 	{
 		static uint8_t painted;
-		if (!painted) { painted = 1; md_bg_palette(); md_bg_testpattern(); }
+		if (!painted) { painted = 1; md_bg_palette(); }
 	}
 #endif
 
@@ -289,19 +289,43 @@ void shim_vblank(void) {
 		// have is harmless, which is what makes this immune to the
 		// per-bank staging skew that bit the palette path.
 		{
+			// PIVOT SLICE 1c — packet from the SH-2. Header is always
+			// valid; payload alternates tiles and name-table chunks.
+			//   [0] magic [1] type [2] param [3] hscroll [4] vscroll
+			//   [5] count  [8..] payload
 			volatile uint16_t *sc = (volatile uint16_t*)0x851A00;
-			static uint16_t md_last_base = 0xFFFF;
-			if (sc[0] == 0xB6B6 && sc[1] != md_last_base) {
-				uint16_t base = sc[1];
-				uint32_t va = (uint32_t)base * 32u;
-				if (va + 40u * 32u <= 0xB000u) {   // stay below the name tables
-					md_last_base = base;
-					*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
-					               | ((va >> 14) & 3u);
-					volatile uint16_t *src = sc + 2;
-					for (uint16_t i = 0; i < 40u * 16u; i++)
-						*vdp_data_port = src[i];
+			if (sc[0] == 0xB6B6) {
+				uint16_t typ = sc[1], cnt = sc[5];
+				// hardware fine scroll, every window and nearly free
+				*vdp_ctrl_wide = ((0x4000u | 0xFC02u) << 16) | 0u;
+				*vdp_data_port = sc[3];
+				*vdp_ctrl_wide = 0x40000010u | 2u;      // VSRAM word 1 = plane B
+				*vdp_data_port = sc[4];
+				if (typ == 0) {
+					// each entry: slot word + 32 bytes of 4bpp planar
+					volatile uint16_t *e = sc + 8;
+					for (uint16_t i = 0; i < cnt; i++, e += 17) {
+						uint32_t va = (uint32_t)e[0] * 32u;
+						if (va + 32u > 0xB000u) continue;
+						*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
+						               | ((va >> 14) & 3u);
+						for (uint16_t k = 1; k < 17; k++)
+							*vdp_data_port = e[k];
+					}
+				} else {
+					// name-table cells, 40 per screen row, 64-cell stride
+					volatile uint16_t *e = sc + 8;
+					uint16_t cell = sc[2];
+					for (uint16_t i = 0; i < cnt; i++, cell++) {
+						if ((cell % 40u) == 0) {
+							uint32_t a = 0xE000u + (cell / 40u) * 128u;
+							*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
+							               | ((a >> 14) & 3u);
+						}
+						*vdp_data_port = e[i];
+					}
 				}
+				sc[0] = 0;                  // consumed
 			}
 		}
 #endif
