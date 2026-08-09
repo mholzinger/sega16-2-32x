@@ -114,11 +114,16 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define NSETS       128
 #define NWAYS       8
 #ifdef MD_BG
-/* Probe builds need ~2KB of .bss headroom for the MD path, and
- * 0x27000-0x28000 is free (between TEXT_C, which ends at 0x27000, and
- * DIAG at 0x28000). Same SDRAM, same cached alias, same coherency story
- * as .bss -- both CPUs already read this array. */
-#define cache_tag ((uint16_t *)0x06027000)          /* NSETS*NWAYS words */
+/* Probe builds need ~2KB of .bss headroom for the MD path, so the tag
+ * arrays move to fixed SDRAM. NOT 0x27000-0x28000: that block is
+ * PAL_SH, the live palette stream target (the earlier "free" claim
+ * missed it), and the slave rewrote both tag arrays with palette words
+ * every stream batch — random palette values read back as tag "hits",
+ * so cells mapped to random slots and the plane rendered noise.
+ * 0x3A800 sits above missq (0x3A000 + 2x192 words, ends 0x3A300) and
+ * ~18KB below the SP init at 0x3F000 — same fixed-address pattern and
+ * coherency story as missq (full cache_purge every window). */
+#define cache_tag ((uint16_t *)0x0603A800)          /* NSETS*NWAYS words */
 #else
 static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #endif
@@ -138,7 +143,16 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * pattern with misses at 263/cycle. MD residency must be STABLE: a code
  * keeps its slot for as long as it is on screen. Same set/way geometry
  * as the render cache, first-come, no eviction (599 peak < 1024). */
-#define md_tag ((uint16_t *)0x06027800)     /* NSETS*NWAYS words */
+#define md_tag ((uint16_t *)0x0603B000)     /* NSETS*NWAYS words; after
+                                             * cache_tag (ends 0x3B000) */
+/* Last-referenced window stamp per slot (low byte of win_no). "First-
+ * come, no eviction" did not survive contact: the animated title
+ * backdrop cycles ~1120 codes, so it fills all 1024 slots in the first
+ * seconds and pins dead codes forever — every later scene allocated
+ * nothing and rendered blank bands. A slot on screen is re-stamped by
+ * the name-table pass at least every 5 windows, so evicting the oldest
+ * way keeps the stability guarantee for everything actually visible. */
+#define md_ref ((uint8_t *)0x0603B800)      /* NSETS*NWAYS bytes */
 #define MD_MARK(sl) (md_dirty[(sl) >> 5] |= 1u << ((sl) & 31))
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
@@ -1509,9 +1523,6 @@ RAMCODE static void cache_fill(int budget)
              * are still half-copied — that tearing rendered plausible-
              * but-wrong tiles at animated cells. */
             cache_tag[s4 + way] = 0xFFFF;
-#ifdef MD_BG
-            MD_MARK(s4 + way);
-#endif
             const uint32_t *src = (const uint32_t *)(altbeast_tiles + code * 64);
             uint32_t *dst = (uint32_t *)(CACHE_C + (s4 + way) * 64);
             for (int k = 0; k < 16; k += 4) {
@@ -1987,6 +1998,7 @@ RAMCODE void m_main(void)
         cache_tag[i] = 0xFFFF;
 #ifdef MD_BG
         md_tag[i] = 0xFFFF;                  /* fixed block: not .bss-zeroed */
+        md_ref[i] = 0;
 #endif
     }
 #ifdef MD_BG
@@ -2098,6 +2110,7 @@ RAMCODE void m_main(void)
 #ifdef MD_BG
     uint16_t md_scan = 0;                /* dirty-slot scan cursor */
     uint8_t  md_phase = 0;               /* 0 = tiles, 1-4 = name table */
+    uint16_t md_pending = 0;             /* claimed slots not yet shipped */
 #endif
     for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
@@ -3104,9 +3117,19 @@ RAMCODE void m_main(void)
                 const layer_regs *bl = &snap[1];              /* BG layer */
                 sc[3] = (uint16_t)(-(bl->vx0 & 7) & 0x3FF);
                 sc[4] = (uint16_t)(bl->vy0 & 7);
-                if (md_phase == 0) {
-                    /* ---- tile payload: ship dirty cache slots ---- */
-                    volatile uint8_t *d = (volatile uint8_t *)(sc + 8);
+                /* DEMAND BIAS (suspect 2, ordering): a name-table chunk
+                 * may reference a slot whose tile has not shipped yet.
+                 * When a burst of new claims is outstanding, spend the
+                 * window on a tile batch instead of the next chunk (the
+                 * chunk cursor does not advance), so tiles chase the
+                 * cells referencing them at 40/window instead of
+                 * 40/(5 windows). */
+                if (md_phase == 0 || md_pending >= MD_BATCH) {
+                    /* ---- tile payload: ship dirty md_tag slots,
+                     * pixels straight from cart ROM (legal under unpair,
+                     * RV pinned 0 — same read tile_pixels does on miss).
+                     * The render cache is NOT consulted: it is transient
+                     * and its slots have nothing to do with md_tag's. ---- */
                     int sent = 0, sl = md_scan;
                     sc[2] = 0xFFFF;
                     for (int i = 0; i < NSETS * NWAYS && sent < MD_BATCH; i++) {
@@ -3114,12 +3137,11 @@ RAMCODE void m_main(void)
                         if (!(md_dirty[sl >> 5] & (1u << (sl & 31))))
                             continue;
                         md_dirty[sl >> 5] &= ~(1u << (sl & 31));
-                        const uint8_t *px = tile_pixels(md_tag[sl], 0);
-                        if (px == blank_tile) {      /* not fetched yet:
-                                                      * leave dirty, retry */
-                            md_dirty[sl >> 5] |= 1u << (sl & 31);
+                        uint16_t mcode = md_tag[sl];
+                        if (mcode == 0xFFFF)         /* never: dirty implies
+                                                      * claimed; guard OOB */
                             continue;
-                        }
+                        const uint8_t *px = altbeast_tiles + (unsigned)mcode * 64;
                         if (sc[2] == 0xFFFF) sc[2] = (uint16_t)sl;
                         ((volatile uint16_t *)(sc + 8))[sent * 17] = (uint16_t)sl;
                         volatile uint8_t *o = (volatile uint8_t *)
@@ -3129,27 +3151,56 @@ RAMCODE void m_main(void)
                             for (int kk = 0; kk < 4; kk++)
                                 *o++ = (uint8_t)((r[kk * 2] << 4) | r[kk * 2 + 1]);
                         }
+                        if (md_pending) md_pending--;
                         sent++;
                     }
                     md_scan = (uint16_t)sl;
                     sc[1] = 0;
                     sc[5] = (uint16_t)sent;
                     DIAG[57] += (uint32_t)sent;
-                    (void)d;
+                    if (md_phase == 0) md_phase = 1; /* forced batches do not
+                                                      * advance the rotation */
                 } else {
                     /* ---- name-table payload: 280 cells of the visible
                      * 40x28 window, mapped code -> cache slot. Cells whose
-                     * code is not resident get the blank slot. ---- */
+                     * code is not resident get the blank slot.
+                     * PER-BAND REGISTER SELECTION, same rules as
+                     * compose_layer: rowscroll bit 15 switches the band
+                     * to the ALT page/scroll set (the stage-1 cloud band
+                     * lives there — composing it from the primary regs
+                     * garbled it the moment the camera panned), and
+                     * primary-xscroll bit 15 makes the rowscroll word the
+                     * band's xscroll. Coarse X goes into the cells; fine
+                     * X ships as 7 per-strip hscroll words after the
+                     * payload (MD cell-mode hscroll, one entry per 8
+                     * screen lines — the band granularity matches S16's).
+                     * KNOWN GAP: a band whose vy fine phase differs from
+                     * the primary's is off by up to 7px (VSRAM is
+                     * per-column, not per-row). */
                     int cell0 = (md_phase - 1) * 280;
                     volatile uint16_t *o = sc + 8;
-                    int vx00 = bl->vx0 & ~7;
                     for (int row = cell0 / 40; row < cell0 / 40 + 7; row++) {
-                        int vy = (bl->vy0 - (bl->vy0 & 7) + row * 8) & 0x1FF;
+                        const uint8_t *pqb = bl->pq;
+                        int vxr = bl->vx0, vyr = bl->vy0;
+                        if (bl->any_special) {
+                            uint16_t rsw = bl->rs[row];   /* rs[28], row<28 */
+                            if (rsw & 0x8000) {
+                                pqb = bl->pq_a;
+                                vxr = bl->vx0_a;
+                                vyr = bl->vy0_a;
+                            } else if (bl->xs_raw & 0x8000) {
+                                vxr = (int)((0xC0 - (rsw & 0x3FF)) & 0x3FF);
+                            }
+                        }
+                        int vx00 = vxr & ~7;
+                        (sc + 8 + 280)[row - cell0 / 40] =
+                            (uint16_t)(-(vxr & 7) & 0x3FF);
+                        int vy = (vyr - (vyr & 7) + row * 8) & 0x1FF;
                         const uint16_t *pg0 = TILEMAP_C
-                            + bl->pq[(((unsigned)vy >> 7) & 2)] * 0x800
+                            + pqb[(((unsigned)vy >> 7) & 2)] * 0x800
                             + (((unsigned)vy >> 3) & 0x1F) * 64;
                         const uint16_t *pg1 = TILEMAP_C
-                            + bl->pq[(((unsigned)vy >> 7) & 2) + 1] * 0x800
+                            + pqb[(((unsigned)vy >> 7) & 2) + 1] * 0x800
                             + (((unsigned)vy >> 3) & 0x1F) * 64;
                         for (int col = 0; col < 40; col++) {
                             unsigned vx = (unsigned)(vx00 + col * 8) & 0x3FF;
@@ -3157,26 +3208,70 @@ RAMCODE void m_main(void)
                             unsigned code = w & 0x1FFF;
                             if (code & 0x1000)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
-                            /* tile_pixels(), NOT a silent probe: with the
-                             * BG compose gone, nothing else asks for these
-                             * codes, so the cache never holds them and every
-                             * cell resolved to the blank slot. The name-table
-                             * pass is now the demand source -- it queues the
-                             * miss exactly as compose used to. */
-                            const uint8_t *pp = tile_pixels(code, 0);
-                            unsigned slot = (pp == blank_tile)
-                                ? MD_BLANK_SLOT
-                                : (unsigned)((pp - CACHE_C) >> 6);
+                            /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
+                             * set/way geometry as the render cache but
+                             * STABLE — hit or claim keeps a slot as long
+                             * as it stays on screen (re-stamped every ≤5
+                             * windows); only the LRU way of a full set is
+                             * evicted (see md_ref). The name-table pass
+                             * is the demand source: a claim marks the
+                             * slot dirty and the tile shipper uploads it.
+                             * Free ways are a suffix, so first-free-way
+                             * needs no later-way hit probe. Slot 1023 is
+                             * RESERVED as the blank (suspect 1: it must
+                             * never be allocatable, or an unresolvable
+                             * cell is indistinguishable from a real one). */
+                            unsigned s4m = CACHE_SET(code) * NWAYS;
+                            unsigned slot = MD_BLANK_SLOT;
+                            unsigned victim = MD_BLANK_SLOT, vage = 0;
+                            int done = 0;
+                            for (unsigned w2 = 0; w2 < NWAYS; w2++) {
+                                unsigned i2 = s4m + w2;
+                                uint16_t t = md_tag[i2];
+                                if (t == code) {
+                                    md_ref[i2] = (uint8_t)win_no;
+                                    slot = i2;
+                                    done = 1;
+                                    break;
+                                }
+                                if (t == 0xFFFF) {
+                                    if (i2 == MD_BLANK_SLOT)
+                                        break;   /* reserved: fall through
+                                                  * to evict ways 0..6 */
+                                    done = 1;
+                                    md_tag[i2] = (uint16_t)code;
+                                    md_ref[i2] = (uint8_t)win_no;
+                                    MD_MARK(i2);
+                                    md_pending++;
+                                    DIAG[53]++;          /* md_tag claims */
+                                    slot = i2;
+                                    break;
+                                }
+                                unsigned age = (uint8_t)
+                                    ((uint8_t)win_no - md_ref[i2]);
+                                if (age >= vage) { vage = age; victim = i2; }
+                            }
+                            if (!done && victim != MD_BLANK_SLOT) {
+                                /* set full: evict the LRU way (see md_ref).
+                                 * Cells still naming the victim rewrite
+                                 * within 4 chunks (~5 windows). */
+                                md_tag[victim] = (uint16_t)code;
+                                md_ref[victim] = (uint8_t)win_no;
+                                MD_MARK(victim);
+                                md_pending++;
+                                DIAG[50]++;              /* evictions */
+                                slot = victim;
+                            }
                             *o++ = (uint16_t)slot;
                         }
                     }
                     sc[1] = 1;
                     sc[2] = (uint16_t)cell0;
                     sc[5] = 280;
+                    md_phase++;
+                    if (md_phase > 4) md_phase = 0;   /* 1 tile + 4 nametable */
                 }
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
-                md_phase++;
-                if (md_phase > 4) md_phase = 0;   /* 1 tile + 4 nametable */
             }
 #endif
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */

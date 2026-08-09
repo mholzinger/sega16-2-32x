@@ -1145,19 +1145,53 @@ _end 0x06018d38); everything is behind `MDBGALL`.
      cache.** With phase 0 gone nothing requested BG codes, so every
      cell resolved blank. The name-table pass is now the demand source.
 
-**Where it stands:** structured MD output, real scene content visible
-through the transparent regions, repeated-tile artifact gone — but the
-plane shows horizontal bars of a wrong tile rather than the background.
+**RESOLVED — slice 1c is done.** The MD plane shows the game's real
+background across title, scream, eyehold and both demo scenes
+(`MDBG=1` / `MDBGALL=1` builds). None of the three ranked suspects was
+the root cause. What was actually wrong, in the order found:
 
-**Prime suspects, in order:**
-  1. `MD_BLANK_SLOT` is 1023, which is also a legitimately allocatable
-     slot. A cell that fails to allocate is indistinguishable from a
-     cell whose code legitimately owns slot 1023. Reserve a slot that
-     the allocator can never hand out.
-  2. Ordering: a name-table chunk can reference a slot whose tile has
-     not been shipped yet (1 tile batch per 4 name-table chunks, 40
-     tiles per batch). Early on, most referenced slots hold nothing.
-     Ship tiles ahead of the cells that reference them, or prioritise
-     the batch after a burst of new claims.
-  3. Scroll sign/offset — `-(vx0 & 7)` for hscroll and `+(vy0 & 7)` for
-     vscroll is a guess and has not been verified against a still frame.
+  1. **The tag arrays sat inside PAL_SH.** The MD_BG builds placed
+     `cache_tag` at 0x27000 and `md_tag` at 0x27800 on the strength of
+     a "0x27000-0x28000 is free" comment — but that block is PAL_SH,
+     the live palette stream target (2048 words). The slave rewrote
+     both tag arrays with palette words every stream batch: palette
+     values read back as tag "hits", cells mapped to random slots,
+     shipped patterns came from garbage codes. One relocation
+     (0x3A800/0x3B000, above missq) took render-cache misses from
+     42/frame to ~1/frame and put real art on the plane. The §16 text
+     below describing md_tag as built was aspirational: the allocator
+     was never written — md_tag was initialised and read, never
+     claimed into. Both halves (claim in the name-table pass, ship
+     from `md_tag[slot]` straight out of cart ROM) exist now.
+  2. **First-come-no-eviction did not survive the title screen.** The
+     animated title backdrop cycles ~1120 codes, so it fills all 1024
+     slots in the first seconds and pins dead codes forever; every
+     later scene allocated nothing (blank bands with stale-tile
+     specks). LRU eviction per set (`md_ref`, one window-stamp byte
+     per slot): a slot on screen is re-stamped at least every 5
+     windows, so eviction only ever takes genuinely dead slots.
+  3. **The name-table pass ignored the alt register set.** The stage-1
+     cloud band draws through rowscroll-bit-15 band switching (same
+     rules as `compose_layer`); composing it from the primary regs
+     garbled it as soon as the camera panned. The pass now does
+     per-band register selection, and fine X ships as 7 per-strip
+     hscroll words per chunk (MD cell-mode hscroll — reg 11 = 02 —
+     has exactly S16's 8-line band granularity). Known gap: a band
+     whose vy fine phase differs from the primary's is off by up to
+     7px (VSRAM is per-column).
+
+  Of the original suspects: (1) slot 1023 is now reserved and the MD
+  zeroes its pattern at init; (2) ordering is handled by demand bias —
+  a window with ≥40 unshipped claims ships a tile batch instead of
+  advancing the chunk rotation; (3) the scroll signs were right all
+  along (title locks at dx=+0).
+
+**Measured state (MAME):** shipping gates untouched (title 2.44,
+eyehold 3.37, TOTAL 24.26). MDBG steady-state title = 13.4%, and the
+gap is visibly the placeholder palette (correct art, grey-for-blue) —
+the §11 precompute, next on the list. Scene changes rebuild ~1000
+tiles in ~0.5s of wall clock, which the parity anchors' 45-frame
+settle reads as huge diffs; judge transitions by eye or with longer
+settles, and judge steady state only on scenes still in-anchor
+(a 240-frame settle outlives scream/eyehold — their terms stop
+holding and the capture lands on the next scene).

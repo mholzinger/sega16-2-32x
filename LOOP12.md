@@ -133,3 +133,34 @@ Counter dump (`diagdump.lua` pattern) reads DIAG from the master at
 3. ares pass: capture + savestate. `tools/row_health.py` scores a build
    from a capture alone and tracks what Mike perceives as choppiness;
    `tools/state_health.py` reads the counters from a state.
+
+## RESULT — 1c DONE (2026-08-09)
+
+The MD plane shows the real background. None of the three suspects was
+the root cause; see ARCHITECTURE.md §16 for the full account. Short
+form:
+
+  1. `cache_tag`/`md_tag` were placed INSIDE PAL_SH (0x27000-0x28000
+     is the palette stream target, not free); the slave clobbered both
+     with palette words every batch. Moved to 0x3A800/0x3B000.
+     Also: the md_tag allocator described in §16 had never actually
+     been written — the array was initialised and read, never claimed
+     into. Instrument lesson again: `md_tag used=1024` with
+     `claims=1` was the tell.
+  2. First-come-no-eviction dies on the title screen (~1120 cycling
+     codes > 1024 slots). Added per-set LRU eviction (`md_ref`
+     window stamps).
+  3. The name-table pass needed the same per-band alt-set/rowscroll
+     selection as compose_layer (cloud band), plus per-strip cell-mode
+     hscroll on the MD side (reg 11 = 02).
+
+Suspect 1 (blank slot) and 2 (ordering) were fixed as designed —
+reserved slot 1023 + demand-biased tile batches — but neither was the
+headline. Suspect 3 (scroll signs) was right all along: title dx=+0.
+
+Shipping gates re-verified after: title 2.44, eyehold 3.37, TOTAL
+24.26, _end 0x06018d38, stamped normal.
+
+Next (unchanged from AFTER 1C): palette precompute (§11) — the
+remaining title diff (13.4%) is visibly grey-for-blue placeholder
+colours — then FG cat-0 on Plane A, then the ares pass.
