@@ -2169,7 +2169,15 @@ RAMCODE void m_main(void)
                  * touched, and b->sub resumes the strip where it
                  * stopped rather than recomputing it.
                  * Phases 4/5/default are single-shot and stay atomic. */
-                {
+                if (b->phase <= 3) {
+                /* PHASES 0-3 ONLY. The first cut ran this block for every
+                 * phase, so `default:` swept up phases 4 (text), 5
+                 * (cache_fill) and the build_maps terminator and gave
+                 * each of them an EXTRA full 12-row cat-2 layer compose
+                 * on top of their real work. On ares that collapsed
+                 * throughput: blit skips 26.6% -> 94.8% of cycles and
+                 * deferrals 458 -> 3523. MAME only showed ~2 points of
+                 * parity for it, which was not loud enough to notice. */
                 int yc = y + b->sub;
                 int yielded = 0;
                 while (yc < ye) {
@@ -2185,7 +2193,7 @@ RAMCODE void m_main(void)
                     case 2:
                         compose_sprites(yc, yn, b->bpar);
                         break;
-                    default:
+                    default:                      /* phase 3 only */
                         compose_layer(yc, yn, 0, 0, 0, b->bank, b->bpar, 2);
                         break;
                     }

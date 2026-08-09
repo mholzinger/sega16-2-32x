@@ -872,3 +872,38 @@ base state `rom/s16.bs1`:
 Plus DIAG[62] (yields happening at all) and DIAG[63] (~0 expected).
 If blit skips do not move, the 12.1%-late decomposition was wrong and
 this comes out with the same NEVER SHIP marking as part (a).
+
+### CMDINT round 1 — REJECTED BY ares, and it was MY BUG, not the design
+
+`rom/ARES_cmdint.bs1`, 3967 cycles:
+
+                        base      CMDPROBE    CMDINT r1
+    blit skips         26.6%       36.2%       94.8%   <- of cycles
+    deferrals            458         458        3523
+    vints/cycle         3.03        3.04        3.04
+
+The counters I added for exactly this said the yielding was innocent:
+**DIAG[62] = 509 yields in 3967 cycles (0.1/cycle), DIAG[63] = 0 guard
+trips.** The mechanism barely fired, so it could not be the cause — and
+CMDPROBE runs the same ISR at the same rate for 36.2%. That isolated it
+to the strip restructure, which is only in CMDINT.
+
+THE BUG: the chunk loop ran for EVERY phase, so its `default:` case
+swept up phase 4 (compose_text), phase 5 (cache_fill) and the
+build_maps terminator and handed each of them an EXTRA full 12-row
+cat-2 layer compose on top of their real work. Every band did a whole
+redundant layer pass. Gated to `b->phase <= 3`; rebuilt as
+`rom/ARES_cmdint2.32x`.
+
+**MAME showed this as ~2 points of parity and I read it as acceptable
+overhead.** It was a whole extra compose pass per band. When a change
+costs more than its parts should, that is a defect to find, not a
+tradeoff to accept.
+
+SEPARATELY, AND IT IS A REAL HEADWIND: CMDPROBE — ISR only, no
+restructure — already moves blit skips 26.6% -> 36.2%. **Enabling the
+CMD interrupt at one fire per vint costs ~10 points of skip rate on its
+own.** Whatever interrupt-driven pickup wins, it must win more than
+that before it is worth anything. If round 2 lands between 26.6% and
+36.2% the mechanism works but does not pay for its own interrupt, and
+the answer is to raise CMD INT only when it can help — not every vint.
