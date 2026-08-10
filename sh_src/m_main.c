@@ -189,12 +189,13 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #define mdp_pen_own ((uint8_t *)0x0603D1A0) /* [3][16][2] owner set,pixel
                                              * -- drives the live CRAM
                                              * refresh; ends 0x3D200 */
-#define md_dbg_nt ((uint16_t *)0x0603D200)  /* [28][40] mirror of the last
-                                             * entry shipped per cell —
+#define md_dbg_nt ((uint16_t *)0x0603D200)  /* [2][28][40] mirror of the
+                                             * last entry shipped per
+                                             * cell, [0]=plane B [1]=A —
                                              * DEBUG ONLY, lua-readable
                                              * (the FB packet is bank-
                                              * blind from lua); ends
-                                             * 0x3DCC0, ~4.8KB under the
+                                             * 0x3E380, ~2.6KB under the
                                              * measured master SP floor */
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
@@ -3335,6 +3336,11 @@ RAMCODE void m_main(void)
                 sc[3] = (uint16_t)(-(bl->vx0 & 7) & 0x3FF);
                 sc[4] = (uint16_t)(bl->vy0 & 7);              /* plane B vy */
                 sc[6] = (uint16_t)(snap[0].vy0 & 7);          /* plane A vy */
+                sc[7] = (uint16_t)win_no;    /* sequence: the receiver's
+                                              * tear detector (ares showed
+                                              * packets torn mid-consume
+                                              * by the bank flip — the
+                                              * confetti sky) */
                 /* DEMAND BIAS (suspect 2, ordering): a name-table chunk
                  * may reference a slot whose tile has not shipped yet.
                  * When a burst of new claims is outstanding, spend the
@@ -3450,7 +3456,7 @@ RAMCODE void m_main(void)
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
                             if (isfg && (w == 0 || (w & 0x8000))) {
                                 /* FG: empty or cat-1 cell -> transparent */
-                                md_dbg_nt[row * 40 + col] = MD_BLANK_SLOT;
+                                md_dbg_nt[1120 + row * 40 + col] = MD_BLANK_SLOT;
                                 *o++ = MD_BLANK_SLOT;
                                 continue;
                             }
@@ -3519,7 +3525,7 @@ RAMCODE void m_main(void)
                             }
                             uint16_t ent = (uint16_t)(slot
                                 | ((unsigned)mdp_s_line[cset] << 13));
-                            md_dbg_nt[row * 40 + col] = ent;
+                            md_dbg_nt[(isfg ? 1120 : 0) + row * 40 + col] = ent;
                             *o++ = ent;
                         }
                     }

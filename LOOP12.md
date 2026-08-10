@@ -391,3 +391,45 @@ Open items, all normal-grind class now:
   - The receiver's VDP span (~140 scanlines) still wants a DMA or a
     write budget before hardware.
   - Parity anchors still mis-time probe builds; judge on ares.
+
+## NIGHT SESSION 3 — Mike's ares capture graded, tear-guard shipped
+
+Mike played tonight's MDBGALL in ares (3797-frame capture in
+screenshots/, savestate rom/s16.bs9, BUILD d496ae16 verified).
+
+**What ares says:**
+  - **The two-plane pivot WORKS on the hardware proxy.** Statues,
+    tombstones, GET IT text, wall, grass — Plane A + Plane B live.
+  - **Cadence is hurt: 4.64 vints/cycle (healthy ~3), V-gate rejects
+    35.3%, push_aborts 46k.** The receiver's ~140-scanline VDP span is
+    the prime suspect — it runs deep into active display every window.
+    Correctness counters are clean (0 deferrals, 0 late restores).
+  - **The confetti sky = torn packets + don't-care colours** (two
+    separate things, both now understood):
+    1. TORN PACKETS: the FB access bank flips mid-consume, stitching
+       half of one window's chunk to half of an older one. FIXED
+       tonight: snapshot-consume — the receiver copies the whole packet
+       to free work RAM at 0xFFA000 (~3 scanlines), then verifies magic
+       AND a new per-window sequence word (sc[7]); a mid-copy flip or
+       rewrite discards the packet (diag 0xFFB0D8 counts drops).
+       MAME: torn=0; needs ares re-test.
+    2. DON'T-CARE COLOURS (still open, scoped): S16 art leaves garbage
+       in palette entries that never display on arcade — FG pixel-0
+       (transparent there) and BG cells hidden behind opaque FG. The
+       pack allocates real pens for them (set 76 pixel-0 = MAGENTA,
+       verified live = snapshot = owner-consistent), and they show
+       through the FG dither's pixel-0 holes as magenta/confetti.
+       FIX (morning task): FG-only sets must not claim a pen for
+       pixel 0 (it is pen-0 transparent by construction), and the
+       assign should track per-set WHICH pixels are actually referenced
+       by resident tiles before claiming pens — the §11 offline
+       precompute absorbs this completely when it lands.
+
+Debug mirror is now per-plane: md_dbg_nt[0]=B, [1120]=A (0x3D200).
+
+**Morning order:**
+  1. FG pixel-0 pen suppression (small, surgical).
+  2. Ares re-test: does snapshot-consume kill the confetti and how do
+     the tear-drop counters read on real timing? (0xFFB0D8)
+  3. Receiver write budget: cap VDP words per window, carry a cursor —
+     target the 4.64->3 vints/cycle recovery. Then Mike's play pass.
