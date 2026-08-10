@@ -83,21 +83,41 @@ static uint8_t md_to_arcade(uint16_t p) {
  * on-screen result can be compared directly against the offline PNG. */
 __attribute__((section(".data")))
 static void md_bg_palette(void) {
+	/* NOTE: vdp_color() takes a CRAM BYTE address, so index i for i>0
+	 * lands on entry i/2 (A0 ignored) — this ramp actually programs
+	 * entries 0-3 with ramp[1,3,5,7]. Kept as-is; line 0 is only the
+	 * placeholder/text line. */
 	static const uint16_t ramp[8] = {
 		0x0000, 0x0222, 0x0444, 0x0666, 0x0888, 0x0AAA, 0x0CCC, 0x0EEE };
 	for (uint16_t i = 0; i < 8; i++)
 		vdp_color(i, ramp[i]);
 	/* Slot 1023 (VRAM 0x7FE0) is the RESERVED blank the SH-2 allocator
 	 * never claims; nothing ever uploads it, and hardware VRAM powers up
-	 * as garbage, so zero it here or "blank" cells show noise. */
-	*vdp_ctrl_wide = ((0x4000u | 0x3FE0u) << 16) | 1u;
+	 * as garbage, so zero it here or "blank" cells show noise.
+	 * (uint32_t) casts are LOAD-BEARING: -mshort makes int 16-bit, so a
+	 * constant-only expression shifted <<16 evaluates to 0 and the VDP
+	 * gets a null command — the CRAM block below silently vanished that
+	 * way for a whole debugging arc. */
+	*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3FE0u) << 16) | 1u;
 	for (uint16_t i = 0; i < 16; i++)
 		*vdp_data_port = 0;
-	/* Cell-mode hscroll (reg 11 = 02): one entry per 8-line strip, which
-	 * is exactly S16's rowscroll band granularity — the SH-2 ships a
-	 * per-strip fine-scroll word with each name-table chunk (alt-set /
-	 * per-row-parallax bands scroll differently from the primary set). */
-	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B02;
+	/* Clear PLANE A's whole name table (0xC000, 64x32): the boot
+	 * console left glyph entries there, and they drew a full-screen
+	 * glyph grid OVER Plane B wherever the 32X layer was transparent.
+	 * Tile 0's pattern is zeroed too so the all-zero table stays
+	 * invisible. Plane A must show nothing until FG cat-0 moves onto
+	 * it. */
+	*vdp_ctrl_wide = ((uint32_t)0x4000u << 16);
+	for (uint16_t i = 0; i < 16; i++)
+		*vdp_data_port = 0;
+	*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 3u;   /* VRAM 0xC000 */
+	for (uint16_t i = 0; i < 2048; i++)
+		*vdp_data_port = 0;
+	/* A/B: full-screen hscroll (reg 11 = 00). Cell mode made the MD
+	 * plane vanish per-strip on MAME while VRAM/CRAM verified correct
+	 * through the data port; bisecting whether the per-strip table is
+	 * the breakage. */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B00;
 }
 
 __attribute__((section(".data")))
@@ -305,12 +325,21 @@ void shim_vblank(void) {
 			//   [0] magic [1] type [2] param [3] hscroll [4] vscroll
 			//   [5] count  [8..] payload
 			volatile uint16_t *sc = (volatile uint16_t*)0x851A00;
+			(*(volatile uint16_t*)0xFFB0E0) = sc[0];      // diag: last magic seen
 			if (sc[0] == 0xB6B6) {
+				(*(volatile uint16_t*)0xFFB0E2)++;        // diag: packets consumed
+				if (sc[1] == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
+				else            (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
+				(*(volatile uint16_t*)0xFFB0E8) = sc[5];  // last count
 				uint16_t typ = sc[1], cnt = sc[5];
 				// vertical fine scroll, every window and nearly free
 				// (horizontal is per-strip now: cell-mode hscroll words
 				// ride each name-table chunk)
-				*vdp_ctrl_wide = 0x40000010u | 2u;      // VSRAM word 1 = plane B
+				// VSRAM addr 2 = plane B. The old 0x40000010|2 put the
+				// 2 in the SECOND control word (address bits 16:14), so
+				// it wrote VSRAM 0 -- PLANE A's vscroll -- all along.
+				// (A/B'd during the MAME blackout hunt: not the cause.)
+				*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
 				*vdp_data_port = sc[4];
 				if (typ == 0) {
 					// each entry: slot word + 32 bytes of 4bpp planar
@@ -320,8 +349,11 @@ void shim_vblank(void) {
 						if (va + 32u > 0xB000u) continue;
 						*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
 						               | ((va >> 14) & 3u);
-						for (uint16_t k = 1; k < 17; k++)
+						for (uint16_t k = 1; k < 17; k++) {
 							*vdp_data_port = e[k];
+							(*(volatile uint16_t*)0xFFB0EA) += e[k];     // diag: pattern sum
+							if (e[k]) (*(volatile uint16_t*)0xFFB0EC)++; // diag: nonzero words
+						}
 					}
 				} else {
 					// name-table cells, 40 per screen row, 64-cell stride
@@ -335,16 +367,24 @@ void shim_vblank(void) {
 						}
 						*vdp_data_port = e[i];
 					}
-					// per-strip plane-B hscroll: 7 words after the cells,
-					// one per 8-line strip (cell-mode table: entry at
-					// 0xFC00 + strip*32, plane B word at +2)
-					for (uint16_t i = 0; i < 7; i++) {
-						uint32_t a = 0xFC02u + ((sc[2] / 40u) + i) * 32u;
-						*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
-						               | ((a >> 14) & 3u);
-						*vdp_data_port = e[280 + i];
-					}
+					// A/B: full-screen plane-B hscroll from the first
+					// strip word of this chunk (cell-mode per-strip is
+					// under bisection — see md_bg_palette)
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C02u) << 16) | 3u;
+					*vdp_data_port = e[280];
 				}
+				// live BG palette: 48 words at fixed offset 688 -> CRAM
+				// lines 1-3 (entries 16-63); line 0 stays the grey/text
+				// ramp. Rides every packet so fades track at window
+				// cadence.
+				// live BG palette: 48 words at fixed offset 688 -> CRAM
+				// lines 1-3 (entries 16-63); line 0 stays the grey/text
+				// ramp. Rides every packet so fades track at window
+				// cadence. (A/B'd during the MAME blackout hunt: not
+				// the cause.)
+				*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16);
+				for (uint16_t i = 0; i < 48; i++)
+					*vdp_data_port = sc[688 + i];
 				sc[0] = 0;                  // consumed
 			}
 		}

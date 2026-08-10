@@ -164,3 +164,26 @@ Shipping gates re-verified after: title 2.44, eyehold 3.37, TOTAL
 Next (unchanged from AFTER 1C): palette precompute (§11) — the
 remaining title diff (13.4%) is visibly grey-for-blue placeholder
 colours — then FG cat-0 on Plane A, then the ares pass.
+
+## PALETTE SLICE (same day, after 1c): data-side DONE, one MAME question open
+
+§11's palette precompute is built and verified to the 68K bus:
+colour-level pack into MD lines 1-3, (code,set)-keyed patterns with
+per-set pen remaps, live CRAM refresh (fades track), drift check,
+rounding quantiser (truncation rendered the stage-1 sky dither at 4x
+contrast). Full account + numbers: ARCHITECTURE.md §17.
+
+Also fixed: the -mshort null-command class bug (MD ints are 16-bit; a
+constant-only `<<16` VDP command evaluates to ZERO — cast or die), the
+VSRAM plane-B/plane-A misaddress, plane A boot-console remnants drawing
+a glyph grid over plane B, the slave still composing BG/FG0 in
+software, and both sbuf clears missing the +8 blit row convention.
+
+OPEN: pack-era builds composite the MD plane as backdrop-only ON MAME
+(data structures verify correct via data-port read-back; the pre-pack
+payload composited fine). Cell-mode hscroll is parked on reg 8B=00
+until resolved. NEXT: ares play pass FIRST — MAME was never the
+acceptance vehicle for MD-plane visuals — then, only if ares agrees
+it's broken, a scene-anchored bisect from fcf68f9 on MAME. Do not trust
+frame-indexed screenshots across builds (timeline drift), dead write
+taps, or the fake videoram space (§17 instrument list).

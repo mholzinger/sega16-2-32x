@@ -1195,3 +1195,87 @@ settle reads as huge diffs; judge transitions by eye or with longer
 settles, and judge steady state only on scenes still in-anchor
 (a 240-frame settle outlives scream/eyehold — their terms stop
 holding and the capture lands on the next scene).
+
+## 17. The palette pack — colours are solved data-side; a MAME composite
+## question remains open
+
+`MDBGALL` now carries the §11 colour design end to end on the SH-2:
+
+  - **Colour-level pack into MD lines 1-3** (line 0 reserved for the
+    grey/text ramp). MEASURED demand (live PAL_SH walk, attract): worst
+    scene = 21 sets but only **36 distinct MD-quantised colours** — fits
+    3x15 usable pens with room. Per set: a line + an 8-entry pixel->pen
+    remap applied at pattern-conversion time, so `md_tag` keys widened
+    to (set<<16)|code — the same tile under two sets is two patterns.
+  - **Live CRAM refresh**: every packet carries 48 CRAM words; each pen
+    tracks its owner (set,pixel) in live PAL_SH, so fades reach the MD
+    at window cadence. A drift check (4 sets/window, fires only when a
+    set diverges from BOTH its pen and its assign snapshot) catches
+    colour-cycling permutations without re-ship storms on uniform fades.
+  - **Quantise by ROUNDING, never truncation**: S16 art dithers pens 1
+    LSB apart (the stage-1 sky is a 5/6 checker); truncation rendered a
+    straddling pair at 4x arcade contrast. `mdp_quant` rounds + clamps.
+  - **Set eviction** (LRU stamps) backs the slot eviction — the whole
+    state machine is stable over a minute of attract: 63 assigns, 44
+    frees, 10 nearest-colour fallbacks, 334 slot evictions.
+
+**Verified on the 68K bus** (VDP write taps): name entries ship with
+palette bits and valid slots, patterns ship pen-remapped and nonzero,
+the 48 CRAM words land with real colours. VRAM read-back through the
+data port returns exactly what was shipped.
+
+**Fixed on the way:**
+  - **`-mshort` NULL-COMMAND CLASS BUG** (the big one): MD-side int is
+    16-bit, so a constant-only `(0xC000|32) << 16` evaluates to 0 and
+    the VDP gets a null command — the CRAM block silently vanished this
+    way. Every 32-bit VDP command built from constants needs a
+    `(uint32_t)` cast. Existing code survived only because it always
+    happened to shift a uint32_t variable.
+  - **VSRAM misaddressing**: `0x40000010|2` put the address bits in the
+    wrong control word — plane B's vscroll had been writing plane A's
+    since slice 1c.
+  - **Plane A boot remnants**: the boot console left glyph entries in
+    plane A's name table, which drew a glyph grid over plane B wherever
+    the 32X was transparent. Wiped at init (plane A stays empty until
+    FG cat-0 moves onto it).
+  - **The slave still composed BG/FG0 in software** (slice 1c ifdef'd
+    only the master's band queue) — and both clears missed the blit's
+    sbuf-row-equals-screen-row-plus-8 convention, leaving 8-row stale
+    seams at band tails.
+
+**OPEN — MAME-only, by all current evidence:** in pack-era builds the
+MD plane composites as BACKDROP ONLY on MAME (through works — the
+backdrop colour is genesis video — but plane pixels read as pen 0),
+while every data structure verifies correct through the data port. The
+pre-pack payload composited fine on MAME (the 13.4% title capture shows
+the plane through the 32X in all bands). Serial A/Bs — cell-mode
+hscroll reverted, CRAM block disabled, VSRAM reverted, palette bits
+stripped — each failed to restore it, but every comparison is
+confounded by attract-timeline drift across rebuilds (window timing
+changes shift which scene sits at a given frame). Cell-mode hscroll is
+PARKED (reg 11 = 00, one global fine-scroll word ships) until this is
+resolved; per-band fine X (the cloud band) needs it back eventually.
+
+**Next session, in order:**
+  1. **Judge on ares first.** The pivot's visual verifications have
+     always been ares-side; MAME's 32X video path was never the
+     acceptance vehicle. If ares shows the background correctly, this
+     is a MAME emulation gap: document it in §8 and carry on.
+  2. If ares also fails: bisect from `fcf68f9` forward ON MAME with a
+     SCENE-ANCHORED visual probe (not frame-indexed — timeline drift
+     invalidated several conclusions this session).
+
+**Instrument traps re-learned (add to the §8 list):**
+  - MAME write taps DIE SILENTLY when the address space reinstalls
+    handlers — a tap that reported 62k writes then 0 forever was dead,
+    not the writes. Reinstall fresh and verify a positive before
+    trusting any zero.
+  - Frame-indexed screenshots are not comparable across builds — any
+    change to window timing shifts the attract timeline. Anchor on game
+    state (parity_cap.lua terms), and remember the anchors' settle
+    frames are tuned for the shipping build's pipeline.
+  - The `:gen_vdp` videoram space is fake for WRITES too (§8 already
+    said reads) — a lua write test proves nothing.
+  - MD-side receiver diag counters live at 0xFFB0E0..EC (last magic,
+    packets, tile batches, name chunks, last count, pattern checksum /
+    nonzero words) — lua-readable work RAM.

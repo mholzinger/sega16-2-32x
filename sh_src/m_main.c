@@ -136,15 +136,19 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * guard. 0x28EC0 is past ROWHASH (0x28D00 + 448B = 0x28EC0); the older
  * "28D80-28FFF free" comment above predates ROWHASH and is wrong. */
 #define md_dirty ((volatile uint32_t *)0x06028EC0)
-/* STABLE code->slot map for MD VRAM, separate from the render cache.
- * The render cache is transient by design -- it evicted and reassigned
- * slots under the name table, so cells pointed at whatever tile had
- * since taken their slot, and the whole plane rendered as one repeated
- * pattern with misses at 263/cycle. MD residency must be STABLE: a code
- * keeps its slot for as long as it is on screen. Same set/way geometry
- * as the render cache, first-come, no eviction (599 peak < 1024). */
-#define md_tag ((uint16_t *)0x0603B000)     /* NSETS*NWAYS words; after
-                                             * cache_tag (ends 0x3B000) */
+/* STABLE (code,set)->slot map for MD VRAM, separate from the render
+ * cache. The render cache is transient by design -- it evicted and
+ * reassigned slots under the name table, so cells pointed at whatever
+ * tile had since taken their slot, and the whole plane rendered as one
+ * repeated pattern with misses at 263/cycle. MD residency must be
+ * STABLE: a key keeps its slot for as long as it is on screen. Same
+ * set/way geometry as the render cache, LRU eviction per set (md_ref).
+ * 32-BIT tags: the pattern shipped to VRAM is pen-REMAPPED per S16
+ * colour set (see the palette pack below), so the same tile code under
+ * two sets is two different patterns — the key is (set<<16)|code. */
+#define md_tag ((uint32_t *)0x0603B400)     /* NSETS*NWAYS longs; after
+                                             * md_ref (ends 0x3B400) */
+#define MD_KEY(code, cset) (((uint32_t)(cset) << 16) | (code))
 /* Last-referenced window stamp per slot (low byte of win_no). "First-
  * come, no eviction" did not survive contact: the animated title
  * backdrop cycles ~1120 codes, so it fills all 1024 slots in the first
@@ -152,8 +156,37 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * nothing and rendered blank bands. A slot on screen is re-stamped by
  * the name-table pass at least every 5 windows, so evicting the oldest
  * way keeps the stability guarantee for everything actually visible. */
-#define md_ref ((uint8_t *)0x0603B800)      /* NSETS*NWAYS bytes */
+#define md_ref ((uint8_t *)0x0603B000)      /* NSETS*NWAYS bytes */
 #define MD_MARK(sl) (md_dirty[(sl) >> 5] |= 1u << ((sl) & 31))
+
+/* ---- MD PALETTE PACK (§11: the depth loss does the merging) ----
+ * MEASURED (this loop, live PAL_SH walk over the attract scenes): the
+ * visible BG window needs at most 21 distinct S16 colour sets but only
+ * 36 distinct MD-quantised colours — so a COLOUR-level pack into MD
+ * lines 1-3 (3 x 15 usable pens = 45; line 0 stays the grey ramp for
+ * the text path) covers the worst scene with room. Per set: a line and
+ * an 8-entry pixel->pen remap, applied when the pattern is converted.
+ * Pen COLOURS refresh from live PAL_SH every window (48 CRAM words in
+ * the packet), so fades track for free; only the merge GROUPING is
+ * static between repacks. A round-robin drift check (4 sets/window)
+ * reassigns a set whose live colours no longer match its pens.
+ * State is master-only, in fixed SDRAM after md_tag (ends 0x3C400). */
+#define MDP_LINES  3
+#define mdp_line_c ((uint16_t *)0x0603C400) /* [3][16] 9-bit colour, FFFF free */
+#define mdp_pen_rc ((uint8_t  *)0x0603C460) /* [3][16] pen refcount */
+#define mdp_s_line ((uint8_t  *)0x0603C4A0) /* [128] line+1, 0 = unassigned */
+#define mdp_s_map  ((uint8_t  *)0x0603C520) /* [128][8] pixel -> pen */
+#define mdp_s_qc   ((uint16_t *)0x0603C920) /* [128][8] q-colours at assign */
+#define mdp_s_stmp ((uint8_t  *)0x0603CF20) /* [128] LRU stamp */
+#define mdp_pen_own ((uint8_t *)0x0603CFA0) /* [3][16][2] owner set,pixel
+                                             * -- drives the live CRAM
+                                             * refresh; ends 0x3D000 */
+#define md_dbg_nt ((uint16_t *)0x0603D000)  /* [28][40] mirror of the last
+                                             * entry shipped per cell —
+                                             * DEBUG ONLY, lua-readable
+                                             * (the FB packet is bank-
+                                             * blind from lua); ends
+                                             * 0x3D8C0 */
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
                                             * round-robin eviction way,
@@ -323,6 +356,140 @@ static inline const uint8_t *tile_pixels(unsigned code, int cpu)
      * The queue still promotes hot tiles into SDRAM for speed. */
     return altbeast_tiles + (unsigned)code * 64;
 }
+
+#ifdef MD_BG
+/* S16B palette word -> 9-bit MD-quantised colour (bbbgggrrr). Channel
+ * layout per s16_to_mars: 4 bits + LSB in bits 12-14. ROUND to the
+ * nearest 3-bit level, never truncate: S16 art dithers adjacent pens 1
+ * LSB apart (the stage-1 sky is a 5/6 checker), and truncation renders
+ * a straddling pair at 4x its arcade contrast — the sky came out as a
+ * visible checkerboard. Rounding recentres the buckets so 1-LSB pairs
+ * collapse back to one colour almost everywhere, and fixes the global
+ * darkening truncation caused. */
+static uint16_t mdp_quant(uint16_t v)
+{
+    unsigned r = ((((v)       & 0xF) << 1) | ((v >> 12) & 1)) + 2;
+    unsigned g = ((((v >> 4)  & 0xF) << 1) | ((v >> 13) & 1)) + 2;
+    unsigned b = ((((v >> 8)  & 0xF) << 1) | ((v >> 14) & 1)) + 2;
+    r >>= 2; g >>= 2; b >>= 2;
+    if (r > 7) r = 7;
+    if (g > 7) g = 7;
+    if (b > 7) b = 7;
+    return (uint16_t)((b << 6) | (g << 3) | r);
+}
+
+/* Release a set's pens and INVALIDATE its VRAM slots: the pattern in
+ * VRAM is pen-remapped under the old assignment, and the (code,set)
+ * key would keep matching after a re-assign with a different remap —
+ * the cells re-claim, re-mark dirty, and the shipper re-converts. */
+static void mdp_free_set(unsigned s)
+{
+    if (!mdp_s_line[s])
+        return;
+    unsigned l = (unsigned)(mdp_s_line[s] - 1);
+    for (int p = 0; p < 8; p++) {
+        unsigned pen = mdp_s_map[s * 8 + p];
+        if (mdp_pen_rc[l * 16 + pen] && !--mdp_pen_rc[l * 16 + pen])
+            mdp_line_c[l * 16 + pen] = 0xFFFF;
+    }
+    mdp_s_line[s] = 0;
+    for (int i = 0; i < NSETS * NWAYS; i++)
+        if (md_tag[i] != 0xFFFFFFFFu && (md_tag[i] >> 16) == s)
+            md_tag[i] = 0xFFFFFFFFu;
+    DIAG[37]++;                              /* set frees/invalidations */
+}
+
+/* Assign a set to a line: greedy best-fit by fewest new pens, evicting
+ * LRU sets from the best line if it is full, nearest-colour fallback if
+ * the scene genuinely exceeds 45 pens (measured worst is 36). Always
+ * succeeds. */
+static void mdp_assign_set(unsigned s, uint8_t stamp)
+{
+    uint16_t qc[8];
+    for (int p = 0; p < 8; p++)
+        qc[p] = mdp_quant(PAL_SH[s * 8 + p]);
+
+    int bestl = 0, bestneed = 99, bestfit = 0;
+    for (int l = 0; l < MDP_LINES; l++) {
+        int need = 0, freep = 0;
+        for (int pen = 1; pen < 16; pen++)
+            if (mdp_line_c[l * 16 + pen] == 0xFFFF)
+                freep++;
+        for (int p = 0; p < 8; p++) {
+            int dup = 0, found = 0;
+            for (int p2 = 0; p2 < p; p2++)
+                if (qc[p2] == qc[p]) dup = 1;
+            if (dup) continue;
+            for (int pen = 1; pen < 16; pen++)
+                if (mdp_line_c[l * 16 + pen] == qc[p]) { found = 1; break; }
+            if (!found) need++;
+        }
+        int fits = need <= freep;
+        /* prefer any fitting line over any non-fitting one, then fewest
+         * new pens */
+        if ((fits && !bestfit) || (fits == bestfit && need < bestneed)) {
+            bestl = l; bestneed = need; bestfit = fits;
+        }
+    }
+    if (!bestfit) {
+        /* evict LRU sets from the chosen line until it fits or nothing
+         * evictable is left */
+        for (;;) {
+            unsigned victim = 128, vage = 0;
+            for (unsigned s2 = 0; s2 < 128; s2++) {
+                if (s2 == s || mdp_s_line[s2] != (uint8_t)(bestl + 1))
+                    continue;
+                unsigned age = (uint8_t)(stamp - mdp_s_stmp[s2]);
+                if (age >= 8 && age >= vage) { vage = age; victim = s2; }
+            }
+            if (victim == 128)
+                break;
+            mdp_free_set(victim);
+            int freep = 0;
+            for (int pen = 1; pen < 16; pen++)
+                if (mdp_line_c[bestl * 16 + pen] == 0xFFFF)
+                    freep++;
+            if (bestneed <= freep)
+                break;
+        }
+    }
+    for (int p = 0; p < 8; p++) {
+        unsigned pen16 = 0, freepen = 0;
+        for (unsigned pen = 1; pen < 16; pen++) {
+            if (mdp_line_c[bestl * 16 + pen] == qc[p]) { pen16 = pen; break; }
+            if (!freepen && mdp_line_c[bestl * 16 + pen] == 0xFFFF)
+                freepen = pen;
+        }
+        if (!pen16 && freepen) {
+            pen16 = freepen;
+            mdp_line_c[bestl * 16 + pen16] = qc[p];
+            mdp_pen_own[(bestl * 16 + pen16) * 2]     = (uint8_t)s;
+            mdp_pen_own[(bestl * 16 + pen16) * 2 + 1] = (uint8_t)p;
+        }
+        if (!pen16) {
+            /* line full of other colours: nearest occupied pen */
+            unsigned bd = 0xFFFF;
+            for (unsigned pen = 1; pen < 16; pen++) {
+                uint16_t c = mdp_line_c[bestl * 16 + pen];
+                if (c == 0xFFFF) continue;
+                int dr = (int)(c & 7) - (int)(qc[p] & 7);
+                int dg = (int)((c >> 3) & 7) - (int)((qc[p] >> 3) & 7);
+                int db = (int)((c >> 6) & 7) - (int)((qc[p] >> 6) & 7);
+                unsigned d = (unsigned)(dr * dr + dg * dg + db * db);
+                if (d < bd) { bd = d; pen16 = pen; }
+            }
+            if (!pen16) pen16 = 1;           /* empty line: cannot happen */
+            DIAG[36]++;                      /* nearest-colour fallbacks */
+        }
+        mdp_pen_rc[bestl * 16 + pen16]++;
+        mdp_s_map[s * 8 + p] = (uint8_t)pen16;
+        mdp_s_qc[s * 8 + p]  = qc[p];
+    }
+    mdp_s_line[s] = (uint8_t)(bestl + 1);
+    mdp_s_stmp[s] = stamp;
+    DIAG[35]++;                              /* set assigns */
+}
+#endif
 
 typedef struct {
     uint8_t pq[4];
@@ -1848,20 +2015,45 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
     if (!NOCAT1DEFER && cat1_valid) {
         compose_layer(cat1_lo, cat1_hi, 1, 0, 0, cat1_bank, cat1_par, 2);
         slave_service_stream();
+#ifndef MD_BG_TEXT
         compose_text(cat1_t0, cat1_t1, cat1_par);
         slave_service_stream();
+#endif
         cat1_valid = 0;
     }
+#ifdef MD_BG
+    /* PIVOT: the SLAVE'S rows too. Slice 1c ifdef'd the master's band
+     * queue but left these two passes composing the software BG/FG0
+     * over the cleared rows — with the BG colour groups no longer
+     * allocated they painted BLACK, and since the master/slave row
+     * split alternates bands, the screen showed full-width black bands
+     * exactly where the slave had composed. Clear to 0 (MD-through)
+     * like the master's phase 0. */
+    for (int y = lo; y < hi; y += 12) {
+        int ye = (y + 12 > hi) ? hi : y + 12;
+        for (int r = y; r < ye; r++) {
+            uint8_t *d = &sbuf[(8 + r) * SBUF_W];  /* sbuf row = screen
+                                                    * row + 8, per
+                                                    * blit_half */
+            for (int x = 0; x < SBUF_W; x += 4)
+                *(uint32_t *)(d + x) = 0;
+        }
+        slave_service_stream();
+    }
+#else
     for (int y = lo; y < hi; y += 12) {
         int ye = (y + 12 > hi) ? hi : y + 12;
         compose_layer(y, ye, 1, 1, 1, bank1, par, 0);
         slave_service_stream();
     }
+#endif
+#ifndef MD_BG_FG0
     for (int y = lo; y < hi; y += 12) {
         int ye = (y + 12 > hi) ? hi : y + 12;
         compose_layer(y, ye, 1, 0, 0, bank1, par, 1);
         slave_service_stream();
     }
+#endif
     /* Layer order: EXACT per segas16b_v for pp=2 sprites (measured
      * dominant in this game): tiles cat0, sprites, FG cat1, text.
      * pp<=1 sprites additionally gate per pixel via pri_lut so they
@@ -1997,13 +2189,24 @@ RAMCODE void m_main(void)
     for (int i = 0; i < NSETS * NWAYS; i++) {
         cache_tag[i] = 0xFFFF;
 #ifdef MD_BG
-        md_tag[i] = 0xFFFF;                  /* fixed block: not .bss-zeroed */
+        md_tag[i] = 0xFFFFFFFFu;             /* fixed block: not .bss-zeroed */
         md_ref[i] = 0;
 #endif
     }
 #ifdef MD_BG
     for (int i = 0; i < NSETS * NWAYS / 32; i++)
         md_dirty[i] = 0;
+    for (int i = 0; i < 28 * 40; i++)
+        md_dbg_nt[i] = 0xDEAD;               /* debug mirror: never-written */
+    for (int i = 0; i < MDP_LINES * 16; i++) {
+        mdp_line_c[i] = 0xFFFF;
+        mdp_pen_rc[i] = 0;
+        mdp_pen_own[i * 2] = mdp_pen_own[i * 2 + 1] = 0;
+    }
+    for (int i = 0; i < 128; i++) {
+        mdp_s_line[i] = 0;
+        mdp_s_stmp[i] = 0;
+    }
 #endif
     for (int i = 0; i < NSETS; i++)
         cache_rot[i] = 0;
@@ -2111,6 +2314,7 @@ RAMCODE void m_main(void)
     uint16_t md_scan = 0;                /* dirty-slot scan cursor */
     uint8_t  md_phase = 0;               /* 0 = tiles, 1-4 = name table */
     uint16_t md_pending = 0;             /* claimed slots not yet shipped */
+    uint8_t  mdp_chk = 0;                /* palette drift check cursor */
 #endif
     for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
@@ -2292,9 +2496,13 @@ RAMCODE void m_main(void)
                 case 0:
 #ifdef MD_BG
                     /* PIVOT SLICE 1a: leave the BG rows at 0 so the MD
-                     * layer shows through, instead of composing them. */
+                     * layer shows through, instead of composing them.
+                     * SBUF ROW = SCREEN ROW + 8 (blit_half reads
+                     * sbuf[(8+y)*W+8]); the first cut cleared unshifted
+                     * rows and left an 8-row stale strip at the tail of
+                     * every band — the grey seams at 64-72/136-144. */
                     for (int r = y; r < ye; r++) {
-                        uint8_t *d = &sbuf[r * SBUF_W];
+                        uint8_t *d = &sbuf[(8 + r) * SBUF_W];
                         for (int x = 0; x < SBUF_W; x++) d[x] = 0;
                     }
 #else
@@ -3137,11 +3345,13 @@ RAMCODE void m_main(void)
                         if (!(md_dirty[sl >> 5] & (1u << (sl & 31))))
                             continue;
                         md_dirty[sl >> 5] &= ~(1u << (sl & 31));
-                        uint16_t mcode = md_tag[sl];
-                        if (mcode == 0xFFFF)         /* never: dirty implies
+                        uint32_t mkey = md_tag[sl];
+                        if (mkey == 0xFFFFFFFFu)     /* never: dirty implies
                                                       * claimed; guard OOB */
                             continue;
-                        const uint8_t *px = altbeast_tiles + (unsigned)mcode * 64;
+                        const uint8_t *px =
+                            altbeast_tiles + (mkey & 0xFFFFu) * 64;
+                        const uint8_t *map = mdp_s_map + (mkey >> 16) * 8;
                         if (sc[2] == 0xFFFF) sc[2] = (uint16_t)sl;
                         ((volatile uint16_t *)(sc + 8))[sent * 17] = (uint16_t)sl;
                         volatile uint8_t *o = (volatile uint8_t *)
@@ -3149,7 +3359,8 @@ RAMCODE void m_main(void)
                         for (int y = 0; y < 8; y++) {
                             const uint8_t *r = px + y * 8;
                             for (int kk = 0; kk < 4; kk++)
-                                *o++ = (uint8_t)((r[kk * 2] << 4) | r[kk * 2 + 1]);
+                                *o++ = (uint8_t)((map[r[kk * 2]] << 4)
+                                                 | map[r[kk * 2 + 1]]);
                         }
                         if (md_pending) md_pending--;
                         sent++;
@@ -3208,6 +3419,10 @@ RAMCODE void m_main(void)
                             unsigned code = w & 0x1FFF;
                             if (code & 0x1000)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
+                            unsigned cset = ((unsigned)w >> 6) & 0x7F;
+                            if (!mdp_s_line[cset])
+                                mdp_assign_set(cset, (uint8_t)win_no);
+                            mdp_s_stmp[cset] = (uint8_t)win_no;
                             /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
                              * set/way geometry as the render cache but
                              * STABLE — hit or claim keeps a slot as long
@@ -3221,25 +3436,26 @@ RAMCODE void m_main(void)
                              * RESERVED as the blank (suspect 1: it must
                              * never be allocatable, or an unresolvable
                              * cell is indistinguishable from a real one). */
+                            uint32_t key = MD_KEY(code, cset);
                             unsigned s4m = CACHE_SET(code) * NWAYS;
                             unsigned slot = MD_BLANK_SLOT;
                             unsigned victim = MD_BLANK_SLOT, vage = 0;
                             int done = 0;
                             for (unsigned w2 = 0; w2 < NWAYS; w2++) {
                                 unsigned i2 = s4m + w2;
-                                uint16_t t = md_tag[i2];
-                                if (t == code) {
+                                uint32_t t = md_tag[i2];
+                                if (t == key) {
                                     md_ref[i2] = (uint8_t)win_no;
                                     slot = i2;
                                     done = 1;
                                     break;
                                 }
-                                if (t == 0xFFFF) {
+                                if (t == 0xFFFFFFFFu) {
                                     if (i2 == MD_BLANK_SLOT)
                                         break;   /* reserved: fall through
                                                   * to evict ways 0..6 */
                                     done = 1;
-                                    md_tag[i2] = (uint16_t)code;
+                                    md_tag[i2] = key;
                                     md_ref[i2] = (uint8_t)win_no;
                                     MD_MARK(i2);
                                     md_pending++;
@@ -3255,14 +3471,17 @@ RAMCODE void m_main(void)
                                 /* set full: evict the LRU way (see md_ref).
                                  * Cells still naming the victim rewrite
                                  * within 4 chunks (~5 windows). */
-                                md_tag[victim] = (uint16_t)code;
+                                md_tag[victim] = key;
                                 md_ref[victim] = (uint8_t)win_no;
                                 MD_MARK(victim);
                                 md_pending++;
                                 DIAG[50]++;              /* evictions */
                                 slot = victim;
                             }
-                            *o++ = (uint16_t)slot;
+                            uint16_t ent = (uint16_t)(slot
+                                | ((unsigned)mdp_s_line[cset] << 13));
+                            md_dbg_nt[row * 40 + col] = ent;
+                            *o++ = ent;
                         }
                     }
                     sc[1] = 1;
@@ -3270,6 +3489,48 @@ RAMCODE void m_main(void)
                     sc[5] = 280;
                     md_phase++;
                     if (md_phase > 4) md_phase = 0;   /* 1 tile + 4 nametable */
+
+                    /* PALETTE DRIFT, 4 sets/window round-robin: fires
+                     * only when a set's live colour differs from BOTH
+                     * the pen it uses (uniform fades track via the
+                     * owner refresh below — no fire) AND its assign
+                     * snapshot (nearest-colour fallback pens differ by
+                     * design — no fire). What remains is real
+                     * structural change: colour cycling permutations,
+                     * post-fade divergence of merged pens. */
+                    for (int n = 0; n < 4; n++) {
+                        unsigned s2 = mdp_chk = (uint8_t)((mdp_chk + 1) & 127);
+                        if (!mdp_s_line[s2])
+                            continue;
+                        unsigned lb = (unsigned)(mdp_s_line[s2] - 1) * 16;
+                        for (int p = 0; p < 8; p++) {
+                            uint16_t lq = mdp_quant(PAL_SH[s2 * 8 + p]);
+                            if (lq != mdp_line_c[lb + mdp_s_map[s2 * 8 + p]]
+                                && lq != mdp_s_qc[s2 * 8 + p]) {
+                                mdp_free_set(s2);
+                                mdp_assign_set(s2, (uint8_t)win_no);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                /* LIVE CRAM REFRESH, every window: each used pen tracks
+                 * its owner's current PAL_SH colour, so fades reach the
+                 * MD plane at window cadence. 48 words at a fixed
+                 * offset past both payload types. */
+                for (int i = 0; i < MDP_LINES * 16; i++) {
+                    uint16_t cw = 0;
+                    if (mdp_pen_rc[i]) {
+                        unsigned os = mdp_pen_own[i * 2];
+                        unsigned op = mdp_pen_own[i * 2 + 1];
+                        uint16_t q = mdp_quant(PAL_SH[os * 8 + op]);
+                        mdp_line_c[i] = q;
+                        cw = (uint16_t)((((q >> 6) & 7) << 9)
+                                        | (((q >> 3) & 7) << 5)
+                                        | ((q & 7) << 1));
+                    }
+                    sc[688 + i] = cw;
                 }
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
             }
