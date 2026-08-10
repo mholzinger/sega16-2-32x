@@ -279,3 +279,52 @@ Test order for next session:
      commercial library (§2): move bulk VRAM traffic into DMA and/or
      restrict the receiver's VDP writes to a vblank budget with a
      carry-over cursor (ship fewer words per window, every window).
+
+## NIGHT SESSION 2, part 2 — the grind results
+
+Executed the LOOP12 test order plus four more discriminators. Facts,
+each verified in the wt-1c worktree with the anchored metric:
+
+  1. **Echo theory DEAD.** Pre-write read-backs (start of receiver,
+     nothing written yet that window) persist across windows:
+     cell (2,0)=0x6150, pattern words 0-2 = CCCC CCCC CCCC, CRAM
+     40-42 = real colours, cells (2,1)/(2,2)/(2,8) all correct.
+     Multi-word, multi-address, pre-write. Storage looks real.
+  2. **V-COUNTER: the receiver's VDP work spans V=0xF8 -> V=0x85 —
+     ~140 scanlines, every window.** The vint here is the HINT at line
+     0xDF; the receiver runs through vblank and 130+ lines of active
+     display. This stands alone as a finding: the receiver is far over
+     any vblank budget, and on real hardware that means massive
+     FIFO-stall time inside the vint handler. Whatever else is true,
+     this needs fixing (DMA or a per-window write budget).
+  3. **Traffic-poison theory DEAD.** Freeze test (receiver consumes
+     but writes nothing after vint 1200): void persists in total VDP
+     port silence.
+  4. **Scroll fetch coords clean.** VSRAM A/B = 0, hscroll B = 0/-6 at
+     read-back. No displacement into unwritten name rows.
+  5. **MAME 315-5313 write path verified from source**: data port ->
+     vdp_vram_write -> vram_w -> m_vram + mark_dirty on all six gfx
+     elements. Renderer reads m_vram (name table raw, patterns via
+     gfx decode). No second store, no 32X-specific divergence found
+     in the source.
+  6. **Savestate round-trip: BG rows still void after restore** (which
+     rebuilds gfx caches from m_vram) — but the GRASS rows survive
+     with colour while the 32X layer comes back glitched. Strong hint
+     that the grass/bottom rows ARE plane B rendering correctly
+     (revisit every "grass = 32X cat-1" assumption from tonight), and
+     the top rows' data is NOT in m_vram at restore time — directly
+     contradicting fact 1 for the same rows.
+
+**The contradiction to break next:** row-2 read-backs return correct
+data through the data port; the same rows are absent from a restored
+savestate and from the render. The only tool left that can see the
+truth is MAME itself: run with -debug and inspect m_vram at the void
+moment, or build MAME with a logprintf in vram_w/vdp_vram_r for
+addresses 0xE100 and the pattern base. One hour with the debugger
+beats another night of black-box probes — the black box is exhausted:
+every probe that can be built from the 68K side has been built and
+they disagree at exactly one interface.
+
+Worktree state: wt-1c has HEAD sources + all receiver diag probes
+(read-backs at 0xFFB0A0-BE, freeze switch at vint 1200 — REMOVE the
+freeze before real use). Main tree is clean at HEAD.
