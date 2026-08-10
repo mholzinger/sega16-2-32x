@@ -328,3 +328,37 @@ they disagree at exactly one interface.
 Worktree state: wt-1c has HEAD sources + all receiver diag probes
 (read-backs at 0xFFB0A0-BE, freeze switch at vint 1200 — REMOVE the
 freeze before real use). Main tree is clean at HEAD.
+
+## VERDICT — THE VOID IS SOLVED. It was never a rendering bug.
+
+Ground truth via MAME's save-item registry (`emu.item` on
+`:gen_vdp` `0/m_vram` — the ONLY trustworthy window into the real
+VRAM; the videoram space is fake, the data port disagrees at pattern
+addresses, taps die): the name table, patterns and registers are all
+present and correct in the render store, and the renderer draws them
+faithfully. The upper rows ARE flat dark tiles — because on System 16
+the graveyard wall, trees and statues are the FG LAYER, and the sky
+behind them is a dark flat BG. **The "void" was the unwired FG cat-0
+plane** (LOOP12 "AFTER 1C" item 2), exposed the same night it became
+load-bearing: slice 1c's slave still composed FG cat-0 in software by
+omission, and this session's slave-ifdef fix (correct!) removed FG
+cat-0's last renderer. Every observation checks out against this:
+grass/eyehold/scream rendered (BG-heavy content), fcf68f9 "worked"
+(slave FG0), ares agreed (same missing layer), raw patterns showed
+garbage "art" (corrupted-but-visible BG vs correct-but-dark BG).
+
+**Proof:** `make MDBG=1` (FG0 still on the 32X) at the demo anchor now
+shows the full scene — logo, tombstones, INSERT COIN, sprites, grass —
+with the palette pack live underneath. Anchored void metric 86.3%
+dominant = the night sky itself.
+
+Parity numbers for the MDBG build remain transition-dominated (the
+anchors settle 45f, the MD path rebuilds ~0.5s; §17) — judge on ares.
+
+NEXT (finally, cleanly): wire FG cat-0 onto MD Plane A. Everything it
+needs already exists: the allocator keys on (code,set), the pack has
+line room measured (FG0 adds ~7-10 sets), plane A is wiped and waiting,
+cell-mode hscroll is parked but plane A can ride the same global fine
+scroll to start. Then the sky-colour scrutiny (dark vs arcade
+grey-blue — check blank-cell rate on sky sets first) and the receiver's
+140-scanline VDP span (DMA or a write budget) before Mike's ares pass.
