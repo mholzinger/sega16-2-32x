@@ -206,6 +206,11 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * snapshot). Masks are gathered from the ROM tile at claim time; FG
  * claims exclude bit 0 (the shipper forces FG pixel 0 to pen 0). */
 #define mdp_s_used ((uint8_t *)0x0603E380)  /* [128]; ends 0x3E400 */
+/* Drift-reassign count per set (saturating). A set that keeps drifting
+ * is colour-CYCLING; at >= 2 its pens are claimed EXCLUSIVE (free pen
+ * before exact-match sharing), so subsequent drifts hit the sole-owner
+ * in-place recolour instead of a free+invalidate+re-ship storm. */
+#define mdp_s_vol  ((uint8_t *)0x0603E400)  /* [128]; ends 0x3E480 */
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
                                             * round-robin eviction way,
@@ -434,6 +439,9 @@ static unsigned mdp_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
         if (!freepen && mdp_line_c[l * 16 + pen] == 0xFFFF)
             freepen = pen;
     }
+    if (mdp_s_vol[s] >= 2 && freepen)
+        pen16 = 0;                           /* volatile set: prefer an
+                                              * EXCLUSIVE pen over sharing */
     if (!pen16 && freepen) {
         pen16 = freepen;
         mdp_line_c[l * 16 + pen16] = q;
@@ -2289,6 +2297,7 @@ RAMCODE void m_main(void)
         mdp_s_line[i] = 0;
         mdp_s_stmp[i] = 0;
         mdp_s_used[i] = 0;
+        mdp_s_vol[i]  = 0;
     }
 #endif
     for (int i = 0; i < NSETS; i++)
@@ -3589,6 +3598,10 @@ RAMCODE void m_main(void)
                                 /* set full: evict the LRU way (see md_ref).
                                  * Cells still naming the victim rewrite
                                  * within 4 chunks (~5 windows). */
+                                if (vage < 12) DIAG[39]++;   /* HOT evict:
+                                                              * victim's cells
+                                                              * likely still on
+                                                              * screen */
                                 mdp_note_tile(cset, code, isfg,
                                               (uint8_t)win_no);
                                 md_tag[victim] = key;
@@ -3625,16 +3638,42 @@ RAMCODE void m_main(void)
                         unsigned lb = (unsigned)(mdp_s_line[s2] - 1) * 16;
                         for (int p = 0; p < 8; p++) {
                             uint16_t lq;
+                            unsigned pen;
                             if (!(mdp_s_used[s2] & (1u << p)))
                                 continue;    /* pen never claimed */
                             lq = mdp_quant(PAL_SH[s2 * 8 + p]);
-                            if (lq != mdp_line_c[lb + mdp_s_map[s2 * 8 + p]]
-                                && lq != mdp_s_qc[s2 * 8 + p]) {
-                                uint8_t um = mdp_s_used[s2];
-                                mdp_free_set(s2);
-                                mdp_assign_set(s2, (uint8_t)win_no, um);
-                                break;
+                            pen = mdp_s_map[s2 * 8 + p];
+                            if (lq == mdp_line_c[lb + pen]
+                                || lq == mdp_s_qc[s2 * 8 + p])
+                                continue;
+                            if (mdp_pen_rc[lb + pen] == 1
+                                && mdp_pen_own[(lb + pen) * 2] == s2
+                                && mdp_pen_own[(lb + pen) * 2 + 1] == p) {
+                                /* SOLE-OWNER DRIFT: colour-cycle the pen
+                                 * in place — no free, no invalidation,
+                                 * no re-ship; the CRAM block carries the
+                                 * new colour next window. This was the
+                                 * dominant churn source ([37] ~85/min
+                                 * mostly drift; title water cycles). */
+                                mdp_line_c[lb + pen] = lq;
+                                mdp_s_qc[s2 * 8 + p] = lq;
+                                DIAG[51]++;          /* in-place recolours */
+                                continue;
                             }
+                            /* SHARED-PEN DRIFT: TOLERATED. The old
+                             * free+reassign here invalidated the whole
+                             * set's slots ~1/sec; reclaimed slots then
+                             * showed FOREIGN art under stale cells for
+                             * up to a rotation (the stage-2 statue-in-
+                             * floor mess) and the CRAM churn was the
+                             * two-state sky flip. A shared pen keeps its
+                             * owner's colour: co-owners in lockstep
+                             * (fades) still track; a diverging co-owner
+                             * shows a small colour error instead. KNOWN
+                             * COST: palette-CYCLING sets on shared pens
+                             * freeze at assign-time colours — the §11
+                             * offline precompute owns the real fix. */
+                            DIAG[38]++;              /* tolerated drifts */
                         }
                     }
                 }
