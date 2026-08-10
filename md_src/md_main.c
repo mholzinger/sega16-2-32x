@@ -324,31 +324,17 @@ void shim_vblank(void) {
 			// valid; payload alternates tiles and name-table chunks.
 			//   [0] magic [1] type [2] param [3] hscroll [4] vscroll
 			//   [5] count  [8..] payload
+			// TEAR GUARD RETIRED (measured, WIP-ladder bisect): the
+			// 736-word FB copy cost ~half the window rate ([9] 1147->632)
+			// — 68K FB reads are slow — and the tear it guarded against
+			// cannot happen: the receiver and the SH-2's packet rebuild
+			// are strictly sequential (both inside the vint chain), and
+			// the torn-packet counter never fired. The ares confetti was
+			// the fallback-pen bug, fixed by the usage-mask allocator.
 			volatile uint16_t *live = (volatile uint16_t*)0x851A00;
+			volatile uint16_t *sc = live;
 			(*(volatile uint16_t*)0xFFB0E0) = live[0];    // diag: last magic seen
 			if (live[0] == 0xB6B6) {
-				// SNAPSHOT-CONSUME (ares tear fix): the receiver's VDP
-				// work spans ~140 scanlines and the FB access bank FLIPS
-				// under it mid-consume — half of one window's chunk
-				// stitched to half of an older one painted the confetti
-				// sky. Copy the whole packet to free work RAM first
-				// (~3 scanlines), then verify magic AND the per-window
-				// sequence word survived the copy; a flip or master
-				// rewrite mid-copy changes one of them and the packet is
-				// DISCARDED instead of applied torn.
-				uint16_t *sc = (uint16_t*)0xFFA000;
-				{
-					uint16_t seq0 = live[7];
-					volatile uint32_t *s32 = (volatile uint32_t*)live;
-					uint32_t *d32 = (uint32_t*)sc;
-					for (uint16_t i = 0; i < 368; i++)
-						d32[i] = s32[i];
-					if (live[0] != 0xB6B6 || live[7] != seq0) {
-						(*(volatile uint16_t*)0xFFB0D8)++;   // diag: torn, dropped
-						live[0] = 0;
-						goto packet_done;
-					}
-				}
 				(*(volatile uint16_t*)0xFFB0E2)++;        // diag: packets consumed
 				if (sc[1] == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
 				else            (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks

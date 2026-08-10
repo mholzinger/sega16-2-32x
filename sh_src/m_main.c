@@ -197,6 +197,15 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
                                              * blind from lua); ends
                                              * 0x3E380, ~2.6KB under the
                                              * measured master SP floor */
+/* Per-set PIXEL USAGE mask (bit v = some resident tile uses value v).
+ * Pens are claimed ONLY for used pixels: S16 art leaves garbage in
+ * arcade-invisible entries (FG pixel 0 is transparent there; set 76
+ * pixel 0 is literal magenta), and claiming pens for all 8 pixels
+ * overflowed the lines — real sky colours got nearest-fallback DARK
+ * pens that the drift rule then correctly never re-fired (live ==
+ * snapshot). Masks are gathered from the ROM tile at claim time; FG
+ * claims exclude bit 0 (the shipper forces FG pixel 0 to pen 0). */
+#define mdp_s_used ((uint8_t *)0x0603E380)  /* [128]; ends 0x3E400 */
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
                                             * round-robin eviction way,
@@ -398,43 +407,124 @@ static void mdp_free_set(unsigned s)
         return;
     unsigned l = (unsigned)(mdp_s_line[s] - 1);
     for (int p = 0; p < 8; p++) {
-        unsigned pen = mdp_s_map[s * 8 + p];
+        unsigned pen;
+        if (!(mdp_s_used[s] & (1u << p)))
+            continue;                        /* never claimed a pen */
+        pen = mdp_s_map[s * 8 + p];
         if (mdp_pen_rc[l * 16 + pen] && !--mdp_pen_rc[l * 16 + pen])
             mdp_line_c[l * 16 + pen] = 0xFFFF;
     }
     mdp_s_line[s] = 0;
+    mdp_s_used[s] = 0;
     for (int i = 0; i < NSETS * NWAYS; i++)
         if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s)
             md_tag[i] = 0xFFFFFFFFu;         /* both planes' variants */
     DIAG[37]++;                              /* set frees/invalidations */
 }
 
-/* Assign a set to a line: greedy best-fit by fewest new pens, evicting
- * LRU sets from the best line if it is full, nearest-colour fallback if
- * the scene genuinely exceeds 45 pens (measured worst is 36). Always
- * succeeds. */
-static void mdp_assign_set(unsigned s, uint8_t stamp)
+/* Claim a pen in line l for quantised colour q; returns the pen and
+ * bumps its refcount. Exact match first, then a free pen, then the
+ * nearest occupied pen (counted — should be rare once pens are only
+ * claimed for used pixels). */
+static unsigned mdp_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
+{
+    unsigned pen16 = 0, freepen = 0;
+    for (unsigned pen = 1; pen < 16; pen++) {
+        if (mdp_line_c[l * 16 + pen] == q) { pen16 = pen; break; }
+        if (!freepen && mdp_line_c[l * 16 + pen] == 0xFFFF)
+            freepen = pen;
+    }
+    if (!pen16 && freepen) {
+        pen16 = freepen;
+        mdp_line_c[l * 16 + pen16] = q;
+        mdp_pen_own[(l * 16 + pen16) * 2]     = (uint8_t)s;
+        mdp_pen_own[(l * 16 + pen16) * 2 + 1] = (uint8_t)p;
+    }
+    if (!pen16) {
+        unsigned bd = 0xFFFF;
+        for (unsigned pen = 1; pen < 16; pen++) {
+            uint16_t c = mdp_line_c[l * 16 + pen];
+            int dr, dg, db;
+            unsigned d;
+            if (c == 0xFFFF) continue;
+            dr = (int)(c & 7) - (int)(q & 7);
+            dg = (int)((c >> 3) & 7) - (int)((q >> 3) & 7);
+            db = (int)((c >> 6) & 7) - (int)((q >> 6) & 7);
+            d = (unsigned)(dr * dr + dg * dg + db * db);
+            if (d < bd) { bd = d; pen16 = pen; }
+        }
+        if (!pen16) pen16 = 1;
+        DIAG[36]++;                          /* nearest-colour fallbacks */
+    }
+    mdp_pen_rc[l * 16 + pen16]++;
+    return pen16;
+}
+
+/* Add newly-seen pixels of an already-assigned set (a fresh tile uses
+ * values earlier residents did not). */
+static void mdp_extend_set(unsigned s, uint8_t addmask)
+{
+    unsigned l = (unsigned)(mdp_s_line[s] - 1);
+    for (int p = 0; p < 8; p++) {
+        uint16_t q;
+        if (!(addmask & (1u << p)))
+            continue;
+        q = mdp_quant(PAL_SH[s * 8 + p]);
+        mdp_s_map[s * 8 + p] = (uint8_t)mdp_claim_pen(l, q, s, (unsigned)p);
+        mdp_s_qc[s * 8 + p]  = q;
+    }
+    mdp_s_used[s] |= addmask;
+}
+
+static void mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask);
+
+/* A tile is being claimed for MD residency: fold its pixel values into
+ * the set's usage mask and assign/extend the pen mapping to cover
+ * exactly the used pixels. FG claims drop bit 0 — the shipper forces
+ * FG pixel 0 to pen 0 (transparent), so its (often garbage) colour
+ * must not spend a pen. */
+static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
+                          uint8_t stamp)
+{
+    const uint8_t *tp = altbeast_tiles + code * 64;
+    uint8_t mask = 0;
+    for (int i = 0; i < 64; i++)
+        mask |= (uint8_t)(1u << tp[i]);
+    if (isfg)
+        mask &= 0xFE;
+    if (!mdp_s_line[cset])
+        mdp_assign_set(cset, stamp, mask);
+    else if (mask & (uint8_t)~mdp_s_used[cset])
+        mdp_extend_set(cset, mask & (uint8_t)~mdp_s_used[cset]);
+}
+
+/* Assign a set to a line, claiming pens ONLY for `mask` pixels: greedy
+ * best-fit by fewest new pens, evicting LRU sets from the best line if
+ * it is full, nearest-colour fallback as last resort. Always succeeds. */
+static void mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask)
 {
     uint16_t qc[8];
+    int bestl = 0, bestneed = 99, bestfit = 0;
     for (int p = 0; p < 8; p++)
         qc[p] = mdp_quant(PAL_SH[s * 8 + p]);
 
-    int bestl = 0, bestneed = 99, bestfit = 0;
     for (int l = 0; l < MDP_LINES; l++) {
-        int need = 0, freep = 0;
+        int need = 0, freep = 0, fits;
         for (int pen = 1; pen < 16; pen++)
             if (mdp_line_c[l * 16 + pen] == 0xFFFF)
                 freep++;
         for (int p = 0; p < 8; p++) {
             int dup = 0, found = 0;
+            if (!(mask & (1u << p)))
+                continue;
             for (int p2 = 0; p2 < p; p2++)
-                if (qc[p2] == qc[p]) dup = 1;
+                if ((mask & (1u << p2)) && qc[p2] == qc[p]) dup = 1;
             if (dup) continue;
             for (int pen = 1; pen < 16; pen++)
                 if (mdp_line_c[l * 16 + pen] == qc[p]) { found = 1; break; }
             if (!found) need++;
         }
-        int fits = need <= freep;
+        fits = need <= freep;
         /* prefer any fitting line over any non-fitting one, then fewest
          * new pens */
         if ((fits && !bestfit) || (fits == bestfit && need < bestneed)) {
@@ -447,55 +537,34 @@ static void mdp_assign_set(unsigned s, uint8_t stamp)
         for (;;) {
             unsigned victim = 128, vage = 0;
             for (unsigned s2 = 0; s2 < 128; s2++) {
+                unsigned age;
                 if (s2 == s || mdp_s_line[s2] != (uint8_t)(bestl + 1))
                     continue;
-                unsigned age = (uint8_t)(stamp - mdp_s_stmp[s2]);
+                age = (uint8_t)(stamp - mdp_s_stmp[s2]);
                 if (age >= 8 && age >= vage) { vage = age; victim = s2; }
             }
             if (victim == 128)
                 break;
             mdp_free_set(victim);
-            int freep = 0;
-            for (int pen = 1; pen < 16; pen++)
-                if (mdp_line_c[bestl * 16 + pen] == 0xFFFF)
-                    freep++;
-            if (bestneed <= freep)
-                break;
+            {
+                int freep = 0;
+                for (int pen = 1; pen < 16; pen++)
+                    if (mdp_line_c[bestl * 16 + pen] == 0xFFFF)
+                        freep++;
+                if (bestneed <= freep)
+                    break;
+            }
         }
     }
     for (int p = 0; p < 8; p++) {
-        unsigned pen16 = 0, freepen = 0;
-        for (unsigned pen = 1; pen < 16; pen++) {
-            if (mdp_line_c[bestl * 16 + pen] == qc[p]) { pen16 = pen; break; }
-            if (!freepen && mdp_line_c[bestl * 16 + pen] == 0xFFFF)
-                freepen = pen;
-        }
-        if (!pen16 && freepen) {
-            pen16 = freepen;
-            mdp_line_c[bestl * 16 + pen16] = qc[p];
-            mdp_pen_own[(bestl * 16 + pen16) * 2]     = (uint8_t)s;
-            mdp_pen_own[(bestl * 16 + pen16) * 2 + 1] = (uint8_t)p;
-        }
-        if (!pen16) {
-            /* line full of other colours: nearest occupied pen */
-            unsigned bd = 0xFFFF;
-            for (unsigned pen = 1; pen < 16; pen++) {
-                uint16_t c = mdp_line_c[bestl * 16 + pen];
-                if (c == 0xFFFF) continue;
-                int dr = (int)(c & 7) - (int)(qc[p] & 7);
-                int dg = (int)((c >> 3) & 7) - (int)((qc[p] >> 3) & 7);
-                int db = (int)((c >> 6) & 7) - (int)((qc[p] >> 6) & 7);
-                unsigned d = (unsigned)(dr * dr + dg * dg + db * db);
-                if (d < bd) { bd = d; pen16 = pen; }
-            }
-            if (!pen16) pen16 = 1;           /* empty line: cannot happen */
-            DIAG[36]++;                      /* nearest-colour fallbacks */
-        }
-        mdp_pen_rc[bestl * 16 + pen16]++;
-        mdp_s_map[s * 8 + p] = (uint8_t)pen16;
-        mdp_s_qc[s * 8 + p]  = qc[p];
+        if (!(mask & (1u << p)))
+            continue;
+        mdp_s_map[s * 8 + p] =
+            (uint8_t)mdp_claim_pen((unsigned)bestl, qc[p], s, (unsigned)p);
+        mdp_s_qc[s * 8 + p] = qc[p];
     }
     mdp_s_line[s] = (uint8_t)(bestl + 1);
+    mdp_s_used[s] = mask;
     mdp_s_stmp[s] = stamp;
     DIAG[35]++;                              /* set assigns */
 }
@@ -2216,6 +2285,7 @@ RAMCODE void m_main(void)
     for (int i = 0; i < 128; i++) {
         mdp_s_line[i] = 0;
         mdp_s_stmp[i] = 0;
+        mdp_s_used[i] = 0;
     }
 #endif
     for (int i = 0; i < NSETS; i++)
@@ -3464,8 +3534,6 @@ RAMCODE void m_main(void)
                             if (code & 0x1000)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
-                            if (!mdp_s_line[cset])
-                                mdp_assign_set(cset, (uint8_t)win_no);
                             mdp_s_stmp[cset] = (uint8_t)win_no;
                             /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
                              * set/way geometry as the render cache but
@@ -3500,6 +3568,8 @@ RAMCODE void m_main(void)
                                         break;   /* reserved: fall through
                                                   * to evict ways 0..6 */
                                     done = 1;
+                                    mdp_note_tile(cset, code, isfg,
+                                                  (uint8_t)win_no);
                                     md_tag[i2] = key;
                                     md_ref[i2] = (uint8_t)win_no;
                                     MD_MARK(i2);
@@ -3516,6 +3586,8 @@ RAMCODE void m_main(void)
                                 /* set full: evict the LRU way (see md_ref).
                                  * Cells still naming the victim rewrite
                                  * within 4 chunks (~5 windows). */
+                                mdp_note_tile(cset, code, isfg,
+                                              (uint8_t)win_no);
                                 md_tag[victim] = key;
                                 md_ref[victim] = (uint8_t)win_no;
                                 MD_MARK(victim);
@@ -3549,11 +3621,15 @@ RAMCODE void m_main(void)
                             continue;
                         unsigned lb = (unsigned)(mdp_s_line[s2] - 1) * 16;
                         for (int p = 0; p < 8; p++) {
-                            uint16_t lq = mdp_quant(PAL_SH[s2 * 8 + p]);
+                            uint16_t lq;
+                            if (!(mdp_s_used[s2] & (1u << p)))
+                                continue;    /* pen never claimed */
+                            lq = mdp_quant(PAL_SH[s2 * 8 + p]);
                             if (lq != mdp_line_c[lb + mdp_s_map[s2 * 8 + p]]
                                 && lq != mdp_s_qc[s2 * 8 + p]) {
+                                uint8_t um = mdp_s_used[s2];
                                 mdp_free_set(s2);
-                                mdp_assign_set(s2, (uint8_t)win_no);
+                                mdp_assign_set(s2, (uint8_t)win_no, um);
                                 break;
                             }
                         }
