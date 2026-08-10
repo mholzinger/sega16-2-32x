@@ -187,3 +187,62 @@ acceptance vehicle for MD-plane visuals — then, only if ares agrees
 it's broken, a scene-anchored bisect from fcf68f9 on MAME. Do not trust
 frame-indexed screenshots across builds (timeline drift), dead write
 taps, or the fake videoram space (§17 instrument list).
+
+## NIGHT SESSION 2 — the void is real, bracketed, and one differential
+## away from dead
+
+Mike confirmed the void ON ARES — not a MAME gap. Then a scene-anchored
+bisect (tools note below) established, deterministically:
+
+  - `fcf68f9` payload + CURRENT MD receiver → **renders** (metric 11%
+    dominant). The whole MD side is exonerated in one step.
+  - HEAD payload → void (99.7% flat).
+  - HEAD payload with ONE change — pattern bytes shipped as RAW pixels
+    instead of through `mdp_s_map` — → **renders** (35.8%, and the art
+    is GARBAGE: see below).
+  - Same with the map read kept but DISCARDED → renders. The read is
+    innocent.
+  - Map values masked to pens 0-7 → void. High pens are innocent.
+  - Double-send of tile batches (bank-skew theory) → void. Dead end.
+  - Layout fix (below) alone → void. Necessary, not sufficient.
+
+**Real bug found and fixed regardless: `mdp_s_qc` is 2048 bytes, the
+layout gave it 1536** — sets ≥ 96 overran the LRU stamps, pen owners
+and debug mirror. That corruption chain (owners → live CRAM refresh →
+line_c → drift storm) is fixed at HEAD.
+
+**The impossible triangle a fresh session must break:** in the void
+build, EVERYTHING verifies correct at the data port from the 68K at
+window time — name entry (pal 2, real slot), that slot's pattern
+(0xCCCC = flat pen 12), CRAM entries 40-47 (real colours) — and the
+screen still shows CRAM entry 0 (backdrop) for those pixels. The
+renderer disagrees with the data port about the same arrays. One of
+these is true and all are testable:
+  1. The raw-build "render" is stale/garbage FB content being uploaded
+     (its art is a repeating grid, NOT the background — so possibly
+     patterns never arrive in EITHER variant and the raw build merely
+     uploads nonzero stale bytes where the map build uploads only what
+     it wrote... but the map build's read-back shows ITS bytes in
+     VRAM).
+  2. Mid-frame window retries rewrite some VDP state during active
+     display in a way read-backs at window time cannot see.
+  3. Something about the two extra SDRAM loads per pixel-pair changes
+     the FB write behaviour (timing/serialisation) in a way that
+     corrupts the PACKET, and the read-back path is reading the FB
+     bank that got the good copy while the MD consumed the bad one.
+
+**Ready-made instruments** (scratchpad `wt-1c` worktree + scripts):
+  - `anchorshot.lua` — screenshot at the demo game-state anchor; no
+    timeline drift across builds.
+  - `voidmetric.py` — % dominant flat colour in the BG region.
+    Good ≈ 11%, void = 99.7%. One number per build, ~70s per cycle.
+  - Receiver read-backs at 0xFFB0C0-CA (CRAM 40-47, cell (2,0), its
+    pattern word); receiver counters at 0xFFB0E0-EC.
+  - The worktree builds fcf68f9 with blobs copied and the buildstamp
+    git-dep shortcut; `git worktree list` shows it.
+
+Suggested first move next session: put the SH-2's OWN read-back on the
+packet in the FB (read back the pattern bytes it just wrote, same
+window, count mismatches into DIAG) — that splits theory 3 from the
+rest in one run. Then tap the MD's FB READS of the packet region and
+compare against what the SH-2 wrote per window (bank by bank).

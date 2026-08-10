@@ -176,17 +176,26 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #define mdp_pen_rc ((uint8_t  *)0x0603C460) /* [3][16] pen refcount */
 #define mdp_s_line ((uint8_t  *)0x0603C4A0) /* [128] line+1, 0 = unassigned */
 #define mdp_s_map  ((uint8_t  *)0x0603C520) /* [128][8] pixel -> pen */
-#define mdp_s_qc   ((uint16_t *)0x0603C920) /* [128][8] q-colours at assign */
-#define mdp_s_stmp ((uint8_t  *)0x0603CF20) /* [128] LRU stamp */
-#define mdp_pen_own ((uint8_t *)0x0603CFA0) /* [3][16][2] owner set,pixel
+/* mdp_s_qc is [128][8] of uint16 = 0x800 BYTES. The first layout
+ * placed the next array 0x600 after it — s_qc writes for sets >= 96
+ * overran the stamps, the pen owners and the debug mirror. Garbage
+ * owners fed garbage into the live CRAM refresh, that corrupted
+ * mdp_line_c, and the drift check then free/invalidated sets every
+ * window: patterns were un-shipped faster than the shipper could ship
+ * them and the whole MD plane rendered as backdrop. Verified on both
+ * MAME and ares (both showed the void; the fix restores the plane). */
+#define mdp_s_qc   ((uint16_t *)0x0603C920) /* [128][8]; ends 0x3D120 */
+#define mdp_s_stmp ((uint8_t  *)0x0603D120) /* [128] LRU stamp; ends 3D1A0 */
+#define mdp_pen_own ((uint8_t *)0x0603D1A0) /* [3][16][2] owner set,pixel
                                              * -- drives the live CRAM
-                                             * refresh; ends 0x3D000 */
-#define md_dbg_nt ((uint16_t *)0x0603D000)  /* [28][40] mirror of the last
+                                             * refresh; ends 0x3D200 */
+#define md_dbg_nt ((uint16_t *)0x0603D200)  /* [28][40] mirror of the last
                                              * entry shipped per cell —
                                              * DEBUG ONLY, lua-readable
                                              * (the FB packet is bank-
                                              * blind from lua); ends
-                                             * 0x3D8C0 */
+                                             * 0x3DCC0, ~4.8KB under the
+                                             * measured master SP floor */
 #endif
 #define cache_rot ((uint8_t *)0x06028880)  /* NSETS<=128B, after blank_tile;
                                             * round-robin eviction way,
