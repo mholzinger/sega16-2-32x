@@ -246,3 +246,36 @@ packet in the FB (read back the pattern bytes it just wrote, same
 window, count mismatches into DIAG) — that splits theory 3 from the
 rest in one run. Then tap the MD's FB READS of the packet region and
 compare against what the SH-2 wrote per window (bank by bank).
+
+### Addendum, written 30 seconds after committing: the read-backs may
+### all be lies, and that dissolves the impossible triangle
+
+Every read-back in the evidence table (cell entry, pattern word, CRAM
+colours) was performed by the receiver IMMEDIATELY AFTER its own
+writes, same window, through the same data port. If MAME's 315-5313
+read path returns prefetch/FIFO state in that situation, all three
+"storage proofs" are echoes of the window's own writes and prove only
+that the WRITE PATH saw those values. Verify before trusting: do a
+read-back in a LATER window with no intervening write to that address
+(or from lua-driven 68K at a quiet frame).
+
+If the read-backs are echoes, the simple theory fits everything
+including ares: **the receiver's VDP writes are landing outside
+vblank.** The 3-window pipeline runs window handlers mid-frame; VDP
+data-port writes during active display go through the 4-slot FIFO
+(hardware: 68K stalls; MAME: possibly drops). A build-dependent shift
+of a few percent in the window handler's timing (map lookups, CRAM
+block, read-back probes) moves which windows' receiver work lands in
+vblank — exactly the raw-renders/map-voids knife-edge, with no magic
+byte-value dependence at all. The raw build's garbage-grid art =
+whatever fraction of pattern writes happened to land.
+
+Test order for next session:
+  1. Read-back echo check (above) — cheap, settles the evidence.
+  2. Count receiver VDP words vs V-counter position: log the MD's
+     V-counter (0xC00008) BEFORE and AFTER the receiver block per
+     window into work RAM; correlate windows-outside-vblank with the
+     void. If confirmed, the fix is architectural and known from the
+     commercial library (§2): move bulk VRAM traffic into DMA and/or
+     restrict the receiver's VDP writes to a vblank budget with a
+     carry-over cursor (ship fewer words per window, every window).
