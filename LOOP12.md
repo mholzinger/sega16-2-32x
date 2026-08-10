@@ -433,3 +433,32 @@ Debug mirror is now per-plane: md_dbg_nt[0]=B, [1120]=A (0x3D200).
      the tear-drop counters read on real timing? (0xFFB0D8)
   3. Receiver write budget: cap VDP words per window, carry a cursor —
      target the 4.64->3 vints/cycle recovery. Then Mike's play pass.
+
+## LOOP 12 iteration (00:00-00:15, honest clock): colours fixed at the
+## root, tear guard retired by ladder-bisect, variance knob named
+
+  - **Usage-mask pen allocator** (7a95400): pens claimed only for pixel
+    values resident tiles actually use; FG claims drop bit 0. The
+    magenta/dark-fallback class is gone at the root — anchored MAME
+    shows the arcade's grey-blue rain-streaked graveyard sky.
+  - **Tear guard retired by WIP-ladder bisect**: the 736-word FB copy
+    halved the window rate ([9] 1147->632 on the ladder, recovered to
+    1086 after revert). The tear it guarded against is impossible
+    (receiver and packet rebuild strictly sequential; torn counter
+    never fired once). The ares confetti was the fallback-pen bug.
+  - **Evict age gate 8->12** (the 9-phase rotation re-stamps every <=9
+    windows; the old gate could evict live sets). Correct on principle;
+    counters say it was not the fallback driver.
+  - **Open knob, well-characterised**: [36] fallbacks vary 7-36/min
+    with attract-loop timeline and can land on visible pens (one run's
+    sky went pale yellow, the next grey-green). [37] frees ~85/min are
+    dominated by the DRIFT path, not assign-evictions — next iteration
+    should split DIAG to count drift-frees vs evict-frees, then decide
+    between: reclaiming line 0, freeing sets whose stamp goes stale
+    immediately on scene change, or damping drift-reassign churn.
+  - WIP auto-commit hook is live (adopted from intv-game-builder);
+    timestamps in the log are the honest clock.
+
+Ares next (Mike): rebuild MDBGALL, attract + a short play, savestate.
+Expect: correct colours, no confetti; judge cadence (state_health
+vints/cycle — was 4.64 on the FG-era build) and sky steadiness.
