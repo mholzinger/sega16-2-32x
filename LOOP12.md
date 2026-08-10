@@ -362,3 +362,32 @@ cell-mode hscroll is parked but plane A can ride the same global fine
 scroll to start. Then the sky-colour scrutiny (dark vs arcade
 grey-blue — check blank-cell rate on sky sets first) and the receiver's
 140-scanline VDP span (DMA or a write budget) before Mike's ares pass.
+
+## FG CAT-0 IS ON PLANE A — the two-plane pivot is alive
+
+Wired in the same night the void was solved, because everything it
+needed already existed. Design as planned: FG keys carry bit 31 in
+md_tag (same tile needs a transparent-pixel-0 pattern variant on
+Plane A — the shipper emits pen 0 for pixel 0 on FG keys); the packet
+rotation is now 1 tile batch + 4 Plane-B chunks + 4 Plane-A chunks
+(sc[2] bit 15 = plane A); FG cells that are empty or cat-1 resolve to
+the blank slot; VSRAM 0 / hscroll 0xFC00 carry the FG layer's fine
+scroll (sc[6] = FG vy). mdp_free_set's invalidation masks the plane
+bit so a set free kills both variants.
+
+At the demo anchor MDBGALL now shows the graveyard on the MD: wall,
+statues, tombstones, columns (Plane A) over grass/platform/sky
+(Plane B), palette pack live, 32X sprites and cat-1 on top. Pack
+pressure with both layers: 7 nearest-fallbacks per minute — the
+3-line budget holds with FG0's extra sets, as §11 predicted.
+
+Open items, all normal-grind class now:
+  - Sky region renders a teal dither where the arcade has dark
+    grey-blue — first suspect: the FG sky cells' set colours or a set
+    that should resolve blank; NOT line pressure ([36]=7).
+  - Transient garbage strip at the left edge during scene rebuilds.
+  - Chunk cadence is now 9 windows per full two-plane refresh; revisit
+    if scroll seams show on ares.
+  - The receiver's VDP span (~140 scanlines) still wants a DMA or a
+    write budget before hardware.
+  - Parity anchors still mis-time probe builds; judge on ares.

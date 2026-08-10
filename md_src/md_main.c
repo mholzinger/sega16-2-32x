@@ -341,6 +341,8 @@ void shim_vblank(void) {
 				// (A/B'd during the MAME blackout hunt: not the cause.)
 				*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
 				*vdp_data_port = sc[4];
+				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
+				*vdp_data_port = sc[6];       // VSRAM 0 = plane A (FG) vy
 				if (typ == 0) {
 					// each entry: slot word + 32 bytes of 4bpp planar
 					volatile uint16_t *e = sc + 8;
@@ -356,22 +358,27 @@ void shim_vblank(void) {
 						}
 					}
 				} else {
-					// name-table cells, 40 per screen row, 64-cell stride
+					// name-table cells, 40 per screen row, 64-cell stride.
+					// sc[2] bit 15 = PLANE A (FG cat-0) chunk; else B.
 					volatile uint16_t *e = sc + 8;
-					uint16_t cell = sc[2];
+					uint16_t cell = sc[2] & 0x7FFF;
+					uint32_t nbase = (sc[2] & 0x8000u) ? 0xC000u : 0xE000u;
 					for (uint16_t i = 0; i < cnt; i++, cell++) {
 						if ((cell % 40u) == 0) {
-							uint32_t a = 0xE000u + (cell / 40u) * 128u;
+							uint32_t a = nbase + (cell / 40u) * 128u;
 							*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
 							               | ((a >> 14) & 3u);
 						}
 						*vdp_data_port = e[i];
 					}
-					// A/B: full-screen plane-B hscroll from the first
-					// strip word of this chunk (cell-mode per-strip is
-					// under bisection — see md_bg_palette)
-					*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C02u) << 16) | 3u;
-					*vdp_data_port = e[280];
+					// full-screen hscroll from the chunk's first strip
+					// word: plane A word at 0xFC00, plane B at 0xFC02
+					// (cell-mode per-strip stays parked)
+					{
+						uint32_t ha = (sc[2] & 0x8000u) ? 0x3C00u : 0x3C02u;
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | ha) << 16) | 3u;
+						*vdp_data_port = e[280];
+					}
 				}
 				// live BG palette: 48 words at fixed offset 688 -> CRAM
 				// lines 1-3 (entries 16-63); line 0 stays the grey/text

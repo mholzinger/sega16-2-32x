@@ -403,8 +403,8 @@ static void mdp_free_set(unsigned s)
     }
     mdp_s_line[s] = 0;
     for (int i = 0; i < NSETS * NWAYS; i++)
-        if (md_tag[i] != 0xFFFFFFFFu && (md_tag[i] >> 16) == s)
-            md_tag[i] = 0xFFFFFFFFu;
+        if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s)
+            md_tag[i] = 0xFFFFFFFFu;         /* both planes' variants */
     DIAG[37]++;                              /* set frees/invalidations */
 }
 
@@ -3333,7 +3333,8 @@ RAMCODE void m_main(void)
                 volatile uint16_t *sc = (volatile uint16_t *)0x24011A00;
                 const layer_regs *bl = &snap[1];              /* BG layer */
                 sc[3] = (uint16_t)(-(bl->vx0 & 7) & 0x3FF);
-                sc[4] = (uint16_t)(bl->vy0 & 7);
+                sc[4] = (uint16_t)(bl->vy0 & 7);              /* plane B vy */
+                sc[6] = (uint16_t)(snap[0].vy0 & 7);          /* plane A vy */
                 /* DEMAND BIAS (suspect 2, ordering): a name-table chunk
                  * may reference a slot whose tile has not shipped yet.
                  * When a burst of new claims is outstanding, spend the
@@ -3360,11 +3361,25 @@ RAMCODE void m_main(void)
                             continue;
                         const uint8_t *px =
                             altbeast_tiles + (mkey & 0xFFFFu) * 64;
-                        const uint8_t *map = mdp_s_map + (mkey >> 16) * 8;
+                        const uint8_t *map =
+                            mdp_s_map + ((mkey >> 16) & 0x7F) * 8;
                         if (sc[2] == 0xFFFF) sc[2] = (uint16_t)sl;
                         ((volatile uint16_t *)(sc + 8))[sent * 17] = (uint16_t)sl;
                         volatile uint8_t *o = (volatile uint8_t *)
                             ((volatile uint16_t *)(sc + 8) + sent * 17 + 1);
+                        if (mkey & 0x80000000u) {
+                            /* FG (Plane A) variant: pixel 0 stays PEN 0
+                             * (transparent over Plane B) instead of
+                             * taking the set's pixel-0 colour. */
+                            for (int y = 0; y < 8; y++) {
+                                const uint8_t *r = px + y * 8;
+                                for (int kk = 0; kk < 4; kk++) {
+                                    uint8_t a = r[kk * 2], b = r[kk * 2 + 1];
+                                    *o++ = (uint8_t)(((a ? map[a] : 0) << 4)
+                                                     | (b ? map[b] : 0));
+                                }
+                            }
+                        } else
                         for (int y = 0; y < 8; y++) {
                             const uint8_t *r = px + y * 8;
                             for (int kk = 0; kk < 4; kk++)
@@ -3397,18 +3412,26 @@ RAMCODE void m_main(void)
                      * KNOWN GAP: a band whose vy fine phase differs from
                      * the primary's is off by up to 7px (VSRAM is
                      * per-column, not per-row). */
-                    int cell0 = (md_phase - 1) * 280;
+                    /* SLICE FG0: phases 1-4 = Plane B (BG layer), phases
+                     * 5-8 = Plane A (FG cat-0). Same walk, same
+                     * allocator; FG keys carry bit 31 so the shipper
+                     * emits the transparent-pixel-0 pattern variant, and
+                     * FG cells that are empty or PRIORITY (cat-1 — still
+                     * composed on the 32X) resolve to the blank slot. */
+                    int isfg = (md_phase >= 5);
+                    const layer_regs *wl = isfg ? &snap[0] : bl;
+                    int cell0 = ((isfg ? md_phase - 5 : md_phase - 1)) * 280;
                     volatile uint16_t *o = sc + 8;
                     for (int row = cell0 / 40; row < cell0 / 40 + 7; row++) {
-                        const uint8_t *pqb = bl->pq;
-                        int vxr = bl->vx0, vyr = bl->vy0;
-                        if (bl->any_special) {
-                            uint16_t rsw = bl->rs[row];   /* rs[28], row<28 */
+                        const uint8_t *pqb = wl->pq;
+                        int vxr = wl->vx0, vyr = wl->vy0;
+                        if (wl->any_special) {
+                            uint16_t rsw = wl->rs[row];   /* rs[28], row<28 */
                             if (rsw & 0x8000) {
-                                pqb = bl->pq_a;
-                                vxr = bl->vx0_a;
-                                vyr = bl->vy0_a;
-                            } else if (bl->xs_raw & 0x8000) {
+                                pqb = wl->pq_a;
+                                vxr = wl->vx0_a;
+                                vyr = wl->vy0_a;
+                            } else if (wl->xs_raw & 0x8000) {
                                 vxr = (int)((0xC0 - (rsw & 0x3FF)) & 0x3FF);
                             }
                         }
@@ -3425,6 +3448,12 @@ RAMCODE void m_main(void)
                         for (int col = 0; col < 40; col++) {
                             unsigned vx = (unsigned)(vx00 + col * 8) & 0x3FF;
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
+                            if (isfg && (w == 0 || (w & 0x8000))) {
+                                /* FG: empty or cat-1 cell -> transparent */
+                                md_dbg_nt[row * 40 + col] = MD_BLANK_SLOT;
+                                *o++ = MD_BLANK_SLOT;
+                                continue;
+                            }
                             unsigned code = w & 0x1FFF;
                             if (code & 0x1000)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
@@ -3445,7 +3474,8 @@ RAMCODE void m_main(void)
                              * RESERVED as the blank (suspect 1: it must
                              * never be allocatable, or an unresolvable
                              * cell is indistinguishable from a real one). */
-                            uint32_t key = MD_KEY(code, cset);
+                            uint32_t key = MD_KEY(code, cset)
+                                | (isfg ? 0x80000000u : 0u);
                             unsigned s4m = CACHE_SET(code) * NWAYS;
                             unsigned slot = MD_BLANK_SLOT;
                             unsigned victim = MD_BLANK_SLOT, vage = 0;
@@ -3494,10 +3524,10 @@ RAMCODE void m_main(void)
                         }
                     }
                     sc[1] = 1;
-                    sc[2] = (uint16_t)cell0;
+                    sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
                     sc[5] = 280;
                     md_phase++;
-                    if (md_phase > 4) md_phase = 0;   /* 1 tile + 4 nametable */
+                    if (md_phase > 8) md_phase = 0;   /* 1 tile + 4 B + 4 A */
 
                     /* PALETTE DRIFT, 4 sets/window round-robin: fires
                      * only when a set's live colour differs from BOTH
