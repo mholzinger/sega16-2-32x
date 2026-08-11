@@ -334,6 +334,10 @@ void shim_vblank(void) {
 			volatile uint16_t *live = (volatile uint16_t*)0x851A00;
 			volatile uint16_t *sc = live;
 			(*(volatile uint16_t*)0xFFB0E0) = live[0];    // diag: last magic seen
+			// SPAN-SPLIT PROBES (write-budget design): V at each stage,
+			// packed per type so lua can attribute the cost.
+			(*(volatile uint16_t*)0xFFB0B0) =
+				*(volatile uint16_t*)0xC00008;            // V at entry
 			if (live[0] == 0xB6B6) {
 				(*(volatile uint16_t*)0xFFB0E2)++;        // diag: packets consumed
 				if (sc[1] == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
@@ -351,6 +355,8 @@ void shim_vblank(void) {
 				*vdp_data_port = sc[4];
 				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
 				*vdp_data_port = sc[6];       // VSRAM 0 = plane A (FG) vy
+				(*(volatile uint16_t*)0xFFB0B2) =
+					*(volatile uint16_t*)0xC00008;    // V after scroll
 				if (typ == 0) {
 					// each entry: slot word + 32 bytes of 4bpp planar
 					volatile uint16_t *e = sc + 8;
@@ -359,25 +365,29 @@ void shim_vblank(void) {
 						if (va + 32u > 0xB000u) continue;
 						*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
 						               | ((va >> 14) & 3u);
-						for (uint16_t k = 1; k < 17; k++) {
+						for (uint16_t k = 1; k < 17; k++)
 							*vdp_data_port = e[k];
-							(*(volatile uint16_t*)0xFFB0EA) += e[k];     // diag: pattern sum
-							if (e[k]) (*(volatile uint16_t*)0xFFB0EC)++; // diag: nonzero words
-						}
 					}
+					(*(volatile uint16_t*)0xFFB0B4) =
+						*(volatile uint16_t*)0xC00008; // V after tiles
 				} else {
 					// name-table cells, 40 per screen row, 64-cell stride.
 					// sc[2] bit 15 = PLANE A (FG cat-0) chunk; else B.
+					// ROW-MAJOR: the old per-cell `% 40` + `/ 40` were
+					// two 68K DIVU's per cell (~280 cycles) — measured
+					// 129 SCANLINES per chunk, the whole receiver span.
+					// One division per packet now.
 					volatile uint16_t *e = sc + 8;
-					uint16_t cell = sc[2] & 0x7FFF;
+					uint16_t cell0 = sc[2] & 0x7FFF;
 					uint32_t nbase = (sc[2] & 0x8000u) ? 0xC000u : 0xE000u;
-					for (uint16_t i = 0; i < cnt; i++, cell++) {
-						if ((cell % 40u) == 0) {
-							uint32_t a = nbase + (cell / 40u) * 128u;
-							*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
-							               | ((a >> 14) & 3u);
-						}
-						*vdp_data_port = e[i];
+					uint16_t row = cell0 / 40u;
+					uint16_t i = 0;
+					for (uint16_t r = 0; r < 7 && i < cnt; r++, row++) {
+						uint32_t a = nbase + (uint32_t)row * 128u;
+						*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
+						               | ((a >> 14) & 3u);
+						for (uint16_t c = 0; c < 40 && i < cnt; c++, i++)
+							*vdp_data_port = e[i];
 					}
 					// full-screen hscroll from the chunk's first strip
 					// word: plane A word at 0xFC00, plane B at 0xFC02
@@ -387,6 +397,8 @@ void shim_vblank(void) {
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | ha) << 16) | 3u;
 						*vdp_data_port = e[280];
 					}
+					(*(volatile uint16_t*)0xFFB0B6) =
+						*(volatile uint16_t*)0xC00008; // V after cells
 				}
 				// live BG palette: 48 words at fixed offset 688 -> CRAM
 				// lines 1-3 (entries 16-63); line 0 stays the grey/text
@@ -400,6 +412,8 @@ void shim_vblank(void) {
 				*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16);
 				for (uint16_t i = 0; i < 48; i++)
 					*vdp_data_port = sc[688 + i];
+				(*(volatile uint16_t*)0xFFB0B8) =
+					*(volatile uint16_t*)0xC00008;    // V after CRAM
 				live[0] = 0;                // consumed (the FB packet)
 packet_done: ;
 			}
