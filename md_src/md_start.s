@@ -115,6 +115,17 @@ _start:
 		move.w	d0,(0xA15100)		/* set FM - allow SH2 access to MARS hw */
 		move.w	#0xACED,(MARS_COMM8)	/* MD-ready level: releases both SH-2s */
 
+		/* PARK THE Z80 (Mike heard it: "sound clipping" on ares — no
+		 * sound is wired, the Z80 was free-running uninitialised RAM
+		 * into the YM2612/PSG from power-on; every MAME run was
+		 * -sound none so it was never audible before). HOLD IT IN
+		 * RESET, permanently: one write, no bus-grant poll (two poll
+		 * variants both hung boot here — grant never arrives in this
+		 * config), no RAM program needed. A reset-held Z80 is silent,
+		 * and the joypad path's bus-request toggles cannot wake it.
+		 * When real sound lands, a proper driver upload replaces this. */
+		move.w	#0x000,(0xA11200)	/* assert Z80 reset, forever */
+
 		/* Pad port init (canonical, per d32xr crt0 + SGDK JOY_reset): TH as
 		 * an OUTPUT (CTRL bit6) idling HIGH on both ports. Was never done —
 		 * the six-button phase table assumes the first transition each frame
