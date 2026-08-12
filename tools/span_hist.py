@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""LOOP 9 pickup-V + blit-span histograms from an ares savestate.
+"""LOOP 9/13 pickup-V histogram from an ares savestate.
 
-Usage: span_hist.py [path-to-.bs1]   (default rom/PROBE_span.bs1)
+Usage: span_hist.py [path-to-.bsN]   (default rom/PROBE_span.bs1)
 Needs a `make SPANPROBE=1` rom; prints nothing useful otherwise.
 
-WHY THIS EXISTS. The blit-span counter (DIAG[26..28]) reports a RATE
-and a MAX, and both were misleading on their own. Measured on ares:
-the mean span is 26.7 lines against the 38 vblank lines available, so
-the mean already fits — the strobe is entirely in the tail. A max of
-62 lines cannot distinguish a rare 2.3x spike (fix the spike) from a
-fat shoulder sitting just past 38 (fix the mean), and those want
-opposite work.
+WHY THIS EXISTS. The V-gate accepts window pickup anywhere in
+V=DF..E4; anything outside is a silent skip and that band ships a
+full-cycle-old frame — the jitter Mike sees. bs9 (LOOP 13) put 276 of
+287 skips in the v<DF bucket, and a live heartbeat can only read <DF
+once the MD's V-counter re-enters 00..DE — the NEXT frame's active
+scan, >=25 lines after the raise. So v<DF pickups are WRAPPED-LATE,
+not early: the master was busy for 25+ scanlines before it looked at
+the window. v2 bins those V values ([42..48], ~38+v lines late) to
+say HOW late.
 
-The span is also measured from window PICKUP, not from the start of
-vblank, so a late pickup is invisible to it while eating the same
-vblank. The V-gate accepts pickup anywhere in V=DF..E4 — a 6-line
-spread — and under load the master is mid-compose-strip when the
-window arrives. DIAG[50]/[51] split the late restores by pickup half
-to test exactly that.
+RETIRED from v1 (do not re-add): the blit-span distribution (answered:
+0 of 2655 spans past vblank — the blitter is innocent), the [50]/[51]
+late-restore split and the [52..60] per-window split (their slots were
+reclaimed by pivot-era counters — evictions, sprite/page/ISR work —
+which made bs9's v1 readout self-contradictory: 104.6% overruns, 2046
+late restores against 11 late pickups).
 """
 import struct
 import sys
@@ -49,60 +51,37 @@ def main():
         return
 
     # PICKUP. The gate accepts DF..E4; anything outside is a silent skip.
-    labels = ["V<DF (early)", "V=DF", "V=E0", "V=E1", "V=E2", "V=E3",
+    labels = ["V<DF (WRAPPED)", "V=DF", "V=E0", "V=E1", "V=E2", "V=E3",
               "V=E4", "V>E4 / none"]
     tot = sum(pick)
     print(f"\nWINDOW PICKUP  (n={tot}) — gate accepts DF..E4")
     for lab, n in zip(labels, pick):
         print(f"  {lab:<14} {n:6d} {100.0 * n / tot:5.1f}%  {bar(n, tot)}")
-    late_pick = pick[5] + pick[6] + pick[7]
-    print(f"  -> pickup at E3 or later: {late_pick} "
-          f"({100.0 * late_pick / tot:.1f}%)")
+    skips = pick[0] + pick[7]
+    print(f"  -> gate rejects (skips): {skips} ({100.0 * skips / tot:.1f}%)")
 
-    # SPAN. 38 lines of vblank is the budget; buckets straddle it.
-    span = [d(i) for i in range(42, 50)]
-    sl = ["<=20 lines", " 21-30", " 31-38  (fits)", " 39-45  (over)",
-          " 46-55", " 56-70", " 71-100", "  >100"]
-    stot = sum(span)
-    print(f"\nBLIT SPAN pickup->restore  (n={stot}) — vblank = 38 lines")
-    for lab, n in zip(sl, span):
-        print(f"  {lab:<15} {n:6d} {100.0 * n / max(stot, 1):5.1f}%  "
-              f"{bar(n, stot)}")
-    over = sum(span[3:])
-    print(f"  -> past vblank: {over} ({100.0 * over / max(stot, 1):.1f}%)")
-
-    # THE CORRELATION this probe was built for.
-    lp, ep = d(50), d(51)
-    print(f"\nLATE RESTORES BY PICKUP HALF")
-    print(f"  pickup E3/E4 (late)  {lp:6d}")
-    print(f"  pickup DF..E2 (early){ep:6d}")
-    if lp + ep:
-        share = 100.0 * lp / (lp + ep)
-        base = 100.0 * late_pick / tot
-        print(f"  late-pickup share of overruns: {share:.1f}%  "
-              f"(late pickups are {base:.1f}% of all windows)")
-        if share > base * 1.5:
-            print("  -> LATE PICKUP IS ENRICHED among overruns: the master "
-                  "arriving late is a cause, not a coincidence.")
-        elif lp + ep > 20:
-            print("  -> overruns are NOT enriched for late pickup: the "
-                  "window starts on time and the blit itself is the spike.")
-
-    # PER-WINDOW SPLIT. k=1 blits 40 rows where k=0/k=2 blit 36, because
-    # 224 rows do not divide into three tile-aligned bands. That is ~3
-    # lines against a deficit of ~8, so if the overruns concentrate on
-    # k=1 a third of the problem is free.
-    if sum(d(i) for i in range(55, 58)):
-        print("\nBY WINDOW  (k=1 blits 40 master rows, k=0/k=2 blit 36)")
-        for k in range(3):
-            n, ov, tk = d(55 + k), d(52 + k), d(58 + k)
-            mean = tk / n / 46.0 if n else 0.0
-            print(f"  k={k}  n={n:5d}  mean={mean:5.1f} lines  "
-                  f"over={ov:4d} ({100.0 * ov / max(n, 1):4.1f}%)")
-        ov1, ovo = d(53), d(52) + d(54)
-        if ov1 + ovo:
-            print(f"  -> k=1 share of overruns: "
-                  f"{100.0 * ov1 / (ov1 + ovo):.0f}% (even split would be 33%)")
+    # HOW LATE the wrapped pickups are. Raise is at ~V=E0; the counter
+    # runs E1..EA, jumps back E5..FF, then re-enters 00.. — so a wrapped
+    # read of v is ~38+v lines after the raise. Bin = v>>5.
+    wrap = [d(i) for i in range(42, 49)]
+    wtot = sum(wrap)
+    if wtot:
+        print(f"\nWRAPPED PICKUP LATENESS  (n={wtot}) — ~38+v lines after "
+              f"the raise; frame = 262")
+        wl = ["v=00-1F (~ 38- 69 ln)", "v=20-3F (~ 70-101 ln)",
+              "v=40-5F (~102-133 ln)", "v=60-7F (~134-165 ln)",
+              "v=80-9F (~166-197 ln)", "v=A0-BF (~198-229 ln)",
+              "v=C0-DE (~230-260 ln)"]
+        for lab, n in zip(wl, wrap):
+            print(f"  {lab:<22} {n:6d} {100.0 * n / wtot:5.1f}%  "
+                  f"{bar(n, wtot)}")
+        near = wrap[0]
+        far = wtot - near
+        print(f"  -> first bin (<=69 lines, a long compose strip) {near} "
+              f"vs deeper {far}")
+        print("     first-bin-heavy => shrink strip granularity / poll "
+              "mid-strip; deep+flat => the master is saturated, cut its "
+              "per-cycle work (handoff item 2).")
 
 
 if __name__ == "__main__":
