@@ -2588,6 +2588,9 @@ RAMCODE void m_main(void)
                 int y = lo + idx * 12, ye = (y + 12 > hi) ? hi : y + 12;
                 uint16_t tq = frt();
                 TOK(0);                          /* busy: a compose strip */
+#ifdef SPAN_PROBE
+                m_stage = (b->phase == 2) ? 5 : (b->phase >= 3 ? 6 : 4);
+#endif
                 /* ---- YIELDABLE STRIP (LOOP 11, interrupt pickup) ----
                  * A 12-row strip runs 6-22 scanlines, and the master's
                  * accept bound is only 6 lines wide (v<0xDF||v>0xE4)
