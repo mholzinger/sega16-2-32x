@@ -60,28 +60,23 @@ def main():
     skips = pick[0] + pick[7]
     print(f"  -> gate rejects (skips): {skips} ({100.0 * skips / tot:.1f}%)")
 
-    # HOW LATE the wrapped pickups are. Raise is at ~V=E0; the counter
-    # runs E1..EA, jumps back E5..FF, then re-enters 00.. — so a wrapped
-    # read of v is ~38+v lines after the raise. Bin = v>>5.
-    wrap = [d(i) for i in range(42, 49)]
-    wtot = sum(wrap)
-    if wtot:
-        print(f"\nWRAPPED PICKUP LATENESS  (n={wtot}) — ~38+v lines after "
-              f"the raise; frame = 262")
-        wl = ["v=00-1F (~ 38- 69 ln)", "v=20-3F (~ 70-101 ln)",
-              "v=40-5F (~102-133 ln)", "v=60-7F (~134-165 ln)",
-              "v=80-9F (~166-197 ln)", "v=A0-BF (~198-229 ln)",
-              "v=C0-DE (~230-260 ln)"]
-        for lab, n in zip(wl, wrap):
-            print(f"  {lab:<22} {n:6d} {100.0 * n / wtot:5.1f}%  "
-                  f"{bar(n, wtot)}")
-        near = wrap[0]
-        far = wtot - near
-        print(f"  -> first bin (<=69 lines, a long compose strip) {near} "
-              f"vs deeper {far}")
-        print("     first-bin-heavy => shrink strip granularity / poll "
-              "mid-strip; deep+flat => the master is saturated, cut its "
-              "per-cycle work (handoff item 2).")
+    # v3: WHO was in flight when the pickup missed. Slots [42..49] bin
+    # every skipped pickup by the master's poll-loop stage (m_stage).
+    stg = [d(i) for i in range(42, 50)]
+    stot = sum(stg)
+    if stot:
+        print(f"\nMISSED PICKUPS BY MASTER STAGE  (n={stot})")
+        sl = ["idle/poll (MD posted late)", "owed build_maps chunk",
+              "shadow LUT chunk", "maintenance steal",
+              "tile strip (ph 0/1)", "sprite strip (ph 2)",
+              "single-shot (ph >= 3)", "post-ack window tail"]
+        for lab, n in zip(sl, stg):
+            print(f"  {lab:<27} {n:6d} {100.0 * n / stot:5.1f}%  "
+                  f"{bar(n, stot)}")
+        print("     strips/chunks dominant => tighten that stage's "
+              "pre-vint quiet zone or chop it; idle dominant => the 68K "
+              "posts late, look at the MD window/ack path (item 2); "
+              "post-ack tail => the pivot's packet/copy work is the hold.")
 
 
 if __name__ == "__main__":
