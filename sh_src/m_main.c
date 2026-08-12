@@ -2478,6 +2478,9 @@ RAMCODE void m_main(void)
              * immediately before each heavy call below and never needs
              * clearing, because the next poll visit clears it. */
             TOK(TOK_READY);
+#ifdef SPAN_PROBE
+            m_stage = 0;                     /* nothing in flight at poll */
+#endif
             if (!bq[bq_h].on && maps_owed) {
                 /* owed build_maps from a dropped band: CHUNKED — one
                  * bounded slice per visit (idle drains it in ~9 visits;
