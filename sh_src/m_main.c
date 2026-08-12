@@ -2839,10 +2839,12 @@ RAMCODE void m_main(void)
              * drifts late as scenes get busier, that is "starts fast,
              * then devolves" and no counter we had could see it.
              * [34] V<DF  [35..40] V=DF..E4  [41] V>E4 / no heartbeat.
-             * Also splits late restores by pickup half ([50] late
-             * pickup E3/E4, [51] early pickup DF..E2) — that is the
-             * correlation the histograms exist to test. */
-            int pick_late = 0;
+             * v2 (LOOP 13): the [50]/[51] late-restore split and the
+             * [42..60] span/per-window sections are RETIRED — the span
+             * question answered (0 of 2655 past vblank) and every slot
+             * past 49 collided with pivot-era counters (evictions at
+             * [50]/[51], sprite/page/ISR work at [52..60]), which is
+             * what made bs9's readout self-contradictory. */
 #endif
             {
                 uint16_t md_v = MARS_SYS_COMM12;
