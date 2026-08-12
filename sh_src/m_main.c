@@ -2508,6 +2508,9 @@ RAMCODE void m_main(void)
                 uint16_t dt = (uint16_t)(frt() - t_vint);
                 if (dt <= 4000) {
                     TOK(0);                  /* busy: a LUT chunk */
+#ifdef SPAN_PROBE
+                    m_stage = 2;
+#endif
                     shadow_lut_chunk();
                 }
                 continue;
