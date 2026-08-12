@@ -2269,6 +2269,13 @@ RAMCODE __attribute__((noinline)) static void tok_set(uint16_t v)
 }
 #endif
 
+#ifdef SPAN_PROBE
+/* v3: which poll-loop stage was in flight when a window pickup missed
+ * the gate. Written only by the master. 0 = idle/poll — a late pickup
+ * at stage 0 means the MD posted late, not us. */
+static uint8_t m_stage;
+#endif
+
 RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
