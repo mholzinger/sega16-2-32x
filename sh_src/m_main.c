@@ -2494,6 +2494,9 @@ RAMCODE void m_main(void)
                                      * un-gated maintenance = 94% blit
                                      * skips on ares vs 31% baseline */
                     TOK(0);                  /* busy: long, uninterruptible */
+#ifdef SPAN_PROBE
+                    m_stage = 1;
+#endif
                     if (build_maps_chunk(owed_par))
                         maps_owed = 0;
                 }
