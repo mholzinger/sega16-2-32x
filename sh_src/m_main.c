@@ -2046,6 +2046,11 @@ RAMCODE void slave_window_k(uint16_t cmd)
 #ifndef NOCAT1DEFER
 #define NOCAT1DEFER 0
 #endif
+#ifdef MD_BG
+/* Packet staging: built in the post-ack gap, published in-window
+ * by a bare copy. .bss (probe builds only; region guard checked). */
+static uint16_t md_pkt[768];
+#endif
 static uint8_t cat1_valid, cat1_lo, cat1_hi, cat1_bank, cat1_par;
 static uint8_t cat1_t0, cat1_t1;
 
@@ -3393,8 +3398,125 @@ RAMCODE void m_main(void)
             if (k == 1)
                 DIAG[9]++;
 #ifdef MD_BG
-            /* PIVOT SLICE 1b — SHIP TILE PATTERNS TO THE MD.
-             * Still FM=1 here, so the framebuffer is ours. Convert a
+            /* PUBLISH the packet PREPARED IN THE GAP (see the post-ack
+             * block at the bottom of the window): the in-window cost is
+             * one 1.5KB SDRAM->FB copy (~0.2 lines) instead of the full
+             * walk/allocator/shipper. That work inside FM=1 was the
+             * 209-line window/ack spans on ares -- the 68K lost ~40% of
+             * its frame vs the shipping build and the game played SLOW.
+             * Magic long is copied LAST so a partial copy never
+             * presents as a valid packet. */
+            {
+                volatile uint32_t *d = (volatile uint32_t *)0x24011A00;
+                const uint32_t *ssrc = (const uint32_t *)md_pkt;
+                for (int i2 = 1; i2 < 368; i2++)
+                    d[i2] = ssrc[i2];
+                d[0] = ssrc[0];
+            }
+#endif
+            MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+#ifdef CMD_INT
+            __asm__ __volatile__("mov #32,r0\n\tldc r0,sr"
+                                 ::: "r0", "memory");  /* back to level 2 */
+#endif
+            TOK(0);                          /* busy: post-ack compose follows */
+
+            /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
+#ifdef FM_TEST
+            /* LOOP 9 — IS "THE SH-2 MAY ONLY WRITE THE FB WITH FM=1"
+             * ACTUALLY TRUE? It rules out the shadow bank AND composing
+             * straight into the FB (which would delete the blit outright
+             * — the only 2x-class lever left), and it has never been
+             * tested. The MD really does clear FM after every ack
+             * (md_main.c:177), so the premise is real; the question is
+             * only what a write does while it is clear.
+             * SCRATCH: 0x24011A00..0x24012000 is 1536 bytes of genuine
+             * dead space — past the image (ends 0x11A00) and below the
+             * game's tile staging (starts 0x12000). Nothing reads it, so
+             * a failed test cannot corrupt the picture.
+             * The pattern carries the cycle counter, so a match proves
+             * THIS cycle's write landed rather than a stale one. */
+            {
+                volatile uint32_t *sa = (volatile uint32_t *)0x24011C00;
+                uint32_t pat = 0xA5A50000u | (uint16_t)win_no;
+                for (int i = 0; i < 8; i++)
+                    sa[i] = pat + i;
+                /* Does a READ work while FM=0? Read back scratch B, which
+                 * was written AND verified inside this same window. */
+                volatile uint32_t *sb = (volatile uint32_t *)0x24011D00;
+                uint32_t want = 0x5A5A0000u | (uint16_t)win_no;
+                for (int i = 0; i < 8; i++)
+                    if (sb[i] == want + i) FMT[3]++;
+            }
+#endif
+            /* Drain the PREVIOUS window's concurrent compose before
+             * relaunching (SYNC[0] carries one command at a time). This
+             * WAS pre-ack (the retry-loop saturation); now it is off the
+             * 68K's critical path — the game is already running. */
+            tp = frt();
+            if (tile_cmd) {
+                slave_wait(tile_cmd);
+                tile_cmd = 0;
+            }
+            diag_add(3, tp);
+
+            /* launch band R(k)'s FULL concurrent compose (tiles then
+             * sprites, slave rows), then do our own rows. */
+            tile_cmd = (uint16_t)(CMD_TILE | (k << 4) | (par << 8) | bank1);
+            slave_cmd(tile_cmd);
+            diag_add(8, tw);
+
+            {
+                /* COMPOSE_LEAD2: see slave_concurrent_k. Both sides
+                 * must use the same mapping or the CPUs compose
+                 * different bands. */
+                int rg = k;                  /* W0->R0, W1->R1, W2->R2 */
+                cache_purge();               /* pages/maps changed in-window:
+                                              * cached lines are stale */
+                /* COMPLETE-OR-DEFER (accuracy mandate): when the queue
+                 * is full (persistently over budget — ares), the NEW
+                 * band is simply not enqueued: in-flight bands always
+                 * COMPLETE, the region just updates at half cadence
+                 * this cycle. Every prior policy that killed partial
+                 * bands (drop-oldest, rotation, victim selection,
+                 * streak fairness) traded one artifact for another —
+                 * stale locked stripes, starved maps, frozen regions,
+                 * BG-only rows with the FG phases missing (the "red
+                 * box" report). A complete band one cycle late looks
+                 * exactly like the arcade one frame ago; a partial
+                 * band looks like a broken game. maps_owed machinery
+                 * stays for the rare boot/transition races. */
+                if (bq[bq_t].on) {
+                    DIAG[13]++;              /* queue-full deferrals */
+                } else {
+                    struct band *nb = &bq[bq_t];
+                    nb->on = 1;
+                    nb->rg = (uint8_t)rg;
+                    nb->bpar = (uint8_t)par;
+                    nb->bank = (uint8_t)bank1;
+                    nb->phase = 0;
+                    nb->s0 = drop_s0[rg];    /* resume rotation point */
+                    nb->cnt = 0;
+                    nb->sub = 0;             /* MUST reset: a band that
+                                              * yielded mid-strip and was
+                                              * then dropped leaves a
+                                              * non-zero cursor in the
+                                              * slot, and the next band to
+                                              * land there would start its
+                                              * phase-0 strip part-way in
+                                              * and never compose those
+                                              * rows. bq[] is a stack
+                                              * local, so at boot it is
+                                              * garbage too. */
+                    bq_t = (bq_t + 1) & 3;
+                }
+            }
+
+#ifdef MD_BG
+            /* GAP-PREP (was PIVOT SLICE 1b, in-window): build the NEXT
+             * window's packet into SDRAM staging — FM=0, game running,
+             * SDRAM-only, entirely off the 68K's critical path. The
+             * in-window publish is a bare copy. Convert a
              * batch of S16 tiles to MD 4bpp planar into the documented
              * dead FB space at 0x11A00 (1536 bytes past the image, below
              * the game's tile staging at 0x12000).
@@ -3413,7 +3535,7 @@ RAMCODE void m_main(void)
                  *   [8..] payload
                  * type 0: 40 tiles, param = first cache slot
                  * type 1: 280 name-table cells, param = first cell */
-                volatile uint16_t *sc = (volatile uint16_t *)0x24011A00;
+                uint16_t *sc = md_pkt;
                 const layer_regs *bl = &snap[1];              /* BG layer */
                 sc[3] = (uint16_t)(-(bl->vx0 & 7) & 0x3FF);
                 sc[4] = (uint16_t)(bl->vy0 & 7);              /* plane B vy */
@@ -3698,103 +3820,6 @@ RAMCODE void m_main(void)
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
             }
 #endif
-            MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
-#ifdef CMD_INT
-            __asm__ __volatile__("mov #32,r0\n\tldc r0,sr"
-                                 ::: "r0", "memory");  /* back to level 2 */
-#endif
-            TOK(0);                          /* busy: post-ack compose follows */
-
-            /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
-#ifdef FM_TEST
-            /* LOOP 9 — IS "THE SH-2 MAY ONLY WRITE THE FB WITH FM=1"
-             * ACTUALLY TRUE? It rules out the shadow bank AND composing
-             * straight into the FB (which would delete the blit outright
-             * — the only 2x-class lever left), and it has never been
-             * tested. The MD really does clear FM after every ack
-             * (md_main.c:177), so the premise is real; the question is
-             * only what a write does while it is clear.
-             * SCRATCH: 0x24011A00..0x24012000 is 1536 bytes of genuine
-             * dead space — past the image (ends 0x11A00) and below the
-             * game's tile staging (starts 0x12000). Nothing reads it, so
-             * a failed test cannot corrupt the picture.
-             * The pattern carries the cycle counter, so a match proves
-             * THIS cycle's write landed rather than a stale one. */
-            {
-                volatile uint32_t *sa = (volatile uint32_t *)0x24011C00;
-                uint32_t pat = 0xA5A50000u | (uint16_t)win_no;
-                for (int i = 0; i < 8; i++)
-                    sa[i] = pat + i;
-                /* Does a READ work while FM=0? Read back scratch B, which
-                 * was written AND verified inside this same window. */
-                volatile uint32_t *sb = (volatile uint32_t *)0x24011D00;
-                uint32_t want = 0x5A5A0000u | (uint16_t)win_no;
-                for (int i = 0; i < 8; i++)
-                    if (sb[i] == want + i) FMT[3]++;
-            }
-#endif
-            /* Drain the PREVIOUS window's concurrent compose before
-             * relaunching (SYNC[0] carries one command at a time). This
-             * WAS pre-ack (the retry-loop saturation); now it is off the
-             * 68K's critical path — the game is already running. */
-            tp = frt();
-            if (tile_cmd) {
-                slave_wait(tile_cmd);
-                tile_cmd = 0;
-            }
-            diag_add(3, tp);
-
-            /* launch band R(k)'s FULL concurrent compose (tiles then
-             * sprites, slave rows), then do our own rows. */
-            tile_cmd = (uint16_t)(CMD_TILE | (k << 4) | (par << 8) | bank1);
-            slave_cmd(tile_cmd);
-            diag_add(8, tw);
-
-            {
-                /* COMPOSE_LEAD2: see slave_concurrent_k. Both sides
-                 * must use the same mapping or the CPUs compose
-                 * different bands. */
-                int rg = k;                  /* W0->R0, W1->R1, W2->R2 */
-                cache_purge();               /* pages/maps changed in-window:
-                                              * cached lines are stale */
-                /* COMPLETE-OR-DEFER (accuracy mandate): when the queue
-                 * is full (persistently over budget — ares), the NEW
-                 * band is simply not enqueued: in-flight bands always
-                 * COMPLETE, the region just updates at half cadence
-                 * this cycle. Every prior policy that killed partial
-                 * bands (drop-oldest, rotation, victim selection,
-                 * streak fairness) traded one artifact for another —
-                 * stale locked stripes, starved maps, frozen regions,
-                 * BG-only rows with the FG phases missing (the "red
-                 * box" report). A complete band one cycle late looks
-                 * exactly like the arcade one frame ago; a partial
-                 * band looks like a broken game. maps_owed machinery
-                 * stays for the rare boot/transition races. */
-                if (bq[bq_t].on) {
-                    DIAG[13]++;              /* queue-full deferrals */
-                } else {
-                    struct band *nb = &bq[bq_t];
-                    nb->on = 1;
-                    nb->rg = (uint8_t)rg;
-                    nb->bpar = (uint8_t)par;
-                    nb->bank = (uint8_t)bank1;
-                    nb->phase = 0;
-                    nb->s0 = drop_s0[rg];    /* resume rotation point */
-                    nb->cnt = 0;
-                    nb->sub = 0;             /* MUST reset: a band that
-                                              * yielded mid-strip and was
-                                              * then dropped leaves a
-                                              * non-zero cursor in the
-                                              * slot, and the next band to
-                                              * land there would start its
-                                              * phase-0 strip part-way in
-                                              * and never compose those
-                                              * rows. bq[] is a stack
-                                              * local, so at boot it is
-                                              * garbage too. */
-                    bq_t = (bq_t + 1) & 3;
-                }
-            }
         }
     }
 }
