@@ -2852,10 +2852,16 @@ RAMCODE void m_main(void)
                     unsigned v = md_v & 0xFF;
                     skip = (v < 0xDF || v > 0xE4);
 #ifdef SPAN_PROBE
-                    if (v < 0xDF)      DIAG[34]++;
+                    /* v2: bs9 put 276 of 287 skips in the v<DF bucket,
+                     * and a live heartbeat can only read <DF once the
+                     * counter re-enters 00..DE — the NEXT frame's
+                     * active scan, >=25 lines after the raise. These
+                     * are WRAPPED-LATE pickups, not early ones. Bin the
+                     * V value into [42..48] (v>>5, ~38+v lines late) to
+                     * see HOW late the master arrives. */
+                    if (v < 0xDF)      { DIAG[34]++; DIAG[42 + (v >> 5)]++; }
                     else if (v > 0xE4) DIAG[41]++;
                     else               DIAG[35 + (v - 0xDF)]++;
-                    pick_late = (v >= 0xE3);
 #endif
                 } else {
                     skip = !(MARS_VDP_FBCTL & 0x8000);
