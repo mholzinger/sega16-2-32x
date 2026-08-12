@@ -2535,6 +2535,9 @@ RAMCODE void m_main(void)
                 uint16_t dt = (uint16_t)(frt() - t_vint);
                 if (dt <= 4000) {
                     TOK(0);                  /* busy: a maintenance chunk */
+#ifdef SPAN_PROBE
+                    m_stage = 3;
+#endif
                     if (maps_owed) {
                         if (build_maps_chunk(owed_par))
                             maps_owed = 0;
