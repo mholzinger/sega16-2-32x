@@ -3434,6 +3434,9 @@ RAMCODE void m_main(void)
                                  ::: "r0", "memory");  /* back to level 2 */
 #endif
             TOK(0);                          /* busy: post-ack compose follows */
+#ifdef SPAN_PROBE
+            m_stage = 7;                     /* v3: post-ack window tail */
+#endif
 
             /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
 #ifdef FM_TEST
