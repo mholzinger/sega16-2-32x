@@ -2874,14 +2874,18 @@ RAMCODE void m_main(void)
                     unsigned v = md_v & 0xFF;
                     skip = (v < 0xDF || v > 0xE4);
 #ifdef SPAN_PROBE
-                    /* v2: bs9 put 276 of 287 skips in the v<DF bucket,
-                     * and a live heartbeat can only read <DF once the
-                     * counter re-enters 00..DE — the NEXT frame's
-                     * active scan, >=25 lines after the raise. These
-                     * are WRAPPED-LATE pickups, not early ones. Bin the
-                     * V value into [42..48] (v>>5, ~38+v lines late) to
-                     * see HOW late the master arrives. */
-                    if (v < 0xDF)      { DIAG[34]++; DIAG[42 + (v >> 5)]++; }
+                    /* v3: the two bs9 runs split the miss mode — run 1
+                     * was v<DF wrapped-late (25+ lines), run 2 was
+                     * V=E5..FF just-late (5-37 lines, MD heartbeat is
+                     * always live so "none" is impossible mid-game).
+                     * Both are the master arriving late; [42..49] now
+                     * bin every MISSED pickup by what the master was
+                     * doing (m_stage): 0 idle/poll (= the MD posted
+                     * late, not us), 1 owed build_maps chunk, 2 shadow
+                     * LUT chunk, 3 maintenance steal, 4 tile strip
+                     * (ph 0/1), 5 sprite strip (ph 2), 6 single-shot
+                     * (ph >= 3), 7 post-ack window tail. */
+                    if (v < 0xDF)      DIAG[34]++;
                     else if (v > 0xE4) DIAG[41]++;
                     else               DIAG[35 + (v - 0xDF)]++;
 #endif
