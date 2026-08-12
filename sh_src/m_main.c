@@ -2994,36 +2994,12 @@ RAMCODE void m_main(void)
                         if (el > DIAG[27])
                             DIAG[27] = el;
                     }
-#ifdef SPAN_PROBE
-                    /* SPAN DISTRIBUTION, not just the max. The mean span
-                     * is 26.7 lines against 38 available, so the mean
-                     * ALREADY FITS — the strobe is the tail, and a max
-                     * alone cannot say whether that tail is a rare 2.3x
-                     * spike or a fat shoulder sitting just past 38.
-                     * Those two want opposite fixes. Thresholds in FRT
-                     * ticks at ~46/line: 20/30/38/45/55/70/100 lines. */
-                    if      (el <=  920) DIAG[42]++;   /* <=20 lines */
-                    else if (el <= 1380) DIAG[43]++;   /*  21-30    */
-                    else if (el <= 1748) DIAG[44]++;   /*  31-38 in vblank */
-                    else if (el <= 2070) DIAG[45]++;   /*  39-45 just over */
-                    else if (el <= 2530) DIAG[46]++;   /*  46-55    */
-                    else if (el <= 3220) DIAG[47]++;   /*  56-70    */
-                    else if (el <= 4600) DIAG[48]++;   /*  71-100   */
-                    else                 DIAG[49]++;   /*  >100     */
-                    if (el > 1748)
-                        DIAG[pick_late ? 50 : 51]++;
-                    /* PER-WINDOW SPLIT. The blit thirds are 36/36/40
-                     * rows, because 224 rows do not divide into three
-                     * tile-aligned bands — so k=1 carries 4 extra rows,
-                     * ~3 lines, against a deficit of ~8. If the
-                     * overruns are all k=1 then a third of the problem
-                     * is the uneven split and costs nothing to fix.
-                     * [52..54] overruns by k, [55..57] windows by k,
-                     * [58..60] summed span ticks by k (-> mean). */
-                    DIAG[55 + k]++;
-                    DIAG[58 + k] += el;
-                    if (el > 1748) DIAG[52 + k]++;
-#endif
+                    /* (SPAN_PROBE v1's span-distribution and per-window
+                     * split lived here; retired in LOOP 13 — the span
+                     * answered (0 of 2655 past vblank, k-split moot) and
+                     * slots [50..60] had been reclaimed by pivot
+                     * counters, corrupting the readout. [42..48] now
+                     * hold the wrapped-late pickup bins at the V-gate. */
                 }
                 MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
                 /* LOOP 7i — TIME THE LATCH. Two measurements disagree by
