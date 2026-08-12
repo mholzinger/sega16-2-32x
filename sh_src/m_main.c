@@ -2901,6 +2901,10 @@ RAMCODE void m_main(void)
                  * is the scarce resource now.) */
                 if (skip)
                     DIAG[7]++;               /* master-side silent skips */
+#ifdef SPAN_PROBE
+                if (skip)
+                    DIAG[42 + m_stage]++;    /* v3: miss by master stage */
+#endif
             }
             uint16_t scmd = (uint16_t)(0x3000 | (k << 4) | (par << 8)
                                        | bank1 | (skip ? 8 : 0));
