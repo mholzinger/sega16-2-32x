@@ -68,6 +68,15 @@ endif
 ifdef SPANPROBE
 SHCCFLAGS += -DSPAN_PROBE
 endif
+# `make BQCHUNK=1` = LOOP 13: bound the band queue's two long
+# single-shots (cache_fill adaptive drain, build_maps terminator) to
+# per-visit quanta — SPAN_PROBE v3 put 98.9% of missed pickups behind
+# them on ares. Falsifier: stage-6 misses collapse in span_hist.py
+# without stale-color regression (chunked maps drain 1/window under
+# load). Candidate for shipping if it holds; probe until then.
+ifdef BQCHUNK
+SHCCFLAGS += -DBQ_CHUNK
+endif
 # `make TILERATE=1` = LOOP 11: how often the game dirties a tilemap page
 # ([54] pages copied, [55] cycles with any dirt, [56] pages pending).
 # The MK2 pivot rests on this being rare. tools/tile_rate.py. NEVER SHIP.
