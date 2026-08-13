@@ -1170,6 +1170,8 @@ void main(void) {
 	*(volatile uint16_t*)0xFFB0E0 = 0;   // LOOP 7b: DREQ push aborts (own
 	                                     // address at last — 0xFFB0F2 is
 	                                     // windows-completed)
+	*(volatile uint16_t*)0xFFA020 = 0;      // last packet magic (relocated)
+	*(volatile uint16_t*)0xFFA022 = 0xFFFF; // push spin-headroom watermark
 #ifdef IDLE_TOKEN
 	*(volatile uint16_t*)0xFFB0EE = 0;   // LOOP 11a: idle-token skips
 #endif
