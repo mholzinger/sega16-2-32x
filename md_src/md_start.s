@@ -126,6 +126,18 @@ _start:
 		 * When real sound lands, a proper driver upload replaces this. */
 		move.w	#0x000,(0xA11200)	/* assert Z80 reset, forever */
 
+		/* MUTE THE PSG (Mike, LOOP 13: "still z80 clipping" with the
+		 * park verified in place). Z80 reset also resets the YM2612 —
+		 * but NOT the PSG, which lives in the VDP: any channel keyed
+		 * during the free-run window before the park (or by the
+		 * emulator's power-on PSG state) sounds FOREVER, and nothing
+		 * ever wrote the attenuation-off latches. %1cc11111 = channel
+		 * cc volume off. */
+		move.b	#0x9F,(0xC00011)	/* tone 0 att 15 (off) */
+		move.b	#0xBF,(0xC00011)	/* tone 1 att 15 */
+		move.b	#0xDF,(0xC00011)	/* tone 2 att 15 */
+		move.b	#0xFF,(0xC00011)	/* noise  att 15 */
+
 		/* Pad port init (canonical, per d32xr crt0 + SGDK JOY_reset): TH as
 		 * an OUTPUT (CTRL bit6) idling HIGH on both ports. Was never done —
 		 * the six-button phase table assumes the first transition each frame
