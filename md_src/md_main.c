@@ -119,11 +119,17 @@ static void md_bg_palette(void) {
 	 * the breakage. */
 	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B00;
 #ifdef MD_VERIFY
-	/* verifier state: WRAM powers up random; the first-bad latch and
-	 * mismatch tally must start clean. */
-	for (uint16_t i = 0; i < 6; i++)
+	/* verifier state, ALL of it in the free WRAM block (first cut put
+	 * the tally at 0xFFB0EA, which the palette-scan span max already
+	 * writes — the same single-writer trap as SPAN_PROBE v1, caught
+	 * the same day). Layout:
+	 *  [0] valid  [1] vram addr  [2] word idx  [3] wrote  [4] read
+	 *  [5] HV     [6] mismatch tally
+	 *  [7] stale packets (seq == last: the bank-skew re-read)
+	 *  [8] seq jumps (seq != last+1 and != last)
+	 *  [9] packets consumed */
+	for (uint16_t i = 0; i < 10; i++)
 		((volatile uint16_t*)0xFFA000)[i] = 0;
-	(*(volatile uint16_t*)0xFFB0EA) = 0;
 #endif
 }
 
