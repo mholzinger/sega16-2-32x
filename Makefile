@@ -77,6 +77,15 @@ endif
 ifdef BQCHUNK
 SHCCFLAGS += -DBQ_CHUNK
 endif
+# `make MDVERIFY=1` = LOOP 13 tick-row probe: the MD receiver reads
+# every tile-batch entry back through the data port and tallies
+# mismatches (0xFFB0EA; first bad triple at WRAM 0xFFA000). The sky
+# tick-row is ares-only, MD-plane-side; this decides whether receiver
+# writes are being lost/misplaced there. Doubles the receiver span —
+# NEVER SHIP.
+ifdef MDVERIFY
+MDCCFLAGS += -DMD_VERIFY
+endif
 # `make TILERATE=1` = LOOP 11: how often the game dirties a tilemap page
 # ([54] pages copied, [55] cycles with any dirt, [56] pages pending).
 # The MK2 pivot rests on this being rare. tools/tile_rate.py. NEVER SHIP.
