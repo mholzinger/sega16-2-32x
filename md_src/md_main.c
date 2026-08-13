@@ -113,6 +113,25 @@ static void md_bg_palette(void) {
 	*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 3u;   /* VRAM 0xC000 */
 	for (uint16_t i = 0; i < 2048; i++)
 		*vdp_data_port = 0;
+	/* Plane B out-of-window cells -> the reserved blank slot. The
+	 * packet ships 40 columns x 28 rows; fine scroll (vx&7 / vy&7)
+	 * shifts the plane and reveals nametable cols 40+ and rows 28+,
+	 * which nothing ever writes — VRAM boot garbage. That was BOTH
+	 * edge artifacts (LOOP 13, native-capture diagnosis): the grey
+	 * right-edge strip (cols 40-41 via hscroll) and the sky tick-row
+	 * (row 31 at the top via vscroll; today's zero-fine-scroll
+	 * capture had no ticks, yesterday's tick scenes did). Arcade
+	 * shows real art in these 1-7px slivers; a 41-column/29-row
+	 * packet is the fidelity follow-up. */
+	for (uint16_t row = 0; row < 32; row++) {
+		uint32_t a = 0xE000u + (uint32_t)row * 128u
+		           + ((row < 28) ? 80u : 0u);
+		uint16_t n = (row < 28) ? 24 : 64;
+		*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
+		               | ((a >> 14) & 3u);
+		for (uint16_t c2 = 0; c2 < n; c2++)
+			*vdp_data_port = 0x03FF;   /* blank slot, pal 0 */
+	}
 	/* A/B: full-screen hscroll (reg 11 = 00). Cell mode made the MD
 	 * plane vanish per-strip on MAME while VRAM/CRAM verified correct
 	 * through the data port; bisecting whether the per-strip table is
