@@ -367,6 +367,36 @@ void shim_vblank(void) {
 						               | ((va >> 14) & 3u);
 						for (uint16_t k = 1; k < 17; k++)
 							*vdp_data_port = e[k];
+#ifdef MD_VERIFY
+						// LOOP 13 tick-row probe: read the entry back
+						// (VRAM read = code 0) and compare. A lost or
+						// misplaced data-port write shifts the pattern
+						// tail = the sky dash. Tally at 0xFFB0EA;
+						// first bad triple parked in free WRAM 0xFFA000
+						// for state extraction. NEVER SHIP: doubles the
+						// receiver span.
+						{
+							volatile uint16_t *vw =
+							    (volatile uint16_t*)0xFFA000;
+							*vdp_ctrl_wide = ((va & 0x3FFFu) << 16)
+							               | ((va >> 14) & 3u);
+							for (uint16_t k = 1; k < 17; k++) {
+								uint16_t rb = *vdp_data_port;
+								if (rb != e[k]) {
+									(*(volatile uint16_t*)0xFFB0EA)++;
+									if (!vw[0]) {
+										vw[0] = 1;          // valid
+										vw[1] = (uint16_t)va;
+										vw[2] = k;          // word idx
+										vw[3] = e[k];       // wrote
+										vw[4] = rb;         // read
+										vw[5] = *(volatile uint16_t*)
+										        0xC00008;   // HV now
+									}
+								}
+							}
+						}
+#endif
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008; // V after tiles
