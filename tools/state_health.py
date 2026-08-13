@@ -88,6 +88,27 @@ def main():
           f"dreq_incomplete={inc} ({100.0 * inc / max(cycles, 1):.1f}% "
           f"of cycles) push_aborts={aborts} "
           f"spin_headroom_min={'n/a' if wmark == 0xFFFF else wmark}/2600")
+    # LOOP 13 part 4 — DREQ residue split (0x28F80, builds with DRQR).
+    # The 68K is exonerated (aborts 0, headroom 2597/2600); the residue
+    # of each incomplete sprite push names the remaining mechanism:
+    #   ==256  the MD pushed the 340-word TEXT layout while the master
+    #          expected SPRITE/596 — wskip/prev_k PHASE DESYNC
+    #   1..8   tail-drain stall: the FIFO's last groups never got DMAC
+    #          service before the next window
+    #   other  mid-stream stall / wild TCR
+    d256, dtail, doth, dlast, dmax = (rd32(0x28F80 + i * 4) for i in range(5))
+    if inc and not (d256 or dtail or doth):
+        print("  (dreq residue split: no data — pre-DRQR build)")
+    elif d256 or dtail or doth:
+        tot_r = d256 + dtail + doth
+        print(f"  residue split: ==256 (phase desync)={d256} "
+              f"1..8 (tail-drain)={dtail} other={doth} "
+              f"last={dlast} max={dmax}")
+        if d256 == tot_r:
+            print("  -> ALL phase desync: fix wskip/prev_k agreement, "
+                  "not the DMA")
+        elif dtail == tot_r:
+            print("  -> ALL tail-drain: DMAC starved at the push tail")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
     # LOOP 7c — THE STROBE. The flip/restore pair blanks the screen over
     # bank Y, which nothing composes into; it is only safe while the pair
