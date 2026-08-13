@@ -3607,7 +3607,18 @@ RAMCODE void m_main(void)
                  * chunk cursor does not advance), so tiles chase the
                  * cells referencing them at 40/window instead of
                  * 40/(5 windows). */
-                if (md_phase == 0 || md_pending >= MD_BATCH) {
+                /* STARVATION BOUND (LOOP 13, the tick-row's true root):
+                 * under sustained claim pressure (cutscene bursts)
+                 * md_pending never drains below MD_BATCH, the demand
+                 * bias fires every window, and the cell cursor FREEZES
+                 * — plane A cells measured a uniform stale row against
+                 * a varied md_dbg_nt mirror while slots kept being
+                 * reassigned under them: foreign art = the dashes. At
+                 * most 2 consecutive forced batches, then a cell chunk
+                 * ships regardless. */
+                if (md_phase == 0
+                    || (md_pending >= MD_BATCH && md_forced < 2)) {
+                    if (md_phase != 0) md_forced++;
                     /* ---- tile payload: ship dirty md_tag slots,
                      * pixels straight from cart ROM (legal under unpair,
                      * RV pinned 0 — same read tile_pixels does on miss).
