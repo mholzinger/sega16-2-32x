@@ -424,7 +424,12 @@ void shim_vblank(void) {
 			// the fallback-pen bug, fixed by the usage-mask allocator.
 			volatile uint16_t *live = (volatile uint16_t*)0x851A00;
 			volatile uint16_t *sc = live;
-			(*(volatile uint16_t*)0xFFB0E0) = live[0];    // diag: last magic seen
+			// last-magic diag RELOCATED to WRAM 0xFFA020 (LOOP 13 part 4):
+			// it sat at 0xFFB0E0 — the DREQ push-abort counter — so every
+			// MD_BG build stamped 0xB6B6 over the abort count each window
+			// and push_aborts read as garbage. FOURTH slot collision this
+			// era. All MD_BG push_aborts figures before this line are void.
+			(*(volatile uint16_t*)0xFFA020) = live[0];    // diag: last magic seen
 			// SPAN-SPLIT PROBES (write-budget design): V at each stage,
 			// packed per type so lua can attribute the cost.
 			(*(volatile uint16_t*)0xFFB0B0) =
