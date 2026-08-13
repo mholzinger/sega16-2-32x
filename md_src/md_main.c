@@ -169,6 +169,55 @@ static void md_bg_testpattern(void) {
 }
 #endif
 
+#ifdef MD_BG
+/* LOOP 13 part 3 — STAGED VDP PLAYBACK. The receiver's port writes
+ * measured V=0x0B..0x35: active display lines 11-53, the VDP fetching
+ * nametables mid-rewrite = the tick dashes. The receiver now STAGES
+ * every VRAM/CRAM write into WRAM (0xFFA400: [0] record count,
+ * [1] vsB [2] vsA [3] hscroll addr|0 [4] hscroll val [5] flags bit0 =
+ * scroll valid; records from [8]: wlen, ctrl_hi, ctrl_lo, data...)
+ * and THIS plays it back at the top of the next vint, inside vblank,
+ * via 68K->VDP DMA (~205 words/line; ~1050 words + ~50 record setups
+ * ≈ 12 lines). Runs AFTER the window post so the SH-2's V-gate is
+ * not starved; the 68K is halted during transfers, which only delays
+ * the ack-spin entry. Reg 1 already carries DMA enable (md_start.s
+ * 0x54). Cost: all MD plane data lands one window late, uniformly. */
+__attribute__((section(".data")))
+static void md_stage_play(void) {
+	volatile uint16_t *stg = (volatile uint16_t*)0xFFA400;
+	uint16_t n = stg[0];
+	if (!n && !(stg[5] & 1))
+		return;
+	if (stg[5] & 1) {
+		*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
+		*vdp_data_port = stg[1];              /* VSRAM 2 = plane B vy */
+		*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
+		*vdp_data_port = stg[2];              /* VSRAM 0 = plane A vy */
+		if (stg[3]) {
+			*vdp_ctrl_wide = ((uint32_t)(0x4000u | stg[3]) << 16) | 3u;
+			*vdp_data_port = stg[4];
+		}
+	}
+	{
+		const uint16_t *p = (const uint16_t*)(stg + 8);
+		for (uint16_t r = 0; r < n; r++) {
+			uint16_t wl = p[0];
+			uint32_t src = ((uint32_t)(p + 3)) >> 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9300 | (wl & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9400 | ((wl >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+			*vdp_ctrl_wide = ((uint32_t)p[1] << 16) | p[2];  /* CD5 fires DMA */
+			p += 3 + wl;
+		}
+	}
+	stg[0] = 0;
+	stg[3] = 0;
+	stg[5] = 0;
+}
+#endif
+
 __attribute__((section(".data")))
 void shim_vblank(void) {
 	static uint16_t busy;
