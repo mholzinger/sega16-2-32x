@@ -2754,16 +2754,22 @@ RAMCODE void m_main(void)
 #endif
                 default:
 #ifdef BQ_CHUNK
-                    /* Terminator via the owed-chunk path: build_maps
-                     * ignores bank1, and build_maps_chunk is the same
-                     * scan in 8-row slices (proven on dropped bands).
-                     * Risk to watch: under sustained load the drain is
-                     * 1 chunk/window (maintenance slot), so maps can
-                     * land cycles late -> stale tile_grp colors. */
-                    if (b->rg == 2) {
-                        maps_owed = 1;
-                        owed_par = (uint8_t)(b->bpar ^ 1);
-                    }
+                    /* Terminator stays IN the band queue, chunked: one
+                     * 8-row slice per poll visit under the dt<=8000
+                     * gate, staying in this phase until the tail lands.
+                     * Full visit rate, so the scan drains in ~14 visits
+                     * (a fraction of one window gap) instead of the
+                     * owed path's 1-2 chunks/cycle. First cut routed it
+                     * through maps_owed and starved BOTH consumers:
+                     * maps landed cycles late (black tile slabs) and
+                     * the shadow LUT sat behind perpetually-owed maps
+                     * in the maintenance slot (every actor a black
+                     * silhouette, the corpus run of 2026-08-12).
+                     * BM-state caveat: a dropped band setting maps_owed
+                     * mid-drain resets the shared BM scan (par check);
+                     * rare, self-heals next visit, accepted for now. */
+                    if (b->rg == 2 && !build_maps_chunk(b->bpar ^ 1))
+                        continue;            /* stay in terminator */
 #else
                     if (b->rg == 2)
                         build_maps(b->bpar ^ 1, b->bank);
