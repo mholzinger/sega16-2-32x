@@ -105,6 +105,91 @@ eyehold 3.37, `_end 0x06018d38`, stamped `normal`.
     140-line span was two DIVUs per cell (7b52357), and the cadence
     recovered to 3.00 without it.
 
+## 2026-08-12 — THE 32% BLIT SKIPS ARE DEAD (item 3 closed)
+
+Four Mike round-trips, one instrument rebuilt twice, one fix. ares
+bs9 series, all BUILD-hash-verified.
+
+**Root cause.** Handoff item 3 (ares skips 32%, MAME 0.3%) was the
+band queue's two LONG SINGLE-SHOTS — `cache_fill` (adaptive 384-code
+drain) and the `build_maps` terminator (~4ms uninterruptible) — both
+behind the `dt<=8000` heavy gate, whose ~4000-tick budget holds on
+MAME and not on ares (~3x slower SH-2). A shot started just inside
+the gate straddled the vint raise by 5-37+ lines; the V-gate
+(correctly) skipped those windows, and each skip shipped a
+full-cycle-old band = the jitter Mike called "blitter".
+SPAN_PROBE v3 attribution: 359 of 363 misses (98.9%) in stage 6,
+zero in every striped phase, zero idle (the 68K always posted on
+time). Striped phases with bounded quanta missed NOTHING — the
+architecture was already correct everywhere else.
+
+**Fix (`BQ_CHUNK`, m_main.c band queue).** Same total work, bounded
+per-visit quanta, in-queue:
+  - `cache_fill`: 64 codes/visit, stays in phase until the old
+    budget (2 or 6 visits) is spent.
+  - `build_maps` terminator: `build_maps_chunk` 8-row slices, one
+    per poll visit, stays in terminator phase until the tail lands
+    (~14 visits, a fraction of one window gap).
+Measured (ares, Mike's run): skips 37% -> 0.4-0.8% of cycles,
+pickups 98.2% at V=E1, cadence 3.00, restores past vblank 0.
+Mike: "animations and frames are improved." Silhouettes/slabs from
+the first cut: gone (corpus-verified).
+
+**NEGATIVE RESULT — do not re-route the terminator through
+maps_owed.** First cut set `maps_owed=1` and let the idle/
+maintenance path drain it: 1-2 chunks/cycle against ~14 needed, so
+maps landed cycles stale (black tile slabs) AND the shadow LUT
+starved behind perpetually-owed maps in the maintenance slot
+(every actor a black silhouette — 2026-08-12 corpus, frames 458/
+1200/2400/3000). The chunks must run at full poll-visit rate INSIDE
+the band queue.
+
+**SPAN_PROBE v2/v3 (instrument, `make SPANPROBE=1` +
+`tools/span_hist.py`).** LOOP 9's v1 slots [50..60] were RECLAIMED
+by pivot-era counters (evictions, sprite/page/ISR work) — the v1
+readout was self-contradictory (104.6% overruns, 2046 late restores
+vs 11 late pickups). Audit DIAG slots before trusting any old probe.
+v3: [42..49] bin every missed pickup by master poll-loop stage;
+[34..41] pickup-V histogram unchanged. Also SUPERSEDED: LOOP 7a's
+"every skip is on the LATE side, never wrapped" — under the pivot,
+wrapped-late (V<DF, 25+ lines) was the dominant mode in one run.
+Heartbeat fact: MD writes 0xD0|V before the post and every ack-spin
+iteration (md_main.c:295,313), so "no heartbeat" cannot occur
+mid-game; V<DF at pickup can only mean the NEXT frame's active scan.
+
+**Z80 clipping, second root (md_start.s).** The reset-park holds the
+Z80 AND the YM2612 — but NOT the PSG, which lives in the VDP. Any
+channel keyed during the pre-park free-run (or the emulator's
+power-on PSG state) sounded forever. Four attenuation-off latches
+(0x9F/BF/DF/FF -> 0xC00011) after the park. Mike: "silent I think."
+UNCONDITIONAL — lands in the shipping build too.
+
+**Red flat-colored player (frames 1500-1560): possibly NOT a bug.**
+After the second spirit ball the arcade flashes the player red until
+the transform; at 20Hz we may sample mostly-red frames. Verify
+against MAME before "fixing" — fidelity rule.
+
+**Artifact shortlist, updated from the corpus pass** (replaces the
+item-4 list): (1) sky tick-row — fixed row of dashes near the top,
+every frame, both builds, worst by visibility; (2) right-edge
+checkered strip; (3) stray sprite fragments at the top edge;
+(4) purple flecks/drips, bottom corners. Mint-tinted BG remains §11
+palette-precompute work.
+
+**BQ_CHUNK graduation checklist** (it is a fidelity fix, candidate
+for shipping): plain `make` gates (parity statics, region guard,
+`normal` stamp), then Mike's play pass on the shipping rom with
+BQCHUNK folded in. Until then it lives behind the flag.
+
+**OpenLara/32X reference notes** (srcref mining, derive-don't-copy):
+two measured negatives that match our traps — cache-as-RAM at
+0xC0000000 SLOWER than cached SDRAM (their commits fedd2ed/380d137),
+and VDP autofill REMOVED because the FEN spin blocked the master
+(latency lost to "hardware acceleration", same trap as DREQ here).
+Their structural rule: the CPU with a deadline must be idle-spinning
+— timing-critical work lives on the CPU with a spare vblank,
+results parked in latched mailboxes. Full report in NOTES.md.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
