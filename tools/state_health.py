@@ -147,6 +147,18 @@ def main():
                if real_total >= 262 else f"{262 - real_total} lines margin")
     print(f"worst handler: total={real_total} window/ack={win} tail={tail} "
           f"(frame=262) dominated by {dom} -> {verdict}")
+    # LOOP 13 MDVERIFY probe (make MDVERIFY=1): receiver read-back
+    # mismatch tally at 0xFFB0EA, first bad triple in WRAM 0xFFA000.
+    vf = rdmd16(0xA000)
+    mm = rdmd16(0xB0EA)
+    if vf or mm:
+        print(f"MDVERIFY: mismatches={mm} first bad: "
+              f"vram=0x{rdmd16(0xA002):04X} word={rdmd16(0xA004)} "
+              f"wrote=0x{rdmd16(0xA006):04X} read=0x{rdmd16(0xA008):04X} "
+              f"HV=0x{rdmd16(0xA00A):04X}")
+    elif mm == 0:
+        print("MDVERIFY: no data or zero mismatches "
+              "(only meaningful on a MDVERIFY=1 build)")
 
 
 if __name__ == "__main__":
