@@ -390,7 +390,7 @@ What the mechanics allow (read this before theorising further):
     worst tile packet 819 words (1638 bytes) at 0xFFA400, well short
     of the 0xFFB000 diag block.
 
-Instruments (this commit, BUILD 4428e6ee):
+Instruments (this commit; round-trip MDBGALL rom is BUILD 896f7654):
   - last-magic diag RELOCATED 0xFFB0E0 → 0xFFA020; 0xFFB0E0 is a true
     abort counter again (init 0, shipping + probe builds).
   - 0xFFA022 = SPIN HEADROOM WATERMARK: min polls left of the 2600
