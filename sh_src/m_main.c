@@ -2728,6 +2728,21 @@ RAMCODE void m_main(void)
                                  b->bpar);
                     break;
                 case 5:
+#ifdef BQ_CHUNK
+                    /* LOOP 13 — BOUNDED QUANTA. SPAN_PROBE v3 (ares
+                     * bs9): 98.9% of missed pickups sat behind this
+                     * stage-6 pair. The dt<=8000 gate budgets ~4000
+                     * ticks, which holds on MAME and not on ares (~3x).
+                     * Same total budget, 64 codes per visit, stay in
+                     * phase until spent — the strip phases run bounded
+                     * quanta exactly like this and miss ZERO pickups. */
+                    cache_fill(64);
+                    diag_add(1, tq);
+                    if (++b->cnt < ((miss_n[0] + miss_n[1] > 96) ? 6 : 2))
+                        continue;            /* stay in phase 5 */
+                    b->cnt = 0;
+                    break;
+#else
                     /* ADAPTIVE DRAIN: flat 128/window left seconds of
                      * white placeholder tiles on ares when cutscenes
                      * burst-load art (Zeus). Deep backlog gets a 3x
@@ -2736,9 +2751,23 @@ RAMCODE void m_main(void)
                     cache_fill((miss_n[0] + miss_n[1] > 96) ? 384 : 128);
                     diag_add(1, tq);
                     break;
+#endif
                 default:
+#ifdef BQ_CHUNK
+                    /* Terminator via the owed-chunk path: build_maps
+                     * ignores bank1, and build_maps_chunk is the same
+                     * scan in 8-row slices (proven on dropped bands).
+                     * Risk to watch: under sustained load the drain is
+                     * 1 chunk/window (maintenance slot), so maps can
+                     * land cycles late -> stale tile_grp colors. */
+                    if (b->rg == 2) {
+                        maps_owed = 1;
+                        owed_par = (uint8_t)(b->bpar ^ 1);
+                    }
+#else
                     if (b->rg == 2)
                         build_maps(b->bpar ^ 1, b->bank);
+#endif
                     b->on = 0;
                     bq_h = (bq_h + 1) & 3;
                     continue;
