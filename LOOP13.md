@@ -367,6 +367,49 @@ first, which matches the mess's location.
   — measure); (c) shrink playback cost: coalesce consecutive-slot
   tile records into one DMA run.
 
+## 2026-08-13 (part 4, cont.) — push_aborts was GARBAGE: slot
+## collision #4; instruments rebuilt for the 11.5% hunt
+
+Lead (a) closed at the instrument level before touching the deadline
+machinery. **The "push_aborts unchanged" datum in the part-4 handoff
+was a clobbered counter**: md_main's MD_BG packet receive stamped its
+last-magic diag into 0xFFB0E0 — the DREQ push-abort counter — every
+accepted window, BEFORE the same handler's push could increment it.
+Every MD_BG push_aborts figure ever read (including LOOP 7g/8's
+"aborts 0 while dreq_incomplete 14-47%") predates MD_BG or is void.
+FOURTH slot collision this era. The 11.5% may yet be plain spin-budget
+aborts that were invisible.
+
+What the mechanics allow (read this before theorising further):
+  - DIAG[17] counts at k1 only; prev_k=0 = the SPRITE push, always
+    596 words. The 340-word TEXT short-push can NOT contribute.
+  - Pushes follow accepted windows 1:1, so an incomplete sprite push
+    is either a spin-budget abort (68K gave up mid-list) or a drain
+    that genuinely stalled — nothing else writes that TCR.
+  - Stage-buffer overflow ruled out by arithmetic: MD_BATCH=40 →
+    worst tile packet 819 words (1638 bytes) at 0xFFA400, well short
+    of the 0xFFB000 diag block.
+
+Instruments (this commit, BUILD 4428e6ee):
+  - last-magic diag RELOCATED 0xFFB0E0 → 0xFFA020; 0xFFB0E0 is a true
+    abort counter again (init 0, shipping + probe builds).
+  - 0xFFA022 = SPIN HEADROOM WATERMARK: min polls left of the 2600
+    budget across completed pushes (init 0xFFFF). Near 0 = budget
+    marginal → the aborts are the mechanism; comfortable + aborts 0 =
+    the drain itself stalls (DMAC0 starved by post-ack SDRAM traffic —
+    the tail now starts ~34 lines earlier and overlaps the compose).
+  - state_health.py prints both and flags pre-relocation states.
+  - MAME baseline (3600f attract, MDBGALL): aborts 0, dreq_inc 0,
+    wmark 2600 EXACT — the FIFO poll never once found it full on
+    MAME. ares is the machine that will spend the budget.
+
+NEXT: Mike round-trip on BUILD 4428e6ee (MDBGALL), savestate at/after
+the bottom-band mess, `state_health.py` on it. The watermark + true
+aborts decide between leads: aborts real → shrink/retime the push
+side (lead c: coalesce stage records; budget raise is LOOP 7b-scarred);
+aborts 0 with headroom → the drain is starved, look at what the tail
+now overlaps (lead b variant: retime the push, not the playback).
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
