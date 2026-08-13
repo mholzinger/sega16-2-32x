@@ -403,12 +403,32 @@ Instruments (this commit; round-trip MDBGALL rom is BUILD 896f7654):
     wmark 2600 EXACT — the FIFO poll never once found it full on
     MAME. ares is the machine that will spend the budget.
 
-NEXT: Mike round-trip on BUILD 896f7654 (MDBGALL), savestate at/after
-the bottom-band mess, `state_health.py` on it. The watermark + true
-aborts decide between leads: aborts real → shrink/retime the push
-side (lead c: coalesce stage records; budget raise is LOOP 7b-scarred);
-aborts 0 with headroom → the drain is starved, look at what the tail
-now overlaps (lead b variant: retime the push, not the playback).
+First ares round-trip (bs9, BUILD 896f7654) — TWO findings:
+
+  1. **TRAP, self-inflicted: `make MDBGALL=1` alone is NOT the part-4
+     rom.** BQ_CHUNK lives behind its own flag; the rebuild dropped it
+     and blit skips read 37.1% — the item-3 disease, un-fixed. The
+     round-trip configuration is `make MDBGALL=1 BQCHUNK=1`. Write it
+     that way every time.
+  2. **The accidental A/B is a real datum: dreq_incomplete is
+     BQCHUNK-correlated.** Without BQ_CHUNK (this bs9): dreq_inc 0.4%,
+     push_aborts TRUE 0, spin headroom 2598/2600 — the 68K push has
+     essentially the whole budget spare and the drain keeps up. With
+     BQ_CHUNK (part-4's 492522e8): 11.5%. The suspect is BQ_CHUNK's
+     full-poll-rate in-queue work (cache_fill 64-code quanta,
+     build_maps 8-row slices) — SDRAM-heavy master traffic running
+     exactly while DMAC0 cycle-steals the FIFO drain, where the old
+     long single-shots left the bus alone between shots. Different
+     play sessions, so correlation not yet causation.
+
+NEXT: Mike round-trip on BUILD 1426c951 (MDBGALL+BQCHUNK — part-4
+config with honest instruments), savestate at/after the bottom-band
+mess, `state_health.py` on it. The watermark + true aborts decide:
+aborts > 0 / headroom near 0 → the push is being cut (shrink/retime;
+lead c coalesce; budget raise is LOOP 7b-scarred); aborts 0 with
+headroom but dreq_inc high → the DRAIN stalls under BQ_CHUNK's bus
+traffic → throttle the quanta while a drain is armed, or retime the
+push. Also ask how the bottom band FEELS vs the 492522e8 pass.
 
 ## GATES ON EVERY COMMIT (unchanged)
 
