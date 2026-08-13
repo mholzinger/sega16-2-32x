@@ -403,7 +403,7 @@ Instruments (this commit; round-trip MDBGALL rom is BUILD 896f7654):
     wmark 2600 EXACT — the FIFO poll never once found it full on
     MAME. ares is the machine that will spend the budget.
 
-NEXT: Mike round-trip on BUILD 4428e6ee (MDBGALL), savestate at/after
+NEXT: Mike round-trip on BUILD 896f7654 (MDBGALL), savestate at/after
 the bottom-band mess, `state_health.py` on it. The watermark + true
 aborts decide between leads: aborts real → shrink/retime the push
 side (lead c: coalesce stage records; budget raise is LOOP 7b-scarred);
