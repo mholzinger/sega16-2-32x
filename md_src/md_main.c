@@ -396,7 +396,7 @@ void shim_vblank(void) {
 							for (uint16_t k = 1; k < 17; k++) {
 								uint16_t rb = *vdp_data_port;
 								if (rb != e[k]) {
-									(*(volatile uint16_t*)0xFFB0EA)++;
+									vw[6]++;
 									if (!vw[0]) {
 										vw[0] = 1;          // valid
 										vw[1] = (uint16_t)va;
