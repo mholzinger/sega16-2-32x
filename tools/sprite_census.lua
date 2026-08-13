@@ -86,11 +86,12 @@ emu.register_frame_done(function()
             -- width at 3 sample rows (rows step addr by pitch BEFORE
             -- drawing, vzoom=0 form; zoomed rows use the same as an
             -- upper bound)
+            local flip = (d2 & 0x100) ~= 0
             local h = bottom - top
             local wmax = 0
             for _, dy in ipairs({1, (h >> 1) + 1, h}) do
                 local a = (addr + pitch * dy) % 0x10000
-                local w = strip_width(rgn, bank, a)
+                local w = strip_width(rgn, bank, a, flip)
                 if w > wmax then wmax = w end
             end
             local mdeq = math.ceil(math.max(wmax, 1) / 32)
