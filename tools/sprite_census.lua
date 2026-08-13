@@ -32,17 +32,19 @@ out:write('frame,nrec,nunz,nshad,nzoom,md_equiv_total,' ..
           'pp0,pp1,pp2,pp3,ncolsets\n')
 local frames = 0
 
-local function strip_width(rgn, bank, o)
-    -- count nibbles until the 0xF end marker, hardware order
+local function strip_width(rgn, bank, o, flip)
+    -- Hardware row walk (m_main.c compose_sprites NIB loops): words
+    -- forward high-nibble-first, or backward low-nibble-first when
+    -- flipped; the row ends when the LAST-walked nibble of a word is
+    -- 0xF (mid-word F nibbles are ordinary skipped pixels). Each word
+    -- consumes 4 x-slots; the end word's marker nibble does not.
     local w = 0
     for i = 0, 127 do
-        local word = rgn:read_u16((bank * 0x10000 + ((o + i) % 0x10000)) * 2)
-        local n1, n2, n3, n4 = (word >> 12) & 0xF, (word >> 8) & 0xF,
-                               (word >> 4) & 0xF, word & 0xF
-        for _, n in ipairs({n1, n2, n3, n4}) do
-            if n == 15 then return w end
-            w = w + 1
-        end
+        local idx = flip and ((o - i) % 0x10000) or ((o + i) % 0x10000)
+        local word = rgn:read_u16((bank * 0x10000 + idx) * 2)
+        local last = flip and ((word >> 12) & 0xF) or (word & 0xF)
+        if last == 15 then return w + 3 end
+        w = w + 4
     end
     return w
 end
