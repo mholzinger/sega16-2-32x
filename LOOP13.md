@@ -430,6 +430,16 @@ headroom but dreq_inc high → the DRAIN stalls under BQ_CHUNK's bus
 traffic → throttle the quanta while a drain is armed, or retime the
 push. Also ask how the bottom band FEELS vs the 492522e8 pass.
 
+Mike's play verdict on 896f7654 (same session as bs9): "Bottom
+cleaned up! only issues currently blit, jitter and speed." So the
+bottom-band mess TRACKS the dreq_incomplete number (0.4% here, 11.5%
+on 492522e8) — supporting the R2-starves-first hypothesis — and his
+blit/jitter/speed complaints are the un-fixed 37% skips from the
+missing BQCHUNK flag. The 1426c951 round-trip now answers the whole
+question at once: if BQ_CHUNK's return brings back both the skips fix
+AND the bottom mess + high dreq_inc, the interaction is proven and
+the fix is throttling BQ_CHUNK's quanta while a DREQ drain is armed.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
