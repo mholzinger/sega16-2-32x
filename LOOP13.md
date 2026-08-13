@@ -444,6 +444,42 @@ question at once: if BQ_CHUNK's return brings back both the skips fix
 AND the bottom mess + high dreq_inc, the interaction is proven and
 the fix is throttling BQ_CHUNK's quanta while a DREQ drain is armed.
 
+## 2026-08-13 — MD-HARDWARE-SPRITE CENSUS (Mike's "lean into the
+## hardware" question, measured against the arcade oracle)
+
+New instruments: `tools/sprite_census.lua` (MAME arcade altbeast, live
+object-RAM walk + ragged strip widths from the :sprites region) +
+`tools/sprite_census.py`. Strip-walk trap worth keeping: the row end
+marker is a word whose LAST-WALKED nibble is 0xF — mid-word F nibbles
+are ordinary skipped pixels, and flipped sprites (d2 bit 8) walk
+backward low-nibble-first. An any-F-ends-row reading collapses every
+flipped sprite to ~1px (first census run was garbage this way).
+
+Attract census, 540 samples (title + stage-1 demo + loop):
+
+    records/frame        mean 4.7, max 18 (whole actors)
+    unzoomed             86.2%   zoomed 13.8%   shadow 0% (attract)
+    MD-equiv sprites     mean 7.4, max 26  vs 80/frame  — comfortable
+    worst line MD-equiv  18     vs 20/line   — NO headroom
+    worst line px        450    vs 320 fetch — OVER on 10% of samples
+    sprite colour sets   max 8/frame
+    priority             94.6% pp2, 5.4% pp3, zero pp0/pp1
+
+Read: MD hardware sprites CANNOT replace the SH-2 sprite pass —
+the 13.8% zoom residue keeps the compose alive regardless, the
+per-line ceilings are at/over capacity already in attract (gameplay
+is heavier), and 8 sprite colour sets would eat all four MD palettes
+that the pivot's 21→8 tile merge already spends. Cross-chip ordering
+is also structurally wrong: a zoomed (SH-2/FB) actor overlapping an
+unzoomed (MD) actor always wins the pixel, whatever the S16 list
+order said. One genuine gift in the data: pp0/pp1 sprites are ~absent
+in attract, so sprite-vs-PLANE priority alone would be expressible.
+Verdict: partial offload at best, palette-grind-class cost, cadence
+win capped by the residue — ARCHITECTURE §4's "sprites, categorically"
+now has load numbers behind it, not just format arguments. PARKED
+behind jitter and audio; revisit only with a gameplay .inp census if
+the cadence lanes (window/ack, §14) run dry.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
