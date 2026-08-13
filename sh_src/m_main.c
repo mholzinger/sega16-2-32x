@@ -3338,8 +3338,17 @@ RAMCODE void m_main(void)
                         SPR_SNAP[i + 7] = SPR_LAND[82 + i + 7];
                     }
                 }
-                if (landed < plen)
+                if (landed < plen) {
                     DIAG[17]++;              /* incomplete DREQ frames */
+                    /* residue split — see DRQR above */
+                    unsigned res = (SH2_DMA_CHCR0 & 2)
+                                 ? 0 : (SH2_DMA_TCR0 & 0xFFFFFFu);
+                    if (res == 256)          DRQR[0]++;
+                    else if (res >= 1 && res <= 8) DRQR[1]++;
+                    else                     DRQR[2]++;
+                    DRQR[3] = res;
+                    if (res > DRQR[4]) DRQR[4] = res;
+                }
                 /* (re-arm moved to dreq_rearm(), called EVERY window —
                  * see below: the DMA drains one transfer then stops, so a
                  * k1-only re-arm left k0/k2 pushes to fill the FIFO and
