@@ -432,7 +432,25 @@ aborts > 0 / headroom near 0 → the push is being cut (shrink/retime;
 lead c coalesce; budget raise is LOOP 7b-scarred); aborts 0 with
 headroom but dreq_inc high → the DRAIN stalls under BQ_CHUNK's bus
 traffic → throttle the quanta while a drain is armed, or retime the
-push. Also ask how the bottom band FEELS vs the 492522e8 pass.
+push.
+
+RESULT (bs9, BUILD 1426c951, Mike): skips 0.4% (BQ_CHUNK restored,
+jitter fix back), dreq_incomplete 8.8%, push_aborts TRUE 0, spin
+headroom 2597/2600, deferrals 0 -> 44. **THE 68K IS EXONERATED**: it
+delivered all 596 words with the whole budget spare, every push. The
+failure is on the master side of the FIFO, correlated with BQ_CHUNK.
+Two mechanisms left; the TCR residue at k1 separates them: ==256
+exactly = the MD pushed the 340-word TEXT layout while the master
+expected SPRITE (wskip/prev_k PHASE DESYNC — note deferrals moved
+0 -> 44, and gate-rejects/idle-skips are the known desync seams);
+1..8 = tail-drain starvation (DMAC0 never serviced the last FIFO
+groups). DRQR probe added at 0x26028F80 ([0] ==256, [1] 1..8,
+[2] other, [3] last, [4] max — first free scratch after PSRC;
+audited the whole DIAG block first: slots 0-63 ALL claimed, no fifth
+collision). state_health.py prints the split + a one-line verdict.
+MAME smoke: boots, cadence 3.00, dreq_inc 0.
+NEXT ROUND-TRIP: BUILD 489ea253, same recipe (jitter moment,
+savestate, state_health). Also ask how the bottom band FEELS vs the 492522e8 pass.
 
 Mike's play verdict on 896f7654 (same session as bs9): "Bottom
 cleaned up! only issues currently blit, jitter and speed." So the
