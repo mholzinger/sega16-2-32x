@@ -274,6 +274,35 @@ fingerprint, sbuf/md_dbg_nt/md_tag extraction, packet decode at
 _md_pkt — symbol moves per build, always re-read rom/s16.lst) plus
 tools/tickdump.lua are the reusable instruments.
 
+## 2026-08-13 (part 2) — THE TICKS' TRUE ROOT: demand-bias starves
+## the cell cursor; frozen cells + slot reassignment = foreign art
+
+Mike's Zeus-cutscene screenshot showed the dashes OVERLAYING plane B
+art — so not the plane-B margin (part 1 fixed a real but separate
+artifact: the grey right-edge strip). Synced bs9 audit: sbuf clean at
+the dash rows; plane A VRAM = a UNIFORM stale row (0x212B repeated,
+tile fully transparent) while the md_dbg_nt mirror held varied fresh
+cells. Plane A cells were GENERATIONS stale.
+
+The freezer is the DEMAND BIAS: "when claims are outstanding, ship a
+tile batch; the chunk cursor does not advance." Under sustained claim
+pressure (cutscene bursts, heavy gameplay) md_pending never drains
+below MD_BATCH, so cell chunks stop shipping ENTIRELY while eviction
+keeps reassigning slots under the frozen cells — foreign art, i.e.
+the dashes, anywhere on screen. (Yesterday's clean 1120/1120 plane-B
+audit was a cursor-advancing moment; the eviction-race suspect was
+the right mechanism with the wrong enabler.)
+
+FIX: md_forced starvation bound — at most 2 consecutive demand-bias
+tile batches, then a cell chunk ships regardless; reset on every cell
+chunk. Worst-case cell staleness is now bounded (~24 windows for a
+full 8-chunk replot at 1:2 mix) instead of INDEFINITE.
+
+Verification recipe for the next state: mirror-vs-VRAM cell diff
+(md_dbg_nt at 0x0603D200 vs decoded VRAM planes) must stay near zero
+in cutscenes; the dashes must be gone from a nonzero-fine-scroll
+scene.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
