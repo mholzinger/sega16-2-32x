@@ -25,6 +25,10 @@ eyehold 3.37, `_end 0x06018d38`, stamped `normal`.
 
 ## THE JOB, in order
 
+(2026-08-13, Mike: colour fidelity is now LAST — "we're so close that
+really it will be a matter of taste." Working order: jitter/DREQ →
+audio → speed/window-ack → artifacts → §11 palette.)
+
 1. **§11 offline palette precompute** (the standing lane; pure python
    until the last step). Walk the captured palette states (28 ares
    states + attract + Mike's stage-2 captures), emit per-scene
