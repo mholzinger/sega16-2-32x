@@ -353,6 +353,25 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xC00008;            // V at entry
 			if (live[0] == 0xB6B6) {
 				(*(volatile uint16_t*)0xFFB0E2)++;        // diag: packets consumed
+#ifdef MD_VERIFY
+				// SEQ FRESHNESS (LOOP 13 tick-row): sc[7] was always
+				// written by the SH-2 and never read here — the "tear
+				// detector" was never wired. The packet lives in the
+				// PER-BANK FB dead block; a stale-bank read re-applies
+				// the previous generation's CELLS after the plane
+				// scrolled = mixed-generation nametable = the sky
+				// speckle band (ares VRAM decode vs MAME, 2026-08-12).
+				// This counts how often it actually happens.
+				{
+					volatile uint16_t *vw = (volatile uint16_t*)0xFFA000;
+					static uint16_t last_seq;
+					uint16_t sq = sc[7];
+					vw[9]++;
+					if (sq == last_seq)          vw[7]++;   // stale re-read
+					else if (sq != (uint16_t)(last_seq + 1)) vw[8]++;
+					last_seq = sq;
+				}
+#endif
 				if (sc[1] == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
 				else            (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
 				(*(volatile uint16_t*)0xFFB0E8) = sc[5];  // last count
