@@ -857,6 +857,17 @@ window_done: ;
 			*ctrl = 0;
 			(*(volatile uint16_t*)0xFFB0E0)++;   // DREQ push aborts
 		}
+		// SPIN HEADROOM WATERMARK (LOOP 13 part 4): min polls LEFT of the
+		// 2600 budget across completed pushes. Discriminates the 11.5%
+		// dreq_incomplete in one round-trip: watermark near 0 = the budget
+		// is marginal and the aborts are real (raise budget / shrink cost);
+		// watermark comfortable + aborts 0 = the 68K pushed everything and
+		// the DMA drain itself is the problem.
+		if (ok) {
+			volatile uint16_t *wm = (volatile uint16_t*)0xFFA022;
+			if (spin < *wm)
+				*wm = spin;
+		}
 	}
 
 #ifdef TAIL_PROBE
