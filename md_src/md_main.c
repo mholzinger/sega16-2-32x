@@ -461,62 +461,40 @@ void shim_vblank(void) {
 				// 2 in the SECOND control word (address bits 16:14), so
 				// it wrote VSRAM 0 -- PLANE A's vscroll -- all along.
 				// (A/B'd during the MAME blackout hunt: not the cause.)
-				*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
-				*vdp_data_port = sc[4];
-				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
-				*vdp_data_port = sc[6];       // VSRAM 0 = plane A (FG) vy
+				// STAGED (LOOP 13 part 3): NO VDP port writes here — the
+				// beam is drawing these very rows (measured V=0x0B..0x35).
+				// Everything appends to the 0xFFA400 buffer, flushed by
+				// md_stage_play inside the NEXT vblank via DMA. The V
+				// stage probes now time the staging copy, not port writes.
+				{
+				volatile uint16_t *stg = (volatile uint16_t*)0xFFA400;
+				volatile uint16_t *sp = stg + 8;
+				uint16_t nrec = 0;
+				stg[1] = sc[4];               // VSRAM 2 = plane B vy
+				stg[2] = sc[6];               // VSRAM 0 = plane A vy
+				stg[5] = 1;
 				(*(volatile uint16_t*)0xFFB0B2) =
-					*(volatile uint16_t*)0xC00008;    // V after scroll
+					*(volatile uint16_t*)0xC00008;    // V after scroll stage
 				if (typ == 0) {
 					// each entry: slot word + 32 bytes of 4bpp planar
 					volatile uint16_t *e = sc + 8;
 					for (uint16_t i = 0; i < cnt; i++, e += 17) {
 						uint32_t va = (uint32_t)e[0] * 32u;
 						if (va + 32u > 0xB000u) continue;
-						*vdp_ctrl_wide = ((0x4000u | (va & 0x3FFFu)) << 16)
-						               | ((va >> 14) & 3u);
+						sp[0] = 16;
+						sp[1] = (uint16_t)(0x4000u | (va & 0x3FFFu));
+						sp[2] = (uint16_t)(((va >> 14) & 3u) | 0x80u);
 						for (uint16_t k = 1; k < 17; k++)
-							*vdp_data_port = e[k];
-#ifdef MD_VERIFY
-						// LOOP 13 tick-row probe: read the entry back
-						// (VRAM read = code 0) and compare. A lost or
-						// misplaced data-port write shifts the pattern
-						// tail = the sky dash. Tally at 0xFFB0EA;
-						// first bad triple parked in free WRAM 0xFFA000
-						// for state extraction. NEVER SHIP: doubles the
-						// receiver span.
-						{
-							volatile uint16_t *vw =
-							    (volatile uint16_t*)0xFFA000;
-							*vdp_ctrl_wide = ((va & 0x3FFFu) << 16)
-							               | ((va >> 14) & 3u);
-							for (uint16_t k = 1; k < 17; k++) {
-								uint16_t rb = *vdp_data_port;
-								if (rb != e[k]) {
-									vw[6]++;
-									if (!vw[0]) {
-										vw[0] = 1;          // valid
-										vw[1] = (uint16_t)va;
-										vw[2] = k;          // word idx
-										vw[3] = e[k];       // wrote
-										vw[4] = rb;         // read
-										vw[5] = *(volatile uint16_t*)
-										        0xC00008;   // HV now
-									}
-								}
-							}
-						}
-#endif
+							sp[2 + k] = e[k];
+						sp += 19; nrec++;
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008; // V after tiles
 				} else {
 					// name-table cells, 40 per screen row, 64-cell stride.
 					// sc[2] bit 15 = PLANE A (FG cat-0) chunk; else B.
-					// ROW-MAJOR: the old per-cell `% 40` + `/ 40` were
-					// two 68K DIVU's per cell (~280 cycles) — measured
-					// 129 SCANLINES per chunk, the whole receiver span.
-					// One division per packet now.
+					// ROW-MAJOR: one division per packet (the per-cell
+					// DIVU pair measured 129 scanlines per chunk).
 					volatile uint16_t *e = sc + 8;
 					uint16_t cell0 = sc[2] & 0x7FFF;
 					uint32_t nbase = (sc[2] & 0x8000u) ? 0xC000u : 0xE000u;
@@ -524,36 +502,37 @@ void shim_vblank(void) {
 					uint16_t i = 0;
 					for (uint16_t r = 0; r < 7 && i < cnt; r++, row++) {
 						uint32_t a = nbase + (uint32_t)row * 128u;
-						*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
-						               | ((a >> 14) & 3u);
-						for (uint16_t c = 0; c < 40 && i < cnt; c++, i++)
-							*vdp_data_port = e[i];
+						uint16_t wl = (uint16_t)((cnt - i) < 40u
+						                         ? (cnt - i) : 40u);
+						sp[0] = wl;
+						sp[1] = (uint16_t)(0x4000u | (a & 0x3FFFu));
+						sp[2] = (uint16_t)(((a >> 14) & 3u) | 0x80u);
+						for (uint16_t c = 0; c < wl; c++, i++)
+							sp[3 + c] = e[i];
+						sp += 3 + wl; nrec++;
 					}
 					// full-screen hscroll from the chunk's first strip
 					// word: plane A word at 0xFC00, plane B at 0xFC02
-					// (cell-mode per-strip stays parked)
-					{
-						uint32_t ha = (sc[2] & 0x8000u) ? 0x3C00u : 0x3C02u;
-						*vdp_ctrl_wide = ((uint32_t)(0x4000u | ha) << 16) | 3u;
-						*vdp_data_port = e[280];
-					}
+					stg[3] = (uint16_t)((sc[2] & 0x8000u) ? 0x3C00u
+					                                      : 0x3C02u);
+					stg[4] = e[280];
 					(*(volatile uint16_t*)0xFFB0B6) =
 						*(volatile uint16_t*)0xC00008; // V after cells
 				}
 				// live BG palette: 48 words at fixed offset 688 -> CRAM
 				// lines 1-3 (entries 16-63); line 0 stays the grey/text
 				// ramp. Rides every packet so fades track at window
-				// cadence.
-				// live BG palette: 48 words at fixed offset 688 -> CRAM
-				// lines 1-3 (entries 16-63); line 0 stays the grey/text
-				// ramp. Rides every packet so fades track at window
-				// cadence. (A/B'd during the MAME blackout hunt: not
-				// the cause.)
-				*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16);
+				// cadence (one window later now, uniformly).
+				sp[0] = 48;
+				sp[1] = (uint16_t)(0xC000u | 32u);
+				sp[2] = 0x80u;
 				for (uint16_t i = 0; i < 48; i++)
-					*vdp_data_port = sc[688 + i];
+					sp[3 + i] = sc[688 + i];
+				nrec++;
+				stg[0] = nrec;
+				}
 				(*(volatile uint16_t*)0xFFB0B8) =
-					*(volatile uint16_t*)0xC00008;    // V after CRAM
+					*(volatile uint16_t*)0xC00008;    // V after CRAM stage
 				live[0] = 0;                // consumed (the FB packet)
 packet_done: ;
 			}
