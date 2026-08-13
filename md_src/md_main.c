@@ -118,6 +118,13 @@ static void md_bg_palette(void) {
 	 * through the data port; bisecting whether the per-strip table is
 	 * the breakage. */
 	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B00;
+#ifdef MD_VERIFY
+	/* verifier state: WRAM powers up random; the first-bad latch and
+	 * mismatch tally must start clean. */
+	for (uint16_t i = 0; i < 6; i++)
+		((volatile uint16_t*)0xFFA000)[i] = 0;
+	(*(volatile uint16_t*)0xFFB0EA) = 0;
+#endif
 }
 
 __attribute__((section(".data")))
