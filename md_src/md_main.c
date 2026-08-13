@@ -389,6 +389,12 @@ void shim_vblank(void) {
 		*(volatile uint16_t*)0xA15102 = 0x0001;
 #endif
 		*mars_comm0 = wcmd;
+#ifdef MD_BG
+		/* STAGED PLAYBACK — after the post (the SH-2's V-gate reads
+		 * the heartbeat written above; the DMA halts only the 68K),
+		 * inside vblank. See md_stage_play. */
+		md_stage_play();
+#endif
 		spin2 = 8000000UL;
 		while (*mars_comm0 && --spin2)
 			*mars_comm12 = (uint16_t)(0xD000
