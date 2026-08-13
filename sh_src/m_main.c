@@ -1840,6 +1840,19 @@ RAMCODE static void copy_pages(int p0, int p1)
  * same way. [0] FM=0 writes that landed, [1] attempts, [2] the FM=1
  * positive control, [3] FM=0 reads that returned the right value. */
 #define FMT ((volatile uint32_t *)0x26028F00)
+/* LOOP 13 part 4 — DREQ RESIDUE SPLIT (0x28F80, clear of PSRC[0..5]
+ * at 0x28F50). When a k1 window finds the sprite push incomplete
+ * (DIAG[17]), the TCR0 residue names the mechanism:
+ *   [0] residue == 256 exactly  -> PHASE DESYNC: the MD pushed the
+ *       340-word TEXT layout while this side expected SPRITE/596 —
+ *       a wskip/prev_k disagreement, not a transport failure;
+ *   [1] residue 1..8            -> tail-drain stall (the FIFO's last
+ *       groups never got DMAC service before this window);
+ *   [2] any other residue       -> mid-stream stall / wild TCR;
+ *   [3] last residue  [4] max residue.
+ * The 68K is already exonerated (push_aborts true-0, spin headroom
+ * 2597/2600 on ares bs9 BUILD 1426c951) — this decides the rest. */
+#define DRQR ((volatile uint32_t *)0x26028F80)
 /* LOOP 9 WAIT_SPLIT_PROBE. k=0 and k=2 hold at 27.3-27.6 lines of span
  * across a light session and a heavy one; k=1 went 31.2 -> 35.2 and owns
  * 100% of the past-vblank restores in both. Four extra rows is a FIXED
