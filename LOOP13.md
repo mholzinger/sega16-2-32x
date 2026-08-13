@@ -303,6 +303,33 @@ Verification recipe for the next state: mirror-vs-VRAM cell diff
 in cutscenes; the dashes must be gone from a nonzero-fine-scroll
 scene.
 
+## 2026-08-13 (part 3) — TICKS PROVEN: the receiver races the beam
+
+The md_forced bound landed (cells 0/1120 stale on BOTH planes,
+mirror == VRAM) and the ticks SURVIVED. The receiver's own V-stage
+probes (0xFFB0B0-B6) close it: V entry 0x0B, after tiles 0x0D,
+after cells 0x35 — the receiver writes VRAM across ACTIVE DISPLAY
+LINES 11-53, the exact dash band. The VDP fetches nametable rows
+while the receiver rewrites them; the transient wrong fetch recurs
+every window = static-looking dashes. No RAM audit can see it, by
+construction. MAME doesn't model the fetch granularity; ares does.
+Parts 1-2 fixed real co-artifacts (margin garbage, frozen-cursor
+foreign art) but the surviving ticks are THIS.
+
+Root shared with handoff item 2: the window/ack span pushes the
+receiver's VDP writes deep past vblank into the beam.
+
+FIX DIRECTION (chosen): stage the packet's VDP traffic to the free
+WRAM block during the window tail, play it back at the TOP of the
+next vint INSIDE vblank via 68K->VDP DMA (~205 words/line: ~1050
+words ≈ 6 lines — fits; a move.w loop at ~30 words/line ≈ 35 lines
+would NOT leave margin). Benefits item 2 directly: the VDP writes
+leave the window entirely. Alternatives considered: nametable
+double-buffering (0x8000/0xA000 are free 0x2000-aligned bases —
+tiles only occupy 1024 slots to 0x8000) costs either doubled writes
+or flip-lag bookkeeping; window-shrink alone cannot get 42 lines of
+writes inside a 38-line vblank.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
