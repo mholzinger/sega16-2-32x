@@ -330,6 +330,43 @@ tiles only occupy 1024 slots to 0x8000) costs either doubled writes
 or flip-lag bookkeeping; window-shrink alone cannot get 42 lines of
 writes inside a 38-line vblank.
 
+## 2026-08-13 (part 4) — TICKS DEAD (staged DMA playback shipped);
+## open regression: bottom band + dreq_incomplete 11.5%
+
+**THE TICKS ARE GONE — Mike-confirmed on ares, BUILD 492522e8.** The
+fix is the staged VDP playback (part 3's design): the receiver
+appends every VRAM/CRAM write to WRAM 0xFFA400 (records: wlen,
+ctrl_hi, ctrl_lo, data; header holds vsB/vsA/hscroll), and
+md_stage_play flushes it at the top of the next vint, AFTER the
+window post, inside vblank, via 68K->VDP DMA. Zero VDP writes
+outside vblank. MAME-verified transport-correct before handoff.
+Side effect, measured: worst handler total 230 -> 194 lines,
+window/ack 185 -> 151 (the port writes left the tail) — real
+progress on handoff item 2. Blit pipeline unchanged-healthy
+(skips 1.0%, cadence 3.00, restores 0 past vblank).
+All MD plane data lands one window late, uniformly (~17ms at 20Hz
+ship cadence; not visible so far).
+
+**OPEN REGRESSION, next session's first job:** the bottom third of
+the screen is a mess (Mike: "hopeful this means progress") and
+dreq_incomplete jumped 2.9% -> 11.5% of cycles with push_aborts
+unchanged. bs9 audits: sbuf holds plausible band content, plane B
+cells 0/400 stale in the bottom rows, plane decode structurally
+fine — so the mess is AGAIN not in any RAM snapshot, or is a
+freeze-instant compose artifact (sbuf showed sprites as sparse
+1px dashes — possibly mid-compose). Working hypothesis: the DMA
+halt (~6-12 lines between window post and ack-spin) shifted the
+tail's phase enough to cut DREQ pushes short (the push has
+deadline machinery around md_main.c:590-855 with its own history
+of 5x incomplete swings — read it before touching). The bottom
+band (R2, composed last from the freshest DREQ data) starves
+first, which matches the mess's location.
+  Leads, in order: (a) read the push deadline condition and where
+  the 11.5% aborts trip; (b) consider moving md_stage_play AFTER
+  the DREQ push (still vblank? push is in the tail, so likely not
+  — measure); (c) shrink playback cost: coalesce consecutive-slot
+  tile records into one DMA run.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
