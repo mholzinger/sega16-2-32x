@@ -70,11 +70,24 @@ def main():
     # shared 0xFFB0F2 with windows-completed, so EVERY abort figure read
     # from an older state is meaningless — treat pre-7b aborts as unknown,
     # not as zero.
+    # LOOP 13 part 4: the MD_BG packet receive stamped its last-magic
+    # diag over 0xFFB0E0 every accepted window, so on every MD_BG build
+    # before the relocation push_aborts read ~0xB6B6 garbage — the
+    # "aborts unchanged" alongside the 11.5% dreq_incomplete regression
+    # was a clobbered counter, not a clean 68K. The magic now lives at
+    # 0xFFA020; 0xFFA022 is the spin-headroom watermark (min polls LEFT
+    # of the 2600 budget across completed pushes; 0xFFFF = no push yet).
+    # Watermark near 0 => budget-marginal, aborts are the mechanism.
     inc = rd32(0x28000 + 17 * 4)
     aborts = rdmd16(0xB0E0)
+    wmark = rdmd16(0xA022)
+    if aborts in (0xB6B6, 0xB6B7) and wmark == 0:
+        print("  !! push_aborts reads packet-magic garbage — pre-relocation "
+              "MD_BG build; treat aborts as UNKNOWN")
     print(f"deferrals={rd32(0x28000 + 13 * 4)} "
           f"dreq_incomplete={inc} ({100.0 * inc / max(cycles, 1):.1f}% "
-          f"of cycles) push_aborts={aborts}")
+          f"of cycles) push_aborts={aborts} "
+          f"spin_headroom_min={'n/a' if wmark == 0xFFFF else wmark}/2600")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
     # LOOP 7c — THE STROBE. The flip/restore pair blanks the screen over
     # bank Y, which nothing composes into; it is only safe while the pair
