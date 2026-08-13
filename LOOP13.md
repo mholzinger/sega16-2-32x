@@ -190,6 +190,60 @@ Their structural rule: the CPU with a deadline must be idle-spinning
 — timing-critical work lives on the CPU with a spare vblank,
 results parked in latched mailboxes. Full report in NOTES.md.
 
+## 2026-08-13 — TICK-ROW HUNT: transport exonerated, suspect is slot
+## eviction vs the cell cursor
+
+The sky tick-row (fixed dashes, ares-only) is MD-PLANE content.
+Elimination chain, each step instrumented:
+
+  1. sbuf zero on those rows; blit_half writes all 320 bytes of every
+     row through the plain FB (m_main.c, cached-alias write loop) —
+     zeros land, the 32X ships clean. NOT the 32X.
+  2. MAME MD VRAM (emu.item dumps, tools/tickdump.lua, decoded
+     offline) — clean plane, no ticks. NOT the shared logic, on
+     MAME's timing.
+  3. ares VRAM decoded STRAIGHT FROM THE SAVESTATE (plane fingerprint
+     search: 80 cell bytes + 48 zero bytes at 128-byte stride finds
+     the nametables; VRAM base = fingerprint - 0xC000; bs9's was
+     0xD6366, little-endian words) — speckle band across the sky
+     nametable rows + right-edge garbage strip. THE CORRUPTION IS
+     REAL AND MD-SIDE ON ARES.
+  4. MDVERIFY v2 (make MDVERIFY=1, all state in WRAM 0xFFA000):
+     2688 packets, write-mismatches 0, STALE bank re-reads 0, seq
+     jumps 0. Transport FULLY clean: VDP writes land, packets always
+     fresh. (v1 tallied at 0xFFB0EA — collides with the palette-scan
+     span max; v1's zero was void. Slot-collision trap, second time
+     in two days: AUDIT THE SLOT before trusting any probe.)
+  5. copy_pages/TILEMAP_U exonerated by the shipping build: the 32X
+     composed layers render from the same copy and shipping skies
+     are clean on ares.
+
+REMAINING SUSPECT, with a supporting number: the pivot's code->slot
+cell map. DIAG[50] (evictions — the value that corrupted SPAN v1's
+readout) was 2046 in one bs9 run, against 1024 slots and ~1120
+on-screen codes. Eviction reassigns a slot while the 280-cell chunk
+cursor takes ~5 windows to re-walk the plane; cells touched since
+their last rebuild show FOREIGN ART. Static sky tiles are the
+least-re-stamped = the natural victims. MAME's demo scene showed no
+speckle — possibly lighter code pressure at that anchor; unproven.
+
+NEXT, in order:
+  a. Measure the race directly: at packet build, count cells whose
+     slot's md_tag no longer matches the code the cell was built for
+     (a generation stamp per slot, checked per chunk). If >0 on
+     ares, that IS the speckle; fix = invalidate/requeue cells on
+     eviction, or reserve headroom (evict only into slots whose
+     cells were rebuilt this pass).
+  b. If (a) reads zero: MAME tickdump at a HIGH-pressure scene
+     (Mike's play position, not the demo anchor) to test whether
+     MAME speckles under the same code load.
+  Sea also: right-edge strip may be the same mechanism at the
+  chunk-cursor wrap column; check after (a).
+
+The seq-freshness counters and the read-back verifier stay in
+MDVERIFY; tools/tickdump.lua + the savestate VRAM decode recipe are
+the era's new instruments.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
