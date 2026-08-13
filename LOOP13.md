@@ -244,6 +244,35 @@ The seq-freshness counters and the read-back verifier stay in
 MDVERIFY; tools/tickdump.lua + the savestate VRAM decode recipe are
 the era's new instruments.
 
+## 2026-08-13 (later) — TICK-ROW SOLVED: it was never corruption
+
+The dashes were VRAM BOOT GARBAGE in the nametable margin the packet
+never writes, revealed 1-7px at a time by FINE SCROLL. The packet
+ships 40 cols x 28 rows; fine hscroll (-(vx0&7)) reveals cols 40+
+(the grey right-edge strip), fine vscroll reveals rows 28-31 at the
+top (the sky tick-row). Proof: ares native capture (Tools > Capture
+Screenshot — 1280x224 at exact 4x, origin (65,11), pixel-perfect
+where window captures alias) at a zero-fine-scroll moment had ZERO
+dash pixels on smooth sky rows; the tick scenes were nonzero-fine-
+scroll scenes. bs1/bs9 offline audits had already cleared every RAM
+layer (cells == md_dbg_nt mirror 1120/1120, patterns, transport).
+
+FIX (md_bg_palette): margin cells -> reserved blank slot at init.
+Slivers now show backdrop instead of garbage; arcade shows real art
+there, so the 41-col/29-row packet is the fidelity follow-up.
+
+The eviction-race suspect (yesterday's item a) is RETIRED as the
+tick cause but the pressure is real: ~1120 codes vs 1024 slots,
+DIAG[50] evictions high — keep it in mind for foreign-art reports.
+DIAG[39] doubles as SPAN_PROBE's V=E3 bin AND the hot-evict counter
+— THIRD slot collision this era; never read either while both
+machineries are compiled in.
+
+The savestate offline-audit kit this hunt built (VRAM base by plane
+fingerprint, sbuf/md_dbg_nt/md_tag extraction, packet decode at
+_md_pkt — symbol moves per build, always re-read rom/s16.lst) plus
+tools/tickdump.lua are the reusable instruments.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
