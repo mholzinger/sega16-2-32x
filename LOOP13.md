@@ -244,7 +244,8 @@ The seq-freshness counters and the read-back verifier stay in
 MDVERIFY; tools/tickdump.lua + the savestate VRAM decode recipe are
 the era's new instruments.
 
-## 2026-08-13 (later) — TICK-ROW SOLVED: it was never corruption
+## 2026-08-13 (later) — TICK-ROW, part 1: the margin garbage
+## (PARTIAL — see part 2 below; the ticks-over-art survived this fix)
 
 The dashes were VRAM BOOT GARBAGE in the nametable margin the packet
 never writes, revealed 1-7px at a time by FINE SCROLL. The packet
