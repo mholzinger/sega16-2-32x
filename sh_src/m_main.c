@@ -3340,9 +3340,10 @@ RAMCODE void m_main(void)
                 }
                 if (landed < plen) {
                     DIAG[17]++;              /* incomplete DREQ frames */
-                    /* residue split — see DRQR above */
-                    unsigned res = (SH2_DMA_CHCR0 & 2)
-                                 ? 0 : (SH2_DMA_TCR0 & 0xFFFFFFu);
+                    /* residue split — see DRQR above. plen - landed,
+                     * NOT a TCR0 re-read: the DMA may drain words
+                     * between the two reads and skew the split. */
+                    unsigned res = plen - landed;
                     if (res == 256)          DRQR[0]++;
                     else if (res >= 1 && res <= 8) DRQR[1]++;
                     else                     DRQR[2]++;
