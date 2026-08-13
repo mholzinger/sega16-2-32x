@@ -137,6 +137,10 @@ static void md_bg_palette(void) {
 	 * through the data port; bisecting whether the per-strip table is
 	 * the breakage. */
 	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B00;
+	/* staged-playback buffer starts empty (WRAM powers up random) */
+	((volatile uint16_t*)0xFFA400)[0] = 0;
+	((volatile uint16_t*)0xFFA400)[3] = 0;
+	((volatile uint16_t*)0xFFA400)[5] = 0;
 #ifdef MD_VERIFY
 	/* verifier state, ALL of it in the free WRAM block (first cut put
 	 * the tally at 0xFFB0EA, which the palette-scan span max already
