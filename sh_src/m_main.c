@@ -2365,6 +2365,7 @@ RAMCODE void m_main(void)
 #endif
 #ifdef FM_TEST
     FMT[0] = FMT[1] = FMT[2] = FMT[3] = 0;
+    DRQR[0] = DRQR[1] = DRQR[2] = DRQR[3] = DRQR[4] = 0;
 #endif
 #ifdef WAIT_SPLIT_PROBE
     for (int i = 0; i < 9; i++)
