@@ -2110,3 +2110,52 @@ REMAINING known-visual, queued:
   true fix = whole-frame ship (double sbuf) someday.
 - Title-screen purple field / unfinished background: allocator drift
   (suspect the eviction age-gate) — allocator polish pass next.
+
+## OPENLARA/32X REFERENCE MINING (2026-08-12, derive-don't-copy)
+
+Source: ~/src/32x-builder/srcref/OpenLara/src/platform/32x (+ its
+src-md 68K side and Chilly Willy crt0). Techniques observed, with
+their locations, for the toolkit's benefit. No code copied.
+
+**Structural rule that names our disease: the CPU with a deadline
+must be idle-spinning.** Their timing-critical pad strobing (nop-
+delay-laden, multi-phase) runs on the 68K inside ITS vblank and
+parks results in COMM8/COMM10 (src-md/crt0.s:370-433); the SH-2
+reads a latched value whenever convenient (main.cpp:68-85). Their
+slave idle-spins on COMM4 = zero pickup latency. Their master never
+has to be anywhere at a specific time: the FBCTL flip is a REQUEST
+the VDP latches at the next vblank (pageFlip, main.cpp:104-108),
+confirmed by an FS spin placed BEHIND game logic where the wait is
+free (pageWait, main.cpp:99-102, order at 230-238). A missed frame
+becomes a bigger clamped logic step, never a skipped blit
+(game.h:272-274).
+
+**Measured negatives (theirs) that match our traps:**
+- Cache-as-RAM (0xC0000000, 2-way mode) was SLOWER than cached
+  SDRAM for their rasterizer — commits fedd2ed/380d137, the
+  ON_CHIP_RENDER path is #defined out.
+- VDP autofill for the frame clear was REMOVED (git 380d137): the
+  FEN busy-spin blocked the master; replaced by a plain memset on
+  the otherwise-idle slave. Hardware acceleration lost to latency —
+  the DREQ trap in another suit.
+
+**Other hard-won items:**
+- 68K idle loop relocated to work RAM "to avoid bus contention for
+  the rom with the SH2s" (src-md/main.c:123-127); RV raised only in
+  interrupt-masked 4-instruction brackets (src-md/crt0.s:230-257).
+- All rasterizers write the OVERWRITE aperture (0x24020200): zero
+  bytes dropped by hardware = free colour-0 transparency, same
+  write latency, two CPUs share the FB safely (asm/rasterize.i:38).
+- Hot SH-2 code force-linked into SDRAM by labelling it .data
+  (asm/common.i:4-5); level data read from cart in place.
+- Cache discipline: "purge before you sleep" — CacheClear as the
+  LAST act of each shared-data phase on both CPUs (render.cpp:721).
+- Interrupt errata: every IRQ handler re-arms the FRT compare-match
+  output ("bump ints", crt0.s:516+ and ~11 sites — the FRT is NOT a
+  free timer on this platform), and an interrupt-clear write needs
+  >=8 cycles before RTE or it re-fires (the four-nop pads,
+  crt0.s:572-577) — a too-short handler re-firing looks like jitter.
+- Master enables VINT only (handler = one counter increment); slave
+  runs with everything masked and polls at task boundaries. Neither
+  CPU masks interrupts to protect compute — the handler is simply
+  too small to matter.
