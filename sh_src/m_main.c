@@ -2419,6 +2419,9 @@ RAMCODE void m_main(void)
     uint8_t  md_phase = 0;               /* 0 = tiles, 1-4 = name table */
     uint16_t md_pending = 0;             /* claimed slots not yet shipped */
     uint8_t  mdp_chk = 0;                /* palette drift check cursor */
+    uint8_t  md_forced = 0;              /* consecutive demand-bias tile
+                                          * batches; see the starvation
+                                          * bound at the packet builder */
 #endif
     for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
