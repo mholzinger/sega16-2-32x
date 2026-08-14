@@ -498,6 +498,56 @@ now has load numbers behind it, not just format arguments. PARKED
 behind jitter and audio; revisit only with a gameplay .inp census if
 the cadence lanes (window/ack, §14) run dry.
 
+## 2026-08-14 — THE PURPLE BAND IS A DEAD PLANE A ON ARES; DMA
+## playback is the suspect, receive/staging exonerated from the state
+
+Mike's stage-1 screenshot (purple repeating band over the walkway) +
+bs9 (BUILD 489ea253) audited offline. Residue split from that state:
+dreq_incomplete 0.9% this session, ALL tail-drain (residue 2 words,
+never 256) — phase desync is DEAD as a theory; the transport was
+near-clean while the band was on screen, so the band is NOT the DREQ.
+
+The real finding, savestate-proven chain:
+  1. VRAM base by mirror-anchor search (the old 80+48-zero fingerprint
+     false-positives; anchor on a KNOWN mirror row instead — new
+     recipe). bs9 base 0xD4366.
+  2. NT A (0xC000): ALL 1120 window cells ZERO. NT B (0xE000): equals
+     the FG (plane A) mirror half EXACTLY, 0/1120 — cross-checked
+     against both halves; half identity proven by MD_BLANK_SLOT(1023)
+     saturation. FG content is IN THE WRONG PLANE; BG content absent.
+  3. MAME, same rom (tickdump): NT A written 1120/1120, NT B holds BG,
+     margins 0x03FF as init wrote them. ARES-ONLY.
+  4. The dead stage buffer in the state (records survive playback —
+     only the header clears): a cell chunk staged ctrl 0x4C00_0083 →
+     NT A rows 24-27, correctly tagged, correctly addressed, blank
+     cells. So bit15 ARRIVES, the receive maps it right, the records
+     are right — and those exact rows read zero in VRAM with their
+     content 0x2000 higher. THE CORRUPTION IS AT DMA PLAYBACK ON ARES.
+  On screen this is exactly Mike's artifact: plane A renders cell 0 =
+  slot-0 art repeated, palette 0 — visible only where FG cat-0 should
+  be opaque and cat-1 doesn't cover it: the walkway band. Likely the
+  whole purple-blocks/drips family.
+
+The screen's "correct" BG with NT B holding FG cells is unexplained —
+possibly last-writer phase luck at freeze (both streams landing at
+0xE000), possibly A13 redirection; do not build on either guess yet.
+
+Probe added (md_stage_play, MD_BG builds): count cell records played
+per plane (0xFFA024 NT A / 0xFFA026 NT B) + PORT READBACK of the
+first NT-A cell just DMA'd (0xFFA028 last, 0xFFA02A mismatches).
+MAME positive-verify: naplay==nbplay rates, readback real, rbmm=0.
+On ares: rbmm≈naplay = the DMA'd NT-A write is lost/redirected at the
+VDP (then A/B port-writes vs DMA for cells is the next build);
+rbmm=0 = VRAM takes it and something wipes it later.
+
+TRAP (new): BUILD hash is COMMIT-derived — a plain and an MDBGALL rom
+of the same commit share a hash. The hash confirms the commit, not
+the flags; confirm the flavor by look (pivot vs shipping renderer).
+
+NEXT ROUND-TRIP: BUILD 18c12af3 MDBGALL+BQCHUNK, play into stage 1
+until the purple band shows, savestate, state_health.py — read the
+"cell records played" line.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
