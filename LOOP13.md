@@ -677,10 +677,19 @@ DEAD, purple band DEAD).
 
 ## REMAINING, Mike's list 2026-08-14: slowness, tearing, missing HUD
 
-  1. **Missing HUD/text info** (health bars, level text, score) —
-     functional loss, triage FIRST: likely the text-layer path under
-     the pivot (MD_BG_TEXT lane or the 32X text compose). Check
-     MAME-side first (local iteration if it reproduces).
+  1. **Missing HUD/text info — ROOT FOUND + FIXED (BUILD fd689c0c).**
+     MD_BG_TEXT was an unimplemented intent: it compiled out BOTH 32X
+     compose_text sites ("text to the MD as well") but no MD-side text
+     path was ever written — every MDBGALL build since the flag landed
+     had NO text layer at all. MAME play_32x confirmed (gameplay with
+     zero HUD), and dropping the flag from the MDBGALL bundle restores
+     score/lives/CREDIT on MAME (hud/ch_2400). Makefile: MDBGALL no
+     longer bundles MD_BG_TEXT; `make MDBGTEXT=1` re-adds it for
+     whoever implements the MD side (Window plane at 0xB000 — regs
+     already point there; W-position regs are zero-size; priority vs
+     FG cat-0 needs design). Compose 2.18ms on MAME with text back;
+     _end 0x06018f68 probe. Also fixed play_32x.lua's dead hard-coded
+     snapshot path (PLAY_SNAP env now).
   2. **Slowness** — window/ack item 2 + the 20Hz cadence; the 151-line
      window/ack span is the lever (OpenLara idle-spin rule, staged
      work already removed the port writes).
