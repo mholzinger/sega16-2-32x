@@ -636,12 +636,22 @@ DEAD, purple band DEAD).
    MD_BATCH=40/window can't absorb a scene cut's hundreds of new
    codes. Fix lane: burst/priority upload at scene cuts (game is
    fading anyway). MAME-reproducible.
-2. **Bottom unset-tile garbage** (513/514, and the earlier Zeus shot):
-   the purple glyph band at the walkway rows — STATIC across
-   consecutive frames = PLANE content, not sprites. The overpush
-   killed the stale-sprite-list mechanism; this is a separate root in
-   the same rows (demo attract shows it, so MAME-reproducible —
-   audit walkway cells+slots at the demo anchor).
+2. **Bottom unset-tile garbage (513/514 + the Zeus shot) — ROOT
+   FOUND, MAME-reproducible, palette-pack class.** The walkway rows
+   are uniform cells (slot 0x128/0x12E/0x12F, palette line 3) whose
+   pattern is a CORRECT solid-pen-3 filler — and MD line 3 pen 3 =
+   0xE08 SATURATED PURPLE on both MAME and ares (td_f2400/4800/6000
+   dumps). Not unset tiles, not sprites, not transport: the walkway's
+   S16 colour set is packed onto a line/pen holding another set's
+   purple. Same family as the mint tint (§11), but it reads as
+   corruption, not taste — and it may be a targeted allocator bug
+   (exclusive-pen violation) rather than precompute-lane work.
+   NEXT here: trace which S16 set owns the walkway filler colour,
+   what the arcade value is (parity captures have the reference), and
+   why the pen pack put purple there. Iterates entirely on MAME.
+   (Earlier gameplay-bs9 read the same cells as 0x2128 with line-1
+   greys — the DEMO scene's pack differs; both scenes' packs need the
+   trace.)
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
