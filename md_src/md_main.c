@@ -1230,6 +1230,11 @@ void main(void) {
 	*(volatile uint16_t*)0xFFA026 = 0;      // cell records played -> NT B
 	*(volatile uint16_t*)0xFFA028 = 0;      // last NT-A readback word
 	*(volatile uint16_t*)0xFFA02A = 0;      // NT-A readback mismatches
+	*(volatile uint16_t*)0xFFA02C = 0;      // wipe-recheck: prev addr (invalid)
+	*(volatile uint16_t*)0xFFA02E = 0;      //   prev value
+	*(volatile uint16_t*)0xFFA030 = 0;      //   recheck mismatches
+	*(volatile uint16_t*)0xFFA032 = 0;      //   last recheck value
+	*(volatile uint16_t*)0xFFA034 = 0;      //   rechecks performed
 #ifdef IDLE_TOKEN
 	*(volatile uint16_t*)0xFFB0EE = 0;   // LOOP 11a: idle-token skips
 #endif
