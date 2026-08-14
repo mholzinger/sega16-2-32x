@@ -97,6 +97,13 @@ def main():
     #          service before the next window
     #   other  mid-stream stall / wild TCR
     d256, dtail, doth, dlast, dmax = (rd32(0x28F80 + i * 4) for i in range(5))
+    # shared-pen drift split (builds >= 450c1ad0): small drifts stay
+    # tolerated; catastrophic (d^2 >= 18) re-claims the set so wrong
+    # colours (the purple walkway) self-heal within a rotation.
+    dsm, dca = rd32(0x28F94), rd32(0x28F98)
+    if dsm or dca:
+        print(f"  pen drift: small(tolerated)={dsm} "
+              f"catastrophic(re-claimed)={dca}")
     if inc and not (d256 or dtail or doth):
         print("  (dreq residue split: no data — pre-DRQR build)")
     elif d256 or dtail or doth:
