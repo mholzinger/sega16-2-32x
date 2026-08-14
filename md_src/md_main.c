@@ -921,6 +921,23 @@ window_done: ;
 			volatile uint16_t *wm = (volatile uint16_t*)0xFFA022;
 			if (spin < *wm)
 				*wm = spin;
+			// TAIL-DRAIN WAIT (LOOP 13): ares measured residues of 1-4
+			// words on 8.5% of cycles — the DMAC never serviced the last
+			// FIFO group before the next k1 window read TCR0, and landed
+			// 592-593 misses the sprite-snapshot gate (>=594), so the
+			// compose keeps a STALE LIST: the purple bottom-band = last
+			// frame's zombie sprites at stale positions. The 68K has the
+			// whole spin budget spare (headroom 2596/2600), so wait here,
+			// bounded, for the FIFO to drain before rte: poll the DREQ
+			// control FULL bit's neighbour (bit 6, EMPTY on hardware) OR
+			// simply give the DMAC a bounded settle. If the residue
+			// counter (DRQR[1]) does not collapse on the next ares pass,
+			// bit 6 is not EMPTY on this silicon — re-derive from srcref.
+			{
+				uint16_t g2 = 400;
+				while (!(*(volatile int8_t*)0xA15107 & 0x40) && --g2) ;
+				(*(volatile uint16_t*)0xFFA036) = g2;  // settle polls left
+			}
 		}
 	}
 
