@@ -260,6 +260,10 @@ static void md_stage_play(void) {
 						*(volatile uint16_t*)0xFFA028 = rb;
 						if (rb != p[3])
 							(*(volatile uint16_t*)0xFFA02A)++;
+						/* arm the next-vint wipe recheck */
+						*(volatile uint16_t*)0xFFA02C =
+							(uint16_t)((p[1] & 0x3FFF) | 0x8000);
+						*(volatile uint16_t*)0xFFA02E = p[3];
 					}
 				}
 			}
