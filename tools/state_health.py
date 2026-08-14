@@ -199,6 +199,16 @@ def main():
         print(f"cell records played: NT A={naplay} NT B={nbplay} "
               f"NT-A readback last=0x{rdmd16(0xA028):04X} "
               f"mismatches={rdmd16(0xA02A)}")
+    # wipe recheck: the SAME cell re-read at the NEXT vint's top, a
+    # frame of game execution later. immediate-readback ok + recheck
+    # mismatch = plane A is zeroed MID-FRAME by a non-shim writer.
+    rcn = rdmd16(0xA034)
+    if rcn:
+        rcm = rdmd16(0xA030)
+        print(f"NT-A wipe recheck: {rcm}/{rcn} mismatches "
+              f"({100.0 * rcm / rcn:.1f}%) last=0x{rdmd16(0xA032):04X}"
+              + (" -> MID-FRAME WIPE CONFIRMED" if rcm else
+                 " -> survives the frame"))
     pkts = rdmd16(0xA012)
     if pkts:
         mm, stale, jumps = rdmd16(0xA00C), rdmd16(0xA00E), rdmd16(0xA010)
