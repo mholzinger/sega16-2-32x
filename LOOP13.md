@@ -705,6 +705,15 @@ milestone call: *"once we solve for screen tearing, we might have an
 almost playable beta. we still have sprite rendering issues to solve
 for."*
 
+bs9 counters (fd689c0c): transport PERFECT — dreq_incomplete 0.0%,
+push aborts 0, NT readback/recheck 0 mismatches, pen drift 1121
+small / 1 catastrophic (the bound is nearly idle in normal play —
+exactly the intended shape). Cadence 3.05, skips 2.9%, rejects 1.6%.
+**Text compose cost, measured: window/ack 151 -> 166 (+15 lines)** —
+the restored 32X text pass; the MD-Window text design item buys this
+back when someone builds it. Strobe 1.4% (worst 130 lines) is the
+one red counter left = the tearing/flip lane's own territory.
+
 Standing order from that: **TEARING IS NOW LANE 1** — the 3-band
 pipeline showing adjacent bands from successive frames (corpus frame
 514: sprite top/bottom halves from different cycles). The fix wants
