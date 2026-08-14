@@ -2995,40 +2995,95 @@ RAMCODE void m_main(void)
                  * answered its question — every skip is on the LATE side,
                  * never wrapped, never a missing heartbeat — and .ramtext
                  * is the scarce resource now.) */
-                if (skip)
-                    DIAG[7]++;               /* master-side silent skips */
+                if (skip && k == 2)
+                    DIAG[7]++;               /* missed flips = dropped frames
+                                              * (blits no longer skip at all:
+                                              * they write the hidden bank) */
 #ifdef SPAN_PROBE
                 if (skip)
                     DIAG[42 + m_stage]++;    /* v3: miss by master stage */
 #endif
             }
+            /* PRESENTATION 2.0 — LIVE DIRTY WORD. The MD publishes the
+             * game's tile dirty bitmap (0xFFB9FE) on COMM10 at every vint
+             * entry, before the post (COMM10 is free post-boot: the pad
+             * publish it was named for was never built, and only the boot
+             * handshake touches COMM8). The DREQ word-80 copy of the same
+             * bitmap arrives one window LATE (pushed post-ack, applied
+             * next window) — under double-buffering that skew would make
+             * the k2 pre-flip copy_pages read gap-written pages from the
+             * WRONG bank and corrupt TILEMAP_U truth. The live word is
+             * exact: the game is stalled from vint entry to ack, so bits
+             * read here are complete through this window. Word 80 stays
+             * applied too (redundant OR; at worst an identity copy). */
+            {
+                uint16_t ld = MARS_SYS_COMM10 & 0x1FFF;
+                pg_pending |= ld;
+                cycle_dirt |= ld;
+            }
+            /* PRESENTATION 2.0 (LOOP 13): true double-buffer. Blits write
+             * the hidden DRAW bank at ALL three windows — no per-band
+             * flip/restore pair, no vblank bound on any blit (the 84-line
+             * ares no-fit is moot), and the blank-decoy trick plus the
+             * whole restore-past-vblank black-frame class are extinct.
+             * ONE FS flip per cycle, at k2, inside the V∈[DF,E4] gate
+             * that already protected the pairs (LOOP 7c: ares defers an
+             * out-of-vblank FBCTL write a whole frame). The gate now
+             * gates ONLY the flip: a missed gate drops one frame — the
+             * display keeps the last WHOLE frame — never a band, never a
+             * black frame. */
             uint16_t scmd = (uint16_t)(0x3000 | (k << 4) | (par << 8)
-                                       | bank1 | (skip ? 8 : 0));
-            uint16_t fs_x = MARS_VDP_FBCTL & MARS_VDP_FS;
+                                       | bank1);
             uint32_t guard;
-            /* LOOP 7d: w0 no longer idles. THREE-vblank ship — the same
-             * 224 rows per cycle in thirds, so each flip/restore pair
-             * carries ~2/3 the rows and has a chance of fitting inside
-             * vblank's 38 lines. See blit_half's call site in
-             * slave_window_k for the measurement that forced this. */
-            int wblit = !skip;               /* three-vblank ship */
-            /* Cleared below if the FS restore is still pending when we stop
-             * waiting for it. Everything pre-ack is SDRAM-only EXCEPT
-             * copy_pages, which reads the game's staging THROUGH the FB and
-             * so needs the bank actually selected. */
-            int fs_settled = 1;
             SYNC[2] = 0;
             SYNC[3] = 0;
             SYNC[5] = 0;                      /* (iter4) preempt-blit echo */
             tp = frt();
-            if (wblit) {
-                guard = 2000000;
-                MARS_VDP_FBCTL = fs_x ^ 1;   /* -> display bank Y */
-                while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_x ^ 1) && --guard) ;
+            if (k == 2 && !skip) {
+                /* THE flip — before this window's blit: R0 of the NEXT
+                 * frame must land in the NEW draw bank (frame N completed
+                 * at k1). Order is load-bearing:
+                 *  1. truth: drain ALL pending dirty pages while the FB
+                 *     window still maps the bank the game wrote;
+                 *  2. flip (bounded latch spin);
+                 *  3. restore every page dirtied since the last flip into
+                 *     the new draw bank from TILEMAP_U, BEFORE the ack —
+                 *     the game writes staging only post-ack, so a restore
+                 *     clobbering a fresh game write is impossible by
+                 *     construction, and its read-backs (collision tst.w,
+                 *     the page-1 scratch pair) never see a stale bank. */
+                cycle_dirt |= pg_pending;
+                while (pg_pending) {
+                    int pg = 0;
+                    while (!(pg_pending & (1u << pg)))
+                        pg++;
+                    copy_pages(pg, pg + 1);
+                    pg_pending &= (uint16_t)~(1u << pg);
+                }
+                uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
+                MARS_VDP_FBCTL = fs_o ^ 1;
+                /* In-gate = in-vblank: latches in 1 tick on MAME and
+                 * immediately on ares (deferral is an OUT-of-vblank
+                 * property, LOOP 7j). Bounded anyway: a failed latch
+                 * aborts this cycle's flip — no restore, cycle_dirt keeps
+                 * accumulating, publish lands in the still-mapped bank —
+                 * instead of publishing into an unknown one. DIAG[31]
+                 * counts; nonzero means the latch model is wrong. */
+                {
+                    uint16_t w0 = frt();
+                    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1)
+                           && (uint16_t)(frt() - w0) < 200) ;
+                }
+                if ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1)) {
+                    DIAG[31]++;              /* flip failed to latch */
+                } else {
+                    restore_pages(cycle_dirt);
+                    cycle_dirt = 0;
+                }
             }
-            diag_add(6, tp);
+            diag_add(6, tp);                 /* slot 6: flip+truth+restore */
             tp = frt();
-            if (wblit) {
+            {
                 /* (iter4) PREEMPT MAILBOX: hand the slave its blit half
                  * WITHOUT first draining its concurrent compose. The slave
                  * services SYNC[4] between compose strips, so pickup
