@@ -2427,6 +2427,15 @@ RAMCODE void m_main(void)
                                           * copy (write-observer ring:
                                           * bitmap rides the DREQ tail;
                                           * boot = all pages once) */
+    uint16_t cycle_dirt = 0x1FFF;        /* PRESENTATION 2.0: pages the game
+                                          * wrote into the CURRENT draw bank
+                                          * since the last flip — exactly the
+                                          * pages STALE in the other bank.
+                                          * Restored there at the k2 flip
+                                          * from TILEMAP_U truth. Boot =
+                                          * all pages once, so the ex-decoy
+                                          * bank gets a full staging copy at
+                                          * the first flip. */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
 #ifdef MD_BG
