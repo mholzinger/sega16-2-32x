@@ -646,12 +646,28 @@ DEAD, purple band DEAD).
    purple. Same family as the mint tint (§11), but it reads as
    corruption, not taste — and it may be a targeted allocator bug
    (exclusive-pen violation) rather than precompute-lane work.
-   NEXT here: trace which S16 set owns the walkway filler colour,
-   what the arcade value is (parity captures have the reference), and
-   why the pen pack put purple there. Iterates entirely on MAME.
-   (Earlier gameplay-bs9 read the same cells as 0x2128 with line-1
-   greys — the DEMO scene's pack differs; both scenes' packs need the
-   trace.)
+   TRACED + FIX SHIPPED (BUILD 7504a11e). Pen trace at f6000: MD line
+   3 pen 3 shared by sets 74-80's S16 pixel 0 (BG colour 0 is OPAQUE,
+   jts16_prio.v:87 — "empty" filler tiles render it), owner set 80.
+   Exact-match sharing at claim time merges pixel-0 colours that
+   momentarily coincide (fades); when the owner's live colour later
+   diverges (purple 0x1C4), every co-owner's filler paints purple —
+   ffc8d27's KNOWN COST at its far end. Caveat learned: f6000 is the
+   SPLASH (all five sets' live colour-0 = 0x0D07 purple-blue is
+   arcade-correct THERE); the parity demo anchor showed ours ~= arc
+   in the bottom band on MAME except a 136px #0000F7 patch — same
+   family, small; ares' claim ordering amplifies it into the band.
+   FIX: thresholded drift tolerance (m_main.c drift loop): d^2 < 18
+   tolerated as before (lockstep fades); d^2 >= 18 = CATASTROPHIC ->
+   mdp_free_set, set re-assigns against LIVE colours at next
+   note_tile, tiles re-ship within a rotation. Measured on MAME
+   attract: catastrophic ~25/min, frees 143/100s, no churn storm,
+   parity IDENTICAL to overpush baseline (statics 2.44/3.37 exact,
+   dynamics unchanged to the pixel). DRQR[5]/[6] = small/catastrophic
+   counters; state_health prints them ("pen drift" line).
+   VERIFY on ares: the walkway band should now self-heal within ~a
+   rotation of any divergence; watch for NEW churn artifacts (the old
+   free+reassign disease) in stage 2's statue floor.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
