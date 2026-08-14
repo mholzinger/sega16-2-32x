@@ -1817,6 +1817,40 @@ RAMCODE static void copy_pages(int p0, int p1)
     }
 }
 
+/* PRESENTATION 2.0 — the reverse of copy_pages: replay TILEMAP_U (the
+ * SDRAM truth copy_pages maintains) into the game's staging pages of the
+ * bank the FB window CURRENTLY maps. Called once per k2 flip, on the NEW
+ * draw bank, for exactly the pages the game dirtied since the previous
+ * flip (cycle_dirt) — the game's own read-backs (collision tst.w against
+ * live tilemap pages, the 1KB scratch save/restore in page 1) then see
+ * the same bytes in either bank. Writes ride the cached write-through
+ * alias like blit_half (stores use the 4-deep write buffer; write-only,
+ * no stale-read hazard). MUST run before the window's ack: the game only
+ * writes staging post-ack, so restore-then-ack makes clobbering a fresh
+ * game write impossible by construction. Steady state is zero pages
+ * (1988 preload design); transition bursts (~10 ares lines/page) land
+ * while the game is fading. */
+RAMCODE static void restore_pages(uint16_t bm)
+{
+    for (int pg = 0; pg < 13; pg++) {
+        if (!(bm & (1u << pg)))
+            continue;
+        volatile uint32_t *src = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
+        volatile uint32_t *dst = (volatile uint32_t *)
+            (0x04012000u + (unsigned)pg * 0x1000u);
+        for (int i = 0; i < 0x400; i += 8) {
+            dst[i + 0] = src[i + 0];
+            dst[i + 1] = src[i + 1];
+            dst[i + 2] = src[i + 2];
+            dst[i + 3] = src[i + 3];
+            dst[i + 4] = src[i + 4];
+            dst[i + 5] = src[i + 5];
+            dst[i + 6] = src[i + 6];
+            dst[i + 7] = src[i + 7];
+        }
+    }
+}
+
 /* LOOP 9 ROWSTALE_PROBE — is a dirty-row blit worth building?
  * MEASURED ON ARES: the blit costs 13.6 SH-2 cycles per longword, of
  * which only 2.7 is instruction issue (that is the whole MAME figure).
