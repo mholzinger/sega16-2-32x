@@ -186,6 +186,19 @@ def main():
     # also writes — unreliable; do not trust v1 numbers).
     # [0] valid [1] addr [2] word [3] wrote [4] read [5] HV
     # [6] mismatches [7] stale packets [8] seq jumps [9] packets
+    # LOOP 13 plane-A hunt (builds >= DRQR+1): cell records played per
+    # plane by md_stage_play, and the port readback of the first NT-A
+    # cell written each playback. On the bs9 that opened this hunt,
+    # NT A was virgin-zero while its content sat in NT B; receive and
+    # staging were exonerated from the dead stage buffer. If naplay is
+    # high with rb_mm ~= naplay -> the DMA'd write to NT A is lost or
+    # redirected at the VDP on ares. If rb_mm == 0 -> VRAM takes the
+    # write and something wipes it later.
+    naplay, nbplay = rdmd16(0xA024), rdmd16(0xA026)
+    if naplay or nbplay:
+        print(f"cell records played: NT A={naplay} NT B={nbplay} "
+              f"NT-A readback last=0x{rdmd16(0xA028):04X} "
+              f"mismatches={rdmd16(0xA02A)}")
     pkts = rdmd16(0xA012)
     if pkts:
         mm, stale, jumps = rdmd16(0xA00C), rdmd16(0xA00E), rdmd16(0xA010)
