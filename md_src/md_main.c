@@ -202,6 +202,27 @@ static void md_stage_play(void) {
 			*vdp_data_port = stg[4];
 		}
 	}
+	/* PLANE-A WIPE RECHECK (LOOP 13): the immediate post-DMA readback
+	 * matched 37k times on ares while NT A audited all-zero at every
+	 * freeze — so either something zeroes the plane MID-FRAME (game
+	 * running), or the immediate readback is fooled. Re-read the
+	 * PREVIOUS playback's first NT-A cell now, at vint top, before
+	 * this vint's records touch the VDP: a mismatch HERE brackets the
+	 * wipe to the frame in between.
+	 *   0xFFA02C prev addr(A13:0)|0x8000 valid   0xFFA02E prev value
+	 *   0xFFA030 recheck mismatches  0xFFA032 last recheck value
+	 *   0xFFA034 rechecks performed */
+	{
+		uint16_t pa = *(volatile uint16_t*)0xFFA02C;
+		if (pa & 0x8000) {
+			*vdp_ctrl_wide = ((uint32_t)(pa & 0x3FFF) << 16) | 3u;
+			uint16_t rc = *vdp_data_port;
+			*(volatile uint16_t*)0xFFA032 = rc;
+			(*(volatile uint16_t*)0xFFA034)++;
+			if (rc != *(volatile uint16_t*)0xFFA02E)
+				(*(volatile uint16_t*)0xFFA030)++;
+		}
+	}
 	{
 		const uint16_t *p = (const uint16_t*)(stg + 8);
 		uint16_t did_rb = 0;
