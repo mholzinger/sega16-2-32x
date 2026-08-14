@@ -548,6 +548,22 @@ NEXT ROUND-TRIP: BUILD 18c12af3 MDBGALL+BQCHUNK, play into stage 1
 until the purple band shows, savestate, state_health.py — read the
 "cell records played" line.
 
+RESULT (bs9, 18c12af3, deep stage-1 session): NT A=37072 records
+played, immediate readback mismatches ZERO — and the state STILL
+audits NT A all-zero with NT B == FG mirror. So the DMA'd write is
+present immediately after playback and gone by freeze: either a
+MID-FRAME WIPE by a non-shim writer (ares-only), or the immediate
+readback is fooled (FIFO residue — though 37k matches over varied
+rows argues real). Probe extended: WIPE RECHECK — re-read the same
+cell at the NEXT vint's top, one game-frame later (0xFFA02C-34;
+state_health prints "NT-A wipe recheck"). MAME verify: ~1/vint,
+varied cells, 0 mismatches. Also noted from that hot session (14-line
+margin, strobe 1.0%, deferrals 762): heavy-load window/ack is item-2
+territory, parked.
+NEXT: BUILD 124cec9c, same recipe. Recheck mismatches > 0 = mid-frame
+wipe confirmed -> hunt the writer (game-side rebased access? vint
+chain?); == 0 = the readback lies on ares -> port-write A/B build.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
