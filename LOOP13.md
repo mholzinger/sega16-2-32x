@@ -816,6 +816,16 @@ Design (from the existing machinery, verify each against source):
      road re-plans.
 
 Order: measure (b) → thunk ring (a) → apply (c) → flip (d) → gates.
+
+Measurement (b) attempt #1, FAILED HONESTLY: a MAME write tap on the
+68K tile-staging window (0x852000-0x861FFF) read ZERO across boot +
+title load + gameplay — impossible (the logo art loads through that
+path), so the tap silently doesn't fire on the 32X handler region:
+the LOOP12 §8/§17 fake-space trap, write-tap edition. DO NOT size
+the ring from that zero. Honest counter: regenerate the tile thunks
+(patch_game.py) with a count-word increment (0xFFA03C) per call —
+probe patch, one MAME run, real per-vint write rate. That is the
+write-log-ring lane's first concrete step next session.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
