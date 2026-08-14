@@ -768,6 +768,54 @@ savestate, state_health.py — the "blit cost" line is the fork:
 FITS → implement Fix A (blit windows collapse to one; flip pair
 count drops 3x, which also attacks the 1.4% strobe); no fit →
 start the write-log ring (Fix B road).
+
+**VERDICT (Mike's bs9, cab53985): 34.6 ticks/row → full-frame 84.2
+lines. NO FIT — Fix A is dead, banded thirds are ares-FORCED, and
+the calibration updates: the ares:MAME blit ratio is 5x (34.6/6.9),
+not the 3x rule of thumb. Use 5x for FB-write-bound estimates.**
+
+## THE WRITE-LOG RING → DOUBLE-BUFFER ROAD (Fix B, next session's
+## kickoff — design settled, unbuilt)
+
+Goal chain: (1) the game's tile writes stop needing the FB → (2) no
+FB state is bank-sensitive → (3) FS becomes a真 double-buffer: blits
+land in the hidden bank across 3 windows, ONE flip per cycle at k2
+inside vblank → band tear DEAD, flip pairs drop 3x (strobe shrinks),
+copy_pages leaves the pre-ack window (slowness win).
+
+Design (from the existing machinery, verify each against source):
+  a. THUNKS (patch_game.py tile sites): today they OR a dirty bit and
+     let the displaced write land through the FB remap. Change: append
+     (addr16, value16) to a RING in MD RAM (0xFFA040..0xFFA3FF free —
+     ~480 bytes = 120 entries; the stage buffer starts 0xFFA400) and
+     still OR the dirty bit as the overflow fallback signal. 68K cost
+     per game tile write: ~20 cycles (move.w x2 + ptr bump) — tile
+     writes are TRANSITION-heavy, steady state ~zero (1988 preload
+     design), so the ring is cheap when it matters.
+  b. TRANSPORT: the ring rides the DREQ TEXT packet's pad/rotation
+     space or a 4th layout — size it from a MEASUREMENT first: count
+     game tile writes/vint in demo + stage 1 + a transition (a lua
+     tap on the thunk sites, or a 68K counter in the thunk). If p95
+     fits ~64 words/vint the TEXT packet carries it; bursts overflow
+     to the dirty-bit path.
+  c. SH-2 APPLY: ring entries → TILEMAP_U words directly (SDRAM,
+     post-ack), replacing copy_pages' FB read for logged writes.
+     Overflow/dirty-bit pages still do one FB copy — but under
+     double-buffering that read must target the bank the game wrote:
+     defer the overflow copy to the window BEFORE the flip (the bank
+     the game staged into is still the draw bank there).
+  d. FLIP DISCIPLINE: FS steady across k0/k1 (blits into hidden bank,
+     display shows last frame), ONE flip at k2 in the vblank gate.
+     The MD's FS-home wait (0xFFB0F6) moves to expect the flip only
+     at k2. Packet publish at k2 must land in the NEW draw bank
+     (publish after flip) or both banks (1.5KB, ~0.2 lines).
+     The blank-decoy trick RETIRES (both banks hold real frames);
+     restore-past-vblank stops being a black-frame class entirely.
+  e. GATES: parity statics must hold; the ares play pass judges tear.
+     Measure b BEFORE building c/d — if the write rate is wild, the
+     road re-plans.
+
+Order: measure (b) → thunk ring (a) → apply (c) → flip (d) → gates.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
