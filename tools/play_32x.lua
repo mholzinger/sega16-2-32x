@@ -35,7 +35,7 @@ emu.register_frame_done(function()
     if frames == 1300 or frames == 1400 or frames == 1500 or frames == 1600 or frames == 1700 or frames == 2400 or frames == 3600 or frames == 5400 then
         for tag, screen in pairs(manager.machine.screens) do
             screen:snapshot(string.format('%s/ch_%04d.png',
-                '/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/821761a1-b62c-404f-824a-6f25c3a157b9/scratchpad', frames))
+                os.getenv('PLAY_SNAP') or '/tmp', frames))
             break
         end
     end
