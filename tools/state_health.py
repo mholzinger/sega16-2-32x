@@ -188,6 +188,20 @@ def main():
                if real_total >= 262 else f"{262 - real_total} lines margin")
     print(f"worst handler: total={real_total} window/ack={win} tail={tail} "
           f"(frame=262) dominated by {dom} -> {verdict}")
+    # LOOP 13 tearing lane (WINSPLIT builds): blit-only cost from
+    # DIAG[23]/[25] (master ticks / master rows). Master blits 112 of
+    # 224 rows per cycle (slave takes the rest concurrently), so
+    # full-frame concurrent blit = 112 * ticks-per-row. MAME measured
+    # 6.9 ticks/row = ~17 lines; vblank is 38 lines (1748 ticks). If
+    # the ares figure fits with margin, the one-vblank full-frame blit
+    # kills the band tear WITHOUT double-buffering.
+    b23, b25 = rd32(0x28000 + 23 * 4), rd32(0x28000 + 25 * 4)
+    if b25:
+        tpr = b23 / b25
+        full = 112 * tpr
+        print(f"blit cost: {tpr:.1f} ticks/row -> full-frame "
+              f"{full / 46.0:.1f} lines (vblank=38) -> "
+              f"{'FITS: one-vblank blit is GO' if full < 1600 else 'no fit: write-log-ring road'}")
     # LOOP 13 MDVERIFY probe (make MDVERIFY=1): all state in WRAM
     # 0xFFA000 (v1 tallied at 0xFFB0EA, which the palette-scan span max
     # also writes — unreliable; do not trust v1 numbers).
