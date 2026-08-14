@@ -141,11 +141,21 @@ ifdef MDBGFG0
 SHCCFLAGS += -DMD_BG -DMD_BG_FG0
 MDCCFLAGS += -DMD_BG
 endif
-# MDBGALL=1 = BG + FG cat-0 + TEXT off the 32X. Upper bound on what the
-# pivot can free: only sprites and FG cat-1 remain.
+# MDBGALL=1 = BG + FG cat-0 off the 32X; TEXT stays on the 32X.
+# MD_BG_TEXT was an UNIMPLEMENTED INTENT (2026-08-14): it compiled out
+# both 32X compose_text sites with a "text to the MD as well" comment,
+# but no MD-side text path was ever built — every MDBGALL build since
+# simply had NO text layer (Mike's "missing HUD": score, health, round
+# text all gone, MAME-confirmed with play_32x). Text costs ~96 patterns
+# on the 32X compose; moving it to the MD Window plane is a real design
+# item (W-position regs, priority vs FG cat-0), tracked in LOOP13.
+# MDBGTEXT=1 re-adds the flag for whoever implements the MD side.
 ifdef MDBGALL
-SHCCFLAGS += -DMD_BG -DMD_BG_FG0 -DMD_BG_TEXT
+SHCCFLAGS += -DMD_BG -DMD_BG_FG0
 MDCCFLAGS += -DMD_BG
+endif
+ifdef MDBGTEXT
+SHCCFLAGS += -DMD_BG_TEXT
 endif
 # MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
 # every row a second time, so it inflates the blit -- diagnosis only.
