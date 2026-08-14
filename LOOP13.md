@@ -696,6 +696,32 @@ DEAD, purple band DEAD).
   3. **Tearing** — 3-band pipeline composing adjacent bands from
      successive frames; wants the single-frame-flip / cadence
      architecture pass. Biggest lever, biggest risk; last.
+
+## 2026-08-14 (evening) — HUD CONFIRMED ON ARES; TEARING IS THE
+## BETA GATE
+
+Mike's pass on BUILD fd689c0c (bs9 saved): **"hud is back!"** and the
+milestone call: *"once we solve for screen tearing, we might have an
+almost playable beta. we still have sprite rendering issues to solve
+for."*
+
+Standing order from that: **TEARING IS NOW LANE 1** — the 3-band
+pipeline showing adjacent bands from successive frames (corpus frame
+514: sprite top/bottom halves from different cycles). The fix wants
+bands to present as ONE frame: either compose all three bands against
+one snapshot AND flip once per full frame (single-frame flip — halves
+the effective display rate per flip but kills the tear), or keep the
+banded cadence and make band boundaries frame-coherent for MOVING
+OBJECTS only (sprites are what tears visibly; the planes scroll
+slowly). Read ARCHITECTURE §2's Model A/B/C bank discipline and the
+LOOP7c strobe history BEFORE touching the flip machinery — every
+flip-timing change this era has had an ares-deferred-latch trap.
+
+Lane 2: the remaining "sprite rendering issues" (Mike's words —
+get specifics + a corpus pass next round-trip; known candidates from
+the era: pp=3 approximation [DIAG 16], shadow cap on huge actors,
+zoomed-path edge cases). Lane 3: slowness (window/ack 151). Audio
+still parked behind these by Mike's earlier ordering.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
