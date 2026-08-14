@@ -826,6 +826,54 @@ the ring from that zero. Honest counter: regenerate the tile thunks
 (patch_game.py) with a count-word increment (0xFFA03C) per call —
 probe patch, one MAME run, real per-vint write rate. That is the
 write-log-ring lane's first concrete step next session.
+
+**SUPERSEDED SAME NIGHT — the write-log ring is DEAD, and the road
+got BETTER. Read this before building anything:**
+
+patch_game.py:660-705 says the thunks fire at POINTER-LOAD sites
+(lea/immediate), not per store — the stores flow untouched into FB
+staging **because the game READS ITS STAGING BACK**: collision
+tst.w's root at lea 0x400000 (0x683C — the LIVE TILEMAP pages) and
+the 1KB scratch save/restore pair (0x1B76A/0x1B7A4, page 1, our
+0x853000). A write-log ring cannot exist at pointer-load sites, and
+naive double-buffering breaks GAME LOGIC (post-flip collision reads
+would see the pre-transition tilemap forever, steady-state writes
+being ~zero).
+
+## PRESENTATION 2.0 (tearing fix, final design — implement in a
+## fresh session, whole and gated, never half)
+
+Model: true double-buffer. Blits write the DRAW bank (hidden) at all
+three windows — **no per-band flip pair, no vblank bound on blits at
+all** (the 84-line no-fit evaporates; the blank-decoy trick and the
+restore-past-vblank black-frame class go extinct). ONE FS flip per
+cycle at k2, inside the existing V∈[DF,E2] vblank gate.
+
+The one real problem is the game's FB read-backs, solved by RESTORE:
+  - Per-bank STALE-PAGE bitmaps (16-bit each): a page dirtied this
+    cycle (thunk bitmap ∪ pg_pending) marks the OTHER bank stale.
+  - At flip: new draw bank's stale bits -> a restore queue; restore
+    pages from TILEMAP_U (SDRAM truth — copy_pages keeps it current
+    from the draw bank every window BEFORE the flip) into the new
+    draw bank, budgeted N pages/window (~1 page ≈ 10 ares lines,
+    paid from the freed blit-pair budget).
+  - Steady state: zero dirty = zero restore cost. Transition bursts:
+    the game is faded/paused; a few cycles of catch-up during black
+    is acceptable. The scratch page (1) rides the same queue.
+  - Boot: clear/duplicate BOTH banks once (the ex-decoy holds trash).
+
+MD side (md_main): the FS-home wait (0xFFB0F6) must expect fs^1
+after a k2 window (the MD knows its own wskip — compute expected FS
+from the phase it just ran). Packet publish at k2 goes AFTER the
+flip into the new draw bank (k0/k1 publish unchanged); the MD's
+0x851A00 read then always sees the bank the packet was published to.
+
+Order: m_main window-path surgery (drop flip pairs; k2 flip +
+post-flip publish) → stale-bitmap/restore queue → md_main FS-home →
+boot bank init → MAME gates (parity statics, play_32x with HUD) →
+Mike. EVERY step re-reads the LOOP7c strobe history first: ares
+defers out-of-vblank FBCTL writes, and the single k2 flip must stay
+inside the gate that already protects it.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
