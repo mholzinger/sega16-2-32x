@@ -731,6 +731,43 @@ get specifics + a corpus pass next round-trip; known candidates from
 the era: pp=3 approximation [DIAG 16], shadow cap on huge actors,
 zoomed-path edge cases). Lane 3: slowness (window/ack 151). Audio
 still parked behind these by Mike's earlier ordering.
+
+## 2026-08-14 (late) — TEARING LANE OPENED: the model, the two fixes,
+## and the measurement that decides
+
+The flip core read (m_main.c ~2960-3130): there is NO double-buffer.
+The image lives in ONE bank; the "flip pair" parks the display on a
+permanently-BLANK decoy bank during each in-vblank band blit, then
+restores. Bands of the live bank therefore become visible at three
+different vints = the tear. Compose is ALREADY frame-coherent (one
+k1 sprite harvest feeds all three band launches; regs latch at k1) —
+presentation is the entire problem.
+
+Fix A — ONE-VBLANK FULL-FRAME BLIT: blit all 3 bands inside one
+vblank every 3rd window (k0/k1 windows go composeonly/short — the
+68K stall SHRINKS). The LOOP7c-era "2.5ms > vblank" that forced
+thirds is STALE: measured today (WINSPLIT, MAME) 6.9 ticks/row →
+full-frame concurrent ≈ 17 lines ≈ 1.1ms vs vblank 38 lines. Fits
+on MAME with 2x margin; the 3x MAME→ares rule says ~51 lines (no
+fit), 2x says 34 (fits). ONE ares savestate on the WINSPLIT build
+decides — state_health now prints the verdict line ("blit cost").
+
+Fix B — true double-buffer (one FS flip per cycle): blocked by the
+game's FB tile staging (per-bank skew: the write-log ring that
+retires copy_pages' FB read must land first — the pre-ack comment
+already names it). This is the road IF the ares blit doesn't fit.
+
+TRAP note: WINSPLIT + BQCHUNK + this era's counters overflow the
+region guard (.bss 0x06019050) — the measuring rom is MDBGALL +
+WINSPLIT WITHOUT BQCHUNK (blit cost doesn't depend on BQ_CHUNK; the
+rom jitters, it's a 2-minute measuring rig, not a play build).
+BUILD cab53985, stamped WINSPLIT — never hand it over as a play rom.
+
+NEXT: Mike boots BUILD cab53985 for ~2 minutes of gameplay,
+savestate, state_health.py — the "blit cost" line is the fork:
+FITS → implement Fix A (blit windows collapse to one; flip pair
+count drops 3x, which also attacks the 1.4% strobe); no fit →
+start the write-log ring (Fix B road).
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
