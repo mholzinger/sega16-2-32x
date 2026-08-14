@@ -628,6 +628,25 @@ Mike's "not fully clean" — get the artifact list from him next pass,
 then triage against the shortlist (sky tick-row is DEAD, margin strip
 DEAD, purple band DEAD).
 
+## 2026-08-14 — NEW ARTIFACT SHORTLIST (Mike's corpus pass, BUILD
+## 51717680: "all in screen tearing")
+
+1. **Scene-cut draw-in** (frames 34/250/335): splash + logo arrive in
+   tiles over ~1s with rectangular holes — tile-upload burst latency;
+   MD_BATCH=40/window can't absorb a scene cut's hundreds of new
+   codes. Fix lane: burst/priority upload at scene cuts (game is
+   fading anyway). MAME-reproducible.
+2. **Bottom unset-tile garbage** (513/514, and the earlier Zeus shot):
+   the purple glyph band at the walkway rows — STATIC across
+   consecutive frames = PLANE content, not sprites. The overpush
+   killed the stale-sprite-list mechanism; this is a separate root in
+   the same rows (demo attract shows it, so MAME-reproducible —
+   audit walkway cells+slots at the demo anchor).
+3. **Band tearing** (514): sprite top/bottom halves from different
+   cycles at band boundaries — the 3-band 20Hz pipeline composing
+   bands from successive frames. Architecture-class (single-frame
+   flip / cadence); park behind 1-2.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
