@@ -3874,19 +3874,46 @@ RAMCODE void m_main(void)
                                 DIAG[51]++;          /* in-place recolours */
                                 continue;
                             }
-                            /* SHARED-PEN DRIFT: TOLERATED. The old
-                             * free+reassign here invalidated the whole
-                             * set's slots ~1/sec; reclaimed slots then
-                             * showed FOREIGN art under stale cells for
-                             * up to a rotation (the stage-2 statue-in-
-                             * floor mess) and the CRAM churn was the
-                             * two-state sky flip. A shared pen keeps its
-                             * owner's colour: co-owners in lockstep
-                             * (fades) still track; a diverging co-owner
-                             * shows a small colour error instead. KNOWN
-                             * COST: palette-CYCLING sets on shared pens
-                             * freeze at assign-time colours — the §11
-                             * offline precompute owns the real fix. */
+                            /* SHARED-PEN DRIFT: TOLERATED WITHIN A
+                             * DISTANCE BOUND. The old unconditional
+                             * free+reassign invalidated the whole set's
+                             * slots ~1/sec (stage-2 statue-in-floor
+                             * mess, two-state sky flip), so ffc8d27
+                             * chose tolerance — and the demo walkway
+                             * showed the cost's far end: sets 74-80's
+                             * OPAQUE BG pixel 0 (jts16_prio.v:87)
+                             * merged onto one pen at claim time whose
+                             * owner (set 80) lives at quantised PURPLE
+                             * 0x1C4 — a d^2=38 error painted across the
+                             * bottom of the screen (Mike's "unset tile
+                             * garbage", 2026-08-14). Small drifts stay
+                             * tolerated (lockstep fades, cycling); a
+                             * CATASTROPHIC diverge (d^2 >= 18, ~2+
+                             * levels on every channel) re-claims via
+                             * mdp_free_set — the set re-assigns against
+                             * its LIVE colours at the next note_tile
+                             * and its tiles re-ship within a rotation.
+                             * Rate measured on MAME attract before
+                             * enabling: DRQR[5] small / DRQR[6]
+                             * catastrophic. */
+                            {
+                                uint16_t c0 = mdp_line_c[lb + pen];
+                                int ddr = (int)(c0 & 7) - (int)(lq & 7);
+                                int ddg = (int)((c0 >> 3) & 7)
+                                        - (int)((lq >> 3) & 7);
+                                int ddb = (int)((c0 >> 6) & 7)
+                                        - (int)((lq >> 6) & 7);
+                                unsigned dd = (unsigned)(ddr * ddr
+                                            + ddg * ddg + ddb * ddb);
+                                if (dd >= 18) {
+                                    DRQR[6]++;   /* catastrophic drift */
+#ifndef DRIFT_MEASURE_ONLY
+                                    mdp_free_set(s2);
+                                    break;       /* set gone; next set */
+#endif
+                                } else
+                                    DRQR[5]++;   /* small, tolerated */
+                            }
                             DIAG[38]++;              /* tolerated drifts */
                         }
                     }
