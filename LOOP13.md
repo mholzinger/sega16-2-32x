@@ -668,6 +668,25 @@ DEAD, purple band DEAD).
    VERIFY on ares: the walkway band should now self-heal within ~a
    rotation of any divergence; watch for NEW churn artifacts (the old
    free+reassign disease) in stage 2's statue floor.
+
+   **CONFIRMED DEAD (Mike's pass, bs9 BUILD 7504a11e): the purple
+   band is cleared.** Drift split on ares: 443 small tolerated / 18
+   catastrophic re-claims — the bound fires rarely and works. That
+   state is also the healthiest yet: dreq 0.0%, window/ack 151 (67
+   lines margin), skips 1.5%, rejects 0.7%.
+
+## REMAINING, Mike's list 2026-08-14: slowness, tearing, missing HUD
+
+  1. **Missing HUD/text info** (health bars, level text, score) —
+     functional loss, triage FIRST: likely the text-layer path under
+     the pivot (MD_BG_TEXT lane or the 32X text compose). Check
+     MAME-side first (local iteration if it reproduces).
+  2. **Slowness** — window/ack item 2 + the 20Hz cadence; the 151-line
+     window/ack span is the lever (OpenLara idle-spin rule, staged
+     work already removed the port writes).
+  3. **Tearing** — 3-band pipeline composing adjacent bands from
+     successive frames; wants the single-frame-flip / cadence
+     architecture pass. Biggest lever, biggest risk; last.
 3. **Band tearing** (514): sprite top/bottom halves from different
    cycles at band boundaries — the 3-band 20Hz pipeline composing
    bands from successive frames. Architecture-class (single-frame
