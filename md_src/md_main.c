@@ -204,6 +204,7 @@ static void md_stage_play(void) {
 	}
 	{
 		const uint16_t *p = (const uint16_t*)(stg + 8);
+		uint16_t did_rb = 0;
 		for (uint16_t r = 0; r < n; r++) {
 			uint16_t wl = p[0];
 			uint32_t src = ((uint32_t)(p + 3)) >> 1;
@@ -213,6 +214,34 @@ static void md_stage_play(void) {
 			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
 			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 			*vdp_ctrl_wide = ((uint32_t)p[1] << 16) | p[2];  /* CD5 fires DMA */
+			/* LOOP 13 part 4, PLANE-A HUNT. ares bs9: FG cell records
+			 * stage correctly to NT A (0x4C00_0083 in the dead buffer)
+			 * yet NT A stays virgin-zero and the FG content appears
+			 * 0x2000 higher, in NT B — while MAME lands everything
+			 * where addressed. Split receive/staging (exonerated) from
+			 * DMA playback ON ares: count cell records played per
+			 * plane, and read back the first NT-A cell just written.
+			 *   0xFFA024 cell recs -> NT A   0xFFA026 -> NT B
+			 *   0xFFA028 last NT-A readback  0xFFA02A mismatches
+			 * Readback-zero = the VDP write itself is lost/redirected
+			 * at playback; readback-match = VRAM had it and something
+			 * later wipes it (savestate told the truth either way). */
+			if (p[2] == 0x83) {
+				if (p[1] & 0x2000)
+					(*(volatile uint16_t*)0xFFA026)++;
+				else {
+					(*(volatile uint16_t*)0xFFA024)++;
+					if (!did_rb) {
+						did_rb = 1;
+						uint32_t a = (uint32_t)(p[1] & 0x3FFF);
+						*vdp_ctrl_wide = (a << 16) | 3u;   /* VRAM read */
+						uint16_t rb = *vdp_data_port;
+						*(volatile uint16_t*)0xFFA028 = rb;
+						if (rb != p[3])
+							(*(volatile uint16_t*)0xFFA02A)++;
+					}
+				}
+			}
 			p += 3 + wl;
 		}
 	}
