@@ -43,7 +43,7 @@ emu.register_frame_done(function()
         -- decode the sprite-list snapshot (SPR_SNAP @ 0x06028400)
         local sh2s = manager.machine.devices[':sega32x:32x_master_sh2'].spaces['program']
         local f = assert(io.open(string.format(
-            '/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/821761a1-b62c-404f-824a-6f25c3a157b9/scratchpad/spr_%04d.txt', frames), 'w'))
+            (os.getenv('PLAY_SNAP') or '/tmp') .. '/spr_%04d.txt', frames), 'w'))
         for i = 0, 63 do
             local b = 0x06028400 + i * 16
             local d0 = sh2s:read_u16(b + 0)
