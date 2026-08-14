@@ -1201,6 +1201,10 @@ void main(void) {
 	                                     // windows-completed)
 	*(volatile uint16_t*)0xFFA020 = 0;      // last packet magic (relocated)
 	*(volatile uint16_t*)0xFFA022 = 0xFFFF; // push spin-headroom watermark
+	*(volatile uint16_t*)0xFFA024 = 0;      // cell records played -> NT A
+	*(volatile uint16_t*)0xFFA026 = 0;      // cell records played -> NT B
+	*(volatile uint16_t*)0xFFA028 = 0;      // last NT-A readback word
+	*(volatile uint16_t*)0xFFA02A = 0;      // NT-A readback mismatches
 #ifdef IDLE_TOKEN
 	*(volatile uint16_t*)0xFFB0EE = 0;   // LOOP 11a: idle-token skips
 #endif
