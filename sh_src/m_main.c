@@ -3417,13 +3417,14 @@ RAMCODE void m_main(void)
                      * static screens; cadence doesn't matter there);
                      * sparse dirt keeps the ~2ms fast path where
                      * cadence IS the game. */
-                    /* DEFER on an unsettled bank: copy_pages reads FB
-                     * staging, and reading it through the wrong bank would
-                     * write garbage into the tilemap shadow. Deferring is
-                     * free — pg_pending is sticky, so the pages simply go
-                     * next window. Steady state is ZERO pending anyway. */
-                    int budget = !fs_settled ? 0
-                               : (pg_pending >= 0x0FFF) ? 7 : 3;
+                    /* (The unsettled-bank defer is gone with the flip
+                     * pairs: under Presentation 2.0 the FB window maps
+                     * one bank for the whole cycle — the k2 flip happens
+                     * strictly before any k2 copy, and k1 has no flip at
+                     * all. This budgeted drain is now just the early
+                     * spread of transition bursts; the k2 pre-flip drain
+                     * is the correctness point. */
+                    int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
 #ifdef TILE_RATE
                     /* LOOP 11 step 1 — HOW OFTEN DOES THE TILEMAP CHANGE?
                      * The pivot rests on it being rare: if the game's tile
