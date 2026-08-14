@@ -3247,8 +3247,14 @@ RAMCODE void m_main(void)
             /* Shared prefix: bitmap at 80, text base at 81, in BOTH
              * layouts. The bitmap is applied every window either way — a
              * dropped one loses tile writes permanently. */
-            if (landed >= 81)
+            if (landed >= 81) {
                 pg_pending |= SPR_LAND[80];
+                cycle_dirt |= SPR_LAND[80];  /* belt for the COMM10 live
+                                              * word (provably a superset,
+                                              * but a missed stale page
+                                              * breaks game logic — cheap
+                                              * insurance) */
+            }
             if (!got_spr && landed >= 338) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
                  * multiple of 256) plus an optional palette tag —
