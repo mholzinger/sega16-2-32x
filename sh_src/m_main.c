@@ -3143,86 +3143,15 @@ RAMCODE void m_main(void)
                 WSPL[3 + k] += (uint32_t)(uint16_t)(frt() - tws);  /* the wait */
                 WSPL[6 + k]++;
 #endif
-                /* LOOP 7c — WHERE THE RESTORE LANDS. This flip/restore pair
-                 * is a BLANKING INTERVAL over bank Y, which nothing ever
-                 * composes into: the blit writes the CPU-side bank and the
-                 * restore puts it back on screen. That is harmless only
-                 * while the whole pair fits inside vblank (38 lines, NTSC
-                 * 224..261). Past that, ares DEFERS an FBCTL write made
-                 * outside vblank to the next vblank — so empty bank Y is
-                 * displayed for a WHOLE FRAME. That is the black strobe
-                 * frame in Mike's 551-554, and it explains why blit skips
-                 * read 0: the skip gate checks V at PICKUP and never asks
-                 * whether the blit will FIT.
-                 * MAME cannot see this at all — 0 black frames in 150, and
-                 * `make BLITBURN=1400` (~30 lines of forced overrun) still
-                 * produced 0, because MAME latches FBCTL immediately and
-                 * never defers. So this is measured, not reproduced:
-                 *   DIAG[26] restores landing past vblank
-                 *   DIAG[27] worst lines from window start to the restore
-                 *   DIAG[28] blit windows total (for the rate)
-                 * ~46 FRT ticks per scanline. */
-                {
-                    /* TICKS, not lines: the SH-2 has NO DIVIDE, so `/46`
-                     * dragged in a libgcc helper — worth ~64 bytes of the
-                     * .ramtext this build could not spare. 38 lines of
-                     * vblank x ~46 ticks/line = 1748. state_health does the
-                     * conversion in python, where division is free. */
-                    uint16_t el = (uint16_t)(frt() - t_vint);
-                    DIAG[28]++;
-                    if (el > 1748) {
-                        DIAG[26]++;
-                        if (el > DIAG[27])
-                            DIAG[27] = el;
-                    }
-                    /* (SPAN_PROBE v1's span-distribution and per-window
-                     * split lived here; retired in LOOP 13 — the span
-                     * answered (0 of 2655 past vblank, k-split moot) and
-                     * slots [50..60] had been reclaimed by pivot
-                     * counters, corrupting the readout. [42..48] now
-                     * hold the wrapped-late pickup bins at the V-gate. */
-                }
-                MARS_VDP_FBCTL = fs_x;       /* back to staging bank X */
-                /* LOOP 7i — TIME THE LATCH. Two measurements disagree by
-                 * 3.3x: restore-past-vblank says 3.3% of blit windows,
-                 * while a 4457-frame ares capture says 10.97% of FRAMES
-                 * are black (dominant gap 4 = the real strobe, not fades;
-                 * those files are 6.4KB against a 779KB median). So the
-                 * vblank overrun is not the whole story.
-                 * If ares really defers an out-of-vblank FBCTL write to the
-                 * NEXT vblank, this readback spin does not FAIL — it
-                 * BLOCKS, for up to a frame, with FM=1, stalling the 68K
-                 * with it. That would make the strobe and the slowness one
-                 * bug, and it is invisible to every counter we have.
-                 * DIAG[29] = total ticks waited, [30] = waits over ~1
-                 * scanline. ~46 ticks/line, ~12000/frame. */
-                {
-                    /* LOOP 7j — BOUNDED, and this is the whole strobe.
-                     * ares defers an FBCTL write made outside vblank to the
-                     * next vblank, and this spin did not FAIL on that, it
-                     * BLOCKED: measured mean 882 ticks across ALL windows,
-                     * which puts each of the ~9% long waits at ~9600 ticks
-                     * = 0.8 of a FRAME, held with FM=1 so the 68K is stopped
-                     * too. That is POSITIVE FEEDBACK — a late restore steals
-                     * most of a frame, so the next window starts later and
-                     * is late too — and it explains both the bursts and why
-                     * the rate bounced 0.6% -> 8.3% between sessions.
-                     * 200 ticks (~4 lines) is generous for a latch that
-                     * takes 1 tick when it is not deferred (MAME reads
-                     * exactly 1). Past that we KNOW it is deferred, and
-                     * waiting cannot make it arrive sooner — so stop paying
-                     * for it and let the loop recover. */
-                    uint16_t w0 = frt();
-                    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x
-                           && (uint16_t)(frt() - w0) < 200) ;
-                    uint16_t wt = (uint16_t)(frt() - w0);
-                    DIAG[29] += wt;
-                    if (wt > 46) DIAG[30]++;
-                    if ((MARS_VDP_FBCTL & MARS_VDP_FS) != fs_x) {
-                        fs_settled = 0;
-                        DIAG[31]++;          /* left with a deferred latch */
-                    }
-                }
+                /* (LOOP 7c/7i/7j's restore-past-vblank + latch-wait
+                 * machinery lived here — DIAG[26]/[27] measurement, the
+                 * FBCTL restore, the bounded latch spin [29]/[30]. ALL
+                 * RETIRED by Presentation 2.0: there is no restore edge
+                 * any more, so the class it measured is extinct by
+                 * construction. [26]/[27]/[29]/[30] now read 0 forever;
+                 * [28] still counts blit windows, [31] counts k2 flip
+                 * latch failures (see the flip block above). */
+                DIAG[28]++;
                 guard = 2000000;
                 while (SYNC[5] != scmd && --guard) ;  /* slave path done */
                 if (!guard) DIAG[22]++;
