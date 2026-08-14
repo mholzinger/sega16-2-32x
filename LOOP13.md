@@ -778,7 +778,7 @@ not the 3x rule of thumb. Use 5x for FB-write-bound estimates.**
 ## kickoff — design settled, unbuilt)
 
 Goal chain: (1) the game's tile writes stop needing the FB → (2) no
-FB state is bank-sensitive → (3) FS becomes a真 double-buffer: blits
+FB state is bank-sensitive → (3) FS becomes a true double-buffer: blits
 land in the hidden bank across 3 windows, ONE flip per cycle at k2
 inside vblank → band tear DEAD, flip pairs drop 3x (strobe shrinks),
 copy_pages leaves the pre-ack window (slowness win).
