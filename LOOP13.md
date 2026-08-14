@@ -564,6 +564,54 @@ NEXT: BUILD 124cec9c, same recipe. Recheck mismatches > 0 = mid-frame
 wipe confirmed -> hunt the writer (game-side rebased access? vint
 chain?); == 0 = the readback lies on ares -> port-write A/B build.
 
+## 2026-08-14 (later) — RETRACTION + THE REAL ROOT + FIX SHIPPED
+
+**RETRACTION: the dead-plane-A narrative was an audit-script bug.**
+The wipe recheck came back 0/16884 (cells survive the frame), which
+forced a re-audit of the auditor: band_audit.py validated a VRAM-base
+candidate by requiring ZERO bytes in the plane-A margin — but the
+part-1 margin fix deliberately writes 0x03FF there, so the CORRECT
+base (0xD6366, same as part 1) failed validation and an alias 0x2000
+lower was chosen; "NT A" then pointed at dead VRAM and "NT B" at NT A.
+At the correct base: **both planes 0/1120 vs their mirrors, margins
+exactly as init wrote them, MAME and ares AGREE.** Transport, staged
+DMA, playback: fully healthy end to end. Everything in yesterday's
+"FG-in-B / A13 flip" section is VOID. Mike's ruling stands recorded:
+ares IS the hardware; the divergence was never real — both emulators
+were right and the instrument was wrong. (Recipe fix: validate a VRAM
+base by MARGIN CONTENT 0x03FF, not by zeros; the fingerprint recipe
+in part 1 predates the margin fix and must not be reused as-is.)
+
+**The purple band's real chain, each link measured in bs9:**
+  - MD walkway rows: uniform cell 0x2128 -> slot 0x128 = solid pen-2
+    grey filler, correct; staged CRAM lines 1-3 sane (greys/greens,
+    no purple). The MD side is INNOCENT.
+  - sbuf band rows 192-215: dense 32X FB content, pen groups 9 and 2
+    — composed sprites/FG-cat-1, not silhouettes (fallbacks only
+    32/5686 cycles).
+  - dreq_incomplete 8.5%, residue 1-4 words, STUCK across frames:
+    with less than a DREQ-burst left in the FIFO, DREQ never asserts
+    and the tail never drains. landed 592-593 misses the sprite-
+    snapshot gate (>=594) -> the compose keeps LAST FRAME'S sprite
+    list on ~1 in 12 cycles -> R2 (bottom band, composed last) paints
+    stage-1's PURPLE zombies at stale positions over the grey MD
+    walkway. Location, colour, structure, counters all line up.
+
+**FIX (md_main.c, unconditional): TAIL OVERPUSH** — after the 596th
+word, push 4 dummy words; TCR reaches 0 on the real payload (TE sets,
+landed=596 always) and the extras die at the next session's 68S 0->4
+FIFO reset. MAME: dreq_inc 0, no session poisoning, transport
+byte-identical. Gates: statics 2.44/3.37 EXACT, _end 0x06018da0
+shipping / 0x06018ca8 probe, stamped normal.
+
+VERIFY on the next ares pass: DRQR[1] (tail-drain residues) must
+collapse ~to zero, dreq_incomplete with it, and the purple band
+should die with the stale lists. If DRQR[1] survives, the DREQ
+threshold model is wrong — re-derive the FIFO behaviour from srcref.
+
+NEXT ROUND-TRIP: BUILD 51717680 (MDBGALL+BQCHUNK), stage-1 walkway,
+savestate, state_health.py + how the band looks.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
