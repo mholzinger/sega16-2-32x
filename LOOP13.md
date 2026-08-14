@@ -612,6 +612,22 @@ threshold model is wrong — re-derive the FIFO behaviour from srcref.
 NEXT ROUND-TRIP: BUILD 51717680 (MDBGALL+BQCHUNK), stage-1 walkway,
 savestate, state_health.py + how the band looks.
 
+**CONFIRMED (bs9, 51717680, Mike's pass): dreq_incomplete 8.5% -> 
+0.0%. ZERO. The overpush killed the tail-drain class outright** (the
+DRQR split stayed silent — no incompletes to bin). Sprite lists now
+land whole every cycle. Mike: "not fully clean but the most playable
+rom we have had yet! in weeks!" The DREQ-threshold model (no assert
+below one burst) is validated hardware fact — TOOLKIT-grade: any
+S16 title's push must pad past TCR or strand its tail.
+
+Still open in that state, ranked: strobe 1.3% of blit windows
+(restores past vblank, worst 141 lines — item-2/window-ack land,
+black-frame class); deferrals climbing (956; audit what DIAG[13]
+actually counts before chasing); V-gate rejects 1.5%; skips 2.5%.
+Mike's "not fully clean" — get the artifact list from him next pass,
+then triage against the shortlist (sky tick-row is DEAD, margin strip
+DEAD, purple band DEAD).
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
