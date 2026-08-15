@@ -2486,7 +2486,7 @@ RAMCODE void m_main(void)
     uint8_t drop_s0[3] = {0, 0, 0};
     uint16_t t_vint = 0;                 /* FRT at last window pickup */
     uint8_t shadow_stole = 0;            /* one stolen LUT chunk per window */
-    uint16_t pg_pending = 0x1FFF;        /* dirty tilemap pages awaiting
+    pg_pending = 0x1FFF;                 /* dirty tilemap pages awaiting
                                           * copy (write-observer ring:
                                           * bitmap rides the DREQ tail;
                                           * boot = all pages once) */
