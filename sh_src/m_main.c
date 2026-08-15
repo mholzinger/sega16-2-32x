@@ -3049,21 +3049,6 @@ RAMCODE void m_main(void)
                     DIAG[42 + m_stage]++;    /* v3: miss by master stage */
 #endif
             }
-            /* LIVE DIRTY WORD (COMM10, MD-written before every post):
-             * merged at every window so the k2 flip's restore set is
-             * complete through THIS vint (the word-80 copy is one window
-             * late — under double-buffering that skew loses the last
-             * gap's writes across the flip: game-logic corruption).
-             * CAPTURE of these pages is a separate question — see the
-             * MD_BG builder gate below: pages can be marked here while
-             * their writer stream is still mid-flight (thunks mark at
-             * pointer-load), and truth captured mid-stream must not be
-             * WALKED by the MD cell builder. */
-            {
-                uint16_t ld = MARS_SYS_COMM10 & 0x1FFF;
-                pg_pending |= ld;
-                cycle_dirt |= ld;
-            }
             /* PRESENTATION 2.0 (LOOP 13): true double-buffer. Blits write
              * the hidden DRAW bank at ALL three windows — no per-band
              * flip/restore pair, no vblank bound on any blit (the 84-line
@@ -3097,6 +3082,24 @@ RAMCODE void m_main(void)
                  *     clobbering a fresh game write is impossible by
                  *     construction, and its read-backs (collision tst.w,
                  *     the page-1 scratch pair) never see a stale bank. */
+                /* LIVE DIRTY WORD (COMM10, MD-written before every
+                 * post), merged at the flip ONLY. The restore set must
+                 * be complete through THIS vint — the word-80 copy is
+                 * one window late, and under double-buffering that skew
+                 * loses the last gap's writes across the flip (game
+                 * logic corruption: collision reads a stale bank). It
+                 * is NOT merged at k0/k1: the thunks mark at pointer-
+                 * load, before their stores, so early captures take
+                 * HALF-WRITTEN pages into truth — the 32X compose
+                 * self-corrects, but the MD builder's allocator turns a
+                 * garbage page into persistent md_tag claims (measured:
+                 * glyph-field planes after every scene cut). k0/k1
+                 * captures run on word-80 marks, which arrive one
+                 * window settled; the k2 mid-stream capture is
+                 * mandatory and exactly right for the game (restore =
+                 * the bytes it just wrote), and pg_watch + the
+                 * builder's claim gate contain its poison. */
+                pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
                 cycle_dirt |= pg_pending;
                 pg_pending |= pg_watch;      /* unstable pages: recapture the
                                               * latest stream state pre-flip */
@@ -3837,25 +3840,6 @@ RAMCODE void m_main(void)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
                             mdp_s_stmp[cset] = (uint8_t)win_no;
-                            /* PRESENTATION 2.0 — UNSTABLE-PAGE CLAIM GATE.
-                             * The thunks mark at pointer-load, so a page's
-                             * truth can be captured MID-STREAM (half-written
-                             * codes). The 32X compose survives that (it
-                             * re-reads truth every cycle, no memory); THIS
-                             * allocator does not — a wild code claims a
-                             * slot, ships art, and the poison persists in
-                             * md_tag until LRU eviction (measured: whole
-                             * planes of glyph fields after every scene
-                             * cut). While a cell's source page is in
-                             * pg_watch (last capture changed = stream may
-                             * be in flight), resolve HITS only: no new
-                             * claims, unresolved cells go blank for the
-                             * cycle. Coherent-but-changing pages (the
-                             * title table-blitter) keep hitting their
-                             * stable codes, so they stay live; only
-                             * genuinely unsettled content is deferred. */
-                            int noclaim = (pg_watch >> pqb[(((unsigned)vy >> 7) & 2)
-                                                           + ((vx >> 9) & 1)]) & 1;
                             /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
                              * set/way geometry as the render cache but
                              * STABLE — hit or claim keeps a slot as long
@@ -3885,11 +3869,6 @@ RAMCODE void m_main(void)
                                     break;
                                 }
                                 if (t == 0xFFFFFFFFu) {
-                                    if (noclaim) {
-                                        done = 1;    /* unstable page: no
-                                                      * claim; cell blank */
-                                        break;
-                                    }
                                     if (i2 == MD_BLANK_SLOT)
                                         break;   /* reserved: fall through
                                                   * to evict ways 0..6 */
@@ -3908,7 +3887,7 @@ RAMCODE void m_main(void)
                                     ((uint8_t)win_no - md_ref[i2]);
                                 if (age >= vage) { vage = age; victim = i2; }
                             }
-                            if (!done && !noclaim && victim != MD_BLANK_SLOT) {
+                            if (!done && victim != MD_BLANK_SLOT) {
                                 /* set full: evict the LRU way (see md_ref).
                                  * Cells still naming the victim rewrite
                                  * within 4 chunks (~5 windows). */
