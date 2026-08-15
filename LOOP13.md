@@ -1008,6 +1008,40 @@ instrumented hunt now, not a mystery. (3) If ares confirms tear-death,
 the freed budget lanes (window/ack 151->? with the flip waits gone)
 get re-measured before anything is built on them.
 
+## 2026-08-14 (23:00) — FIRST ARES CONTACT: strobe class CONFIRMED
+## DEAD; one real bug found by Mike's bs9 and fixed (flip latch abort)
+
+Mike's first pres-2.0 ares state (bs9, BUILD cdfc4799, MDBGALL
+flavor): **restore-past-vblank 0/1934 — the strobe/black-frame class
+is dead on ares**, cadence 3.00, rejects 0.1%, window/ack worst 159
+with 79 lines margin (the flip-pair waits really did come off the
+span). On screen: the documented MDBGALL MD-plane regression, plus
+worse — and the counters named a second, REAL cause:
+
+**[31] = 10/645 cycles: the k2 FBCTL write sometimes latches LATE on
+ares even inside the V∈[DF,E4] gate.** The first cut treated a
+200-tick timeout as an ABORT and skipped the restore — but an issued
+FBCTL write cannot be taken back: the flip landed moments later and
+the banks swapped UNRESTORED. Staging skew → the game's read-backs
+hit a stale bank → garbage tilemap writes → (on MDBGALL) the builder
+immortalises them as claims. 1.6% of cycles, compounding.
+FIX (this commit): once the write is issued the flip is COMMITTED —
+wait for the latch (backstop 18000 ticks ≈ 1.5 frames), then ALWAYS
+restore. [31] now counts LATE latches (latency signal, not
+corruption); state_health says which meaning applies per build.
+
+Also in that state: dreq_incomplete 5.7%, all tail-drain, residue 2 —
+the class the overpush killed is back under pres-2.0 timing (or under
+the abort bug's disturbed cycles). RE-MEASURE on the fixed build
+before theorising.
+
+**Parity baseline change, deterministic and REPRODUCED twice: eyehold
+3.37 -> 3.06 (title 2.44 exact, dx=0 both).** 224 fewer mismatched
+pixels = the latch-wait's few-tick shift settles the eyehold capture
+on a phase CLOSER to the arcade. An improvement, but it moves a
+static: Mike should bless 3.06 as the new gate value or veto the
+build. Gate values from this commit: title 2.44, eyehold 3.06.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
