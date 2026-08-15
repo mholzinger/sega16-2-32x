@@ -1075,6 +1075,46 @@ BG lane picks up from here — builder/palette work on a healthy
 transport, with the mid-stream-capture notes and instruments from
 tonight's entry as the starting kit.
 
+## 2026-08-15 (early) — SHIPPING-ON-ARES AUDIT: every data store is
+## CLEAN; the BG breakage is localized to compose-window MARGINS
+
+Mike's shipping-flavor pass (rom/s16_ship_pres20.32x, state
+s16_ship_pres20.bs9): "sprites working! backgrounds are not." The
+state audited offline, each store verified:
+  - staging bank0 == bank1 == TILEMAP truth, BYTE-IDENTICAL, all 13
+    pages — the pres-2.0 capture/restore machinery is FLAWLESS on ares.
+  - render cache: 1024/1024 slots hold exactly tiles.bin's art for
+    their tagged code. TEXT_U: clean (PUSH 2P START + zeros).
+    BANK_SHADOW == MCU_BANKREQ == 1. Strobe 0/10068, cadence 3.03.
+  - sbuf rendered through the state's own cram_mirror: the SCENE CORE
+    IS CORRECT (garden BG, player, portrait, CREDITS). The breakage is
+    confined to the TOP ~8 rows, BOTTOM rows, and RIGHT EDGE — bands
+    of font-tile noise at the compose window's margins, plus a
+    checkered block top-right. NOT data corruption — a WALK-RANGE /
+    scroll edge case the arcade never displays and MAME's timing never
+    exposes. Same family as the MD-plane margin fix (part 1), now on
+    the 32X compose path. Suspects for next session: compose row range
+    vs vy fine phase at ares' latch timing; the text-layer row
+    windowing; what the game parks in tilemap rows adjacent to the
+    visible window.
+  - The MDBGALL glyph-field residue likely shares this root (the MD
+    cell walk uses the same snap/scroll windowing).
+
+FALSE TRAILS TONIGHT, recorded so they stay dead: "glyphs in sbuf"
+via the false-color render (repeating art reads as letters — always
+render through cram_mirror); a cache-poisoning theory (cache proved
+perfect); pq>=13 walking TEXT_U (decode_pages clamps to 12).
+
+**BUILD-SYSTEM TRAP (cost two misdiagnoses): the final `make` of the
+23:02 sequence did NOT relink — rom/s16.32x remained the MDBGALL
+binary (stamp 23:02:02 vs the MDBGALL link at :04, lst = MDBGALL's).
+When flavors alternate, verify with `cmp` against the saved flavor
+copies and check the lst's `_end` — the BUILD hash cannot tell
+flavors apart and the stamp can lie about which link produced the
+file. Also: shipping and MDBGALL place cache_tag (and sbuf, and all
+.bss) at DIFFERENT addresses — never carry symbol addresses across
+flavors; grep the lst that matches the binary audited.**
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
