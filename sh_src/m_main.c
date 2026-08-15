@@ -3521,6 +3521,21 @@ RAMCODE void m_main(void)
                     for (int i = 0; i < len; i++)
                         b[i] = 0xFF;
                 }
+            } else {
+                /* k == 0 — EARLY CAPTURE, same budget as k1: spread a
+                 * transition burst's truth work across the cycle so the
+                 * k2 pre-flip drain (and the MD-cell re-stamp bang that
+                 * follows a big truth delta) shrinks. Idempotent —
+                 * capture reads the draw bank, which is stable all
+                 * cycle. */
+                int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
+                for (int pc = 0; pc < budget && pg_pending; pc++) {
+                    int pg = 0;
+                    while (!(pg_pending & (1u << pg)))
+                        pg++;
+                    cap_page(pg);
+                    pg_pending &= (uint16_t)~(1u << pg);
+                }
             }
 
             /* ---- EARLY ACK (iter4): all FM-required work (blit, DREQ
