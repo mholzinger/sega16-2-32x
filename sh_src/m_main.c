@@ -1824,6 +1824,7 @@ RAMCODE static void cap_page(int pg)
     volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
     volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
     uint32_t ch = 0;
+    cap_runs++;
     for (int i = 0; i < 0x400; i += 4) {
         uint32_t v0 = src[i + 0], v1 = src[i + 1];
         uint32_t v2 = src[i + 2], v3 = src[i + 3];
