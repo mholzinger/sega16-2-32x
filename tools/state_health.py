@@ -132,12 +132,16 @@ def main():
     # of blit have to come off to stop it.
     # DIAG[27] is in FRT TICKS, not lines: the SH-2 has no divide, so the
     # conversion moved here (~46 ticks/scanline, 38 lines of vblank = 1748).
+    # PRESENTATION 2.0: the flip/restore pair is GONE — [26]/[27] read 0
+    # forever (the class is extinct by construction), [28] still counts
+    # blit windows, and [31] counts k2 flips that failed to latch inside
+    # the vblank gate (structurally 0; nonzero = the latch model is wrong).
     late, worst, tot = (rd32(0x28000 + i * 4) for i in (26, 27, 28))
     if tot:
         print(f"restore past vblank={late}/{tot} "
               f"({100.0 * late / tot:.1f}% of blit windows) "
               f"worst={worst / 46.0:.0f} lines (vblank=38) -> "
-              f"{'STROBE CONFIRMED' if late else 'not the strobe'}")
+              f"{'STROBE CONFIRMED' if late else 'strobe class dead (pres 2.0: no restore edge)'}")
     # LOOP 7i: how long the FS RESTORE took to LATCH. ares defers an FBCTL
     # write made outside vblank to the next vblank, and the master's
     # readback spin does not fail on that — it BLOCKS, with FM=1, stalling
