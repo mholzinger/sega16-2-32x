@@ -3439,7 +3439,7 @@ RAMCODE void m_main(void)
                  * the DREQ FIFO; DMAC0 lands it at SPR_LAND. TE set =
                  * a complete coherent list; TE clear = keep last
                  * frame's list (stale beats torn). */
-                if (got_spr && landed >= 594) {   /* whole list arrived */
+                if (got_spr && aligned) {   /* whole list arrived, aligned */
                     for (int i = 0; i < 512; i += 8) {
                         SPR_SNAP[i + 0] = SPR_LAND[82 + i + 0];
                         SPR_SNAP[i + 1] = SPR_LAND[82 + i + 1];
