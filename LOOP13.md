@@ -879,6 +879,133 @@ inside the gate that already protects it.
    bands from successive frames. Architecture-class (single-frame
    flip / cadence); park behind 1-2.
 
+## 2026-08-14 (night) — PRESENTATION 2.0 BUILT AND GATED (BUILD
+## 183ce625); shipping flavor clean end to end, MDBGALL flavor carries
+## one known MD-plane regression
+
+**THE CORE LANDED, whole, as designed.** m_main window path: flip
+pairs and the blank-decoy trick are GONE; blits write the hidden draw
+bank at all three windows through the FB window with ZERO FBCTL
+writes; ONE FS flip per cycle at k2, inside the existing V∈[DF,E4]
+gate, before that window's blit (frame N completes at k1; k2 flips it
+onto screen, then starts frame N+1's R0 into the new draw bank). The
+V-gate now gates ONLY the flip: a missed gate drops one whole frame
+(display keeps the last complete one) — never a band, never black.
+DIAG[7] = missed flips now; [26]/[27]/[29]/[30] read 0 forever
+(restore-edge class extinct by construction); [31] = k2 latch
+failures (must stay 0). state_health.py prints the new meanings.
+
+**The read-back problem's real shape, and the machinery that closes
+it** (the write-log ring's replacement, one level deeper than the
+kickoff design):
+  - cap_page/cap_drain: capture is COPY-AND-COMPARE; a page whose
+    capture CHANGED enters pg_watch and is recaptured every cycle and
+    restored at every flip until two consecutive captures agree. This
+    is the split-stream closure: the big writers (RLE passes,
+    clear-alls, the 0x258A blitter) mark dirty ONCE at pointer-load
+    then stream stores for many vints — a flip mid-stream would split
+    the stream across banks with no further mark. With the watch, the
+    k2 pre-flip capture + post-flip restore hand the stream its exact
+    byte state in the new bank; it continues seamlessly.
+  - restore_pages: TILEMAP_U truth -> the new draw bank's staging
+    pages, STRICTLY pre-ack (the game writes staging only post-ack, so
+    clobbering a fresh game write is impossible by construction).
+    Restore set = cycle_dirt | pg_watch; full pg_pending drain first.
+  - LIVE DIRTY WORD on COMM10 (free post-boot; MD writes it before
+    every post): merged at the k2 flip ONLY, so the restore set is
+    complete through that very vint. The word-80 bitmap is one window
+    late; under double-buffering that skew would lose the last gap's
+    writes across the flip (real game-logic corruption).
+  - Boot: cycle_dirt/pg_watch start 0x1FFF (ex-decoy gets a full
+    staging copy at the first flip); Hw32xInit already line-tables and
+    clears BOTH banks.
+  - MD side: the FS-home wait is RETIRED (not rewritten — predicting
+    fs^1 after k2 would burn its whole 0.8s guard on every master-side
+    V-gate skip); the master verifies the latch before the ack, so FS
+    is final by COMM0-clear. k2 packet publish happens AFTER the flip
+    (lands in the bank the MD will read).
+
+**GATES, shipping flavor (`make`, BUILD 183ce625, _end 0x06018e20,
+stamped normal): ALL GREEN.**
+  - Parity statics EXACT: title 2.44 dx=0, eyehold 3.37 dx=0.
+    Dynamics show dx=±8..24 scroll-phase offsets at high % — the
+    anchors are settle-tuned for the old presentation and now measure
+    the one-cycle display latency double-buffering adds; the statics
+    prove content identity.
+  - black_probe 150 consecutive frames: 0 black. Adjacent-frame diffs:
+    48 full-frame changes (the flips) + partial diffs confined to the
+    title logo's CRAM-cycling rows — NO band-boundary diffs. Whole
+    frames on screen, every time.
+  - play_32x gameplay (coin+start+fight): Zeus cutscene, stage 1,
+    HUD — clean, baseline-indistinguishable.
+
+**KNOWN REGRESSION, MDBGALL flavor only (rom/s16_mdbgall_pres20.32x,
+same BUILD hash — flavor by look, per the hash trap): MD-plane
+foreign-art fields after scene cuts,** worst at title/cutscenes, plus
+a left-edge stale strip in the demo. The 32X layers (sprites, text,
+HUD) stay clean. A long instrumented hunt (all MAME-side) proved,
+each step verified:
+  - transport is INNOCENT end to end: packet seq 7188/7188 consumed in
+    order (MDVERIFY 0 stale / 0 jumps), staged tile-record DMA
+    readback 4009/4009 exact, VRAM nametables == md_dbg_nt mirror
+    (0-6 diffs/1120) — the MASTER BUILDS the garbage cells;
+  - truth machinery is HEALTHY: banks-vs-TILEMAP_U diff clean on
+    stable pages, truth == capture bank on active ones (the dump must
+    read truth via the CACHED 0x0601xxxx alias — lua's uncached-alias
+    reads and SH-2-side FB reads under FM=0 both return junk: two more
+    fake-space traps);
+  - the poison enters through EARLY CAPTURES: merging the live COMM10
+    word at EVERY window captured pointer-load-marked pages MID-STREAM
+    (half-written codes) into truth. The 32X compose shrugs (re-reads
+    truth every cycle, no memory); the MD builder does NOT — wild
+    codes become md_tag claims + slot uploads that persist until LRU
+    eviction. Word-80's one-window lag was an accidental
+    WRITE-SETTLING DELAY the old build depended on.
+  NEGATIVE RESULTS (do not re-try):
+  - k0 early-capture spread: reintroduces the same poison.
+  - builder claim-gate on pg_watch pages (hit-only, blank on miss):
+    made it WORSE both with every-window and k2-only merges —
+    mechanism not understood; reverted.
+  - budget spreading alone does not move it.
+  Best current state = k2-only merge, no gate: mostly clean scenes,
+  residual left-edge strip + post-cut fields that heal slowly. The
+  remaining mechanism is NOT fully cracked — the next session should
+  start from: why do garbage cells persist ~30s when truth heals in
+  ~2 cycles and cell chunks re-walk every ~5 windows? (Suspects: the
+  heal loop via pg_watch recaptures only at k2 — always mid-stream
+  for long streams; md_pending saturation ordering; allocator memory.)
+  Instruments to re-add from this entry: the tile-record readback
+  probe (md_stage_play, 0xFFA038/3A/3C) and the mdcmp.lua
+  VRAM-vs-mirror diff recipe.
+
+**NEW TRAPS, paid for tonight:**
+  - The 0x28D00 "hole" is nearly FULL: ROWHASH ends 0x28EC0, md_dirty
+    runs 0x28EC0..0x28F40, FMT/WSPL overlay 0x28F00/0x28F20 under
+    their flags. A debug pair parked at 0x28F10 sat INSIDE md_dirty —
+    fifth slot collision of the era, self-inflicted, and it corrupted
+    the MD tile pipeline while "measuring" it. Truly free:
+    0x28F40..0x28F4F only.
+  - Restoring sources without rebuilding: three instrument runs
+    (sbuf dump, tickdump, FB-bank dumps) silently measured the
+    BASELINE rom after a `git checkout` restore skipped `make`. Check
+    the BUILD line of every run.
+  - lua reads: SH-2 space maps CACHED addresses only (0x06xxxxxx);
+    0x26xxxxxx and FM-gated 0x24xxxxxx return junk/zeros. The 68K
+    window (maincpu 0x840000) is the honest FB view at FM=0, and
+    68K-side FBCTL (0xA1518A) writes DO latch from lua.
+  - .bss statics near arrays: pg_watch/pg_pending live right after
+    cram_key — any future overrun lands on them. The MDBGALL flavor
+    sits at _end 0x06018fb8 (72 bytes under the guard).
+
+**NEXT SESSION:** (1) Mike's ares play pass on the SHIPPING rom
+(BUILD 183ce625) — the tear/strobe verdict is the milestone gate;
+state_health's "flip/blit skips" is now dropped-frames and
+flip-latch-failures[31] must read 0. (2) The MDBGALL MD-plane lane
+picks up from the regression notes above — it is a bounded,
+instrumented hunt now, not a mystery. (3) If ares confirms tear-death,
+the freed budget lanes (window/ack 151->? with the flip waits gone)
+get re-measured before anything is built on them.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
