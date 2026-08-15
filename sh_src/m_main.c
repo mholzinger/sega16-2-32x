@@ -3906,7 +3906,7 @@ RAMCODE void m_main(void)
                                     ((uint8_t)win_no - md_ref[i2]);
                                 if (age >= vage) { vage = age; victim = i2; }
                             }
-                            if (!done && victim != MD_BLANK_SLOT) {
+                            if (!done && !noclaim && victim != MD_BLANK_SLOT) {
                                 /* set full: evict the LRU way (see md_ref).
                                  * Cells still naming the victim rewrite
                                  * within 4 chunks (~5 windows). */
