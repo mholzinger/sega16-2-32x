@@ -261,7 +261,14 @@ static volatile uint16_t miss_n[2];
 /* Color maps, double-buffered by window parity (slave prescans par^1
  * during window N; both CPUs compose frame N+1 from par^1 after the
  * toggle). */
-static uint8_t tile_grp[2][128];
+/* tile_grp RELOCATED .bss -> fixed block (LOOP 13): the magic-tail
+ * alignment gate pushed the MDBGALL flavor's _end past the 0x19000
+ * region guard; 0x3E480..0x3EFFF is unclaimed (mdp_s_vol ends 0x3E480,
+ * master stack top 0x3F000). Same cached-SDRAM access + purge
+ * discipline as the .bss placement — only the address moved. NOT
+ * zero-inited by crt0: build_maps rewrites every entry it uses per
+ * pass, and boot writes 0xFF below before first compose. */
+#define tile_grp ((uint8_t (*)[128])0x0603E480)         /* [2][128] */
 static uint8_t spr_pair[2][64];
 static uint8_t text_grp[2][8];              /* text colors: on-demand too */
 /* Sticky ownership (persistent across cycles — see build_maps): which
