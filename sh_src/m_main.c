@@ -3532,14 +3532,7 @@ RAMCODE void m_main(void)
                  * follows a big truth delta) shrinks. Idempotent —
                  * capture reads the draw bank, which is stable all
                  * cycle. */
-                int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
-                for (int pc = 0; pc < budget && pg_pending; pc++) {
-                    int pg = 0;
-                    while (!(pg_pending & (1u << pg)))
-                        pg++;
-                    cap_page(pg);
-                    pg_pending &= (uint16_t)~(1u << pg);
-                }
+                cap_drain((pg_pending >= 0x0FFF) ? 7 : 3);
             }
 
             /* ---- EARLY ACK (iter4): all FM-required work (blit, DREQ
