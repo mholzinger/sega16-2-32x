@@ -3333,7 +3333,7 @@ RAMCODE void m_main(void)
                                               * breaks game logic — cheap
                                               * insurance) */
             }
-            if (!got_spr && landed >= 338) {
+            if (!got_spr && aligned) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
                  * multiple of 256) plus an optional palette tag —
                  * bit 15 = present, bits 13-11 = which aligned PAIR of
