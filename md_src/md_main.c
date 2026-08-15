@@ -247,6 +247,19 @@ static void md_stage_play(void) {
 			 * Readback-zero = the VDP write itself is lost/redirected
 			 * at playback; readback-match = VRAM had it and something
 			 * later wipes it (savestate told the truth either way). */
+			/* DEBUG (this hunt): tile-record readback — first word of
+			 * the slot just DMA'd vs what was staged. 0xFFA038 =
+			 * mismatches, 0xFFA03A = rechecks, 0xFFA03C = last readback. */
+			if (wl == 16 && !(p[1] & 0x2000) && (p[2] & 3) != 3) {
+				uint32_t a2 = ((uint32_t)(p[1] & 0x3FFF))
+				            | ((uint32_t)(p[2] & 3) << 14);
+				*vdp_ctrl_wide = ((a2 & 0x3FFFu) << 16) | ((a2 >> 14) & 3u);
+				uint16_t rb2 = *vdp_data_port;
+				*(volatile uint16_t*)0xFFA03C = rb2;
+				(*(volatile uint16_t*)0xFFA03A)++;
+				if (rb2 != p[3])
+					(*(volatile uint16_t*)0xFFA038)++;
+			}
 			if (p[2] == 0x83) {
 				if (p[1] & 0x2000)
 					(*(volatile uint16_t*)0xFFA026)++;
