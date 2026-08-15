@@ -1852,15 +1852,11 @@ RAMCODE static void restore_pages(uint16_t bm)
         volatile uint32_t *src = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
         volatile uint32_t *dst = (volatile uint32_t *)
             (0x04012000u + (unsigned)pg * 0x1000u);
-        for (int i = 0; i < 0x400; i += 8) {
+        for (int i = 0; i < 0x400; i += 4) {
             dst[i + 0] = src[i + 0];
             dst[i + 1] = src[i + 1];
             dst[i + 2] = src[i + 2];
             dst[i + 3] = src[i + 3];
-            dst[i + 4] = src[i + 4];
-            dst[i + 5] = src[i + 5];
-            dst[i + 6] = src[i + 6];
-            dst[i + 7] = src[i + 7];
         }
     }
 }
