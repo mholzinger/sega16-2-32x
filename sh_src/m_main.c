@@ -3883,6 +3883,11 @@ RAMCODE void m_main(void)
                                     break;
                                 }
                                 if (t == 0xFFFFFFFFu) {
+                                    if (noclaim) {
+                                        done = 1;    /* unstable page: no
+                                                      * claim; cell blank */
+                                        break;
+                                    }
                                     if (i2 == MD_BLANK_SLOT)
                                         break;   /* reserved: fall through
                                                   * to evict ways 0..6 */
