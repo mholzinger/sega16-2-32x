@@ -3095,13 +3095,7 @@ RAMCODE void m_main(void)
                 cycle_dirt |= pg_pending;
                 pg_pending |= pg_watch;      /* unstable pages: recapture the
                                               * latest stream state pre-flip */
-                while (pg_pending) {
-                    int pg = 0;
-                    while (!(pg_pending & (1u << pg)))
-                        pg++;
-                    cap_page(pg);
-                    pg_pending &= (uint16_t)~(1u << pg);
-                }
+                cap_drain(13);               /* ALL of it — correctness */
                 uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
                 MARS_VDP_FBCTL = fs_o ^ 1;
                 /* In-gate = in-vblank: latches in 1 tick on MAME and
