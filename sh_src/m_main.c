@@ -3480,10 +3480,7 @@ RAMCODE void m_main(void)
                         int pg = 0;
                         while (!(pg_pending & (1u << pg)))
                             pg++;
-                        if (copy_page(pg))
-                            pg_watch |= (uint16_t)(1u << pg);
-                        else
-                            pg_watch &= (uint16_t)~(1u << pg);
+                        cap_page(pg);
                         pg_pending &= (uint16_t)~(1u << pg);
                     }
                 }
