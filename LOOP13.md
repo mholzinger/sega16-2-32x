@@ -1042,6 +1042,39 @@ on a phase CLOSER to the arcade. An improvement, but it moves a
 static: Mike should bless 3.06 as the new gate value or veto the
 build. Gate values from this commit: title 2.44, eyehold 3.06.
 
+## 2026-08-14 (23:20) — MIKE'S VERDICT ON e9ee3058: **TEARING IS
+## DEAD.** The beta gate's presentation half is CLOSED.
+
+Mike, MDBGALL flavor, stage-1 gameplay: *"player and enemy sprites
+look correct and I don't detect much screen tearing at all. all
+background sprites are messy if not flat out broken."* Two states
+this session, both clean where it counts: strobe 0/8633 and 0/4217,
+dreq_incomplete 0.0% both, flip skips 0.3% then 0.0%, cadence 3.01,
+transport 0 mismatches across ~40k cell records, worst margin 38
+lines. [31] late latches run 0.6% and are handled (wait+restore).
+The latch fix also reclaimed the structural MD damage: the glyph
+fields are GONE from his screenshot.
+
+**WHAT REMAINS is the MDBGALL BG lane, three visible families**
+(screenshot 23:20, stage 1):
+  1. BANDED SKY — alternating light/dark row stripes across plane B's
+     sky with dotted speckle rows. Candidates: cell-chunk staleness
+     banding, or the KNOWN GAP (per-band vy fine phase vs per-column
+     VSRAM).
+  2. PURPLE SPECKLE/FRINGE over most BG art (temple edges, columns,
+     walkway) — the 0xE08-purple family again; pen drift read 214
+     small / 7 catastrophic. Smells like §11 palette-pack /
+     exclusive-pen territory, not transport.
+  3. Scattered stale blocks (left-mid strips) — the scene-cut residue
+     class from the session entry above.
+  Red flat player = the documented post-spirit-ball flash at 20Hz;
+  verify vs MAME before "fixing".
+
+The pres-2.0 core is DONE and gated on both emulators. The MDBGALL
+BG lane picks up from here — builder/palette work on a healthy
+transport, with the mid-stream-capture notes and instruments from
+tonight's entry as the starting kit.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
