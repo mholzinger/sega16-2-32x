@@ -3282,7 +3282,27 @@ RAMCODE void m_main(void)
                             ? plen : (plen - (SH2_DMA_TCR0 & 0xFFFFFFu));
             if (landed > plen) landed = 0;   /* never trust a wild TCR0 */
             int got_spr = (prev_k == 0);
-            if (landed >= 80) {
+            /* MAGIC-TAIL ALIGNMENT GATE (LOOP 13, savestate-proven).
+             * ares drops a 68K FIFO write that races a full FIFO without
+             * decrementing the armed length; the overpush dummies then
+             * backfill the count, so TCR completes and the WHOLE packet
+             * lands displaced -N words — `landed` cannot see it. The MD
+             * pushes its two pad words as 0xA55A/0x5AA5; if they are not
+             * at their exact position, every word here is suspect and
+             * NOTHING is applied — stale beats displaced. The word-80
+             * dirty marks in a skipped packet were already cleared
+             * MD-side, so recapture ALL pages instead of losing them. */
+            int aligned = 0;
+            if (landed == 596 || (landed == 340 && !got_spr)) {
+                unsigned mp = landed - 2;
+                aligned = (SPR_LAND[mp] == 0xA55A && SPR_LAND[mp + 1] == 0x5AA5);
+                if (!aligned) {
+                    DRQR[7]++;               /* complete-but-displaced */
+                    pg_pending |= 0x1FFF;
+                    cycle_dirt |= 0x1FFF;
+                }
+            }
+            if (aligned) {
                 {
                     volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + 0x740);
                     volatile uint32_t *s = (volatile uint32_t *)(SPR_LAND + 0);
