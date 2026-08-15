@@ -1836,6 +1836,20 @@ RAMCODE static void cap_page(int pg)
         pg_watch &= (uint16_t)~(1u << pg);
 }
 
+RAMCODE static void cap_drain(int budget)
+{
+    for (int pc = 0; pc < budget && pg_pending; pc++) {
+#ifdef TILE_RATE
+        DIAG[54]++;                          /* pages actually copied */
+#endif
+        int pg = 0;
+        while (!(pg_pending & (1u << pg)))
+            pg++;
+        cap_page(pg);
+        pg_pending &= (uint16_t)~(1u << pg);
+    }
+}
+
 /* PRESENTATION 2.0 — the reverse of copy_pages: replay TILEMAP_U (the
  * SDRAM truth copy_pages maintains) into the game's staging pages of the
  * bank the FB window CURRENTLY maps. Called once per k2 flip, on the NEW
