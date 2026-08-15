@@ -3295,12 +3295,14 @@ RAMCODE void m_main(void)
              * MD-side, so recapture ALL pages instead of losing them. */
             int aligned = 0;
             if (landed == 596 || (landed == 340 && !got_spr)) {
-                unsigned mp = landed - 2;
-                aligned = (SPR_LAND[mp] == 0xA55A && SPR_LAND[mp + 1] == 0x5AA5);
-                if (!aligned) {
+                /* one 32-bit compare — (landed-2)*2 is /4 for both */
+                if (*(volatile uint32_t *)(SPR_LAND + landed - 2)
+                        == 0xA55A5AA5u)
+                    aligned = 1;
+                else {
                     DRQR[7]++;               /* complete-but-displaced */
-                    pg_pending |= 0x1FFF;
-                    cycle_dirt |= 0x1FFF;
+                    pg_pending = 0x1FFF;
+                    cycle_dirt = 0x1FFF;
                 }
             }
             if (aligned) {
@@ -3321,20 +3323,16 @@ RAMCODE void m_main(void)
                  * the post-ack full cache_purge() runs every window — and
                  * the targeted purge was bit-identical either way. It was
                  * dead code kept out of caution; .ramtext is scarcer.) */
-            }
-            /* Shared prefix: bitmap at 80, text base at 81, in BOTH
-             * layouts. The bitmap is applied every window either way — a
-             * dropped one loses tile writes permanently (a misaligned
-             * packet instead recaptures all pages, above). */
-            if (aligned) {
+                /* Shared prefix: bitmap at 80, text base at 81, in BOTH
+                 * layouts. The bitmap is applied every aligned window — a
+                 * misaligned packet recaptures all pages instead (above). */
                 pg_pending |= SPR_LAND[80];
                 cycle_dirt |= SPR_LAND[80];  /* belt for the COMM10 live
                                               * word (provably a superset,
                                               * but a missed stale page
                                               * breaks game logic — cheap
                                               * insurance) */
-            }
-            if (!got_spr && aligned) {
+                if (!got_spr) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
                  * multiple of 256) plus an optional palette tag —
                  * bit 15 = present, bits 13-11 = which aligned PAIR of
