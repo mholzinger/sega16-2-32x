@@ -153,8 +153,12 @@ def main():
         print(f"FS restore latch: mean={lat / max(tot, 1):.0f} ticks "
               f"({lat / max(tot, 1) / 46.0:.1f} lines), "
               f"{latn}/{tot} waits >1 line ({100.0 * latn / tot:.1f}%) "
-              f"flip-latch-failures[31]={rd32(0x28000 + 31 * 4)} "
-              f"(pres 2.0: must be 0)")
+              f"flip-late-latches[31]={rd32(0x28000 + 31 * 4)} "
+              f"(pres 2.0 >= this build: k2 latch took >200 ticks; the "
+              f"flip WAITS and restores either way — a latency signal, "
+              f"not corruption. Builds cdfc4799 and earlier ABORTED the "
+              f"restore on these: bank skew, real corruption — re-measure "
+              f"on the fixed build.)")
     # PREEMPT-BLIT TIMEOUTS (builds >= 1152c7d1). The master's SYNC[2]
     # pickup and SYNC[5] echo waits used to be unbounded: if the slave
     # failed to answer, the master spun forever with FM=1 and took the
