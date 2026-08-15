@@ -3429,7 +3429,7 @@ RAMCODE void m_main(void)
                      * strictly before any k2 copy, and k1 has no flip at
                      * all. This budgeted drain is now just the early
                      * spread of transition bursts; the k2 pre-flip drain
-                     * is the correctness point. */
+                     * is the correctness point.) */
                     int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
 #ifdef TILE_RATE
                     /* LOOP 11 step 1 — HOW OFTEN DOES THE TILEMAP CHANGE?
