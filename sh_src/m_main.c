@@ -1799,22 +1799,38 @@ RAMCODE static void cache_fill(int budget)
  * every window (split master/slave): the old 2-page rotor left the shadow
  * up to ~200ms stale, and scrolling streams new tile columns continuously
  * — the roaming garbled squares were stale shadow columns. ~0.7ms/CPU. */
-RAMCODE static void copy_pages(int p0, int p1)
+/* PRESENTATION 2.0: capture is now COPY-AND-COMPARE (same trick as the
+ * palette pair apply) and reports whether the page's content moved. The
+ * report drives the pg_watch set: the game's big staging writers (the
+ * RLE passes, the clear-alls, the 0x258A table blitter) mark dirty ONCE
+ * at their pointer load and then stream stores for many vints — a scene
+ * load runs ~a second. A flip mid-stream would split the stream across
+ * banks with no further mark to say so; watching every page until two
+ * consecutive captures agree keeps it captured pre-flip and restored
+ * post-flip for as long as it is actually moving, so the draw bank
+ * always evolves exactly as a single-banked staging would. The compare
+ * is one extra SDRAM read per long against the FB read we already pay —
+ * noise. */
+RAMCODE static int copy_page(int pg)
 {
-    for (int pg = p0; pg < p1; pg++) {
-        volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
-        volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
-        for (int i = 0; i < 0x400; i += 8) {
-            dst[i + 0] = src[i + 0];
-            dst[i + 1] = src[i + 1];
-            dst[i + 2] = src[i + 2];
-            dst[i + 3] = src[i + 3];
-            dst[i + 4] = src[i + 4];
-            dst[i + 5] = src[i + 5];
-            dst[i + 6] = src[i + 6];
-            dst[i + 7] = src[i + 7];
-        }
+    volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
+    volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
+    uint32_t ch = 0;
+    for (int i = 0; i < 0x400; i += 8) {
+        uint32_t v0 = src[i + 0], v1 = src[i + 1];
+        uint32_t v2 = src[i + 2], v3 = src[i + 3];
+        ch |= v0 ^ dst[i + 0]; dst[i + 0] = v0;
+        ch |= v1 ^ dst[i + 1]; dst[i + 1] = v1;
+        ch |= v2 ^ dst[i + 2]; dst[i + 2] = v2;
+        ch |= v3 ^ dst[i + 3]; dst[i + 3] = v3;
+        v0 = src[i + 4]; v1 = src[i + 5];
+        v2 = src[i + 6]; v3 = src[i + 7];
+        ch |= v0 ^ dst[i + 4]; dst[i + 4] = v0;
+        ch |= v1 ^ dst[i + 5]; dst[i + 5] = v1;
+        ch |= v2 ^ dst[i + 6]; dst[i + 6] = v2;
+        ch |= v3 ^ dst[i + 7]; dst[i + 7] = v3;
     }
+    return ch != 0;
 }
 
 /* PRESENTATION 2.0 — the reverse of copy_pages: replay TILEMAP_U (the
