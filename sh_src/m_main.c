@@ -3835,6 +3835,25 @@ RAMCODE void m_main(void)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
                             mdp_s_stmp[cset] = (uint8_t)win_no;
+                            /* PRESENTATION 2.0 — UNSTABLE-PAGE CLAIM GATE.
+                             * The thunks mark at pointer-load, so a page's
+                             * truth can be captured MID-STREAM (half-written
+                             * codes). The 32X compose survives that (it
+                             * re-reads truth every cycle, no memory); THIS
+                             * allocator does not — a wild code claims a
+                             * slot, ships art, and the poison persists in
+                             * md_tag until LRU eviction (measured: whole
+                             * planes of glyph fields after every scene
+                             * cut). While a cell's source page is in
+                             * pg_watch (last capture changed = stream may
+                             * be in flight), resolve HITS only: no new
+                             * claims, unresolved cells go blank for the
+                             * cycle. Coherent-but-changing pages (the
+                             * title table-blitter) keep hitting their
+                             * stable codes, so they stay live; only
+                             * genuinely unsettled content is deferred. */
+                            int noclaim = (pg_watch >> pqb[(((unsigned)vy >> 7) & 2)
+                                                           + ((vx >> 9) & 1)]) & 1;
                             /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
                              * set/way geometry as the render cache but
                              * STABLE — hit or claim keeps a slot as long
