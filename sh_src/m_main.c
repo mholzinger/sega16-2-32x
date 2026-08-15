@@ -3323,8 +3323,9 @@ RAMCODE void m_main(void)
             }
             /* Shared prefix: bitmap at 80, text base at 81, in BOTH
              * layouts. The bitmap is applied every window either way — a
-             * dropped one loses tile writes permanently. */
-            if (landed >= 81) {
+             * dropped one loses tile writes permanently (a misaligned
+             * packet instead recaptures all pages, above). */
+            if (aligned) {
                 pg_pending |= SPR_LAND[80];
                 cycle_dirt |= SPR_LAND[80];  /* belt for the COMM10 live
                                               * word (provably a superset,
