@@ -3110,9 +3110,11 @@ RAMCODE void m_main(void)
                     DIAG[31]++;              /* flip failed to latch */
                 } else {
                     /* watched pages restore too: their stream may still
-                     * be mid-flight, and the restored truth (captured
-                     * seconds ago at worst, this window at best) is the
-                     * exact base the game's next stores expect. */
+                     * be mid-flight, and the truth was recaptured THIS
+                     * window (pg_pending |= pg_watch above), so the new
+                     * bank gets the exact base the game's next stores
+                     * expect — the stream continues seamlessly across
+                     * the bank swap. */
                     restore_pages((uint16_t)(cycle_dirt | pg_watch));
                     cycle_dirt = 0;
                 }
