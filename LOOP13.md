@@ -879,9 +879,11 @@ inside the gate that already protects it.
    bands from successive frames. Architecture-class (single-frame
    flip / cadence); park behind 1-2.
 
-## 2026-08-14 (night) — PRESENTATION 2.0 BUILT AND GATED (BUILD
-## 183ce625); shipping flavor clean end to end, MDBGALL flavor carries
-## one known MD-plane regression
+## 2026-08-14 (night) — PRESENTATION 2.0 BUILT AND GATED; shipping
+## flavor clean end to end, MDBGALL flavor carries one known MD-plane
+## regression. (Both handed-over roms stamp the SAME commit-derived
+## BUILD hash — run `python3 tools/build_id.py show <rom>` and match it
+## against state_health's BUILD line; flavor by look, per the trap.)
 
 **THE CORE LANDED, whole, as designed.** m_main window path: flip
 pairs and the blank-decoy trick are GONE; blits write the hidden draw
@@ -925,7 +927,7 @@ kickoff design):
     is final by COMM0-clear. k2 packet publish happens AFTER the flip
     (lands in the bank the MD will read).
 
-**GATES, shipping flavor (`make`, BUILD 183ce625, _end 0x06018e20,
+**GATES, shipping flavor (`make`, rom/s16.32x, _end 0x06018e20,
 stamped normal): ALL GREEN.**
   - Parity statics EXACT: title 2.44 dx=0, eyehold 3.37 dx=0.
     Dynamics show dx=±8..24 scroll-phase offsets at high % — the
@@ -998,7 +1000,7 @@ each step verified:
     sits at _end 0x06018fb8 (72 bytes under the guard).
 
 **NEXT SESSION:** (1) Mike's ares play pass on the SHIPPING rom
-(BUILD 183ce625) — the tear/strobe verdict is the milestone gate;
+(rom/s16.32x) — the tear/strobe verdict is the milestone gate;
 state_health's "flip/blit skips" is now dropped-frames and
 flip-latch-failures[31] must read 0. (2) The MDBGALL MD-plane lane
 picks up from the regression notes above — it is a bounded,
