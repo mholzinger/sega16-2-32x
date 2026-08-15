@@ -1812,8 +1812,11 @@ RAMCODE static void cache_fill(int budget)
  * is one extra SDRAM read per long against the FB read we already pay —
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
-#define MK_ACC   (*(volatile uint16_t *)0x26028F10)  /* DEBUG: marks seen */
-#define CAP_RUNS (*(volatile uint32_t *)0x26028F14)  /* DEBUG: captures */
+/* (A debug pair briefly lived at 0x26028F10 — INSIDE md_dirty
+ * (0x28EC0..0x28F3F). Fifth slot collision of the era; audit the block
+ * before parking anything in the "28D00 hole": ROWHASH ends 0x28EC0,
+ * md_dirty runs to 0x28F40, FMT/WSPL overlay 0x28F00/0x28F20 under
+ * their probe flags. Truly free: 0x28F40..0x28F4F only.) */
 static uint16_t pg_pending;                  /* dirty pages awaiting capture
                                               * (file-scope so cap_drain can
                                               * own the scan loop once — the
