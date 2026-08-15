@@ -3109,7 +3109,11 @@ RAMCODE void m_main(void)
                 if ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1)) {
                     DIAG[31]++;              /* flip failed to latch */
                 } else {
-                    restore_pages(cycle_dirt);
+                    /* watched pages restore too: their stream may still
+                     * be mid-flight, and the restored truth (captured
+                     * seconds ago at worst, this window at best) is the
+                     * exact base the game's next stores expect. */
+                    restore_pages((uint16_t)(cycle_dirt | pg_watch));
                     cycle_dirt = 0;
                 }
             }
