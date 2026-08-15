@@ -3426,6 +3426,7 @@ RAMCODE void m_main(void)
                         d[i + 3] = s[i + 3];
                     }
                 }
+                }
             }
             if (k == 1) {
                 latch_layer_regs();          /* scanline-261-style reg latch */
