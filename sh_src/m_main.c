@@ -1812,6 +1812,8 @@ RAMCODE static void cache_fill(int budget)
  * is one extra SDRAM read per long against the FB read we already pay —
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
+static uint16_t mk_acc;                      /* DEBUG: all marks ever seen */
+static uint32_t cap_runs;                    /* DEBUG: cap_page invocations */
 static uint16_t pg_pending;                  /* dirty pages awaiting capture
                                               * (file-scope so cap_drain can
                                               * own the scan loop once — the
