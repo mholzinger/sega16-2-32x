@@ -1182,6 +1182,33 @@ VERIFY on Mike's next ares pass (either flavor, BUILD 96f2ea21):
     drain is armed;
   - sprite glitch reports should drop with the displaced lists gone.
 
+**FIRST ARES READING (Mike, s16_mdbgall_magic.bs9, 96f2ea21): the
+loss class is REAL and BIG — dreq misaligned 675/~7890 windows =
+8.6% of packets, the exact magnitude of the pre-overpush 8.5%
+dreq_incomplete.** Transport otherwise clean (aborts 0, headroom
+2597/2600, NT readback 0, strobe 0/7889). But that pass also read
+window/ack worst 251 (11-line margin), rejects 7.6%, cadence 3.25 —
+the 0x1FFF recapture-all fallback costs ~13 restore-pages per poison
+= ~1 extra page/window at this rate, and the bitmap is 0000 in
+steady state, so it was insurance against nothing.
+
+**ITERATION (BUILD f2978db9): EXACT mark recovery replaces the
+0x1FFF fallback.** COMM10 is published from the SAME address the
+push harvests (0xFFB9FE), same handler, no writer between — so
+COMM10 read at window N == the word-80 bitmap of the packet PUSHED
+at window N. The master latches it one window (static c10_prev) and
+ORs THAT on poison: lost marks recovered exactly, poison fallout
+drops to ~zero steady-state cost. Gates: statics 2.44/3.37 dx=0
+EXACT, _end ship 0x18d68 / MDBGALL 0x18fb8, MAME smoke unchanged
+(DRQR[7]=1 boot-only). VERIFY on the next ares pass: rejects and
+window/ack should fall back toward the 159/79-margin class while
+"dreq misaligned" keeps counting (the count itself is fine — each
+one is now one window of stale, invisible). If Mike still FEELS
+jitter at ~8.6%, the next lever is loss-rate reduction: per-word
+full polling costs ~+10-16 lines of 68K tail (spin headroom says
+polls almost never wait, so the cost is pure MMIO reads — measure
+with TAIL_PROBE before shipping it).
+
 FALSE TRAIL KILLED THIS SESSION: "compose walks margin rows the
 arcade never displays" — the walk ranges are exact; do not re-open
 compose_layer_regs for this. TOOLKIT-grade fact: ANY S16 title's
