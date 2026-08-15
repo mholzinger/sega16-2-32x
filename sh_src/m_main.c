@@ -2480,7 +2480,7 @@ RAMCODE void m_main(void)
                                           * all pages once, so the ex-decoy
                                           * bank gets a full staging copy at
                                           * the first flip. */
-    uint16_t pg_watch = 0x1FFF;          /* pages whose last capture CHANGED
+    pg_watch = 0x1FFF;                   /* pages whose last capture CHANGED
                                           * content = a writer stream may
                                           * still be in flight (the big
                                           * writers mark once at pointer
@@ -2490,7 +2490,7 @@ RAMCODE void m_main(void)
                                           * restored at every flip until
                                           * two consecutive captures agree
                                           * — the split-stream closure; see
-                                          * copy_page. */
+                                          * cap_page. Boot: watch all. */
     uint32_t win_no = 0;                 /* window counter (steal rate-limit) */
     uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
 #ifdef MD_BG
