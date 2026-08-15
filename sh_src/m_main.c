@@ -3486,16 +3486,7 @@ RAMCODE void m_main(void)
                     if (pg_pending) DIAG[55]++;      /* cycles with any dirt */
                     DIAG[56] += (uint32_t)__builtin_popcount(pg_pending);
 #endif
-                    for (int pc = 0; pc < budget && pg_pending; pc++) {
-#ifdef TILE_RATE
-                        DIAG[54]++;                  /* pages actually copied */
-#endif
-                        int pg = 0;
-                        while (!(pg_pending & (1u << pg)))
-                            pg++;
-                        cap_page(pg);
-                        pg_pending &= (uint16_t)~(1u << pg);
-                    }
+                    cap_drain(budget);
                 }
                 diag_add(0, tp);
                 par ^= 1;                    /* now composing the next frame */
