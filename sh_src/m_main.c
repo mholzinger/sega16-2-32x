@@ -3106,30 +3106,37 @@ RAMCODE void m_main(void)
                 cap_drain(13);               /* ALL of it — correctness */
                 uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
                 MARS_VDP_FBCTL = fs_o ^ 1;
-                /* In-gate = in-vblank: latches in 1 tick on MAME and
-                 * immediately on ares (deferral is an OUT-of-vblank
-                 * property, LOOP 7j). Bounded anyway: a failed latch
-                 * aborts this cycle's flip — no restore, cycle_dirt keeps
-                 * accumulating, publish lands in the still-mapped bank —
-                 * instead of publishing into an unknown one. DIAG[31]
-                 * counts; nonzero means the latch model is wrong. */
+                /* ONCE THE WRITE IS ISSUED THE FLIP IS COMMITTED. Mike's
+                 * first pres-2.0 ares state read [31]=10 in 645 cycles:
+                 * even inside the gate, ares sometimes latches this write
+                 * LATE. The first cut treated a 200-tick timeout as an
+                 * abort and skipped the restore — but the write cannot be
+                 * taken back; the flip landed moments later and the banks
+                 * swapped UNRESTORED (staging skew = the game's read-backs
+                 * see a stale bank = garbage tilemap writes). So: wait for
+                 * the latch as long as it takes, bounded only by ~1.5
+                 * frames (18000 ticks) as a hang backstop. The stall costs
+                 * up to a frame with FM=1 on the rare late latch — the
+                 * LOOP 7j positive-feedback concern — but a correctness
+                 * violation is not an option, and this is once per cycle
+                 * at worst, not per band pair. DIAG[31] now counts LATE
+                 * latches (>200 ticks); state_health flags them as a
+                 * latency signal, not corruption. */
                 {
                     uint16_t w0 = frt();
                     while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1)
-                           && (uint16_t)(frt() - w0) < 200) ;
+                           && (uint16_t)(frt() - w0) < 18000) ;
+                    if ((uint16_t)(frt() - w0) >= 200)
+                        DIAG[31]++;          /* late latch (was: abort) */
                 }
-                if ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1)) {
-                    DIAG[31]++;              /* flip failed to latch */
-                } else {
-                    /* watched pages restore too: their stream may still
-                     * be mid-flight, and the truth was recaptured THIS
-                     * window (pg_pending |= pg_watch above), so the new
-                     * bank gets the exact base the game's next stores
-                     * expect — the stream continues seamlessly across
-                     * the bank swap. */
-                    restore_pages((uint16_t)(cycle_dirt | pg_watch));
-                    cycle_dirt = 0;
-                }
+                /* watched pages restore too: their stream may still
+                 * be mid-flight, and the truth was recaptured THIS
+                 * window (pg_pending |= pg_watch above), so the new
+                 * bank gets the exact base the game's next stores
+                 * expect — the stream continues seamlessly across
+                 * the bank swap. */
+                restore_pages((uint16_t)(cycle_dirt | pg_watch));
+                cycle_dirt = 0;
             }
             diag_add(6, tp);                 /* slot 6: flip+truth+restore */
             tp = frt();
