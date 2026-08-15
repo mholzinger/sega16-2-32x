@@ -1115,6 +1115,81 @@ file. Also: shipping and MDBGALL place cache_tag (and sbuf, and all
 .bss) at DIFFERENT addresses — never carry symbol addresses across
 flavors; grep the lst that matches the binary audited.**
 
+## 2026-08-15 — THE MARGIN NOISE WAS NEVER A COMPOSE BUG: DREQ
+## PACKETS LAND WORD-DISPLACED ON ARES; MAGIC-TAIL GATE SHIPPED
+
+The "compose margin walk" handoff theory is DEAD — the windowing is
+correct (verified against segaic16 conventions, screen row sy = source
+vy0+sy exactly). The truth came out of s16_ship_pres20.bs9 in three
+steps, each savestate-proven:
+
+1. The frozen sbuf (rendered through its own cram_mirror) shows the
+   noise is TEXT-LAYER GLYPHS — the HUD, scrambled: score rows top,
+   lifebar/CREDITS rows bottom, the 0x0E80/0x0E81 lifebar tiles as the
+   top-right "checkered block". Not tile-plane data at all.
+2. TEXT_C in that state holds the layer-reg block DISPLACED -2 WORDS:
+   pages 0x1212/0x6767 at 0x73E/F (canon 0x740/1), ysc 0x20 at 0x746/7
+   (canon 0x748/9), xsc 0x1D8 at 0x74A/B (canon 0x74C/D) — while snap[]
+   holds the CORRECT values (latched from an earlier, straight window).
+   Both the prefix reg-copy and the rotating tb=0x700 chunk wrote
+   TEXT_U[w] = shadow[w+2]: the whole landed packet sat 2 words EARLY.
+3. Root, from emulator source both sides: ares' DREQ FIFO (io-external
+   .cpp) DISCARDS a 68K fifo write that races a full FIFO — silently,
+   WITHOUT decrementing the armed length; MAME defer_access()es the
+   68K instead, so MAME can never lose a word. Our push checks the
+   full flag once per 4-WORD GROUP against an 8-deep FIFO: under slow
+   DMAC0 drain (master SDRAM traffic — the old BQCHUNK correlation),
+   a group admitted at 6/8 loses its last 2 words. THE OVERPUSH THEN
+   BACKFILLS THE COUNT (lost words never decremented the length, so
+   2 of the 4 dummies get accepted): TCR reaches 0, TE sets,
+   landed==596 — and every word after the loss point is applied
+   displaced -2. dreq_incomplete "collapsing" 8.5% -> 0.0% was partly
+   THIS: the overpush converted honest truncations into silent
+   displacement. Displaced TEXT packets park glyph junk + wrong regs +
+   wrong palette words; displaced SPRITE packets are Mike's residual
+   "sprite rendering issues".
+
+**FIX (BUILD 96f2ea21, both flavors, unconditional): MAGIC TAIL.**
+  - md_main.c: the two pad words (pushed anyway) are now 0xA55A/0x5AA5.
+  - m_main.c decode: a packet is applied ONLY if landed==596 (or 340
+    for a no-palette TEXT push) AND the 32-bit magic sits at its exact
+    position. Misaligned -> skip EVERYTHING (stale beats displaced),
+    count DRQR[7], and recapture ALL pages (pg_pending=cycle_dirt=
+    0x1FFF: the word-80 dirty marks were already cleared MD-side —
+    COMM10 can NOT recover them, its next publish is post-clear).
+  - tile_grp RELOCATED .bss -> fixed 0x0603E480 (unclaimed, mdp_s_vol
+    ends 0x3E480, master stack top 0x3F000): the gate pushed MDBGALL's
+    _end past the region guard; boot inits it explicitly (m_main
+    ~line 2410), so no crt0-zero dependence.
+  - state_health.py prints "dreq misaligned" (DRQR[7], 0x28F9C).
+
+GATES: title 2.44 dx=0, eyehold 3.37 dx=0 EXACT (both re-runs;
+eyehold settled back from the 23:00 3.06 question — 3.37 stands).
+Shipping _end 0x06018d00, MDBGALL+BQCHUNK 0x06018f40, both stamped
+normal (same BUILD hash — flavor by look/cmp, per the trap; copies:
+rom/s16_ship_magic.32x, rom/s16_mdbgall_magic.32x). MAME MDBGALL
+smoke 3600f: cadence 3.02, flip skips 0, dreq_inc 0, DRQR[7]=1
+(single boot window, ZERO growth) — no false poisons.
+
+VERIFY on Mike's next ares pass (either flavor, BUILD 96f2ea21):
+  - the top/bottom/right HUD-glyph noise and the checkered block must
+    die (existing TEXT_U junk self-heals in ~12 windows of rotation);
+  - state_health "dreq misaligned" is the honest loss meter now —
+    expect nonzero and GROWING on ares (each one = one skipped packet
+    = one window of stale, invisible); if it runs >2-3%/cycle, the
+    next lever is pacing the 68K push (per-PAIR full checks, ~+3
+    lines of tail) or throttling master SDRAM traffic while the
+    drain is armed;
+  - sprite glitch reports should drop with the displaced lists gone.
+
+FALSE TRAIL KILLED THIS SESSION: "compose walks margin rows the
+arcade never displays" — the walk ranges are exact; do not re-open
+compose_layer_regs for this. TOOLKIT-grade fact: ANY S16 title's
+DREQ push on ares must either poll the full flag per word or verify
+landing alignment; the full-flag-per-group protocol is only safe on
+dual-bank-FIFO semantics (MAME/likely hardware), and the overpush
+masks the failure — pad words must be a verifiable magic.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
