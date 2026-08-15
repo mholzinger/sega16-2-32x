@@ -1812,6 +1812,11 @@ RAMCODE static void cache_fill(int budget)
  * is one extra SDRAM read per long against the FB read we already pay —
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
+static uint16_t pg_pending;                  /* dirty pages awaiting capture
+                                              * (file-scope so cap_drain can
+                                              * own the scan loop once — the
+                                              * 3 inline copies overflowed
+                                              * the region guard) */
 RAMCODE static void cap_page(int pg)
 {
     volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
