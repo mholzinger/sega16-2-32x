@@ -3049,18 +3049,16 @@ RAMCODE void m_main(void)
                     DIAG[42 + m_stage]++;    /* v3: miss by master stage */
 #endif
             }
-            /* PRESENTATION 2.0 — LIVE DIRTY WORD. The MD publishes the
-             * game's tile dirty bitmap (0xFFB9FE) on COMM10 at every vint
-             * entry, before the post (COMM10 is free post-boot: the pad
-             * publish it was named for was never built, and only the boot
-             * handshake touches COMM8). The DREQ word-80 copy of the same
-             * bitmap arrives one window LATE (pushed post-ack, applied
-             * next window) — under double-buffering that skew would make
-             * the k2 pre-flip copy_pages read gap-written pages from the
-             * WRONG bank and corrupt TILEMAP_U truth. The live word is
-             * exact: the game is stalled from vint entry to ack, so bits
-             * read here are complete through this window. Word 80 stays
-             * applied too (redundant OR; at worst an identity copy). */
+            /* LIVE DIRTY WORD (COMM10, MD-written before every post):
+             * merged at every window so the k2 flip's restore set is
+             * complete through THIS vint (the word-80 copy is one window
+             * late — under double-buffering that skew loses the last
+             * gap's writes across the flip: game-logic corruption).
+             * CAPTURE of these pages is a separate question — see the
+             * MD_BG builder gate below: pages can be marked here while
+             * their writer stream is still mid-flight (thunks mark at
+             * pointer-load), and truth captured mid-stream must not be
+             * WALKED by the MD cell builder. */
             {
                 uint16_t ld = MARS_SYS_COMM10 & 0x1FFF;
                 pg_pending |= ld;
@@ -3530,15 +3528,10 @@ RAMCODE void m_main(void)
                     for (int i = 0; i < len; i++)
                         b[i] = 0xFF;
                 }
-            } else {
-                /* k == 0 — EARLY CAPTURE, same budget as k1: spread a
-                 * transition burst's truth work across the cycle so the
-                 * k2 pre-flip drain (and the MD-cell re-stamp bang that
-                 * follows a big truth delta) shrinks. Idempotent —
-                 * capture reads the draw bank, which is stable all
-                 * cycle. */
-                cap_drain((pg_pending >= 0x0FFF) ? 7 : 3);
             }
+            /* (No k0 capture: an early-capture spread was tried and it
+             * reintroduced the mid-stream-capture poison above. k1's
+             * settled budget + the k2 drain carry the load.) */
 
             /* ---- EARLY ACK (iter4): all FM-required work (blit, DREQ
              * harvest+re-arm, copy_pages, CRAM) is done; release the game
