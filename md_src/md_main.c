@@ -889,7 +889,23 @@ window_done: ;
 					fifo[0] = b[2]; fifo[0] = b[3];
 					b += 4;
 				}
-				if (ok) { fifo[0] = 0; fifo[0] = 0; }  // pad to 596 / 340
+				// MAGIC TAIL (LOOP 13). The pads are pushed anyway; give
+				// them known values so the master can verify the packet
+				// landed word-ALIGNED. ares discards a FIFO write that
+				// races a full FIFO WITHOUT counting it (io-external.cpp
+				// dreq fifo: write only if !full, length decrements only
+				// on accept; MAME defer_access()es instead, so it can
+				// never lose one) — the per-4-word-group full check can
+				// admit a group into a 6/8 FIFO under slow drain and drop
+				// its tail words. The overpush dummies then BACKFILL the
+				// count (lost words never decremented the armed length),
+				// so TCR completes and the whole packet lands displaced
+				// -N words: savestate-proven as the TEXT-RAM reg block at
+				// -2 (0x73E/0x746/0x74A) and the HUD-glyph margin noise.
+				// A displaced landing puts these two words off-position;
+				// the master then skips the packet whole (stale beats
+				// displaced) and counts it in DRQR[7].
+				if (ok) { fifo[0] = 0xA55A; fifo[0] = 0x5AA5; }  // pad to 596 / 340
 			} else
 				ok = 0;
 		}
