@@ -3063,6 +3063,7 @@ RAMCODE void m_main(void)
                 uint16_t ld = MARS_SYS_COMM10 & 0x1FFF;
                 pg_pending |= ld;
                 cycle_dirt |= ld;
+                mk_acc |= ld;
             }
             /* PRESENTATION 2.0 (LOOP 13): true double-buffer. Blits write
              * the hidden DRAW bank at ALL three windows — no per-band
