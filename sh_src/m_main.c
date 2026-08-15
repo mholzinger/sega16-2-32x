@@ -3300,6 +3300,15 @@ RAMCODE void m_main(void)
              * NOTHING is applied — stale beats displaced. The word-80
              * dirty marks in a skipped packet were already cleared
              * MD-side, so recapture ALL pages instead of losing them. */
+            /* EXACT mark recovery for poisoned packets: the MD publishes
+             * COMM10 from the SAME address the push harvests (0xFFB9FE),
+             * in the same handler, with no writer in between — so the
+             * COMM10 read at window N equals the word-80 bitmap in the
+             * packet PUSHED at window N. One-window latch makes the lost
+             * marks recoverable without the 0x1FFF recapture-all, whose
+             * ~13-page restore burst at the first ares poison rate (8.6%
+             * of packets, bs9 96f2ea21) cost real window/ack margin. */
+            static uint16_t c10_prev;
             int aligned = 0;
             if (landed == 596 || (landed == 340 && !got_spr)) {
                 /* one 32-bit compare — (landed-2)*2 is /4 for both */
@@ -3308,10 +3317,12 @@ RAMCODE void m_main(void)
                     aligned = 1;
                 else {
                     DRQR[7]++;               /* complete-but-displaced */
-                    pg_pending = 0x1FFF;
-                    cycle_dirt = 0x1FFF;
+                    pg_pending |= c10_prev;
+                    cycle_dirt |= c10_prev;
                 }
             }
+            c10_prev = MARS_SYS_COMM10 & 0x1FFF;  /* insurance for the
+                                                   * packet now in flight */
             if (aligned) {
                 {
                     volatile uint32_t *d = (volatile uint32_t *)(TEXT_U + 0x740);
