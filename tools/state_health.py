@@ -120,6 +120,17 @@ def main():
                   "not the DMA")
         elif dtail == tot_r:
             print("  -> ALL tail-drain: DMAC starved at the push tail")
+    # LOOP 13 magic tail (builds >= 96f2ea21): DRQR[7] counts packets
+    # that landed COMPLETE (TCR 0) but word-DISPLACED — the ares FIFO
+    # drops a write racing a full FIFO without counting it, and the
+    # overpush backfills the length, so only the pad-word magic
+    # (0xA55A5AA5 at its exact position) can see the shift. Misaligned
+    # packets are skipped whole (stale beats displaced). MAME baseline:
+    # 1 (a single boot-window artifact); steady growth on ares = the
+    # 68K push racing a near-full FIFO -> throttle/pace the push.
+    dmis = rd32(0x28F9C)
+    print(f"dreq misaligned (magic-tail poisoned, skipped)={dmis}"
+          f"{'' if dmis <= 1 else '  << FIFO word-loss ACTIVE'}")
     print(f"dirty bitmap now={rdmd16(0xB9FE):04X}")
     # LOOP 7c — THE STROBE. The flip/restore pair blanks the screen over
     # bank Y, which nothing composes into; it is only safe while the pair
