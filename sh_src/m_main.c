@@ -3080,11 +3080,16 @@ RAMCODE void m_main(void)
                  *     construction, and its read-backs (collision tst.w,
                  *     the page-1 scratch pair) never see a stale bank. */
                 cycle_dirt |= pg_pending;
+                pg_pending |= pg_watch;      /* unstable pages: recapture the
+                                              * latest stream state pre-flip */
                 while (pg_pending) {
                     int pg = 0;
                     while (!(pg_pending & (1u << pg)))
                         pg++;
-                    copy_pages(pg, pg + 1);
+                    if (copy_page(pg))
+                        pg_watch |= (uint16_t)(1u << pg);
+                    else
+                        pg_watch &= (uint16_t)~(1u << pg);
                     pg_pending &= (uint16_t)~(1u << pg);
                 }
                 uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
