@@ -433,6 +433,16 @@ void shim_vblank(void) {
 		// stale slices).
 		*mars_comm12 = (uint16_t)(0xD000
 			| (*(volatile uint16_t*)0xC00008 >> 8));
+		// PRESENTATION 2.0 — LIVE TILE-DIRTY WORD on COMM10 (free
+		// post-boot; the pad publish it was named for was never built).
+		// The DREQ word-80 copy of this bitmap is harvested post-window
+		// and applied one window LATE; at the master's k2 flip that
+		// skew would make its pre-flip truth capture read gap-written
+		// pages from the wrong bank. Published BEFORE the post, so the
+		// master reads a value complete through this vint (the game is
+		// stalled until the ack). NOT cleared here — the DREQ push
+		// below still owns harvest-and-clear.
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #if defined(CMD_PROBE) || defined(CMD_INT)
 		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
 		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the
