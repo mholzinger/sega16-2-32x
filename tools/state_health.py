@@ -58,8 +58,12 @@ def main():
           f"vints/cycle={vints / max(cycles, 1):.2f} (healthy ~3)")
     print(f"V-gate rejects={gates} ({100.0 * gates / max(vints, 1):.1f}% "
           f"of vints)")
-    print(f"blit skips={skips} ({100.0 * skips / max(cycles, 1):.1f}% "
-          f"of cycles)")
+    # PRESENTATION 2.0 (builds >= 183ce625): blits never skip — they write
+    # the hidden bank at every window. DIAG[7] now counts MISSED k2 FLIPS
+    # (= whole frames dropped, display keeps the last complete frame).
+    # On older builds the same slot is per-band blit skips.
+    print(f"flip/blit skips={skips} ({100.0 * skips / max(cycles, 1):.1f}% "
+          f"of cycles; pres-2.0 builds: dropped frames)")
     # dreq_incomplete is now PER-CYCLE-RATED and split against the MD's
     # own abort counter, because the two causes need opposite fixes:
     #   aborts>0   the 68K ran out of spin budget mid-push (raise it, or
