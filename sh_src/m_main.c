@@ -3079,8 +3079,10 @@ RAMCODE void m_main(void)
                                        | bank1);
             uint32_t guard;
             SYNC[2] = 0;
-            SYNC[3] = 0;
-            SYNC[5] = 0;                      /* (iter4) preempt-blit echo */
+            SYNC[5] = 0;                      /* (iter4) preempt-blit echo
+                                               * (SYNC[3]'s clear retired:
+                                               * write-only vestige of the
+                                               * old flip-pair protocol) */
             tp = frt();
             if (k == 2 && !skip) {
                 /* THE flip — before this window's blit: R0 of the NEXT
