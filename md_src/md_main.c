@@ -607,13 +607,19 @@ packet_done: ;
 			}
 		}
 #endif
-		// The SH-2's final FS restore may LATCH only at the next vblank
-		// (ares/hardware defer FBCTL writes made outside vblank). The game
-		// must not resume while its staging bank is deselected — hold here
-		// until FS reads back at its steady value (immediate on MAME).
+		// PRESENTATION 2.0: no restore edge exists any more — FS moves
+		// exactly once per cycle, inside the k2 window, before the ack
+		// (the master verifies the latch before releasing us). So after
+		// a k2 window the steady FS is the OPPOSITE of last vint's
+		// stored value; after k0/k1 it is unchanged. Compute the
+		// expectation from our own phase (wskip == the k just run) —
+		// waiting for the stale stored value after k2 would burn the
+		// whole 200000-spin guard every third window.
 		{
 			uint32_t g = 200000UL;
 			uint16_t fs_home = *(volatile uint16_t*)0xFFB0F6;
+			if (wskip == 2)
+				fs_home ^= 1;
 			while ((*(volatile uint16_t*)0xA1518A & 1) != fs_home && --g) ;
 		}
 		// (unpair model: RV stays 0 — the game fetches through 0x900000)
