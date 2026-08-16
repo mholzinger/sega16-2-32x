@@ -3956,6 +3956,9 @@ RAMCODE void m_main(void)
                         const uint8_t *map =
                             mdp_s_map + ((mkey >> 16) & 0x7F) * 8;
                         if (sc[2] == 0xFFFF) sc[2] = (uint16_t)sl;
+#ifdef NT_WRAP
+                        md_lastb[sent] = (uint16_t)sl;
+#endif
                         ((volatile uint16_t *)(sc + 8))[sent * 17] = (uint16_t)sl;
                         volatile uint8_t *o = (volatile uint8_t *)
                             ((volatile uint16_t *)(sc + 8) + sent * 17 + 1);
