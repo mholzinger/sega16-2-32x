@@ -12,7 +12,9 @@ local f = 0
 emu.register_frame_done(function()
   f = f + 1
   if f >= 28 and f <= 64 and f % 4 == 0 then
-    manager.machine.video:snapshot()
+    for _, screen in pairs(manager.machine.screens) do
+      screen:snapshot(string.format('%s/f%03d.png', dir, f))
+    end
     out:write(string.format("f=%d blanked=%d arms=%d\n", f,
       msp:read_u32(0x06028FA0), msp:read_u32(0x06028FA4)))
   end
