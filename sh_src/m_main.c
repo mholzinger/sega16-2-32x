@@ -4119,7 +4119,11 @@ RAMCODE void m_main(void)
                     }
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
+#ifdef NT_WRAP
+                    sc[5] = 287;             /* 7 x (hdr + 40 cells) */
+#else
                     sc[5] = 280;
+#endif
                     md_phase++;
                     if (md_phase > 8) md_phase = 0;   /* 1 tile + 4 B + 4 A */
 #ifdef CUT_BLANK
