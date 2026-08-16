@@ -3222,18 +3222,14 @@ RAMCODE void m_main(void)
                  * bank gets the exact base the game's next stores
                  * expect — the stream continues seamlessly across
                  * the bank swap. */
-#ifdef PG_STICKY
-                /* restore only pages that actually MOVED since the last
-                 * restore: a watched-but-unchanged page's banks are
-                 * already coherent, and this cycle's writes were taken
-                 * by the pre-flip capture above, so pg_hot covers every
-                 * mid-flight stream. Watch stays wide (capture), restore
-                 * stays narrow (bandwidth). */
-                restore_pages((uint16_t)(cycle_dirt | pg_hot));
-                pg_hot = 0;
-#else
+                /* (PG_STICKY tried restoring only hot pages here —
+                 * eyehold 8.18 -> 26.56: a watched page NOT restored at
+                 * the flip leaves the new bank's staging stale, and the
+                 * NEXT k2 capture reads that stale bank into truth —
+                 * the bank disease at k2. Capture-wide REQUIRES
+                 * restore-wide; the deep-watch k2 cost is inherent and
+                 * is bounded by pg_deep instead.) */
                 restore_pages((uint16_t)(cycle_dirt | pg_watch));
-#endif
                 cycle_dirt = 0;
             }
             diag_add(6, tp);                 /* slot 6: flip+truth+restore */
