@@ -2196,9 +2196,13 @@ RAMCODE void slave_window_k(uint16_t cmd)
  * the guard, and this buys it back with margin. Master-only,
  * CPU-built and CPU-copied: cached view is correct. Boot init not
  * needed (header words are written every window before publish).
- * Layout: 0x3E780 base/hs trackers (224B, NT_WRAP), 0x3E860 md_pkt
- * (1536B, ends 0x3EE60 — leaves 0x1A0 to the 0x3F000 stack top). */
-#define md_pkt ((uint16_t *)0x0603E860)
+ * PLACEMENT IS STACK-CRITICAL: the first cut put md_pkt's palette
+ * words 192 bytes below the 0x3F000 master stack top and the stack
+ * CLOBBERED them (green title, correct shapes — CRAM garbage).
+ * md_pkt now sits at the block's bottom (0x3E780..0x3ED7F), leaving
+ * a 640-byte stack red-zone; the NT_WRAP trackers moved to the
+ * 0x3E380 gap below tile_grp. */
+#define md_pkt ((uint16_t *)0x0603E780)
 #endif
 static uint8_t cat1_valid, cat1_lo, cat1_hi, cat1_bank, cat1_par;
 static uint8_t cat1_t0, cat1_t1;
