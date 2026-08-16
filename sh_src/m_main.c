@@ -1825,18 +1825,22 @@ RAMCODE static void cache_fill(int budget)
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
 #ifdef PG_STICKY
-static uint8_t pg_quiet[13];                 /* consecutive quiet captures
-                                              * of a watched page; watch
-                                              * drops at 12 (a pointer-load
-                                              * mark can precede the
-                                              * stream's writes by cycles
-                                              * — one quiet capture is not
-                                              * proof the stream ended) */
-static uint8_t pg_deep;                      /* cycles left of deep watch:
+/* Fixed scrap 0x28F40-4F (region guard: CUT_BLANK+PG_STICKY together
+ * pushed .bss 16 bytes over 0x19000). NOT zeroed like .bss — boot
+ * inits explicitly next to pg_watch. */
+#define pg_quiet ((uint8_t *)0x06028F40)     /* [13] consecutive quiet
+                                              * captures of a watched page;
+                                              * watch drops at 12 (a
+                                              * pointer-load mark can
+                                              * precede the stream's writes
+                                              * by cycles — one quiet
+                                              * capture is not proof the
+                                              * stream ended) */
+#define pg_deep (*(uint8_t *)0x06028F4D)     /* cycles left of deep watch:
                                               * a broad mark (>=8 pages =
                                               * the loaders/clear-alls that
                                               * mark ALL at pointer-load)
-                                              * pins every watch for 60
+                                              * pins every watch for 24
                                               * cycles — scene loads write
                                               * their last pages seconds
                                               * after the one mark they
