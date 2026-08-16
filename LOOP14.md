@@ -237,6 +237,62 @@ offline, no ares round-trip needed:
   The b1343ac9 co-owner items (a)/(b) are ANSWERED by this corpus:
   slabs dead, no churn flicker reported.
 
+## 2026-08-16 — PGROTOR DEAD ON ARES (backgrounds cycling); ROOT
+## RE-FIXED AS PGSTICKY (sticky+deep watch), EYEHOLD 30.72 -> 8.18
+
+**PGROTOR NEGATIVE RESULT (Mike, frames 3239-42 + savestate 9):**
+sprites good, but "all background tiles are rotating on their own
+accord" — backgrounds CYCLE between different scenes' art. Mechanism:
+FB staging is PER-BANK, and only pages in the restore set
+(cycle_dirt|pg_watch) have their two banks kept coherent. The rotor
+captured pages OUTSIDE that set from whichever bank was mapped that
+cycle — for pages whose banks had legitimately diverged (streams that
+straddled flips unwatched), truth alternated bank A/bank B content
+every cycle = the cycling. MAME never showed it (its banks happened
+converged). Un-shippable by design, flag kept as archaeology. Its
+ares state also priced the per-window cost: worst window/ack 183 ->
+212 (margin 38 -> 7 lines), deferrals 2 -> 377.
+
+**PGSTICKY (make PGSTICKY=1) is the root fix.** The original miss,
+sharpened: thunks mark at POINTER-LOAD; the drain can capture before
+the stream's stores arrive, see no change, and drop the page —
+nothing re-marks. Fix, entirely inside the settled-mark discipline
+(no unmarked-page captures, so the bank disease cannot occur by
+construction):
+  - every mark puts its pages into pg_watch, not just pg_pending;
+  - watch drops only after 12 consecutive quiet captures (sticky=3
+    caught the eye-scene CLEAR but missed the face draw into page 0
+    — loaders write their last pages 5+ cycles after their one mark);
+  - a BROAD mark (>=8 pages = the loaders/clear-alls that mark ALL)
+    pins deep watch for 60 cycles (pg_deep) — scene loads run ~1s and
+    the tail pages arrive seconds after the mark.
+Steady-state cost ZERO (no rotor); transitions get ~60 cycles of
+13-page k2 captures inside faded scenes.
+
+**Verified (BUILD 652cb5fe, rom/s16_mdbgall_pgsticky.32x, _end
+0x18fa0, stamped normal):** eyehold MDBGALL 30.72 -> 26.86 (sticky
+12 alone) -> **8.18%** with deep watch — better than the rotor's
+13.35, and the capture is visually PERFECT (face, open eye, INSERT
+COIN, no bands; the 8.18 is animation phase). magic_smoke: cadence
+3.01, skips 0, dreq 0, [7]=1 boot-only, drift 3083/25 ~= baseline.
+Shipping statics EXACT (2.44/3.37 dx=0).
+
+**METHODOLOGY TRAPS PAID (do not re-learn):** (1) anchored truth
+dumps at the eyehold anchor measure LOAD PROGRESS, not staleness —
+the anchor fires at scene entry and every build shifts run timing, so
+sticky=12 "measured worse" than sticky=3 on a metric that was really
+the dump moment moving; (2) the "arcade clear-class rows stay zero
+all scene" assumption is false at +300 frames. The parity harness
+(both sides state-anchored by the same terms) is the robust
+instrument; use eyehold % + the png, not raw truth diffs.
+
+**MIKE: play rom/s16_mdbgall_pgsticky.32x (BUILD 652cb5fe).**
+Questions: (a) background garbage in gameplay/after cuts — gone?
+(b) any background CYCLING like pgrotor — must be none; (c) feel —
+pgrotor's cost class (jitter) should be absent, cadence unchanged.
+CUTBLANK verdict still open from last round. PGROTOR rom is DEAD —
+discard it.
+
 NOTE srcref/cannonball is stock desktop Cannonball (no 32X code);
 the real 32X OutRun vibe-port is srcref/cannonball-outrun-32x
 (haroldo-ok). Mined 2026-08-15: nothing new for us — its 60Hz is
