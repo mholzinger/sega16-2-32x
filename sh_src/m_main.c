@@ -4272,6 +4272,9 @@ RAMCODE void m_main(void)
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
                     sc[5] = (uint16_t)(o - (sc + 8));   /* payload words */
+                    md_lastb_n = 0;
+                    md_lastc = (uint16_t)(0x100 | (isfg ? 0x80 : 0)
+                                          | (cell0 / 40));
 #else
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
