@@ -174,6 +174,69 @@ at scene starts (a storm that re-arms every chunk would blank-flash
 cells; the >=80 threshold is the guard). If (b) reads well, fold
 CUTBLANK into the MDBGALL bundle default.
 
+## 2026-08-15 (night) — ITEM 3 ROOT FOUND ON MAME: THE "RESIDUE" IS
+## STALE TILEMAP TRUTH, MDBGALL-ONLY; PGROTOR FIX BUILT AND GATED
+
+Mike's b1343ac9 pass came back "too much garbage in background
+tiles" (corpus frames 149-236 transition + 754 gameplay) with a
+HEALTHY state (cadence 3.01, dreq 0, drift 255/8 — the co-owner slab
+class IS dead: fence/temple clean in every gameplay frame; what
+remains is a sky/cloud + top/bottom band class). The whole chain ran
+offline, no ares round-trip needed:
+
+  - **The eyehold MDBGALL static (30.72%) was already measuring it.**
+    The eye scene's top 2 + bottom 5 cell rows show ranking-table
+    trash for the entire scene, MAME-deterministic. sbuf render
+    (tools/nt_dump.lua) shows the 32X itself composing a stage-1
+    GRASS STRIP + glyph cells there — stale cat-1 (0xB3xx-0xB5xx)
+    cells composed opaque.
+  - **The truth is stale, not the compose.** At the same eyehold
+    state anchor (tools/arc_dump.lua on mame altbeast vs anchored
+    nt_dump on the 32x driver): MDBGALL SDRAM truth pages 0-4 hold
+    6947 words the arcade CLEARED at the scene cut (full-width row
+    blocks 4-8/27-31 = exactly the trash screen rows via vy0=32);
+    pages 5-11 exact. **The SHIPPING flavor at the same anchor is
+    0-word EXACT across all 12 pages** — the truth pipeline is
+    perfect there; MD_BG's per-window work shifts capture timing so
+    the game's streaming staging writes slip past pg_watch's
+    one-quiet-capture drop and nothing ever re-marks the page.
+    (This also retires the ranking-table ~30s mystery: nothing
+    re-dirties the page until the NEXT big writer.)
+  - **Fix: `make PGROTOR=1`** — background truth re-verify, 2 pages
+    per k1 through the existing cap_drain (budget 3->5, ~0.1-0.3ms).
+    Bounds any missed mark to <=0.65s instead of forever.
+  - **Verified (BUILD eeab8e85, rom/s16_mdbgall_pgrotor.32x, _end
+    0x18ef8, stamped normal):** stale pages 0-4 heal to 0 diffs at
+    the anchor; eyehold MDBGALL 30.72% -> 13.35% and the bands are
+    CLEAN in the capture — the remaining 13.35% is the eye caught
+    mid-blink (display-latency class, same family as the shipping
+    3.37% pupil diff). magic_smoke: cadence 3.01, skips 0, dreq 0,
+    [7]=1 boot-only ([5] runs ~35% higher — the rotor rephases the
+    drift check; [5] is documented phase-sensitive, not a gate).
+    Shipping statics EXACT (2.44/3.37 dx=0, pixel-identical counts).
+  - Instruments promoted: tools/nt_dump.lua (anchored SH2-side truth/
+    mirror/sbuf/CRAM dump), tools/arc_dump.lua (arcade-side anchored
+    truth), tools/nt_audit.py (replay the nt-builder against dumped
+    truth), tools/frame_snap.lua, tools/cut_profile.lua,
+    tools/cut_snap.lua.
+  - TRAP RE-PAID ONCE: mid-session `make MDBGALL=1` left rom/s16.32x
+    MDBGALL-flavored and a "shipping" measurement was really MDBGALL
+    (caught by the contradiction it produced, then cmp). The flavor
+    check is not optional.
+
+**MIKE'S NEXT ROUND-TRIP, updated (three roms, one question each):**
+  1. rom/s16_mdbgall_pgrotor.32x (BUILD eeab8e85) — is the
+     background-tile garbage gone in gameplay and after cuts? This
+     is the headline fix for what you reported.
+  2. rom/s16_mdbgall_cutblank.32x (BUILD ffa476df) — do scene cuts
+     read as a clean reveal (no foreign-art field)?
+  3. If both hold, next build folds PGROTOR (+CUTBLANK if liked)
+     into the MDBGALL bundle for a single verdict rom, and PGROTOR
+     becomes a candidate for the shipping bundle too (cheap
+     insurance; shipping truth measured clean without it).
+  The b1343ac9 co-owner items (a)/(b) are ANSWERED by this corpus:
+  slabs dead, no churn flicker reported.
+
 NOTE srcref/cannonball is stock desktop Cannonball (no 32X code);
 the real 32X OutRun vibe-port is srcref/cannonball-outrun-32x
 (haroldo-ok). Mined 2026-08-15: nothing new for us — its 60Hz is
