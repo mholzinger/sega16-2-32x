@@ -56,25 +56,31 @@ def mirror_row(plane, row):
 # ---- VRAM base by mirror-content anchor (mirror[1] -> plane A 0xC000) ----
 base = None
 for row in (10, 6, 14, 20):
-    needle = b"".join(struct.pack("<H", w) for w in mirror_row(1, row))
-    if len(set(mirror_row(1, row))) < 4:
+    cells = mirror_row(1, row)
+    if len(set(cells)) < 4:
         continue                      # too uniform: risks false hits
+    needle = b"".join(struct.pack("<H", w) for w in cells)
     j = st.find(needle)
-    hits = []
-    while j >= 0:
-        hits.append(j)
+    while j >= 0 and base is None:
+        cand = j - (0xC000 + row * 128)
+        # a candidate must ALSO hold two other mirror rows at their
+        # plane-A offsets (the mirror/TILEMAP copies in SDRAM won't)
+        if cand > 0:
+            ok = all(st[cand + 0xC000 + r2 * 128:
+                        cand + 0xC000 + r2 * 128 + 80]
+                     == b"".join(struct.pack("<H", w)
+                                 for w in mirror_row(1, r2))
+                     for r2 in (row + 3, row + 7) if r2 < 28)
+            if ok:
+                base = cand
         j = st.find(needle, j + 1)
-    # the mirror itself also matches; the VRAM copy is the OTHER hit
-    for h in hits:
-        cand = h - (0xC000 + row * 128)
-        if cand > 0x40000:            # past SDRAM = plausible VRAM chunk
-            base = cand
-            break
     if base:
-        print(f"VRAM base 0x{base:X} (anchored on mirror[1] row {row})")
+        print(f"VRAM base 0x{base:X} (anchored on mirror[1] row {row}, "
+              f"verified rows +3/+7)")
         break
 if base is None:
-    sys.exit("no VRAM base found — mirror rows too uniform or state empty")
+    sys.exit("no VRAM base found — mirror rows too uniform, state empty, "
+             "or planes mid-transition (try another state)")
 
 
 def vw(off):
