@@ -1251,6 +1251,59 @@ and mirror[1] with plane A (0xC000) — the reverse of the naive
 reading; and the staged-record ctrl words in WRAM 0xFFA400 are a
 register-free anchor for which VRAM addresses the receiver targets.
 
+## 2026-08-15 (evening) — CORPUS PASS d8358681: the "broken
+## backgrounds" are the CO-OWNER PEN CLASS, and the drift detector
+## could not see it BY CONSTRUCTION; detector fixed (BUILD b1343ac9)
+
+Mike's 2:50 raw capture (9764 frames, ~57fps) + state audited. The
+per-scene anatomy:
+  - **Scene-cut load-in (frames 182-231, ~0.85s):** tilemap SHAPES
+    arrive correct almost immediately; most cells render one wrong
+    repeated tile until slot uploads catch up (1120 fresh codes at
+    MD_BATCH=40/window ≈ 28 windows ≈ 0.45s uploads + cell
+    restamps). The "J-field" is cells referencing slots that still
+    hold the PREVIOUS scene's art. Known draw-in class; the fade
+    mostly covers it; burst/priority upload at cuts remains the lane.
+  - **Persistent mid-scene breakage (frames 1500/5000: yellow slabs
+    across the fence band, purple striped cells, black cells):** the
+    ffc8d27 KNOWN-COST family at scale — and the reason it survived
+    the catastrophic-drift bound is structural: **the live CRAM
+    refresh makes a shared pen DISPLAY its owner's live colour, but
+    the drift check compared each set against the pen's BOOKKEEPING
+    colour (mdp_line_c/qc). A co-owner whose own colour never moved
+    passes those gates while its filler cells paint the owner's
+    diverged colour.** The visible error class was exactly the one
+    the detector skipped ([6]=8 while slabs covered the midground).
+  FIX (m_main drift loop): co-owners now compare their live colour
+  against the OWNER'S live colour (what the pen shows); same d^2>=18
+  free+re-claim rule, lockstep fades still exit early. [5]/[6] HAVE
+  NEW SEMANTICS from b1343ac9 (co-owner class included): MAME attract
+  baseline [5]=3397/[6]=26 per 65s vs 141/3 under the old meaning —
+  do not compare across builds.
+  - .ramtext cost paid by relocating pri_lut .bss -> fixed 0x3E580
+    (after tile_grp; boot zeroes it explicitly). MDBGALL _end
+    0x18e98, shipping 0x18b90.
+
+**A/B closed on the d8358681 [5] jump (141 -> 2860 on identical MAME
+smokes):** reverting ONLY the plane-A margin init reproduced 141 →
+the margin change did move the old meter, almost certainly boot-
+timing phase vs the attract fades (statics stayed pixel-exact both
+sides). Moot now that the meter's semantics changed, but recorded:
+[5] is PHASE-SENSITIVE; never read it as a fidelity gate.
+
+Also noted for a hardware future: DRQR[0..7] boot init sits inside
+`#ifdef FM_TEST` — emulators zero SDRAM so counters read sane; real
+silicon won't.
+
+GATES b1343ac9: title 2.44 dx=0, eyehold 3.37 dx=0 EXACT; MDBGALL
+smoke healthy (cadence 3.02, dreq 0, DRQR[7]=1 boot-only).
+NEXT ROUND-TRIP (BUILD b1343ac9, MDBGALL flavor): the yellow/purple
+slab fields should now RE-CLAIM within ~a rotation of diverging —
+watch for the opposite failure (churn storms: repeated free+re-claim
+flicker in fading scenes; the drift-reassign saturating counter is
+the guard). Load-in speed unchanged — that lane (burst upload at
+cuts) is untouched tonight.
+
 FALSE TRAIL KILLED THIS SESSION: "compose walks margin rows the
 arcade never displays" — the walk ranges are exact; do not re-open
 compose_layer_regs for this. TOOLKIT-grade fact: ANY S16 title's
