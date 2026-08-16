@@ -4027,6 +4027,16 @@ RAMCODE void m_main(void)
                         int prow = (((wl->vy0 >> 3) & 0x3F) + row) & 31;
                         int c0w  = (vx00 >> 3) & 63;
                         uint16_t hdr = (uint16_t)((prow << 8) | c0w);
+                        /* LOSS BACKSTOP: a diffed span that never lands
+                         * (stale-bank re-read after a V-gate reject, or
+                         * any dropped window) would diverge FOREVER —
+                         * the full-chunk protocol self-healed by
+                         * re-shipping everything each rotation. Force
+                         * one rotating row per visit back to full-ship
+                         * (~1s worst repair, ~+3 lines/window). */
+                        if ((int)(win_no % 7u) == row - cell0 / 40)
+                            for (int i2 = 0; i2 < 40; i2++)
+                                mrow[i2] = 0xFFFF;
                         {
                             uint16_t prev =
                                 md_dbg_base[(isfg ? 28 : 0) + row];
