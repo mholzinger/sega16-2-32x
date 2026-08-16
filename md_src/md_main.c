@@ -576,6 +576,56 @@ void shim_vblank(void) {
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008; // V after tiles
 				} else {
+#ifdef NT_WRAP
+					// LOOP15 wrap protocol: per row [hdr=(prow<<8)|c0]
+					// [40 cells], cells land at wrapped plane columns
+					// (up to two spans), and each 8-line screen strip
+					// gets its FULL hscroll (cell-strip mode, table
+					// entries 32 bytes apart at VRAM 0xFC00; A word
+					// +0, B word +2).
+					volatile uint16_t *e = sc + 8;
+					uint16_t srow = (uint16_t)((sc[2] & 0x7FFF) / 40u);
+					uint16_t isa = (uint16_t)(sc[2] & 0x8000u ? 1 : 0);
+					uint32_t nbase = isa ? 0xC000u : 0xE000u;
+					for (uint16_t r = 0; r < 7; r++) {
+						uint16_t hdr = *e++;
+						uint16_t c0 = hdr & 63u;
+						uint32_t rb = nbase
+							+ (uint32_t)(hdr >> 8) * 128u;
+						uint16_t l1 = (uint16_t)(64u - c0);
+						if (l1 > 40u) l1 = 40u;
+						uint32_t a = rb + (uint32_t)c0 * 2u;
+						sp[0] = l1;
+						sp[1] = (uint16_t)(0x4000u | (a & 0x3FFFu));
+						sp[2] = (uint16_t)(((a >> 14) & 3u) | 0x80u);
+						for (uint16_t c = 0; c < l1; c++)
+							sp[3 + c] = e[c];
+						sp += 3 + l1; nrec++;
+						if (l1 < 40u) {       // wrap: rest at column 0
+							uint16_t l2 = (uint16_t)(40u - l1);
+							sp[0] = l2;
+							sp[1] = (uint16_t)(0x4000u | (rb & 0x3FFFu));
+							sp[2] = (uint16_t)(((rb >> 14) & 3u) | 0x80u);
+							for (uint16_t c = 0; c < l2; c++)
+								sp[3 + c] = e[l1 + c];
+							sp += 3 + l2; nrec++;
+						}
+						e += 40;
+						// this strip's full hscroll word
+						{
+							uint32_t ha = 0xFC00u
+								+ (uint32_t)(srow + r) * 32u
+								+ (isa ? 0u : 2u);
+							sp[0] = 1;
+							sp[1] = (uint16_t)(0x4000u | (ha & 0x3FFFu));
+							sp[2] = (uint16_t)(((ha >> 14) & 3u) | 0x80u);
+							sp[3] = (sc + 8 + 287)[r];
+							sp += 4; nrec++;
+						}
+					}
+					stg[3] = 0;               // no full-screen hscroll
+					(void)cnt;
+#else
 					// name-table cells, 40 per screen row, 64-cell stride.
 					// sc[2] bit 15 = PLANE A (FG cat-0) chunk; else B.
 					// ROW-MAJOR: one division per packet (the per-cell
@@ -601,6 +651,7 @@ void shim_vblank(void) {
 					stg[3] = (uint16_t)((sc[2] & 0x8000u) ? 0x3C00u
 					                                      : 0x3C02u);
 					stg[4] = e[280];
+#endif
 					(*(volatile uint16_t*)0xFFB0B6) =
 						*(volatile uint16_t*)0xC00008; // V after cells
 				}
