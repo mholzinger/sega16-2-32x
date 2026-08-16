@@ -3997,6 +3997,21 @@ RAMCODE void m_main(void)
                     sc[5] = 280;
                     md_phase++;
                     if (md_phase > 8) md_phase = 0;   /* 1 tile + 4 B + 4 A */
+#ifdef CUT_BLANK
+                    /* arm/decay: >=80 claims in ONE chunk only happens at
+                     * scene cuts (panning claims edge strips, <80). 12
+                     * chunk-visits ~= 1.5 rotations under demand bias;
+                     * storms re-arm. Trickle pressure (the LOOP13
+                     * starvation case) never arms — the bound above is
+                     * untouched. */
+                    if ((uint16_t)(md_pending - cb_pend0) >= 80) {
+                        if (!md_cut)
+                            ((volatile uint32_t *)0x26028FA0)[1]++;
+                        md_cut = 12;
+                    } else if (md_cut) {
+                        md_cut--;
+                    }
+#endif
 
                     /* PALETTE DRIFT, 4 sets/window round-robin: fires
                      * only when a set's live colour differs from BOTH
