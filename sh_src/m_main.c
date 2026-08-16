@@ -4011,22 +4011,44 @@ RAMCODE void m_main(void)
                         }
                         int vx00 = vxr & ~7;
 #ifdef NT_WRAP
-                        /* full per-strip hscroll (cell mode on the MD)
-                         * + per-row placement header: prow anchored on
-                         * the PRIMARY vy coarse (single VSRAM value per
-                         * plane), c0 from this row's own vx coarse (the
-                         * strip's own hscroll compensates). Fetch below
-                         * keeps the row's own vxr/vyr — alt/rowscroll
-                         * rows read the right map cells, exactly as
-                         * before; only WHERE they land changed. */
-                        (sc + 8 + 287)[row - cell0 / 40] =
-                            (uint16_t)((0 - vxr) & 0x3FF);
+                        /* PHASE B: mirror-diffed rows. Placement header
+                         * as Phase A (prow anchored on the PRIMARY vy
+                         * coarse, c0 from this row's own vx coarse; the
+                         * fetch below keeps the row's own vxr/vyr).
+                         * Before walking, ALIGN the view-space mirror
+                         * with the new placement: shift it by the coarse
+                         * step so only genuinely new content will diff;
+                         * a vertical/teleport change invalidates the
+                         * row. 0xFFFF/0xDEAD never match a real entry
+                         * (ent bits 10-12 are always 0). */
+                        uint16_t cbrow[40];
+                        uint16_t *mrow =
+                            md_dbg_nt + (isfg ? 1120 : 0) + row * 40;
+                        int prow = (((wl->vy0 >> 3) & 0x3F) + row) & 31;
+                        int c0w  = (vx00 >> 3) & 63;
+                        uint16_t hdr = (uint16_t)((prow << 8) | c0w);
                         {
-                            int prow = (((wl->vy0 >> 3) & 0x3F) + row) & 31;
-                            int c0w  = (vx00 >> 3) & 63;
-                            uint16_t hdr = (uint16_t)((prow << 8) | c0w);
-                            *o++ = hdr;
-                            md_dbg_base[(isfg ? 28 : 0) + row] = hdr;
+                            uint16_t prev =
+                                md_dbg_base[(isfg ? 28 : 0) + row];
+                            if (prev != hdr) {
+                                int dc = (c0w - (prev & 63)) & 63;
+                                if ((prev >> 8) != (unsigned)prow
+                                    || (dc > 8 && dc < 56)) {
+                                    for (int i2 = 0; i2 < 40; i2++)
+                                        mrow[i2] = 0xFFFF;
+                                } else if (dc <= 8) {     /* forward */
+                                    for (int i2 = 0; i2 < 40 - dc; i2++)
+                                        mrow[i2] = mrow[i2 + dc];
+                                    for (int i2 = 40 - dc; i2 < 40; i2++)
+                                        mrow[i2] = 0xFFFF;
+                                } else {                   /* backward */
+                                    int db = 64 - dc;
+                                    for (int i2 = 39; i2 >= db; i2--)
+                                        mrow[i2] = mrow[i2 - db];
+                                    for (int i2 = 0; i2 < db; i2++)
+                                        mrow[i2] = 0xFFFF;
+                                }
+                            }
                         }
 #else
                         (sc + 8 + 280)[row - cell0 / 40] =
