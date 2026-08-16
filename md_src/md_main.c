@@ -123,14 +123,25 @@ static void md_bg_palette(void) {
 	 * capture had no ticks, yesterday's tick scenes did). Arcade
 	 * shows real art in these 1-7px slivers; a 41-column/29-row
 	 * packet is the fidelity follow-up. */
-	for (uint16_t row = 0; row < 32; row++) {
-		uint32_t a = 0xE000u + (uint32_t)row * 128u
-		           + ((row < 28) ? 80u : 0u);
-		uint16_t n = (row < 28) ? 24 : 64;
-		*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
-		               | ((a >> 14) & 3u);
-		for (uint16_t c2 = 0; c2 < n; c2++)
-			*vdp_data_port = 0x03FF;   /* blank slot, pal 0 */
+	/* BOTH planes. The first cut blanked only plane B; plane A's margin
+	 * cells stayed 0x0000 = SLOT 0, which is a live cache slot — once
+	 * real art lands there, fine hscroll leaks it into the right-edge
+	 * sliver (savestate-proven 2026-08-15: plane A margins 672/672 at
+	 * 0x0000 while plane B's were exactly 0x03FF; the unblanked plane-A
+	 * margins also fooled the VRAM-base fingerprint into the +0x2000
+	 * alias AGAIN — validate against BOTH planes, or anchor on mirror
+	 * content). */
+	for (uint16_t pl = 0; pl < 2; pl++) {
+		uint32_t nt = pl ? 0xE000u : 0xC000u;
+		for (uint16_t row = 0; row < 32; row++) {
+			uint32_t a = nt + (uint32_t)row * 128u
+			           + ((row < 28) ? 80u : 0u);
+			uint16_t n = (row < 28) ? 24 : 64;
+			*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
+			               | ((a >> 14) & 3u);
+			for (uint16_t c2 = 0; c2 < n; c2++)
+				*vdp_data_port = 0x03FF;   /* blank slot, pal 0 */
+		}
 	}
 	/* A/B: full-screen hscroll (reg 11 = 00). Cell mode made the MD
 	 * plane vanish per-strip on MAME while VRAM/CRAM verified correct
