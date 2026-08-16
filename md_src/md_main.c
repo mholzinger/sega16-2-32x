@@ -619,6 +619,23 @@ void shim_vblank(void) {
 				(*(volatile uint16_t*)0xFFB0B8) =
 					*(volatile uint16_t*)0xC00008;    // V after CRAM stage
 				live[0] = 0;                // consumed (the FB packet)
+				// WINSPAN (LOOP15): packet-consume span in beam lines,
+				// entry probe (0xFFB0B0) -> post-CRAM-stage (0xFFB0B8).
+				// 0xFFA038 u32 sum, 0xFFA03C u16 n, 0xFFA03E u16 max.
+				// Wrap-ambiguous samples (V jump region) discarded; a
+				// consistent relative meter for ranking builds, not an
+				// absolute clock. state_health prints it.
+				{
+					uint16_t d = (uint16_t)
+						((((*(volatile uint16_t*)0xFFB0B8) >> 8)
+						- ((*(volatile uint16_t*)0xFFB0B0) >> 8)) & 0xFF);
+					if (d < 0x80) {
+						(*(volatile uint32_t*)0xFFA038) += d;
+						(*(volatile uint16_t*)0xFFA03C)++;
+						if (d > *(volatile uint16_t*)0xFFA03E)
+							*(volatile uint16_t*)0xFFA03E = d;
+					}
+				}
 packet_done: ;
 			}
 		}
