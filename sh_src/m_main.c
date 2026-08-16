@@ -3855,9 +3855,18 @@ RAMCODE void m_main(void)
                  * type 1: 280 name-table cells, param = first cell */
                 uint16_t *sc = md_pkt;
                 const layer_regs *bl = &snap[1];              /* BG layer */
+#ifdef NT_WRAP
+                /* wrap protocol: VSRAM carries FULL vy (placement grid
+                 * anchored on the primary's coarse; per-strip hscroll
+                 * carries full vx). sc[3] unused by the receiver. */
+                sc[3] = 0;
+                sc[4] = (uint16_t)(bl->vy0 & 0xFF);           /* plane B vy */
+                sc[6] = (uint16_t)(snap[0].vy0 & 0xFF);       /* plane A vy */
+#else
                 sc[3] = (uint16_t)(-(bl->vx0 & 7) & 0x3FF);
                 sc[4] = (uint16_t)(bl->vy0 & 7);              /* plane B vy */
                 sc[6] = (uint16_t)(snap[0].vy0 & 7);          /* plane A vy */
+#endif
                 sc[7] = (uint16_t)win_no;    /* sequence: the receiver's
                                               * tear detector (ares showed
                                               * packets torn mid-consume
