@@ -1877,7 +1877,7 @@ RAMCODE static void cap_page(int pg)
          * cycles after the pointer-load mark with the page physically
          * untouched in between (measured: sticky=3 caught the clear
          * but missed the eye-face draw into page 0, 1152 words). */
-        if ((pg_watch >> pg) & 1) {
+        if (((pg_watch >> pg) & 1) && !pg_deep) {
             if (++pg_quiet[pg] >= 12) {
                 pg_watch &= (uint16_t)~(1u << pg);
                 pg_quiet[pg] = 0;
