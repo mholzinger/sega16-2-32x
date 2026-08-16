@@ -3985,6 +3985,10 @@ RAMCODE void m_main(void)
                         sent++;
                     }
                     md_scan = (uint16_t)sl;
+#ifdef NT_WRAP
+                    md_lastb_n = (uint8_t)sent;
+                    md_lastc = 0;
+#endif
                     sc[1] = 0;
                     sc[5] = (uint16_t)sent;
                     DIAG[57] += (uint32_t)sent;
