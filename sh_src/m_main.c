@@ -3155,6 +3155,31 @@ RAMCODE void m_main(void)
                     DIAG[7]++;               /* missed flips = dropped frames
                                               * (blits no longer skip at all:
                                               * they write the hidden bank) */
+#ifdef NT_WRAP
+                if (skip) {
+                    /* reject-loss healing: whatever the last packet
+                     * carried may never land (stale-bank consume on the
+                     * MD's retry). Re-mark the batch, invalidate the
+                     * chunk's rows, re-ship all strip hscrolls. */
+                    for (int i2 = 0; i2 < md_lastb_n; i2++) {
+                        int sl2 = md_lastb[i2];
+                        if (!(md_dirty[sl2 >> 5] & (1u << (sl2 & 31)))) {
+                            MD_MARK(sl2);
+                            md_pending++;
+                        }
+                    }
+                    md_lastb_n = 0;
+                    if (md_lastc) {
+                        int fg2 = (md_lastc >> 7) & 1;
+                        int r0 = md_lastc & 0x1F;
+                        for (int r2 = r0; r2 < r0 + 7; r2++)
+                            md_dbg_base[(fg2 ? 28 : 0) + r2] = 0xFFFF;
+                        md_lastc = 0;
+                    }
+                    for (int i2 = 0; i2 < 56; i2++)
+                        md_dbg_hs[i2] = 0xFFFF;
+                }
+#endif
 #ifdef SPAN_PROBE
                 if (skip)
                     DIAG[42 + m_stage]++;    /* v3: miss by master stage */
