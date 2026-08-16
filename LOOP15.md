@@ -229,6 +229,45 @@ anatomy); smoke cadence 3.01/dreq 0/[6]=0/[7]=1; WINSPAN 17.7
     payload, or fewer game-visible vints), not micro-trims — design
     next loop with TAILPROBE numbers first.
 
+## 2026-08-16 (later night) — MDVERIFY VERDICT: FB CHANNEL LOSSLESS;
+## THE 13% POISONED DREQ IS THE ONE LIVE DEFECT; PUSH GUARD SHIPPED
+
+Mike's MDVERIFY state (wrapB2_verify): **packets=7079,
+write-mismatches=0, STALE re-reads=0, seq jumps=0** — the SH2->MD FB
+packet channel is LOSSLESS on ares. The stale-bank loss theory is
+DEAD (reject-healing stays as free insurance). His wrapB2 verdicts:
+loads tightened (not free), jitter slightly down (17% -> 13%
+poisoned), gameplay "really closing in".
+
+The 13% is the ONE live defect, and the mechanism is now cornered:
+wrapB freed ~30 lines of 68K consume, the master's post-ack compose
+launch moved ~30 lines earlier, and compose (SDRAM) now overlaps the
+68K's DREQ push whose FIFO drain (the DMAC, also an SDRAM customer)
+starves — poisoned 4% -> 13-17%. The per-word tail patch only
+trimmed the edge because the drops are NOT tail-confined (the "ALL
+tail-drain" residue read was 3 samples — over-read, mea culpa).
+
+**PUSH GUARD (wrapB3, BUILD 5d0e625f, rom/s16_mdbgall_wrapB3.32x):**
+the master idles 1380 FRT ticks (~30 lines) post-ack before the
+compose launch — returning exactly the lines wrap freed, on the side
+that was idle pre-wrap anyway. The 68K keeps its win for the game.
+DIAL: the 1380 constant vs the ares "dreq misaligned" meter; target
+the ~4% historical class. MAME cannot measure this (no FIFO loss).
+Cost visible on MAME: flip skips 1 -> 3 per 65s (~0.25% — the pad
+occasionally pushes a k2 late); acceptable, watch it on ares.
+
+**MAME parity under NT_WRAP is now a PHASE LOTTERY for anchored
+scenes** (title 65.04dx24 / 59.22dx0 attractors, eyehold 8.1 / 13.4
+/ 40.3): every build's timing shifts which load/animation phase the
+anchor+20 catches. Judge by ANATOMY (load-in/blink content vs
+garble/bands) + the shipping statics + Mike's eye. The pixel-exact
+gate era for MDBGALL anchors is over until anchors get load-aware.
+
+MIKE (wrapB3): (a) jitter — state check: dreq misaligned should
+drop toward ~4%/minute-class; if still high I dial the guard up,
+(b) loads/foreign fields vs wrapB2, (c) gameplay feel — the guard
+costs the master, not the 68K, so speed should hold or improve.
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
