@@ -268,6 +268,30 @@ drop toward ~4%/minute-class; if still high I dial the guard up,
 (b) loads/foreign fields vs wrapB2, (c) gameplay feel — the guard
 costs the master, not the 68K, so speed should hold or improve.
 
+## 2026-08-16 (latest) — PUSH GUARD DEAD ON ARES ("jitter VERY
+## high"); PER-WORD PUSH SHIPPED INSTEAD (wrapB4, BUILD 989432e4)
+
+The 1380-tick master idle pad made jitter WORSE, not better: the
+master had NO slack — compose was already consuming the freed spin,
+and the pad drove k2 flips past the V-gate (dropped frames; MAME
+foreshadowed it, skips 1 -> 3). REVERTED same-day. LESSON: the
+master's freed spin was never idle headroom; both sides spent the
+wrap dividend immediately.
+
+**wrapB4 = the deterministic fix: per-word FIFO polling on the
+ENTIRE 68K push** (FPUSH macro, NT_WRAP builds; ~13 lines of 68K
+paid from the ~32 the wrap freed — the game still nets ~+19). By
+construction a full FIFO is now always detected before every word:
+the uncounted-drop race cannot occur. MAME gates: eyehold 8.38
+(eye-only), flip skips back to 1, cadence 3.03, WINSPAN 14.5,
+shipping statics EXACT. rom/s16_mdbgall_wrapB3.32x is DEAD —
+discard; wrapB4 replaces it.
+
+VERDICT METER (Mike's next state): dreq misaligned — per-word
+polling should collapse it toward zero (not just the ~4% class:
+the race itself is closed; residual poisons would indicate a
+DIFFERENT loss mode worth knowing about).
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
