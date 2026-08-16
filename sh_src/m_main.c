@@ -1863,8 +1863,13 @@ RAMCODE static void cap_page(int pg)
 #endif
     } else {
 #ifdef PG_STICKY
+        /* 12, not 3: the scene loaders run ~a second (7+ cycles) and
+         * write their pages in sequence — page 0's rows can arrive 5+
+         * cycles after the pointer-load mark with the page physically
+         * untouched in between (measured: sticky=3 caught the clear
+         * but missed the eye-face draw into page 0, 1152 words). */
         if ((pg_watch >> pg) & 1) {
-            if (++pg_quiet[pg] >= 3) {
+            if (++pg_quiet[pg] >= 12) {
                 pg_watch &= (uint16_t)~(1u << pg);
                 pg_quiet[pg] = 0;
             }
