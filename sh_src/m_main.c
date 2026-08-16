@@ -4224,7 +4224,11 @@ RAMCODE void m_main(void)
                                 }
                                 uint16_t hv2 =
                                     (uint16_t)((0 - vxr2) & 0x3FF);
-                                if (md_dbg_hs[pl2 * 28 + r2] != hv2) {
+                                /* same loss backstop:每 strip re-ships
+                                 * every 28 windows regardless */
+                                if (md_dbg_hs[pl2 * 28 + r2] != hv2
+                                    || (int)((win_no + (pl2 ? 14u : 0u))
+                                             % 28u) == r2) {
                                     md_dbg_hs[pl2 * 28 + r2] = hv2;
                                     *o++ = (uint16_t)((pl2 << 7) | r2);
                                     *o++ = hv2;
