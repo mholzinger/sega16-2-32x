@@ -3173,7 +3173,7 @@ RAMCODE void m_main(void)
                 {
                     uint16_t m = MARS_SYS_COMM10 & 0x1FFF;
                     pg_watch |= m;
-                    if (__builtin_popcount(m) >= 8) pg_deep = 60;
+                    if (__builtin_popcount(m) >= 8) pg_deep = 24;
                     else if (pg_deep) pg_deep--;
                 }
 #endif
@@ -3432,7 +3432,7 @@ RAMCODE void m_main(void)
 #ifdef PG_STICKY
                 pg_watch |= SPR_LAND[80] & 0x1FFF;
                 if (__builtin_popcount(SPR_LAND[80] & 0x1FFF) >= 8)
-                    pg_deep = 60;
+                    pg_deep = 24;
 #endif
                 if (!got_spr) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
