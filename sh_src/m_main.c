@@ -2191,8 +2191,14 @@ RAMCODE void slave_window_k(uint16_t cmd)
 #endif
 #ifdef MD_BG
 /* Packet staging: built in the post-ack gap, published in-window
- * by a bare copy. .bss (probe builds only; region guard checked). */
-static uint16_t md_pkt[768];
+ * by a bare copy. LOOP15: moved from .bss (1536B) to the 0x3E780
+ * fixed block — Phase B's builder code pushed _end 656 bytes over
+ * the guard, and this buys it back with margin. Master-only,
+ * CPU-built and CPU-copied: cached view is correct. Boot init not
+ * needed (header words are written every window before publish).
+ * Layout: 0x3E780 base/hs trackers (224B, NT_WRAP), 0x3E860 md_pkt
+ * (1536B, ends 0x3EE60 — leaves 0x1A0 to the 0x3F000 stack top). */
+#define md_pkt ((uint16_t *)0x0603E860)
 #endif
 static uint8_t cat1_valid, cat1_lo, cat1_hi, cat1_bank, cat1_par;
 static uint8_t cat1_t0, cat1_t1;
