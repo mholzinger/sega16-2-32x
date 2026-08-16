@@ -3703,6 +3703,7 @@ RAMCODE void m_main(void)
                         b[i] = 0xFF;
                 }
             }
+#endif  /* !NT_WRAP (skip-rate bars) */
             /* (No k0 capture: an early-capture spread was tried and it
              * reintroduced the mid-stream-capture poison above. k1's
              * settled budget + the k2 drain carry the load.) */
