@@ -3424,6 +3424,8 @@ RAMCODE void m_main(void)
                                               * insurance) */
 #ifdef PG_STICKY
                 pg_watch |= SPR_LAND[80] & 0x1FFF;
+                if (__builtin_popcount(SPR_LAND[80] & 0x1FFF) >= 8)
+                    pg_deep = 60;
 #endif
                 if (!got_spr) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
