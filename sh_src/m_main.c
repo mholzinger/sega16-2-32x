@@ -288,7 +288,12 @@ static uint8_t text_grp[2][8];              /* text colors: on-demand too */
  * color's level. Exact except when one color is used at two levels in
  * the same frame (counted in DIAG[15]); sprite-pair groups stay level
  * 0 so sprite-over-sprite remains hardware list-order overwrite. */
-static uint8_t pri_lut[2][256];
+/* pri_lut RELOCATED .bss -> fixed block (LOOP 13, same move as
+ * tile_grp): the co-owner drift check pushed MDBGALL past the region
+ * guard. 0x3E580..0x3E781 is free (tile_grp ends 0x3E580, master stack
+ * top 0x3F000). Fully rewritten by every build_maps pass; boot zeroes
+ * it below (no crt0-zero dependence). */
+#define pri_lut ((uint8_t (*)[256])0x0603E580)         /* [2][256] */
 static uint8_t pri_max[2];                  /* max level in pri_lut[par] */
 /* SHADOW sprites (color 0x3F): the arcade darkens the UNDERLYING
  * pixel via a shadowed copy of the whole palette (segas16b_v:
