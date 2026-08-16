@@ -157,6 +157,20 @@ endif
 ifdef MDBGTEXT
 SHCCFLAGS += -DMD_BG_TEXT
 endif
+# `make CUTBLANK=1` = LOOP 14 item 2: at a scene-cut claim storm (one
+# nt chunk claiming >=80 slots arms a 12-chunk countdown), cells whose
+# slot's art has not shipped yet go out as the BLANK slot instead of
+# the stale art the slot still holds — the J-field of foreign art at
+# cuts becomes blank cells under the fade, filling in as uploads land
+# (heal <=1 rotation after each tile lands). Bandwidth-neutral by
+# design: the cut drain is at the transport floor (measured 2026-08-15,
+# tools/cut_profile.lua: 792 claims drained in 28 windows = 8 discovery
+# chunks + 20 batches; the 768-word packet is full at MD_BATCH=40+pal).
+# Counters at the 0x28FA0 scrap: [0] blanked cells, [1] cut arms.
+# Candidate for the MDBGALL bundle if Mike's pass likes it.
+ifdef CUTBLANK
+SHCCFLAGS += -DCUT_BLANK
+endif
 # MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
 # every row a second time, so it inflates the blit -- diagnosis only.
 ifdef MDPAYOFF
