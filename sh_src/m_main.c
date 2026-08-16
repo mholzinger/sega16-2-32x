@@ -1827,11 +1827,20 @@ static uint16_t pg_watch;                    /* see cap_page */
 #ifdef PG_STICKY
 static uint8_t pg_quiet[13];                 /* consecutive quiet captures
                                               * of a watched page; watch
-                                              * drops at 3 (a pointer-load
+                                              * drops at 12 (a pointer-load
                                               * mark can precede the
                                               * stream's writes by cycles
                                               * — one quiet capture is not
                                               * proof the stream ended) */
+static uint8_t pg_deep;                      /* cycles left of deep watch:
+                                              * a broad mark (>=8 pages =
+                                              * the loaders/clear-alls that
+                                              * mark ALL at pointer-load)
+                                              * pins every watch for 60
+                                              * cycles — scene loads write
+                                              * their last pages seconds
+                                              * after the one mark they
+                                              * ever post */
 #endif
 /* (A debug pair briefly lived at 0x26028F10 — INSIDE md_dirty
  * (0x28EC0..0x28F3F). Fifth slot collision of the era; audit the block
