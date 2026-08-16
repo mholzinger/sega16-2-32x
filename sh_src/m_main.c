@@ -1832,6 +1832,15 @@ static uint8_t pg_quiet[13];                 /* consecutive quiet captures
                                               * stream's writes by cycles
                                               * — one quiet capture is not
                                               * proof the stream ended) */
+static uint16_t pg_hot;                      /* pages whose capture CHANGED
+                                              * since the last k2 restore —
+                                              * the only watched pages whose
+                                              * banks can be incoherent, so
+                                              * the only ones restore must
+                                              * touch (deep watch pinned 13
+                                              * pages into restore for 60
+                                              * cycles: ares rejects 0.2 ->
+                                              * 3.1%, [31]=129) */
 static uint8_t pg_deep;                      /* cycles left of deep watch:
                                               * a broad mark (>=8 pages =
                                               * the loaders/clear-alls that
