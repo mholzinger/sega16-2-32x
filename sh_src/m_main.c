@@ -3222,7 +3222,18 @@ RAMCODE void m_main(void)
                  * bank gets the exact base the game's next stores
                  * expect — the stream continues seamlessly across
                  * the bank swap. */
+#ifdef PG_STICKY
+                /* restore only pages that actually MOVED since the last
+                 * restore: a watched-but-unchanged page's banks are
+                 * already coherent, and this cycle's writes were taken
+                 * by the pre-flip capture above, so pg_hot covers every
+                 * mid-flight stream. Watch stays wide (capture), restore
+                 * stays narrow (bandwidth). */
+                restore_pages((uint16_t)(cycle_dirt | pg_hot));
+                pg_hot = 0;
+#else
                 restore_pages((uint16_t)(cycle_dirt | pg_watch));
+#endif
                 cycle_dirt = 0;
             }
             diag_add(6, tp);                 /* slot 6: flip+truth+restore */
