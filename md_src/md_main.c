@@ -961,8 +961,8 @@ window_done: ;
 			for (uint16_t rg = 0; rg < 15; rg++) {
 				while (*ctrl < 0 && --spin) ;
 				if (!spin) { ok = 0; break; }
-				fifo[0] = rs[0]; fifo[0] = rs[1];
-				fifo[0] = rs[2]; fifo[0] = rs[3];
+				FPUSH(rs[0]); FPUSH(rs[1]);
+				FPUSH(rs[2]); FPUSH(rs[3]);
 				rs += 4;
 			}
 		}
