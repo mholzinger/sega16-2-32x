@@ -3865,6 +3865,10 @@ RAMCODE void m_main(void)
                     const layer_regs *wl = isfg ? &snap[0] : bl;
                     md_forced = 0;           /* cell chunk shipped: the
                                               * starvation bound resets */
+#ifdef CUT_BLANK
+                    uint16_t cb_pend0 = md_pending;  /* claims this chunk
+                                                      * = storm detector */
+#endif
                     int cell0 = ((isfg ? md_phase - 5 : md_phase - 1)) * 280;
                     volatile uint16_t *o = sc + 8;
                     for (int row = cell0 / 40; row < cell0 / 40 + 7; row++) {
