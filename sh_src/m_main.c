@@ -4159,9 +4159,34 @@ RAMCODE void m_main(void)
                                 ((volatile uint32_t *)0x26028FA0)[0]++;
                             }
 #endif
+#ifdef NT_WRAP
+                            cbrow[col] = ent;
+#else
                             md_dbg_nt[(isfg ? 1120 : 0) + row * 40 + col] = ent;
                             *o++ = ent;
+#endif
                         }
+#ifdef NT_WRAP
+                        /* diff against the (aligned) mirror; ship only
+                         * the changed span. Mirror updated span-only —
+                         * cells outside it already match. */
+                        {
+                            int st = 0, en = 39;
+                            while (st < 40 && cbrow[st] == mrow[st]) st++;
+                            *o++ = hdr;
+                            if (st < 40) {
+                                while (cbrow[en] == mrow[en]) en--;
+                                *o++ = (uint16_t)((st << 8) | (en - st + 1));
+                                for (int i2 = st; i2 <= en; i2++) {
+                                    *o++ = cbrow[i2];
+                                    mrow[i2] = cbrow[i2];
+                                }
+                            } else {
+                                *o++ = 0;                /* nothing changed */
+                            }
+                            md_dbg_base[(isfg ? 28 : 0) + row] = hdr;
+                        }
+#endif
                     }
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
