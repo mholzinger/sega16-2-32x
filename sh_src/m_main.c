@@ -3148,6 +3148,14 @@ RAMCODE void m_main(void)
                  * the bytes it just wrote), and pg_watch + the
                  * builder's claim gate contain its poison. */
                 pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
+#ifdef PG_STICKY
+                /* marks enter WATCH: a pointer-load mark can arrive
+                 * cycles before the stream's stores, and the first
+                 * capture then sees no change — sticky watch keeps
+                 * capturing until 3 quiet cycles prove the stream is
+                 * really over (the eyehold stale-truth root). */
+                pg_watch |= MARS_SYS_COMM10 & 0x1FFF;
+#endif
                 cycle_dirt |= pg_pending;
                 pg_pending |= pg_watch;      /* unstable pages: recapture the
                                               * latest stream state pre-flip */
