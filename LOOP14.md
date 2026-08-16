@@ -116,6 +116,71 @@ Proven-good, ares-verified (state d8358681, tools/bs9_audit.py):
   - **Scratchpad instruments die with the session** — promote to
     tools/ before handing off (this file's instruments already are).
 
+## 2026-08-15 (late) — ITEM 2 MEASURED TO ITS FLOOR; CUT_BLANK BUILT
+## AND GATED (the J-field becomes a clean reveal)
+
+**The bandwidth half of draw-in is CLOSED as "already at the floor."**
+tools/cut_profile.lua (per-frame DIAG[53]/[57] deltas + MD-side
+consume counters, 70s MDBGALL attract): transport windows run at
+60/s (one per MD vint — not the 20Hz render cadence). The title cut
+at f32 claims 792 fresh codes and drains in 28 windows = 0.47s, and
+28 is the conservation floor: ~8 discovery chunks (the 9-phase
+rotation must WALK cells to find claims) + ~20 tile batches, one
+packet per window. The packet container is FULL (8 hdr + 680 tile +
+48 pal = 736 of 768 words; MD_BATCH can only reach 41). Reordering
+(more forced batches vs more chunks) just trades discovery against
+shipping — the sum is invariant. The only real bandwidth lever is a
+second packet per window, and the retired tear-guard measured a
+736-word 68K FB read costing HALF the window rate — that lane stays
+closed unless Mike still wants faster after seeing CUT_BLANK.
+
+**CUT_BLANK (make CUTBLANK=1, m_main.c nt walk) attacks the SYMPTOM:
+the J-field was never missing bandwidth, it was stale art.** Cells
+are restamped correctly at claim time but their slot still holds the
+previous scene's tile until the upload lands. Now: an nt chunk that
+claims >=80 slots in one window (only cuts do; pans claim <80,
+LOOP13's trickle-starvation case never triggers) arms a 12-chunk
+countdown; while armed, any cell whose slot is still dirty ships as
+MD_BLANK_SLOT. Foreign art -> blank under the fade; the chunk
+revisit after the art lands rewrites the real entry (post-drain the
+rotation is pure-chunk, full heal in ~8 windows). The starvation
+bound is untouched. Counters at the 0x28FA0 scrap ([0] blanked
+cells, [1] arms), boot-zeroed explicitly (FM_TEST trap noted).
+
+**Verified (BUILD ffa476df = MDBGALL+BQCHUNK+CUTBLANK,
+rom/s16_mdbgall_cutblank.32x, stamped normal, _end 0x18f28):**
+  - Mechanism: arm at f32, 680 cells blanked through the storm,
+    blanking stops by f48; 4 arms / 2182 cells across 7s of attract
+    (tools/cut_snap.lua prints the counters + snapshots the cut).
+  - The f044 A/B is dramatic: baseline shows the scattered
+    foreign-tile field across the whole midscreen; CUTBLANK shows
+    landed art + clean blank + crisp INSERT COIN. The draw-in reads
+    as a top-down reveal instead of garbage.
+  - MDBGALL parity A/B vs s16_mdbgall_magic: eyehold/demo/demo2
+    PIXEL-IDENTICAL (steady state untouched). Title 59.33 -> 64.03:
+    the title reveal is progressive, claims trickle past the
+    45-frame capture anchor, so late blanks are still healing at
+    capture — the feature working, not a heal failure. Mike's call.
+  - Shipping gate (BUILD bdd7b8fe, plain make): title 2.44 dx=0,
+    eyehold 3.37 dx=0 EXACT. Region guard: ship 0x18b90 / cutblank
+    0x18f28. magic_smoke on CUTBLANK: cadence 3.01, skips 1,
+    dreq 0, [7]=1 boot-only, drift 3349/26 — matches baseline.
+
+**FOR MIKE'S NEXT ROUND-TRIP (two verdicts now):** (a) the b1343ac9
+co-owner pen items from THE JOB above, unchanged; (b) does
+rom/s16_mdbgall_cutblank.32x make cuts read clean on ares — blank
+reveal vs the old foreign-art field — and does anything NEW flicker
+at scene starts (a storm that re-arms every chunk would blank-flash
+cells; the >=80 threshold is the guard). If (b) reads well, fold
+CUTBLANK into the MDBGALL bundle default.
+
+NOTE srcref/cannonball is stock desktop Cannonball (no 32X code);
+the real 32X OutRun vibe-port is srcref/cannonball-outrun-32x
+(haroldo-ok). Mined 2026-08-15: nothing new for us — its 60Hz is
+span-fill rendering with no audio/DREQ/slave-SH2, its 32X idioms are
+d32xr's (already mined, NOTES.md:402+). Keep for its MAME bring-up
+notes only.
+
 ## GATES ON EVERY COMMIT (unchanged)
 
   - `tools/parity_run.sh <dir>`: title 2.44, eyehold 3.37 statics.
