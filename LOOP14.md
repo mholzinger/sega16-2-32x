@@ -329,6 +329,34 @@ load transients (cosmetic, corpus frame_001980), 4. audio (parked).
 CUTBLANK verdict STILL OPEN (cuts read clean?) — fold decision waits
 on it.
 
+## 2026-08-16 (later still) — CUTBLANK VERDICT VOIDED BY BUILD
+## LINEAGE; COMBINED ROM BUILT (v3cb). PGSTICKY's cost is FELT.
+
+Mike played rom/s16_mdbgall_cutblank.32x (ffa476df) — "backgrounds
+all garbled": that rom PREDATES PGSTICKY and still carries the
+stale-truth disease; the CUTBLANK question was never actually
+testable on it. TRAP (new, name it): **probe roms are frozen at
+their build commit — before handing one over, check what fixes
+postdate it.** His other observation is real signal though: the
+no-PGSTICKY rom felt FASTER with less sprite tearing (its state:
+rejects 0.2%, [31]=8 vs v2's 2.3%/90) — **PGSTICKY's transition
+cost is humanly perceptible**; speed lane should include deep-watch
+tuning (24 -> lower? spread the k2 capture?) with the eyehold 8.2%
+gate as the floor.
+
+**rom/s16_mdbgall_v3cb.32x (BUILD de463cb1) = the combined verdict
+rom: MDBGALL bundle (PG_STICKY folded) + CUT_BLANK.** Region guard
+required moving pg_quiet/pg_deep to the 0x28F40 scrap (boot-zeroed
+explicitly; scrap now 0x28F4E..4F + 0x28F68-7F + 0x28FA8-FF free —
+0x28FA0-A7 are the CUT_BLANK counters). _end 0x18ff0 (16 bytes
+under the guard — the NEXT flag needs a diet first). Gates: eyehold
+8.25 dx=0, statics EXACT, smoke cadence 3.01/skips 0/dreq 0/[7]=1,
+cut_snap arms/blanks firing (680 cells @ f36 cut).
+
+MIKE: v3cb replaces both old probe roms. Question stands: do scene
+cuts read as a clean reveal (blank fill-in under the fade) vs
+foreign art — with backgrounds NOW intact everywhere else?
+
 NOTE srcref/cannonball is stock desktop Cannonball (no 32X code);
 the real 32X OutRun vibe-port is srcref/cannonball-outrun-32x
 (haroldo-ok). Mined 2026-08-15: nothing new for us — its 60Hz is
