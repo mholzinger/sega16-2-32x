@@ -117,6 +117,57 @@ drops to 1-in-4 windows (heal walk) except during claim storms
 (CUT_BLANK's detector marks those); WINSPAN on Mike's state is the
 scoreboard: mean 47.3 -> target ~15.
 
+## 2026-08-16 (later) — PHASE B SHIPPED: MIRROR-DIFFED ROWS, CONSUME
+## MEAN 47 -> 18 LINES; two placement bugs paid for on the way
+
+**rom/s16_mdbgall_wrapB.32x (BUILD 21b71894) = the speed rom.**
+Design pivot from the kickoff: NO new packet scheduling — the chunk
+rotation stays exactly as-is (its cadence already matches AB scroll
+speeds), and rows became MIRROR-DIFFED: shift the view-space mirror
+by the coarse step (or invalidate on vertical/teleport), walk the
+row unchanged (allocator side effects identical), ship only the
+changed span. Eviction/palette healing falls out free (changed
+entries diff). Plus: an ALL-STRIPS hscroll delta tail every type-1
+packet (scroll smoothness needs per-window hs — the pre-wrap path
+shipped a full-screen value every window), and a LOSS BACKSTOP (one
+rotating force-full row per chunk visit + each strip re-ships every
+28 windows: a span that never lands — stale-bank re-read after a
+V-gate reject — would otherwise diverge FOREVER; the old full-chunk
+protocol self-healed by construction).
+
+**MEASURED: WINSPAN mean 47.2 -> 17.8 lines (max 70, storms) on the
+65s MAME attract**; ares expects the same shape (MAME 47.2 == ares
+47.3 baseline). Gates: title parity PIXEL-EXACT (46619, the stable
+constant); smoke cadence 3.01, dreq 0, [7]=1, drift [5]=2109/[6]=1;
+region guard 0x18d68; shipping statics EXACT after plain make.
+
+**GATE NOTE — eyehold under NT_WRAP+CUTBLANK is judged by diff
+ANATOMY, not %:** the anchor+20 races the scene's draw-in and the
+eye's blink phase (observed 8.14 / 13.35 / 40.04 across builds —
+the 40 was CUT_BLANK's black rows mid-load + a wide-open blink).
+PASS = diff confined to the eye interior + logo, NO bands/scatter;
+late-scene frame_snaps confirm rows heal.
+
+**TWO PLACEMENT BUGS, both cost a build each (slot collisions #6
+and the stack red-zone):**
+  - md_pkt moved .bss -> 0x3E860 put its palette words 192 bytes
+    below the 0x3F000 master stack top: the STACK clobbered them —
+    green monochrome title with CORRECT shapes (CRAM garbage). The
+    master stack dips >=576 bytes; anything above ~0x3ED80 is
+    red-zone. md_pkt now 0x3E780..0x3ED7F.
+  - trackers at 0x3E380 sat exactly on mdp_s_used ([6] 26 -> 257
+    from corrupted usage masks). THE FIXED MAP IS FULL — grep every
+    define before parking ANYTHING; new small arrays go in .bss and
+    audits take their address from the flavor lst (md_dbg_base
+    0x50b0 / md_dbg_hs 0x5040 this build).
+
+MIKE: play wrapB. Questions: (a) speed — transitions and gameplay
+should feel lighter (the 68K window shrank ~30 lines mean; watch
+window/ack + deferrals + rejects in the state), (b) any NEW
+background wrongness (wrap placement, scroll seams at the 64-column
+wrap boundary, per-band parallax — now exact per strip for the
+first time), (c) the standing CUT_BLANK cut-reveal verdict.
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
