@@ -2417,6 +2417,8 @@ RAMCODE void m_main(void)
             spr_pair[k][i] = 0xFF;
         for (int i = 0; i < 8; i++)
             text_grp[k][i] = 0xFF;
+        for (int i = 0; i < 256; i++)
+            pri_lut[k][i] = 0;      /* fixed block: not .bss-zeroed */
     }
     for (int i = 0; i < 32; i++) {
         grp_key[i] = 0xFF;
