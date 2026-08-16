@@ -196,8 +196,8 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * md_dbg_hs = last SHIPPED per-strip hscroll (delta tracker for the
  * all-strips hs tail section every type-1 packet carries). Both are
  * fixed blocks: boot inits them to 0xFFFF explicitly. */
-#define md_dbg_base ((uint16_t *)0x0603E780)
-#define md_dbg_hs   ((uint16_t *)0x0603E7F0)
+#define md_dbg_base ((uint16_t *)0x0603E380)
+#define md_dbg_hs   ((uint16_t *)0x0603E3F0)
 #endif
 #define md_dbg_nt ((uint16_t *)0x0603D200)  /* [2][28][40] mirror of the
                                              * last entry shipped per
