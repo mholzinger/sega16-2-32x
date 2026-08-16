@@ -1,9 +1,10 @@
 -- CUT_BLANK verification: snapshot the title-cut draw-in window and
 -- print the 0x28FA0 scrap counters ([0] blanked cells, [1] cut arms).
---   CS_DIR=snapdir mame 32x -cart <rom> -rompath ./mame -skip_gameinfo \
---     -video soft -sound none -nothrottle -str 8 \
---     -snapdir snapdir -autoboot_script tools/cut_snap.lua
+--   CS_DIR=outdir mame 32x -cart <rom> -rompath ./mame -skip_gameinfo \
+--     -video soft -sound none -nothrottle \
+--     -autoboot_script tools/cut_snap.lua
 -- Frames 28..64 step 4 cover the f32 claim storm (cut_profile 2026-08-15).
+local dir = os.getenv("CS_DIR") or "/tmp"
 local ms  = manager.machine.devices[":sega32x:32x_master_sh2"]
 local msp = ms.spaces["program"]
 local out = assert(io.open("/tmp/cut_snap.txt", "w"))
