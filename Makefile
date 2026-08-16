@@ -182,10 +182,28 @@ endif
 # writes slip past pg_watch's one-quiet-capture drop and are never
 # re-marked. The rotor bounds any such miss to <=0.65s instead of
 # forever. Cost ~0.1-0.3ms per k1 (full-13 refresh was ~0.7ms).
-# Candidate for BOTH flavors if gates hold (shipping's truth measured
-# clean, but the bound is cheap insurance there too).
+# DEAD ON ARES (Mike, 2026-08-16, frames 3239-42 + bs9): backgrounds
+# CYCLE between scenes' art — the rotor captures unmarked pages
+# outside the settled-mark discipline, so on ares timing it takes
+# mid-write staging states into truth continuously (exactly the
+# half-written-page hazard the k2 merge comment warns about; MAME's
+# capture timing happened to land post-write). NEVER SHIP. The root
+# fix is PGSTICKY below.
 ifdef PGROTOR
 SHCCFLAGS += -DPG_ROTOR
+endif
+# `make PGSTICKY=1` = LOOP 14 item 3 root fix, take 2: sticky watch.
+# The original miss: thunks mark at POINTER-LOAD; the budgeted drain
+# can capture the page before the stream's writes arrive, see no
+# change, and drop it — nothing ever re-marks (the eyehold 6947-word
+# staleness, MDBGALL-only because MD_BG work shifts drain timing into
+# that too-early window). Fix: every mark puts the page into pg_watch
+# (not just pg_pending), and watch drops only after 3 consecutive
+# quiet captures. All captures stay inside the settled-mark path —
+# no unmarked-page races (the PGROTOR disease), ~zero steady-state
+# cost, ~3 extra page captures per transition burst.
+ifdef PGSTICKY
+SHCCFLAGS += -DPG_STICKY
 endif
 # MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
 # every row a second time, so it inflates the blit -- diagnosis only.
