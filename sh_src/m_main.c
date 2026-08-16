@@ -1856,10 +1856,23 @@ RAMCODE static void cap_page(int pg)
         ch |= v2 ^ dst[i + 2]; dst[i + 2] = v2;
         ch |= v3 ^ dst[i + 3]; dst[i + 3] = v3;
     }
-    if (ch)
+    if (ch) {
         pg_watch |= (uint16_t)(1u << pg);
-    else
+#ifdef PG_STICKY
+        pg_quiet[pg] = 0;
+#endif
+    } else {
+#ifdef PG_STICKY
+        if ((pg_watch >> pg) & 1) {
+            if (++pg_quiet[pg] >= 3) {
+                pg_watch &= (uint16_t)~(1u << pg);
+                pg_quiet[pg] = 0;
+            }
+        }
+#else
         pg_watch &= (uint16_t)~(1u << pg);
+#endif
+    }
 }
 
 RAMCODE static void cap_drain(int budget)
