@@ -3166,9 +3166,16 @@ RAMCODE void m_main(void)
                 /* marks enter WATCH: a pointer-load mark can arrive
                  * cycles before the stream's stores, and the first
                  * capture then sees no change — sticky watch keeps
-                 * capturing until 3 quiet cycles prove the stream is
-                 * really over (the eyehold stale-truth root). */
-                pg_watch |= MARS_SYS_COMM10 & 0x1FFF;
+                 * capturing until 12 quiet cycles prove the stream is
+                 * really over (the eyehold stale-truth root). Broad
+                 * marks (loaders) pin deep watch; decremented here,
+                 * once per cycle. */
+                {
+                    uint16_t m = MARS_SYS_COMM10 & 0x1FFF;
+                    pg_watch |= m;
+                    if (__builtin_popcount(m) >= 8) pg_deep = 60;
+                    else if (pg_deep) pg_deep--;
+                }
 #endif
                 cycle_dirt |= pg_pending;
                 pg_pending |= pg_watch;      /* unstable pages: recapture the
