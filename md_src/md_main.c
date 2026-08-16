@@ -1027,7 +1027,16 @@ window_done: ;
 				// A displaced landing puts these two words off-position;
 				// the master then skips the packet whole (stale beats
 				// displaced) and counts it in DRQR[7].
+#ifdef NT_WRAP
+				if (ok) {
+					while (*ctrl < 0 && --spin) ;
+					fifo[0] = 0xA55A;
+					while (*ctrl < 0 && --spin) ;
+					fifo[0] = 0x5AA5;               // pad to 596 / 340
+				}
+#else
 				if (ok) { fifo[0] = 0xA55A; fifo[0] = 0x5AA5; }  // pad to 596 / 340
+#endif
 			} else
 				ok = 0;
 		}
