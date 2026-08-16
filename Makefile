@@ -171,6 +171,22 @@ endif
 ifdef CUTBLANK
 SHCCFLAGS += -DCUT_BLANK
 endif
+# `make PGROTOR=1` = LOOP 14 item 3 ROOT FIX candidate: background
+# tilemap-truth re-verify, 2 pages per k1 through the existing
+# cap_drain (budget 3->5). MEASURED (2026-08-15, tools/nt_dump.lua +
+# arc_dump.lua at the eyehold anchor): MDBGALL truth pages 0-4 hold
+# 6947 stale words vs the arcade (ranking-table cat-1 cells the game
+# cleared at the cut — the top/bottom trash bands and the stage-1 sky
+# garbage); the SHIPPING flavor at the same anchor is 0-word EXACT.
+# The MD_BG window work shifts capture timing so streamed staging
+# writes slip past pg_watch's one-quiet-capture drop and are never
+# re-marked. The rotor bounds any such miss to <=0.65s instead of
+# forever. Cost ~0.1-0.3ms per k1 (full-13 refresh was ~0.7ms).
+# Candidate for BOTH flavors if gates hold (shipping's truth measured
+# clean, but the bound is cheap insurance there too).
+ifdef PGROTOR
+SHCCFLAGS += -DPG_ROTOR
+endif
 # MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
 # every row a second time, so it inflates the blit -- diagnosis only.
 ifdef MDPAYOFF
