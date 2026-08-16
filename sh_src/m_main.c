@@ -3545,6 +3545,21 @@ RAMCODE void m_main(void)
                      * spread of transition bursts; the k2 pre-flip drain
                      * is the correctness point.) */
                     int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
+#ifdef PG_ROTOR
+                    /* Background truth re-verify: cap_page is compare-
+                     * and-copy, so a clean page costs one read pass and
+                     * writes nothing new. Bounds ANY missed stream mark
+                     * (the MDBGALL eyehold staleness class) to one
+                     * rotor period instead of forever. */
+                    {
+                        static uint8_t pg_rot;
+                        pg_pending |= (uint16_t)(1u << pg_rot);
+                        if (++pg_rot >= 13) pg_rot = 0;
+                        pg_pending |= (uint16_t)(1u << pg_rot);
+                        if (++pg_rot >= 13) pg_rot = 0;
+                    }
+                    if (budget < 5) budget = 5;
+#endif
 #ifdef TILE_RATE
                     /* LOOP 11 step 1 — HOW OFTEN DOES THE TILEMAP CHANGE?
                      * The pivot rests on it being rare: if the game's tile
