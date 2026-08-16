@@ -192,8 +192,12 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #ifdef NT_WRAP
 /* LOOP15 wrap protocol: per view row, (prow<<8)|c0 — where that row's
  * cells landed in the wrapped 64x32 plane. Fixed block 0x3E780 (free
- * space after pri_lut; audit reads it from bs9 states). [2][28]. */
+ * space after pri_lut; audit reads it from bs9 states). [2][28].
+ * md_dbg_hs = last SHIPPED per-strip hscroll (delta tracker for the
+ * all-strips hs tail section every type-1 packet carries). Both are
+ * fixed blocks: boot inits them to 0xFFFF explicitly. */
 #define md_dbg_base ((uint16_t *)0x0603E780)
+#define md_dbg_hs   ((uint16_t *)0x0603E7F0)
 #endif
 #define md_dbg_nt ((uint16_t *)0x0603D200)  /* [2][28][40] mirror of the
                                              * last entry shipped per
