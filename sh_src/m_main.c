@@ -3982,6 +3982,43 @@ RAMCODE void m_main(void)
                                 continue;    /* pen never claimed */
                             lq = mdp_quant(PAL_SH[s2 * 8 + p]);
                             pen = mdp_s_map[s2 * 8 + p];
+                            /* CO-OWNER PATH (2026-08-15, the yellow/purple
+                             * slab family): the live CRAM refresh makes a
+                             * shared pen DISPLAY its owner's current
+                             * colour, so a co-owner whose own live colour
+                             * never moved paints owner-coloured filler —
+                             * and the bookkeeping gates below (line_c/qc)
+                             * see no drift at all, which is why slabs
+                             * persisted with [6]=8. Compare a co-owner
+                             * against WHAT THE PEN SHOWS (owner live),
+                             * same d^2>=18 catastrophic rule. Lockstep
+                             * fades still exit on lq == oc. */
+                            {
+                                unsigned os = mdp_pen_own[(lb + pen) * 2];
+                                unsigned op = mdp_pen_own[(lb + pen) * 2 + 1];
+                                if (os != s2 || op != (unsigned)p) {
+                                    uint16_t oc =
+                                        mdp_quant(PAL_SH[os * 8 + op]);
+                                    if (lq != oc) {
+                                        int er = (int)(oc & 7) - (int)(lq & 7);
+                                        int eg = (int)((oc >> 3) & 7)
+                                               - (int)((lq >> 3) & 7);
+                                        int eb = (int)((oc >> 6) & 7)
+                                               - (int)((lq >> 6) & 7);
+                                        unsigned ed = (unsigned)(er * er
+                                                    + eg * eg + eb * eb);
+                                        if (ed >= 18) {
+                                            DRQR[6]++;
+                                            mdp_free_set(s2);
+                                            break;   /* set gone */
+                                        }
+                                        DRQR[5]++;
+                                        DIAG[38]++;
+                                    }
+                                    continue;   /* owner-vs-line_c rules
+                                                 * below are owner-only */
+                                }
+                            }
                             if (lq == mdp_line_c[lb + pen]
                                 || lq == mdp_s_qc[s2 * 8 + p])
                                 continue;
