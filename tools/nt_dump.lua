@@ -29,6 +29,15 @@ emu.register_frame_done(function()
     dump("mdtag.bin", 0x0603B400, 4096)
     dump("sline.bin", 0x0603C4A0, 128)
     dump("tmap.bin",  0x06019000, 53248)
+    dump("textu.bin", 0x06026000, 4096)
+    do  -- 68K WRAM text shadow (patch_game: 0x410000 -> 0xFF8000)
+      local mdp = manager.machine.devices[":maincpu"].spaces["program"]
+      local fh = assert(io.open(dir .. "/shadow.bin", "wb"))
+      local t = {}
+      for i = 0, 4095 do t[#t + 1] = string.char(mdp:read_u8(0xFF8000 + i)) end
+      fh:write(table.concat(t))
+      fh:close()
+    end
     manager.machine:exit()
   end
 end)
