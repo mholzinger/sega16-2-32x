@@ -3155,7 +3155,7 @@ RAMCODE void m_main(void)
                     DIAG[7]++;               /* missed flips = dropped frames
                                               * (blits no longer skip at all:
                                               * they write the hidden bank) */
-#ifdef NT_WRAP
+#if defined(NT_WRAP) && defined(MD_BG)
                 if (skip) {
                     /* reject-loss healing: whatever the last packet
                      * carried may never land (stale-bank consume on the
