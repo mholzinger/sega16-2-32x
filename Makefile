@@ -151,7 +151,10 @@ endif
 # item (W-position regs, priority vs FG cat-0), tracked in LOOP13.
 # MDBGTEXT=1 re-adds the flag for whoever implements the MD side.
 ifdef MDBGALL
-SHCCFLAGS += -DMD_BG -DMD_BG_FG0
+# PG_STICKY folded into the bundle 2026-08-16: Mike's ares verdict on
+# 652cb5fe was "nearly flawless"; the stale-truth class it fixes is
+# MDBGALL-blocking (LOOP14).
+SHCCFLAGS += -DMD_BG -DMD_BG_FG0 -DPG_STICKY
 MDCCFLAGS += -DMD_BG
 endif
 ifdef MDBGTEXT
