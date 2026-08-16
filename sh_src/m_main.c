@@ -3401,6 +3401,9 @@ RAMCODE void m_main(void)
                                               * but a missed stale page
                                               * breaks game logic — cheap
                                               * insurance) */
+#ifdef PG_STICKY
+                pg_watch |= SPR_LAND[80] & 0x1FFF;
+#endif
                 if (!got_spr) {
                 /* LOOP 8: word 81 is text base (bits 0-10, always a
                  * multiple of 256) plus an optional palette tag —
