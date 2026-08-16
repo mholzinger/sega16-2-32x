@@ -4066,8 +4066,12 @@ RAMCODE void m_main(void)
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
                             if (isfg && (w == 0 || (w & 0x8000))) {
                                 /* FG: empty or cat-1 cell -> transparent */
+#ifdef NT_WRAP
+                                cbrow[col] = MD_BLANK_SLOT;
+#else
                                 md_dbg_nt[1120 + row * 40 + col] = MD_BLANK_SLOT;
                                 *o++ = MD_BLANK_SLOT;
+#endif
                                 continue;
                             }
                             unsigned code = w & 0x1FFF;
