@@ -2391,6 +2391,13 @@ RAMCODE void m_main(void)
 #ifdef MD_BG
     for (int i = 0; i < NSETS * NWAYS / 32; i++)
         md_dirty[i] = 0;
+#ifdef CUT_BLANK
+    /* fixed-scrap counters (0x28FA0 free block): not .bss, so boot
+     * must zero them explicitly (emulators zero SDRAM; silicon won't).
+     * [0] blanked cells, [1] cut arms. */
+    ((volatile uint32_t *)0x26028FA0)[0] = 0;
+    ((volatile uint32_t *)0x26028FA0)[1] = 0;
+#endif
     for (int i = 0; i < 28 * 40; i++)
         md_dbg_nt[i] = 0xDEAD;               /* debug mirror: never-written */
     for (int i = 0; i < MDP_LINES * 16; i++) {
