@@ -2540,6 +2540,10 @@ RAMCODE void m_main(void)
     uint8_t  md_forced = 0;              /* consecutive demand-bias tile
                                           * batches; see the starvation
                                           * bound at the packet builder */
+#ifdef CUT_BLANK
+    uint8_t  md_cut = 0;                 /* chunk-visits left in cut mode
+                                          * (armed by a claim storm) */
+#endif
 #endif
     for (int i = 0; i < 4; i++) {
         bq[i].on = 0;
