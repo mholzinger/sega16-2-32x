@@ -208,6 +208,20 @@ endif
 ifdef PGSTICKY
 SHCCFLAGS += -DPG_STICKY
 endif
+# `make NTWRAP=1` = LOOP 15 wrap protocol, PHASE A (display math only,
+# bandwidth-neutral): cells land at wrapped 64x32 plane positions with
+# per-row placement headers; the MD switches to cell-strip hscroll
+# (reg 0x0B=0x02) and applies FULL per-strip hscroll + full VSRAM vy —
+# per-band fine-x parallax becomes exact for the first time (the old
+# path applied ONE full-screen hscroll from strip 0). Phase B (ship
+# only incoming columns + slow heal walk; consume mean 47.3 lines ->
+# ~10 on the ares WINSPAN meter) builds on this once A gates. NOTE:
+# margins no longer exist (whole plane live) — bs9_audit's margin and
+# window checks need the md_dbg_base array (0x3E780) to locate rows.
+ifdef NTWRAP
+SHCCFLAGS += -DNT_WRAP
+MDCCFLAGS += -DNT_WRAP
+endif
 # MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
 # every row a second time, so it inflates the blit -- diagnosis only.
 ifdef MDPAYOFF
