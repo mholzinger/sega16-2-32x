@@ -9,10 +9,15 @@
 --   mdtag.bin  0x0603B400  4096   (md_tag u32 x1024)
 --   sline.bin  0x0603C4A0  128    (mdp_s_line)
 --   tmap.bin   0x06019000  53248  (TILEMAP_C 13 pages x 2K words)
+-- ND_FRAME=<n> dumps at an absolute frame; ND_ANCHOR=eyehold dumps at
+-- the parity eyehold state anchor + 20 settle (matches parity_cap and
+-- tools/arc_dump.lua so both sides freeze the same game state).
 local ms  = manager.machine.devices[":sega32x:32x_master_sh2"]
 local msp = ms.spaces["program"]
 local dir = os.getenv("ND_OUT") or "/tmp/nt_dump"
-local at  = tonumber(os.getenv("ND_FRAME") or "1600")
+local at  = tonumber(os.getenv("ND_FRAME") or "0")
+local anchor = os.getenv("ND_ANCHOR")
+local armed = nil
 local function dump(name, base, len)
   local f = assert(io.open(string.format("%s/%s", dir, name), "wb"))
   local t = {}
