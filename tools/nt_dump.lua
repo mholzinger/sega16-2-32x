@@ -30,6 +30,8 @@ emu.register_frame_done(function()
     dump("sline.bin", 0x0603C4A0, 128)
     dump("tmap.bin",  0x06019000, 53248)
     dump("textu.bin", 0x06026000, 4096)
+    dump("sbuf.bin",  0x06005390, 80640)   -- 336x240 composed indices
+    dump("cram.bin",  0x06028900, 512)     -- cram_mirror
     do  -- 68K WRAM text shadow (patch_game: 0x410000 -> 0xFF8000)
       local mdp = manager.machine.devices[":maincpu"].spaces["program"]
       local fh = assert(io.open(dir .. "/shadow.bin", "wb"))
