@@ -3661,7 +3661,16 @@ RAMCODE void m_main(void)
                 tp = frt();
                 apply_cram(par);
                 diag_add(2, tp);
-            } else if (k == 2) {
+            }
+#ifndef NT_WRAP
+            /* SKIP-RATE BARS: excluded under NT_WRAP for the region
+             * guard (~150 bytes) and because the wrap flavor sets its
+             * own parity baseline — these debug pixels (and the CRAM
+             * 255 hijack) are OURS-ONLY content inside the capture
+             * area. When NT_WRAP becomes the bundle, whether shipping
+             * drops them too (statics would MOVE, downward) is Mike's
+             * gate-rebaseline call, not a default. */
+            else if (k == 2) {
                 /* SKIP-RATE BARS (band-staleness debug):
                  *   2 = total in-window time (1px = 87.7us)
                  *   4 = master-side blit skips this cycle x16px
