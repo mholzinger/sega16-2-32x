@@ -1209,6 +1209,48 @@ full polling costs ~+10-16 lines of 68K tail (spin headroom says
 polls almost never wait, so the cost is pure MMIO reads — measure
 with TAIL_PROBE before shipping it).
 
+**SECOND ARES ROUND-TRIP (f2978db9, Mike): the COMM10 exact-recovery
+verdict is IN — rejects 7.6% -> 0.2%, cadence 3.01, late-latches
+627 -> 14, "sprites look complete". Loss rate steady (532/~6096
+windows = 8.7%), all skipped safely.** The two artifacts Mike shot
+were AUDITED FROM HIS STATE and classified:
+  - frame 75 (INSERT COIN, no BG): scene-cut draw-in — known
+    shortlist item 1 (MD_BATCH can't absorb a cut's hundreds of new
+    codes). Not new.
+  - frame 503 (right-edge letter band over the attract demo): a
+    5-column slice of the RANKING screen's table cells ("1ST",
+    digits, (C)SEGA) stuck in the rightmost MD columns after the
+    scene cut = the documented post-cut residue that heals slowly.
+    The savestate (~100s in) shows it HEALED: both planes 0/1120 vs
+    mirrors, window NT empty, sbuf clean. The ~30s-persistence open
+    question (mid-stream captures / allocator memory) remains the
+    MDBGALL lane's next real target.
+  - TEXT_U right columns clean, transport perfect — the magic-tail
+    fix holds on ares.
+
+**REAL BUG FOUND BY THE AUDIT + FIXED (BUILD d8358681, both
+flavors): plane A margins were NEVER BLANKED.** The part-1 margin
+init wrote only plane B (0xE000); plane A's margin cells (cols
+40-63, rows 28-31) stayed 0x0000 = SLOT 0 — a LIVE cache slot — so
+once art lands there, fine hscroll (xf=1 in Mike's state) leaks it
+into the 1-7px right-edge sliver. Init now blanks BOTH planes to
+0x03FF. Gates: statics 2.44/3.37 dx=0 EXACT, MAME smoke clean.
+Watch item: that smoke's pen-drift small count read 2860 vs ~140 on
+the two prior smokes with parity pixel-identical — likely an attract
+phase-shift artifact of the changed boot timing; re-read on the next
+ares state before believing either number.
+
+**TRAP, THIRD TIME — VRAM-base fingerprinting:** the margin-content
+recipe validated base+0x2000 AGAIN, because it only checked ONE
+plane's margins and plane A's were (per the bug above) not 0x03FF.
+The unblanked true base failed validation; the alias passed. Anchor
+on MIRROR CONTENT (search the state for md_dbg_nt row bytes — NT
+file offset minus its VRAM offset gives the base) or validate BOTH
+planes. Also nailed this way: mirror[0] pairs with plane B (0xE000)
+and mirror[1] with plane A (0xC000) — the reverse of the naive
+reading; and the staged-record ctrl words in WRAM 0xFFA400 are a
+register-free anchor for which VRAM addresses the receiver targets.
+
 FALSE TRAIL KILLED THIS SESSION: "compose walks margin rows the
 arcade never displays" — the walk ranges are exact; do not re-open
 compose_layer_regs for this. TOOLKIT-grade fact: ANY S16 title's
