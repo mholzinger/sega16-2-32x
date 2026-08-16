@@ -987,8 +987,8 @@ window_done: ;
 					for (uint16_t g = 0; g < 64; g++) {
 						while (*ctrl < 0 && --spin) ;
 						if (!spin) { ok = 0; break; }
-						fifo[0] = p[0]; fifo[0] = p[1];
-						fifo[0] = p[2]; fifo[0] = p[3];
+						FPUSH(p[0]); FPUSH(p[1]);
+						FPUSH(p[2]); FPUSH(p[3]);
 						p += 4;
 					}
 				}
