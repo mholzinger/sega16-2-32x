@@ -189,6 +189,12 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #define mdp_pen_own ((uint8_t *)0x0603D1A0) /* [3][16][2] owner set,pixel
                                              * -- drives the live CRAM
                                              * refresh; ends 0x3D200 */
+#ifdef NT_WRAP
+/* LOOP15 wrap protocol: per view row, (prow<<8)|c0 — where that row's
+ * cells landed in the wrapped 64x32 plane. Fixed block 0x3E780 (free
+ * space after pri_lut; audit reads it from bs9 states). [2][28]. */
+#define md_dbg_base ((uint16_t *)0x0603E780)
+#endif
 #define md_dbg_nt ((uint16_t *)0x0603D200)  /* [2][28][40] mirror of the
                                              * last entry shipped per
                                              * cell, [0]=plane B [1]=A —
