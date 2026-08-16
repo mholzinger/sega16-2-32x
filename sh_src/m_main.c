@@ -2566,6 +2566,11 @@ RAMCODE void m_main(void)
                                           * all pages once, so the ex-decoy
                                           * bank gets a full staging copy at
                                           * the first flip. */
+#ifdef PG_STICKY
+    for (int i = 0; i < 13; i++)         /* fixed scrap: no .bss zeroing */
+        pg_quiet[i] = 0;
+    pg_deep = 0;
+#endif
     pg_watch = 0x1FFF;                   /* pages whose last capture CHANGED
                                           * content = a writer stream may
                                           * still be in flight (the big
