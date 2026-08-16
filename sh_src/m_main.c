@@ -1824,6 +1824,15 @@ RAMCODE static void cache_fill(int budget)
  * is one extra SDRAM read per long against the FB read we already pay —
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
+#ifdef PG_STICKY
+static uint8_t pg_quiet[13];                 /* consecutive quiet captures
+                                              * of a watched page; watch
+                                              * drops at 3 (a pointer-load
+                                              * mark can precede the
+                                              * stream's writes by cycles
+                                              * — one quiet capture is not
+                                              * proof the stream ended) */
+#endif
 /* (A debug pair briefly lived at 0x26028F10 — INSIDE md_dirty
  * (0x28EC0..0x28F3F). Fifth slot collision of the era; audit the block
  * before parking anything in the "28D00 hole": ROWHASH ends 0x28EC0,
