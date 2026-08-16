@@ -134,15 +134,32 @@ static void md_bg_palette(void) {
 	for (uint16_t pl = 0; pl < 2; pl++) {
 		uint32_t nt = pl ? 0xE000u : 0xC000u;
 		for (uint16_t row = 0; row < 32; row++) {
+#ifdef NT_WRAP
+			/* wrap protocol: the WHOLE 64x32 plane is live window
+			 * (cells land at wrapped positions) — blank-fill all of
+			 * it; there are no margins anymore. */
+			uint32_t a = nt + (uint32_t)row * 128u;
+			uint16_t n = 64;
+#else
 			uint32_t a = nt + (uint32_t)row * 128u
 			           + ((row < 28) ? 80u : 0u);
 			uint16_t n = (row < 28) ? 24 : 64;
+#endif
 			*vdp_ctrl_wide = ((0x4000u | (a & 0x3FFFu)) << 16)
 			               | ((a >> 14) & 3u);
 			for (uint16_t c2 = 0; c2 < n; c2++)
 				*vdp_data_port = 0x03FF;   /* blank slot, pal 0 */
 		}
 	}
+#ifdef NT_WRAP
+	/* cell-strip hscroll mode + a clean table: reg 0x0B bit1 selects
+	 * per-8-line entries (32 bytes apart at VRAM 0xFC00; A +0, B +2).
+	 * Zero the whole table so unstamped strips show the blank fill. */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8B02;
+	*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
+	for (uint16_t i = 0; i < 512; i++)
+		*vdp_data_port = 0;
+#endif
 	/* A/B: full-screen hscroll (reg 11 = 00). Cell mode made the MD
 	 * plane vanish per-strip on MAME while VRAM/CRAM verified correct
 	 * through the data port; bisecting whether the per-strip table is
