@@ -28,7 +28,20 @@ end
 local f = 0
 emu.register_frame_done(function()
   f = f + 1
-  if f == at then
+  local go = (at > 0 and f == at)
+  if anchor == "eyehold" and not go then
+    local mdp = manager.machine.devices[":maincpu"].spaces["program"]
+    if armed then
+      armed = armed - 1
+      go = (armed <= 0)
+    elseif f >= 60
+        and mdp:read_u8(0xFFF031) == 0x10
+        and mdp:read_u8(0xFFC0A1) == 0x09
+        and (mdp:read_u16(0xFFC0A2) & 0xFFF0) == 0x0040 then
+      armed = 20
+    end
+  end
+  if go then
     dump("snap.bin",  0x060052E8, 168)
     dump("ntmir.bin", 0x0603D200, 4480)
     dump("mdtag.bin", 0x0603B400, 4096)
