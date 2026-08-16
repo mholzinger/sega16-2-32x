@@ -5,11 +5,13 @@ emu.register_frame_done(function()
     frames = frames + 1
     if frames % 600 ~= 0 then return end
     local sh2 = manager.machine.devices[':sega32x:32x_master_sh2'].spaces['program']
-    local n = sh2:read_u32(0x06027000 + 9 * 4)
+    -- DIAG base is 0x06028000 (0x27000 is PAL_SH — this read the palette
+    -- as counters and reported nonsense; corrected LOOP 6).
+    local n = sh2:read_u32(0x06028000 + 9 * 4)
     if n == 0 then return end
     local line = string.format('f=%d n=%d', frames, n)
     for i = 1, 14 do
-        local v = sh2:read_u32(0x06027000 + (i - 1) * 4)
+        local v = sh2:read_u32(0x06028000 + (i - 1) * 4)
         line = line .. string.format(' %s=%.2fms', names[i], v / n * 1.37e-3)
     end
     out:write(line .. '\n')

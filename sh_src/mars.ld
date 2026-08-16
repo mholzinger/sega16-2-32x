@@ -71,6 +71,14 @@ SECTIONS {
 	} > rom
 	_stext = SIZEOF (.text);
 
+	/* Rebased 68K game image (unpair project): the FULL 256KB arcade
+	 * image, every ROM reference +0x900000, executed by the 68K through
+	 * the banked 0x900000 cart window (bank 3 -> cart 0x300000). Fixed
+	 * placement: the delta is baked into the patched binary. */
+	.gamehigh 0x02300000 : AT(0x00300000) {
+		KEEP(*(.gamehigh))
+	} > rom
+
 	.data 0x06000000 : AT(LOADADDR(.text) + SIZEOF(.text)) {
 		*(.got.plt) *(.got)
 		*(.shdata)

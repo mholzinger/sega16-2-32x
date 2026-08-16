@@ -1275,3 +1275,887 @@ those offsets (game body at 0x808+ for the RV=1 model), so:
 4. Shim: RV never set to 1; game-entry and vint-chain targets
    +0x940000; FM windows unchanged (step 1 = memory model only,
    perf-neutral by design; step 2 pulls compose out of windows).
+
+## REBASE DESIGN v2 (supersedes v1 details above — simpler)
+
+Key realization: the HIGH copy at cart 0x240000 is the FULL 256KB
+arcade image (offsets 0x0-0x3FFFF), not body-only. Consequences:
+- The game's displaced boot bytes (arcade 0x400-0x7FF, unplaceable in
+  cart LOW space because the Sega security blob owns those offsets)
+  exist at cart 0x240400+ = 68K 0x940400+ — the boot executes IN
+  PLACE with pc-relative code intact. The 0xFFB400 RAM stash, ALL
+  bfix conversions, and the four jump-in patches DIE. Their whole
+  reason (displacement) is gone.
+- game_high.bin patch set = existing HW staging/IO passes + RLE
+  word-write patch + the rebase pass (+0x940000) + ONE thunk
+  (0x1B5C6 jmp (47E).w -> jmp (B3F0).w; shim thunk jmp 0x94047E.l).
+- The LOW copy shrinks to just the adapter vector stubs:
+  cart 0x880 (level 4): rte;
+  cart 0x8C0 (level 6): move.l (B3FC).w,-(sp); rts   [2F38 B3FC 4E75]
+  — 68K vint jumps via the work-RAM pointer 0xFFB3FC -> shim_vblank.
+  (MAME confirms: at adapter-enable, 0x0-0x3FFFFF = 32X vector ROM,
+  fixed L4/L6 vectors -> 0x880880/0x8808C0; H-int vector at 0x70-73
+  is a writable register. 0x880000 fixed window + 0x900000 banked
+  window install exactly as the design needs.)
+- Boot: set 0xA15104 bank=2, write 0xFFB3FC=&shim_vblank, never set
+  RV=1, enter the game at 0x940000+reset-PC. Shim vint chain target
+  0x942AAC. RV toggles deleted from the window scheduler.
+- Rebase pass rules (patcher): class-A confirmed operands in
+  [0x100,0x40000): hex-confirmed EA/jsr/jmp/lea always rebased;
+  decimal-confirmed long immediates only into %aN or memory stores;
+  #imm->%dN skipped (runtime burn-down); .short/.long ctx lines
+  excluded (data-as-code false positives); spawn-table handler longs
+  at +8 of each 12-byte record rebased explicitly.
+Branch: unpair-rebase. Main stays playable (2be2a5f-era) meanwhile.
+
+## UNPAIR STEP 1 LANDED (branch unpair-rebase): the game runs rebased
+
+Burn-down log (each caught via MAME trace/stack instrumentation in
+_vblank — 16 stack words at 0xFFB100 every vint):
+1. Mode-dispatcher jump table 0x26DC (lea pc-table; movea.l (A0,D0);
+   jmp (A0)) -> harvested ALL such tables from the disassembly;
+   word-OFFSET variant self-heals (addaw (A0),A0) and needs nothing.
+2. Handler-pointer tables consumed via movel %aN@...,@(2) after a
+   pc-lea -> harvested by idiom scan.
+3. Spawn-script region is TWO-LEVEL: meta-table at 0x1D32A of 5 per-
+   round record-table pointers, records stride 12 with handler at +8
+   (walker at 0xD842); tables extend past the old DATA_EXCLUDE bound.
+4. Two-level dispatch at 0x4C00 (table of sub-tables at 0x6DA0) ->
+   RECURSIVE table expansion (entry pointing at >=3 plausible pointers
+   is itself a table).
+5. Runtime handler harvest (toolkit move): run the WORKING RV=1 build,
+   sample live object-handler longs (slots 0xFFC000/0xFFD800 +2) over
+   attract+gameplay -> 43 distinct values -> rebase all data
+   occurrences (tools/harvested_handlers.txt, 181 sites).
+6. THE CLOSER — dispatcher normalization: the two consumption funnels
+   (0x39A8 object dispatcher, 0xD842 spawn walker) re-pointed at shim
+   RAM thunks (0xFFB3A0/0xFFB3C0) that add +0x900000 to any low
+   pointer AT CALL TIME. Every handler-table format, enumerated or
+   not, is covered. After this: NO drops in 5400 frames of coined
+   gameplay ("no drop" from the stack-catch harness).
+
+Total: 2289 static rebases + 2 dispatcher thunks + 1 abs.w thunk.
+MAME-verified: boots to title, coined gameplay through the wolf
+scene, window telemetry healthy (gpc idles at 0x903982). The vint
+delivery needed NO changes — the adapter's writable H-int vector at
+0x70 (already in use, field-proven on ares) works at any RV.
+Worktree lesson re-learned: compound commands with cd drift the
+shell's cwd — the patcher once silently ran from the main worktree.
+
+NEXT: ares smoke test, then STEP 2 — pull sprite/tile compose out of
+the pause windows (cart readable at any time now).
+
+## === RESUME POINT (2026-07-30h) — BISECT VERDICT + SACRED DEADLINE ===
+Mike's A/B/C rom bisect (stamped worktree builds — the technique for
+"what did you change": rebuild old commits, stamp, 30s savestate
+each, read the counters): A=a4b51d0 blit-skips 31% of cycles (FAST
+per Mike); C=8b4ecc2 blit-skips 94% (the "insanely slow") — the
+un-throttled shadow steal blocked window pickup on ares. LAW: the
+blit deadline is sacred — NO maintenance chunk may be in flight when
+a window signal can arrive; all non-band work gated to dt<=4000
+(54b227c). Perception note: complete-or-defer clusters staleness
+(frozen regions read as stutter) vs partial-band tears (distributed,
+read as fast-but-broken) — with deferrals near zero after the sprite
+fast-forward this should be moot, but judge cadence by the SKIP RATE
+in savestates, not by feel. SHIP 54b227ce; awaiting Mike's 30s
+savestate on it (target: skips well under A's 31%).
+Ledger: seams/tearing (atomic-ship), SH-2 SLEEP idling if ares VPS
+low, jts16_prio exactness, sound.
+
+## === MILESTONE (2026-07-30g) — THE THROUGHPUT FIX; SHIP 3cb9ffd7 ===
+The ares budget shortfall was mostly ONE waste: compose_sprites
+walked every sprite from its TOP row on every 12-row strip (150-row
+boss = ~150 steps to compose 12, every strip, both CPUs). Replaced
+with closed-form fast-forward (n rows = one multiply; bit-exact).
+MAME: spr 11.4->2.6ms (4.4x), DEFERRALS 823->ZERO whole-run,
+mskips 776->299. With complete-or-defer + zero deferrals, bands are
+complete AND on-cadence. Expect on ares: ghosting/half-cadence gone,
+full-speed action band. Scheduler journey (for the record): partial-
+band policies (drop-oldest/rotation/victim/fairness) all traded
+artifacts; complete-or-defer + ENOUGH BUDGET is the correct end
+state. Ledger: tearing (atomic-ship on DREQ), jts16_prio
+punch-through exactness, pp3/amb, sound, rounds 2-5 sweep.
+
+## === RESUME POINT (2026-07-30f) — FAIRNESS + SPEED BOUND; SHIP f2d9682 ===
+After the near-working ares run (build 9dbe9184: HUD/tiles/sprites
+correct, one frozen purple band): drop-streak fairness (05b42cb —
+protecting the maps band had made one region the permanent
+sacrifice; 3-strike undroppable rotation fixes the frozen rows) and
+the DREQ push TOTAL spin budget (f2d9682 — per-group budgets could
+burn several ms of 68K time per vint on slow FIFO drain without
+ever timing out = Mike's "VERY VERY SLOW"; now ~0.1ms hard ceiling,
+aborts retry next vint, 0xFFB0F2 counts aborts). Build provenance:
+roms stamped (tools/build_id.py show), savestates carry the commit
+hash in DIAG[18], PRESSURE builds labeled, the .lst guard gates rom
+emission. SHIP = f2d96820. Awaiting ares verdict on: speed, frozen
+band gone, sprites intact. Then: tearing (atomic-ship), jts16_prio
+exactness, sound.
+
+## === RESUME POINT (2026-07-30e) — SPRITE LIST ON DREQ; FB DATA-FREE ===
+The DREQ FIFO sprite channel is IN (6466663): game sprite RAM
+remapped to MD RAM 0xFF7000 (ordered staged list, coherent
+readbacks); shim vint pushes 512 words via the Chaotix DREQ protocol
+(A15110 len, A15107=4 68S, FIFO-full sign-bit gating, bounded
+spins); master DMAC0 lands at SPR_LAND 0x28C00 (DMA-EXCLUSIVE KB —
+learned the hard way: allocator state parked there was clobbered
+every frame = all-black build); TE-gated snapshot, stale-beats-torn
+fallback, DIAG[17] counts incomplete frames. MAME: everything
+correct. The FB now carries ONLY tile staging + the blit.
+Sprite list timing: shim pushes BEFORE the game's IRQ code runs, so
+the pushed list is one vint stale — consistent, coherent.
+FIXED-BLOCK MAP (single source of truth in m_main.c comment):
+28000 DIAG | 28100 BM+alloc(28360) | 28400 SPR_SNAP | 28800 SYNC
+(+blank_tile 28840) | 28900 cram_mirror | 28B00 shadow_lut |
+28C00-28FFF SPR_LAND (DMA target, nothing else may live there).
+NEXT: Mike's ares verdict — sprites should finally hold together.
+Remaining: extreme-pressure maps-convergence garbage (capacity
+arc: chunked owed-builds converge ~1s under total saturation;
+ares's milder load should sit under it), tearing (atomic-ship on
+the DREQ channel — regs+palette+sprites as ONE frame packet),
+jts16_prio punch-through exactness, sound.
+
+## === RESUME POINT (2026-07-30d) — TRANSPORT LAW + MAINTENANCE SLOT ===
+THE LAW (cost 5 hours to converge on; now in TOOLKIT): the FB window
+is NOT a valid MD->SH2 data channel — MD writes are DISCARDED while
+the SH-2 owns the FB (ares/hardware strict, MAME lenient), and both
+sides want the FB exactly at vblank. Only COMM (small, acked) and
+DREQ FIFO (bulk, unused yet) cross reliably. Every ares-only symptom
+mapped to a channel violation or to idle-starvation of deferred work:
+- palette per-bank skew -> COMM stream (24b799a) VERIFIED synced
+- shadow LUT idle-starvation -> maintenance slot
+- owed build_maps idle-starvation -> chunked + maintenance slot
+  (1629e28; the group-1 red/white/blue garbage = prescan misses)
+- SPRITE LIST: still on the FB and PROVEN torn on ares (40/64
+  records part-stale in Mike's savestate; game uploads it IN VINT =
+  maximal overlap). NEXT MAJOR ARC: DREQ FIFO channel — MD pushes
+  sprite list (2KB/frame) per vint, SH-2 DMAC lands it in SPR_SNAP;
+  later regs+palette+sprites ride it as ONE frame packet = the
+  atomic-ship rework AND the tearing fix.
+Verification rig: `make PRESSURE=1` (ares-proxy budgets baked in).
+Under pressure the eye scene is CLEAN while dropping; demo scenes
+still degrade at severities beyond the measured ares point (ares
+attract drops ~490/minutes vs thousands in the rig) — capacity arc.
+Layout lesson: .bss near the 0x19000 guard caused a ~1.5ms LTO/cache
+layout regression; cram_mirror/shadow_lut now fixed SDRAM 0x28900/
+0x28B00, BM chunk state 0x28C00, _end at 0x18FF0 (16B headroom —
+next .bss growth must move something or grow the region map).
+Cross-build frame numbers are INVALID for comparisons (timelines
+drift minutes); scene-match or reg-match only.
+
+## === RESUME POINT (2026-07-30c) — BLACK ACTORS = SPRITE-PAIR CRAM ZEROS ===
+Mike's ares attract savestate (rom/s16.bs1, demo scene with ALL
+actors as black silhouettes, tiles/HUD fine — screenshots/2100.png):
+- shadow_dirty=1 after minutes: idle-only LUT rebuild STARVED under
+  ares load. FIXED this commit: guaranteed-progress steal (one chunk
+  per window even with the queue busy; full refresh <=3.2s any load).
+- CRAM entries 160-207 (sprite pairs 10-12) ALL ZERO -> actors
+  black. apply_cram's sprite loop reads FB_PAL+1024+sc*16 (palette
+  staging IN THE FRAMEBUFFER) via spr_pair[par][sc]. Suspect: the
+  palette snapshot reads the WRONG BANK at ares timing (the intro-
+  cast snapshot/bank-restore race family) — game wrote sprite rows
+  into bank A, snapshot read bank B (never-written = zeros).
+- Also confirmed: real palette data carries bit 15 (0xFFFF entries,
+  groups 1/4/12) — the jts16 shadow-exemption is live on real data.
+NEXT PROBE (savestate-only, no ares scripting): locate BOTH 32X
+DRAM framebuffers in the .bs1 (search for FB_PAL sprite rows with
+actor colors), diff FB_PAL region bank A vs bank B: colors-in-one/
+zeros-in-other proves the bank-skew read. _spr_pair from s16.lst
+gives the pair mapping to check which sc rows map to pairs 10-12.
+CONFIRMED (same savestate): reconstructed the S16 words for mirror
+group 12 (inverse s16_to_mars) and searched the state file: exactly
+TWO copies — the game's 68K work-RAM palette buffer (~MD 0xE5B0)
+and ONE framebuffer bank's FB_PAL. The other bank NEVER got those
+rows: palette writes land only in the bank staging at write time.
+Any row written during the other bank's tenure is zeros in the bank
+apply_cram happens to snapshot -> black sprite pairs. SH-2 cannot
+read the other bank (single draw-bank window), so no SH-2-side
+fallback exists.
+SUPERSEDED by 24b799a — the FB copy below was ALSO dropped on ares
+(FB-window arbitration discards MD writes while SH-2 owns the FB;
+proven: mirror populated, FB rows still zero). Palette now rides the
+acked COMM stream (tag 0x4800) into PAL_SH at SDRAM 0x27000; MD
+diff-scans mirror quarters, FIFO dirty queue (LIFO starved rows
+under fade churn). VERIFIED: PAL_SH==mirror word-for-word; MAME
+gameplay actors correctly colored; eye scene clean.
+METHOD WARNING (cost a lot of this session): frame-number
+comparisons ACROSS BUILDS are invalid — mskips drift shifts the
+game timeline minutes apart; at f=1700 one build is in gameplay,
+another still in the eye hold. Scene-match or reg-match, always.
+REMAINING KNOWN (pre-existing, next arc): full-width band of
+repeated sprite blocks at deck level in gameplay (sprite-list
+decode/terminator suspect — visible in MAME, scene-stable);
+ares gameplay text-strip garbage; tearing (atomic-ship umbrella).
+
+OLD (superseded): palette writes remapped to a stable MD RAM mirror
+(0xFF9000); shim vint copies one 512-word quarter/vint into the
+staging bank's FB_PAL — both banks always complete, snapshot can
+never read never-written rows. Fade RMW reads hit real RAM. Known
+gap: fresh rows lag <=4 vints (~67ms) — brief dark flash on hard
+scene-palette loads (MAME: transient blob at f=1500 player-spawn,
+clean by 1700). If ares objects: prioritize dirty quarters (MD
+tracks which quarter got game writes since last copy, copies dirty
+first, 2/vint burst). Also landed same session: guaranteed shadow-
+LUT progress (steal one chunk/window under load). BOTH ares
+symptoms from the attract savestate now have fixes in rom/s16.32x.
+Savestate parse one-liners: sdram file base 0x23B (probe-relocate
+per TOOLKIT recipe); MD RAM base = find swap16(TAS thunk bytes
+4a38c02050f8c0204e75) minus 0xB380.
+
+## === MILESTONE (2026-07-30b) — ARES CLEAN READ ON THE ATTRACT ===
+Mike: "the eyes are working without the issues! only screen tearing,
+but thats on the roadmap. we have a clean read!" — the full attract
+rotation (title -> eyes -> demo -> (C)SEGA) passes the acceptance
+gate. His ares savestate (rom/s16.bs1, parsed per TOOLKIT recipe)
+shows DIAG[13]=864: ares drops bands steadily in attract and the
+rotating drop-resume absorbs it invisibly — diagnosis confirmed on
+the gate emulator itself. Ares pp3=1034/amb=9: priority-exactness
+work is live next. OPEN (ordered): tearing (atomic-ship umbrella),
+shadow x0.75 + pal bit-15 exemption (jts16_colmix.v), priority
+punch-through/fallback (jts16_prio.v), attract pacing debt.
+
+## === RESUME POINT (2026-07-30) — EYE "WHITE BAND" = LOCKED DROP ===
+Mike's ares report post-TAS-fix: attract rotates, but the eye scene
+has a moving white band stripe. DIAGNOSED: drop-oldest under ares's
+sustained mild overload victimized the SAME strips every cycle — a
+locked stale stripe (mustard eyelid bar from an earlier pan position
++ growing lavender gap). MAME never drops there (bdrain=0), so it
+was reproduced with PRESSURE BUILDS (quiet zone temporarily cut
+11300->6500: eye hold drops ~1 band/2 cycles = the ares regime; the
+identical stripe appeared, proving the mechanism). FIX (a4b51d0):
+rotating drop-resume — per-region stale frontier drop_s0[]; a
+dropped band's next same-region band starts its strip walk at the
+frontier (stale rows first), bounding any row's staleness to ~2
+cycles. Bands now walk strips by rotating index (s0+cnt, wraps; 6
+strips R0/R1, 4 strips R2) instead of linear y. Validated: clean at
+moderate pressure WITH active drops; severe pressure spreads
+staleness instead of locking (expected); zero-pressure identical to
+before. METHOD (toolkit): pressure builds — throttle your own
+budget until MAME misbehaves like the slowest target, fix at that
+operating point, then restore. Regression: skips=13, scenes intact.
+NEXT: Mike's ares verdict on the eye scene ("clean read" candidate).
+If residual shimmer on ares, an ares savestate taken mid-artifact
+(+DIAG[13] drop counter at 0x06028000+52) tells us the actual ares
+drop rate; the structural cure remains the atomic-ship rework.
+
+## === RESUME POINT (2026-07-29b) — ATTRACT STALL SOLVED: TAS ===
+ROOT CAUSE (not a patcher bug — a HARDWARE divergence): the game
+latches one-shots with tas/bne. On System 16B, TAS's locked
+read-modify-write works; on the Mega Drive/32X the bus arbiter DROPS
+THE WRITE PHASE of the 68K RMW cycle (the classic Gargoyles-era MD
+quirk — modeled by MAME, ares, and real hardware). Every TAS latch
+in the game silently never sets.
+THE STALL: attract gate at 0x2260 (script actor, record C100):
+  cmpi.w #$1001,$c00c ; bcc wait     <- eye-camera X must park
+  tas $c020 ; bne skip               <- once-only latch (BROKEN)
+  add.w #$c00,$c014                  <- kill velocity F400 -> 0000
+  tst.b $c0a0 ; beq wait             <- anim-done flag (set by the
+  jmp $1e54                             0x23DC driver's terminator)
+With TAS never latching, the velocity add fired TWICE (F400 -> 0C00
+= +12px/frame): the camera ran away past x=0x1001, and since x is
+tested BEFORE the done flag, the transition was locked out forever
+= infinite title/eye loop + the runaway pan ("broken consecutive
+animations"). Gate-variable logging (gatelog.lua pattern: c00c/
+c0a0/c0a1/c0a2/c014/f02d) proved it against the arcade: arcade adds
+once and parks; ours added twice and ran away.
+THE FIX: patch_game.py TAS_SITES — full-binary opcode scan found
+exactly 5 real TAS instructions (0x2268 $c020, 0xE098 $f15a, 0xEAC0
++ 0x150B6 (3E,A0), 0x12E84 (3C,A6); other 4AC8-4AFF words are
+data). Each 2-word TAS -> jsr to an MD-RAM thunk (md_main.c):
+tst.b (TAS's exact N/Z, clears V/C) + st (sets latch, no CC) + rts.
+Thunks at FFB380/FFB38A/FFB394/FFB3F6 (B3F6+10 = B400 boot copy,
+exact fit). VERIFIED: transition fires (f031 0x10->0x14, hold ends
+at c0a0=FF exactly like arcade), demo gameplay scene renders, loop
+cycles back to (C)SEGA — full arcade attract rotation. 5460-frame
+regression: 45 skips, no stalls.
+LESSON (toolkit-grade, whole-library): S16->32X ports must scan for
+and replace EVERY TAS; MD hardware breaks them all. Also: log the
+GATE VARIABLES of a stuck state machine side-by-side with the
+oracle before tracing — two 70-line logs named the bug in one look.
+ALSO NEW: srcref/jtcores (Jotego FPGA S16, GPL-3.0) is now the
+authoritative hardware spec — derive behavior from the Verilog,
+cite the .v file, never copy code (GPL). Key: jts16_prio.v,
+jts16_colmix.v, jts16_shadow.v, jts16_obj*.v, jts16b_mapper.v.
+NEXT: ares verdict on the attract rotation; then verify priority/
+shadow/sprite rules against jtcores Verilog (pp3/amb exactness),
+attract pacing debt (mskips ~900 heavy scenes), atomic-ship rework.
+
+## === RESUME POINT (2026-07-31) — ATTRACT STALL PINNED TO ONE GATE ===
+State: unpair-rebase @ bd48d00 + uncommitted md_main.c (rowscroll
+priority streaming, 16 batches) — commit with the fix.
+MIKE'S REPORT: first eye animation correct, consecutive ones broken,
+loops until coin. FULLY CHARACTERIZED via synchronized state logging
+(synclog.lua: f026/f02A/f031 + pages/xs same-run):
+- Timeline IDENTICAL to arcade through scream (AAAA) + eye hold
+  (pages 0101, xs 0x140, f031=0x10, f02A frozen 0x2BA = WAIT state).
+- ARCADE at hold+146 frames: sequencer fires — f02A reset 0, f031
+  0x10->0x14 (writer = 0x1E4E block, the game-mode entry with stack
+  reset at 0x901E5A) -> demo replay runs (index +1/frame, script #
+  from f031 bits 3-4 via pointer table 0x1834 -> scripts 0x3E4B0/
+  0x3EDB0/0x3F6B0 — all verified byte-identical, pointers correctly
+  rebased).
+- OURS: THE TRANSITION NEVER FIRES. f02A/f031 frozen; at hold+160
+  the scream-scene camera resumes panning -12px/frame FOREVER
+  (pages cycle 0101->1212->2323->3434->4040 every ~340 frames = the
+  runaway "broken animations"). Demo replay never starts (player
+  would run right if it did — actually the world scrolls with NO
+  demo at all).
+- Input mailboxes verified idle (0xFF); poison sweep of the window
+  CLEAN; demo scripts unmodified.
+NEXT PROBE (one wp-chain): find the eye-hold TIMER — wp READ on
+fff031 during the hold names the sequencer poll PC; dasm it; its
+timer/condition variable RAM-diffed ours-vs-arcade at hold start;
+expect ONE corrupted duration/trigger value (the +0x90 family) or a
+condition on a subsystem we stub (RULED OUT by sndlog probe: sound
+mailbox idle 0xFF, MCU_BUSY 0, f144 vint-lag counter frozen = main
+loop healthy — the stall is purely the sequencer's trigger). (the
+0x1E4E path resets SP — it's the mode bootstrap reached by a jump
+from the sequencer). DEFINITIVE NEXT STEP: trace-diff 5 frames
+around the arcade's hold-end (its f031 0x10->0x14 moment) vs ours at
+the same phase — the first divergent branch in the sequencer polling
+loop IS the broken condition. Use synchronized same-run frame
+anchors, not -debug-skewed windows.
+Timing note: -debug shifts attract timing by frames — synchronized
+same-run logs only; separate wp runs have skewed windows.
+
+## === RESUME POINT (2026-07-30d) — EYE GEOMETRY EXACT ===
+State: branch unpair-rebase @ 688a9e5. Eye-sequence geometry now
+PIXEL-MATCHED to the arcade at register-matched frames. Three fixes
+on top of the sign fix: 10-bit xscroll (latch masked to 9 bits —
+every pan past the map midpoint was 512px off), rowscroll-x path
+still had the pre-fix negated sign, and PRIORITY REG STREAMING (the
+rotating text stream gave each word 0-6.4 frames random staleness;
+pages could be fresher than their xscroll neighbor → mismatched
+compose state during fast pans; the reg block 0x740-0x753 now ships
+every vint, SH-2 tracks MD within ~1 frame).
+METHOD ADDITIONS: reg-stamped sequence capture (seqcap.lua — align
+machines by REGISTER STATE, never frame number: attract rotations
+differ and drift); reg-matched trigger capture (regmatch pattern);
+remember the NVRAM-credits trap applies to EVERY arcade run.
+Remaining ledger: attract pacing (mskips ~900 in heavy scenes),
+allocator capacity, big-shadow cap, pp3/amb exactness, text-layer
+palette phase (logo white vs teal at matched frames — text palette
+streaming timing, small). Structural rework (atomic ship) still the
+umbrella for the pacing class. Ares verdict wanted on 688a9e5.
+
+## === RESUME POINT (2026-07-30c) — SCROLL X SIGN FIXED ===
+State: branch unpair-rebase @ 2cad330. THE EYES ARE SOLVED — and the
+root cause was bigger than the eyes: the X scroll conversion was
+SIGN-INVERTED since the project began (vx = screen + ((0xC0-xs)
+&0x3FF), we had the negation). Survived every oracle comparison
+because the title is sign-agnostic (xs=0xC0) and gameplay backgrounds
+are locally periodic. Pinned by the attract TRANSFORMATION SCREAM
+(unique art, cols 24-63, xs=0): sign_scream.png is now pixel-
+identical to the arcade. The eye "split"/"band"/"skin fragments" =
+wrapped-column views of correctly-loaded pages — geometry, not
+loading, not pacing. Also fixed en route this arc: BG/FG reg
+mapping verified correct against segaic16 (FOREGROUND=idx0=word
+0x740); page A/B content verified word-identical to arcade during
+transitions; reg stream verified live-tracking (~1-frame lag).
+The 2026-07-30b "visible loading state" diagnosis was WRONG — kept
+for the record; the atomic-ship re-plumb remains queued for the
+pacing ledger (attract mskips ~950, band drops) but the eye/scream
+GEOMETRY is now exact.
+Mike's next ares pass should show: eyes/scream/attract art all
+correctly framed; backgrounds possibly subtly improved everywhere
+(any place the old sign wrapped unnoticed).
+
+## === RESUME POINT (2026-07-30b) — EYE DIAGNOSIS COMPLETE (superseded) ===
+Root cause found via live reg logging (reglog.lua pattern): the eye
+TRANSITION loads the next eye into pages 0xA/0xB (regs flip to
+AAAA/BBBB, xscroll 0) while the old eye shows from pages 0/1. The
+arcade finishes that load fast enough that the intermediate state is
+never displayed (yarc_1200-1300 show only complete frames). OURS
+holds the mid-load state on screen for MANY frames — the 68K's tile
+writes go through the contended MD FB window and our render windows
+tax it ~15% — so the wrap-seam at xscroll 0 (the "black band") and
+the mismatched page/palette pairing (wrong pupil colors) are the
+VISIBLE LOADING STATE, not render bugs. Stream/decode/compose all
+verified correct (SH-2 shadow tracks MD regs with ~1-frame lag; page
+content byte-identical to arcade at scene-matched frames).
+CONSEQUENCE: the entire remaining accuracy ledger — eye transitions,
+attract pacing, band staleness, big-shadow cap, pp3-over-cat1, amb
+colors — funnels into ONE architectural item: the ATOMIC-SHIP +
+STAGING-STREAM re-plumb (shrink/eliminate 68K stalls, complete-frame
+handoff, per-pixel priority sideband). That is THE next work item,
+designed fresh at full context next session.
+
+## === RESUME POINT (2026-07-30) — EYE-SCENE DEFECTS PINNED ===
+Mike's ares round on 4c6aa1a: eyes DECODING (quadrant fix ✓) but not
+MAME-matched. Both defects now REPRODUCED IN MAME on the FIRST
+(uncoined) attract loop — earlier captures sampled the post-game loop
+which renders clean, hiding them. Deterministic, locally debuggable:
+1. VERTICAL SPLIT-BAND: ours shows two half-eyes with a black seam
+   (y32_1400); the arcade NEVER splits — it morphs the eye FULL-FRAME
+   by palette animation (yarc_1200-1300: blue pupil phases). Not
+   rowscroll/alt-set (arcade regs at the scene: rowscroll all zero,
+   plain scrolls, BG pages=0000, FG pages=5555).
+2. WRONG PUPIL COLORS (magenta vs blue/gold phases; later full
+   red/white chaos at y32_1800) — palette-cycle phase/script wrong;
+   same family as the 0x1A6FA launch-table fixes (more scripts or
+   phase state likely broken).
+Timeline note: ours runs ~150 frames behind arcade from boot overhead
+— SCENE-match, don't frame-match. Probe queued for next session:
+diff OUR SDRAM shadow pages (now 0x06019000!) at the split moment vs
+arcade tile RAM at its scene-matched frame (~ -150): content split =
+load/copy path; content correct = compose path. Then wp the palette
+stream slots (0xF300 family) ours-vs-arcade through the morph.
+TOOL NOTE: probe luas from the old scratchpad have STALE region
+addresses (shadow was 0x18000, DIAG 0x27000) — regenerate from the
+new map (shadow 0x19000, TEXT 0x26000, DIAG 0x28000, SNAP 0x28400).
+FB_PAL reads from lua at frame_done race the access bank — reads of
+0x2401F000 returning zeros are AMBIGUOUS, use in-window state or the
+cram_mirror (0x06... .bss, dumpable via nm address) instead.
+
+## === RESUME POINT (2026-07-29 late) ===
+State: branch unpair-rebase @ 4c6aa1a. Accuracy round 2 landed: TRUE
+SHADOW DARKENING for standard shadow sprites (nearest-darker CRAM via
+shadow_lut, lazy 4-entry idle rebuilds from cram_mirror; silhouette
+fallback while dirty and for actors >48 rows tall — the giant
+cutscene cast at 2x/pixel saturated both CPUs into band staleness,
+a worse inaccuracy). PACING LESSONS bought with blood this round:
+- 64-entry LUT chunks = ~10ms of multiplies (est. said 0.5) — SIZE
+  idle work by MEASURED cost, not arithmetic hope.
+- The slave may NEVER run a multi-ms pass without stream service:
+  one whole-half shadow-sprite call stalled the MD past its vint
+  gate (458 skips). Strips + service between, always.
+- Finer strips are NOT free for tall zoomed sprites: every strip
+  call walks the sprite's FULL height for address stepping.
+ACCURACY LEDGER (current approximations, all measured/logged):
+1. Shadow actors >48 rows: silhouette (attract/cutscene only).
+2. pp=3 sprites vs FG-cat1/text-cat0: approximated as pp=2 (DIAG[16]
+   sightings = shadows only so far).
+3. amb= colors at two priority levels: 5-7 in title scenes (pri_lut
+   takes max level there).
+4. Column scroll: unimplemented (no sighting yet).
+All four resolve structurally in the SIDEBAND + ATOMIC-SHIP rework
+(per-pixel priority plane + complete-frame handoff) — next major.
+Attract pacing debt: mskips ~1k in the post-game attract (gated
+emergence actors); gameplay clean (MD skips 2, mskips 169, compose
+2.60ms). Mike's ares verdict wanted on 4c6aa1a.
+
+## === RESUME POINT (2026-07-29 evening) ===
+State: branch unpair-rebase @ 7ef5526. ACCURACY MANDATE ACTIVE (Mike:
+"accuracy before speed — must look and play exactly like its MAME
+source"; memory: accuracy-before-speed).
+Landed: EXACT sprite/tile priority mixing per segas16b_v.cpp — pp=2
+exact by layer order (measured dominant), pp<=1 per-pixel gated via
+the value->level pri_lut (these are the intro emergence actors that
+rise BEHIND the gravestone — Mike's "layer eating" report was partly
+THIS, now hardware-correct), pp=3 counted (only shadows). Gates kept
+OUT of the unrolled hot macros (register-spill lesson: +43% sprite
+time; uncached-read variant even worse via SDRAM bus contention).
+ALSO: found+fixed a LONG-STANDING .bss/tilemap-shadow overlap at
+0x18000 (cache tags stomped every window; steady-state miss ~10/win
+instead of ~0 in every prior build). Regions now at 0x19000+, and the
+MAKEFILE FAILS THE BUILD if __end crosses the base — kit rule: every
+hard-coded memory map gets an enforced boundary check.
+Telemetry legend additions: amb= colors at 2 levels (LUT approx
+engaged, 5-9 in title scenes only), pp3= pp==3 sprite sightings.
+Verification: compose 2.50ms = baseline, ch_1700 matches the arcade
+oracle full cast for the first time; mskips 107 concentrated where
+big zoomed gated actors pay the gate honestly (gameplay clean).
+Accuracy queue (in order): 1. Mike's ares pass on 7ef5526.
+2. Shadow sprites: real darkening (arcade adds a shadowed palette
+copy; we currently draw silhouettes). 3. amb-color exactness (title
+scenes) + pp=3-over-cat1 exactness — both fold into the atomic-ship
+compose rework (priority sideband). 4. Column scroll (log-if-seen).
+5. Allocator capacity (nearest-color overflow). Then atomic ship.
+
+## === RESUME POINT (2026-07-29 afternoon) ===
+NEGATIVE RESULT (measured, load-bearing): 30Hz/2-slice cadence does
+NOT fit — full-frame compose at a 2-vint cycle is 1.5x the sustained
+budget (slave half-region stopped finishing between windows: swait
+1.5ms, mskips 1323, bdrain 4402, MD gate slipping to 0xE9+). Reverted
+to the 3-phase/20Hz config (mskips 5). CONCLUSION: the pipeline is
+COMPUTE-BOUND at 20Hz full-frame rate; ares smoothness must come from
+ATOMIC shipping, not rate. Next architecture step is therefore the
+double-sbuf whole-frame handoff at 20Hz:
+  - compose frame N+1 into sbuf_B while slices of completed frame N
+    ship from sbuf_A; swap pointers only when N+1 is COMPLETE (all
+    bands + sprites + text). A band that misses its deadline delays
+    the swap one cycle (whole frame holds, still coherent) instead of
+    showing a stale band.
+  - memory: second buffer needs ~72-80KB. Candidates: shrink the tile
+    cache (direct-ROM misses make small caches viable — measure miss
+    cost first) and/or drop sbuf borders for the ship buffer.
+  - eye-screen artifacts on ares (vertical black band) are timing-
+    class: MAME same build renders them clean (e32_4950/5250).
+Ares verdict from Mike on fa1faf8: EYES/title art confirmed working
+("accomplished the impossible"), gameplay still has the staleness
+class — matches the atomic-ship diagnosis.
+Workflow decision (Mike): interactive for architecture; /loop for
+oracle-verified parity grinds (rounds 2-5) once gameplay stabilizes.
+End goal recorded: the whole sega16 library ported via the kit.
+
+## === RESUME POINT (2026-07-29) ===
+State: branch unpair-rebase @ fa1faf8. TITLE ART RESTORED (the "eyes"
+regression Mike reported was never a regression — the attract title
+scenes had NEVER rendered in the port). Root cause: page-select
+quadrant decode X-swapped vs segaic16 (UL=bits0-3, UR=4-7, LL=8-11,
+LR=12-15). Gameplay had survived because scrolling scenes keep both
+X-halves loaded; the title is a single-half scene. Landed with it:
+ALT register set + per-row parallax xscroll support in compose_layer
+(fast path for the common case) — the rounds-2+ parallax groundwork.
+Also this session: direct-ROM tile misses (placeholder machinery was
+an RV=1 artifact; cold scenes now always correct), drop-oldest band
+queue (attract block-drain cascade -> isolated stale bands),
+tools/oracle_shots.lua + wpcatch.lua now take the LOCAL rompath:
+MAME ROMs live in ./mame/ (gitignored) — no NAS needed.
+DIAGNOSIS LESSONS (toolkit): clean-NVRAM before arcade-oracle attract
+comparisons (persisted credits change the attract flow); scene-flow
+"skips" can be layer-decode bugs (data was present and correct at
+every stage — staging, shadow, regs — only the final quadrant lookup
+was wrong); verify each pipeline STAGE (68K write stream -> staging
+-> SDRAM shadow -> regs -> compose) before touching code.
+Full run: mskips 5, compose 2.51ms, gameplay screenshot-identical,
+title frame-matched vs arcade.
+Next: 1. Mike's ares pass (title, intro, smear). 2. Whole-frame-ship
+refactor proposal (compose into off-screen FB bank, flip per frame:
+kills band staleness/tearing wholesale). 3. Roadmap: rounds 2-5,
+sound, allocator polish, column scroll (log-if-seen), merge.
+
+## === OLD RESUME POINT (2026-07-28 evening) ===
+State: branch unpair-rebase @ 3c99d3b. THE ENTRANCE ANIMATIONS ARE
+BACK (Zeus head + orb + lightning + gravestone + rise smoke, verified
+frame-matched vs the arcade oracle) plus Mike's "P1 spawns at P2"
+fixed (+0x90 pan-speed corruption) and shadow sprites render as dark
+silhouettes. Two root causes closed the intro:
+1. Harvest false positives: value 0x00010000 patched at 72 DATA sites
+   (movement/spawn records); one was the cutscene pan speed 0x0001 ->
+   0x0091. Now a VALUE BLACKLIST {0x10000,0x102,0x104,0x106} in the
+   harvest pass — call-time thunks cover any real handler.
+2. SH-2 snapshot race: the slave's W1 SPR_SNAP copy raced the
+   master's FB bank restore and read display-bank zeros — short
+   cutscene sprite lists vanished whole. Snapshot moved to the master
+   after its own restore.
+TOOLKIT ADDITIONS (permanent): tools/oracle_shots.lua (frame-matched
+arcade ground truth), tools/wpcatch.lua (r/w watchpoint catcher with
+values, both machines), the paired-trace + RAM-diff + build-buffer
+diff pattern (ours-vs-arcade at the same frame answers "which side
+broke" in one run).
+LESSONS: ascending byte ramps forge ascending "pointer" longs (the
+0x1AD10 easing curve); ascending REAL pointer tables exist too
+(0x1989E — reverting it stalls boot); collision-family harvested
+values are best killed by VALUE, not by region.
+Pacing state: sprite strips pre-vint margin 10800 ticks, tiles 11300,
+heavy 8000, cache_fill 128/shot. Full coined run: mskips 13 to end of
+gameplay, bdrain 0; post-game ATTRACT still saturates bands (bdrain
+1523, mskips->143) — polish item, gameplay unaffected.
+Next: 1. Mike's ares verdict (rom/s16.32x). 2. Attract-scene band
+saturation. 3. Roadmap unchanged (30Hz retest, rounds 2-5, sound,
+parallax, allocator polish, merge).
+
+## === OLD RESUME POINT (2026-07-28) ===
+State: branch unpair-rebase @ 5f7f9ed. Step 2 complete + band-staleness
+fix VERIFIED in MAME: interruptible band state machine + heavy-phase
+self-pacing + PRE-VINT QUIET ZONE (master starts no band work >11300
+FRT ticks after pickup; polls only). Full coined 5460-frame run:
+mskips 2 (was 385, and 923 before self-pacing), bdrain 0, MD skips 1,
+compose 2.32ms/cycle, sprites whole in screenshots.
+DIAGNOSIS TRAIL (toolkit lesson): swait/bdrain telemetry exonerated
+slave-wait and queue-full; the pickup latency WAS the 12-row strip
+(~0.4ms = 6 scanlines) vs the heartbeat gate's 2-line worst-case
+slack. Shrinking strips (6/4-row) backfired: per-strip overhead
+saturated throughput -> block-drain feedback loop, 2305 mskips. The
+quiet zone keeps full-size strips AND ~0 pickup latency for ~0.7ms
+idle/frame. LESSON: when a latency budget is blown, idle before the
+deadline beats shrinking the work unit — overhead scales with count.
+Next actions, in order:
+1. ARES: Mike tests rom/s16.32x — verdict wanted on floating heads /
+   split sprites (band staleness) and overall choppiness.
+2. Known open artifacts: solid-red player / red legs / white+yellow
+   rectangles = CRAM allocator capacity (polish pass queued); purple
+   title field; tearing at rows 75/150 (30Hz/2-slice retest queued).
+3. Then: rounds 2-5 asset sweep, sound (megadriveref Z80 driver),
+   shadow pen, row/column parallax, merge to main after approval
+   (strip debug bars first).
+
+## === OLD RESUME POINT (2026-07-27 evening) ===
+State: branch unpair-rebase @ 9140cf8 — the rebased (RV=0, 0x900000-
+window) build boots and plays in MAME; ares smoke test PENDING (build
+was launched in ares, verdict not yet reported). Main branch = last
+field-approved build (sticky CRAM, 20Hz row-following pipeline).
+Next actions, in order:
+1. Mike's ares verdict on the unpair build (boot? artifacts? speed
+   should feel UNCHANGED — step 1 was memory-model only).
+2. STEP 2: pull sprite/tile compose out of the pause windows (cart is
+   SH-2-readable at any time now) — windows shrink to snapshot+blits,
+   ~18ms pause -> ~4-5ms. This is the game-speed payoff.
+3. Watch list: implausible demo-HUD score seen once in MAME (possible
+   harvested-handler false positive in a data table); the 13 skipped
+   immediates in tools/rebase_report.txt are the remaining burn-down
+   candidates if anything else acts odd.
+
+## POISON RIG + READ-POINTER BURN-DOWN (unpair, continued)
+
+TOOLKIT BREAKTHROUGH: the dead low copy (cart 0x808-0x3FFFF) is now
+0xFF-POISONED. MAME leaves the cart readable at low addresses (the
+leniency that hid every missed READ pointer), so poisoning makes MAME
+fail EXACTLY like ares — the whole remaining burn-down runs in the
+scripted rig, no ares round-trips. Catches so far with it:
+- Sprite frame-table base #0x255E0 in %d2 (a deliberately-skipped
+  data-register immediate; consumed via adda.l -> movea.l (A0) ->
+  address-error cascade into the adapter vector weeds). Fixed via a
+  REBASE_IMMEDIATES override list.
+- Detector note: mask the sampled 68K PC to 24 bits (abs.w-called
+  thunks report as 0xFFFFB3xx).
+Earlier the same evening, the ares field probes (word-value bars) had
+proven the garbage tilemap was 68K-side: the RLE loader's stride-6
+per-round source table at 0x1CE2 read poison. Global lea-table sweep,
+mixed-table classifier (runtime addresses pass through), stride-record
+tables, odd data pointers — all landed in the patcher.
+STATUS: full coined 5400-frame run clean on the poisoned build; tiles/
+sprites/gameplay render; REMAINING: patchy wrong-color BG rows (sky
+shows brick/water strips) — now MAME-reproducible; next tool is a
+TILEMAP_U staging diff old-vs-new build to name the loader.
+ALSO WATCH: implausible score digits (possible over-rebase false
+positive) — the staging/RAM diff will catch its table too.
+
+## THE MOVEW-CLOBBER IDIOM FAMILY (latent since the FIRST staging remap!)
+
+wp-harness catch: the strip-blitter at 0x258A builds dests as
+  movel #BASE,%d0 ; movew (a0)+,%d0   (REPLACES d0's low word)
+— the arcade relied on BASE having a ZERO low word (0x400000). Our
+staging bases don't (tile 0x852000, text 0xFF8000): the +0x2000/+0x8000
+bias silently died at every such site, in EVERY build to date. This is
+the long-standing "misassembled sky strip" artifact class AND stray
+text-writer stores into 0xFF0xxx (shim .data!). Fix: movew -> ADDW at
+9 audited sites (offsets never carry). Excluded lookalikes: delay
+counters / tile-attribute builders (movew #0xA000).
+LESSON (toolkit, permanent): any base remap to a non-64K-aligned
+address must audit the movew-into-low-word idiom — grep every
+movel #BASE,%dN and trace the next d0 write.
+Tools this round: wpset-with-condition + lua stop-poll harness
+(wpcatch.lua pattern), staging page differ old-vs-new builds.
+REMAINING: sky brick/water patch rows still visible in MAME under
+poison — next isolated target (suspect: another writer family or the
+row-scroll tables); rig is fully local now.
+
+## OVER-REBASE REGRESSION PAIR (caught by Mike's ares screenshots)
+
+1. Red-silhouette mis-spawns: the spawn-record walker rebased past
+   table ends (no shape check) into spawn PARAMS. Records are
+   [camX][p1][p2][flag 0x0000|0x0040][handler.l], camX=0xFFFF
+   terminates — walker now shape-gated (31 verified handlers).
+2. Scores of 900100/1800200/2700300 = BCD points +0x900000: the
+   pointer-store heuristic rebased `movel #imm,<mem>` immediates —
+   score awards to 0xFFF032. Rule DROPPED entirely: real handler
+   stores are normalized at call time by the dispatcher thunks, data
+   mailboxes stay untouched. (2056 static rebases now, down from the
+   over-eager 2354 — recall handled by thunks.)
+LESSON: consumption-point normalization (thunks) beats aggressive
+static sweeps for ambiguous immediates — sweep only what's PROVEN
+pointer-shaped by type or table structure.
+OPEN: sky brick/water patch rows (round-1 BG) + round-2+ demo garble
++ purple fleck columns + Zeus sprite dropouts. Scene-synced staging
+differ rigged (rise-text trigger); old-build trigger needs longer
+timeout (its boot is slower).
+
+## SKY-PATCH CLASS: narrowed to RLE pass interleave corruption
+
+Scene-locked staging census (coined rise, f=1400, both builds):
+OLD pages 0-9 = fully populated real maps (both-bytes ~1789/page,
+exactly 256 zero words/page = blank stripes). NEW = same maps but
+scatter-corrupted: ~150-470 words/page missing their LOW byte,
+~110-256 missing their HIGH byte, blank stripes filled with junk.
+So the per-round source table fix WORKS (maps load); the corruption
+is in the write path: the two RLE passes (patched word-write pass-1
+at 0x16C0 base 0x852000, odd-byte pass-2 at 0x16E0 base 0x852001)
+are landing out of phase with each other in the NEW build only.
+NEXT PROBES (local rig):
+1. Dump staging at TITLE in both builds — does corruption pre-date
+   the round-1 load (leftover from an earlier loader) or arrive with
+   it?
+2. wp-trace pass-1 vs pass-2 write ADDRESSES for one page in the new
+   build (wpset on one page + PC log) — mis-phase will show as
+   address skew between the passes.
+3. Suspect list: something the rebase changed in the RLE callers'
+   flow (bank word consumed differently?), or a second loader
+   touching the same pages between passes.
+
+## SKY-PATCH CLASS SOLVED: harvested-value byte collisions in packed streams
+
+The pass-2 RLE writer control run nailed it (old wrote the cell via
+the zero-RUN path at 0x16F8, new via the LITERAL path at 0x1704 =
+stream desync), and the report cross-check found the cause: harvested
+handler VALUES 0x102/0x106 byte-collide inside the compressed map
+streams — the occurrence pass sprayed 79 +0x900000 corruptions across
+0x29E00-0x3E3xx. Occurrence matching now bounded below the asset
+region (<0x28000, where all real handler tables live). Scene-locked
+staging diff: ~14,000 corrupt words -> 1 (single word, page 9,
+dump-instant race suspect). MAME visuals: rise + gameplay match the
+main build.
+LESSON (toolkit): value-occurrence patching MUST be region-bounded or
+context-gated — small harvested values WILL collide inside packed
+data. The full diagnostic chain that solved this: scene-locked
+staging diff -> byte-pattern census -> single-cell watchpoint with
+old-build CONTROL run -> report cross-check.
+
+## PLAYER-INVISIBLE REGRESSION: the @(36) sprite-definition stores
+
+Dropping the memory-dst immediate rule took the `movel #ptr,%fp@(36)`
+family with it — object field +36 is the SPRITE DEFINITION pointer,
+consumed as DATA (movea (36,A6)) with no thunk at the consumer. Rule
+restored PRECISELY: register-indirect destinations only (%aN@(k) /
+%fp@(k)); ABSOLUTE destinations stay excluded (those were the BCD
+score-award mailboxes). 2243 static rebases.
+Field state per Mike: sky fixed ("MUCH better"), gravestone wiggle
+correct, frames still dropping on ares (53-60 VPS — queued with the
+step-2 speed work).
+
+## OPEN ITEMS AFTER THE SKY/PLAYER FIX ROUND (field: "MUCH better")
+
+Confirmed fixed on ares: sky/tilemaps, gravestone rise animation,
+scores, spawn params, player visibility (in MAME).
+OPEN, in priority order:
+1. ARES-ONLY: P1 spawns at/near the P2 X (far right, half off-screen);
+   MAME object state is byte-identical old-vs-new (slot dumps).
+   Poison covers ROM reads, so the divergence domain is: (a) reads of
+   0x000-0x0FF (EXCLUDED from rebasing; MAME models the adapter vector
+   area as writable-hint-vector + bios, ares differs) — census the
+   game's low-vector reads next; or (b) window-timing vs the game's
+   sprite-list/spawn sequence. 
+2. White skyline rectangles (tree-row tiles) — MAME-reproducible,
+   wp-harness next.
+3. Choppiness/frame drops on ares (53-60 VPS) — belongs to step-2
+   (pull compose out of windows) which is still the end-goal.
+4. Round-2+ garble sweep; Zeus sprite edge dropouts.
+
+## LOW-VECTOR CONSTANT READS (the ares-only P1-position suspect)
+
+Census found 4 game references below 0x100 — the killers:
+0x14930/0x1493C `addal 0x0,%a4` = the game ADDS vector[0]
+(0xFFFFFF00 = -0x100, a size-optimized constant) to an address
+register. At RV=0, MAME and ares serve DIFFERENT adapter bytes at
+address 0 -> ares-only pointer/position skew. Plus tstb 0x0 (flag
+test of a vector byte) and oriw #0,0x0 (RMW). All four redirected to
+the high copy's authentic arcade vector bytes (operand 0 ->
+0x900000). TOOLKIT: the rebase census must include [0x000,0x100) —
+vector-table-as-constants is a real 68K idiom.
+
+## ROUND-2 DISPATCHER FIX + CLEAN 20K SWEEP
+
+The round-2 attract crash chain: the two-level dispatcher's WORD
+index table at 0x6DC0 pair-reads as 0x00030004 — a forged "valid ROM
+pointer" that passed every classifier (three different sweeps
+re-swallowed it). Resolution: REBASE_EXCLUDE hard list applied as a
+final revert pass over game_high.bin (heuristics cannot reject forged
+pairs; exclusion is the only safe answer — same philosophy as
+DATA_EXCLUDE in the original patcher).
+RESULT: 20,000-frame attract sweep (all round demos) with ZERO
+address-space escapes under poison. Ares build includes the
+low-vector constant fix (P1-position candidate) — awaiting field
+verdict on: P1 spawn position, round-2+ demo visuals, choppiness.
+
+## FIELD TRIAGE: remaining round-1 artifacts are ALLOCATOR-CAPACITY class
+
+Mike's "top half eats player sprite" = the demo player's LEGS sprite
+color overflowing to the shared CRAM pair (multi-part S16 characters;
+torso color owns a pair, legs color over budget -> flat red). Same
+family as the white skyline rectangles (tile-group overflow sharing).
+NOT rebase bugs — the pointer surgery is stable (20k-frame sweeps
+clean). Allocator follow-ups (bounded, later): nearest-color overflow
+fallback instead of last-assigned; revisit the 6..10 pair budget
+clamp for sprite-heavy scenes.
+
+DECISION: pivot to UNPAIR STEP 2 — pull sprite/tile compose out of
+the pause windows (cart is SH-2-readable at any time under RV=0).
+This is the payoff: 68K pause ~18ms -> ~4-5ms per cycle, the
+choppiness/speed fix Mike has asked for throughout. Plan sketch:
+- Sprite compose moves from window exts to the CONCURRENT phase
+  (SPR_SNAP + spr maps already SDRAM; cart sprite reads now legal
+  anytime). Same row-following schedule, just post-ack.
+- Tile thirds unchanged (already concurrent).
+- Windows shrink to: snapshot (SPR_SNAP/pages/regs/CRAM) + blit
+  slices + cache fills (fills can ALSO go concurrent now — no RV
+  constraint on cart tile reads).
+- Cycle can then shorten (2-slice/112-row retest is BACK on the
+  table since blits get the whole vblank to themselves).
+
+## UNPAIR STEP 2 LANDED: full concurrent compose — 68K pause 3.4ms/cycle
+
+Windows now hold ONLY: vblank slice blits + (W0) staging snapshot
+(regs, pages, SPR_SNAP) + apply_cram. ALL composition — tiles AND
+sprites/cat1/text — runs concurrent with the game (RV=0 makes cart
+art readable anytime). Per-band schedule after Wk's ack: each CPU
+composes tiles then sprites on ITS OWN rows of band R(k) (row splits
+= no cross-CPU ordering). Leftover machinery + SYNC[3] handshake
+deleted; fills concurrent (master tail); build_maps unchanged at k2.
+MAME gameplay: total in-window time 3.38ms/cycle (was ~11-12), no
+stalls, misses ~3. Projected ares tax ~10% (was 37%).
+Notes from the round:
+- Master must cache_purge before its post-ack band work (pages/maps
+  changed in-window).
+- The "yellow ghosts" that appeared are AUTHENTIC: the arcade's
+  grave-emergence effect sprites (FPGA ground truth shows the same
+  yellow block) — step 2's budget renders sprites older builds
+  dropped.
+- Sprite color 0x3F (shadow/darken) sprites are SKIPPED for now
+  (proper darkening is a residual); pair-zone eviction now spares
+  live singles (group-14 text/pair-7 thrash).
+
+## SNAPSHOT PHASE-SHIFT (step-2 follow-up, from Mike's 3-image report)
+
+Step 2 exposed a sprite-list race: the game's own vint handler (which
+rebuilds the sprite hardware list) runs AFTER our window in the
+interrupt chain, so a W0 snapshot read a stale/mid-rebuild list once
+the game ran at speed — vanishing Zeus, sprites cut at band seams.
+Snapshot now taken at W1 (post game-vint, list complete); band
+schedule phase-shifted: W1 composes R0, W2 -> R1, W0 -> R2 (each
+band still done 2+ vints before its rows ship). build_maps rides
+region R2's tail (before the next W1 snapshot).
+REMAINING known-visual, queued:
+- Slice-seam temporal tearing on fast movers: inherent to progressive
+  shipping at full game speed; mitigate with the 30Hz/2-slice retest,
+  true fix = whole-frame ship (double sbuf) someday.
+- Title-screen purple field / unfinished background: allocator drift
+  (suspect the eviction age-gate) — allocator polish pass next.
+
+## OPENLARA/32X REFERENCE MINING (2026-08-12, derive-don't-copy)
+
+Source: ~/src/32x-builder/srcref/OpenLara/src/platform/32x (+ its
+src-md 68K side and Chilly Willy crt0). Techniques observed, with
+their locations, for the toolkit's benefit. No code copied.
+
+**Structural rule that names our disease: the CPU with a deadline
+must be idle-spinning.** Their timing-critical pad strobing (nop-
+delay-laden, multi-phase) runs on the 68K inside ITS vblank and
+parks results in COMM8/COMM10 (src-md/crt0.s:370-433); the SH-2
+reads a latched value whenever convenient (main.cpp:68-85). Their
+slave idle-spins on COMM4 = zero pickup latency. Their master never
+has to be anywhere at a specific time: the FBCTL flip is a REQUEST
+the VDP latches at the next vblank (pageFlip, main.cpp:104-108),
+confirmed by an FS spin placed BEHIND game logic where the wait is
+free (pageWait, main.cpp:99-102, order at 230-238). A missed frame
+becomes a bigger clamped logic step, never a skipped blit
+(game.h:272-274).
+
+**Measured negatives (theirs) that match our traps:**
+- Cache-as-RAM (0xC0000000, 2-way mode) was SLOWER than cached
+  SDRAM for their rasterizer — commits fedd2ed/380d137, the
+  ON_CHIP_RENDER path is #defined out.
+- VDP autofill for the frame clear was REMOVED (git 380d137): the
+  FEN busy-spin blocked the master; replaced by a plain memset on
+  the otherwise-idle slave. Hardware acceleration lost to latency —
+  the DREQ trap in another suit.
+
+**Other hard-won items:**
+- 68K idle loop relocated to work RAM "to avoid bus contention for
+  the rom with the SH2s" (src-md/main.c:123-127); RV raised only in
+  interrupt-masked 4-instruction brackets (src-md/crt0.s:230-257).
+- All rasterizers write the OVERWRITE aperture (0x24020200): zero
+  bytes dropped by hardware = free colour-0 transparency, same
+  write latency, two CPUs share the FB safely (asm/rasterize.i:38).
+- Hot SH-2 code force-linked into SDRAM by labelling it .data
+  (asm/common.i:4-5); level data read from cart in place.
+- Cache discipline: "purge before you sleep" — CacheClear as the
+  LAST act of each shared-data phase on both CPUs (render.cpp:721).
+- Interrupt errata: every IRQ handler re-arms the FRT compare-match
+  output ("bump ints", crt0.s:516+ and ~11 sites — the FRT is NOT a
+  free timer on this platform), and an interrupt-clear write needs
+  >=8 cycles before RTE or it re-fires (the four-nop pads,
+  crt0.s:572-577) — a too-short handler re-firing looks like jitter.
+- Master enables VINT only (handler = one counter increment); slave
+  runs with everything masked and polls at task boundaries. Neither
+  CPU masks interrupts to protect compute — the handler is simply
+  too small to matter.

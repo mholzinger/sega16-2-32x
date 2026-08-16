@@ -115,6 +115,29 @@ _start:
 		move.w	d0,(0xA15100)		/* set FM - allow SH2 access to MARS hw */
 		move.w	#0xACED,(MARS_COMM8)	/* MD-ready level: releases both SH-2s */
 
+		/* PARK THE Z80 (Mike heard it: "sound clipping" on ares — no
+		 * sound is wired, the Z80 was free-running uninitialised RAM
+		 * into the YM2612/PSG from power-on; every MAME run was
+		 * -sound none so it was never audible before). HOLD IT IN
+		 * RESET, permanently: one write, no bus-grant poll (two poll
+		 * variants both hung boot here — grant never arrives in this
+		 * config), no RAM program needed. A reset-held Z80 is silent,
+		 * and the joypad path's bus-request toggles cannot wake it.
+		 * When real sound lands, a proper driver upload replaces this. */
+		move.w	#0x000,(0xA11200)	/* assert Z80 reset, forever */
+
+		/* MUTE THE PSG (Mike, LOOP 13: "still z80 clipping" with the
+		 * park verified in place). Z80 reset also resets the YM2612 —
+		 * but NOT the PSG, which lives in the VDP: any channel keyed
+		 * during the free-run window before the park (or by the
+		 * emulator's power-on PSG state) sounds FOREVER, and nothing
+		 * ever wrote the attenuation-off latches. %1cc11111 = channel
+		 * cc volume off. */
+		move.b	#0x9F,(0xC00011)	/* tone 0 att 15 (off) */
+		move.b	#0xBF,(0xC00011)	/* tone 1 att 15 */
+		move.b	#0xDF,(0xC00011)	/* tone 2 att 15 */
+		move.b	#0xFF,(0xC00011)	/* noise  att 15 */
+
 		/* Pad port init (canonical, per d32xr crt0 + SGDK JOY_reset): TH as
 		 * an OUTPUT (CTRL bit6) idling HIGH on both ports. Was never done —
 		 * the six-button phase table assumes the first transition each frame
@@ -253,11 +276,20 @@ get_input:
 _vblank:
 		move.l	2(sp),(0xFFB0F8)	/* diagnostics: interrupted (game) PC */
 		movem.l	d0-d7/a0-a6,-(sp)
+		/* burn-down aid: snapshot 16 words of the interrupted stack to
+		 * 0xFFB100 — when a missed rebase pointer drops the game PC low,
+		 * the return-address chain here names the jsr that did it. */
+		lea		66(sp),a0			/* movem 60 bytes + frame SR2/PC4 */
+		lea		0xFFB100,a1
+		moveq	#15,d0
+	9:	move.w	(a0)+,(a1)+
+		dbf		d0,9b
 		jsr		shim_vblank			/* C shim: MCU duties (md_main.c) */
 		movem.l	(sp)+,d0-d7/a0-a6
 		tst.w	(game_running)
 		beq.s	1f
-		jmp		(0x2AAC).l			/* game IRQ4 handler; its rte pops our frame */
+		jmp		(0x902AAC).l		/* game IRQ4 handler (rebased high copy);
+									   its rte pops our frame */
 	1:
 _hblank:
 		rte

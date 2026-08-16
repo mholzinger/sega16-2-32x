@@ -114,10 +114,15 @@ SEGA_BLOB:
 		.word	0x4EF9, 0x008C, 0x0410
 		.word	0x0000
 
-! Arcade game body at native cart offsets 0x808-0x3FFFF (patched HW refs)
+! Arcade game body region 0x808-0x3FFFF: POISONED (0xFF fill). The
+! game executes the rebased copy at 0x300000 (unpair model); ares maps
+! adapter space at low addresses, so any missed rebase pointer reads
+! junk there — this fill makes MAME fail the SAME way instead of
+! silently returning correct bytes (MAME leaves the cart readable at
+! low addresses), so the burn-down runs entirely in the scripted rig.
 	.org	0x808
 GAME_BODY:
-		.incbin "game_body.bin"
+		.fill	0x3F7F8, 1, 0xFF
 
 ! Boot RAM-copy stash: patched game [0x400,0x808) + continuation jmp,
 ! copied by the shim to 0xFFB400 and executed there.
@@ -324,7 +329,17 @@ mcont:
 		mov     #0x80,r0
 		mov.l   _primary_adapter,r1
 		mov.b   r0,@r1      /* set FM */
+.ifdef CMD_PROBE
+		mov     #0x02,r0    /* bit1 = CMD int (d32xr crt0.s uses 0x0A =
+				       vbi|cmd); CMD is level 8 and SR is set to
+				       level 2 below, so it is accepted */
+.else
+.ifdef CMD_INT
+		mov     #0x02,r0    /* bit1 = CMD int */
+.else
 		mov     #0x00,r0
+.endif
+.endif
 		mov.b   r0,@(1,r1)  /* set int enables */
 		mov     #0x20,r0
 		ldc     r0,sr       /* allow ints */
@@ -522,6 +537,44 @@ main_cmd_irq:
 		nop
 
 		! handle CMD IRQ
+.ifdef CMD_PROBE
+		! LOOP 11 — PICKUP-LATENCY PROBE. The master discovers a window
+		! by polling COMM0 at the top of its main loop, so it cannot
+		! react until the strip in flight ends (6-22 scanlines, and
+		! build_maps is ~4ms). That latency is what shows up as 26.6%
+		! blit skips (a stale band = the green tear) and as the 210-line
+		! worst window/ack. This ISR does NO work: it timestamps the
+		! instant the 68000's command actually arrived, so the main loop
+		! can subtract and report exactly how many FRT ticks an
+		! interrupt-driven pickup would recover. Measure before
+		! restructuring the renderer around it.
+		mov.l   r2,@-r15
+		mov.l   mci_frt_frch,r1
+		mov.b   @r1,r2          /* FRC high */
+		extu.b  r2,r2
+		shll8   r2
+		mov.l   mci_frt_frcl,r1
+		mov.b   @r1,r1          /* FRC low */
+		extu.b  r1,r1
+		or      r1,r2
+		mov.l   mci_diag58,r1
+		mov.l   r2,@r1          /* DIAG[58] = arrival stamp */
+		mov.l   mci_diag57,r1
+		mov.l   @r1,r2
+		add     #1,r2
+		mov.l   r2,@r1          /* DIAG[57] = ISR fire count */
+		mov.l   @r15+,r2
+.endif
+.ifdef CMD_INT
+		! LOOP 11 — YIELD SIGNAL. The window is announced here, the
+		! instant the 68000 raises it, instead of whenever the strip
+		! in flight happens to end. The ISR still does NO window work:
+		! it raises a flag the compose loop tests between row chunks,
+		! so pickup latency becomes one chunk instead of one strip.
+		mov.l   mci_winpend,r1
+		mov     #1,r0
+		mov.b   r0,@r1
+.endif
 
 		mov.l   @r15+,r1
 		mov.l   @r15+,r0
@@ -531,6 +584,20 @@ main_cmd_irq:
 		.align  2
 mci_mars_adapter:
 		.long   0x20004000
+.ifdef CMD_INT
+mci_winpend:
+		.long   0x26028D80      /* win_pend, uncached */
+.endif
+.ifdef CMD_PROBE
+mci_frt_frch:
+		.long   0xFFFFFE12
+mci_frt_frcl:
+		.long   0xFFFFFE13
+mci_diag57:
+		.long   0x260280E4      /* DIAG[57] uncached */
+mci_diag58:
+		.long   0x260280E8      /* DIAG[58] uncached */
+.endif
 
 main_pwm_irq:
 		mov.l   r1,@-r15
