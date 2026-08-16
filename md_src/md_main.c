@@ -984,8 +984,31 @@ window_done: ;
 				for (uint16_t g = 0; ok && g < ng; g++) {
 					while (*ctrl < 0 && --spin) ;
 					if (!spin) { ok = 0; break; }
-					fifo[0] = b[0]; fifo[0] = b[1];
-					fifo[0] = b[2]; fifo[0] = b[3];
+#ifdef NT_WRAP
+					if (g + 4 >= ng) {
+						/* PUSH TAIL, per-word (LOOP15): wrapB's shorter
+						 * consume moved the push into the DMAC's busy
+						 * phase and poisoned 17% of packets — the
+						 * state's residue split says ALL tail-drain.
+						 * The per-group poll admits a 4-word burst into
+						 * a 6/8 FIFO and ares drops the burst's tail
+						 * words uncounted; polling per word for the
+						 * last 4 groups (~2 lines) closes exactly the
+						 * racing stretch. */
+						fifo[0] = b[0];
+						while (*ctrl < 0 && --spin) ;
+						fifo[0] = b[1];
+						while (*ctrl < 0 && --spin) ;
+						fifo[0] = b[2];
+						while (*ctrl < 0 && --spin) ;
+						fifo[0] = b[3];
+						if (!spin) { ok = 0; break; }
+					} else
+#endif
+					{
+						fifo[0] = b[0]; fifo[0] = b[1];
+						fifo[0] = b[2]; fifo[0] = b[3];
+					}
 					b += 4;
 				}
 				// MAGIC TAIL (LOOP 13). The pads are pushed anyway; give
