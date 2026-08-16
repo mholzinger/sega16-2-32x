@@ -72,6 +72,51 @@ Parked: poisoned-packet polling (TAILPROBE first), boot-preload of
 the first screen's tiles (draw-in cosmetics), audio, §11 palette
 (sky = 4 blues vs arcade 7 — taste-level per Mike, on file).
 
+## 2026-08-16 — ARES WINSPAN CONFIRMS THE LEVER; WRAP PHASE A BUILT
+## AND PIXEL-PROVEN
+
+Mike's v4 state: **MD consume span mean=47.3 lines max=73
+(n=10936)** of the 215-line window/ack — the MAME shape confirmed on
+ares timing. Phase B target: mean -> ~10.
+
+**NT_WRAP PHASE A (make NTWRAP=1, BUILD 74b06396,
+rom/s16_mdbgall_wrapA.32x): display math proven, bandwidth-neutral.**
+Cells land at wrapped 64x32 plane positions (per-row header
+(prow<<8)|c0, prow anchored on the PRIMARY vy coarse — single VSRAM
+value; alt/rowscroll rows fetch their own map cells as before, only
+placement changed); receiver stages up to 2 spans per row; MD runs
+cell-strip hscroll (reg 0x0B=0x02, entries 32 bytes apart at 0xFC00)
+with FULL per-strip values; VSRAM carries full vy. Boot blank-fills
+the WHOLE plane (margins no longer exist) and zeroes the hstable.
+**Gate: pixel-IDENTICAL to the non-wrap build on all five parity
+scenes (ImageChops bbox None on ours-vs-ours), smoke clean.** Fine-x
+parallax per band is now EXACT where the old path applied one
+full-screen value — none of the five anchors happened to catch a
+fine-x divergence, hence identical rather than improved.
+
+Notes banked:
+  - Region guard: NT_WRAP excludes the always-compiled SKIP-RATE
+    BARS block (k2 debug bars + CRAM-255 hijack, ~150 bytes). Those
+    debug pixels are ours-only content inside the capture area of
+    EVERY other flavor — whether shipping drops them too (statics
+    would move DOWN) is a Mike gate-rebaseline call, parked.
+  - md_dbg_base[2][28] at 0x3E780 records per-row placement for
+    audits; bs9_audit does NOT yet understand wrapped layouts or the
+    dead margin checks — update it before the first NT_WRAP ares
+    state gets audited.
+  - Same-source MDBGALL rebuilds are NOT bit-reproducible (1.3M
+    byte diff, behaviorally equivalent within the eyehold blink
+    wobble ±0.1%) — never cmp across rebuilds to prove flavor;
+    cmp only against the SAVED handed-over copy.
+  - MDBGALL eyehold parity wobbles 8.1-8.3% across builds (anchor
+    lands mid-blink); treat ~8.2 as a band, not a constant.
+
+NEXT (Phase B, the payoff): per-row coarse-x trackers ship only
+INCOMING COLUMN cells + strip hscroll on scroll; full-chunk rotation
+drops to 1-in-4 windows (heal walk) except during claim storms
+(CUT_BLANK's detector marks those); WINSPAN on Mike's state is the
+scoreboard: mean 47.3 -> target ~15.
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
