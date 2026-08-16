@@ -929,6 +929,20 @@ window_done: ;
 		*(volatile uint16_t*)0xA15110 = (kk == 0) ? 596
 					      : (pal_pr ? 596 : 340);
 		*ctrl = 4;                            // 68S: session start
+#ifdef NT_WRAP
+		/* PER-WORD PUSH (LOOP15, wrap bundle): poll the full flag
+		 * before EVERY word. The per-group form admits a 4-word burst
+		 * into a 6/8-full FIFO and ares drops the burst's tail words
+		 * uncounted (the magic-tail poisoned class: 4% pre-wrap ->
+		 * 13-17% once the shorter consume moved the push into the
+		 * DMAC's busy phase). Costs ~13 lines of 68K window — paid
+		 * from the ~32 the wrap protocol freed. (The master-side idle
+		 * pad was tried first and REVERTED: the master had no slack —
+		 * it cost dropped frames, Mike's "jitter VERY high".) */
+#define FPUSH(w) do { while (*ctrl < 0 && --spin) ; fifo[0] = (w); } while (0)
+#else
+#define FPUSH(w) (fifo[0] = (w))
+#endif
 		// Two loops, not one with an index test: a per-group branch here
 		// costs ~1 scanline of tail, and the master's window-pickup slack
 		// is only 2-5 lines — enough to flip MAME's blit-skip regime.
