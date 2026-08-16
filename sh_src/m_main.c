@@ -2448,6 +2448,12 @@ RAMCODE void m_main(void)
     ((volatile uint32_t *)0x26028FA0)[0] = 0;
     ((volatile uint32_t *)0x26028FA0)[1] = 0;
 #endif
+#ifdef NT_WRAP
+    for (int i = 0; i < 56; i++) {
+        md_dbg_base[i] = 0xFFFF;             /* forces first-visit full rows */
+        md_dbg_hs[i] = 0xFFFF;               /* forces first hs ship (hs<=0x3FF) */
+    }
+#endif
     for (int i = 0; i < 28 * 40; i++)
         md_dbg_nt[i] = 0xDEAD;               /* debug mirror: never-written */
     for (int i = 0; i < MDP_LINES * 16; i++) {
