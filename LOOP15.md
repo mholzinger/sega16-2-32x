@@ -168,6 +168,67 @@ background wrongness (wrap placement, scroll seams at the 64-column
 wrap boundary, per-band parallax — now exact per strip for the
 first time), (c) the standing CUT_BLANK cut-reveal verdict.
 
+## 2026-08-16 (night) — WRAPB ON ARES: CONSUME WIN LANDED (47->14.8)
+## BUT EXPOSED TWO REGRESSIONS; BOTH FIXED IN wrapB2 (BUILD e0c03387)
+
+Mike's wrapB state: **MD consume span mean 14.8** (from 47.3) — the
+Phase B win is real on silicon. But: dreq misaligned **1914 = 17% of
+windows** (was 250-450), and the residue split says ALL tail-drain —
+wrapB's shorter/variable consume moved the 68K's FIFO push into the
+DMAC's busy phase; every poisoned packet = one window of stale
+sprites/text = jitter that ate the felt win. And the corpus shows
+the Zeus load as a ~4s foreign-art field (frame_000620): under
+mirror-diff, transport losses are PERMANENT until eviction (the old
+wasteful protocol was accidentally self-healing), and lost-batch
+slots aren't dirty so CUT_BLANK can't blank them.
+
+**wrapB2 fixes (rom/s16_mdbgall_wrapB2.32x, BUILD e0c03387):**
+  1. PUSH-TAIL PER-WORD POLLING (md_main, NT_WRAP): the per-group
+     poll admits a 4-word burst into a 6/8 FIFO and ares drops the
+     burst's tail words uncounted; the last 4 groups + the magic
+     pads now poll per word (~2 lines). Targets the diagnosed
+     tail-drain class directly. VERDICT METER: dreq misaligned per
+     minute on Mike's next state — expect back to <=450-class.
+  2. REJECT-LOSS HEALING (m_main, NT_WRAP): on a master-detected
+     V-gate skip, re-mark the last tile batch's slots, invalidate
+     the last chunk's mirror rows, re-ship all strip hscrolls —
+     whatever that window carried may have been consumed from a
+     stale bank on the MD's retry. Worst case a harmless
+     double-ship per skip (~1.7% of vints).
+  ALSO BUILT: rom/s16_mdbgall_wrapB2_verify.32x (same + MDVERIFY) —
+  ONE Mike run makes state_health's MDVERIFY section count stale/
+  skipped packet generations and settle the loss mechanism
+  decisively. Diagnosis rom, receiver span doubled — never ship.
+
+Gates wrapB2: title PIXEL-EXACT 46619; eyehold 8.06 (eye-only
+anatomy); smoke cadence 3.01/dreq 0/[6]=0/[7]=1; WINSPAN 17.7
+(win preserved); shipping statics EXACT; _end 0x18ee0.
+
+**ARCHITECTURE ANSWERS (Mike's three questions, banked):**
+  - "Best use of 32X tiles / larger native tilemaps?" The 32X has no
+    tilemap hardware at all — its only display is the framebuffer;
+    OUR compose IS the 32X-native path, and the shipping flavor
+    already draws every layer that way with NO load-in (nothing
+    ships — the SH2 reads tilemap truth directly). The load-in pain
+    is exclusive to the MDBGALL transport (MD plane cells + tile
+    art must cross the FB packet at 40 tiles/window). Bigger maps
+    can't ship whole: the container is the 1536-byte dead FB block
+    and the MD side is cell-granular by hardware.
+  - "Are load-ins just timing?" Partly bandwidth-floor (0.5s for a
+    ~800-code cut, measured at the transport floor in LOOP14),
+    partly the LOSSES above stretching 0.5s into ~4s. wrapB2
+    attacks the losses; the floor stands. The remaining lanes for
+    the floor: boot/cut-time preload while faded (parked), or
+    accept the blank reveal (CUT_BLANK) as the cover.
+  - Game speed still ~50%: the game's 68K main loop is starved by
+    the vint handler (worst 250 of 262 lines; mean much less). The
+    consume win returns ~32 lines/window mean to the game (~12% of
+    a frame) — real but not the 2x Mike needs. The remaining big
+    slices are the DREQ push (~596 words, protocol-fixed) and the
+    tail (40). A 2x needs an architecture step (slimmer DREQ
+    payload, or fewer game-visible vints), not micro-trims — design
+    next loop with TAILPROBE numbers first.
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
