@@ -4188,11 +4188,48 @@ RAMCODE void m_main(void)
                         }
 #endif
                     }
+#ifdef NT_WRAP
+                    /* ALL-STRIPS hscroll delta tail: scroll moves every
+                     * affected strip's hscroll TOGETHER, every game
+                     * frame — waiting for each row's chunk visit would
+                     * make scrolling steppy (the pre-wrap path shipped a
+                     * full-screen value every window). Recompute all 56
+                     * strips' full hscroll here, ship only changes.
+                     * Layout: [n] then n x [(plane<<7)|strip, value]. */
+                    {
+                        volatile uint16_t *nhs = o;
+                        uint16_t n2 = 0;
+                        *o++ = 0;
+                        for (int pl2 = 0; pl2 < 2; pl2++) {
+                            const layer_regs *w2 = pl2 ? &snap[0] : bl;
+                            for (int r2 = 0; r2 < 28; r2++) {
+                                int vxr2 = w2->vx0;
+                                if (w2->any_special) {
+                                    uint16_t rs2 = w2->rs[r2];
+                                    if (rs2 & 0x8000)
+                                        vxr2 = w2->vx0_a;
+                                    else if (w2->xs_raw & 0x8000)
+                                        vxr2 = (int)((0xC0 - (rs2 & 0x3FF))
+                                                     & 0x3FF);
+                                }
+                                uint16_t hv2 =
+                                    (uint16_t)((0 - vxr2) & 0x3FF);
+                                if (md_dbg_hs[pl2 * 28 + r2] != hv2) {
+                                    md_dbg_hs[pl2 * 28 + r2] = hv2;
+                                    *o++ = (uint16_t)((pl2 << 7) | r2);
+                                    *o++ = hv2;
+                                    n2++;
+                                }
+                            }
+                        }
+                        *nhs = n2;
+                    }
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
-#ifdef NT_WRAP
-                    sc[5] = 287;             /* 7 x (hdr + 40 cells) */
+                    sc[5] = (uint16_t)(o - (sc + 8));   /* payload words */
 #else
+                    sc[1] = 1;
+                    sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
                     sc[5] = 280;
 #endif
                     md_phase++;
