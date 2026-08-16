@@ -38,7 +38,7 @@ emu.register_frame_done(function()
         and mdp:read_u8(0xFFF031) == 0x10
         and mdp:read_u8(0xFFC0A1) == 0x09
         and (mdp:read_u16(0xFFC0A2) & 0xFFF0) == 0x0040 then
-      armed = 20
+      armed = tonumber(os.getenv("ND_SETTLE") or "20")
     end
   end
   if go then
