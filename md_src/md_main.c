@@ -974,7 +974,7 @@ window_done: ;
 				*bm = 0;
 				FPUSH(pal_pr
 					? (uint16_t)(txt_dma_base | ((pal_pr - 1) << 11) | 0x8000)
-					: txt_dma_base;
+					: txt_dma_base);
 				// Body: the sprite list after w0 (so it LANDS for w1,
 				// where the harvest is — the game's vint handler rebuilds
 				// the list after our window in the IRQ chain), else the
