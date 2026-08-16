@@ -203,6 +203,15 @@ static uint16_t cache_tag[NSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * (md_dbg_base/md_dbg_hs symbols), like _snap. */
 static uint16_t md_dbg_base[56];
 static uint16_t md_dbg_hs[56];
+/* reject-loss healing (belt): what THIS window's packet carries, so a
+ * master-detected V-gate skip can conservatively re-ship it — a packet
+ * consumed from a stale bank after a skip silently never lands, and
+ * under mirror-diff nothing would ever re-send it (the old full-chunk
+ * protocol re-shipped everything each rotation). Worst case: one
+ * harmless double-ship per skip. */
+static uint16_t md_lastb[40];                /* tile batch slots */
+static uint8_t  md_lastb_n;
+static uint16_t md_lastc;                    /* 0x100|(fg<<7)|row0, 0=none */
 #endif
 #define md_dbg_nt ((uint16_t *)0x0603D200)  /* [2][28][40] mirror of the
                                              * last entry shipped per
