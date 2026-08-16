@@ -3367,6 +3367,9 @@ RAMCODE void m_main(void)
                     DRQR[7]++;               /* complete-but-displaced */
                     pg_pending |= c10_prev;
                     cycle_dirt |= c10_prev;
+#ifdef PG_STICKY
+                    pg_watch |= c10_prev;
+#endif
                 }
             }
             c10_prev = MARS_SYS_COMM10 & 0x1FFF;  /* insurance for the
