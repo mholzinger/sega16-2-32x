@@ -3974,6 +3974,20 @@ RAMCODE void m_main(void)
                             }
                             uint16_t ent = (uint16_t)(slot
                                 | ((unsigned)mdp_s_line[cset] << 13));
+#ifdef CUT_BLANK
+                            /* cut mode: a slot whose art has not shipped
+                             * yet still holds the PREVIOUS scene's tile;
+                             * ship the blank instead (fade cover). The
+                             * next chunk visit after the upload lands
+                             * rewrites the real entry. Blank slot is
+                             * reserved and never claimed, so its dirty
+                             * bit can't be set — no self-blanking. */
+                            if (md_cut
+                                && (md_dirty[slot >> 5] & (1u << (slot & 31)))) {
+                                ent = MD_BLANK_SLOT;
+                                ((volatile uint32_t *)0x26028FA0)[0]++;
+                            }
+#endif
                             md_dbg_nt[(isfg ? 1120 : 0) + row * 40 + col] = ent;
                             *o++ = ent;
                         }
