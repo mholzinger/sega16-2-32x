@@ -970,9 +970,9 @@ window_done: ;
 			while (*ctrl < 0 && --spin) ;
 			if (spin) {
 				volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
-				fifo[0] = *bm;
+				FPUSH(*bm);
 				*bm = 0;
-				fifo[0] = pal_pr
+				FPUSH(pal_pr
 					? (uint16_t)(txt_dma_base | ((pal_pr - 1) << 11) | 0x8000)
 					: txt_dma_base;
 				// Body: the sprite list after w0 (so it LANDS for w1,
