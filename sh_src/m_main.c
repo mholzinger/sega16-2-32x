@@ -3804,6 +3804,23 @@ RAMCODE void m_main(void)
                                  ::: "r0", "memory");  /* back to level 2 */
 #endif
             TOK(0);                          /* busy: post-ack compose follows */
+#if defined(NT_WRAP) && defined(MD_BG)
+            /* PUSH GUARD (LOOP15): wrapB freed ~30 lines of 68K consume
+             * and the master's post-ack compose launch moved that much
+             * earlier — right onto the 68K's DREQ push, whose FIFO
+             * drain (the DMAC, an SDRAM customer like compose) then
+             * starves: poisoned packets 4% -> 13-17%. MDVERIFY proved
+             * the FB channel lossless, so this is THE loss channel.
+             * Give the lines back on the MASTER side — its spin was
+             * idle pre-wrap anyway; the 68K keeps its win for the
+             * game. ~46 FRT ticks/line; dial against the ares
+             * "dreq misaligned" meter (target: back to the ~4%
+             * historical class). */
+            {
+                uint16_t g0 = frt();
+                while ((uint16_t)(frt() - g0) < 1380) ;
+            }
+#endif
 #ifdef SPAN_PROBE
             m_stage = 7;                     /* v3: post-ack window tail */
 #endif
