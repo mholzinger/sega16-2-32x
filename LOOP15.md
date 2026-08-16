@@ -292,6 +292,38 @@ polling should collapse it toward zero (not just the ~4% class:
 the race itself is closed; residual poisons would indicate a
 DIFFERENT loss mode worth knowing about).
 
+## 2026-08-16 — WRAPB4 ARES VERDICT: **dreq misaligned 1914 -> 1.**
+## Jitter "extremely high -> little"; baseline NEARLY PLAYABLE.
+## The DREQ loss class is CLOSED. Canonical MDBGALL build line:
+## `make MDBGALL=1 BQCHUNK=1 CUTBLANK=1 NTWRAP=1` (BUILD 989432e4).
+
+State: skips 0.3%, deferrals 192 (lowest ever), catastrophic drift
+1, spin headroom 2600/2600 (the per-word polls never actually wait —
+they exist to catch the one racing moment). Handler split moved:
+window/ack 167 (was 205-215), tail 87 (the poll cost lives there);
+total ~unchanged at 254 worst.
+
+## THE SPEED ARITHMETIC (Mike's 10MHz question — the honest frame)
+
+Yes — the deficit is structural. The arcade S16B 68000 runs 10MHz
+with 100% of the CPU; the MD 68000 runs 7.67MHz (0.77x) and our
+vint handler takes its share of every frame on top. Game CPU vs
+arcade ~= 0.77 x (1 - handler share). The game paces itself per
+vint: when its per-frame work overruns the CPU it has, it takes 2
+frames per step — the "~50% speed" feel. Wrap already returned ~30
+lines/window; the remaining levers, in order of leverage:
+  1. DREQ payload/cadence redesign — the push (~596 words x 3
+     windows/cycle) is 3x oversampled for a 20Hz compose; 2 windows
+     per cycle returns ~1/3 of the handler to the game. Fidelity
+     tradeoffs (text refresh cadence — LOOP8's negative — and
+     sprite-landing freshness) need TAILPROBE-grade measurement
+     first. THE candidate for the next big step.
+  2. Continue shaving consume (16 -> ~10: palette-block
+     skip-when-unchanged, storm-only costs).
+  3. Accept: 0.77x is the ceiling with the game on the MD 68K. The
+     only way past it is moving game logic off the 68K — a
+     different project.
+
 ## DEAD ENDS — DO NOT RE-ATTEMPT (paid for in LOOP11/12)
 
   - IDLETOKEN/IDLEGRACE (Chaotix handshake): premise is a parked
