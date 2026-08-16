@@ -92,6 +92,14 @@ def main():
           f"dreq_incomplete={inc} ({100.0 * inc / max(cycles, 1):.1f}% "
           f"of cycles) push_aborts={aborts} "
           f"spin_headroom_min={'n/a' if wmark == 0xFFFF else wmark}/2600")
+    # WINSPAN (LOOP15): MD packet-consume span accumulator, builds
+    # de463cb1+. Relative meter (V-jump samples discarded) — rank
+    # builds with it, don't read it as an absolute clock.
+    ws_n = rdmd16(0xA03C)
+    if ws_n:
+        ws_sum = (rdmd16(0xA038) << 16) | rdmd16(0xA03A)
+        print(f"MD consume span: mean={ws_sum / ws_n:.1f} lines "
+              f"max={rdmd16(0xA03E)} (n={ws_n}) << the 68K window lever")
     # LOOP 13 part 4 — DREQ residue split (0x28F80, builds with DRQR).
     # The 68K is exonerated (aborts 0, headroom 2597/2600); the residue
     # of each incomplete sprite push names the remaining mechanism:
