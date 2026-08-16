@@ -1878,6 +1878,7 @@ RAMCODE static void cap_page(int pg)
         pg_watch |= (uint16_t)(1u << pg);
 #ifdef PG_STICKY
         pg_quiet[pg] = 0;
+        pg_hot |= (uint16_t)(1u << pg);
 #endif
     } else {
 #ifdef PG_STICKY
