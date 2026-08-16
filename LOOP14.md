@@ -293,6 +293,42 @@ pgrotor's cost class (jitter) should be absent, cadence unchanged.
 CUTBLANK verdict still open from last round. PGROTOR rom is DEAD —
 discard it.
 
+## 2026-08-16 (later) — MIKE'S VERDICT ON 652cb5fe: **"NEARLY
+## FLAWLESS."** PG_STICKY FOLDED INTO THE MDBGALL BUNDLE (deep=24);
+## speed + band tearing are now the front of the queue.
+
+Ares pass, PGSTICKY build: presentation nearly perfect; residuals =
+a few cloud cells in the stage-1 sky loading oddly (boxed in Mike's
+frame_001980; small, transient-loading class) and the two standing
+items: SPEED (slow) and band TEARING. State 652cb5fe.bs9: drift
+1404/0 (catastrophic ZERO), skips 0 — but the deep-watch cost showed:
+V-gate rejects 0.2 -> 3.1%, [31]=129, cadence 3.10.
+
+Cost work, both measured on the eyehold gate:
+  - **NEGATIVE RESULT: restore-narrow (pg_hot) is WRONG.** Restoring
+    only changed pages (8.18 -> 26.56) — a watched page skipped at
+    the flip leaves the new bank's staging stale and the NEXT k2
+    capture reads that bank into truth: the bank disease at k2.
+    **Capture-wide REQUIRES restore-wide.** Reverted; comment at the
+    restore site.
+  - pg_deep 60 -> 24 cycles: eyehold 8.21% (unchanged from 8.18);
+    the k2 exposure per scene load drops 3s -> 1.2s. Ares rejects
+    should land well under the 3.1% measured at deep=60.
+
+**BUNDLE: `make MDBGALL=1` now carries PG_STICKY** (Makefile note at
+the fold). Verdict rom rom/s16_mdbgall_v2.32x = MDBGALL+BQCHUNK,
+BUILD 631b4875, _end 0x18fa0, stamped normal. Gates: eyehold 8.21
+dx=0, statics EXACT 2.44/3.37, smoke cadence 3.01/skips 0/dreq 0/
+[7]=1.
+
+QUEUE NOW (Mike's list): 1. speed (window/ack ~205 worst, the
+parked OpenLara idle-spin lever, + rejects tuning above), 2. band
+tearing (3-band pipeline composing adjacent bands from successive
+frames — the architecture pass, biggest lever/risk), 3. cloud-cell
+load transients (cosmetic, corpus frame_001980), 4. audio (parked).
+CUTBLANK verdict STILL OPEN (cuts read clean?) — fold decision waits
+on it.
+
 NOTE srcref/cannonball is stock desktop Cannonball (no 32X code);
 the real 32X OutRun vibe-port is srcref/cannonball-outrun-32x
 (haroldo-ok). Mined 2026-08-15: nothing new for us — its 60Hz is
