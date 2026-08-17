@@ -220,6 +220,15 @@ def main():
                if real_total >= 262 else f"{262 - real_total} lines margin")
     print(f"worst handler: total={real_total} window/ack={win} tail={tail} "
           f"(frame=262) dominated by {dom} -> {verdict}")
+    # LOOP15: always-on handler-total mean (builds >= the wrapB4
+    # successor). THE speed number: mean 68K lines/vint taken from the
+    # game; game CPU vs arcade ~= 0.77 x (262 - mean) / 262.
+    hsum = (rdmd16(0xB0D0) << 16) | rdmd16(0xB0D2)
+    if hsum and vints:
+        hmean = hsum / vints
+        print(f"68K handler mean={hmean:.1f} lines/vint "
+              f"-> game gets ~{100.0 * (262 - hmean) / 262:.0f}% of the MD 68K "
+              f"(~{77.0 * (262 - hmean) / 262:.0f}% of the 10MHz arcade)")
     # LOOP 13 tearing lane (WINSPLIT builds): blit-only cost from
     # DIAG[23]/[25] (master ticks / master rows). Master blits 112 of
     # 224 rows per cycle (slave takes the rest concurrently), so
