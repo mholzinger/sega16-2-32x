@@ -4452,19 +4452,35 @@ RAMCODE void m_main(void)
                 /* LIVE CRAM REFRESH, every window: each used pen tracks
                  * its owner's current PAL_SH colour, so fades reach the
                  * MD plane at window cadence. 48 words at a fixed
-                 * offset past both payload types. */
-                for (int i = 0; i < MDP_LINES * 16; i++) {
-                    uint16_t cw = 0;
-                    if (mdp_pen_rc[i]) {
-                        unsigned os = mdp_pen_own[i * 2];
-                        unsigned op = mdp_pen_own[i * 2 + 1];
-                        uint16_t q = mdp_quant(PAL_SH[os * 8 + op]);
-                        mdp_line_c[i] = q;
-                        cw = (uint16_t)((((q >> 6) & 7) << 9)
-                                        | (((q >> 3) & 7) << 5)
-                                        | ((q & 7) << 1));
+                 * offset past both payload types. LOOP15 (NT_WRAP):
+                 * md_pkt persists between windows, so comparing against
+                 * the block's previous content detects change for free;
+                 * sc[1] bit15 tells the receiver whether to stage the
+                 * CRAM record at all — outside fades that is 48 slow FB
+                 * reads + a 51-word DMA record saved EVERY window. The
+                 * bookkeeping (mdp_line_c) still updates every window. */
+                {
+                    uint16_t chg = 0;
+                    for (int i = 0; i < MDP_LINES * 16; i++) {
+                        uint16_t cw = 0;
+                        if (mdp_pen_rc[i]) {
+                            unsigned os = mdp_pen_own[i * 2];
+                            unsigned op = mdp_pen_own[i * 2 + 1];
+                            uint16_t q = mdp_quant(PAL_SH[os * 8 + op]);
+                            mdp_line_c[i] = q;
+                            cw = (uint16_t)((((q >> 6) & 7) << 9)
+                                            | (((q >> 3) & 7) << 5)
+                                            | ((q & 7) << 1));
+                        }
+                        chg |= (uint16_t)(sc[688 + i] ^ cw);
+                        sc[688 + i] = cw;
                     }
-                    sc[688 + i] = cw;
+#ifdef NT_WRAP
+                    if (chg)
+                        sc[1] |= 0x8000;     /* palette present this window */
+#else
+                    (void)chg;
+#endif
                 }
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
             }
