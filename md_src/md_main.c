@@ -1411,8 +1411,9 @@ void main(void) {
 #ifdef IDLE_TOKEN
 	*(volatile uint16_t*)0xFFB0EE = 0;   // LOOP 11a: idle-token skips
 #endif
+	*(volatile uint32_t*)0xFFB0D0 = 0;   // LOOP15: sum of total spans
+	                                     // (ALWAYS-ON handler-mean meter)
 #ifdef TAIL_PROBE
-	*(volatile uint32_t*)0xFFB0D0 = 0;   // LOOP 6: sum of total spans
 	*(volatile uint32_t*)0xFFB0D4 = 0;   //   sum of stream spans
 	*(volatile uint32_t*)0xFFB0D8 = 0;   //   sum of DREQ-push spans
 	*(volatile uint32_t*)0xFFB0DC = 0;   //   sum of palette-scan spans
