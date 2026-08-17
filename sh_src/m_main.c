@@ -3178,6 +3178,11 @@ RAMCODE void m_main(void)
                     }
                     for (int i2 = 0; i2 < 56; i2++)
                         md_dbg_hs[i2] = 0xFFFF;
+                    md_pkt[688] ^= 1;        /* poison the palette-skip
+                                              * baseline: the lost window
+                                              * may have carried a flagged
+                                              * palette — force a re-ship
+                                              * next window */
                 }
 #endif
 #ifdef SPAN_PROBE
