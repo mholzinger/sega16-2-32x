@@ -552,10 +552,15 @@ void shim_vblank(void) {
 					last_seq = sq;
 				}
 #endif
-				if (sc[1] == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
-				else            (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
+				// LOOP15 (NT_WRAP): sc[1] bit15 = "palette block changed
+				// this window"; the type lives in the low byte.
+				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = sc[5];
+#ifdef NT_WRAP
+				uint16_t palp = (uint16_t)(sc[1] & 0x8000u);
+#endif
+				if (typ == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
+				else          (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
 				(*(volatile uint16_t*)0xFFB0E8) = sc[5];  // last count
-				uint16_t typ = sc[1], cnt = sc[5];
 				// vertical fine scroll, every window and nearly free
 				// (horizontal is per-strip now: cell-mode hscroll words
 				// ride each name-table chunk)
