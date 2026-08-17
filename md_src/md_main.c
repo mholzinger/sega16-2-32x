@@ -1184,14 +1184,18 @@ window_done: ;
 		uint8_t total = (uint8_t)(ev - v_entry);   // TRUE entry -> here
 		uint8_t win = (uint8_t)(v_win - v_entry);  // window/ack-spin only
 		if (total > max_total) { max_total = total; at_win = win; }
+		// LOOP15: the handler-total MEAN promoted to ALWAYS-ON — it is
+		// the number the DREQ-cadence redesign steers by (mean 68K time
+		// taken from the game), `total` is already computed above, and
+		// the add is ~10 cycles. state_health prints it as "68K handler
+		// mean". Sum 0xFFB0D0 over 0xFFB0F0 vints (boot-zeroed).
+		*(volatile uint32_t*)0xFFB0D0 += total;
 #ifdef TAIL_PROBE
 		// LOOP 6 TAIL METRICS. The max span is dominated by rare worst
 		// frames and barely moves under changes that cut real work by 6x
 		// (gating COMM sends 64 -> 11 left the max stream span at ~120),
 		// so accumulate MEANS too — sustained load is what starves the
-		// game. 0xFFB0D0 = sum of total spans, 0xFFB0D4 = sum of stream
-		// spans, over 0xFFB0F0 vints. Mean = sum / vints.
-		*(volatile uint32_t*)0xFFB0D0 += total;
+		// game. 0xFFB0D4 = sum of stream spans, over 0xFFB0F0 vints.
 		*(volatile uint32_t*)0xFFB0D4 += (uint8_t)(ev - v_stream);
 		*(volatile uint32_t*)0xFFB0D8 += dreq_span;
 		*(volatile uint32_t*)0xFFB0DC += palscan_span;
