@@ -682,14 +682,20 @@ void shim_vblank(void) {
 				}
 				// live BG palette: 48 words at fixed offset 688 -> CRAM
 				// lines 1-3 (entries 16-63); line 0 stays the grey/text
-				// ramp. Rides every packet so fades track at window
-				// cadence (one window later now, uniformly).
-				sp[0] = 48;
-				sp[1] = (uint16_t)(0xC000u | 32u);
-				sp[2] = 0x80u;
-				for (uint16_t i = 0; i < 48; i++)
-					sp[3 + i] = sc[688 + i];
-				nrec++;
+				// ramp. NT_WRAP: staged only when the SH2 flagged a
+				// change (fades still track at window cadence; static
+				// scenes save 48 slow FB reads + the DMA record).
+#ifdef NT_WRAP
+				if (palp)
+#endif
+				{
+					sp[0] = 48;
+					sp[1] = (uint16_t)(0xC000u | 32u);
+					sp[2] = 0x80u;
+					for (uint16_t i = 0; i < 48; i++)
+						sp[3 + i] = sc[688 + i];
+					nrec++;
+				}
 				stg[0] = nrec;
 				}
 				(*(volatile uint16_t*)0xFFB0B8) =
