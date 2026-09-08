@@ -3305,3 +3305,43 @@ NOLANDWAIT is a real but not free lever on the shipping line: +28%
 refresh (23.7 -> 30.3 Hz) for 4x the torn landings (54 -> 208) and lower
 tile throughput (355 -> 262). Not shippable as-is; worth revisiting if
 the tear feedback can absorb it.
+
+## 76. THE REAL GATE, AND THE TWO BOTTLENECKS ARE INDEPENDENT
+
+Mike, on a day of measurements that did not move: "we had a working
+model 4 days ago that was well over 30 frames per second, so you are
+measuring the wrong gates". Correct. Everything in entries 71-75 was
+measured on ATTRACT MODE with no input, and on the FLIP RATE. The
+project's speed gate is `tools/gameplay_speed.py`: game-frames per vint
+over the level-1 input script, 100% = 60 game-frames/s. It also already
+carried the counter entry 72 went looking for — WRAM 0xFFF144, vints in
+which the game's pass had not finished.
+
+    build                              speed    fps   frame-misses
+    ship line (today)                  48.7%     29     51.3%
+    opt1 flags on today's tree         60.7%     36     39.3%
+    opt1 rom as built 2026-09-07       64.9%     39     35.1%
+    FBXPORT alone                      50.3%     30     49.7%
+    **opt1 flags + FBXPORT             82.3%     49     17.7%**
+
+Confirmed: 86.9% on a different sample window (2000..3600), and a fresh
+build from clean objects reproduces byte-identically apart from the
+3-byte stamp.
+
+**THE TWO BOTTLENECKS ARE INDEPENDENT AND NEITHER SHOWS ALONE.** FBXPORT
+by itself buys 1.6 points, which is why entry 75 read it as a failure.
+The sprite-pair fix by itself buys 12. Together they buy 34. The DREQ
+push and the late-claim failures were each hiding the other: with the
+claim failing, the frame is spent on shadow-ramp draws no matter how
+fast the packet crosses; with the packet crossing slowly, fixing the
+claim leaves the 68K waiting anyway.
+
+Flags: TXTWRAM=1 LATESTEAL0=1 LATEKEEP=1 DRAWADOPT=1 FBXPORT=1.
+
+BUILD-SYSTEM HAZARD that cost several false results here: `.build_flags`
+does not capture every flag and objects depend on it, so a flag A/B can
+silently reuse the previous build's objects — three roms this session
+differed from their control by 2-4 bytes of timestamp. `rm -f sh_src/*.o
+md_src/*.o` before every A/B, and CHECK the roms differ before believing
+a comparison. Also: `make -n | grep "md_main.c"` matches the rule's echo
+line, not the compiler invocation; grep for `m68k-elf-gcc.*md_main\.c`.
