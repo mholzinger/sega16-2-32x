@@ -377,8 +377,42 @@ adapter's own MD-side ROM window (bank 3 -> cart 0x300000), a different
 mechanism. Adopting SSF2 means: the "SEGA SSF" header, the larger ROM
 end, and bank writes at 0xA130F3+ around any access past 4 MB.
 
-UNVERIFIED: whether bank switching is safe to perform while the SH-2 is
-mid-read of a banked slot. Nothing here has been tested on the MiSTer.
+**WHO CAN PAGE, AND WHETHER IT IS SAFE — from the RTL, not assumed.**
+
+`cart.sv` gates the bank write on `TIME_N`, and in `S32X.sv` TIME_N is
+the ONE cart signal that is not muxed:
+
+    .TIME_N(GEN_TIME_N)          // always the Genesis /TIME strobe
+    .LWR_N(!s32x_rom ? GEN_LWR_N : S32X_CLWR_N)
+
+So **only the 68K can write the bank registers.** The SH-2 has no TIME_N
+and cannot page; it reads through whatever bank the 68K selected.
+
+`s32x_rom` is not per-cycle arbitration — it is set once at ROM download
+and never cleared, so on a 32X cart the cart bus is driven from the 32X
+side permanently and the MD's cart cycles are PASSED THROUGH the 32X,
+exactly as the real adapter sits between the MD and the cart.
+
+The two sides are then serialised by the 32X's own ROM state machine
+(`IF.sv`, ROM_ST / RS_IDLE / RS_SH_WAIT, SH_ROM_GRANT vs MD_ROM_WAIT +
+MD_ROM_DTACK_N). One cart transaction at a time.
+
+**Therefore there is no torn-read hazard**: a 68K bank write and an SH-2
+cart read are separate, serialised bus cycles. The only hazard is
+LOGICAL — repaging a 512 KB slot the SH-2 is currently reading code or
+art from changes what its next fetch returns. The discipline is
+ownership of slots, not timing.
+
+**AND THIS IS THE CART-FETCH TAX.** Section 4d could not measure why 68K
+cart fetches are expensive here. It is this state machine: SH-2 and MD
+cart accesses take the bus one at a time, so the 68K's instruction
+fetches from cart ROM queue behind the SH-2s' art reads — which is
+exactly why r60_push was moved to RAMCODE and why the compose is
+described as the heaviest cart reader. It is arbitration, not wait
+states.
+
+Still untested on the MiSTer: nothing in this section has been run,
+only derived.
 
 ---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
