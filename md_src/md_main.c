@@ -2767,7 +2767,7 @@ void shim_vblank(void) {
 					PSTAMP(0xFFA184);
 				}
 #endif
-#ifdef FB_XPORT
+#if defined(FB_XPORT) && !defined(FBX_TAIL)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
 				 * to: the 68K cannot reach the framebuffer at FM=1.
 				 * Push-before-post was tried and reverted in August
@@ -2885,6 +2885,19 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA09E =
 					*(volatile uint16_t*)0xC00008;   /* V at hold exit */
 				*(volatile uint16_t*)0xFFA0A2 = *mars_comm4;
+#ifdef FBX_TAIL
+				/* PUSH AT THE TAIL, NOT BEFORE THE POST (LOOP27 75).
+				 * Measured: pushing before the post moves V-at-post from
+				 * 240 (inside vblank, where the ISR can still flip) to 34
+				 * (line 34 of active display), and the flip rate falls
+				 * 27.3 Hz -> 1.2. The push has to be at FM=0, but this
+				 * is FM=0 too — the master dropped it at its ack — and
+				 * it costs the post nothing. The packet then waits in the
+				 * framebuffer for the next window, one vint of latency,
+				 * which the harvest already tolerates (a stale publish
+				 * yields landed = 0 and last frame's records stand). */
+				r60_push();
+#endif
 			}
 		}
 #endif

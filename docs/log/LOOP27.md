@@ -3248,3 +3248,60 @@ MEASUREMENT RULE from this entry: count the HARDWARE EFFECT, not the
 code path. "Reached the flip site" and "wrote FS" differ by 78x here.
 Where the emulator can log the effect itself (--trace-flip, --trace-dreq,
 --trace-comm), prefer that over any counter in our own source.
+
+## 74. THE CENSUS BLOCK NEEDED THE SAME CALIBRATION (2026-09-08)
+
+CEN[0] was verified to hold a write and the rest of the block assumed.
+CEN[12] then reported 470 hits inside a block compiled to `if (0)`.
+Calibrated properly — bump every slot once at m_main entry, a site that
+runs exactly once, and require each to read exactly 1:
+
+    usable   0 1 2 3 4 5 7 8 10 13 17 18 19 20 21 22 23
+    ALIASED  6 9 11 12 14 15 16      (read 76, 76, 150, 112, 35, 289, 150)
+
+Slots 9/11/12/14/15/16 were the entire flip census, so the flip numbers
+in entry 72 and the first version of 73 were garbage. `CENCAL=1` runs
+this calibration. **Calibrate every slot, not the block.**
+
+The `--trace-flip` figures were never affected — they come from the
+emulator, not from our memory — which is why they were the only numbers
+that stayed consistent all session.
+
+Second trap, same shape: `.build_flags` does not capture every flag
+(FLIP_EDGE_OFF and FBX_TAIL reach MDCCFLAGS/SHCCFLAGS and the compile
+line, but not the stamp). Objects depend on the stamp, so a flag build
+can silently reuse the previous build's objects — two roms differing by
+2 bytes of timestamp. `touch sh_src/m_main.c md_src/md_main.c` before
+every flag A/B until that is fixed.
+
+## 75. WHY FBXPORT KILLS THE FLIP: THE POST LEAVES VBLANK
+
+Trustworthy channel only (ares --trace-flip + 68K WRAM counters):
+
+    build                 vints  V at post  flips   refresh   delivery  tears
+    baseline (DREQ)        877      240      346    23.7 Hz     n/a       54
+    DREQ, no landing wait  871      n/a      440    30.3 Hz     n/a      208
+    FBXPORT (pre-post)     882       35       12     0.8 Hz   821/821      0
+    FBXPORT (tail push)    882       35       12     0.8 Hz   821/821      0
+
+**V at post is the mechanism.** The baseline posts at V=240, inside
+vblank, where the ISR can still flip. FBXPORT posts at V=35 — line 35 of
+active display — and every flip attempt then misses the window.
+
+Ruled out as the cause:
+  - the vblank edge guard (FLIPEDGEOFF=1 changes nothing under FBXPORT),
+  - FLIPDEFER (no effect under FBXPORT; on the DREQ build it drops the
+    game to 69 vints in 520 frames, reproducing entry 12),
+  - the landing wait (removing it on the DREQ build RAISES flips to
+    30.3 Hz, so it is not what delays a post),
+  - the push's position: moving it to the vint tail (FBXTAIL=1, after
+    the master's ack where FM is already down) left V at post at 35.
+
+So the post is late for a reason that is NOT the 68K's push placement,
+and that is the next thing to find. The FB transport itself is sound:
+100% delivery, zero tears, against the DREQ route's 54.
+
+NOLANDWAIT is a real but not free lever on the shipping line: +28%
+refresh (23.7 -> 30.3 Hz) for 4x the torn landings (54 -> 208) and lower
+tile throughput (355 -> 262). Not shippable as-is; worth revisiting if
+the tear feedback can absorb it.

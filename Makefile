@@ -772,6 +772,36 @@ endif
 #   [70] V-ISR entries (the denominator)
 # FBXLATE=1 moves the FB packet lift BELOW the flip, to measure whether
 # the pre-flip position is required or merely assumed.
+# `make ... FLIPRATE=1` = report FS writes per 64 vints through the value
+# instrument, so the flip rate can be read on the FPGA where no trace
+# exists. 64 = a flip every vint; ares measures 27 baseline, 1 FBXPORT.
+# `make ... FLIPEDGEOFF=1` = drop the K2FREE vblank-edge guard. It exists
+# because ares latches FS mid-scan and tears; the FPGA RTL latches only
+# in VBLK and defers a late write itself. Tearing is expected on ares.
+# CENCAL=1: bump every census slot once at m_main entry. Each must read
+# exactly 1; anything else means that slot is aliased. Run this before
+# trusting any new slot.
+ifdef CENCAL
+SHCCFLAGS += -DCEN_CAL -DFLIP_CENSUS
+endif
+# NOLANDWAIT=1: remove the pre-blit landing wait on the DREQ build, to
+# attribute FBXPORT's flip collapse to it or exonerate it.
+# FBXTAIL=1: with FBXPORT, push at the vint TAIL (after the master's ack,
+# FM already down) instead of before the post, so the post keeps landing
+# inside vblank. Costs one vint of packet latency.
+ifdef FBXTAIL
+MDCCFLAGS += -DFBX_TAIL
+endif
+ifdef NOLANDWAIT
+SHCCFLAGS += -DNO_LAND_WAIT
+endif
+ifdef FLIPEDGEOFF
+SHCCFLAGS += -DFLIP_EDGE_OFF
+endif
+ifdef FLIPRATE
+SHCCFLAGS += -DFLIP_CENSUS -DFLIP_RATE_POST
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER
+endif
 ifdef FBXLATE
 SHCCFLAGS += -DFBX_LATE
 endif

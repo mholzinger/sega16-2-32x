@@ -5699,10 +5699,22 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * landing in the last ~2 lines of vblank latches mid-scan often
      * enough to see. ~2-line safety margin; the marginal flips
      * become clean declines instead of tears. */
+#ifdef FLIP_EDGE_OFF
+    /* THE EDGE GUARD, OFF (LOOP27 74). It drops any flip that misses the
+     * vblank edge because ares latches FS immediately and tears. Real
+     * silicon does not: srcref/S32X_MiSTer rtl/32X/VDP.sv latches
+     * FS <= FBCR.FS only when VBLK, i.e. a late write is DEFERRED by the
+     * hardware itself. Under FBXPORT the push moves ahead of the post,
+     * the post lands ~57 lines later, and this guard then declines
+     * essentially every flip: 27.3 Hz -> 1.2 Hz. Expect tearing on ares
+     * with this off; expect the FPGA not to tear. */
+    if (0) {
+#else
     if ((uint16_t)(frt() - visr_t0) > 1650) {
+#endif
         MARS_SYS_COMM4 = 0xF1FF;
 #ifdef FLIP_CENSUS
-        CEN[12]++;                       /* declined: past the vblank edge */
+        CEN[21]++;                       /* declined: past the vblank edge */
 #endif
         DIAG[44]++;
 #ifdef FLIP_DEFER
@@ -5735,7 +5747,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     if (dfb_nohold ? 0 : !dfb_drawn) {
         MARS_SYS_COMM4 = 0xF1FF;
 #ifdef FLIP_CENSUS
-        CEN[13]++;                       /* declined: nothing drawn */
+        CEN[22]++;                       /* declined: nothing drawn */
 #endif
         DIAG[29]++;
         return 0;
@@ -5753,7 +5765,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     if (!nat_shipped) {
         MARS_SYS_COMM4 = 0xF1FF;
 #ifdef FLIP_CENSUS
-        CEN[14]++;                       /* declined: nothing shipped */
+        CEN[23]++;                       /* declined: nothing shipped */
 #endif
         DIAG[29]++;
         nat_capt = 1;                /* captures above already ran this
@@ -5774,7 +5786,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     {
         uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
 #ifdef FLIP_CENSUS
-        CEN[16]++;                       /* THE FS WRITE — the only thing
+        CEN[17]++;                       /* THE FS WRITE — the only thing
                                           * that actually changes the
                                           * displayed framebuffer. Every
                                           * other "flip" counter in this
@@ -5800,7 +5812,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
          * the same number in a savestate, split by decline reason:
          *   [66] flipped   [67] past the vblank edge
          *   [68] nothing drawn  [69] nothing shipped  [70] V-ISR entries */
-        CEN[11]++;                       /* ISR flipped */
+        CEN[19]++;                       /* ISR flipped */
 #endif
         {
             uint16_t fp = (uint16_t)(frt() - visr_t0);
@@ -6010,7 +6022,36 @@ void visr_vbi(void)
 #ifdef K2_FREE
     visr_t0 = t0;
 #ifdef FLIP_CENSUS
-    CEN[15]++;                           /* V-ISR entries = denominator */
+    CEN[18]++;                           /* V-ISR entries = denominator */
+#ifdef FLIP_RATE_POST
+    /* HARDWARE READOUT OF THE FLIP RATE. The FS-write census is SH-2
+     * side and the only channel off the FPGA is a screenshot, which is
+     * 68K side. So post the count of FS writes in the last 64 V-ISRs on
+     * COMM8 in the 0xBBxx form the 68K already latches and clears, and
+     * let the value instrument flood it:  64 = every vint, 27 = 27 Hz,
+     * 1 = the ares FBXPORT figure. Biased into bit 7 so black cannot be
+     * mistaken for a reading. */
+    {
+        static uint16_t fr_n, fr_base, fr_val;
+        if (++fr_n >= 64) {
+            fr_val = (uint16_t)(CEN[17] - fr_base);
+            fr_base = (uint16_t)CEN[17];
+            fr_n = 0;
+        }
+        /* post when the channel is free OR already carries our own value:
+         * on the baseline build COMM8 is busy enough with the BAxx heal
+         * traffic that a free-only test never fired on hardware, and the
+         * 68K flooded its "never posted" fallback (42) instead. Ours is
+         * cleared by the 68K each time it latches, so this never parks a
+         * value on the channel — the failure mode that blacked the
+         * screen earlier today. */
+        {
+            uint16_t c8 = MARS_SYS_COMM8;
+            if (c8 == 0 || (c8 & 0xFF00u) == 0xBB00u)
+                MARS_SYS_COMM8 = (uint16_t)(0xBB80 | (fr_val > 63 ? 63 : fr_val));
+        }
+    }
+#endif
 #endif
 #ifdef HS_CENSUS
     hsc_win++;
@@ -8095,6 +8136,14 @@ RAMCODE void m_main(void)
      * addresses here, at a site that MUST execute, and keep whichever
      * ones come back with a large count. */
     CEN[10]++;                           /* m_main entered: must read 1 */
+#ifdef CEN_CAL
+    /* CALIBRATE EVERY SLOT, not one of them. CEN[0] was verified and the
+     * rest assumed, and CEN[12] then reported 470 hits inside a block
+     * compiled to `if (0)`. m_main runs exactly once, so after this every
+     * slot 0..23 must read exactly 1; any other value means that slot is
+     * aliased by something else and must not be used. */
+    for (int q = 0; q < 24; q++) if (q != 10) CEN[q]++;
+#endif
 #endif
     /* Release the secondary SH-2 from its S_OK wait. */
     MARS_SYS_COMM4 = 0;
@@ -9231,7 +9280,7 @@ RAMCODE void m_main(void)
 #ifdef FLIP_CENSUS
                     CEN[6]++;               /* reached the body flip */
 #endif
-                    DIAG[56]++; CEN[9]++;    /* body-fallback flip: the ISR
+                    DIAG[56]++; CEN[20]++;    /* body-fallback flip: the ISR
                                               * declined this cycle (bail
                                               * counters say why) */
                     flip_span();
@@ -9260,6 +9309,11 @@ RAMCODE void m_main(void)
              * or the harvest tears the landing (bad1). */
 #ifdef FM_LATE
             if (0)   /* v2: blit DURING the push; the 68K waits for our ack */
+#endif
+#ifdef NO_LAND_WAIT
+            /* BISECT: the landing wait, removed on the DREQ build too, so
+             * the flip collapse under FBXPORT can be attributed. */
+            if (0)
 #endif
 #ifdef FB_XPORT
             /* NOTHING TO DRAIN (LOOP27 67). This wait watches TCR0 go
