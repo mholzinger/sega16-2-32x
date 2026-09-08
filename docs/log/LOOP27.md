@@ -3440,3 +3440,44 @@ and tools/arcade_trace.py (the analysis). PC sampling and memory taps
 were both tried and both failed — every MAME hook fires at a fixed phase
 where the game is always in its wait loop, and taps did not see work RAM
 in this driver. Do not re-try either.
+
+## 79. OUR SHIM COSTS AS MUCH 68K TIME AS THE GAME ITSELF
+
+Entry 78 left one term unpriced: our own instruction count per frame.
+MAME traces our rom's 68K exactly as it traced the arcade's, so it is
+measurable. Per vint, 7 vints of the level-1 timeline:
+
+    total 68K instructions      5335
+      the game's own code       2780   52.1%
+      our shim / RAMCODE        2882   47.9%
+
+    arcade, for comparison      3691   per frame, all of it game
+
+The shim is not overhead at the margin. It is roughly a second copy of
+the game's own workload, on a CPU with 77% of the arcade's clock.
+
+Not a spin artifact: the top ten shim PCs are 4.2% of shim instructions
+and the hottest is a compare loop, not a wait, so the count is not
+inflated by timing-dependent spinning in MAME.
+
+Where the shim's time goes, by 256-byte block, instructions per vint:
+
+    FF0A00   306   10.6%
+    FF0E00   264    9.2%
+    FF0700   258    9.0%
+    FF0D00   240    8.4%   4-byte compare loop = the PAL_DELTA pre-pass
+    FF0C00   183    6.4%
+    FF0100   182    6.3%
+    FF1200   175    6.1%
+    FF1500   118    4.1%
+
+No single hot spot: the cost is spread across the whole shim, so there
+is no one loop to delete. FF0D00 is the palette compare pre-pass, which
+r60_push's own comment measures at ~65 lines/vint and which the
+frame-threshold note had already predicted as the next lever —
+an independent measurement landing on the same place.
+
+METHOD CAVEAT: MAME's 32X models neither SH-2 timing nor the FB stall,
+so cycle costs from it mean nothing. Instruction counts are code-path
+facts and survive that; the spin check above is what makes them safe to
+use here.
