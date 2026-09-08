@@ -70,10 +70,27 @@ the 68000 being too slow is not.
 from a clean rebuild. It is not shippable: the display refreshes 0.3
 times a second.
 
-**On hardware** (MiSTer, bisected one flag at a time): FBXPORT renders
-(86 colours), + opt1 renders (85), + CLAIMNEW is 57% black. The rom that
-renders and is closest to shippable today is `rom/s16_fast49b.32x`
-(opt1 + FBXPORT), but it is near-frozen for the reason above.
+**ON HARDWARE, AND THIS IS THE LAST THING MEASURED THIS SESSION —
+FBXPORT IS REQUIRED FOR THE PORT TO RENDER ON THE MiSTer AT ALL.**
+Clean builds, one flag apart, screenshot-verified:
+
+    make ship-us                        1 colour   BLACK
+    make ship-us FBXPORT=1             84 colours  renders
+    make ship-us <opt1 flags>           1 colour   BLACK
+
+So the FB transport is not only a speed change. Without it the shipping
+line is a black screen on silicon, which is NOT visible in ares — ares
+renders the DREQ line fine. Everything in section 2's ladder is an ares
+measurement; on hardware only the FBXPORT builds are alive at all.
+
+The earlier hardware bisect (FBXPORT 86 / +opt1 85 / +CLAIMNEW 57%
+black) used STALE-ASSET builds for two of its three roms and must be
+redone with `make clean`. The only clean hardware results are the three
+lines above; `+opt1 +FBXPORT` and `+CLAIMNEW` have NOT been retested
+clean.
+
+`rom/s16_fast49b.32x` (opt1 + FBXPORT) rendered on hardware but was
+built with stale assets — do not trust it until rebuilt clean.
 
 The accepted hardware base remains `mister-keeper-20260908`
 (`make ship-us FBXPORT=1`).
