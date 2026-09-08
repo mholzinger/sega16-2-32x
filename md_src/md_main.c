@@ -2016,6 +2016,15 @@ static void r60_push(void) {
 			pub[1] = fbx_i;              /* exact word count */
 			fbx_seq_pub++;
 			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+#ifdef FLIP_CENSUS
+			/* what the 68K believes it published, for the delivery
+			 * census: count, last sequence, last length, and the
+			 * publish word READ BACK through the same window */
+			(*(volatile uint16_t*)0xFFA190)++;
+			*(volatile uint16_t*)0xFFA192 = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+			*(volatile uint16_t*)0xFFA194 = fbx_i;
+			*(volatile uint16_t*)0xFFA196 = pub[0];   /* read-back */
+#endif
 		}
 #endif
 		PSTAMP(0xFFA0BC);                /* records+tail shipped */

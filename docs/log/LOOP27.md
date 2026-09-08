@@ -3150,3 +3150,70 @@ CAUTION carried forward: the rom Mike looked at ten minutes earlier
 every vint, fighting the game's own palette writes. Never hand him a
 `BOOT_VALUE` build as something to judge; those exist to be photographed
 by a script, not watched.
+
+---------------------------------------------------------------------
+
+## 71. THE INSTRUMENT WAS THE BUG: SH-2 COUNTERS ABOVE DIAG[63] ARE LOST
+
+2026-09-08, the flip census. Every SH-2-side number quoted in this
+session's second half came from writes that never landed.
+
+**Symptom.** Two counters incremented on the SAME STATEMENT read 808 and
+1. Adjacent lines disagreed by three orders of magnitude.
+
+**Calibration** at `m_main` entry, a site that must execute exactly once:
+
+    DIAG[62]   0x260280F8    1     write sticks
+    DIAG[64]   0x26028100    0     WRITE LOST
+    DIAG[84]   0x26028150    0     WRITE LOST
+    0x2602FF00               1     write sticks
+    0x26037000               1     write sticks
+    0x2603FF00              66     sticks, but the address is in use
+
+The usable DIAG block ends around slot 63. Slots past it silently
+discard writes and read back residue — plausible small numbers, which is
+what makes it dangerous. A zero-in-the-baseline scan does NOT prove a
+slot is free: a slot that discards writes reads zero too.
+
+**What this invalidated, and the correction:**
+
+  - **"FB transport delivery is 0.2%" — WRONG. It is 100%.** With a
+    calibrated census block: 819 publishes, 819 taken, 0 bad length, 0
+    stale. The alarm was a lost counter.
+  - `DIAG[56]` ("body-fallback flips") is a real counter — it is below
+    the cliff — and it was the only reason the contradiction showed up
+    at all.
+
+**Rule going forward:** every census build carries `CEN[10]`, incremented
+once at `m_main` entry. If it does not read exactly 1, no other slot in
+that run means anything. The census block is `CEN` at 0x2602FF00
+(m_main.c), not DIAG.
+
+## 72. THE FLIP IS NOT THE LIMITER (2026-09-08)
+
+With the census fixed, the measurement entry 9 called for, 900 frames,
+ares, same tree, one flag apart:
+
+    build          vints  ISR flips  body flips  declines  refresh
+    DREQ FIFO       875      357        338        668     79%  47.7 Hz
+    FB transport    881        7        814        825     93%  55.9 Hz
+
+The declines and the flips sum to more than the vint count because a
+vint DECLINES in the V-ISR (past the vblank edge) and then FLIPS in the
+body. The frame is not dropped; it is flipped late. Entry 9's "flips on
+17% of vints = ~10 Hz" does not reproduce.
+
+**So the framebuffer is refreshing at ~56 Hz and the observed ~9 fps is
+the GAME's frame advance, not the display's.** FLIPDEFER is not the next
+lever, and the plan built on entry 9 is withdrawn.
+
+The limiter is upstream and already named in docs/design/SILICON.md: the
+game enters and leaves its IRQ4 handler every vint (`fmgate_ret` reads
+64/64 on both transports) while its own frame advance inside that
+handler does not keep up. That is where the next measurement goes.
+
+Also settled, since the census could finally see it: the packet lift
+works at BOTH positions — before the flip and after it — at 100%
+delivery each (`FBXLATE=1` is the A/B). The flip does not move the
+packet out from under the reader, so the pre-flip move was unnecessary.
+It is kept because it is free and it removes the question.

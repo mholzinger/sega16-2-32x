@@ -69,6 +69,15 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * as zeros — the black-actor family. */
 #define PAL_SH      ((volatile uint16_t *)0x26027000)   /* 2048 words */
 #define DIAG        ((volatile uint32_t *)0x26028000)   /* profiling, lua-read */
+/* CENSUS BLOCK (LOOP27 72). NOT DIAG: writes to DIAG[64] and beyond are
+ * silently LOST in this build. Calibrated at m_main entry, a site that
+ * must run exactly once: DIAG[62] and 0x2602FF00 both read 1 there,
+ * DIAG[64] and DIAG[84] both read 0. Every SH-2-side counter above slot
+ * 63 that the 2026-09-08 session quoted was reading residue, including
+ * a "0.2% packet delivery" that was really 100%. CEN[10] carries that
+ * same must-be-1 sanity count in every census build — check it before
+ * believing any other slot. */
+#define CEN ((volatile uint32_t *)0x2602FF00)
 #ifdef HS_CENSUS
 #define hsc_win  (*(volatile uint16_t *)0x26028D82)   /* vint counter (ISR entry) */
 #define HSC_RING ((volatile uint16_t *)0x26028D40)   /* [16][2]: pkt win, flip win */
@@ -5692,6 +5701,9 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * become clean declines instead of tears. */
     if ((uint16_t)(frt() - visr_t0) > 1650) {
         MARS_SYS_COMM4 = 0xF1FF;
+#ifdef FLIP_CENSUS
+        CEN[12]++;                       /* declined: past the vblank edge */
+#endif
         DIAG[44]++;
 #ifdef FLIP_DEFER
         /* Not a dropped frame any more: arm, and the next vblank's ISR
@@ -5722,6 +5734,9 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * flips (free here: ROW_DEFER is compiled out on R60 ships). */
     if (dfb_nohold ? 0 : !dfb_drawn) {
         MARS_SYS_COMM4 = 0xF1FF;
+#ifdef FLIP_CENSUS
+        CEN[13]++;                       /* declined: nothing drawn */
+#endif
         DIAG[29]++;
         return 0;
     }
@@ -5737,6 +5752,9 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * counts holds (free here: ROW_DEFER is compiled out). */
     if (!nat_shipped) {
         MARS_SYS_COMM4 = 0xF1FF;
+#ifdef FLIP_CENSUS
+        CEN[14]++;                       /* declined: nothing shipped */
+#endif
         DIAG[29]++;
         nat_capt = 1;                /* captures above already ran this
                                       * vint: the body fallback must not
@@ -5768,6 +5786,15 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
          * DIAG[45]/[46]: flip position from ISR entry (sum/max) — the
          * number that decides tear-legality, distinct from the span. */
         MARS_SYS_COMM4 = 0xF102;
+#ifdef FLIP_CENSUS
+        /* FLIP CENSUS (LOOP27 71). The 32X layer changes only at a flip,
+         * so flips per V-ISR IS the display refresh rate. Entry 9
+         * measured 17% on the 60 Hz builds from COMM traces; these put
+         * the same number in a savestate, split by decline reason:
+         *   [66] flipped   [67] past the vblank edge
+         *   [68] nothing drawn  [69] nothing shipped  [70] V-ISR entries */
+        CEN[11]++;                       /* ISR flipped */
+#endif
         {
             uint16_t fp = (uint16_t)(frt() - visr_t0);
             DIAG[45] += fp;
@@ -5975,6 +6002,9 @@ void visr_vbi(void)
     uint16_t t0 = frt();
 #ifdef K2_FREE
     visr_t0 = t0;
+#ifdef FLIP_CENSUS
+    CEN[15]++;                           /* V-ISR entries = denominator */
+#endif
 #ifdef HS_CENSUS
     hsc_win++;
 #endif
@@ -7242,6 +7272,46 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
 #define DREQ_LEN(k)  (596u)
 #endif
 
+#ifdef FB_XPORT
+static uint8_t  fbx_seq_seen;            /* last publish sequence consumed */
+static unsigned fbx_landed;              /* words lifted this window */
+/* Lift the published packet out of the framebuffer into SPR_LAND.
+ * FBXLATE=1 calls this AFTER the flip instead of before it, to measure
+ * whether the pre-flip position is actually required. */
+RAMCODE static void fbx_lift(void)
+{
+#ifdef FLIP_CENSUS
+    CEN[2]++;                            /* lift block entered */
+#endif
+    volatile uint16_t *pub = (volatile uint16_t *)FBX_PUB_SH;
+    uint16_t pw = pub[0];
+    fbx_landed = 0;
+#ifdef FLIP_CENSUS
+    CEN[5] = pw;
+    if ((pw & 0xFF00u) == FBX_MAGIC) {
+        CEN[3]++;
+        if ((uint8_t)pw == fbx_seq_seen) CEN[4]++;
+    }
+#endif
+    if ((pw & 0xFF00u) == FBX_MAGIC && (uint8_t)pw != fbx_seq_seen) {
+        unsigned n = pub[1];
+        if (n >= 26 && n <= 924) {
+            const volatile uint32_t *sp = (const volatile uint32_t *)FBX_PKT_SH;
+            uint32_t *dp = (uint32_t *)SPR_LAND;
+            unsigned nl = (n + 1u) >> 1;
+            for (unsigned i = 0; i < nl; i++) dp[i] = sp[i];
+            fbx_landed = n;
+            fbx_seq_seen = (uint8_t)pw;
+#ifdef FLIP_CENSUS
+            CEN[0]++;
+#endif
+        }
+#ifdef FLIP_CENSUS
+        else CEN[1]++;
+#endif
+    }
+}
+#endif
 RAMCODE static void dreq_rearm(int k)
 {
 #ifdef FB_XPORT
@@ -8011,6 +8081,14 @@ __attribute__((noinline)) static void fb_probe(void)
 #endif
 RAMCODE void m_main(void)
 {
+#ifdef FLIP_CENSUS
+    /* CALIBRATE THE INSTRUMENT BEFORE TRUSTING IT. DIAG[84] read 0 at
+     * this site while the program was plainly running, so writes past
+     * some point in the DIAG block do not survive. Bump six candidate
+     * addresses here, at a site that MUST execute, and keep whichever
+     * ones come back with a large count. */
+    CEN[10]++;                           /* m_main entered: must read 1 */
+#endif
     /* Release the secondary SH-2 from its S_OK wait. */
     MARS_SYS_COMM4 = 0;
     SHSTAGE(1, 0x001F);                  /* m_main entered (SDRAM code runs) */
@@ -9102,6 +9180,15 @@ RAMCODE void m_main(void)
                                                * write-only vestige of the
                                                * old flip-pair protocol) */
 #endif
+#ifdef FB_XPORT
+            /* LIFT THE PACKET BEFORE THE FLIP (LOOP27 72). The 68K wrote
+             * it at FM=0 into the bank that was current then; flip_span()
+             * below swaps banks. FBXLATE=1 moves this call below the flip
+             * so the two positions can be compared on the same rig. */
+#ifndef FBX_LATE
+            fbx_lift();
+#endif
+#endif
             tp = frt();
             /* THE flip — before this window's blit: R0 of the NEXT
              * frame must land in the NEW draw bank (frame N completed
@@ -9134,7 +9221,10 @@ RAMCODE void m_main(void)
 #ifdef HS_CENSUS
                     HSC_RING[(HSC_IDX & 15) * 2 + 1] = hsc_win; HSC_IDX++;  /* body flip */
 #endif
-                    DIAG[56]++;              /* body-fallback flip: the ISR
+#ifdef FLIP_CENSUS
+                    CEN[6]++;               /* reached the body flip */
+#endif
+                    DIAG[56]++; CEN[9]++;    /* body-fallback flip: the ISR
                                               * declined this cycle (bail
                                               * counters say why) */
                     flip_span();
@@ -9511,30 +9601,17 @@ RAMCODE void m_main(void)
                  * A stale or malformed publish yields landed = 0, which
                  * is the existing "no packet this vint" path — last
                  * frame's records stand. */
-                static uint8_t fbx_seq_seen;
-                unsigned landed = 0;
-                {
-                    volatile uint16_t *pub = (volatile uint16_t *)FBX_PUB_SH;
-                    uint16_t pw = pub[0];
-                    if ((pw & 0xFF00u) == FBX_MAGIC
-                        && (uint8_t)pw != fbx_seq_seen) {
-                        unsigned n = pub[1];
-                        if (n >= 26 && n <= 924) {
-                            const volatile uint32_t *sp =
-                                (const volatile uint32_t *)FBX_PKT_SH;
-                            uint32_t *dp = (uint32_t *)SPR_LAND;
-                            unsigned nl = (n + 1u) >> 1;   /* lengths are
-                                                            * 4-word
-                                                            * aligned */
-                            for (unsigned i = 0; i < nl; i++) dp[i] = sp[i];
-                            landed = n;
-                            fbx_seq_seen = (uint8_t)pw;
-                            DIAG[44]++;                    /* packets taken */
-                        } else {
-                            DIAG[45]++;                    /* bad length */
-                        }
-                    }
-                }
+                /* the pre-flip lift above already copied it into
+                 * SPR_LAND and validated the publish word */
+#ifdef FBX_LATE
+                fbx_lift();                   /* A/B: after the flip */
+#endif
+#ifdef FLIP_CENSUS
+                CEN[7]++;                     /* harvest reached */
+                if (fbx_landed) CEN[8]++;     /* ... with a packet */
+#endif
+                unsigned landed = fbx_landed;
+                fbx_landed = 0;                /* one consumer, one packet */
                 int okp = 0;
 #else
                 unsigned landed = (SH2_DMA_CHCR0 & 2)

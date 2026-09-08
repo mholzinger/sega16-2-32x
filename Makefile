@@ -765,6 +765,20 @@ endif
 # copies it into SPR_LAND in its window body — same bytes, same layout,
 # the whole harvest downstream unchanged. Not a probe: this is the
 # candidate ship route.
+# `make ... FLIPCENSUS=1` = count flip outcomes into DIAG. The 32X layer
+# changes only at a flip, so flips per V-ISR is the display refresh rate:
+#   DIAG[66] flipped   [67] declined past the vblank edge
+#   [68] declined nothing drawn   [69] declined nothing shipped
+#   [70] V-ISR entries (the denominator)
+# FBXLATE=1 moves the FB packet lift BELOW the flip, to measure whether
+# the pre-flip position is required or merely assumed.
+ifdef FBXLATE
+SHCCFLAGS += -DFBX_LATE
+endif
+ifdef FLIPCENSUS
+SHCCFLAGS += -DFLIP_CENSUS
+MDCCFLAGS += -DFLIP_CENSUS
+endif
 ifdef FBXPORT
 MDCCFLAGS += -DFB_XPORT
 SHCCFLAGS += -DFB_XPORT

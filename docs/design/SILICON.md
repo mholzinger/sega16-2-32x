@@ -265,6 +265,38 @@ effect size of most changes under test.
 
 
 ---------------------------------------------------------------------
+## 4b. TRUSTING AN SH-2 COUNTER
+
+**Writes to DIAG slots above ~63 are silently discarded in this build.**
+They read back residue: small, plausible numbers. Calibrated at `m_main`
+entry, a site that runs exactly once, DIAG[62] reads 1 and DIAG[64] and
+DIAG[84] read 0.
+
+A zero-in-the-baseline scan does not prove a slot is free — a slot that
+discards writes also reads zero.
+
+Use `CEN` (0x2602FF00, m_main.c), and check `CEN[10]`, which is
+incremented once at `m_main` entry: **if it does not read exactly 1, no
+other slot in that run means anything.**
+
+This cost a false alarm on 2026-09-08: the FB transport was reported at
+0.2% packet delivery and is in fact at 100% (819 published, 819 taken, 0
+bad, 0 stale, both lift positions).
+
+## 4c. DELIVERY AND REFRESH, MEASURED
+
+    FB transport delivery      819 published / 819 taken     100%
+    lift before the flip       100%      lift after the flip  100%
+
+    display refresh (900 frames, ares)
+      DREQ FIFO      695 flips / 875 vints    79%   47.7 Hz
+      FB transport   821 flips / 881 vints    93%   55.9 Hz
+
+A vint may decline in the V-ISR (past the vblank edge) and then flip in
+the window body; the frame is flipped late, not dropped. **The flip is
+therefore not what limits the observed frame rate.**
+
+---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
 
 Listed so that later work does not assume them settled:
@@ -279,12 +311,13 @@ Listed so that later work does not assume them settled:
   - **The claim that the DREQ push was costing the GAME its frames is
     therefore unproven.** The transport is 48x cheaper; that it was the
     thing the game waited on is inference.
-  - **The real fps limiter is probably the FLIP, not the transport.**
-    LOOP27 entry 9 measured flips landing on 17% of vints = ~10 Hz, and
-    the observed rate on ares is ~9 fps. `FLIPDEFER=1` was built to fix
-    it and is blocked: `flip_span()` requires FM=1 and there is no FM=1
-    at the top of vblank (LOOP27 entry 12). The new FM ordering may
-    unblock it — untested.
+  - **The fps limiter is NOT the flip.** That was the standing theory
+    from LOOP27 entry 9 (flips on 17% of vints = ~10 Hz); a corrected
+    census does not reproduce it — the framebuffer refreshes at ~56 Hz
+    while the observed rate is ~9 fps. The limiter is the GAME's frame
+    advance: it enters and leaves its IRQ4 handler every vint on both
+    transports, and does not advance a frame each time. What blocks it
+    inside that handler is unmeasured, and is the next thing to measure.
   - **Why a DREQ FIFO access costs ~2.4 scanlines** is unknown.
   - **Of the FB route's remaining 57 scanlines, only ~2 are transport.**
     The rest is the packet BUILD (selection/compare), now the largest
