@@ -3591,3 +3591,70 @@ tree, default off, with this entry attached.
 RULE THIS CONFIRMS AGAIN: a pixel/colour win measured only on ares is
 not a win. Every flag that changes WHERE the master reads from must be
 bisected on the MiSTer before it is believed.
+
+## 83. TWO BUILD BUGS THAT INVALIDATED HALF A DAY
+
+Both found 2026-09-08 while re-checking a result that would not reproduce.
+
+**1. THIS SHELL IS zsh, AND UNQUOTED $var DOES NOT WORD-SPLIT.** Every
+helper of the shape
+
+    build() { make ship-us $1 ...; }      # $1 = "A=1 B=1 C=1"
+    build "$FLAGS"
+
+hands make ONE malformed argument instead of three assignments. Builds
+where the flags were typed literally on the make line were correct;
+every helper-driven A/B in entries 73-82 must be re-run. Write the flags
+out, or use "$@" from a #!/bin/sh script (which does split).
+
+**2. `rm -f *.o` IS NOT `make clean`.** The baked assets (sprbake.bin,
+tiles.bin, sprites.bin, game_body.bin) are regenerated only when
+.build_flags changes, and .build_flags does not capture every flag, so a
+build can inherit the PREVIOUS flag set's asset bake. Two roms built
+from the same flag list differed by 1.3 MB — all of it the asset region,
+shifted — and each reproduced its own measurement.
+
+    same flags, back to back, make clean      1 byte differs (the stamp)
+    same flags, rm *.o only                   1,287,725 bytes differ
+
+**RULE: `make clean` before every measured build, and diff the roms
+before believing any A/B.** A pair that differs by 2-4 bytes is the same
+build; a pair that differs by ~1.3 MB has a stale bake in it.
+
+## 84. THE BIND, MEASURED PROPERLY
+
+Clean builds, flags typed literally, level-1 input script, ares:
+
+    build                       game speed   display    V at post
+    ship line (DREQ)              48.7%      21.5 Hz       -
+    opt1 (DREQ)                   60.7%      11.5 Hz      243
+    opt1 + FBXPORT                82.3%       0.3 Hz       43
+    opt1 + FBXPORT + FBXTAIL      49.1%      11.5 Hz      239
+
+The 82.3% is REAL — it survives a clean rebuild. So is its cost.
+
+**The mechanism is V at post.** The 68K cannot reach the framebuffer at
+FM=1, so the FB push must happen at FM=0, and the only FM=0 window
+before the post is ahead of it: the post then moves from V=243 (inside
+vblank, where the ISR can still flip) to V=43 (active display), and
+every flip misses. FBXTAIL moves the push to the vint tail, which
+restores V at post to 239 and the display to 11.5 Hz — but the tail runs
+before the game's IRQ4, so the game loses 33 points of speed.
+
+**THE ARCHITECTURAL BIND, stated exactly:**
+
+  - The DREQ FIFO needs no FM, and costs ~2.4 scanlines per word on
+    hardware.
+  - The framebuffer costs ~0.05 lines per word, and needs FM=0 — which
+    collides with the master's blit window.
+  - Every placement of the FB push either delays the post out of vblank
+    (killing the flip) or delays the game's IRQ4 (killing the speed).
+
+The packet is ~150 words to convey ~85 words of change (entry 80). At
+the FIFO's rate even 85 words is ~204 scanlines, so shrinking the packet
+does not escape the bind either.
+
+What does escape it: making the master's FM=1 window shorter and
+scheduled, so there is a real FM=0 window that is not in front of the
+post. That is item 3, "feed at the right frequency", and it is a
+scheduling change rather than a transport one.
