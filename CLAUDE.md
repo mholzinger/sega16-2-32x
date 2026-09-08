@@ -44,6 +44,11 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
+## Start here (2026-09-08)
+
+`docs/handoff/HANDOFF-PIPELINE.md` — current state, the bind, the next
+stage, and the build rules that must be followed before any measurement.
+
 ## The scope (2026-09-08)
 
 The 68000 clock is NOT a loss. The game needs 2780 instructions/vint and
