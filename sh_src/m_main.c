@@ -83,6 +83,21 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define HSC_RING ((volatile uint16_t *)0x26028D40)   /* [16][2]: pkt win, flip win */
 #define HSC_IDX  (*(volatile uint16_t *)0x26028D80)
 #endif
+/* CLAIMNEW (LOOP27 77): the late claim scans the sprite list to decide
+ * which colour sets need a pair. It has always scanned SPR_SNAP, the
+ * snapshot the compose reads. When the snap latch SKIPS a refresh —
+ * which it does whenever a compose chain is mid-flight, the exact case
+ * entry 6 diagnosed — the claim is then scanning last frame's records
+ * and never claims a pair for a set that arrived this frame. That set
+ * draws with base 15, the shadow ramp. Scanning FB_SPR instead makes
+ * the claim see the arriving records a window earlier; the two are
+ * identical content whenever the refresh did happen, so this only
+ * changes behaviour in the failing case. */
+#ifdef CLAIM_NEW
+#define CLAIM_SRC   FB_SPR
+#else
+#define CLAIM_SRC   SPR_SNAP
+#endif
 #define SPR_SNAP    ((volatile uint16_t *)0x26028400)   /* 512-word sprite-list
                                                          * snapshot: FB staging
                                                          * is BANK-DEPENDENT and
@@ -10938,7 +10953,7 @@ RAMCODE void m_main(void)
                                                       * record the 32X draws */
                 unsigned nl_live = 0;                /* live sets (LATE_STEAL0) */
                 for (int i = 0; i < 64; i++) {
-                    volatile uint16_t *sd = SPR_SNAP + i * 8;
+                    volatile uint16_t *sd = CLAIM_SRC + i * 8;
                     uint16_t sd2 = sd[2];
                     if (sd2 & 0x8000)
                         break;
@@ -10966,7 +10981,7 @@ RAMCODE void m_main(void)
                                          + __builtin_popcount(tc_live[1]));
                     unsigned nmd = 0;
                     for (int i = 0; i < 64; i++) {
-                        volatile uint16_t *sd = SPR_SNAP + i * 8;
+                        volatile uint16_t *sd = CLAIM_SRC + i * 8;
                         uint16_t sd2 = sd[2];
                         if (sd2 & 0x8000) break;
                         if (sd2 & 0x2000) nmd++;
@@ -10977,7 +10992,7 @@ RAMCODE void m_main(void)
 #endif
 #endif
                 for (int i = 0; i < 64; i++) {
-                    volatile uint16_t *sd = SPR_SNAP + i * 8;
+                    volatile uint16_t *sd = CLAIM_SRC + i * 8;
                     uint16_t sd2 = sd[2];
                     if (sd2 & 0x8000)
                         break;               /* list terminator */

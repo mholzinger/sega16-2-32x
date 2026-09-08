@@ -3345,3 +3345,29 @@ differed from their control by 2-4 bytes of timestamp. `rm -f sh_src/*.o
 md_src/*.o` before every A/B, and CHECK the roms differ before believing
 a comparison. Also: `make -n | grep "md_main.c"` matches the rule's echo
 line, not the compiler invocation; grep for `m68k-elf-gcc.*md_main\.c`.
+
+## 77. CLAIMNEW: THE LATE CLAIM WAS SCANNING THE SNAPSHOT
+
+Entry 6 left a residual of 114 shadow-ramp draws with a diagnosed cause:
+the compose reads records that arrived after the claim loop last looked.
+The fix it proposed was to claim from SPR_LAND before the copy into
+SPR_SNAP. The same effect, one line: **have the claim scan FB_SPR (the
+live list) instead of SPR_SNAP (the snapshot).**
+
+The two hold identical content whenever the snap refresh happened. They
+differ exactly when the snap LATCH SKIPPED a refresh — a compose chain
+mid-flight, which is the case entry 6 diagnosed — and there the claim
+was scanning last frame's records and never claiming a pair for a set
+that had just arrived. That set draws with base 15: the shadow ramp.
+
+    metric                    FBXPORT+opt1   +CLAIMNEW
+    shadow-ramp draws [3]         704            57
+    claim failures    [1]          28             0
+    nothing-stealable [0]          83             0
+    speed                        82.3%         82.0%
+
+12x fewer ramp draws, no claim failures at all, and no speed cost. Also
+below entry 6's best (114) on a build running 20 points faster, which
+means more sprite churn per second, not less.
+
+Flags: TXTWRAM LATESTEAL0 LATEKEEP DRAWADOPT FBXPORT CLAIMNEW.

@@ -789,6 +789,12 @@ endif
 # FBXTAIL=1: with FBXPORT, push at the vint TAIL (after the master's ack,
 # FM already down) instead of before the post, so the post keeps landing
 # inside vblank. Costs one vint of packet latency.
+# CLAIMNEW=1: the late claim scans the LIVE sprite list (FB_SPR) rather
+# than the snapshot, so a set that arrives while the snap latch is
+# skipping a refresh still gets a pair instead of drawing the shadow ramp.
+ifdef CLAIMNEW
+SHCCFLAGS += -DCLAIM_NEW
+endif
 ifdef FBXTAIL
 MDCCFLAGS += -DFBX_TAIL
 endif
