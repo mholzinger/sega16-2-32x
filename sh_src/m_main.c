@@ -5773,6 +5773,13 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
 #endif
     {
         uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
+#ifdef FLIP_CENSUS
+        CEN[16]++;                       /* THE FS WRITE — the only thing
+                                          * that actually changes the
+                                          * displayed framebuffer. Every
+                                          * other "flip" counter in this
+                                          * file counts reaching a site. */
+#endif
         MARS_VDP_FBCTL = fs_o ^ 1;
 #ifdef K2_FREE
         /* FLIP ECHO (LOOP24): the k2 68K holds — register-polling from

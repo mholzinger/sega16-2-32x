@@ -3217,3 +3217,34 @@ works at BOTH positions — before the flip and after it — at 100%
 delivery each (`FBXLATE=1` is the A/B). The flip does not move the
 packet out from under the reader, so the pre-flip move was unnecessary.
 It is kept because it is free and it removes the question.
+
+## 73. FBXPORT REGRESSES THE FLIP 27 Hz -> 1.2 Hz (2026-09-08)
+
+Entry 72's "93% refresh" was wrong. It counted code REACHING a flip
+site. The only thing that changes the displayed framebuffer is the FS
+write in flip_span(), and flip_span() declines internally — the same
+K2FREE edge guard, evaluated again — on almost every call.
+
+Counter at the FS write itself, corroborated by ares's own flip trace
+(`--trace-flip`, which logs FS write requests and actual bank changes):
+
+    build       vints  reached flip site  FS WRITES  emulator trace   refresh
+    baseline     497         392             222     228 wr / 226 fl  27.3 Hz
+    FBXPORT      502         472               6      12 wr /  10 fl   1.2 Hz
+
+**The FB transport made the display refresh 20x WORSE.** The mechanism
+is consistent with the change: the push moved AHEAD of the post (it has
+to — the 68K cannot reach the framebuffer at FM=1), so the post arrives
+~57 scanlines later, every flip attempt lands past the vblank edge, and
+both the ISR and the body fallback decline.
+
+So: entry 9 was right that the flip is the limiter, entry 72's
+withdrawal of that was wrong, and FLIPDEFER (entry 12) is exactly the
+lever — a late flip must commit at the next vblank instead of being
+dropped. The FPGA RTL does this in silicon (VDP.sv latches FS only when
+VBLK); ares latches immediately, which is why the guard exists at all.
+
+MEASUREMENT RULE from this entry: count the HARDWARE EFFECT, not the
+code path. "Reached the flip site" and "wrote FS" differ by 78x here.
+Where the emulator can log the effect itself (--trace-flip, --trace-dreq,
+--trace-comm), prefer that over any counter in our own source.
