@@ -3481,3 +3481,58 @@ METHOD CAVEAT: MAME's 32X models neither SH-2 timing nor the FB stall,
 so cycle costs from it mean nothing. Instruction counts are code-path
 facts and survive that; the spin check above is what makes them safe to
 use here.
+
+## 80. THE PIPELINE, SIZED: THE GAME WRITES 85 WORDS A FRAME
+
+Mike's architecture, in his words: "The game code only knows it's feeding
+data through a pipeline provided by the Sega 16 arcade architecture. All
+we should be doing is rebaking the bitmap data so that it's the
+compatible colour palette and having the dual SH-2 chips organize and
+feed the data to the 68K, wholesale."
+
+Sized with tools/write_census_ares.py on the 82% build, per frame over
+frames 1500-4100 of the level-1 timeline:
+
+    what the GAME writes            what OUR SHIM does
+      sprite RAM      47.6            adapter accesses   125.0
+      text RAM        21.8            shim instructions  2882 per vint
+      palette         14.8            hottest site       r60_ship_words
+      I/O + bank       5.6                               (389,804 accesses)
+      -----------------------
+      TOTAL          ~85 words
+
+**We move ~150 words a frame, and burn 2882 instructions deciding which
+ones, to convey ~85 words of actual change.** About 34 shim instructions
+per game write.
+
+The game's writes are ALREADY INTERCEPTED — the patcher rebases every
+one of them and the thunks mark dirty bits. So the pipeline does not
+need to discover anything: a write-through at the thunk, forwarding each
+write into the FB staging as it happens, is O(writes) and deletes the
+rotor, the compare, the shadow, the dirty bitmap, the selection and the
+packing. That is the architecture change, and 85 words/frame is why it
+is affordable.
+
+### 80a. NEGATIVE: PALNOCMP (ship raw instead of comparing)
+
+Reasoned from the FB transport's cheap words: a redundant 32-word block
+costs ~1.6 scanlines to ship and ~5 to prove redundant, so ship it.
+
+    baseline (compare)        82.0%
+    PALNOCMP (ship raw)       74.1%     REVERTED
+
+Wrong, and the measurement says why: the compare's fast pre-scan exits
+at the first difference, and an equal block then ships ZERO words. The
+raw path pays a 16-long shadow copy AND 32 shipped words. Discovery is
+cheaper than delivery here — the opposite of the DREQ case, because the
+unit of delivery is a whole block while the unit of discovery is one
+compare that usually stops early.
+
+The prize is in NOT VISITING, not in cheaper comparing:
+
+    PALROTOR_OFF (no visits, colours freeze)   86.1%    the ceiling
+    baseline                                   82.0%
+
+PAL_STREAK_N / PAL_BACKOFF_M are now build-tunable (PALSTREAK=,
+PALBACKOFF=) to chase that 4.1 points by visiting less often, but the
+real answer is write-through, which removes the visit entirely.

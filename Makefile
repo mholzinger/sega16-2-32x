@@ -1629,6 +1629,21 @@ endif
 # blocks (rotor/compare/selection skipped; colours freeze). The speed
 # it buys is the ceiling of moving the palette compare off the 68K.
 # NEVER SHIP.
+# `make ... PALNOCMP=1` = the 68K stops COMPARING palette blocks and
+# ships every marked block raw. Through the FB transport a redundant
+# 32-word block costs ~1.6 scanlines; proving it redundant costs ~5.
+# Discovery moves to the SH-2 side; the 68K only pumps.
+# PALSTREAK=N / PALBACKOFF=M tune the rotor's visit rate: a palette block
+# that compared equal N consecutive visits is then visited 1 vint in
+# (M+1). PALROTOR_OFF (no visits at all) measures 86.1% against the
+# baseline's 82.0%, so the prize is in NOT VISITING; PALNOCMP (visit but
+# ship raw instead of comparing) measured 74.1% and was reverted.
+ifdef PALSTREAK
+MDCCFLAGS += -DPAL_STREAK_N=$(PALSTREAK)
+endif
+ifdef PALBACKOFF
+MDCCFLAGS += -DPAL_BACKOFF_M=$(PALBACKOFF)
+endif
 ifdef PALROTOROFF
 MDCCFLAGS += -DPALROTOR_OFF
 endif

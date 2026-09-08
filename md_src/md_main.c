@@ -1282,6 +1282,12 @@ static void r60_push(void) {
 	                                      * the rotor+cmp stamp read
 	                                      * 30-33 LINES/vint mostly
 	                                      * re-proving equality */
+#ifndef PAL_STREAK_N
+#define PAL_STREAK_N 4               /* equal visits before backing off */
+#endif
+#ifndef PAL_BACKOFF_M
+#define PAL_BACKOFF_M 3              /* visit 1 vint in (M+1) once backed off */
+#endif
 	uint8_t ids[16];
 	uint16_t K = 0, nrec = 1;
 	volatile uint8_t *pd = (volatile uint8_t*)0xFFBA00;
@@ -1448,8 +1454,8 @@ static void r60_push(void) {
 				 * retry transitions are exempt (ship-twice must
 				 * finish) and storms bypass via the open clamp. */
 				if ((pd[by] & bit) && !(pal_retry[by] & bit)
-				    && pal_streak[r] >= 4 && kcap == 8
-				    && (uint8_t)((fr2 + r) & 3)) {
+				    && pal_streak[r] >= PAL_STREAK_N && kcap == 8
+				    && (uint8_t)((fr2 + r) & PAL_BACKOFF_M)) {
 					r = (uint8_t)((r + 1) & 63);
 					n++;
 					continue;
