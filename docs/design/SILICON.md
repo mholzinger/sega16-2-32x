@@ -1,12 +1,11 @@
 # What makes this port run on real 32X silicon
 
-2026-09-08. Written because a day of hardware time bought the contents
-of this file and none of it is recoverable by reading the code.
+2026-09-08. Reference document for the hardware behaviour this port
+depends on. None of it is derivable from the source.
 
-This is the REPRODUCIBLE document: every claim below names the build
-that produces it, the observation that confirms it, and the file and
-line where it lives. If a statement here has no build command next to
-it, treat it as unproven.
+Every claim names the build that produces it, the observation that
+confirms it, and the file and line where it is implemented. A statement
+with no build command next to it is unproven.
 
 Companion documents: `docs/handoff/HANDOFF-DREQ.md` (the transport
 finding as a handoff), `docs/log/LOOP27.md` entries 10-13 and 65-70 (the
@@ -37,9 +36,9 @@ Deploy and run:
 ---------------------------------------------------------------------
 ## 1. THE TWO HARDWARE FACTS THE PORT DEPENDS ON
 
-Neither is in any document. Both were derived on hardware, both are
-invisible under emulation, and the port does not run on silicon without
-respecting both.
+Neither appears in any documentation. Both were derived on hardware,
+neither reproduces under emulation, and the port does not run on
+hardware unless both are respected.
 
 ### FACT 1 — The slave SH-2 must warm up SDRAM it did not write
 
@@ -75,11 +74,11 @@ tile batches, NT chunks, tiles, rejects, every column.
 So it is **default on** since this date. `NOSLVWARM=1` removes it;
 `MISTERWARM=1` / `MISTERCACHE=1` isolate the halves (Makefile:912-934).
 
-> Both the Makefile and mars_start.s previously said this stub did NOT
-> fix the hang and that the default carried neither half. Both were
-> wrong, and six black captures were spent rediscovering it. If you find
-> a comment in this tree asserting a negative about hardware, check
-> whether anyone ever ran the A/B.
+Note: the Makefile and mars_start.s previously stated that this stub did
+not fix the hang and that the default build carried neither half. Both
+statements were incorrect; six captures were spent re-deriving the
+result. Treat any negative claim about hardware in this tree as
+unverified until the A/B is located.
 
 ### FACT 2 — The 68K cannot touch the 32X framebuffer at FM=1
 
@@ -98,10 +97,10 @@ saturating run length per region:
                FM=0 write lands and is read FRESH, same window, 7 of 7
                FM=1 write never arrives
 
-Freshness is the whole design. With constant test values a
-one-window-stale region reads as a pass, and the earlier sentinel probe
-that lacked this check returned "0 of 4 survived" — which was a readback
-through the FM=1 dead path, not evidence about those regions.
+The freshness check is required. With constant test values a
+one-window-stale region reads as a pass. An earlier sentinel probe
+without this check reported "0 of 4 survived"; that readback was
+performed at FM=1 and is not evidence about those regions.
 
 
 ---------------------------------------------------------------------
@@ -117,27 +116,24 @@ the value instrument (section 4) on the MiSTer:
     whole r60_push, DREQ route            99 scanlines of 262
     whole r60_push, FB route              57 scanlines
 
-On ares the same 20 FIFO words cost ~3 scanlines. **That gap is why
-weeks of tuning against the emulator never found this.** It is also why
-a speed change here cannot be ranked on ares at all — only correctness
-can.
+On ares the same 20 FIFO words cost ~3 scanlines. Consequence: speed
+changes to this path cannot be ranked on ares, only correctness can.
 
 Ruled out as the mechanism of the FIFO cost, each by measurement:
 FIFO-full stalling (spin residual 2600 of 2600 = never full), the
 master's drain rate, contention with the master (a deliberate 8-line
 delay before pushing dodged 0 lines), packet size as the primary lever.
-It is per-access and intrinsic. **What the RTL is actually doing there
-is still unknown.**
+The cost is per-access and intrinsic. The RTL-level cause is unknown.
 
 
 ---------------------------------------------------------------------
 ## 3. THE FB TRANSPORT PROTOCOL (FBXPORT=1)
 
 The r60 packet crosses through the framebuffer instead of the DREQ
-FIFO. The packet BUILDER is untouched — only the destination of its ship
-primitives changes — so the master's harvest parses byte-identical
-bytes and every length, tag and tear rule downstream still holds. That
-was the design constraint, not an accident.
+FIFO. The packet builder is unchanged; only the destination of its ship
+primitives differs. The master's harvest therefore parses byte-identical
+data and all downstream length, tag and tear rules continue to apply.
+This was a design constraint.
 
 ### Addresses — one source, both sides
 
@@ -186,8 +182,8 @@ Two pieces of DREQ machinery are actively harmful on this route:
     alone made the first FB build (217 scanlines) WORSE than the FIFO
     (99). Disabled under FB_XPORT.
   - **dreq_rearm** (`sh_src/m_main.c:7248`) leaves DMAC0 armed with
-    DAR0 = SPR_LAND — a loaded gun pointed at the packet just copied
-    there. Skipped under FB_XPORT.
+    DAR0 = SPR_LAND, i.e. targeting the region the packet was just
+    copied into. Skipped under FB_XPORT.
 
 The 68K side likewise skips the DREQ length register write and the DREQ
 enable (`*ctrl = 4`), and ARM_GATE's arm check becomes inert: there is
@@ -218,15 +214,14 @@ Flood all 64 entries and one capture returns one exact value.
 Decoding from a capture is a six-line histogram read; the most common
 colour is the flood.
 
-**BIAS EVERY VALUE OFF ZERO** (set a high bit that is always present).
-A flooded d = 0 is a black screen and so is a machine that never
-reached the flood — four captures were read as "the probe never ran"
-when the truth was a missing build flag. A result that cannot be told
-from a dead machine is not a measurement.
+**Bias every encoded value away from zero** (set a constant high bit).
+An encoded d = 0 renders identically to a target that never reached the
+flood. Four captures were misread as "probe did not run" when the cause
+was a missing build flag.
 
-Four-way colour buckets, which every probe before 2026-09-08 used, are
-useless here: the ORANGE bucket spanned 32-80 scanlines, wide enough to
-hide the entire effect of any change worth making.
+Four-way colour buckets, used by every probe before 2026-09-08, are
+unsuitable: the ORANGE bucket spanned 32-80 scanlines, which exceeds the
+effect size of most changes under test.
 
 ### Existing instrument flags
 
@@ -237,7 +232,7 @@ hide the entire effect of any change worth making.
     BOOTFBXT=1        the FM=0 FB write, in scanlines
     BOOTGAMERATE=1    game frames per 64 vints (see the caveat below)
 
-### Traps, each of which cost hours
+### Known failure modes of the rig
 
   1. **`/tmp/ACTIVEGAME` is written by the launcher, not the core.** It
      reports a launch that never happened. Only `/tmp/remote.log`'s
@@ -260,9 +255,10 @@ hide the entire effect of any change worth making.
      being free; a probe that left 0xBBxx there permanently stopped the
      arm echo the push gates on, and the screen went black. Ride the
      channel like every other message and let the 68K clear it.
-  7. **Never hand a BOOT_VALUE build to a human to judge.** It floods
-     the palette every vint and STROBES against the game's own palette
-     writes. Those builds exist to be photographed by a script.
+  7. **BOOT_VALUE builds are not suitable for visual assessment.** The
+     flood runs every vint and beats against the game's own palette
+     writes, producing a strobe. These builds are for script capture
+     only.
   8. **Probe roms are `make ship-us BOOT<X>=1`** — the full ship flag
      set. A bare `make BOOT<X>=1` builds a different, non-booting
      configuration (it turns FM_GATE off and fails to compile).
@@ -271,7 +267,7 @@ hide the entire effect of any change worth making.
 ---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
 
-Stated plainly so nobody rebuilds on a guess:
+Listed so that later work does not assume them settled:
 
   - **The port's frame rate is not measured.** Two instruments were
     built and both were wrong: the game's scene timer (0xFFF02A) runs at
