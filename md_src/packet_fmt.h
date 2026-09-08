@@ -153,6 +153,23 @@ _Static_assert((R60_LEN(1, 1, 1) & 3u) == 0 && (R60_LEN(0, 16, 40) & 3u) == 0
                && (R60_LEN(1, 3, 21) & 3u) == 0,
                "R60 lengths not burst-aligned");
 #define R60_ARM        936u
+
+/* FB TRANSPORT (2026-09-08, LOOP27 67) — the packet crosses through the
+ * 32X FRAMEBUFFER, not the DREQ FIFO. Measured on hardware: 20 words
+ * into the FIFO = 48 scanlines, the same 20 into the FB at FM=0 = 1, and
+ * the master reads them FRESH in the same window. The 68K cannot touch
+ * the FB at FM=1 at all, so the write sits BEFORE the post and the read
+ * after it — which is the order the window protocol already keeps.
+ * Region: 0x12000, past the image (ends 0x11A00) and past md_pkt A
+ * (ends ~0x11FC0), 936 words = 0x750 bytes, ending well under md_pkt B
+ * at 0x1E800. The publish word sits clear of the packet at 0x12800 and
+ * is written LAST — it is the only completion signal, exactly as
+ * md_consume's 0xB6B6 is in the other direction. */
+#define FBX_PKT_MD     0x852000uL         /* 68K view */
+#define FBX_PUB_MD     0x852800uL
+#define FBX_PKT_SH     0x24012000u        /* master view, uncached */
+#define FBX_PUB_SH     0x24012800u
+#define FBX_MAGIC      0xB600u            /* publish: 0xB6<<8 | sequence */
 #ifdef PAL_DELTA
 /* R60 layout v3 (PALDELTA) — the pal payload ships WORD DELTAS.
  * Only the pal section changes; header/tag/rowscroll/records/tail

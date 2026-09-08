@@ -756,6 +756,17 @@ endif
 # BOOTFBXP=1: MD side only, master untouched — the latch is never set so
 # the flood must paint the 42 fallback. Black here means the wedge is on
 # the MD side; a colour means it is the master's COMM8 post.
+# `make ... FBXPORT=1` = THE FB TRANSPORT (LOOP27 67). The r60 packet
+# crosses through the 32X framebuffer instead of the DREQ FIFO: the 68K
+# writes it at FM=0 before the post (1 scanline per 20 words on hardware,
+# against the FIFO's 48), publishes a sequence word LAST, and the master
+# copies it into SPR_LAND in its window body — same bytes, same layout,
+# the whole harvest downstream unchanged. Not a probe: this is the
+# candidate ship route.
+ifdef FBXPORT
+MDCCFLAGS += -DFB_XPORT
+SHCCFLAGS += -DFB_XPORT
+endif
 # BOOTFBXT=1: time the FM=0 FB write (20 words, the comparable count)
 # with the value instrument instead of reporting the transport verdict.
 ifdef BOOTFBXT
@@ -774,6 +785,15 @@ MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBFREE
 endif
 ifdef BOOTFBTIME
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBTIME
+endif
+# `make ... BOOTGAMERATE=1` = game frames per 64 vints, read exactly off
+# the game's scene timer and flooded as a number. 64 = 60 Hz.
+ifdef BOOTGAMERATE
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_GAMERATE
+MDASFLAGS += -Wa,--defsym,BOOT_GAMERATE=1
+endif
+ifdef BOOTVALUESEL
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
 ifdef BOOTVALUETOTAL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_TOTAL

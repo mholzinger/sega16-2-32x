@@ -404,6 +404,15 @@ _vblank:
 									 * real frame is still intact */
 		rte
 fmgate_ret:							/* via the game's rte, SR=2700 */
+.ifdef BOOT_GAMERATE
+		/* GAME FRAMES, COUNTED WHERE THEY HAPPEN (LOOP27 68). Every exit
+		 * path of the game's IRQ4 lands here, so this counter is exactly
+		 * "the game advanced a frame" — scene-independent, unlike the
+		 * scene timer, which runs at different rates (and backwards) in
+		 * different attract scenes and made the first comparison
+		 * meaningless. */
+		addq.w	#1,(0xFFA18E).l
+.endif
 .ifdef POST_LATE
 		movem.l	d0-d1/a0-a1,-(sp)	/* the game's live scratch regs */
 		jsr		r60_late_post		/* post+push AFTER the game's vint */

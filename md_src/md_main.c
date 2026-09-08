@@ -1204,6 +1204,22 @@ static uint8_t glow_live;
  * remaining words of one call go to a full FIFO, which ares DROPS
  * (measured, drq_probe): harmless, the packet is torn anyway and
  * the BAD1 echo re-marks. Returns words NOT shipped (0 = clean). */
+#ifdef FB_XPORT
+/* FB TRANSPORT (LOOP27 67): the same packet, same layout, same order —
+ * only the destination changes. Keeping r60_push's builder untouched is
+ * the point: the master's harvest parses the identical bytes and every
+ * length, tag and tear rule downstream still holds. */
+static uint16_t fbx_i;                   /* word cursor into the FB packet */
+static uint8_t  fbx_seq_pub;             /* publish sequence */
+__attribute__((section(".data"), noinline))
+static uint16_t r60_ship_words(const uint16_t *src, uint16_t nw)
+{
+	volatile uint16_t *d = (volatile uint16_t*)FBX_PKT_MD + fbx_i;
+	for (uint16_t i = 0; i < nw; i++) d[i] = src[i];
+	fbx_i = (uint16_t)(fbx_i + nw);
+	return 0;                            /* an FB write cannot fall short */
+}
+#else
 __attribute__((section(".data"), noinline))
 static uint16_t r60_ship_words(const uint16_t *src, uint16_t nw)
 {
@@ -1231,6 +1247,7 @@ static uint16_t r60_ship_words(const uint16_t *src, uint16_t nw)
 		: "cc", "memory");
 	return (uint16_t)(nw - i);
 }
+#endif
 #endif
 
 /* RAMCODE (2026-08-30, the PALDELTA autopsy): r60_push was the ONE
@@ -1282,6 +1299,9 @@ static void r60_push(void) {
 	 * expensive". Last-value HV at 0xFFA0B4..BC (grep'd free). */
 #define PSTAMP(a) (*(volatile uint16_t*)(a) = *(volatile uint16_t*)0xC00008)
 	PSTAMP(0xFFA0B4);                    /* entry */
+#ifdef FB_XPORT
+	fbx_i = 0;
+#endif
 	/* (busy-loop calibration retired: loop1 vblank 7 lines, loop2
 	 * active-line-87 9 lines — both FULL SPEED, no ambient bus tax
 	 * at either end of the mystery span. The 66 lines are the
@@ -1677,7 +1697,9 @@ static void r60_push(void) {
 	 * ship at FM=1 while the master blits (no landing wait on its side),
 	 * ack awaited before the game's IRQ4.) */
 	{
+#ifndef FB_XPORT
 		*(volatile uint16_t*)0xA15110 = tw;
+#endif
 		(*(volatile uint32_t*)0xFFA0A4) += tw;   /* push words, honest sum */
 		(*(volatile uint16_t*)0xFFA0A8)++;
 	}
@@ -1713,6 +1735,17 @@ static void r60_push(void) {
 #elif defined(BOOT_FBTIME)
 		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
+#elif defined(BOOT_GAMERATE)
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
+#elif defined(BOOT_VALUE_SEL)
+		/* the SELECTION phase alone: entry -> selection/compare done.
+		 * Under FB_XPORT the whole push read 217 lines against the FIFO
+		 * route's 99, while the 20-word ship itself is ~1 — so the
+		 * question is whether selection got more expensive when the
+		 * push moved ahead of the post. */
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B4 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B6 >> 8);
 #elif defined(BOOT_VALUE_TOTAL)
 		/* whole push: entry 0xFFA0B4 -> records+tail shipped 0xFFA0BC */
 		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B4 >> 8);
@@ -1749,7 +1782,9 @@ static void r60_push(void) {
 		       && --guard) ;
 	}
 #endif
-	*ctrl = 4;
+#ifndef FB_XPORT
+	*ctrl = 4;                           /* DREQ enable (FIFO route only) */
+#endif
 #ifdef BOOT_SETUP
 	/* SETUP OR WORDS? (2026-09-08, LOOP27 62.) Cutting the packet
 	 * 52 -> 20 words did NOT speed the game on hardware (61), yet the
@@ -1773,8 +1808,14 @@ static void r60_push(void) {
 		 * load, not play load. Not-full guarantees ONE free slot,
 		 * so one write per poll is the only overflow-proof
 		 * discipline. Fidelity buys the ~6 handler lines back. */
+#ifdef FB_XPORT
+/* no FIFO to poll and no word can be dropped: the FB is memory */
+#define R60G() do { } while (0)
+#define R60P(w) do { ((volatile uint16_t*)FBX_PKT_MD)[fbx_i++] = (uint16_t)(w); } while (0)
+#else
 #define R60G() do { while (*ctrl < 0 && --spin) ;                      if (!spin) ok = 0; } while (0)
 #define R60P(w) do { R60G(); if (ok) fifo[0] = (w); } while (0)
+#endif
 		const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
 #ifdef BOOT_NOPOLL
 		/* IS IT THE POLL OR THE WRITE? (2026-09-08, LOOP27 58)
@@ -1963,6 +2004,20 @@ static void r60_push(void) {
 #endif
 		PSTAMP(0xFFA17E);                /* fine: before tail */
 		if (ok) { R60G(); PSTAMP(0xFFA180); if (ok) { R60P(0xA55A); PSTAMP(0xFFA182); R60P(0x5AA5); } }
+#ifdef FB_XPORT
+		/* PUBLISH, and only now. Every packet word is in the FB; this
+		 * word says so. The 68000 completes writes in order, so a
+		 * publish written last cannot precede its own payload — the
+		 * same guarantee md_consume relies on in the other direction.
+		 * A master that reads a stale sequence simply keeps last
+		 * frame's records, which is the existing no-packet path. */
+		if (ok) {
+			volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+			pub[1] = fbx_i;              /* exact word count */
+			fbx_seq_pub++;
+			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+		}
+#endif
 		PSTAMP(0xFFA0BC);                /* records+tail shipped */
 #ifdef BOOT_SETUP
 	/* Two buckets in one flood: which half of the regs stage is it?
@@ -2117,6 +2172,38 @@ void shim_vblank(void) {
  * positive control already exists and already passed on hardware:
  * rom/s16_68kdraw.32x. Use that. Do not resurrect this without finding
  * out what the write actually lands on first. */
+#ifdef BOOT_GAMERATE
+	/* GAME FRAMES PER 64 VINTS, AS A NUMBER (2026-09-08, LOOP27 68).
+	 * The wheel (BOOTMOTIONGAME) needs a wristwatch and a person; this
+	 * is the same question read exactly, off the same source — the
+	 * game's own scene timer at WRAM 0xFFF02A, one tick per game frame.
+	 * Sample it every 64 vints and report the delta:
+	 *     64 = the game is running at vint rate (60 Hz)
+	 *     32 = half
+	 *      3 = the ~95% miss the DREQ FIFO was costing us
+	 * Biased into bit 7 so a dead machine cannot read as a number. */
+	{
+		static uint16_t gr_base, gr_vc;
+		static uint8_t  gr_val;
+		uint16_t t = *(volatile uint16_t*)0xFFA18E;   /* game IRQ4
+		                     * completions, counted in md_start.s at
+		                     * fmgate_ret — the game's own scene timer
+		                     * runs at scene-dependent rates and in both
+		                     * directions, and comparing two builds that
+		                     * had reached DIFFERENT attract scenes was
+		                     * measuring the scene, not the port. */
+		if (++gr_vc >= 64) {
+			/* the scene timer runs in either direction depending on the
+			 * scene (the first read clamped at 127 on the ship line —
+			 * a countdown, not a fast game); magnitude is the rate */
+			uint16_t sd = (uint16_t)(t - gr_base);
+			gr_val = (uint8_t)(sd > 127 ? 127 : sd);
+			gr_base = t;
+			gr_vc = 0;
+		}
+		*(volatile uint16_t*)0xFFA188 = (uint16_t)(0xF000 | 0x80 | gr_val);
+	}
+#endif
 #ifdef BOOT_MOTION
 	/* ARE WE ACTUALLY STREAMING, AND HOW FAST? (2026-09-08, LOOP27 37.)
 	 * Mike, fairly: "nothing ever shows actual moving streaming frames."
@@ -2671,6 +2758,15 @@ void shim_vblank(void) {
 					PSTAMP(0xFFA184);
 				}
 #endif
+#ifdef FB_XPORT
+				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
+				 * to: the 68K cannot reach the framebuffer at FM=1.
+				 * Push-before-post was tried and reverted in August
+				 * because the push was ~90 lines of FIFO writes and the
+				 * flip then never made vblank — through the FB it is
+				 * ~2, so the objection is gone with the FIFO. */
+				r60_push();
+#endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
 				*mars_comm2 = BANK_SHADOW;
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
@@ -2728,9 +2824,13 @@ void shim_vblank(void) {
 				}
 				if (armed_ok)
 #endif
-				r60_push();                          /* selection overlaps the
-				                                      * ISR span; the F103 wait +
-				                                      * FM drop sit before its ship */
+#ifndef FB_XPORT
+				r60_push();
+#else
+				(void)0;                 /* FB route: shipped at FM=0 */
+#endif
+				/* (FM_LATE arm: selection overlaps the ISR span; the
+				 * F103 wait + FM drop sit before its ship) */
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 				while (*mars_comm0 != 0 && !FML_PAST(0x60)) ;   /* master ack: FM down */
@@ -2758,7 +2858,11 @@ void shim_vblank(void) {
 				}
 				if (armed_ok)
 #endif
+#ifndef FB_XPORT
 				r60_push();
+#else
+				(void)0;                 /* FB route: shipped at FM=0 */
+#endif
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 #endif

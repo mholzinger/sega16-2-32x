@@ -7244,6 +7244,12 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
 
 RAMCODE static void dreq_rearm(int k)
 {
+#ifdef FB_XPORT
+    /* the FB route never enables DREQ, and an armed DMA pointed at
+     * SPR_LAND is a loaded gun aimed at the packet we just copied there */
+    (void)k;
+    return;
+#else
     SH2_DMA_CHCR0 = 0x44E0;
     (void)SH2_DMA_CHCR0;
     SH2_DMA_SAR0 = 0x20004012;          /* DREQ FIFO */
@@ -7261,6 +7267,7 @@ RAMCODE static void dreq_rearm(int k)
     SH2_DMA_DRCR0 = 0;
     SH2_DMA_DMAOR = 1;
     SH2_DMA_CHCR0 = 0x44E1;
+#endif
 }
 
 #ifdef IDLE_TOKEN
@@ -9157,6 +9164,16 @@ RAMCODE void m_main(void)
 #ifdef FM_LATE
             if (0)   /* v2: blit DURING the push; the 68K waits for our ack */
 #endif
+#ifdef FB_XPORT
+            /* NOTHING TO DRAIN (LOOP27 67). This wait watches TCR0 go
+             * quiet, and on the FB route no DREQ transfer ever runs: TCR
+             * sits at R60_ARM, the break condition is unreachable, and
+             * the master burned the FULL 4000-tick bound EVERY window.
+             * That was the whole of the first FB build's slowdown. The
+             * packet is in memory before its publish word exists, so
+             * there is no drain to wait for. */
+            if (0)
+#endif
             {
                 WSTAGE(0x001F);                  /* RED: window, at the landing wait */
                 uint16_t w0 = frt();
@@ -9483,11 +9500,49 @@ RAMCODE void m_main(void)
                  * bad1_post pends the echo until COMM8 is free; arm_seen
                  * (the 68K's k1 announce) turns a zero landing into a
                  * tear too. The 68K re-marks its last TWO pushes. */
+#ifdef FB_XPORT
+                /* FB TRANSPORT (LOOP27 67). The packet came through the
+                 * framebuffer, so there is no TCR to interrogate and no
+                 * partial landing to reconstruct: the 68K's publish word
+                 * is written after every payload word, and its sequence
+                 * says whether this window has a new one. Copy it into
+                 * SPR_LAND and the entire harvest below runs unchanged
+                 * on identical bytes.
+                 * A stale or malformed publish yields landed = 0, which
+                 * is the existing "no packet this vint" path — last
+                 * frame's records stand. */
+                static uint8_t fbx_seq_seen;
+                unsigned landed = 0;
+                {
+                    volatile uint16_t *pub = (volatile uint16_t *)FBX_PUB_SH;
+                    uint16_t pw = pub[0];
+                    if ((pw & 0xFF00u) == FBX_MAGIC
+                        && (uint8_t)pw != fbx_seq_seen) {
+                        unsigned n = pub[1];
+                        if (n >= 26 && n <= 924) {
+                            const volatile uint32_t *sp =
+                                (const volatile uint32_t *)FBX_PKT_SH;
+                            uint32_t *dp = (uint32_t *)SPR_LAND;
+                            unsigned nl = (n + 1u) >> 1;   /* lengths are
+                                                            * 4-word
+                                                            * aligned */
+                            for (unsigned i = 0; i < nl; i++) dp[i] = sp[i];
+                            landed = n;
+                            fbx_seq_seen = (uint8_t)pw;
+                            DIAG[44]++;                    /* packets taken */
+                        } else {
+                            DIAG[45]++;                    /* bad length */
+                        }
+                    }
+                }
+                int okp = 0;
+#else
                 unsigned landed = (SH2_DMA_CHCR0 & 2)
                                 ? (unsigned)R60_ARM
                                 : ((unsigned)R60_ARM
                                    - (SH2_DMA_TCR0 & 0xFFFFFFu));
                 int okp = 0;
+#endif
                 unsigned K = 0, nrec = 0, rs = 0, pb = R60_HDR, rec0 = R60_HDR;
                 /* BOUNDED DRAIN-WAIT (pass 9): most "tears" are the
                  * harvest RACING the 68K's still-running push — the
@@ -9502,6 +9557,7 @@ RAMCODE void m_main(void)
                  * drain it watches. Budget 700 ticks (~15 lines):
                  * rescues near-miss races; true word loss still
                  * shortfalls and tears (fed back as before). */
+#ifndef FB_XPORT
                 if (landed >= R60_HDR && landed < 924) {
                     unsigned twx = SPR_LAND[R60_W_TAG] & 0x3FFu;
                     if (twx >= 26 && twx <= 924 && landed < twx) {
@@ -9522,6 +9578,7 @@ RAMCODE void m_main(void)
                                                              * not re-add */
                     }
                 }
+#endif
                 if (landed >= 26 && landed <= 924) {
                     unsigned tag = SPR_LAND[R60_W_TAG];
                     K = (tag & 0x8000u) ? ((tag >> R60_KSHIFT) & 15u) : 0u;
