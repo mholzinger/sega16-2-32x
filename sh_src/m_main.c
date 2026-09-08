@@ -3497,14 +3497,23 @@ static __attribute__((noinline)) const uint8_t *bake_find(uint16_t addr, uint16_
     for (int p = 0; p < 32; p++) {
         const uint8_t *s = sprbake_blob + 16 + h * SPRBAKE_SLOT_SZ;
         uint32_t off = *(const uint32_t *)(s + 8);
-        if (off == 0xFFFFFFFFu)
+        if (off == 0xFFFFFFFFu) {
+#ifdef FLIP_CENSUS
+            CEN[13] += 1;                /* MISS: falls back to the live
+                                          * per-pixel ROM decoder */
+#endif
             return 0;
+        }
         if (*(const uint16_t *)s == addr
             && *(const uint16_t *)(s + 2) == d2
             && (*(const uint16_t *)(s + 4) >> 8) == bank
             && (*(const uint16_t *)(s + 4) & 0xFF) >= hgt
-            && *(const uint16_t *)(s + 6) == zm)
+            && *(const uint16_t *)(s + 6) == zm) {
+#ifdef FLIP_CENSUS
+            CEN[13] += 0x10000;          /* baked frame HIT (high half) */
+#endif
             return sprbake_blob + off;
+        }
         h = (h + 1) & SPRBAKE_MASK;
     }
     /* THE TRIP BOUND MUST RETURN A MISS. Without this line the function

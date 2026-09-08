@@ -334,6 +334,53 @@ excess over 1.304x is port overhead — cart-bus contention through the
 adapter and our shim — rather than clock.
 
 ---------------------------------------------------------------------
+## 4e. PAST 4 MB: THE SSF2 MAPPER WORKS ON 32X
+
+Our cart is FULL — 4.00 MB used, zero trailing free bytes — so any
+"bake it uncompressed" plan is a cart-size question. It has an answer,
+and there is a shipping example.
+
+**Doom 32X Resurrection v3.0/v3.1 is 5,242,880 bytes.** Its header says:
+
+    console field   "SEGA SSF"          (not "SEGA 32X")
+    ROM end         0x4FFFFF            5.00 MB declared
+
+That is the SSF2 mapper. From the MiSTer RTL
+(`srcref/S32X_MiSTer/rtl/CART/cart.sv`):
+
+    if (rom_sz > 'h200000)                  // banking enabled over 2 MB
+        ROM_BANK[VA[3:1]] <= VDI[4:0];      // 8 slots x 512 KB, 5-bit bank
+    ROM_BANK_A = ROM_BANK_EN ? {ROM_BANK[VA[21:19]], VA[18:1]} : ...
+
+Eight 512 KB slots, each selecting one of 32 banks — **up to 16 MB**.
+Bank registers are the SSF2 ones at 0xA130F3..0xA130FF. Note also
+
+    wire ROM_LIN_EN = (rom_sz > 'h400000) & ~ROM_BANK_EN & ~s32x;
+
+the LINEAR over-4MB path is explicitly disabled for 32X carts, so
+banking is the only route.
+
+**It applies to the SH-2, not just the 68K.** `S32X.sv:666` drives the
+cart module's address from either bus:
+
+    CART cart ( .VA(!s32x_rom ? GEN_VA : S32X_CA), ... )
+
+so an SH-2 cart read goes through the same ROM_BANK_A mapping. Art past
+4 MB is therefore reachable by the compose path, not only by the 68K.
+
+Verified on our own rig: the headless ares fork runs the 5 MB Doom
+Resurrection image (exit 0, SDRAM live), so both rigs can carry it.
+
+Our port does NOT use this today: the header says "SEGA 32X", ROM end
+0x3FFFFF, and the "banked 0x900000 window" in patch_game.py is the 32X
+adapter's own MD-side ROM window (bank 3 -> cart 0x300000), a different
+mechanism. Adopting SSF2 means: the "SEGA SSF" header, the larger ROM
+end, and bank writes at 0xA130F3+ around any access past 4 MB.
+
+UNVERIFIED: whether bank switching is safe to perform while the SH-2 is
+mid-read of a banked slot. Nothing here has been tested on the MiSTer.
+
+---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
 
 Listed so that later work does not assume them settled:
