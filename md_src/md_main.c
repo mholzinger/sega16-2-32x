@@ -1465,6 +1465,25 @@ static void r60_push(void) {
 					((const uint16_t*)0xFF9000 + ((uint16_t)r << 5));
 				uint32_t *sp4 = (uint32_t*)
 					((uint16_t*)PAL_SHADOW + ((uint16_t)r << 5));
+#ifdef PAL_NOCMP
+				/* NO DISCOVERY ON THE 68K (LOOP27 81). Ship the marked
+				 * block raw and let the SH-2 be the one that knows what
+				 * changed. v1 of this measured WORSE (74.1% vs 82.0%)
+				 * because it still maintained the shadow — a 16-long
+				 * copy per block, about what the compare it replaced
+				 * cost. With no compare there is no shadow: no copy, no
+				 * scan, no mask walk, just the block id. */
+				(void)mp4; (void)sp4;
+				pal_force[by] &= (uint8_t)~bit;
+				ids[K++] = (uint8_t)(r | R60_PAL_RAW);
+				palw += 32;
+				if (pd[by] & bit) {
+					pd[by] &= (uint8_t)~bit;
+					pal_retry[by] |= bit;
+				} else {
+					pal_retry[by] &= (uint8_t)~bit;
+				}
+#else
 				if (pal_force[by] & bit) {
 					for (uint16_t i = 0; i < 16; i++)
 						*sp4++ = *mp4++;
@@ -1532,6 +1551,7 @@ static void r60_push(void) {
 				} else {
 					pal_retry[by] &= (uint8_t)~bit;
 				}
+#endif
 			}
 			r = (uint8_t)((r + 1) & 63);
 			n++;

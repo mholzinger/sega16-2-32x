@@ -1633,6 +1633,13 @@ endif
 # ships every marked block raw. Through the FB transport a redundant
 # 32-word block costs ~1.6 scanlines; proving it redundant costs ~5.
 # Discovery moves to the SH-2 side; the 68K only pumps.
+# `make ... PALNOCMP=1` = the 68K does no palette DISCOVERY: no compare,
+# no shadow, no mask walk. It ships each marked block raw and the SH-2
+# is the side that knows what changed. (v1 kept the shadow copy and
+# measured 74.1%; that was the copy, not the idea.)
+ifdef PALNOCMP
+MDCCFLAGS += -DPAL_NOCMP
+endif
 # PALSTREAK=N / PALBACKOFF=M tune the rotor's visit rate: a palette block
 # that compared equal N consecutive visits is then visited 1 vint in
 # (M+1). PALROTOR_OFF (no visits at all) measures 86.1% against the

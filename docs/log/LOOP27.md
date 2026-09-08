@@ -3536,3 +3536,34 @@ The prize is in NOT VISITING, not in cheaper comparing:
 PAL_STREAK_N / PAL_BACKOFF_M are now build-tunable (PALSTREAK=,
 PALBACKOFF=) to chase that 4.1 points by visiting less often, but the
 real answer is write-through, which removes the visit entirely.
+
+## 81. NEGATIVE, TWICE: THE PALETTE COMPARE IS LOAD-BEARING
+
+The write-through idea says the 68K should not discover anything — ship
+raw, let the SH-2 sort it out. Tested twice on the palette path, both
+against the 82.0% baseline:
+
+    PALNOCMP v1  ship raw, keep the shadow copy      74.1%
+    PALNOCMP v2  ship raw, no shadow at all          57.9%
+    PALROTOR_OFF no visits at all (colours freeze)   86.1%   the ceiling
+
+v1 was a flawed test — it skipped the compare but still ran the 16-long
+shadow copy, which costs about what the compare cost. v2 removed the
+shadow and got WORSE, which settles it: the expensive term is not the
+68K's comparing, it is the PACKET VOLUME and what the SH-2 must then do
+with it. Eight raw blocks is 256 words a vint that the master has to
+apply to CRAM under PEN gating; the compare exists to stop that, and it
+pays for itself several times over.
+
+**So the palette compare is COMPRESSION, and compression is worth more
+than it costs even at 0.05 scanlines a word.** Write-through is the
+right instinct for a path whose writes are few and known at the writer;
+it is the wrong instinct for a path whose unit of delivery is a 32-word
+block and whose consumer pays per word.
+
+The 4.1 points in PALROTOR_OFF are therefore NOT recoverable by removing
+discovery. They are in NOT VISITING — scheduling, not arithmetic — which
+is what PAL_STREAK_N / PAL_BACKOFF_M tune.
+
+Both flags are kept, default off, so the next person does not re-run
+these two experiments.
