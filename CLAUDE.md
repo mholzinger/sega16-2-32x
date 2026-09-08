@@ -44,6 +44,19 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
+## The scope (2026-09-08)
+
+The 68000 clock is NOT a loss. The game needs 2780 instructions/vint and
+our 7.670 MHz budget covers that at any cost up to 46 cycles per
+instruction; the arcade's own 10 MHz 68000 runs the same code at 45.2,
+because it is stalled on its video bus rather than computing. We do not
+pay those stalls.
+
+**The only thing holding up parity is the pipeline: feeding frames and
+sprites into the 32X at the right frequency, in the shape that
+architecture wants.** It costs 2882 instructions/vint today — as much as
+the game itself. See `ARCHITECTURE.md` (top) and LOOP27 78-79.
+
 ## Standing rules
 
 1. **Accuracy before speed.** The port must look and play exactly like

@@ -11,6 +11,31 @@ wrong. Hardware claims cite `srcref/jtcores` Verilog by file and line.
 
 ---
 
+## THE SCOPE OF THIS PROJECT (2026-09-08, Mike — read this first)
+
+**The 68000 is not the problem, and the clock is not a loss.** Measured,
+not assumed (LOOP27 78-79):
+
+    the game needs             2780 instructions per vint
+    our budget                 127,841 cycles per vint at 7.670 MHz
+    so it fits at any cost <=  46 cycles per instruction
+    the ARCADE itself runs at  45.2 cycles per instruction
+
+The arcade's 10 MHz 68000 spends its frame STALLED ON ITS VIDEO BUS, not
+computing — 45 cycles per instruction is a bus-bound machine. We do not
+pay those stalls, because the game's video writes land in our RAM and
+packet staging instead of on an S16 video bus. The slower clock is
+therefore offset by cheaper access, and the game's own code fits.
+
+**The only thing between this port and parity is the pipeline** — the
+shim that feeds frames and sprites into the 32X at the right frequency
+and in the shape that architecture wants. Measured, it costs 2882
+instructions per vint, about as much as the game itself, and every one
+of those instructions is ours to spend or save.
+
+That is the scope. Work that reduces or reshapes the pipeline is on it.
+Work premised on the 68000 being too slow is not.
+
 ## RUNNING ON REAL SILICON — see docs/design/SILICON.md
 
 2026-09-08: the port boots and runs on a real 32X FPGA core. Two
