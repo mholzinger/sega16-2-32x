@@ -47,7 +47,8 @@ discover/glow/
 sh_src/pal_scenes.h
 sh_src/pal_scenes_md.h
 fpgascreens/
-docs/proof/*_proof.png
+docs/proof/
+docs/arcade/
 inp/private/
 .DS_Store
 *.bak
