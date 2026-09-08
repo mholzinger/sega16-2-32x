@@ -3096,3 +3096,57 @@ at FM=0, before the post; the master copies FB -> SPR_LAND in its window
 body and the whole existing harvest runs unchanged.** Items 2-4 (flip/FM
 sequencing, the magic-word tear check, repointing ARMGATE and the belt)
 stand as written, minus every bank-parity concern.
+
+---------------------------------------------------------------------
+
+## 69. THE WARM-UP IS THE WHOLE BOOT FIX (2026-09-08 14:10)
+
+`MISTERBOOT=1` had always bundled two changes — the slave SDRAM warm-up
+stub in mars_start.s and the slave cache-off — and nothing had ever
+separated them. Four roms from one tree, one flag apart, on the MiSTer:
+
+    warm-up   cache-off   result
+    no        no          BLACK   (1 colour on screen)
+    no        yes         BLACK   (1 colour)
+    YES       no          BOOTS   (18 colours, 64 game frames/64 vints)
+    yes       yes         BOOTS   (62 colours, 64/64)
+
+The warm-up is the entire fix; the cache-off does nothing and had been
+carrying half the credit. On ares the ship line's counters are IDENTICAL
+with and without the warm-up (vints, packets, tile batches, chunks,
+rejects, every column, frames 200 and 400), so it costs nothing there.
+
+**Now default on** (`NOSLVWARM=1` removes it). Two comments said the
+opposite — the Makefile's "the DEFAULT BUILD CARRIES NEITHER / neither
+fixed the MiSTer hang" and the same claim in mars_start.s — and SIX
+black captures were spent this session rediscovering that they were
+wrong. Both corrected at the source. Entry 10 had it right the first
+time: "a REAL fix to fold into every build".
+
+New flags: `MISTERWARM=1` (warm-up alone), `MISTERCACHE=1` (cache-off
+alone); `MISTERBOOT=1` still means both.
+
+## 70. MIKE'S CALL: KEEPER (2026-09-08 14:17)
+
+`make ship-us FBXPORT=1` — the FB transport, the warm-up by default, no
+probe flags, no palette floods. Deployed as
+`/media/fat/games/S32X/KEEPER.32x`, confirmed running from BOTH
+`/tmp/remote.log` ("game started: Sega32X/KEEPER.32x") and
+`/var/log/ACTIVEGAME`.
+
+Mike, watching it: **"AH THIS ONE! THIS IS THE ONE! Bank it!"**
+
+Headless captures of that session, three shots 4s apart: 97-118 distinct
+colours, 54-61% of pixels changing between consecutive captures. The 32X
+layer is on screen and moving on real hardware.
+
+Tagged `mister-keeper-20260908`. Reproducible: rebuilding from the clean
+tag differs from the accepted binary by 36 bytes, all of them the build
+stamp (git hash + timestamp at 0x2489D8 and 0x3FFFD4).
+
+CAUTION carried forward: the rom Mike looked at ten minutes earlier
+(`H4_both`) STROBED, and that was the instrument, not the port —
+`BOOTGAMERATE=1` floods all 64 MD palette entries from inside the push
+every vint, fighting the game's own palette writes. Never hand him a
+`BOOT_VALUE` build as something to judge; those exist to be photographed
+by a script, not watched.
