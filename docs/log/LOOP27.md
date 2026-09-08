@@ -3567,3 +3567,27 @@ is what PAL_STREAK_N / PAL_BACKOFF_M tune.
 
 Both flags are kept, default off, so the next person does not re-run
 these two experiments.
+
+## 82. CLAIMNEW IS AN ARES-ONLY WIN — IT BREAKS ON SILICON
+
+Entry 77 measured CLAIMNEW as 12x fewer shadow-ramp draws (704 -> 57)
+with no speed cost, on ares. On the MiSTer, bisected one flag at a time:
+
+    A  FBXPORT                              86 colours   renders
+    B  + TXTWRAM LATESTEAL0 LATEKEEP DRAWADOPT
+                                            85 colours   renders
+    C  + CLAIMNEW                           43 colours   57% BLACK
+
+The change points the late claim at FB_SPR (the framebuffer sprite
+staging) instead of SPR_SNAP. An FB read at that point is evidently not
+valid on hardware — the same class as every other ares/silicon
+divergence in this log — and sets get drawn without pairs, which is
+black rather than the shadow ramp it was meant to fix.
+
+**Dropped.** The shipping combination is B: FBXPORT + the opt1 sprite
+flags, 82.3% on ares and rendering on hardware. CLAIMNEW stays in the
+tree, default off, with this entry attached.
+
+RULE THIS CONFIRMS AGAIN: a pixel/colour win measured only on ares is
+not a win. Every flag that changes WHERE the master reads from must be
+bisected on the MiSTer before it is believed.
