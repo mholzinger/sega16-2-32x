@@ -196,6 +196,11 @@ against.
 
 - `ARCHITECTURE.md` — how the 32X library draws a frame, where this
   port sits, and the pivot. Start here.
+- `docs/design/SILICON.md` — what makes the port run on REAL 32X
+  hardware: the slave SDRAM warm-up, the FM=1 framebuffer rule, the FB
+  packet transport, the probe rig and its traps. Every claim carries the
+  build command that reproduces it. Read it before touching the boot
+  path, the packet transport, or before writing any hardware probe.
 - `TOOLKIT.md` — the reusable kit inventory: what is game-agnostic and
   what is Altered-Beast-specific.
 - `docs/log/LOOP.md`, `docs/log/LOOP6..11.md` — the working log, newest last. Each has a

@@ -11,6 +11,16 @@ wrong. Hardware claims cite `srcref/jtcores` Verilog by file and line.
 
 ---
 
+## RUNNING ON REAL SILICON — see docs/design/SILICON.md
+
+2026-09-08: the port boots and runs on a real 32X FPGA core. Two
+hardware facts make that true, neither of them in any document and both
+invisible under emulation: the slave SH-2 must warm up SDRAM it did not
+write, and the 68K cannot touch the framebuffer at FM=1 at all. The
+reproducible account — every claim with its build command, its
+observation and its file:line — is `docs/design/SILICON.md`. Read it
+before changing anything in the boot path or the packet transport.
+
 ## 0. Where the port is (2026-09-02)
 
 Sections 1 to 9 describe the faithful software pipeline and the pivot
