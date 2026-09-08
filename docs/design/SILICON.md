@@ -297,6 +297,43 @@ the window body; the frame is flipped late, not dropped. **The flip is
 therefore not what limits the observed frame rate.**
 
 ---------------------------------------------------------------------
+## 4d. THE 68000 CLOCK DEFICIT — THE GATE UNDER ALL THE OTHERS
+
+The port runs the arcade's own 68000 program. The two machines do not
+run it at the same speed, and the difference is fixed in hardware. From
+MAME's machine definitions (`mame -listxml`):
+
+    System 16B  maincpu  MC68000  10,000,000 Hz
+    32X / MD    maincpu  MC68000   7,670,453 Hz
+
+**Our 68000 runs at 76.7% of the arcade's**, so identical code takes
+1.304x as long here before any port overhead is added.
+
+What that does and does not imply:
+
+  - It is NOT a 76.7% ceiling on frame rate. The ceiling is
+    1 / (1.304 * U), where U is the fraction of a frame the ARCADE's
+    68000 spends working. 60 fps is unreachable only if U > 0.767.
+  - The port currently measures 82.0% game-frame rate, which is ABOVE
+    the naive clock ratio. That is only possible if U is well under 1,
+    i.e. the arcade game leaves most of its frame idle — so the clock
+    deficit is not what limits us today. Port overhead is.
+
+**U is not yet measured properly.** Sampling the arcade's PC once per
+frame (`register_frame_done`) reports 99.6% idle, but that hook fires at
+the END of a frame, exactly when the game is waiting, so the figure is
+phase-biased and worthless as a magnitude. A sound measurement needs
+either many samples spread across each frame or a debugger trace of one
+frame counting instructions inside vs outside the idle loop at
+0x003980..0x003990 (0x903980 in our rebased map).
+
+The comparable measurement on our side already exists: the game-handler
+length ring (V at entry 0xFFA380, V at rte 0xFFA300, md_start.s). The
+same quantity on the arcade, in scanlines, would give the full picture:
+excess over 1.304x is port overhead — cart-bus contention through the
+adapter and our shim — rather than clock.
+
+---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
 
 Listed so that later work does not assume them settled:
