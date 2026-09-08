@@ -1,0 +1,25 @@
+{
+  "build_hash": "484e2020",
+  "vints": 3514,
+  "cycles": 1519,
+  "cadence": 2.313,
+  "skips": 0,
+  "flip_late": 205,
+  "flip_late_rate": 0.135,
+  "rejects": 332,
+  "reject_rate": 0.0945,
+  "handler_mean": 80.2,
+  "window_ack_mean": 66.3,
+  "consume_mean": 13.5,
+  "consume_max": 69,
+  "visr": {
+    "fires": 3388,
+    "isr_flips": 1590,
+    "body_fallback": 0,
+    "stale": 5,
+    "nopost": 298,
+    "k1_seen": 1494,
+    "span_mean_lines": 82.9,
+    "span_max_lines": 370.1
+  }
+}

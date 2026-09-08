@@ -1,0 +1,25 @@
+# Idle gameplay: coin, start, walk right until level 1 is on screen, then
+# STAND STILL (a punch every ~5 s keeps the scene alive). Measures the
+# standing-still component of the frame cost (SESSION 7).
+300,y,1
+310,y,0
+420,start,1
+430,start,0
+600,right,1
+1500,right,0
+1800,a,1
+1806,a,0
+2100,a,1
+2106,a,0
+2400,a,1
+2406,a,0
+2700,a,1
+2706,a,0
+3000,a,1
+3006,a,0
+3300,a,1
+3306,a,0
+3600,a,1
+3606,a,0
+3900,a,1
+3906,a,0

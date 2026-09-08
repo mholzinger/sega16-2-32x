@@ -1,0 +1,5 @@
+# ares-headless --input: coin via START+A held (the shim maps X or START+A to coin); attract continues with CREDIT 1
+200,start,1
+200,a,1
+230,start,0
+230,a,0

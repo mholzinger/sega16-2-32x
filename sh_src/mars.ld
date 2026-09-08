@@ -71,6 +71,42 @@ SECTIONS {
 	} > rom
 	_stext = SIZEOF (.text);
 
+	/* Rebased 68K game image (unpair project): the FULL 256KB arcade
+	 * image, every ROM reference +0x900000, executed by the 68K through
+	 * the banked 0x900000 cart window (bank 3 -> cart 0x300000). Fixed
+	 * placement: the delta is baked into the patched binary. */
+	/* P3: MD-format mob sprite art at a FIXED cart offset so the 68K
+	 * boot upload needs no link-time coordination (md_sprart_info.h
+	 * hardcodes bank 2 / window offset 0xF0000). Sits in the gap
+	 * between .text's end and the game's bank-3 image; the assert
+	 * fails the link if .text ever grows into it. */
+	.mdsprart 0x022F9100 : AT(0x002F9100) {
+		KEEP(*(.mdsprart))
+	} > rom
+	ASSERT(LOADADDR(.ramtext) + SIZEOF(.ramtext) <= 0x002F8000,
+	       ".text+.data+.ramtext ROM image spilled into .palscenes at 0x2F8000")
+
+	/* PALSTATIC: per-scene PAL_SH images (pal_scenes.h) in the unused
+	 * upper half of the mdsprart slot — SH-2 read-only const data,
+	 * fetched through the cached cart view like the sprite art. */
+	.palscenes 0x022F8000 : AT(0x002F8000) {
+		KEEP(*(.palscenes))
+	} > rom
+	.gamehigh 0x02300000 : AT(0x00300000) {
+		KEEP(*(.gamehigh))
+	} > rom
+	/* SPRBAKE blob: the 768KB window above .gamehigh (bake_sprites.py
+	 * budgets against exactly this). Cached cart view like .palscenes. */
+	.sprbake 0x02340000 : AT(0x00340000) {
+		KEEP(*(.sprbake))
+	} > rom
+	ASSERT(SIZEOF(.sprbake) <= 0xC0000,
+	       ".sprbake blob overflows the cart at 0x400000")
+	ASSERT(0x002F9100 + SIZEOF(.mdsprart) <= 0x00300000,
+	       ".mdsprart blob grew into .gamehigh at 0x300000")
+	ASSERT(SIZEOF(.palscenes) <= 0x8000,
+	       ".palscenes overflows its slot before .gamehigh")
+
 	.data 0x06000000 : AT(LOADADDR(.text) + SIZEOF(.text)) {
 		*(.got.plt) *(.got)
 		*(.shdata)
@@ -85,14 +121,30 @@ SECTIONS {
 	 * _stext, Size _sdata) carries BOTH .data and .ramtext over — no crt0
 	 * change. _sdata is therefore the combined size. Functions opt in via
 	 * __attribute__((section(".ramtext"))). */
-	.ramtext 0x06000000 + SIZEOF(.data) : AT(LOADADDR(.data) + SIZEOF(.data)) {
+	/* SESSION 7 task 0: .ramtext moved OUT of the low region to
+	 * 0x06031000-0x06039000, the upper half of the old 64KB tile cache
+	 * (CACHE_C is 512 slots now, m_main.c). The ROM image stays
+	 * contiguous after .data; the MARS header copy (Size _sdata) carries
+	 * .data only, and main_reset in mars_start.s copies .ramtext to its
+	 * home (__ramtext_lma -> __ramtext_start, __ramtext_size bytes)
+	 * before it releases the slave. This buys ~23KB under the 0x19000
+	 * region guard for sbuf's neighbours. */
+	.ramtext 0x06031000 : AT(LOADADDR(.data) + SIZEOF(.data)) {
 		. = ALIGN(0x4);
+		__ramtext_start = .;
 		*(.ramtext .ramtext.*)
 		. = ALIGN(0x4);
+		__ramtext_end = .;
 	} > ram
-	_sdata = SIZEOF(.data) + SIZEOF(.ramtext);
+	__ramtext_lma  = LOADADDR(.ramtext);
+	__ramtext_size = SIZEOF(.ramtext);
+	_sdata = SIZEOF(.data);
+	ASSERT(__ramtext_end <= 0x06038000,
+	       ".ramtext overflows its 0x31000-0x38000 SDRAM slot (probe scrap 0x38000-0x39000, SPR_LAND 0x39000)")
+	ASSERT(__ramtext_size > 0 && (__ramtext_size & 3) == 0,
+	       ".ramtext size must be a non-zero multiple of 4 for the boot copy")
 
-	.bss 0x06000000 + SIZEOF(.data) + SIZEOF(.ramtext) :
+	.bss 0x06000000 + SIZEOF(.data) :
 	{
 		__bss_start = . ;
 		*(.shbss)

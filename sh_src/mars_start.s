@@ -114,10 +114,15 @@ SEGA_BLOB:
 		.word	0x4EF9, 0x008C, 0x0410
 		.word	0x0000
 
-! Arcade game body at native cart offsets 0x808-0x3FFFF (patched HW refs)
+! Arcade game body region 0x808-0x3FFFF: POISONED (0xFF fill). The
+! game executes the rebased copy at 0x300000 (unpair model); ares maps
+! adapter space at low addresses, so any missed rebase pointer reads
+! junk there — this fill makes MAME fail the SAME way instead of
+! silently returning correct bytes (MAME leaves the cart readable at
+! low addresses), so the burn-down runs entirely in the scripted rig.
 	.org	0x808
 GAME_BODY:
-		.incbin "game_body.bin"
+		.fill	0x3F7F8, 1, 0xFF
 
 ! Boot RAM-copy stash: patched game [0x400,0x808) + continuation jmp,
 ! copied by the shim to 0xFFB400 and executed there.
@@ -136,9 +141,9 @@ M68K_CODE:
 ! Primary Vector Base Table at 0x06000000
 
 		.long   mstart      /* Cold Start PC */
-		.long   0x0603F000  /* Cold Start SP 0x0603F000*/
+		.long   0x0603F800  /* Cold Start SP: was 0x3F000; R60 master call graph reaches 2176B deep (measured: stack slot writes AT md_pkt[0] 0x3E780) -- took 2KB from the slave 4KB */
 		.long   mstart      /* Manual Reset PC */
-		.long   0x0603F000  /* Manual Reset SP */
+		.long   0x0603F800  /* Manual Reset SP */
 		.long   main_err    /* Illegal instruction */
 		.long   0x00000000  /* reserved */
 		.long   main_err    /* Invalid slot instruction */
@@ -250,19 +255,40 @@ M68K_CODE:
 ! The main SH2 starts here at 0x06000240
 
 mstart:
-		bra     mcont
+		bra     mtramp
 		nop
 
 ! The secondary SH2 starts here at 0x06000244
 
 sstart:
-		bra     scont
+		bra     stramp
 		nop
+
+! 2026-09-02: mcont/scont are once-only boot code and now live in ROM
+! (.text) -- ~180B of the BIOS-copied SDRAM image freed for the region
+! guard. The fixed 4-byte entry stubs above reach them through these.
+		.align  2
+mtramp:
+		mov.l   mtramp_a,r0
+		jmp     @r0
+		nop
+		.align  2
+mtramp_a:
+		.long   mcont
+stramp:
+		mov.l   stramp_a,r0
+		jmp     @r0
+		nop
+		.align  2
+stramp_a:
+		.long   scont
 
 ! Each section of code below has its own data table so that the code
 ! can be extended without worrying about the offsets becoming too big.
 ! This results in duplicate entries, but not so many that we care. :)
 
+		.text
+		.align  2
 mcont:
 ! clear interrupt flags
 		mov.l   _primary_int_clr,r1
@@ -292,6 +318,23 @@ mcont:
 		cmp/eq  r1,r2
 		bf/s    0b
 		add     #4,r1
+
+! SESSION 7 task 0: copy .ramtext from its ROM image to 0x06031000
+! (mars.ld) — the BIOS header copy carries .data only now. This runs
+! BEFORE M_OK is posted, and the 68K releases BOTH SH-2s (0xACED) only
+! after it has seen M_OK and S_OK, so the slave cannot reach s_main
+! (RAMCODE) before the copy is complete. Exact count: dt tests after
+! the decrement, so N longs copy in N iterations.
+		mov.l   _primary_rt_lma,r2
+		mov.l   _primary_rt_vma,r3
+		mov.l   _primary_rt_size,r4
+		shlr2   r4
+	3:
+		mov.l   @r2+,r0
+		mov.l   r0,@r3
+		add     #4,r3
+		dt      r4
+		bf      3b
 
 ! handshake with the 68000: keep (re)posting M_OK until the 68000 ACKs
 ! with a different value. The BIOS's own one-shot M_OK post races the
@@ -324,7 +367,24 @@ mcont:
 		mov     #0x80,r0
 		mov.l   _primary_adapter,r1
 		mov.b   r0,@r1      /* set FM */
+.ifdef VISR_FLIP
+		mov     #0x08,r0    /* bit3 = V int (d32xr crt0.s vbi bit) —
+				       LOOP24: the master runs the k2 flip
+				       span from its own V-ISR. Level 12,
+				       SR is level 2 below: accepted */
+.else
+.ifdef CMD_PROBE
+		mov     #0x02,r0    /* bit1 = CMD int (d32xr crt0.s uses 0x0A =
+				       vbi|cmd); CMD is level 8 and SR is set to
+				       level 2 below, so it is accepted */
+.else
+.ifdef CMD_INT
+		mov     #0x02,r0    /* bit1 = CMD int */
+.else
 		mov     #0x00,r0
+.endif
+.endif
+.endif
 		mov.b   r0,@(1,r1)  /* set int enables */
 		mov     #0x20,r0
 		ldc     r0,sr       /* allow ints */
@@ -349,7 +409,7 @@ mcont:
 _primary_int_clr:
 		.long   0x2000401E  /* one word passed last int clr reg */
 _primary_stk:
-		.long   0x0603F000  /* Cold Start SP */
+		.long   0x0603F800  /* Cold Start SP */
 _primary_sts:
 		.long   0x20004020
 _primary_ok:
@@ -369,6 +429,12 @@ _primary_bss_start:
 		.long   __bss_start
 _primary_bss_end:
 		.long   __end
+_primary_rt_lma:
+		.long   __ramtext_lma + 0x22000000   /* uncached cart view */
+_primary_rt_vma:
+		.long   __ramtext_start + 0x20000000 /* uncached SDRAM alias */
+_primary_rt_size:
+		.long   __ramtext_size
 _primary_do_init:
 		.long   __INIT_SECTION__
 _primary_do_fini:
@@ -442,6 +508,8 @@ _secondary_go:
 
 ! Primary exception handler
 
+		.data
+		.align  2
 main_err:
 		rte
 		nop
@@ -480,6 +548,35 @@ main_v_irq:
 		nop
 
 		! handle V IRQ
+.ifdef VISR_FLIP
+		! LOOP 24 — the master owns the flip clock. Call the C
+		! handler (visr_vbi): on a fresh k2 post it runs the whole
+		! flip-critical span from here, inside vblank by
+		! construction. Full caller-saved set: the C function is
+		! free with r0-r7, pr, mach, macl (GBR is untouched by
+		! sh-elf-gcc codegen).
+		mov.l   r2,@-r15
+		mov.l   r3,@-r15
+		mov.l   r4,@-r15
+		mov.l   r5,@-r15
+		mov.l   r6,@-r15
+		mov.l   r7,@-r15
+		sts.l   pr,@-r15
+		sts.l   mach,@-r15
+		sts.l   macl,@-r15
+		mov.l   mvi_visr,r1
+		jsr     @r1
+		nop
+		lds.l   @r15+,macl
+		lds.l   @r15+,mach
+		lds.l   @r15+,pr
+		mov.l   @r15+,r7
+		mov.l   @r15+,r6
+		mov.l   @r15+,r5
+		mov.l   @r15+,r4
+		mov.l   @r15+,r3
+		mov.l   @r15+,r2
+.endif
 
 		mov.l   @r15+,r1
 		mov.l   @r15+,r0
@@ -489,6 +586,10 @@ main_v_irq:
 		.align  2
 mvi_mars_adapter:
 		.long   0x20004000
+.ifdef VISR_FLIP
+mvi_visr:
+		.long   _visr_vbi
+.endif
 
 main_h_irq:
 		mov.l   r1,@-r15
@@ -522,6 +623,44 @@ main_cmd_irq:
 		nop
 
 		! handle CMD IRQ
+.ifdef CMD_PROBE
+		! LOOP 11 — PICKUP-LATENCY PROBE. The master discovers a window
+		! by polling COMM0 at the top of its main loop, so it cannot
+		! react until the strip in flight ends (6-22 scanlines, and
+		! build_maps is ~4ms). That latency is what shows up as 26.6%
+		! blit skips (a stale band = the green tear) and as the 210-line
+		! worst window/ack. This ISR does NO work: it timestamps the
+		! instant the 68000's command actually arrived, so the main loop
+		! can subtract and report exactly how many FRT ticks an
+		! interrupt-driven pickup would recover. Measure before
+		! restructuring the renderer around it.
+		mov.l   r2,@-r15
+		mov.l   mci_frt_frch,r1
+		mov.b   @r1,r2          /* FRC high */
+		extu.b  r2,r2
+		shll8   r2
+		mov.l   mci_frt_frcl,r1
+		mov.b   @r1,r1          /* FRC low */
+		extu.b  r1,r1
+		or      r1,r2
+		mov.l   mci_diag58,r1
+		mov.l   r2,@r1          /* DIAG[58] = arrival stamp */
+		mov.l   mci_diag57,r1
+		mov.l   @r1,r2
+		add     #1,r2
+		mov.l   r2,@r1          /* DIAG[57] = ISR fire count */
+		mov.l   @r15+,r2
+.endif
+.ifdef CMD_INT
+		! LOOP 11 — YIELD SIGNAL. The window is announced here, the
+		! instant the 68000 raises it, instead of whenever the strip
+		! in flight happens to end. The ISR still does NO window work:
+		! it raises a flag the compose loop tests between row chunks,
+		! so pickup latency becomes one chunk instead of one strip.
+		mov.l   mci_winpend,r1
+		mov     #1,r0
+		mov.b   r0,@r1
+.endif
 
 		mov.l   @r15+,r1
 		mov.l   @r15+,r0
@@ -531,6 +670,20 @@ main_cmd_irq:
 		.align  2
 mci_mars_adapter:
 		.long   0x20004000
+.ifdef CMD_INT
+mci_winpend:
+		.long   0x26028D80      /* win_pend, uncached */
+.endif
+.ifdef CMD_PROBE
+mci_frt_frch:
+		.long   0xFFFFFE12
+mci_frt_frcl:
+		.long   0xFFFFFE13
+mci_diag57:
+		.long   0x260280E4      /* DIAG[57] uncached */
+mci_diag58:
+		.long   0x260280E8      /* DIAG[58] uncached */
+.endif
 
 main_pwm_irq:
 		mov.l   r1,@-r15
@@ -575,7 +728,7 @@ main_vres_irq:
 mvri_mars_adapter:
 		.long   0x20004000
 mvri_primary_stk:
-		.long   0x0603F000  /* Cold Start SP */
+		.long   0x0603F800  /* Cold Start SP */
 mvri_primary_vres:
 		.long   main_reset
 
@@ -771,6 +924,7 @@ svri_secondary_vres:
 ! Fast memcpy function - copies longs, runs from sdram for speed
 ! On entry: r4 = dst, r5 = src, r6 = len (in longs)
 
+		.if 0	! 2026-09-03: fast_memcpy/fast_wmemcpy/get_stack_pointer/CacheClearLine/cache_flush/CacheControl: declared in mars.h, called by nothing (SDRAM .data)
 		.align  4
 		.global _fast_memcpy
 _fast_memcpy:
@@ -797,6 +951,7 @@ _fast_wmemcpy:
 		nop
 
 
+		.if 0	! 2026-09-02: unreferenced marsdev helpers (124B of SDRAM .data)
 ! void word_8byte_copy(short *dst, short *src, int count)
 		.align  4
 		.global _word_8byte_copy
@@ -849,6 +1004,7 @@ _word_8byte_copy_bytereverse:
 
 		
 ! int _get_stack_pointer()
+		.endif
 		.align  4
 		.global _get_stack_pointer
 _get_stack_pointer:	
@@ -890,6 +1046,8 @@ _CacheControl:
 _sh2_cctl:
 		.long   0xFFFFFE92
 
+		.endif
+		.if 0	! 2026-09-02: unreferenced (ScreenStretch, 94B of SDRAM .data)
 ! void ScreenStretch(int src, int width, int height, int interp);
 ! On entry: r4 = src pointer, r5 = width, r6 = height, r7 = interpolate
 
@@ -967,6 +1125,7 @@ ss_pitch:
 
 		.align  2
 
+		.endif
 		.text
 
 main_reset:
@@ -999,6 +1158,24 @@ main_reset:
 		add     #4,r3
 		dt      r4
 		bf      1b
+
+		! SESSION 7 task 0: .ramtext lives at 0x06031000 (mars.ld), not
+		! contiguous with .data, so the header copy above no longer
+		! carries it. Copy it from its ROM image now, BEFORE the slave is
+		! released (it runs RAMCODE too). Exact count: dt tests after
+		! the decrement, so N longs copy in N iterations.
+		mov.l   ramtext_lma,r2
+		mov.l   rom_start,r1
+		add     r1,r2
+		mov.l   ramtext_vma,r3
+		mov.l   ramtext_size,r4
+		shlr2   r4
+	2:
+		mov.l   @r2+,r0
+		mov.l   r0,@r3
+		add     #4,r3
+		dt      r4
+		bf      2b
 
 		mov.l   main_st,r0
 		mov.l   main_ok,r1
@@ -1037,6 +1214,12 @@ main_go:
 		.long   mstart
 rom_header:
 		.long   0x220003D4
+ramtext_lma:
+		.long   __ramtext_lma
+ramtext_vma:
+		.long   __ramtext_start + 0x20000000   ! uncached alias, like sdram_start
+ramtext_size:
+		.long   __ramtext_size
 rom_start:
 		.long   0x22000000
 sdram_start:

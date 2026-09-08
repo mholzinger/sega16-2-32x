@@ -1,0 +1,25 @@
+{
+  "build_hash": "c98b3c8b",
+  "vints": 3585,
+  "cycles": 1633,
+  "cadence": 2.195,
+  "skips": 0,
+  "flip_late": 235,
+  "flip_late_rate": 0.1439,
+  "rejects": 246,
+  "reject_rate": 0.0686,
+  "handler_mean": 49.1,
+  "window_ack_mean": 33.3,
+  "consume_mean": 11.2,
+  "consume_max": 69,
+  "visr": {
+    "fires": 3428,
+    "isr_flips": 1359,
+    "body_fallback": 268,
+    "stale": 127,
+    "nopost": 447,
+    "k1_seen": 1495,
+    "span_mean_lines": 81.4,
+    "span_max_lines": 370.0
+  }
+}

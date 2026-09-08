@@ -1,0 +1,30 @@
+# Reconstructed gameplay input script (original play2.csv was lost in
+# a session scratchpad). Mapping per REBUILD.md M2: coin = Y, start = START.
+# coin
+300,y,1
+310,y,0
+# start
+420,start,1
+430,start,0
+# walk right through the level, punch every ~2s
+600,right,1
+700,a,1
+706,a,0
+820,a,1
+826,a,0
+940,a,1
+946,a,0
+1060,a,1
+1066,a,0
+1180,a,1
+1186,a,0
+1300,a,1
+1306,a,0
+1420,a,1
+1426,a,0
+1540,a,1
+1546,a,0
+1660,a,1
+1666,a,0
+1780,a,1
+1786,a,0

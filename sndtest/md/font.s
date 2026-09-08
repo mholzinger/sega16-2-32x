@@ -1,0 +1,417 @@
+	.section .text
+
+	.global font_data
+font_data:
+;// 20
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF0FFF0
+		.long 0x0FFF0FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x000FF000
+		.long 0x00FFF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0000FF00
+		.long 0x000FF000
+		.long 0x00FF0000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x0000FF00
+		.long 0x000FF000
+		.long 0x0000FF00
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0000FF00
+		.long 0x000FFF00
+		.long 0x00FFFF00
+		.long 0x0FF0FF00
+		.long 0x0FFFFFF0
+		.long 0x0000FF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x0FF00000
+		.long 0x0FFFFF00
+		.long 0x00000FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00000
+		.long 0x0FFFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x00000FF0
+		.long 0x0000FF00
+		.long 0x000FF000
+		.long 0x00FF0000
+		.long 0x00FF0000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x00FFFFF0
+		.long 0x00000FF0
+		.long 0x0000FF00
+		.long 0x00FFF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x000FF000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFFF0
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFF00
+		.long 0x0FF00FF0
+		.long 0x0FFFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFF000
+		.long 0x0FF0FF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF0FF00
+		.long 0x0FFFF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x0FF00000
+		.long 0x0FFFFF00
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x0FF00000
+		.long 0x0FFFFF00
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFFF0
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF0FFF0
+		.long 0x0FF00FF0
+		.long 0x00FFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFFF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00000FF0
+		.long 0x00000FF0
+		.long 0x00000FF0
+		.long 0x00000FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF0FF00
+		.long 0x0FFFF000
+		.long 0x0FFFF000
+		.long 0x0FF0FF00
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF000FF
+		.long 0x0FFF0FFF
+		.long 0x0FFFFFFF
+		.long 0x0FF0F0FF
+		.long 0x0FF000FF
+		.long 0x0FF000FF
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FFF0FF0
+		.long 0x0FFFFFF0
+		.long 0x0FFFFFF0
+		.long 0x0FF0FFF0
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFF00
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF0FF00
+		.long 0x00FF0FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFF00
+		.long 0x0FF0FF00
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x00FFFF00
+		.long 0x0FF00000
+		.long 0x00FFFF00
+		.long 0x00000FF0
+		.long 0x00000FF0
+		.long 0x00FFFF00
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x000FF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF000FF
+		.long 0x0FF000FF
+		.long 0x0FF0F0FF
+		.long 0x0FFFFFFF
+		.long 0x0FFF0FFF
+		.long 0x0FF000FF
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x00FFFF00
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FF00FF0
+		.long 0x0FF00FF0
+		.long 0x00FFFF00
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x000FF000
+		.long 0x00000000
+
+		.long 0x00000000
+		.long 0x0FFFFFF0
+		.long 0x0000FF00
+		.long 0x000FF000
+		.long 0x00FF0000
+		.long 0x0FF00000
+		.long 0x0FFFFFF0
+		.long 0x00000000
+
+		;// tile 38  ':'
+		.long 0x00000000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x00000000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x00000000
+		.long 0x00000000
+
+		;// tile 39  '.'
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x0FF00000
+		.long 0x0FF00000
+		.long 0x00000000
+
+		;// tile 40  '-'
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0xFFFFF000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+		.long 0x00000000
+
+		;// tile 41  '>'
+		.long 0x00000000
+		.long 0x0F000000
+		.long 0x0FF00000
+		.long 0x0FFF0000
+		.long 0x0FF00000
+		.long 0x0F000000
+		.long 0x00000000
+		.long 0x00000000
+
+		;// tile 42  '|'
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00000000
+
+		;// tile 43  '+'
+		.long 0x00000000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0xFFFFF000
+		.long 0x00F00000
+		.long 0x00F00000
+		.long 0x00000000
+		.long 0x00000000
+
+		;// tile 44  '%'
+		.long 0xFF00F000
+		.long 0xFF00F000
+		.long 0x000F0000
+		.long 0x00F00000
+		.long 0x0F000000
+		.long 0xF00FF000
+		.long 0xF00FF000
+		.long 0x00000000
+

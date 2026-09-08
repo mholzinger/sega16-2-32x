@@ -45,6 +45,16 @@ void Hw32xInit(int vmode, int lineskip) {
 				j--;
 			}
 		}
+		/* OVERSCAN BELT (pass 13, "the purple row"): entries 224-255
+		 * were left ZERO, so an emulator that renders NTSC overscan
+		 * lines through the 32X (some ares builds do; the current
+		 * clamped one does not, and hardware drives border) showed
+		 * the LINE TABLE ITSELF as pixels — a lavender/purple
+		 * speckled row at the screen bottom. Point them at the last
+		 * image row: invisible where those lines are clamped, a
+		 * benign repeat elsewhere. */
+		for(int i=224; i<256; i++)
+			frameBuffer16[i] = 223*160 + 0x100;
 		// clear screen
 		for(int i=0x100; i<0x10000; i++) frameBuffer16[i] = 0;
 
@@ -60,6 +70,16 @@ void Hw32xInit(int vmode, int lineskip) {
 				j--;
 			}
 		}
+		/* OVERSCAN BELT (pass 13, "the purple row"): entries 224-255
+		 * were left ZERO, so an emulator that renders NTSC overscan
+		 * lines through the 32X (some ares builds do; the current
+		 * clamped one does not, and hardware drives border) showed
+		 * the LINE TABLE ITSELF as pixels — a lavender/purple
+		 * speckled row at the screen bottom. Point them at the last
+		 * image row: invisible where those lines are clamped, a
+		 * benign repeat elsewhere. */
+		for(int i=224; i<256; i++)
+			frameBuffer16[i] = 223*160 + 0x100;
 		// clear screen
 		for(int i=0x100; i<0x10000; i++) frameBuffer16[i] = 0;
 
