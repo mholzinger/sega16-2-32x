@@ -3371,3 +3371,72 @@ below entry 6's best (114) on a build running 20 points faster, which
 means more sprite churn per second, not less.
 
 Flags: TXTWRAM LATESTEAL0 LATEKEEP DRAWADOPT FBXPORT CLAIMNEW.
+
+## 78. THE ARCADE 68K IS BUS-BOUND, NOT COMPUTE-BOUND (2026-09-08)
+
+Mike: "are reads and writes being posted by the CPU at the same rate on
+the genesis/32x as they are on the arcade?" and "do we have timings
+coded into the game, or is it gated on cycles alone?" Both answered from
+the binary and from MAME's own instruction trace — no sampling, no
+inference.
+
+**HOW THE GAME KEEPS TIME.** It is EVENT-gated, not cycle-gated:
+
+    2ac6:  addqb #1,0xfffff01c    ; IRQ4 (vblank) increments a flag
+    397e:  clrb  0xfffff01c       ; main code clears it
+    3982:  tstb  0xfffff01c       ; and spins
+    3986:  beqs  0x3982           ;   until vblank sets it
+    3988:  dbf   %d0,0x397e       ; repeated d0+1 times = wait N frames
+
+Delays are counted in VBLANK EVENTS. A scan of the whole program finds
+exactly ONE pure cycle-delay loop:
+
+    2d8a:  moveq #127,%d0
+    2d8c:  dbf %d0,0x2d8c         ; ~1280 cycles, no memory access
+
+128 us on the arcade, 167 us here — 30.4% longer, the clock ratio, and
+the only place in the program where that matters directly. The other 101
+short dbf loops are memory-move loops, sensitive to ACCESS RATE rather
+than to the clock.
+
+**WHAT THE TRACE SAYS** (gameplay, level-1 timeline, 7 frames):
+
+    instructions per frame   3681 3743 3665 3702 3667 3716 3664
+    mean                     3691
+    idle-loop instructions   54 of 29594 = 0.18%
+    CPU at every vblank      0x3986 — the wait loop, 8 of 8
+
+So the game DOES finish its frame and wait — but it executes only ~8
+idle instructions per frame (about four iterations, ~88 cycles). It
+finishes with essentially nothing to spare.
+
+**THE CONSEQUENCE, AND IT OVERTURNS THE CLOCK ARGUMENT.** 166,667
+cycles/frame over 3,691 instructions is **45.2 cycles per instruction**.
+No 68000 instruction mix averages 45 cycles. The arcade's CPU is
+spending most of its frame STALLED ON THE BUS — System 16B video RAM
+writes carry wait states — not computing.
+
+That means the 76.7% clock ratio is NOT the ceiling, because we do not
+pay the arcade's bus stalls: the game's video writes land in our own RAM
+and packet staging, not on an S16 video bus. Consistent with the
+measurement: the port runs at 82.0% of 60 fps, which is ABOVE the clock
+ratio and would be impossible if we executed the same instructions at
+the same per-instruction cost.
+
+Arithmetic for the ceiling: our budget is 127,841 cycles/frame, so the
+game's ~3,691 instructions fit inside one vint only if our average cost
+is at or below **34.6 cycles per instruction**. At 82.0% we are at about
+42, so ~7 cycles per instruction of headroom is what the remaining work
+has to find — and that is a bus/access-rate question, not a clock one.
+
+**UNVERIFIED, and it matters:** this assumes our port executes the same
+instruction COUNT per game frame as the arcade. The port patches the
+game's video accesses and gates some writers, so the count may differ.
+Measuring it needs a 68K instruction count on our side, which ares does
+not currently provide (its --profile is SH-2 only).
+
+Tools: tools/arcade_trace.lua (MAME instruction trace, gameplay-driven)
+and tools/arcade_trace.py (the analysis). PC sampling and memory taps
+were both tried and both failed — every MAME hook fires at a fixed phase
+where the game is always in its wait loop, and taps did not see work RAM
+in this driver. Do not re-try either.

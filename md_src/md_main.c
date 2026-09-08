@@ -1735,6 +1735,19 @@ static void r60_push(void) {
 #elif defined(BOOT_FBTIME)
 		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
+#elif defined(BOOT_BURN_W)
+		/* the SHIM_BURN loop executing from 68K WRAM, in scanlines */
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA186 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 >> 8);
+#elif defined(BOOT_BURN_R)
+		/* THE SAME LOOP executing from CART ROM, in scanlines. The two
+		 * differ only in where the instructions are fetched from, so
+		 * ROM minus WRAM is the 32X adapter's fetch tax on 68K code —
+		 * the rate question, measured rather than assumed. ares reports
+		 * both at 39 lines (it models no cart contention); hardware is
+		 * the only place this can be read. */
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA188 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA18A >> 8);
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
@@ -1755,6 +1768,11 @@ static void r60_push(void) {
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
 #endif
 		uint8_t d  = (uint8_t)(p2 - p0);
+#if defined(BOOT_BURN_W) || defined(BOOT_BURN_R)
+		/* bias off zero: an unbiased 0 floods black, which is also what
+		 * a probe that never ran looks like (the trap from LOOP27 67) */
+		d = (uint8_t)(0x80 | (d > 127 ? 127 : d));
+#endif
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));

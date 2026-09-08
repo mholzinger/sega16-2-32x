@@ -792,6 +792,16 @@ endif
 # CLAIMNEW=1: the late claim scans the LIVE sprite list (FB_SPR) rather
 # than the snapshot, so a set that arrives while the snap latch is
 # skipping a refresh still gets a pair instead of drawing the shadow ramp.
+# BOOTBURNW=1 / BOOTBURNR=1: report the SHIMBURN loop's duration when
+# executed from 68K WRAM / from cart ROM, through the value instrument.
+# ROM minus WRAM is the adapter's fetch tax on 68K code. Pair with
+# SHIMBURN=N.
+ifdef BOOTBURNW
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_BURN_W
+endif
+ifdef BOOTBURNR
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_BURN_R
+endif
 ifdef CLAIMNEW
 SHCCFLAGS += -DCLAIM_NEW
 endif
