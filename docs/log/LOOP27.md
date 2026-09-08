@@ -3020,3 +3020,79 @@ measurement that justifies it is solid, but rewiring ARMGATE, the belt
 and the tear census at the end of a 12-hour session is how good findings
 get turned into broken ship lines. The next session starts with a
 bank-aware sentinel probe and item 1.
+
+---------------------------------------------------------------------
+
+## 67. THE FB TRANSPORT, MEASURED: 48 LINES -> 1, AND IT LANDS
+
+`BOOTFBXFER=1` / `BOOTFBXT=1`, 2026-09-08, on Mike's MiSTer. Item 1 is
+answered, and the answer is better than the both-banks shortcut entry 66
+proposed: there is nothing to double-write.
+
+**The probe.** The 68K writes the same short test packet into the FB
+TWICE per vint, in the two places the transport could sit:
+
+    A  0x852000  before the post, at FM=0   (pre-flip)
+    B  0x852040  inside r60_push, at FM=1   (post-flip)
+
+word[0] is a per-vint sequence, the rest a fixed pattern. The MASTER
+reads both regions in its window body and reports, per region, a
+saturating count of consecutive windows in which the sequence advanced
+by EXACTLY ONE. That is the whole design: constant test values cannot
+tell a fresh write from last window's, and a naive readback would have
+called a one-window-stale region a pass. The verdict rides COMM8 and is
+flooded through the value instrument.
+
+**Hardware:  runA = 7 (saturated), runB = 0, content-ok = 0.**
+
+  - The FM=0 write LANDS, and the master reads it FRESH — same window,
+    no flip in between — for every window it was watched.
+  - The FM=1 write does not arrive at all. Not stale: absent.
+
+**Cost: 20 words into the FB at FM=0 = 1 SCANLINE.** The same 20 words
+through the DREQ FIFO are 48. Not 24x — **~48x**, with no free-region
+hunt, no bank parity, no double write.
+
+### WHAT THIS RETRACTS FROM ENTRY 65 AND HANDOFF-DREQ
+
+**The 68K cannot touch the 32X framebuffer at FM=1 on this hardware.**
+Writes are dropped, reads return nothing usable. Two of last night's
+results were taken through that dead path and are void:
+
+  - **"20 writes to the FRAMEBUFFER = 2 lines" (entry 65) timed writes
+    that never landed.** The number is real; it is the cost of a
+    discarded write. The live route costs 1 line for the same 20 words,
+    so the conclusion survives — but it was luck, not method.
+  - **"FB free-region sentinel mask: 0 of 4 survived" (entry 66) is not
+    evidence about those regions.** The master stamped them, but the
+    68K's READBACK sat in r60_push at FM=1. It was reading through the
+    dead path. Bank parity was never demonstrated; the sentinels may
+    have been sitting there untouched the whole time.
+
+### TWO RIG LESSONS THAT COST SIX ROUND TRIPS
+
+  - **d=0 IS BLACK AND SO IS A BLANKED SCREEN.** Four captures came back
+    all-black and were read as "the flood never ran". Every value the
+    instrument can carry must be biased away from 0 (this probe sets
+    bit 7 always), or a zero result and a dead machine are the same
+    picture. Entry 66's "0 of 4" is exactly this trap.
+  - **A MiSTer rom needs `MISTERBOOT=1`.** Six black captures in a row
+    were nothing but a missing flag: without the slave SDRAM warm-up the
+    build boots on ares and is black on hardware. Every probe rom for
+    the MiSTer is `make ship-us BOOT<X>=1 MISTERBOOT=1`. The control that
+    caught it: the same flag build from the current tree was black while
+    the night's rom of the same name painted, which pointed at the tree
+    and not the code — the roms turned out to be the same build shifted
+    560 bytes, and the flag was the only real difference.
+  - Do not park a value on COMM8. v1 of this probe left 0xBBxx on the
+    channel permanently; COMM8 never reads 0 again, the master's pended
+    posts stop, and the screen goes black. The verdict now rides the
+    channel like every other message and the 68K clears it.
+
+### THE JOB NOW
+
+Item 1 is closed. The transport is: **68K writes the packet into the FB
+at FM=0, before the post; the master copies FB -> SPR_LAND in its window
+body and the whole existing harvest runs unchanged.** Items 2-4 (flip/FM
+sequencing, the magic-word tear check, repointing ARMGATE and the belt)
+stand as written, minus every bank-parity concern.

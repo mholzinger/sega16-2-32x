@@ -727,6 +727,47 @@ endif
 # unused: the master stamps magic words at 0x12000/0x14000/0x18000/
 # 0x1C000, the 68K reads them back a vint later and reports a 4-bit mask
 # through the value instrument (bit set = region survived = FREE).
+# `make ... BOOTFBXFER=1` = the FB TRANSPORT readback (HANDOFF-DREQ job
+# 1). The 68K writes a 13-word sequenced test packet into the FB twice —
+# A at 0x12000 before the post (FM=0, pre-flip), B at 0x12040 inside
+# r60_push (FM=1, post-flip) — and the master checks BOTH for content and
+# for FRESHNESS (sequence advancing by 1 every window), reporting a
+# saturating run length per region through the value instrument:
+#   d = runA | runB<<3 | 0x40 if both regions' content is correct
+#   0x7F = both fresh for 7+ windows running = the transport works
+#   d = 42 = the master never ran the check
+# BOOTFBXA=1 / BOOTFBXB=1 build the same probe with only ONE writer, to
+# bisect which write site blacks the hardware screen.
+ifdef BOOTFBXFER
+SHCCFLAGS += -DBOOT_FBXFER
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER -DBOOT_FBX_A -DBOOT_FBX_B
+endif
+ifdef BOOTFBXA
+SHCCFLAGS += -DBOOT_FBXFER
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER -DBOOT_FBX_A
+endif
+ifdef BOOTFBXB
+SHCCFLAGS += -DBOOT_FBXFER
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER -DBOOT_FBX_B
+endif
+# BOOTFBXN=1: the reporting path with NO master-side FB access — the
+# control that says whether touching the FB from the master at the window
+# body is what blacks the hardware screen.
+# BOOTFBXP=1: MD side only, master untouched — the latch is never set so
+# the flood must paint the 42 fallback. Black here means the wedge is on
+# the MD side; a colour means it is the master's COMM8 post.
+# BOOTFBXT=1: time the FM=0 FB write (20 words, the comparable count)
+# with the value instrument instead of reporting the transport verdict.
+ifdef BOOTFBXT
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER -DBOOT_FBX_A -DBOOT_FBX_TIME
+endif
+ifdef BOOTFBXP
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER -DBOOT_FBX_A -DBOOT_FBX_B
+endif
+ifdef BOOTFBXN
+SHCCFLAGS += -DBOOT_FBXFER -DBOOT_FBX_NOFB
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER
+endif
 ifdef BOOTFBFREE
 SHCCFLAGS += -DBOOT_FBFREE
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBFREE

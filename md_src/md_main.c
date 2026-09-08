@@ -53,6 +53,9 @@ static volatile uint16_t* const mars_comm0  = (uint16_t*) MARS_COMM0;
 static volatile uint16_t* const mars_comm2  = (uint16_t*) MARS_COMM2;
 static volatile uint16_t* const mars_comm4  = (uint16_t*) MARS_COMM4;
 static volatile uint16_t* const mars_comm6  = (uint16_t*) MARS_COMM6;
+#ifdef BOOT_FBXFER
+static uint8_t fbx_seq;                  /* FB-transport probe sequence */
+#endif
 static volatile uint16_t* const mars_comm8  = (uint16_t*) MARS_COMM8;
 /* per-scene sprite-art upload state (docs/design/BOSSFIGHT.md); WRAM slots since
  * the 68K RAMCODE trick makes .data execute-typed */
@@ -1626,6 +1629,19 @@ static void r60_push(void) {
 		PSTAMP(0xFFA184);
 	}
 #endif
+#ifdef BOOT_FBX_B
+	/* B: the same packet written where the DREQ push already is — FM=1,
+	 * after the post and therefore after the ISR's flip. If A is stale
+	 * and B is fresh, the flip is the whole of the sentinel probe's
+	 * 0-of-4 and the transport simply belongs here. */
+	{
+		volatile uint16_t *fx = (volatile uint16_t*)0x852040;
+		PSTAMP(0xFFA182);
+		fx[0] = fbx_seq;
+		for (uint16_t q = 1; q < 13; q++) fx[q] = q;
+		PSTAMP(0xFFA184);
+	}
+#endif
 #ifdef BOOT_COMMTIME
 	/* IS IT THE DREQ FIFO, OR EVERY 68K->32X ACCESS? (2026-09-08,
 	 * LOOP27 60.) Twenty FIFO writes cost 32-80+ lines on hardware and
@@ -1676,7 +1692,22 @@ static void r60_push(void) {
 	 * from a screenshot histogram. No buckets, no bisection, one capture
 	 * per number. Reports the regs stage (0xFFA0B6 -> 0xFFA0B8). */
 	{
-#ifdef BOOT_FBFREE
+#ifdef BOOT_FBX_TIME
+		/* WHAT DOES THE FM=0 FB WRITE COST? The 48-vs-2 comparison in
+		 * HANDOFF-DREQ timed the FB write at FM=1 — where this probe has
+		 * now shown (runB=0 on hardware) the write does not land at all.
+		 * The only FB route that works is this one, so this is the only
+		 * number that can be set against the FIFO's 48 lines/20 words. */
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
+#elif defined(BOOT_FBXFER)
+		/* master's verdict, straight off COMM8 — no WRAM slot to audit.
+		 * 0xBBxx = the master ran the check; anything else = it did not
+		 * (flooded as 42 so "never checked" cannot read as "zero"). */
+		uint8_t p0 = 0;
+		uint16_t lt = *(volatile uint16_t*)0xFFA186;
+		uint8_t p2 = ((lt & 0xF000) == 0xF000) ? (uint8_t)(lt & 0xFF) : 42;
+#elif defined(BOOT_FBFREE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)*(volatile uint16_t*)0xFFA186;
 #elif defined(BOOT_FBTIME)
@@ -2514,6 +2545,19 @@ void shim_vblank(void) {
 			*mars_comm8 = 0;
 			(*(volatile uint16_t*)0xFFA0D6)++;   /* heal posts consumed */
 		}
+#ifdef BOOT_FBXFER
+		/* the FB-transport verdict rides COMM8 like every other master
+		 * message and is CLEARED here. v1 parked 0xBBxx on the channel
+		 * permanently instead, and the hardware screen went black:
+		 * COMM8 never reads 0 again, so the master's pended posts (and
+		 * with them the arm echo the push gates on) stop. Latch it into
+		 * the value instrument's slot and free the channel. */
+		else if ((*mars_comm8 & 0xFF00) == 0xBB00) {
+			*(volatile uint16_t*)0xFFA186 =
+				(uint16_t)(0xF000 | (*mars_comm8 & 0xFF));
+			*mars_comm8 = 0;
+		}
+#endif
 #ifdef GLOW_MASK
 		else if (*mars_comm8 == 0xBAD3) {
 			glow_live = 0;                       /* animator yielded */
@@ -2602,6 +2646,31 @@ void shim_vblank(void) {
 #else
 		if (r60_go) {
 			{
+#ifdef BOOT_FBX_A
+				/* CAN THE 68K CARRY THE PACKET THROUGH THE FB?
+				 * (2026-09-08, HANDOFF-DREQ job 1.) A 68K word into the
+				 * DREQ FIFO costs ~2.4 lines on hardware, into the FB
+				 * ~0.1 — but the FB probe that measured that never READ
+				 * THE DATA BACK, and the sentinel probe that tried lost
+				 * 4 of 4 regions (suspected bank parity across the ISR
+				 * flip at the post).
+				 * Write the same 13-word test packet TWICE, in the two
+				 * places the real transport could sit:
+				 *   A at 0x12000, HERE, at FM=0 and BEFORE the post/flip
+				 *   B at 0x12040, in r60_push, at FM=1 and AFTER it
+				 * word[0] is a per-vint sequence, words[1..12] = q, so
+				 * the master can tell a FRESH write from last window's
+				 * (constant values cannot — that is what would have made
+				 * a naive readback lie). */
+				fbx_seq++;
+				{
+					volatile uint16_t *fa = (volatile uint16_t*)0x852000;
+					PSTAMP(0xFFA182);
+					fa[0] = fbx_seq;
+					for (uint16_t q = 1; q < 20; q++) fa[q] = q;
+					PSTAMP(0xFFA184);
+				}
+#endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
 				*mars_comm2 = BANK_SHADOW;
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
@@ -4017,6 +4086,14 @@ window_done: ;
 		if (md_hold_seen) md_hold = (uint8_t)(md_hold_seen == 2);
 		md_hold_seen = 0;
 		uint8_t disp = (uint8_t)((IO_MISC & 0x20) && !md_hold);
+#ifdef BOOT_FBXFER
+		/* THE PROBE MUST NOT BE READ THROUGH THE DISPLAY GATE. A blanked
+		 * MD plane is black, and so is a flooded d=0 — the first three
+		 * hardware runs of this probe came back black and were read as
+		 * "the flood never ran", which does not follow. Force the plane
+		 * on for probe builds so black means exactly one thing. */
+		disp = 1;
+#endif
 		if (disp != disp_last) {
 			*(volatile uint16_t*)VDP_CTRL_PORT = disp ? 0x8154 : 0x8114;
 			disp_last = disp;

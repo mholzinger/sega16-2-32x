@@ -7,11 +7,19 @@ and the state sections of HANDOFF-HARDWARE.md.
 ## THE ANSWER
 
 **A 68K word write into the 32X DREQ FIFO costs ~2.4 scanlines on real
-hardware. The same word into the 32X FRAMEBUFFER costs ~0.1.**
+hardware. The same word into the 32X FRAMEBUFFER costs ~0.05.**
 
     68K -> 32X DREQ FIFO     20 words    48 scanlines
-    68K -> 32X FRAMEBUFFER   20 words     2 scanlines      24x
+    68K -> 32X FRAMEBUFFER   20 words     1 scanline       ~48x
     whole r60_push, ~52 words            99 scanlines      of 262
+
+**UPDATED 2026-09-08 (LOOP27 67), and the correction matters: the 68K
+cannot touch the framebuffer at ALL at FM=1.** The original 2-scanline
+figure timed writes at FM=1 that never landed. The route that works is
+FM=0, before the post, and it costs 1 line for 20 words — and a probe
+that reads the data back confirms the master sees it FRESH, in the same
+window, with no flip in between. There is no free-region hunt and no
+bank-parity problem.
 
 Measured on Mike's MiSTer with an exact-value instrument, same build,
 same vint, only the destination differing. On ares the same 20 FIFO
@@ -84,17 +92,19 @@ black-screen cause.
 ---------------------------------------------------------------------
 ## THE JOB (next session starts here)
 
-**1. FIND ~300 BYTES OF FB THAT SURVIVE A FLIP.**
-The documented 2KB hole at 0x1E800 is FULL: md_pkt B (1472B) + palette
-(64B at 0x1EDC0) + SAT (512B at 0x1EE00) = exactly 2KB. Visible pixels
-end at 0x200 + 224*320 = 0x11A00, which is where md_pkt A begins; A ends
-~0x11FC0.
-A sentinel probe of 0x12000/0x14000/0x18000/0x1C000 returned **0 of 4
-surviving** — almost certainly BANK PARITY (master writes the draw bank,
-a flip intervenes, the 68K reads the other). Redo it bank-aware.
-**Likely answer: write the packet to BOTH banks.** At 2 lines per 20
-words, double-writing is ~4 lines against the FIFO's 48 — still 12x, and
-it removes the free-region hunt and the parity reasoning entirely.
+**1. CLOSED (2026-09-08, LOOP27 67).** The packet does not have to
+survive anything. Measured on hardware with `BOOTFBXFER=1`:
+
+    68K write at FM=0, before the post   LANDS, master reads it FRESH
+                                         (sequence +1 every window, 7/7)
+    68K write at FM=1, inside r60_push   never arrives at all
+    cost of the FM=0 write, 20 words     1 scanline (FIFO: 48)
+
+So: **the 68K writes the packet into the FB at FM=0 before the post; the
+master copies FB -> SPR_LAND in its window body and the entire existing
+harvest runs unchanged.** No free-region hunt, no both-banks write, no
+bank parity. The old "0 of 4 sentinels survived" was a readback through
+the FM=1 dead path and proves nothing about those regions.
 
 **2. SEQUENCE IT AGAINST FLIP AND FM.** The 68K writes at FM=0, the
 master reads at FM=1. The window protocol already orders that; the
@@ -110,6 +120,10 @@ semantics; they get simplified or removed.
 ---------------------------------------------------------------------
 ## THE RIG (fully working, all gotchas)
 
+    build    make ship-us BOOT<X>=1 MISTERBOOT=1
+             **MISTERBOOT=1 IS NOT OPTIONAL.** Without the slave SDRAM
+             warm-up the rom boots on ares and is BLACK on hardware —
+             six black captures in a row on 2026-09-08 were nothing else.
     deploy   scp rom/X.32x root@mister.office.local:/media/fat/games/S32X/NAME.32x
     launch   curl -s -X POST http://mister.office.local:8182/api/games/launch \
                -H 'Content-Type: application/json' \
@@ -146,6 +160,12 @@ GOTCHAS THAT COST HOURS:
 MD CRAM is 9 bits, exactly enough for 0-255:
 
     R = d & 7 , G = (d >> 3) & 7 , B = (d >> 6) & 3
+
+**BIAS EVERY VALUE AWAY FROM ZERO** (set bit 7, say). d=0 floods BLACK,
+and so does a machine that never reached the flood — four captures on
+2026-09-08 were read as "the flood never ran" when the truth was a
+missing MISTERBOOT. A result that cannot be told from a dead screen is
+not a measurement.
 
 Decode from a capture histogram: `d = (b>>5<<6)|(g>>5<<3)|(r>>5)`.
 One screenshot, one exact number. `BOOTVALUETOTAL=1` switches it from the

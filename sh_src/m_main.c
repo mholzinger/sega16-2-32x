@@ -11162,6 +11162,66 @@ RAMCODE void m_main(void)
             ((volatile uint16_t *)0x20004200)[1] = 0x03FF;   /* yellow */
             ((volatile uint16_t *)0x20004200)[2] = 0x001F;   /* red    */
 #endif
+#ifdef BOOT_FBXFER
+            /* THE FB TRANSPORT, READ BACK (2026-09-08, HANDOFF-DREQ job 1).
+             * The 68K wrote a 13-word test packet into the FB twice this
+             * vint: A at 0x12000 before the post (FM=0, pre-flip), B at
+             * 0x12040 inside r60_push (FM=1, post-flip). Both carry a
+             * per-vint sequence in word[0].
+             * FRESHNESS IS THE WHOLE POINT and it needs no shared clock:
+             * remember the sequence seen last window; a region whose
+             * sequence advances by exactly 1 every window is being
+             * written and read INSIDE ONE WINDOW. A region that repeats
+             * or skips is landing in the other bank (or not at all), and
+             * a constant-value readback would have called that a pass.
+             * Report a saturating run length per region so one capture
+             * says "it has worked for 7 windows running", not "it worked
+             * once". */
+            {
+                static uint8_t fbx_prevA, fbx_prevB;
+                static uint8_t fbx_runA, fbx_runB;
+                static uint8_t fbx_first;
+#ifdef BOOT_FBX_NOFB
+                /* CONTROL: the same block with NO framebuffer access at
+                 * all. Both writers, alone or together, came back BLACK
+                 * on hardware while the unmodified value-probe painted —
+                 * so the suspect is the master touching the FB HERE, and
+                 * K_fbfree's "0 of 4 survived" (which is also d=0, also
+                 * black) may never have been a reading at all. */
+                uint8_t sA = (uint8_t)(fbx_prevA + 1), sB = (uint8_t)(fbx_prevB + 1);
+                int okA = 1, okB = 1;
+#else
+                volatile uint16_t *fa = (volatile uint16_t *)0x24012000u;
+                volatile uint16_t *fb2 = (volatile uint16_t *)0x24012040u;
+                uint8_t sA = (uint8_t)fa[0], sB = (uint8_t)fb2[0];
+                int okA = 1, okB = 1;
+                for (unsigned q = 1; q < 13; q++) {
+                    if (fa[q] != (uint16_t)q) okA = 0;
+                    if (fb2[q] != (uint16_t)q) okB = 0;
+                }
+#endif
+                if (fbx_first) {
+                    if (okA && sA == (uint8_t)(fbx_prevA + 1)) {
+                        if (fbx_runA < 7) fbx_runA++;
+                    } else fbx_runA = 0;
+                    if (okB && sB == (uint8_t)(fbx_prevB + 1)) {
+                        if (fbx_runB < 7) fbx_runB++;
+                    } else fbx_runB = 0;
+                }
+                fbx_first = 1;
+                fbx_prevA = sA;
+                fbx_prevB = sB;
+                /* bit7 always set: d=0 is BLACK and black is also what a
+                 * screen that never flooded looks like — the first
+                 * hardware run of this probe came back all-black and
+                 * could not be read either way. With the bias, black
+                 * means "the MD never got here", never "zero". */
+                if (MARS_SYS_COMM8 == 0)
+                MARS_SYS_COMM8 = (uint16_t)(0xBB80 | fbx_runA
+                                            | (fbx_runB << 3)
+                                            | ((okA && okB) ? 0x40 : 0));
+            }
+#endif
 #ifdef BOOT_FBFREE
             /* WHICH FB REGIONS ARE ACTUALLY FREE? (2026-09-08, LOOP27 66)
              * The FB transport needs ~300 bytes nobody else touches. The
