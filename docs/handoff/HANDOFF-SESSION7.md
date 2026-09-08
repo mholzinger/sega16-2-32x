@@ -1,6 +1,6 @@
 # HANDOFF — session 7 kickoff (written 2026-09-07, after session 6)
 
-Read HANDOFF-SESSION6.md sections 3a-3l for the full record. This file
+Read docs/handoff/HANDOFF-SESSION6.md sections 3a-3l for the full record. This file
 is the state you start from and the ONE job: cut the framebuffer writes,
 which is the frame-rate wall.
 

@@ -46,6 +46,7 @@ def shifted_input(src, k, dst):
 
 
 def run(rom, frame, inp, out):
+    os.makedirs(out, exist_ok=True)
     cmd = [ARES, '--frames', str(frame), '--input', inp]
     for name, blk, off, ln in BLOCKS:
         cmd += ['--dump', f'{blk}:{off:#x}:{ln:#x}:{os.path.join(out, name + ".bin")}']
@@ -100,6 +101,19 @@ def main():
     out = a.out or tempfile.mkdtemp(prefix='mdstatic_gate_')
     os.makedirs(out, exist_ok=True)
     tables = {}
+    mds_addr = None
+    baked_line = None
+    hdr = os.path.join(ROOT, 'sh_src', 'pal_scenes_md.h')
+    if os.path.exists(hdr):
+        import re
+        mm = re.search(r'mds_s_line\[MDSTATIC_N\]\[128\] = \{\s*\{ ([^}]*) \}', open(hdr).read())
+        if mm:
+            baked_line = [int(x) for x in mm.group(1).split(',')]
+    lst = os.path.splitext(a.rom)[0] + '.lst'
+    if os.path.exists(lst):
+        for ln in open(lst):
+            if ln.rstrip().endswith(' _mds_ctr'):
+                mds_addr = int(ln.split()[0], 16) & 0x3FFFF
     for k in range(a.jitter):
         inp = a.input
         if k:
@@ -112,15 +126,23 @@ def main():
             m = st.sdram
             diag = struct.unpack_from('>64I', m, sf.DIAG)
             census = struct.unpack_from('>I', m, 0x28F7C)[0]
-            mds = struct.unpack_from('>4I', m, 0x28F40)
+            mds = struct.unpack_from('>6I', m, mds_addr) if mds_addr is not None else (0,) * 6
             print(f'=== {os.path.basename(a.rom)} k={k} frame={fr_k} ===')
             print(f'display gate: blanks={census >> 16} held={census & 0xFFFF} vints | '
-                  f'MDSTATIC installs={mds[0]} pin-evict-refused={mds[1]} flushes={mds[2]} pin-free-refused={mds[3]} | '
+                  f'MDSTATIC installs={mds[0]} (from hold {mds[5]}) refused(foreign pal)={mds[4]} pin-evict-refused={mds[1]} flushes={mds[2]} pin-free-refused={mds[3]} | '
                   f'pscene_sw={struct.unpack_from(">I", m, 0x28F5C)[0]}')
             st.report()
-            tab = m[sf.MDP_LINE_C:sf.MDP_LINE_C + 96] + m[sf.MDP_S_LINE:sf.MDP_S_LINE + 128] + \
-                m[sf.MDP_S_MAP:sf.MDP_S_MAP + 1024] + m[sf.MDP_S_USED:sf.MDP_S_USED + 128]
-            tables.setdefault(fr, {})[k] = (hashlib.sha1(tab).hexdigest()[:12], diag[36])
+            # battery key: the BAKED sets' rows only (line, map, used) plus the
+            # fallback count. Sets outside the bake may appear on some boot
+            # timings and take exact pens from the spare line — that is the
+            # dynamic path working, not a boot-order difference.
+            s_line = m[sf.MDP_S_LINE:sf.MDP_S_LINE + 128]
+            s_map = m[sf.MDP_S_MAP:sf.MDP_S_MAP + 1024]
+            s_used = m[sf.MDP_S_USED:sf.MDP_S_USED + 128]
+            key = b''.join(bytes([s_line[s], s_used[s]]) + s_map[s * 8:s * 8 + 8]
+                           for s in range(128) if baked_line and baked_line[s])
+            extra = [f'{s:#04x}' for s in range(128) if s_line[s] and baked_line and not baked_line[s]]
+            tables.setdefault(fr, {})[k] = (hashlib.sha1(key).hexdigest()[:12], diag[36], ','.join(extra) or '-')
             if a.png:
                 for half in (0, 1):
                     img = frame_from_dumps(st, half)
@@ -128,7 +150,7 @@ def main():
                     img.save(p)
                     img.resize((1600, 1200)).save(p[:-4] + '_43.png')
     if a.jitter > 1:
-        print('=== boot-order battery: per frame, (k: tables-sha1, DIAG[36]) ===')
+        print('=== boot-order battery: per frame, (k: baked-sets-sha1, DIAG[36], extra dynamic sets) ===')
         for fr, per in tables.items():
             vals = set(per.values())
             verdict = 'IDENTICAL across k' if len(vals) == 1 else f'{len(vals)} DISTINCT outcomes'

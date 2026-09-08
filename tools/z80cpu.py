@@ -4,7 +4,7 @@
 Built so the sound pipeline can EXECUTE the real Sega S16B Z80 sound
 driver offline and capture its YM2151/uPD7759 output — faithful by
 construction, no reimplementation of the driver's LFO/portamento math
-(SOUND_DRIVER.md). Deterministic, portable, works on any S16B sound ROM.
+(docs/sound/SOUND_DRIVER.md). Deterministic, portable, works on any S16B sound ROM.
 
 Full documented instruction set + CB/ED/DD/FD/DDCB/FDCB. Flags follow
 the documented Z80 (SZ-H-P/V-N-C); the undocumented F3/F5 (bits 3/5)

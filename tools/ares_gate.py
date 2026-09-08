@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ares-headless dump decoder + CI gate (LOOP24; HANDOFF-ARES.md).
+"""ares-headless dump decoder + CI gate (LOOP24; docs/handoff/HANDOFF-ARES.md).
 
 Consumes the two raw dumps produced by the ares-debug harness:
 
@@ -77,7 +77,7 @@ def metrics(d, w):
         "window_ack_mean": round(w32(0xA040) / vints, 1) if vints else None,
         "consume_mean": round(w32(0xA038) / wn, 1) if wn else None,
         "consume_max": w16(0xA03E),
-        # VISRFLIP family (all zero on non-probe builds; see LOOP24.md)
+        # VISRFLIP family (all zero on non-probe builds; see docs/log/LOOP24.md)
         "visr": {
             "fires": D(49),
             "isr_flips": D(58),

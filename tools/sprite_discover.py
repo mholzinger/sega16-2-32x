@@ -9,7 +9,7 @@ prints the answer job 2 needs: how many unique NATIVE-zoom sprite
 frames exist, what they cost in ROM, and how much of the per-frame
 decode load a bake of the top-N would actually cover.
 
-The budget is the measured one from LOOP17.md: 768KB free under the
+The budget is the measured one from docs/log/LOOP17.md: 768KB free under the
 4MB no-mapper ceiling.
 
 Per-frame bake layout assumed (must match tools/bake_sprites.py):

@@ -1,4 +1,4 @@
-/* sndtest secondary SH-2 — the PCM lane's home (SOUND.md P1). The
+/* sndtest secondary SH-2 — the PCM lane's home (docs/sound/SOUND.md P1). The
  * voice-pool mixer (sound.c) owns this CPU: init once, then pump
  * forever. amb_dma_handler lives in sound.c, reached via the DMA1 IRQ
  * chain in mars_start.s.

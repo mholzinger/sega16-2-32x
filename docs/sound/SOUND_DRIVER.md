@@ -17,7 +17,7 @@ captured each command in ISOLATION (soft-reset + read-gag). That severs
 the driver's per-note envelope/TL re-application, so regenerated music
 fades after a few bars (measured: TL/SL-RR registers written 1-2× over a
 14 s track vs 43-158× in a continuous capture). Decoding the sequence
-data statically sidesteps the capture entirely. See `HANDOFF-SOUND.md`.
+data statically sidesteps the capture entirely. See `docs/sound/HANDOFF-SOUND.md`.
 
 ## Hardware I/O (Z80 io space)
 

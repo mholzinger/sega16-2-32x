@@ -397,7 +397,7 @@ grid filled with Altered Beast's LIVE attract-mode palette — reds, skin
 tones, blues, greens, animating with the game. The full pipeline is proven:
 game code -> palette shadow (0xFFA000) -> shim COMM stream -> SH-2
 s16_to_mars (sBGR4443 -> BGR555) -> CRAM -> 32X display. Proof frame saved
-as docs_palette_proof.png (gitignored art? no - it's a palette grid, kept).
+as docs/proof/palette_proof.png (gitignored art? no - it's a palette grid, kept).
 
 Hardware-correctness fixes landed with it (d32xr-informed, srcref/d32xr):
 - d32xr treats RV as a BRIEF PULSE (bset/bclr around ROM-DMA only) and keeps
@@ -464,7 +464,7 @@ up to 63 text batches/frame, acked) -> SH-2 SDRAM text+pal shadows -> render
 40x28 visible window (cols 24..63, scrolldx -192) with SDRAM font tiles ->
 framebuffer. Text tile format (segaic16.cpp:1024): code=data&0x1FF,
 colour=(data>>9)&7, pal entry = colour*8+pen, pen0 transparent. Proof:
-docs_text_proof.png.
+docs/proof/text_proof.png.
 
 THE RV/FRAMEBUFFER TENSION (root, verified): SH-2 framebuffer (DRAM) writes
 are BLOCKED while RV=1 — even a solid fill is black in ares (CRAM writes are
@@ -491,7 +491,7 @@ Fixed the last ares gap: the SH-2 now draws BOTH framebuffers each render
 window (render_text / flip / render_text), so whichever buffer ares displays
 is always current — ares' flip timing no longer matters. ares now shows the
 game's text layer at 60 VPS: dark glyphs on the game's live maroon backdrop,
-identical to MAME. Proof: docs_text_ares.png.
+identical to MAME. Proof: docs/proof/text_ares.png.
 
 The complete, WORKING stage-C pipeline (both emulators):
   game 68K -> text RAM 0xFF8000 + palette 0xFFA000 shadows

@@ -1,0 +1,834 @@
+<title>One Frame of Altered Beast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#EEF1F2; --panel:#FFFFFF; --ink:#1B242C; --mute:#5B6770; --line:#C9D1D6;
+  --md:#1479A0; --md-soft:#DCEBF3; --sx:#C2552B; --sx-soft:#F6E3DB; --ac-soft:#E4E8EA;
+  --num:#8F5F0B; --num-soft:#F3E6C9;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:"Source Sans 3","Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12181D; --panel:#1A2229; --ink:#E4EAEE; --mute:#98A5AE; --line:#2E3A43;
+    --md:#3A9EC4; --md-soft:#17303C; --sx:#D8714B; --sx-soft:#3A241B; --ac-soft:#232C33;
+    --num:#E2A845; --num-soft:#3A2F17;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12181D; --panel:#1A2229; --ink:#E4EAEE; --mute:#98A5AE; --line:#2E3A43;
+  --md:#3A9EC4; --md-soft:#17303C; --sx:#D8714B; --sx-soft:#3A241B; --ac-soft:#232C33;
+  --num:#E2A845; --num-soft:#3A2F17;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--md)}
+.page{max-width:1240px;margin:0 auto;padding:0 24px 96px;display:grid;grid-template-columns:1fr;gap:0 40px}
+@media (min-width:1120px){.page{grid-template-columns:200px minmax(0,1fr)}}
+nav.toc{display:none}
+@media (min-width:1120px){
+  nav.toc{display:block;position:sticky;top:24px;align-self:start;padding-top:96px;font-size:13.5px}
+  nav.toc ol{list-style:none;margin:0;padding:0;border-left:1px solid var(--line)}
+  nav.toc li a{display:block;padding:5px 0 5px 14px;color:var(--mute);text-decoration:none;border-left:2px solid transparent;margin-left:-1px}
+  nav.toc li a:hover{color:var(--ink);border-left-color:var(--ink)}
+  nav.toc .n{font-family:var(--mono);font-size:11px;margin-right:6px;color:var(--mute)}
+}
+main{min-width:0}
+header.hero{padding:72px 0 28px;border-bottom:1px solid var(--line);margin-bottom:40px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(44px,6vw,72px);line-height:.95;letter-spacing:-.01em;margin:10px 0 18px;text-wrap:balance}
+.lede{font-size:21px;line-height:1.4;max-width:62ch;margin:0 0 28px}
+h2{font-family:var(--display);font-weight:600;font-size:34px;line-height:1.05;margin:64px 0 10px;text-wrap:balance;display:flex;align-items:baseline;gap:14px}
+h2 .n{font-family:var(--mono);font-size:14px;font-weight:400;color:var(--mute);letter-spacing:.06em}
+h3{font-family:var(--display);font-weight:600;font-size:22px;margin:32px 0 6px}
+p{max-width:68ch;margin:0 0 14px}
+ul,ol{max-width:68ch;padding-left:22px}
+li{margin:0 0 6px}
+code,kbd{font-family:var(--mono);font-size:.86em;background:var(--ac-soft);padding:1px 5px;border-radius:3px}
+.num{font-family:var(--mono);font-size:.92em;color:var(--num);font-weight:600}
+figure{margin:22px 0 28px;padding:18px 18px 14px;background:var(--panel);border:1px solid var(--line);overflow-x:auto}
+figure svg{display:block;max-width:100%;height:auto;min-width:640px;font-family:var(--body);font-size:12px;color:var(--ink)}
+figcaption{font-size:14px;color:var(--mute);margin-top:12px;max-width:80ch;line-height:1.45}
+figcaption b{color:var(--ink);font-weight:600}
+svg text{fill:currentColor}
+.tm{font-family:var(--mono);font-size:11px}
+.ts{font-size:10.5px;fill:var(--mute)}
+.tb{font-weight:600}
+.td{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.02em}
+.bx{fill:var(--panel);stroke:var(--ink);stroke-width:1.1}
+.bx-md{fill:var(--md-soft);stroke:var(--md);stroke-width:1.2}
+.bx-sx{fill:var(--sx-soft);stroke:var(--sx);stroke-width:1.2}
+.bx-ac{fill:var(--ac-soft);stroke:var(--ink);stroke-width:1}
+.bx-num{fill:var(--num-soft);stroke:var(--num);stroke-width:1}
+.pn{fill:none;stroke:var(--line);stroke-width:1}
+.pn-md{fill:none;stroke:var(--md);stroke-width:1;stroke-dasharray:3 3}
+.pn-sx{fill:none;stroke:var(--sx);stroke-width:1;stroke-dasharray:3 3}
+.ln{stroke:var(--ink);stroke-width:1.1;fill:none}
+.ln-md{stroke:var(--md);stroke-width:1.3;fill:none}
+.ln-sx{stroke:var(--sx);stroke-width:1.3;fill:none}
+.ln-soft{stroke:var(--line);stroke-width:1;fill:none}
+.dash{stroke-dasharray:4 3}
+.f-md{fill:var(--md)} .f-sx{fill:var(--sx)} .f-ink{fill:var(--ink)} .f-num{fill:var(--num)} .f-soft{fill:var(--line)} .f-mute{fill:var(--mute)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;color:var(--mute);margin:0 0 10px}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{width:14px;height:14px;border:1.5px solid;display:inline-block}
+.sw.md{background:var(--md-soft);border-color:var(--md)} .sw.sx{background:var(--sx-soft);border-color:var(--sx)} .sw.ac{background:var(--ac-soft);border-color:var(--ink)}
+table.facts{border-collapse:collapse;font-size:15px;margin:14px 0 20px;min-width:420px}
+table.facts th,table.facts td{text-align:left;padding:7px 14px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+table.facts th{font-weight:600;color:var(--mute);font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+table.facts td.v{font-family:var(--mono);font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.callout{border-left:3px solid var(--num);background:var(--num-soft);padding:12px 16px;margin:18px 0 22px;max-width:74ch}
+.callout p{margin:0}
+.src{font-size:13px;color:var(--mute);margin-top:6px}
+.src code{font-size:12px}
+/* ladder chart (HTML) */
+.bars{display:grid;grid-template-columns:max-content 1fr max-content;gap:6px 14px;align-items:center;font-size:14px;margin:14px 0 6px}
+.bars .lab{color:var(--ink)} .bars .lab small{display:block;color:var(--mute);font-size:12px}
+.bars .track{position:relative;height:12px;background:var(--ac-soft)}
+.bars .fill{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:0 3px 3px 0}
+.bars .fill.cal{background:repeating-linear-gradient(135deg,var(--mute) 0 3px,transparent 3px 6px)}
+.bars .fill.win{background:var(--sx)}
+.bars .val{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+.bars .thr{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--num)}
+.pair{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;align-items:center;font-size:14px;margin:12px 0 4px}
+.pair .row{display:grid;grid-template-columns:1fr;gap:3px}
+.pair .bar{height:9px;background:var(--mute);position:relative}
+.pair .bar.after{background:var(--sx)}
+.pair .bar i{position:absolute;left:calc(100% + 8px);top:-4px;font-style:normal;font-family:var(--mono);font-size:12px;white-space:nowrap}
+footer{margin-top:72px;padding-top:18px;border-top:1px solid var(--line);font-size:14px;color:var(--mute);max-width:74ch}
+@media (prefers-reduced-motion: no-preference){ nav.toc li a{transition:color .15s,border-color .15s} }
+:focus-visible{outline:2px solid var(--md);outline-offset:2px}
+</style>
+
+<div class="page">
+<nav class="toc" aria-label="Sections">
+<ol>
+<li><a href="#s1"><span class="n">01</span>Two machines</a></li>
+<li><a href="#s2"><span class="n">02</span>From ROM dumps to a cart</a></li>
+<li><a href="#s3"><span class="n">03</span>Rewiring the game's addresses</a></li>
+<li><a href="#s4"><span class="n">04</span>What a sprite is</a></li>
+<li><a href="#s5"><span class="n">05</span>What a tile is, and who is in front</a></li>
+<li><a href="#s6"><span class="n">06</span>The 68000's frame</a></li>
+<li><a href="#s7"><span class="n">07</span>The handoff</a></li>
+<li><a href="#s8"><span class="n">08</span>The SH-2s draw a generation</a></li>
+<li><a href="#s9"><span class="n">09</span>Where everything lives</a></li>
+<li><a href="#s10"><span class="n">10</span>The Mega Drive draws the planes</a></li>
+<li><a href="#s11"><span class="n">11</span>The composite</a></li>
+<li><a href="#s12"><span class="n">12</span>Why it works, and what is left</a></li>
+</ol>
+</nav>
+
+<main>
+<header class="hero">
+<div class="eyebrow">System 16B → Sega 32X · how the port draws a frame</div>
+<h1>One Frame of Altered Beast</h1>
+<p class="lede">A 1988 arcade board draws its picture with four dedicated chips, for free, every scanline. A 1994 Sega 32X has two fast CPUs and a framebuffer where every pixel is a store instruction. This page follows a sprite sheet from the ROM dumps on disk through both machines to the screen, and shows why the seven-year-younger console can keep up only by asking the Mega Drive's own video chip to help.</p>
+
+<figure>
+<svg viewBox="0 0 880 178" role="img" aria-label="Bar chart: the 32X framebuffer bandwidth allows 1.6 screen passes per frame at 60 Hz; the final blit alone costs 1.0, leaving 0.6 of a pass for five layers of arcade graphics.">
+<defs><pattern id="h0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--num);stroke-width:1.5"/></pattern></defs>
+<text x="260" y="18" class="td">The one number</text>
+<text x="260" y="34" class="ts">32X framebuffer write bandwidth, measured on ares: 6.76 MB/s. One 320×224 8-bit screen is 71,680 bytes.</text>
+<text x="250" y="66" text-anchor="end">Budget per frame at 60 Hz</text>
+<rect x="260" y="54" width="384" height="18" class="bx-num"/>
+<text x="652" y="68" class="tm f-num tb">1.6 passes</text>
+<text x="250" y="102" text-anchor="end">The final blit, sbuf → framebuffer</text>
+<rect x="260" y="90" width="240" height="18" class="f-sx"/>
+<text x="508" y="104" class="tm tb">1.0 pass, unavoidable</text>
+<text x="250" y="138" text-anchor="end">Left for BG, FG, sprites, text, priority</text>
+<rect x="500" y="126" width="144" height="18" fill="url(#h0)" style="stroke:var(--num);stroke-width:1"/>
+<text x="652" y="140" class="tm">0.6 of a pass, for five layers</text>
+<line x1="260" y1="156" x2="740" y2="156" class="ln-soft"/>
+<g class="tm f-mute" font-size="10">
+<line x1="260" y1="156" x2="260" y2="160" class="ln-soft"/><text x="260" y="171" text-anchor="middle">0</text>
+<line x1="380" y1="156" x2="380" y2="160" class="ln-soft"/><text x="380" y="171" text-anchor="middle">0.5</text>
+<line x1="500" y1="156" x2="500" y2="160" class="ln-soft"/><text x="500" y="171" text-anchor="middle">1.0</text>
+<line x1="620" y1="156" x2="620" y2="160" class="ln-soft"/><text x="620" y="171" text-anchor="middle">1.5</text>
+<line x1="740" y1="156" x2="740" y2="160" class="ln-soft"/><text x="740" y="171" text-anchor="middle">2.0 screen passes</text>
+</g>
+</svg>
+<figcaption><b>The framerate is this number, not a bug.</b> Any proposal that does not reduce screen passes cannot change the framerate. The port's first architecture composed both scroll planes, sprites and text in software and shipped a frame every three vints: 20 Hz. The current one hands the two scroll planes to the Mega Drive VDP and keeps the SH-2s for what only they can draw. Source: <code>ARCHITECTURE.md §1</code>.</figcaption>
+</figure>
+
+<div class="legend" aria-label="How to read the diagrams">
+<span><i class="sw ac"></i>arcade board / the unmodified game</span>
+<span><i class="sw md"></i>Mega Drive side: 68000, VDP, work RAM</span>
+<span><i class="sw sx"></i>32X side: SH-2s, SDRAM, framebuffer, 32X CRAM</span>
+<span><span class="num">amber</span> = a measured number from this repo</span>
+</div>
+</header>
+
+<!-- ============================================================ 01 -->
+<h2 id="s1"><span class="n">01</span>Two machines, one picture</h2>
+<p>System 16B is a 68000 at 10 MHz surrounded by video silicon. The CPU never touches a pixel: it writes tile numbers into tile RAM, sprite records into sprite RAM, colours into palette RAM, and the chips read those tables and paint the beam. The Mega Drive is built the same way, only smaller: its VDP draws two tile planes and 80 sprites from 64 KB of VRAM with 64 colours. The 32X adds two SH-2s, 256 KB of SDRAM and a 320×224 framebuffer whose output is mixed with the Mega Drive's video, pixel by pixel, on the way to the TV.</p>
+
+<figure>
+<svg viewBox="0 0 1000 372" role="img" aria-label="Block diagrams of the System 16B arcade board and of the Mega Drive plus 32X, showing CPUs, video chips, RAM, ROM and the composite output.">
+<defs>
+<marker id="a1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker>
+<marker id="a1m" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--md)"/></marker>
+<marker id="a1s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--sx)"/></marker>
+</defs>
+<!-- arcade panel -->
+<rect x="10" y="10" width="480" height="330" class="pn"/>
+<text x="24" y="30" class="td">System 16B arcade board · 1987</text>
+<rect x="30" y="50" width="130" height="40" class="bx-ac"/>
+<text x="95" y="67" text-anchor="middle" class="tb">68000 · 10 MHz</text>
+<text x="95" y="82" text-anchor="middle" class="ts">writes tables, never pixels</text>
+<!-- bus -->
+<path d="M95 90 V105 H410" class="ln"/>
+<path d="M80 105 V120" class="ln" marker-end="url(#a1)"/>
+<path d="M190 105 V120" class="ln" marker-end="url(#a1)"/>
+<path d="M300 105 V120" class="ln" marker-end="url(#a1)"/>
+<path d="M410 105 V120" class="ln" marker-end="url(#a1)"/>
+<!-- rams -->
+<rect x="30" y="120" width="100" height="40" class="bx"/><text x="80" y="136" text-anchor="middle" class="tb">tile RAM</text><text x="80" y="151" text-anchor="middle" class="tm">64 KB</text>
+<rect x="140" y="120" width="100" height="40" class="bx"/><text x="190" y="136" text-anchor="middle" class="tb">text RAM</text><text x="190" y="151" text-anchor="middle" class="tm">4 KB · regs</text>
+<rect x="250" y="120" width="100" height="40" class="bx"/><text x="300" y="136" text-anchor="middle" class="tb">sprite RAM</text><text x="300" y="151" text-anchor="middle" class="tm">2 KB · 128 × 16 B</text>
+<rect x="360" y="120" width="100" height="40" class="bx"/><text x="410" y="136" text-anchor="middle" class="tb">palette RAM</text><text x="410" y="151" text-anchor="middle" class="tm">2048 × 5-5-5</text>
+<!-- ram -> chips -->
+<path d="M80 160 V200" class="ln" marker-end="url(#a1)"/>
+<path d="M190 160 V180 H150 V200" class="ln" marker-end="url(#a1)"/>
+<path d="M300 160 V180 H250 V200" class="ln" marker-end="url(#a1)"/>
+<path d="M410 160 V200" class="ln" marker-end="url(#a1)"/>
+<!-- chips -->
+<rect x="30" y="200" width="150" height="44" class="bx-ac"/><text x="105" y="217" text-anchor="middle" class="tb">tilemap generator</text><text x="105" y="232" text-anchor="middle" class="ts">2 planes + text, rowscroll</text>
+<rect x="190" y="200" width="130" height="44" class="bx-ac"/><text x="255" y="217" text-anchor="middle" class="tb">sprite chip</text><text x="255" y="232" text-anchor="middle" class="ts">zoom ½–1, ragged strips</text>
+<rect x="350" y="200" width="120" height="44" class="bx-ac"/><text x="410" y="217" text-anchor="middle" class="tb">colour mixer</text><text x="410" y="232" text-anchor="middle" class="ts">10-deep priority, shadow</text>
+<!-- chips -> mixer -->
+<path d="M105 244 V258 H405 V244" class="ln" marker-end="url(#a1)"/>
+<path d="M255 244 V258" class="ln"/>
+<!-- roms -->
+<rect x="30" y="285" width="150" height="38" class="bx"/><text x="105" y="301" text-anchor="middle" class="tb">tile ROM · 384 KB</text><text x="105" y="316" text-anchor="middle" class="tm">3 chips = 3 bitplanes</text>
+<rect x="190" y="285" width="130" height="38" class="bx"/><text x="255" y="301" text-anchor="middle" class="tb">sprite ROM · 1 MB</text><text x="255" y="316" text-anchor="middle" class="tm">4 hi/lo byte pairs</text>
+<path d="M60 285 V244" class="ln" marker-end="url(#a1)"/>
+<path d="M300 285 V244" class="ln" marker-end="url(#a1)"/>
+<path d="M470 222 H488" class="ln" marker-end="url(#a1)"/>
+<text x="350" y="316" class="ts">mixer → CRT: 60 Hz, every layer free</text>
+<!-- MD panel -->
+<rect x="520" y="10" width="225" height="330" class="pn-md"/>
+<text x="532" y="30" class="td f-md">Mega Drive · 1988</text>
+<rect x="535" y="50" width="200" height="36" class="bx-md"/><text x="635" y="66" text-anchor="middle" class="tb">68000 · 7.67 MHz</text><text x="635" y="80" text-anchor="middle" class="ts">runs the arcade game, patched</text>
+<rect x="535" y="100" width="200" height="60" class="bx-md"/><text x="635" y="117" text-anchor="middle" class="tb">VDP</text><text x="635" y="132" text-anchor="middle" class="ts">VRAM 64 KB · 2 planes · 80 sprites</text><text x="635" y="147" text-anchor="middle" class="ts">64 colours: 4 × 16, 3 bits/ch</text>
+<rect x="535" y="175" width="95" height="40" class="bx-md"/><text x="582" y="191" text-anchor="middle" class="tb">work RAM</text><text x="582" y="206" text-anchor="middle" class="tm">64 KB</text>
+<rect x="640" y="175" width="95" height="40" class="bx-md"/><text x="687" y="191" text-anchor="middle" class="tb">Z80 · YM2612</text><text x="687" y="206" text-anchor="middle" class="ts">sound, later</text>
+<rect x="535" y="230" width="200" height="56" class="bx-md"/><text x="635" y="247" text-anchor="middle" class="tb">the 68000's view of the 32X</text><text x="635" y="262" text-anchor="middle" class="tm">FB window 0x840000</text><text x="635" y="277" text-anchor="middle" class="tm">COMM / DREQ regs 0xA151xx</text>
+<path d="M635 86 V100" class="ln-md" marker-end="url(#a1m)"/>
+<path d="M600 215 V230" class="ln-md" marker-end="url(#a1m)"/>
+<!-- 32X panel -->
+<rect x="770" y="10" width="220" height="330" class="pn-sx"/>
+<text x="782" y="30" class="td f-sx">32X · 1994</text>
+<rect x="785" y="50" width="190" height="30" class="bx-sx"/><text x="880" y="70" text-anchor="middle" class="tb">SH-2 master · 23 MHz</text>
+<rect x="785" y="86" width="190" height="30" class="bx-sx"/><text x="880" y="106" text-anchor="middle" class="tb">SH-2 slave · 23 MHz</text>
+<rect x="785" y="132" width="90" height="40" class="bx-sx"/><text x="830" y="148" text-anchor="middle" class="tb">SDRAM</text><text x="830" y="163" text-anchor="middle" class="tm">256 KB</text>
+<rect x="885" y="132" width="90" height="40" class="bx-sx"/><text x="930" y="148" text-anchor="middle" class="tb">cart ROM</text><text x="930" y="163" text-anchor="middle" class="tm">≤4 MB, shared bus</text>
+<rect x="785" y="188" width="190" height="44" class="bx-sx"/><text x="880" y="205" text-anchor="middle" class="tb">framebuffer · 2 banks × 128 KB</text><text x="880" y="221" text-anchor="middle" class="ts">every pixel is a CPU store</text>
+<rect x="785" y="246" width="190" height="40" class="bx-sx"/><text x="880" y="262" text-anchor="middle" class="tb">32X CRAM · 256 × 5-5-5</text><text x="880" y="277" text-anchor="middle" class="ts">bit 15 = show the MD pixel</text>
+<path d="M880 116 V132" class="ln-sx" marker-end="url(#a1s)"/>
+<path d="M830 172 V188" class="ln-sx" marker-end="url(#a1s)"/>
+<path d="M880 232 V246" class="ln-sx" marker-end="url(#a1s)"/>
+<!-- composite -->
+<path d="M735 130 H752 V318" class="ln-md" marker-end="url(#a1m)"/>
+<path d="M785 266 H764 V318" class="ln-sx" marker-end="url(#a1s)"/>
+<rect x="670" y="318" width="180" height="30" class="bx"/>
+<text x="760" y="331" text-anchor="middle" class="tb">per-pixel composite</text>
+<text x="760" y="344" text-anchor="middle" class="ts">32X in front or MD through → TV</text>
+<text x="500" y="362" class="ts">FM (0xA15100 bit 15) decides who owns the framebuffer: 0 = the 68000, 1 = the SH-2s. Nothing here is drawn for free.</text>
+</svg>
+<figcaption><b>The arcade side is four chips reading four tables.</b> The port has to become those chips. The tilemap generator has an obvious stand-in on the right, the MD VDP, if the tables can be delivered to it. The sprite chip has none: the VDP cannot zoom, cannot draw the ragged variable-width strips System 16 uses, and tops out at 20 sprites per scanline. Sources: Jotego's jts16 core, <code>jts16_obj_draw.v:70,107</code>; <code>ARCHITECTURE.md §4</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 02 -->
+<h2 id="s2"><span class="n">02</span>From ROM dumps to a cartridge image</h2>
+<p>Nothing is redrawn by hand. The build takes the arcade ROM set the author owns and converts each chip's contents into the shape the target CPU wants, at build time, once. The arcade's own program runs unmodified except for address patches. MAME's <code>-listxml</code> manifest tells the tools how the ROM files interleave, so the same scripts serve any System 16B title.</p>
+
+<figure>
+<svg viewBox="0 0 1000 340" role="img" aria-label="Build pipeline from arcade ROM files through conversion tools into the regions of the 32X cartridge image.">
+<defs><marker id="a2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker></defs>
+<text x="20" y="20" class="td">on disk: the arcade ROM set</text>
+<text x="330" y="20" class="td">build-time tools (Python)</text>
+<text x="690" y="20" class="td">the cart: rom/s16.32x</text>
+<!-- sources -->
+<rect x="20" y="34" width="240" height="40" class="bx-ac"/><text x="30" y="50" class="tb">68000 program ROMs</text><text x="30" y="65" class="ts">the game byte for byte, plus its i8751 MCU</text>
+<rect x="20" y="88" width="240" height="40" class="bx-ac"/><text x="30" y="104" class="tb">tile ROMs · opr-11674 / 75 / 76</text><text x="30" y="119" class="ts">3 × 128 KB, one bitplane each</text>
+<rect x="20" y="142" width="240" height="40" class="bx-ac"/><text x="30" y="158" class="tb">sprite ROMs · epr-11677..84</text><text x="30" y="173" class="ts">4 pairs, even byte = hi socket, odd = lo</text>
+<rect x="20" y="196" width="240" height="40" class="bx-ac"/><text x="30" y="212" class="tb">captured palette states</text><text x="30" y="227" class="ts">ares savestates from every scene</text>
+<rect x="20" y="250" width="240" height="40" class="bx"/><text x="30" y="266" class="tb">mame -listxml altbeast</text><text x="30" y="281" class="ts">names, sizes, offsets → interleave rules</text>
+<!-- tools -->
+<rect x="330" y="34" width="250" height="40" class="bx"/><text x="340" y="50" class="tm tb">patch_game.py</text><text x="340" y="65" class="ts">rebase every video/IO address (section 03)</text>
+<rect x="330" y="88" width="250" height="40" class="bx"/><text x="340" y="104" class="tm tb">gen_tiles.py · md_tiles.py</text><text x="340" y="119" class="ts">planes → 8bpp (SH-2) and 4bpp planar (VDP)</text>
+<rect x="330" y="142" width="250" height="40" class="bx"/><text x="340" y="158" class="tm tb">gen_sprites.py → bake_sprites.py</text><text x="340" y="173" class="ts">interleave to chip word order; pre-decode known frames</text>
+<rect x="330" y="196" width="250" height="40" class="bx"/><text x="340" y="212" class="tm tb">palpack · glow_bake · bake_mdspr</text><text x="340" y="227" class="ts">scene palettes, glow animator, MD sprite art</text>
+<path d="M260 54 H330" class="ln" marker-end="url(#a2)"/>
+<path d="M260 108 H330" class="ln" marker-end="url(#a2)"/>
+<path d="M260 162 H330" class="ln" marker-end="url(#a2)"/>
+<path d="M260 216 H330" class="ln" marker-end="url(#a2)"/>
+<path d="M260 270 H300 V108" class="ln dash"/>
+<path d="M300 162 H330" class="ln dash"/>
+<!-- cart -->
+<rect x="690" y="34" width="290" height="26" class="bx-md"/><text x="700" y="52" class="tm">68K shim · md_start.s + md_main.c</text>
+<rect x="690" y="60" width="290" height="34" class="bx-md"/><text x="700" y="74" class="tm">game_body.bin · the patched game</text><text x="700" y="88" class="ts">runs from the 0x900000 cart window</text>
+<rect x="690" y="94" width="290" height="26" class="bx-sx"/><text x="700" y="112" class="tm">SH-2 master + slave · m_main.c, s_main.c</text>
+<rect x="690" y="120" width="290" height="40" class="bx-sx"/><text x="700" y="136" class="tm">tiles.bin · 1 MB</text><text x="700" y="151" class="ts">16,384 tiles × 64 B, one byte per pixel</text>
+<rect x="690" y="160" width="290" height="40" class="bx-sx"/><text x="700" y="176" class="tm">sprites.bin · 1 MB</text><text x="700" y="191" class="ts">word i == what the sprite chip reads at i</text>
+<rect x="690" y="200" width="290" height="34" class="bx-sx"/><text x="700" y="214" class="tm">sprbake.bin · ≤768 KB</text><text x="700" y="228" class="ts">segment runs {skip, len, pens} per frame row</text>
+<rect x="690" y="234" width="290" height="34" class="bx-sx"/><text x="700" y="248" class="tm">pal_scenes.h · glow_tab.h · md_sprart.bin</text><text x="700" y="262" class="ts">tables in ROM; runtime does a lookup, not a search</text>
+<path d="M580 54 H630 V77 H690" class="ln" marker-end="url(#a2)"/>
+<path d="M580 108 H640 V140 H690" class="ln" marker-end="url(#a2)"/>
+<path d="M580 162 H650 V180 H690" class="ln" marker-end="url(#a2)"/>
+<path d="M580 175 H650 V217 H690" class="ln" marker-end="url(#a2)"/>
+<path d="M580 216 H660 V251 H690" class="ln" marker-end="url(#a2)"/>
+<text x="690" y="290" class="ts">Region guard: the SH-2 image must end</text><text x="690" y="302" class="ts">under 0x06019000 or the build fails.</text>
+<text x="690" y="318" class="ts">Every baked frame is re-decoded through a</text><text x="690" y="330" class="ts">port of the live algorithm before the ROM links.</text>
+</svg>
+<figcaption><b>The sprite sheet never becomes a PNG.</b> The sprite chip reads a 16-bit stream in which the even byte comes from one ROM socket and the odd byte from another, so <code>gen_sprites.py</code> interleaves the pairs and the SH-2 reads the result exactly as the arcade chip would. The bake is an optimisation on top: frames the game is known to use are pre-decoded into runs of pens, with the accuracy gate running before any ROM exists. Sources: <code>TOOLKIT.md</code>, <code>tools/bake_sprites.py</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 03 -->
+<h2 id="s3"><span class="n">03</span>Rewiring the game's addresses</h2>
+<p>The arcade program writes to hardware at fixed addresses: tile RAM at <code>0x400000</code>, sprite RAM at <code>0x440000</code>, palette at <code>0x840000</code>. On the Mega Drive those addresses are empty. <code>patch_game.py</code> disassembles the binary, finds every absolute operand in a hardware range and rewrites it to a place the Mega Drive 68000 can reach. Two destinations exist: Mega Drive work RAM, which the 68000 owns outright, and the 32X framebuffer window, which the 68000 sees at <code>0x840000</code> and the SH-2s see at <code>0x24000000</code>. Whatever the game writes there, the SH-2s can read in place.</p>
+
+<figure>
+<svg viewBox="0 0 960 392" role="img" aria-label="The six arcade hardware address ranges the game writes, and where each is redirected on the 32X: work RAM mirrors or framebuffer staging pages.">
+<defs>
+<marker id="a3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker>
+</defs>
+<text x="40" y="22" class="td">what the game thinks it writes</text>
+<text x="620" y="22" class="td">where the write actually lands</text>
+<text x="360" y="22" class="ts">patch_game.py rewrites the operand →</text>
+<!-- rows: y = 40 + i*50, h 40 -->
+<g>
+<rect x="40" y="40" width="300" height="40" class="bx-ac"/><text x="50" y="56" class="tm tb">0x3F0000</text><text x="120" y="56">tile bank registers</text><text x="50" y="71" class="ts">which 4 K tiles each plane page can reach</text>
+<rect x="620" y="40" width="300" height="40" class="bx-md"/><text x="630" y="56" class="tm tb">0xFFB040</text><text x="700" y="56">work-RAM shadow words</text><text x="630" y="71" class="ts">shipped in the per-vint packet</text>
+<path d="M340 60 H620" class="ln" marker-end="url(#a3)"/>
+</g>
+<g>
+<rect x="40" y="90" width="300" height="40" class="bx-ac"/><text x="50" y="106" class="tm tb">0x400000</text><text x="120" y="106">tile RAM · 64 KB</text><text x="50" y="121" class="ts">two scroll planes, 16 pages; read back for collision</text>
+<rect x="620" y="90" width="300" height="40" class="bx-sx"/><text x="630" y="106" class="tm tb">0x852000</text><text x="700" y="106">32X framebuffer staging</text><text x="630" y="121" class="ts">SH-2s read it in place; dirty pages captured pre-flip</text>
+<path d="M340 110 H620" class="ln" marker-end="url(#a3)"/>
+<text x="480" y="104" text-anchor="middle" class="ts">92% of frames write nothing here;</text><text x="480" y="116" text-anchor="middle" class="ts">the rest are 4–11 K-word storms</text>
+</g>
+<g>
+<rect x="40" y="140" width="300" height="40" class="bx-ac"/><text x="50" y="156" class="tm tb">0x410000</text><text x="120" y="156">text RAM · 4 KB</text><text x="50" y="171" class="ts">glyphs, plus the layer registers at 0x740–0x7FF</text>
+<rect x="620" y="140" width="150" height="40" class="bx-sx"/><text x="630" y="156" class="tm tb">0x85F000</text><text x="630" y="171" class="ts">glyphs → FB staging</text>
+<rect x="770" y="140" width="150" height="40" class="bx-md"/><text x="780" y="156" class="tm tb">0xFF8000</text><text x="780" y="171" class="ts">scroll regs → work RAM</text>
+<path d="M340 160 H620" class="ln" marker-end="url(#a3)"/>
+<text x="480" y="154" text-anchor="middle" class="ts">split by offset: regs are vint-context writes</text><text x="480" y="166" text-anchor="middle" class="ts">and must not be lost to FB arbitration</text>
+</g>
+<g>
+<rect x="40" y="190" width="300" height="40" class="bx-ac"/><text x="50" y="206" class="tm tb">0x440000</text><text x="120" y="206">sprite RAM · 2 KB</text><text x="50" y="221" class="ts">128 records × 16 bytes, rewritten every frame</text>
+<rect x="620" y="190" width="300" height="40" class="bx-md"/><text x="630" y="206" class="tm tb">0xFF7000</text><text x="700" y="206">work-RAM mirror</text><text x="630" y="221" class="ts">records ride the DREQ packet, 8 words each (§07)</text>
+<path d="M340 210 H620" class="ln" marker-end="url(#a3)"/>
+</g>
+<g>
+<rect x="40" y="240" width="300" height="40" class="bx-ac"/><text x="50" y="256" class="tm tb">0x840000</text><text x="120" y="256">palette RAM · 4 KB</text><text x="50" y="271" class="ts">2048 × 5-5-5; fades are read-modify-write</text>
+<rect x="620" y="240" width="300" height="40" class="bx-md"/><text x="630" y="256" class="tm tb">0xFF9000</text><text x="700" y="256">work-RAM mirror, the live palette</text><text x="630" y="271" class="ts">thunks mark 64 dirty blocks; only dirty blocks ship</text>
+<path d="M340 260 H620" class="ln" marker-end="url(#a3)"/>
+<text x="480" y="254" text-anchor="middle" class="ts">reads must hit real RAM:</text><text x="480" y="266" text-anchor="middle" class="ts">FB staging is per bank; a fade would read zeros</text>
+</g>
+<g>
+<rect x="40" y="290" width="300" height="40" class="bx-ac"/><text x="50" y="306" class="tm tb">0xC40000</text><text x="120" y="306">I/O: coins, sticks, DIPs, MCU</text><text x="50" y="321" class="ts">the i8751 protection MCU also lives here</text>
+<rect x="620" y="290" width="300" height="40" class="bx-md"/><text x="630" y="306" class="tm tb">0xFFC0xx</text><text x="700" y="306">mailbox bytes</text><text x="630" y="321" class="ts">the 68K shim emulates the MCU and reads the pads</text>
+<path d="M340 310 H620" class="ln" marker-end="url(#a3)"/>
+</g>
+<!-- thunk note -->
+<rect x="40" y="342" width="880" height="40" class="bx-num"/>
+<text x="50" y="357" class="tm">write-observer thunk: jsr (thunk).w → OR a dirty bit → run the displaced instruction → rts</text>
+<text x="50" y="373" class="tm">every TAS is replaced too: the MD bus arbiter drops its write half, so tas/bne one-shot latches re-fire forever</text>
+</svg>
+<figcaption><b>Mirroring the writes is easy; knowing what changed is the hard part.</b> Diffing the palette mirror every vint cost 45 of the 68000's 92 handler scanlines to discover nothing had changed. The fix is the thunk: each write site is patched to jump through a four-byte stub in work RAM that sets a dirty bit, then runs the instruction it displaced. The shim ships only dirty units. The enumeration is the dangerous part, so a MAME write-tap census validates every hand-derived site list. Sources: <code>tools/patch_game.py</code>, <code>TOOLKIT.md</code> "Trapping the game's writes".</figcaption>
+</figure>
+
+<!-- ============================================================ 04 -->
+<h2 id="s4"><span class="n">04</span>What a sprite is</h2>
+<p>A System 16B sprite is not a bitmap. It is a 16-byte record that tells the sprite chip where to start reading ROM, how far to step per row, how much to shrink, and which of 64 colour sets to paint with. The chip walks the ROM a word at a time, four pixels per word, until it meets a nibble of <code>0xF</code>, which ends the row. Rows can be any width, so a frame is a ragged strip, not a rectangle. Zoom is an accumulator that skips source pixels as it overflows, in 32 steps down to half size. The werewolf transformation rides on this, and it is the first reason sprites cannot go to the Mega Drive's sprite hardware.</p>
+
+<figure>
+<svg viewBox="0 0 1080 372" role="img" aria-label="The eight-word System 16B sprite record with its bit fields, the ROM strip walk that produces pixels, and the two decode paths the port uses.">
+<defs><marker id="a4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker></defs>
+<text x="40" y="22" class="td">one sprite record: 8 words in sprite RAM, up to 128 per frame</text>
+<g class="tm">
+<rect x="40" y="36" width="140" height="70" class="bx-ac"/><text x="46" y="50" class="tb">w0</text><text x="46" y="66">bottom [15:8]</text><text x="46" y="80">top [7:0]</text><text x="46" y="94" class="ts">screen rows</text>
+<rect x="180" y="36" width="140" height="70" class="bx-ac"/><text x="186" y="50" class="tb">w1</text><text x="186" y="66">x [8:0]</text><text x="186" y="80" class="ts">screen origin −184</text>
+<rect x="320" y="36" width="140" height="70" class="bx-ac"/><text x="326" y="50" class="tb">w2</text><text x="326" y="66">end[15] hide[14]</text><text x="326" y="80">flip[8]</text><text x="326" y="94">pitch[7:0], signed</text>
+<rect x="460" y="36" width="140" height="70" class="bx-ac"/><text x="466" y="50" class="tb">w3</text><text x="466" y="66">ROM word address</text><text x="466" y="80" class="ts">first row's start</text>
+<rect x="600" y="36" width="140" height="70" class="bx-ac"/><text x="606" y="50" class="tb">w4</text><text x="606" y="66">bank[11:8] pri[7:6]</text><text x="606" y="80">colour set[5:0]</text>
+<rect x="740" y="36" width="140" height="70" class="bx-ac"/><text x="746" y="50" class="tb">w5</text><text x="746" y="66">zoom [9:0]</text><text x="746" y="80" class="ts">0 = native size</text>
+<rect x="880" y="36" width="160" height="70" class="bx"/><text x="886" y="50" class="tb">w6, w7</text><text x="886" y="66">chip scratch</text><text x="886" y="80" class="ts">port uses w2 bit 13 =</text><text x="886" y="94" class="ts">"the MD VDP drew this"</text>
+</g>
+<text x="40" y="138" class="td">how the chip turns it into pixels</text>
+<g class="tm">
+<text x="40" y="160">ROM words from w3, bank w4:</text>
+<rect x="40" y="168" width="52" height="24" class="bx"/><text x="66" y="185" text-anchor="middle">3 3 1 1</text>
+<rect x="96" y="168" width="52" height="24" class="bx"/><text x="122" y="185" text-anchor="middle">1 2 2 3</text>
+<rect x="152" y="168" width="52" height="24" class="bx"/><text x="178" y="185" text-anchor="middle">3 0 0 F</text>
+<text x="212" y="185" class="ts">← nibble F ends the row</text>
+<text x="40" y="216">→ pixels, 4 per word:</text>
+<g>
+<rect x="40" y="224" width="12" height="12" class="f-sx"/><rect x="52" y="224" width="12" height="12" class="f-sx"/><rect x="64" y="224" width="12" height="12" class="f-md"/><rect x="76" y="224" width="12" height="12" class="f-md"/>
+<rect x="88" y="224" width="12" height="12" class="f-md"/><rect x="100" y="224" width="12" height="12" class="f-num"/><rect x="112" y="224" width="12" height="12" class="f-num"/><rect x="124" y="224" width="12" height="12" class="f-sx"/>
+<rect x="136" y="224" width="12" height="12" class="f-sx"/><rect x="148" y="224" width="12" height="12" class="pn"/><rect x="160" y="224" width="12" height="12" class="pn"/>
+<text x="180" y="234" class="ts">pens 1–14 index the colour set; 0 is transparent</text>
+</g>
+<text x="40" y="262">next row: address += pitch</text>
+<text x="40" y="276" class="ts">a negative pitch walks backwards = horizontal flip</text>
+<text x="40" y="298">zoom: a 5-bit step accumulates per pixel;</text>
+<text x="40" y="312" class="ts">on overflow a source pixel is skipped (jts16_obj_draw.v:70)</text>
+<text x="40" y="334">shadow: colour set 0x3F paints nothing;</text>
+<text x="40" y="348" class="ts">it darkens what is beneath by ×0.75 (jts16_colmix.v:80–89)</text>
+</g>
+<rect x="600" y="130" width="440" height="96" class="bx-sx"/>
+<text x="610" y="148" class="tb">live decoder · compose_sprites, hot code in SDRAM</text>
+<text x="610" y="165" class="ts">reads sprites.bin from cart ROM word by word: the chip's own walk</text>
+<text x="610" y="180" class="ts">handles zoom, flip, shadow and per-pixel priority gating</text>
+<text x="610" y="195" class="ts">the most expensive compose work; zoomed frames cost most</text>
+<text x="610" y="210" class="ts">used for every frame the bake cannot reproduce byte for byte</text>
+<rect x="600" y="240" width="440" height="110" class="bx-sx"/>
+<text x="610" y="258" class="tb">baked fast path · SPRBAKE, native-zoom frames only</text>
+<text x="610" y="275" class="ts">key = (address, pitch + flip, bank, height): what fixes the pixels</text>
+<text x="610" y="290" class="ts">a row is runs of {skip, len, pens}; the inner loop is a copy + one add</text>
+<text x="610" y="305" class="ts">the colour set is NOT baked: base = pair &lt;&lt; 4 is added at draw time,</text>
+<text x="610" y="320" class="ts">so one baked frame serves every palette the game uses it with</text>
+<text x="610" y="338" class="ts">gate: every baked frame re-decoded offline and compared byte for byte</text>
+<path d="M670 106 V118 H820 V130" class="ln dash" marker-end="url(#a4)"/>
+<text x="40" y="368" class="ts">Either way a pen lands in sbuf as one byte per pixel, and the blit moves it once more.</text>
+</svg>
+<figcaption><b>Two decoders, one truth.</b> The bake is only allowed to replace the live decoder where the two produce identical bytes, and the build proves that offline for every baked frame at a sweep of x positions. Zoomed, shadow and priority-gated sprites stay on the live path. Sources: <code>sh_src/m_main.c compose_sprites</code>, <code>tools/bake_sprites.py</code>, Jotego's jts16 core <code>jts16_obj_draw.v</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 05 -->
+<h2 id="s5"><span class="n">05</span>What a tile is, and who is in front of whom</h2>
+<p>The two scroll planes and the text layer are grids of 8×8 tiles. Each cell in tile RAM is one 16-bit word naming a tile and one of 128 colour sets of eight pens. Bit 15 marks a priority tile, one that draws in front of most sprites. The tile pixels themselves are three bitplanes in three separate ROM chips, so a pen is 0 to 7. The arcade mixer then sorts ten layers per pixel: two text categories, two foreground categories, two background categories, and sprites at four priority levels interleaved between them. That interleaving is the second, subtler, reason the split across two chips is hard.</p>
+
+<figure>
+<svg viewBox="0 0 960 340" role="img" aria-label="The tilemap word's bit fields, how three bitplanes make a pen, and the ten-deep System 16 priority chain coloured by which chip now draws each layer.">
+<text x="40" y="22" class="td">one tilemap cell: a 16-bit word</text>
+<g class="tm">
+<g>
+<rect x="40" y="34" width="26" height="30" class="bx-ac"/><text x="53" y="53" text-anchor="middle">15</text>
+<rect x="66" y="34" width="52" height="30" class="bx"/><text x="92" y="53" text-anchor="middle" class="ts">14 13</text>
+<rect x="118" y="34" width="182" height="30" class="bx-ac"/><text x="209" y="53" text-anchor="middle">12 … 6</text>
+<rect x="300" y="34" width="156" height="30" class="bx-ac"/><text x="378" y="53" text-anchor="middle">5 … 0</text>
+</g>
+<path d="M53 64 V78" class="ln"/><text x="53" y="92" text-anchor="middle">priority</text><text x="53" y="104" text-anchor="middle" class="ts">"cat 1"</text>
+<path d="M118 70 H300" class="ln"/><path d="M118 64 V70 M300 64 V70" class="ln"/><text x="209" y="84" text-anchor="middle">colour set, 7 bits → 128 sets × 8 pens</text>
+<path d="M118 100 H456" class="ln"/><path d="M118 94 V100 M456 94 V100" class="ln"/><text x="287" y="114" text-anchor="middle">tile code, 13 bits; bank register remaps when bit 12 is set</text>
+</g>
+<!-- planes -->
+<text x="560" y="22" class="td">one tile pixel: 3 bitplanes → pen 0–7</text>
+<g class="tm">
+<rect x="560" y="34" width="90" height="22" class="bx-ac"/><text x="605" y="49" text-anchor="middle">opr-11674 bit</text>
+<rect x="560" y="60" width="90" height="22" class="bx-ac"/><text x="605" y="75" text-anchor="middle">opr-11675 bit</text>
+<rect x="560" y="86" width="90" height="22" class="bx-ac"/><text x="605" y="101" text-anchor="middle">opr-11676 bit</text>
+<path d="M650 45 H690 V71 M650 71 H690 M650 97 H690 V71" class="ln"/>
+<path d="M690 71 H720" class="ln"/>
+<rect x="720" y="58" width="200" height="26" class="bx"/><text x="820" y="75" text-anchor="middle">pen = b2 b1 b0 → set's colour</text>
+<text x="560" y="128" class="ts">pen 0: transparent in FG/text, opaque in BG (prio.v:87)</text>
+<text x="560" y="142" class="ts">priority tiles lose to sprites where pen [2:0] = 0 (prio.v:61)</text>
+</g>
+<!-- chain -->
+<text x="40" y="180" class="td">the arcade's priority chain, front to back (jts16_prio.v:84–95)</text>
+<g>
+<text x="40" y="200" class="ts">front</text>
+<text x="920" y="200" text-anchor="end" class="ts">back</text>
+<g class="tm">
+<rect x="40" y="206" width="82" height="46" class="bx-sx"/><text x="81" y="225" text-anchor="middle" class="tb">T1</text><text x="81" y="240" text-anchor="middle" class="ts">text, cat 1</text>
+<rect x="128" y="206" width="82" height="46" class="bx-sx"/><text x="169" y="225" text-anchor="middle" class="tb">S3</text><text x="169" y="240" text-anchor="middle" class="ts">sprites pri 3</text>
+<rect x="216" y="206" width="82" height="46" class="bx-sx"/><text x="257" y="225" text-anchor="middle" class="tb">T0</text><text x="257" y="240" text-anchor="middle" class="ts">text, cat 0</text>
+<rect x="304" y="206" width="82" height="46" class="bx-sx"/><text x="345" y="225" text-anchor="middle" class="tb">F1</text><text x="345" y="240" text-anchor="middle" class="ts">FG priority</text>
+<rect x="392" y="206" width="82" height="46" class="bx-sx"/><text x="433" y="225" text-anchor="middle" class="tb">S2</text><text x="433" y="240" text-anchor="middle" class="ts">sprites pri 2</text>
+<rect x="480" y="206" width="82" height="46" class="bx-md"/><text x="521" y="225" text-anchor="middle" class="tb">F0</text><text x="521" y="240" text-anchor="middle" class="ts">FG → Plane A</text>
+<rect x="568" y="206" width="82" height="46" class="bx-md"/><text x="609" y="225" text-anchor="middle" class="tb">B1</text><text x="609" y="240" text-anchor="middle" class="ts">BG → Plane B</text>
+<rect x="656" y="206" width="82" height="46" class="bx-sx"/><text x="697" y="225" text-anchor="middle" class="tb">S1</text><text x="697" y="240" text-anchor="middle" class="ts">sprites pri 1</text>
+<rect x="744" y="206" width="82" height="46" class="bx-md"/><text x="785" y="225" text-anchor="middle" class="tb">B0</text><text x="785" y="240" text-anchor="middle" class="ts">BG → Plane B</text>
+<rect x="832" y="206" width="82" height="46" class="bx-sx"/><text x="873" y="225" text-anchor="middle" class="tb">S0</text><text x="873" y="240" text-anchor="middle" class="ts">sprites pri 0</text>
+</g>
+<path d="M40 262 H474" class="ln-sx"/><text x="257" y="278" text-anchor="middle" class="ts">everything in front of F0 is drawn by the SH-2s into the framebuffer</text>
+<path d="M480 262 H914" class="ln-md"/><text x="697" y="278" text-anchor="middle" class="ts">the Mega Drive VDP draws F0 and both BG categories; S0/S1 sprites land in front of them</text>
+<text x="40" y="300" class="ts">The 32X composites against MD video across exactly ONE boundary: a 32X pixel is either in front of the whole MD picture or lets it through.</text>
+<text x="40" y="314" class="ts">Keeping F1 on the 32X, painted after the sprites, preserves "the player walks behind the foreground scenery".</text>
+<text x="40" y="328" class="ts">Measured cost: FG priority tiles are ~26% of visible cells; BG priority tiles ~4 per screen.</text>
+</svg>
+<figcaption><b>The split is decided by priority, not colour.</b> Colour looked like the wall (128 arcade sets against 4 Mega Drive palettes) and turned out to be a grind: quantised to 3 bits per channel the worst scene needs 36 distinct tile colours, and three MD palette lines hold 45. Priority is what fixes which layer goes to which chip. Sources: <code>ARCHITECTURE.md §4, §11, §17</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 06 -->
+<h2 id="s6"><span class="n">06</span>The 68000's frame</h2>
+<p>From here on, the page follows one frame at 60 Hz. NTSC gives 262 scanlines per frame, and the arcade game was written for a 10 MHz 68000. On the Mega Drive it runs at 7.67 MHz, and it shares its frame with the shim: the vertical-interrupt handler that delivers the game's tables to the SH-2s and the VDP. The game's own frame protocol is unforgiving. It clears a flag, runs its pass, and spins until its interrupt sets the flag again, so a frame is exactly one vint or exactly two. Nothing in between.</p>
+
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Timeline of one NTSC frame in scanlines showing the 68000's vint handler segments, the game's own interrupt and game pass overshooting the 262-line frame by about 47 lines.">
+<defs><pattern id="h6" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--num);stroke-width:1.5"/></pattern></defs>
+<text x="60" y="20" class="td">the 68000's frame, in scanlines (ship build, level-1 gameplay, ares)</text>
+<text x="60" y="52" class="ts">68000</text>
+<g>
+<rect x="60" y="58" width="51" height="30" class="bx-md"/>
+<rect x="111" y="58" width="65" height="30" class="bx-md"/>
+<rect x="176" y="58" width="24" height="30" class="bx-md"/>
+<rect x="200" y="58" width="27" height="30" class="bx-md"/>
+<rect x="227" y="58" width="94" height="30" class="bx-ac"/>
+<rect x="321" y="58" width="570" height="30" class="bx-ac"/>
+<rect x="764" y="58" width="127" height="30" fill="url(#h6)" style="stroke:none"/>
+</g>
+<g class="tm tb">
+<text x="85" y="78" text-anchor="middle">a</text><text x="143" y="78" text-anchor="middle">b</text><text x="188" y="78" text-anchor="middle">c</text><text x="213" y="78" text-anchor="middle">d</text><text x="274" y="78" text-anchor="middle">e</text><text x="540" y="78" text-anchor="middle">f · the game's pass</text>
+</g>
+<!-- key -->
+<g class="ts">
+<text x="60" y="112"><tspan class="tm tb">a</tspan>  0–19    shim prologue + DMA of the Mega Drive's plane data</text>
+<text x="60" y="126"><tspan class="tm tb">b</tspan>  19–43   palette rotor + compares (the largest shim item)</text>
+<text x="60" y="140"><tspan class="tm tb">c</tspan>  43–52   dirty-block selection</text>
+<text x="60" y="154"><tspan class="tm tb">d</tspan>  52–62   regs, rowscroll, sprite records → DREQ push + ack</text>
+<text x="60" y="168"><tspan class="tm tb">e</tspan>  62–97   the game's own IRQ4 handler, ~35 lines</text>
+<text x="60" y="182"><tspan class="tm tb">f</tspan>  97–309  the game's pass, ~212 lines, incl. spins in the FM-gate thunks while the SH-2s hold the FB</text>
+</g>
+<line x1="764" y1="40" x2="764" y2="200" style="stroke:var(--num);stroke-width:1.5"/>
+<text x="770" y="50" class="tm f-num tb">262: next vint</text>
+<text x="770" y="112" class="tm f-num">~47 lines over</text>
+<text x="770" y="126" class="ts">→ this frame takes 2 vints</text>
+<text x="770" y="140" class="ts">→ 30 Hz for this frame</text>
+<text x="60" y="212" class="ts">SH-2s, same frame</text>
+<rect x="60" y="218" width="200" height="22" class="bx-sx"/><text x="160" y="233" text-anchor="middle" class="ts">FM=1: blit the finished frame into the FB</text>
+<rect x="260" y="218" width="504" height="22" class="pn-sx"/><text x="512" y="233" text-anchor="middle" class="ts">FM=0: the 68000 owns the FB; the SH-2s compose the next generation in SDRAM</text>
+<line x1="60" y1="258" x2="920" y2="258" class="ln-soft"/>
+<g class="tm f-mute" font-size="10">
+<text x="60" y="272" text-anchor="middle">0</text><text x="194" y="272" text-anchor="middle">50</text><text x="329" y="272" text-anchor="middle">100</text><text x="463" y="272" text-anchor="middle">150</text><text x="597" y="272" text-anchor="middle">200</text><text x="732" y="272" text-anchor="middle">250</text><text x="866" y="272" text-anchor="middle">300 lines</text>
+<line x1="60" y1="258" x2="60" y2="262" class="ln-soft"/><line x1="194" y1="258" x2="194" y2="262" class="ln-soft"/><line x1="329" y1="258" x2="329" y2="262" class="ln-soft"/><line x1="463" y1="258" x2="463" y2="262" class="ln-soft"/><line x1="597" y1="258" x2="597" y2="262" class="ln-soft"/><line x1="732" y1="258" x2="732" y2="262" class="ln-soft"/><line x1="866" y1="258" x2="866" y2="262" class="ln-soft"/>
+</g>
+<text x="60" y="294" class="ts">Segments decoded from HV-counter stamps in work RAM (HANDOFF-SESSION8 §7). The shim's ~62 lines are the same on every build, blit or no blit.</text>
+</svg>
+<figcaption><b>Speed is a threshold, not a slope.</b> The 68000's frame is about 310 lines against a 262-line budget, so half the gameplay frames spill into a second vint. Cutting 16 lines from the handler moves nothing; cutting enough to cross 262 moves everything. Measured on the ship build: <span class="num">50.4%</span> of gameplay frames finish inside one vint. Two cuts that are worth zero alone were worth <span class="num">+5.8 points</span> together, once the frame sat at the edge. Sources: <code>docs/handoff/HANDOFF-SESSION8.md §2, §7</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 07 -->
+<h2 id="s7"><span class="n">07</span>The handoff: one packet per vint</h2>
+<p>Everything the SH-2s need from the game that does not already sit in the framebuffer crosses in one packet, once per vint, through the 32X's DREQ FIFO. The 68000 writes words into a register; the SH-2 master's DMA controller drains them into SDRAM with no CPU involved. The protocol around it exists because the FIFO drops words when the SH-2 is busy on the bus, so the packet carries an exact length and a magic tail, and a torn landing is reported back so the 68000 can re-send what was lost.</p>
+
+<figure>
+<svg viewBox="0 0 960 364" role="img" aria-label="Sequence between the 68000 and the SH-2 master for one vint: announce, arm DMA, raise FM, push the packet, land in SDRAM, validate, echo torn; plus the packet's word layout.">
+<defs>
+<marker id="a7" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker>
+</defs>
+<!-- lanes -->
+<line x1="40" y1="70" x2="920" y2="70" class="ln-md"/>
+<text x="40" y="40" class="td f-md">Mega Drive 68000 · vint handler</text>
+<line x1="40" y1="190" x2="920" y2="190" class="ln-sx"/>
+<text x="40" y="140" class="td f-sx">SH-2 master</text>
+<g class="ts">
+<!-- 68K events -->
+<rect x="40" y="48" width="140" height="44" class="bx-md"/><text x="46" y="63" class="tb" style="fill:var(--ink)">gates</text><text x="46" y="76">V-count 0xDF–0xE8?</text><text x="46" y="88">COMM0 == 0 (master idle)?</text>
+<rect x="190" y="48" width="140" height="44" class="bx-md"/><text x="196" y="63" class="tb" style="fill:var(--ink)">announce</text><text x="196" y="76">COMM6 ← 0xB101</text><text x="196" y="88">consume MD-plane packets</text>
+<rect x="340" y="48" width="130" height="44" class="bx-md"/><text x="346" y="63" class="tb" style="fill:var(--ink)">raise FM, post</text><text x="346" y="76">0xA15100 bit 15 ← 1</text><text x="346" y="88">COMM0 ← command</text>
+<rect x="490" y="48" width="170" height="44" class="bx-md"/><text x="496" y="63" class="tb" style="fill:var(--ink)">push</text><text x="496" y="76">words → FIFO 0xA15112</text><text x="496" y="88">4-word bursts, ~85 cycles each</text>
+<rect x="790" y="48" width="140" height="44" class="bx-md"/><text x="796" y="63" class="tb" style="fill:var(--ink)">re-mark on 0xBAD1</text><text x="796" y="76">dirty bits back on the</text><text x="796" y="88">blocks that push carried</text>
+<!-- SH-2 events -->
+<rect x="190" y="150" width="140" height="44" class="bx-sx"/><text x="196" y="165" class="tb" style="fill:var(--ink)">V-ISR arms DMAC ch0</text><text x="196" y="178">SAR = FIFO 0x20004012</text><text x="196" y="190">DAR = SDRAM 0x39000, 936 w</text>
+<rect x="490" y="150" width="150" height="44" class="bx-sx"/><text x="496" y="165" class="tb" style="fill:var(--ink)">DMA lands the packet</text><text x="496" y="178">FIFO → DMAC → SPR_LAND</text><text x="496" y="190">zero CPU cost</text>
+<rect x="640" y="150" width="150" height="44" class="bx-sx"/><text x="646" y="165" class="tb" style="fill:var(--ink)">harvest</text><text x="646" y="178">length stable 192 ticks?</text><text x="646" y="190">landed == tag length? tail?</text>
+<rect x="790" y="150" width="140" height="44" class="bx-sx"/><text x="796" y="165" class="tb" style="fill:var(--ink)">ok → SPR_SNAP</text><text x="796" y="178">torn → COMM8 ← 0xBAD1</text><text x="796" y="190">stale beats torn: keep last</text>
+</g>
+<!-- cross arrows -->
+<path d="M255 92 V150" class="ln" marker-end="url(#a7)"/>
+<path d="M565 92 V150" class="ln" marker-end="url(#a7)"/>
+<path d="M860 150 V92" class="ln" marker-end="url(#a7)"/>
+<text x="40" y="215" class="ts">The master waits for the landing before its FM span, so the FIFO drains against an idle bus. A torn push loses at most one vint of palette or scroll.</text>
+<text x="40" y="229" class="ts">Sprite records ride every packet regardless. MAME lands none of these packets (its FIFO model differs); ares and hardware land 233 of 234.</text>
+<!-- packet layout -->
+<text x="40" y="262" class="td">the packet, in 16-bit words (R60 layout v3)</text>
+<g class="tm">
+<rect x="40" y="272" width="100" height="30" class="bx"/><text x="90" y="291" text-anchor="middle">regs · 20</text>
+<rect x="140" y="272" width="40" height="30" class="bx"/><text x="160" y="291" text-anchor="middle">bm</text>
+<rect x="180" y="272" width="40" height="30" class="bx"/><text x="200" y="291" text-anchor="middle">tag</text>
+<rect x="220" y="272" width="150" height="30" class="bx dash"/><text x="295" y="291" text-anchor="middle">rowscroll · 60, optional</text>
+<rect x="370" y="272" width="110" height="30" class="bx dash"/><text x="425" y="291" text-anchor="middle">len + 8 id words</text>
+<rect x="480" y="272" width="180" height="30" class="bx dash"/><text x="570" y="291" text-anchor="middle">K pal blocks, word deltas</text>
+<rect x="660" y="272" width="200" height="30" class="bx"/><text x="760" y="291" text-anchor="middle">n sprite records × 8</text>
+<rect x="860" y="272" width="60" height="30" class="bx"/><text x="890" y="291" text-anchor="middle">tail</text>
+</g>
+<g class="ts">
+<text x="90" y="318" text-anchor="middle">layer scroll + page regs</text>
+<text x="180" y="334" text-anchor="middle">bm = dirty tile pages · tag = exact length + flags</text>
+<text x="295" y="318" text-anchor="middle">only when the game row-scrolls</text>
+<text x="570" y="318" text-anchor="middle">2 mask words + changed entries, vs 32 raw</text>
+<text x="760" y="318" text-anchor="middle">max 40, terminator inside</text>
+<text x="890" y="318" text-anchor="middle">A55A 5AA5</text>
+<text x="40" y="352">max 924 words; palette deltas cut the typical push about 3× (151 → ~51 words). Every length is a multiple of 4: the FIFO drains in 4-word bursts and an odd tail never completes.</text>
+</g>
+</svg>
+<figcaption><b>Zero-copy on the receiving side.</b> The SH-2's interrupt handler programs four DMA registers and returns; the words arrive in SDRAM while it does other work. This is the shape Knuckles' Chaotix used for its display list, learned from reading the shipped cartridge. Sources: <code>md_src/packet_fmt.h</code>, <code>md_src/md_main.c r60_push</code>, <code>ARCHITECTURE.md §2</code> Model B.</figcaption>
+</figure>
+
+<!-- ============================================================ 08 -->
+<h2 id="s8"><span class="n">08</span>The SH-2s draw a generation</h2>
+<p>The SH-2 side works in generations, and a generation is a whole frame. Nothing smaller is ever scheduled or shipped, because an earlier design that composed and shipped the screen in three bands let one band freeze while the others moved, which the eye reads instantly. The master latches every input of the frame at one instant, hands the slave one command, and the slave composes the entire screen into a staging buffer in SDRAM. Only when the slave has echoed completion does the frame ship, both CPUs blitting half each, inside the window where they own the framebuffer. The vertical-interrupt handler then flips only a bank that was freshly written.</p>
+
+<figure>
+<svg viewBox="0 0 960 340" role="img" aria-label="Timeline of one whole-frame generation across the SH-2 master, the SH-2 slave, the staging buffer and the two framebuffer banks: launch, compose in three bands, close, ship, flip.">
+<defs><marker id="a8" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker></defs>
+<g class="ln-soft"><line x1="120" y1="30" x2="120" y2="272"/><line x1="500" y1="30" x2="500" y2="272"/><line x1="880" y1="30" x2="880" y2="272"/></g>
+<g class="tm f-mute" font-size="10"><text x="120" y="24" text-anchor="middle">vint n</text><text x="500" y="24" text-anchor="middle">vint n+1</text><text x="880" y="24" text-anchor="middle">vint n+2</text></g>
+<text x="40" y="62" class="td f-sx" font-size="13">master</text>
+<rect x="120" y="42" width="170" height="44" class="bx-sx"/><text x="128" y="57" class="tb">LAUNCH</text><text x="128" y="70" class="ts">latch regs + rowscroll,</text><text x="128" y="81" class="ts">snapshot records, command the slave</text>
+<rect x="290" y="42" width="180" height="44" class="bx-sx"/><text x="298" y="57" class="tb">build the MD's packets</text><text x="298" y="70" class="ts">name-table chunks, tile batches,</text><text x="298" y="81" class="ts">48 CRAM words, scroll</text>
+<rect x="470" y="42" width="60" height="44" class="bx-sx"/><text x="500" y="57" text-anchor="middle" class="tb">CLOSE</text><text x="500" y="70" text-anchor="middle" class="ts">slave echo</text><text x="500" y="81" text-anchor="middle" class="ts">landed</text>
+<rect x="540" y="42" width="180" height="44" class="bx-sx"/><text x="548" y="57" class="tb">SHIP · FM=1</text><text x="548" y="70" class="ts">blit its half of the rows into the</text><text x="548" y="81" class="ts">hidden bank, cached write-through</text>
+<rect x="740" y="42" width="140" height="44" class="bx-sx"/><text x="748" y="57" class="tb">next LAUNCH</text><text x="748" y="70" class="ts">only when no generation is</text><text x="748" y="81" class="ts">open or awaiting its blit</text>
+<text x="40" y="132" class="td f-sx" font-size="13">slave</text>
+<rect x="120" y="112" width="120" height="44" class="bx-sx"/><text x="128" y="127" class="tb">band R0</text><text x="128" y="140" class="ts">clear to 0 → sprites →</text><text x="128" y="151" class="ts">FG cat-1 tiles → text</text>
+<rect x="240" y="112" width="120" height="44" class="bx-sx"/><text x="248" y="127" class="tb">band R1</text><text x="248" y="140" class="ts">same order,</text><text x="248" y="151" class="ts">next 72 rows</text>
+<rect x="360" y="112" width="110" height="44" class="bx-sx"/><text x="368" y="127" class="tb">band R2</text><text x="368" y="140" class="ts">rows to 223, then</text><text x="368" y="151" class="ts">echo the command</text>
+<rect x="540" y="112" width="180" height="44" class="bx-sx"/><text x="548" y="127" class="tb">SHIP · FM=1</text><text x="548" y="140" class="ts">blit the other half of the rows;</text><text x="548" y="151" class="ts">the split is tuned (BLITSHIFT)</text>
+<path d="M470 134 H500 V86" class="ln" marker-end="url(#a8)"/>
+<text x="40" y="202" class="td" font-size="13">sbuf</text>
+<rect x="120" y="182" width="350" height="44" class="bx"/><text x="128" y="197" class="tb">staging buffer · 336 × 232 bytes in SDRAM</text><text x="128" y="210" class="ts">one writer per generation; a byte is a 32X CRAM index,</text><text x="128" y="221" class="ts">0 = "let the Mega Drive's pixel through"; 8-px margins take clipping off the loops</text>
+<path d="M300 156 V182" class="ln" marker-end="url(#a8)"/>
+<path d="M470 204 H540 V156" class="ln" marker-end="url(#a8)"/>
+<path d="M630 156 V182" class="ln"/>
+<rect x="540" y="182" width="180" height="44" class="bx"/><text x="548" y="197" class="tb">FB hidden bank ← rows</text><text x="548" y="210" class="ts">71,680 bytes: the 1.0 pass</text><text x="548" y="221" class="ts">from the top of the page</text>
+<text x="40" y="258" class="td" font-size="13">display</text>
+<rect x="120" y="240" width="620" height="32" class="bx-ac"/><text x="430" y="260" text-anchor="middle" class="ts">bank A on screen, unchanged for the whole generation: a late frame repeats the previous one whole, never half</text>
+<rect x="740" y="240" width="180" height="32" class="bx-sx"/><text x="830" y="254" text-anchor="middle" class="tb">V-ISR FLIP</text><text x="830" y="266" text-anchor="middle" class="ts">only if this bank was freshly blitted</text>
+<path d="M720 204 H830 V240" class="ln" marker-end="url(#a8)"/>
+<g class="ts">
+<text x="40" y="300">Measured on ares (PHASECENSUS): compose 0.93 vint per generation; the blit lands 0.24 vint into the FM window; launch → close averages 1.22 vints.</text>
+<text x="40" y="314">Both SH-2s write the FB through the cached window (0x04000000): stores ride the 4-deep write buffer instead of stalling per word, as every shipped 32X title does.</text>
+<text x="40" y="328">Rule learned the hard way: no FB reads at FM=0 (the 68000's writes are landing) and no cart-ROM reads while the 68000 holds the bus, so compose reads only SDRAM.</text>
+</g>
+</svg>
+<figcaption><b>Whole frame or nothing.</b> Under this scheme a frozen lower third is structurally impossible: there is no path that ships part of a screen. Cadence becomes 60 Hz when compose closes inside a vint and a coherent 30 Hz when it does not. Sources: <code>docs/design/NATIVE.md</code>, <code>sh_src/m_main.c</code>, <code>sh_src/s_main.c</code>, <code>ARCHITECTURE.md §0</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 09 -->
+<h2 id="s9"><span class="n">09</span>Where everything lives</h2>
+<p>Two memory maps carry the whole pipeline. The 256 KB of 32X SDRAM holds the SH-2 program, the hot code copied out of ROM, every shadow of the game's tables, the staging buffer and the DMA landing zone. Each 128 KB framebuffer bank holds the 320×224 image and, past it, the game's own tile RAM: the 68000 writes there because the patcher told it to, and the SH-2s read it in place.</p>
+
+<figure>
+<svg viewBox="0 0 960 284" role="img" aria-label="Two horizontal memory maps: the 32X SDRAM regions used by the port, and the layout of one framebuffer bank including the display image and the staging pages the game writes into.">
+<text x="60" y="20" class="td f-sx">32X SDRAM · 256 KB · SH-2 address 0x06000000 (cached) / 0x26000000 (uncached)</text>
+<!-- 0x40000 over 840px: 0.0032 px/B; origin 60 -->
+<g class="tm" font-size="10.5">
+<rect x="60" y="30" width="254" height="30" class="bx-sx"/><text x="187" y="49" text-anchor="middle">SH-2 program: .text .data .bss</text>
+<rect x="314" y="30" width="73" height="30" class="pn"/><text x="350" y="49" text-anchor="middle" class="ts">free</text>
+<rect x="387" y="30" width="171" height="30" class="bx-sx"/><text x="472" y="49" text-anchor="middle">TILEMAP_U · 13 pages</text>
+<rect x="558" y="30" width="13" height="30" class="bx-sx"/>
+<rect x="571" y="30" width="13" height="30" class="bx-sx"/>
+<rect x="584" y="30" width="13" height="30" class="bx-sx"/>
+<rect x="597" y="30" width="105" height="30" class="bx-sx"/><text x="649" y="49" text-anchor="middle">tile cache 512 × 64 B</text>
+<rect x="702" y="30" width="92" height="30" class="bx-sx"/><text x="748" y="49" text-anchor="middle">.ramtext</text>
+<rect x="794" y="30" width="13" height="30" class="pn"/>
+<rect x="807" y="30" width="13" height="30" class="bx-num"/>
+<rect x="820" y="30" width="80" height="30" class="bx-sx"/><text x="860" y="49" text-anchor="middle">stacks</text>
+</g>
+<g class="ts">
+<path d="M564 60 V74" class="ln-soft"/><text x="564" y="86" text-anchor="middle">0x26000 TEXT_U</text>
+<path d="M577 60 V96" class="ln-soft"/><text x="577" y="108" text-anchor="middle">0x27000 PAL_SH · 2048 words</text>
+<path d="M590 60 V118" class="ln-soft"/><text x="590" y="130" text-anchor="middle">0x28000 DIAG · SPR_SNAP · SYNC mailboxes</text>
+<path d="M813 60 V74" class="ln-soft"/><text x="813" y="86" text-anchor="middle">0x39000 SPR_LAND (DREQ) + MD packet staging</text>
+<text x="60" y="74" class="tm">0x00000</text><text x="314" y="74" class="tm">0x13530</text><text x="387" y="74" class="tm">0x19000</text><text x="702" y="74" class="tm">0x31000</text><text x="900" y="74" class="tm" text-anchor="end">0x40000</text>
+<text x="60" y="130">Region guard: .bss must end under 0x19000, where the shadows start. It once grew past 0x18000</text><text x="60" y="144">and the page copies stomped the cache tags every cycle. 0x29000: render tile cache. 0x31000: hot code copied from ROM.</text>
+</g>
+<!-- FB -->
+<text x="60" y="164" class="td f-sx">one framebuffer bank · 128 KB · SH-2 0x24000000 · 68000 0x840000</text>
+<!-- 0x20000 over 840px: 0.00641 px/B -->
+<g class="tm" font-size="10.5">
+<rect x="60" y="174" width="3" height="30" class="bx-ac"/>
+<rect x="63" y="174" width="460" height="30" class="bx-sx"/><text x="293" y="193" text-anchor="middle">display image · 320 × 224 × 8 bpp · 71,680 bytes</text>
+<rect x="523" y="174" width="10" height="30" class="bx-num"/>
+<rect x="533" y="174" width="315" height="30" class="bx-md"/><text x="690" y="193" text-anchor="middle">tile RAM staging · pages 0–11</text>
+<rect x="848" y="174" width="5" height="30" class="bx-md"/>
+<rect x="853" y="174" width="21" height="30" class="pn"/>
+<rect x="874" y="174" width="26" height="30" class="bx-md"/><text x="887" y="193" text-anchor="middle">text</text>
+</g>
+<g class="ts">
+<text x="60" y="218" class="tm">0x00000 line table</text>
+<text x="523" y="218" class="tm" text-anchor="middle">0x11A00</text>
+<path d="M528 204 V226" class="ln-soft"/><text x="528" y="238" text-anchor="middle">1,536 dead bytes past the image: the MD-plane packet (section 10) crosses here</text>
+<text x="533" y="218" class="tm">0x12000</text>
+<text x="848" y="218" class="tm" text-anchor="middle">0x1E000</text>
+<text x="887" y="218" class="tm" text-anchor="middle">0x1F000</text>
+<text x="60" y="258">Staging is per bank: a page written while the other bank was hidden is missing in this one, so dirty pages are captured to</text><text x="60" y="272">TILEMAP_U before the flip and restored into the fresh bank after it. The palette moved to work RAM for exactly this reason.</text>
+</g>
+</svg>
+<figcaption><b>The framebuffer is also a mailbox.</b> Both CPUs can address it, so the game's bulk writes (tile RAM storms of up to 11,000 words at a scene cut) go straight into the hidden bank rather than through the FIFO, which could never carry them. The catch is that there are two banks, and everything built on FB staging has to survive seeing the wrong one. Sources: <code>sh_src/m_main.c</code> SDRAM map, <code>tools/patch_game.py</code>, <code>docs/design/PIPELINE.md</code> T1 verdict.</figcaption>
+</figure>
+
+<!-- ============================================================ 10 -->
+<h2 id="s10"><span class="n">10</span>The Mega Drive draws the planes</h2>
+<p>The VDP cannot read SH-2 SDRAM and the 68000 cannot read the arcade tile ROM in the SH-2's format, so the scroll planes reach the VDP through a second packet that travels the other way: SH-2 to 68000, through the dead 1,536 bytes past the framebuffer image. Inside its FM window the master converts a batch of arcade tiles into the VDP's 4-bits-per-pixel planar format, remapping each tile's eight pens into the slot its colour set was given in one of three MD palette lines. At the top of the next vint, with FM low, the 68000 reads the packet through its own window and DMAs it into VRAM, the scroll table and CRAM.</p>
+
+<figure>
+<svg viewBox="0 0 960 470" role="img" aria-label="The SH-2 to 68000 packet path for tiles, name tables, colours and scroll into the VDP, the VRAM layout it targets, and the four CRAM lines.">
+<defs>
+<marker id="a10" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker>
+</defs>
+<rect x="40" y="20" width="290" height="62" class="bx-sx"/>
+<text x="48" y="37" class="tb">SH-2 master · FM=1 · claim VRAM slots</text>
+<text x="48" y="52" class="ts">walk both name tables from the latched regs; md_tag holds</text>
+<text x="48" y="65" class="ts">1024 slots keyed (colour set, tile code), LRU by window</text>
+<text x="48" y="78" class="ts">stamp; slot 1023 is reserved blank</text>
+<rect x="40" y="94" width="290" height="62" class="bx-sx"/>
+<text x="48" y="111" class="tb">convert a batch of 40 tiles</text>
+<text x="48" y="126" class="ts">3 bitplanes → 4bpp packed, high nibble = left pixel;</text>
+<text x="48" y="139" class="ts">each pen remapped into the set's slot in an MD line;</text>
+<text x="48" y="152" class="ts">FG pen 0 stays transparent</text>
+<path d="M185 82 V94" class="ln-sx" marker-end="url(#a10)"/>
+<rect x="360" y="50" width="250" height="76" class="bx-num"/>
+<text x="368" y="67" class="tb">FB dead block · 0x11A00 · 1,536 bytes</text>
+<text x="368" y="82" class="ts">header: magic, type, hscroll, vscroll, count</text>
+<text x="368" y="95" class="ts">payload: a tile batch, or a 280-cell name-table</text>
+<text x="368" y="108" class="ts">chunk, plus 48 CRAM words; magic written LAST,</text>
+<text x="368" y="121" class="ts">so a stale read re-uploads and never corrupts</text>
+<path d="M330 125 H360" class="ln-sx" marker-end="url(#a10)"/>
+<rect x="640" y="50" width="280" height="76" class="bx-md"/>
+<text x="648" y="67" class="tb">68000 · FM=0, top of the vint</text>
+<text x="648" y="82" class="ts">reads 0x851A00 through its own FB window,</text>
+<text x="648" y="95" class="ts">then 68K → VDP DMA: patterns to slot × 32, cells to</text>
+<text x="648" y="108" class="ts">Plane A / B, colours to CRAM, scroll to the</text>
+<text x="648" y="121" class="ts">hscroll table and VSRAM</text>
+<path d="M610 88 H640" class="ln-md" marker-end="url(#a10)"/>
+<text x="360" y="150" class="ts">Idempotent by design: FB staging is per bank, and nothing in this path ever asks which bank the 68000 saw.</text>
+<!-- VRAM bar: 0x10000 over 880px = 0.01343 px/B, origin 40 -->
+<text x="40" y="190" class="td f-md" font-size="13">VDP VRAM · 64 KB</text>
+<g class="tm" font-size="10.5">
+<rect x="40" y="198" width="605" height="30" class="bx-md"/><text x="342" y="217" text-anchor="middle">patterns · 1,408 tile slots · measured peak demand 599</text>
+<rect x="645" y="198" width="55" height="30" class="pn"/><text x="672" y="217" text-anchor="middle" class="ts">window</text>
+<rect x="700" y="198" width="55" height="30" class="bx-md"/><text x="727" y="217" text-anchor="middle">Plane A</text>
+<rect x="755" y="198" width="55" height="30" class="pn"/><text x="782" y="217" text-anchor="middle" class="ts">spare</text>
+<rect x="810" y="198" width="99" height="30" class="bx-md"/><text x="859" y="217" text-anchor="middle">Plane B</text>
+<rect x="909" y="198" width="11" height="30" class="bx-md"/>
+</g>
+<g class="ts">
+<text x="40" y="242" class="tm">0x0000</text>
+<text x="645" y="242" class="tm" text-anchor="middle">0xB000</text>
+<text x="700" y="242" class="tm" text-anchor="middle">0xC000</text>
+<text x="755" y="242" class="tm" text-anchor="middle">0xD000</text>
+<text x="810" y="242" class="tm" text-anchor="middle">0xE000</text>
+<text x="909" y="242" class="tm" text-anchor="middle">0xFC00</text>
+<text x="727" y="258" text-anchor="middle">= S16 FG cat-0</text>
+<text x="859" y="258" text-anchor="middle">= S16 BG</text>
+<text x="909" y="272" text-anchor="end">hscroll table · 0xFE00 sprite table (offloaded S16 sprites)</text>
+<text x="755" y="272" text-anchor="middle">shadow name table, planned</text>
+</g>
+<!-- CRAM -->
+<text x="40" y="306" class="td f-md" font-size="13">VDP CRAM · 4 lines × 16 colours, 3 bits per channel</text>
+<g class="tm" font-size="10.5">
+<rect x="40" y="314" width="360" height="22" class="bx"/><text x="48" y="329">line 0 · grey ramp for text; the offloaded sprites' one line</text>
+<rect x="40" y="338" width="360" height="22" class="bx-md"/><text x="48" y="353">line 1 · packed tile colours</text>
+<rect x="40" y="362" width="360" height="22" class="bx-md"/><text x="48" y="377">line 2 · packed tile colours</text>
+<rect x="40" y="386" width="360" height="22" class="bx-md"/><text x="48" y="401">line 3 · packed tile colours</text>
+</g>
+<g class="ts">
+<text x="420" y="329">worst scene: 21 colour sets on screen, but only 36 distinct colours</text>
+<text x="420" y="343">after 3-bit quantisation, against 45 usable pens in lines 1–3</text>
+<text x="420" y="363">5-bit → 3-bit error: max 2 steps, mean 1.05; round, never truncate</text>
+<text x="420" y="377">(the sky is a 5/6 dither; truncation rendered it at 4× contrast)</text>
+<text x="420" y="397">48 CRAM words ride every packet, so fades reach the VDP at window cadence</text>
+</g>
+<g class="ts">
+<text x="40" y="432">Per-scene static palettes (PALSTATIC): tables baked from captured palette states; the SH-2 detects the scene from 8 probe pairs in the live palette</text>
+<text x="40" y="446">and applies 32X CRAM, the MD lines and the shadow LUT in one atomic load. A wrong load self-heals: the 68000 re-ships the whole palette in ~9 vints.</text>
+<text x="40" y="464">Why residency needs eviction: the animated title backdrop cycles ~1,120 tile codes through 1,024 slots; first-come pinned dead tiles and later scenes came up blank.</text>
+</g>
+</svg>
+<figcaption><b>Two chips, one tile sheet, no shared memory.</b> The packet is self-describing and harmless to replay, which is what makes it safe to pass through a double-buffered framebuffer without knowing which bank the reader got. The measured payoff of putting the planes here was not framerate: it was blit skips falling from 23.4% to 0.2%, which is the green tearing gone. Sources: <code>ARCHITECTURE.md §10, §13, §15, §16, §17</code>, <code>docs/design/PALSTATIC.md</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ 11 -->
+<h2 id="s11"><span class="n">11</span>The composite: one pixel, two chips</h2>
+<p>At the very end, the 32X cartridge mixes its framebuffer with the Mega Drive's video output before the signal leaves the console. Each framebuffer byte indexes the 32X colour RAM; if the entry it lands on has bit 15 set, the mixer shows the Mega Drive's pixel at that position instead. The staging buffer is cleared to index 0, whose entry is the one through-colour, so everywhere the SH-2s drew nothing the VDP's planes show. Everywhere they drew a sprite, a priority tile or a glyph, the 32X colour wins.</p>
+
+<figure>
+<svg viewBox="0 0 960 372" role="img" aria-label="The display stack from back to front: MD backdrop, Plane B, Plane A, MD sprites, then the 32X framebuffer layer; and a pixel grid showing sprite pens covering while index 0 lets the planes through.">
+<defs>
+<marker id="a11" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" style="fill:var(--ink)"/></marker>
+<pattern id="h11" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--md);stroke-width:1.5"/></pattern>
+</defs>
+<text x="40" y="22" class="td">the stack, back to front</text>
+<g>
+<rect x="40" y="232" width="480" height="30" class="bx-ac"/><text x="50" y="251" class="ts">Mega Drive backdrop colour</text>
+<rect x="40" y="196" width="480" height="30" class="bx-md"/><text x="50" y="209" class="tb">Plane B = System 16 background, both categories</text><text x="50" y="221" class="ts">3 bits/channel; hardware scroll: one register write moves the plane</text>
+<rect x="40" y="160" width="480" height="30" class="bx-md"/><text x="50" y="173" class="tb">Plane A = System 16 foreground, category 0</text><text x="50" y="185" class="ts">pen 0 transparent over Plane B, as on the arcade</text>
+<rect x="40" y="124" width="480" height="30" class="bx-md"/><text x="50" y="137" class="tb">Mega Drive sprites = offloaded System 16 records</text><text x="50" y="149" class="ts">native zoom only; one CRAM line, so ~16% of records today</text>
+<rect x="40" y="70" width="480" height="48" class="bx-sx"/><text x="50" y="86" class="tb">32X framebuffer layer · index → 32X CRAM, 5 bits/channel</text><text x="50" y="99" class="ts">S16 sprites (zoomed, shadow ×0.75), FG priority tiles over them, text</text><text x="50" y="112" class="ts">index 0 → CRAM[0] = 0x8000 → through: the MD pixel shows</text>
+<path d="M30 262 V70" class="ln" marker-end="url(#a11)"/><text x="24" y="60" class="ts">front</text>
+</g>
+<text x="580" y="22" class="td">one patch of screen, 8 × 6 pixels</text>
+<g>
+<rect x="580" y="34" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="34" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="628" y="34" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="652" y="34" width="24" height="24" class="f-sx"/><rect x="676" y="34" width="24" height="24" class="f-sx"/><rect x="700" y="34" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="724" y="34" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="748" y="34" width="24" height="24" fill="url(#h11)" class="pn"/>
+<rect x="580" y="58" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="58" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="628" y="58" width="24" height="24" class="f-sx"/><rect x="652" y="58" width="24" height="24" class="f-sx"/><rect x="676" y="58" width="24" height="24" class="f-sx"/><rect x="700" y="58" width="24" height="24" class="f-sx"/><rect x="724" y="58" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="748" y="58" width="24" height="24" fill="url(#h11)" class="pn"/>
+<rect x="580" y="82" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="82" width="24" height="24" class="f-sx"/><rect x="628" y="82" width="24" height="24" class="f-sx"/><rect x="652" y="82" width="24" height="24" class="f-num"/><rect x="676" y="82" width="24" height="24" class="f-sx"/><rect x="700" y="82" width="24" height="24" class="f-sx"/><rect x="724" y="82" width="24" height="24" class="f-sx"/><rect x="748" y="82" width="24" height="24" fill="url(#h11)" class="pn"/>
+<rect x="580" y="106" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="106" width="24" height="24" class="f-sx"/><rect x="628" y="106" width="24" height="24" class="f-sx"/><rect x="652" y="106" width="24" height="24" class="f-sx"/><rect x="676" y="106" width="24" height="24" class="f-sx"/><rect x="700" y="106" width="24" height="24" class="f-sx"/><rect x="724" y="106" width="24" height="24" class="f-ink"/><rect x="748" y="106" width="24" height="24" class="f-ink"/>
+<rect x="580" y="130" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="130" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="628" y="130" width="24" height="24" class="f-sx"/><rect x="652" y="130" width="24" height="24" class="f-sx"/><rect x="676" y="130" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="700" y="130" width="24" height="24" class="f-ink"/><rect x="724" y="130" width="24" height="24" class="f-ink"/><rect x="748" y="130" width="24" height="24" class="f-ink"/>
+<rect x="580" y="154" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="604" y="154" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="628" y="154" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="652" y="154" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="676" y="154" width="24" height="24" fill="url(#h11)" class="pn"/><rect x="700" y="154" width="24" height="24" class="f-ink"/><rect x="724" y="154" width="24" height="24" class="f-ink"/><rect x="748" y="154" width="24" height="24" class="f-ink"/>
+</g>
+<g class="ts">
+<rect x="580" y="194" width="12" height="12" fill="url(#h11)" class="pn"/><text x="598" y="204">index 0: through, the VDP's planes show</text>
+<rect x="580" y="214" width="12" height="12" class="f-sx"/><text x="598" y="224">sprite pen: 32X colour, 5-5-5</text>
+<rect x="580" y="234" width="12" height="12" class="f-num"/><text x="598" y="244">shadow: the nearest darker CRAM entry</text>
+<rect x="580" y="254" width="12" height="12" class="f-ink"/><text x="598" y="264">FG priority tile, painted after the sprites: the beast walks behind the pillar</text>
+<text x="580" y="292">Colour differs between the two sides by depth only: the 32X framebuffer is</text>
+<text x="580" y="306">5-5-5 like the arcade, the VDP is 3-3-3. Rendered side by side on captured</text>
+<text x="580" y="320">frames the difference was not visible, which is why the planes could move.</text>
+</g>
+<text x="40" y="350" class="ts">The 32X's own priority bit puts its layer in front of everything the VDP draws; the through bit punches the holes.</text>
+<text x="40" y="364" class="ts">Inside the Mega Drive's own picture, sprites over Plane A over Plane B is the VDP's ordinary rule.</text>
+</svg>
+<figcaption><b>Transparency is a bit in colour RAM, not a pixel value.</b> The port reserved index 0 for this from day one and then never armed it: <code>cram[0]</code> was 0x0000, opaque black, and the first attempt to open a hole painted the background rows solid black. One word changed it. Sources: <code>ARCHITECTURE.md §10</code>; Jotego's jts16 core <code>jts16_colmix.v:88</code> for the shadow rule.</figcaption>
+</figure>
+
+<!-- ============================================================ 12 -->
+<h2 id="s12"><span class="n">12</span>Why it works, and what is left</h2>
+<p>The 32X keeps up with the arcade board for the same reason the arcade board was fast: most of the screen is drawn by silicon that was built to draw it. The Mega Drive's VDP scrolls two full planes for one register write. The SH-2s spend their bandwidth only on what the VDP cannot express, and the framebuffer they fill is mostly holes. What follows is measured, on ares, on the same inputs.</p>
+
+<h3>Moving the planes to the VDP</h3>
+<div class="pair" role="table" aria-label="Before and after moving the tile planes to the Mega Drive VDP, same 1197 cycles">
+<div class="lab">blit skips per cycle<small style="display:block;color:var(--mute);font-size:12px">the green tear</small></div>
+<div class="row"><div class="bar" style="width:100%"><i>before 23.4%</i></div><div class="bar after" style="width:1%"><i>after 0.2%</i></div></div>
+<div class="lab">compose load, layer 0</div>
+<div class="row"><div class="bar" style="width:100%"><i>6,792</i></div><div class="bar after" style="width:22%"><i>1,494</i></div></div>
+<div class="lab">compose load, layer 1</div>
+<div class="row"><div class="bar" style="width:100%"><i>5,720</i></div><div class="bar after" style="width:0.5%"><i>0</i></div></div>
+<div class="lab">the blit itself</div>
+<div class="row"><div class="bar" style="width:92.5%"><i>719</i></div><div class="bar after" style="width:100%"><i>777, unchanged in kind</i></div></div>
+</div>
+<p class="src">Grey = software-composed planes, orange = planes on the VDP. Each row is scaled to its own "before". Source: <code>ARCHITECTURE.md §15</code>.</p>
+
+<h3>The 60 Hz ladder</h3>
+<p>Gameplay frames that finish inside one vint, as a percentage. 100 would be a locked 60 Hz. Hatched rows are calibration builds whose picture is wrong; they mark where the ceiling is, not what can ship.</p>
+<div class="bars" role="table" aria-label="Percentage of gameplay frames finishing in one vint, per build">
+<div class="lab">ship build<small>68K handler 62 lines</small></div><div class="track"><div class="fill win" style="width:50.4%"></div><span class="thr" style="left:50.4%"></span></div><div class="val">50.4</div>
+<div class="lab">palette rotor off<small>handler 46</small></div><div class="track"><div class="fill" style="width:50%"></div></div><div class="val">50.0</div>
+<div class="lab">MD-plane consume off<small>handler 51</small></div><div class="track"><div class="fill" style="width:50.2%"></div></div><div class="val">50.2</div>
+<div class="lab">both off + ROWGEN row skip<small>first crossing with correct pixels · handler 35</small></div><div class="track"><div class="fill win" style="width:56.2%"></div></div><div class="val">56.2</div>
+<div class="lab">no blit at all<small>calibration, picture wrong</small></div><div class="track"><div class="fill cal" style="width:60.1%"></div></div><div class="val">60.1</div>
+<div class="lab">both off + no blit<small>calibration: the FM-span ceiling</small></div><div class="track"><div class="fill cal" style="width:80.4%"></div></div><div class="val">80.4</div>
+<div class="lab">everything stripped<small>calibration, session 6 floor</small></div><div class="track"><div class="fill cal" style="width:88%"></div></div><div class="val">88</div>
+</div>
+<p class="src">Read with <code>tools/gameplay_speed.py</code> over frames 1500–4100 of <code>play_level1.csv</code>, ares-headless. Source: <code>docs/handoff/HANDOFF-SESSION8.md §2, §7</code>.</p>
+
+<div class="callout"><p><b>What the ladder says.</b> The 68000, not the SH-2s, is the binding constraint now. Its frame must lose about 50 lines to cross the 262-line threshold, and the two largest non-game items in its vint are the palette compare (16 lines) and the DMA of the Mega Drive's plane data (11 lines). Neither moves the needle alone; together, plus a proven row-skip on the blit, they do. The next lever named in the handoff is moving the palette compare onto the SH-2.</p></div>
+
+<h3>What is still owned by the arcade's shape</h3>
+<ul>
+<li><b>Zoomed sprites</b> stay on the SH-2s forever. No 32X or Mega Drive silicon scales a sprite, and Altered Beast zooms constantly.</li>
+<li><b>Priority sprites</b> at levels 0 and 1 draw in front of the VDP planes. The layer order stands in for the arcade's per-pixel gate; it is the one place the split is not exact.</li>
+<li><b>Sound</b> is a separate port. The arcade's YM2151 has eight FM channels; the Mega Drive's YM2612 has six, so a faithful score means a software synth on an SH-2 driving the 32X PWM. Designed, not built.</li>
+<li><b>Everything else generalises.</b> Every System 16B title has two scroll planes, a text layer, this sprite chip and 128 colour sets. The patcher, the packet, the residency allocator and the palette pack are the kit.</li>
+</ul>
+
+<h3>Three sources of truth</h3>
+<table class="facts">
+<tr><th>Question</th><th>Answered by</th></tr>
+<tr><td>What does the arcade silicon do?</td><td>The System 16 FPGA core Jotego wrote for MiSTer (<a href="https://github.com/jotego/jtcores">jtcores</a>, GPL Verilog). It is the closest thing to a schematic that exists for these chips, so every hardware fact on this page cites one of its files by line: <code>jts16_prio.v</code> for priority, <code>jts16_obj_draw.v</code> for the sprite walk and zoom, <code>jts16_colmix.v</code> for shadow. Derived from, never copied.</td></tr>
+<tr><td>What should the picture look like?</td><td>MAME's <code>altbeast</code> driver, the arcade oracle, captured to a no-coin attract corpus and diffed frame by frame against our output on the game's own timeline.</td></tr>
+<tr><td>What does our machine actually do?</td><td>Two targets. <b>ares</b>, the cycle-accurate 32X emulator, forked to add a headless mode: it runs scripted input files with no window, dumps savestates and screenshots, and <code>tools/state_health.py</code> and <code>tools/gameplay_speed.py</code> read the pipeline counters straight out of SDRAM. Every number on this page comes from those runs. <b>FPGA 32X emulation</b> (the MiSTer core) and the author's play pass are the hardware-truth check and the acceptance gate.</td></tr>
+</table>
+<p>MAME's 32X model is kept for what it does honestly, the 68000 and VDP timing, and not trusted for framebuffer cost, which it does not model at all: the same blit measures 9.4 µs per row there and 47.3 on ares. It also lands none of the DREQ packets a current build sends, so it cannot judge pixels on this line. That is why the accurate emulator had to become scriptable: the slow target is the only one whose answer counts, and a play pass cannot be re-run a thousand times.</p>
+
+<footer>
+Compiled 2026-09-07 from the repository's own documents: ARCHITECTURE.md, TOOLKIT.md, docs/design/NATIVE.md, docs/design/PALSTATIC.md, docs/design/PIPELINE.md, docs/design/DESIGN-FLOW.md, docs/handoff/HANDOFF-SESSION8.md, md_src/packet_fmt.h, sh_src/m_main.c. Every number is one that was measured there; where a document retracted an earlier figure, the retraction won.
+</footer>
+</main>
+</div>

@@ -48,7 +48,7 @@ volatile uint8_t slave_in_compose;
 static uint16_t st_last;
 static uint8_t st_band;
 /* (the one-generation event ring that lived here is retired — the
- * region guard; its four traces are banked in BOSSFIGHT.md) */
+ * region guard; its four traces are banked in docs/design/BOSSFIGHT.md) */
 __attribute__((section(".ramtext"), noinline)) void st_s(unsigned ev)
 {
     uint16_t now = frt_s();
@@ -190,6 +190,9 @@ static void slave_fence(unsigned row)
 
 __attribute__((section(".ramtext"))) void s_main(void)
 {
+#ifdef BOOT_SHSTAGE
+    *(volatile uint16_t *)0x2000402A = 4;    /* slave probe: SDRAM main entered */
+#endif
     while (MARS_SYS_COMM14 != 0xB007)
         MARS_SYS_COMM6++;
 
@@ -218,7 +221,7 @@ __attribute__((section(".ramtext"))) void s_main(void)
              * (state deltas) = slave utilization: ~100% in the boss
              * fight = compute-bound (diets help); well under = the
              * wall is waiting/serialization and diets cannot move
-             * it. Scratch 0x28C80 [0] busy ticks (INTEGRATION.md).
+             * it. Scratch 0x28C80 [0] busy ticks (docs/design/INTEGRATION.md).
              * CALIBRATION: the slave never sets FRT TCR — its ticks
              * are phi/8 = 48208/vint, 4x the master's 12052 (which
              * also means the park bound below is ~25 lines, not the

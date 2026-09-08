@@ -2,7 +2,7 @@
 # 2-WINDOW CYCLE (band tearing dead + game CPU 50% -> ~66%)
 
 Kickoff. Read LOOP15 (the wrap/speed era: WINSPAN, the handler-mean
-meter, the per-word push) and DEVNOTES.md. Where LOOPs and
+meter, the per-word push) and docs/log/DEVNOTES.md. Where LOOPs and
 ARCHITECTURE.md disagree, ARCHITECTURE wins.
 
 ## WHERE THIS STANDS (2026-08-16, Mike's v6 state + verdicts)

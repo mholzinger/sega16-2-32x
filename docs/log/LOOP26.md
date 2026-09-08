@@ -1,7 +1,7 @@
 # LOOP 26 — THE PALETTE-TRANSPORT ARC AND THE BLINK HUNT (2026-08-30)
 
 One day, one arc, three convictions overturned by measurement. The
-full numbers live in REBUILD.md (entries from "PALETTE-TRANSPORT
+full numbers live in docs/design/REBUILD.md (entries from "PALETTE-TRANSPORT
 ARC, STEPS 1+2" through the CRAMFLIP field grade); this is the loop
 digest.
 
@@ -81,7 +81,7 @@ works the metric-1 finish under full rig gates.
 Mike's verdict on the BQ coalescing build ("DID NOT EVEN MOVE THE
 NEEDLE. Same stuck lower third") plus his directive ("gates should
 be for an entire screen update") ended the band-machinery fix-loop.
-NATIVE=1 (NATIVE.md is the design doc) deletes the band as a
+NATIVE=1 (docs/design/NATIVE.md is the design doc) deletes the band as a
 schedulable unit:
 
   - ONE generation in flight = the whole frame. Launch latches ALL
@@ -133,7 +133,7 @@ LEDGER: the SELF-CHAIN 2026-08-25 negative did NOT reproduce — bad1
 went DOWN with back-to-back slave compose. The negative was measured
 under the 151-word push; PALDELTA (~51 words) + the hoisted landing
 wait changed the bus economy it rested on. The negative stands FOR
-ITS ERA; NATIVE.md records the differences.
+ITS ERA; docs/design/NATIVE.md records the differences.
 
 GEN-WALL CENSUS at 0x28F50/54/58 (sum/count/max, PICKUP_SRC scrap).
 The 60Hz path from here: the wall is 1.22 vints and the window is
@@ -176,11 +176,11 @@ priority order (speed first, per the standing queue):
 
 ## UNATTENDED SESSION ADDENDUM (2026-08-31 afternoon)
 
-Mike's arcade reference captured and banked (ORACLE.md): 17,528
+Mike's arcade reference captured and banked (docs/design/ORACLE.md): 17,528
 frame-true PNGs, coin-in through round clear. Graded — the walk is
 already at arcade cadence; the boss fight is the true-60Hz scene and
 the arc target. BANDSHIFT master-rebalance measured DEAD (4 points,
-ORACLE.md table); machinery stays in-tree as a no-op. P3 claim rate
+docs/design/ORACLE.md table); machinery stays in-tree as a no-op. P3 claim rate
 on NATIVE measured: 0.57 records/gen of ~3.6 (16%) — the one-CRAM-
 line limit, unlocked by the static-palette arc.
 
@@ -213,7 +213,7 @@ attract entry FADES (game-side) so it cannot reproduce the hard-cut
 smear; the LIVE transformation is the acceptance scene and only
 Mike's play reaches it. v2 (atomic picture: shadow NT + plane-base
 flip; sprite-pair static zone -> freed CRAM lines -> P3 claims) per
-PALSTATIC.md. Note: in-scene REMAP churn unchanged by design (44k on
+docs/design/PALSTATIC.md. Note: in-scene REMAP churn unchanged by design (44k on
 the attract run both arms) — that class is v2's allocator retirement.
 
 ## ROTOR BACKOFF: MEASURED MISS, BETTER TARGET FOUND (2026-08-31 late)
@@ -248,7 +248,7 @@ flaws, both mine:
      shadow, so NO deltas re-ship and a wrong load STANDS FOREVER.
      A 10-20 frame smear was traded for a permanent wrong palette.
 rom/s16.32x REVERTED to the play-passed NATIVE build (e0549e86).
-v1.1 requirements before this ships again (PALSTATIC.md updated):
+v1.1 requirements before this ships again (docs/design/PALSTATIC.md updated):
   a. HEAL CHANNEL FIRST: a scene load must post a full re-mark +
      force-raw request to the 68K (BAD1-family COMM8 code) so ANY
      wrong load self-heals in ~8 vints — the belt precedes the

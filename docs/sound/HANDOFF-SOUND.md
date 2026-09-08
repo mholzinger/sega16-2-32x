@@ -352,7 +352,7 @@ direct from the sample ROM (`opr-11672/73`) via the uPD7759 algorithm,
 deriving from jtcores `jt7759` (Mike: "we have a fully working sound
 decoder in the FPGA source").
 
-PROGRESS 2026-09-01 (this session), all in `SOUND_DRIVER.md`:
+PROGRESS 2026-09-01 (this session), all in `docs/sound/SOUND_DRIVER.md`:
 - `tools/z80dis.py` — full Z80 disassembler, no deps (KIT). Built to
   reverse the driver; reusable.
 - Driver mapped from the ROM: I/O ports, IRQ tick ($0089), command
@@ -367,9 +367,9 @@ PROGRESS 2026-09-01 (this session), all in `SOUND_DRIVER.md`:
   note (ix+27..30) — exactly what the isolation tap dropped.
 - REMAINING: the per-channel note/opcode encoding, the instrument
   patch table address, the tempo model — then reimplement and validate
-  0x94 against the ear-validated music_track.h. See SOUND_DRIVER.md
+  0x94 against the ear-validated music_track.h. See docs/sound/SOUND_DRIVER.md
   "remaining work".
-- MUSIC lane: the decode-by-execution renderer WORKS (SOUND_DRIVER.md
+- MUSIC lane: the decode-by-execution renderer WORKS (docs/sound/SOUND_DRIVER.md
   "Validation"). `tools/z80cpu.py` (Z80 core, 10/10 tests) +
   `tools/snd_render.py` boot the real driver and render 0x94: rich note
   content AND the per-tick TL envelope refresh (reg $78 at 717/s) that
@@ -416,13 +416,13 @@ Original stuck-state analysis below, kept for the record.
 
 ---
 
-For the next session. Written stuck. Read SOUND.md first for the
+For the next session. Written stuck. Read docs/sound/SOUND.md first for the
 architecture and phase log; this file is only about where we are
 jammed and what is proven vs. assumed.
 
 ## Where things stand
 
-P0-P4 of the sound engine are BUILT and COMMITTED (`SOUND.md` has the
+P0-P4 of the sound engine are BUILT and COMMITTED (`docs/sound/SOUND.md` has the
 full log). `make sndtest` -> `rom/sndtest.32x`: the complete Altered
 Beast soundboard behind a menu — 10 music tracks (cmds 0x94-0x9D), 63
 YM jingles/sfx, 22 speech commands, real router dispatch on both lanes
@@ -475,7 +475,7 @@ hex value is the ground truth this whole argument needs.**
    the same binary as the headless fork (nightly f23eb39ad+). Two
    independent oddities tonight point at his GUI build behaving
    differently: the from-boot ticking heard on GUI ares but NOT in
-   OpenEmu (SOUND.md P3 open observation), and now this. Cheap test:
+   OpenEmu (docs/sound/SOUND.md P3 open observation), and now this. Cheap test:
    load the same rom in **OpenEmu** (which played earlier builds
    perfectly tonight) and browse the map there. If OpenEmu is clean
    and GUI-ares is broken, the lab's interactive rig should become
@@ -510,7 +510,7 @@ hex value is the ground truth this whole argument needs.**
   0x01-0x0C genuinely silent no-ops, 0x8C would halt the arcade's
   sound CPU (our router just plays what the map recorded for it).
 
-## Deferred engineering (SOUND.md carries these too)
+## Deferred engineering (docs/sound/SOUND.md carries these too)
 
 - Music loop cuts are 14s with unpolished loop points.
 - DT2 dropped in transcode; no music-over-sfx layering (player is
@@ -520,7 +520,7 @@ hex value is the ground truth this whole argument needs.**
   capture already works there); provision the 68K vint budget for the
   feeder; parity statics must not move.
 - Boot-tick open observation (P3): ares GUI only; NOPWM isolation
-  probe documented in SOUND.md.
+  probe documented in docs/sound/SOUND.md.
 
 ## Key artifacts
 

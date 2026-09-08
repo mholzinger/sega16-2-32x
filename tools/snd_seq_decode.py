@@ -4,12 +4,12 @@
 Reads a S16B Z80 sound ROM and decodes its music/sfx SEQUENCE DATA
 directly, so the 32X sound pipeline gets faithful tracks from the bytes
 Sega shipped — NOT from tapping playback (the isolation-sweep tap dropped
-the driver's per-note envelope re-application; SOUND.md / HANDOFF-SOUND).
+the driver's per-note envelope re-application; docs/sound/SOUND.md / HANDOFF-SOUND).
 
 Reverse-engineered from epr-11671 (Altered Beast, English + Japanese
 share this exact ROM — MAME segas16b.cpp lines 39-45). Every address
 here is DERIVED from the ROM by disassembly (tools/z80dis.py), never
-copied. See SOUND_DRIVER.md for the full driver map + citations.
+copied. See docs/sound/SOUND_DRIVER.md for the full driver map + citations.
 
 STATUS: stage 1 COMPLETE (song table + song headers + channel stream
 pointers, all validated against the ROM). Stage 2 (per-channel note/
@@ -77,7 +77,7 @@ def parse_header(rom, ptr, cfg):
 def decode_stream(rom, seq_ptr, cfg):
     raise NotImplementedError(
         "stage 2: note/opcode interpreter not yet confirmed — see "
-        "SOUND_DRIVER.md 'remaining work'")
+        "docs/sound/SOUND_DRIVER.md 'remaining work'")
 
 
 def main():

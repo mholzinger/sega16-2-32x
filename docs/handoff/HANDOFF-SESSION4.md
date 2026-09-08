@@ -1,6 +1,6 @@
 # HANDOFF — session 4 (2026-09-04/05), written at Mike's request
 
-Read HANDOFF-SESSION3.md for the rig, the laws and the shipping line.
+Read docs/handoff/HANDOFF-SESSION3.md for the rig, the laws and the shipping line.
 This file is the delta and the honest state of the grass.
 
 ## Roms on disk (all built from this tree, canonical flags + LAUNCHEARLY
@@ -137,11 +137,11 @@ C1 returns only as a single-renderer design. Open after the pass:
 - So: not palette, not the glow animator, not a dropped writer. It is the
   60Hz gap made visible by a 60Hz effect (ship bar: 60 or best-to-60).
   Fix classes: (a) 60Hz shipping in this scene (static planes, one head
-  sprite, the beam) — the BOSSFIGHT.md arc; (b) a deliberate alternate-
+  sprite, the beam) — the docs/design/BOSSFIGHT.md arc; (b) a deliberate alternate-
   parity sample (3-vint gens) = 20Hz flicker, NOT shimmer — rejected on
   sight; (c) a compositor blend of the two phases = a method, not the
   arcade's frames. Mike's call; (a) is the bar.
-- PRECEDENT: BOSSFIGHT.md "ZEUS SOLVED" — the arcade draws Zeus one
+- PRECEDENT: docs/design/BOSSFIGHT.md "ZEUS SOLVED" — the arcade draws Zeus one
   frame in three and our per-generation snapshot locked a phase; the
   fix there was the pair map, and a spatial checker for game-alternated
   sets was queued as cosmetics. The beam is that queue item's first
@@ -176,7 +176,7 @@ line is no longer folklore in a zsh array.
   arcade's timeline too.
 - **MAME cannot pixel-judge ANY current build**: the accepted nocat1 rom
   is confetti in MAME's 32X, as is every parity_* capture since 08-30
-  (BOSSFIGHT.md said so on 09-01; CLAUDE.md now says so too). The
+  (docs/design/BOSSFIGHT.md said so on 09-01; CLAUDE.md now says so too). The
   "kit-baseline" flag subset (canon minus the census-derived tables) is
   confetti on the US as well, so it demonstrated nothing; the JP ships on
   the full line. The JP pixel gate is Mike's ares pass. If he wants a
@@ -343,7 +343,7 @@ pair 0, and pair 0's CRAM (cram_mirror slots 0-1) holds red/white/blue
 FIRST; PAL_SH set 0 holds the greys; PAL_SETGEN[128] = 0 (the set's
 generation never moved) while cram_keygen[0] = 2 and slot 1 carries
 key 0x1006 gen 182. The memo (key + generation) hit over a stale paint
-— the "first paint stood" class of BOSSFIGHT.md, third occurrence. Why
+— the "first paint stood" class of docs/design/BOSSFIGHT.md, third occurrence. Why
 the generation never bumped for set 0 is NOT resolved (the landing
 walk bumps on any changed word, and PAL_SH was zeroed at boot).
 Belt: apply_cram forgets one slot's generation per window (cram_rot),

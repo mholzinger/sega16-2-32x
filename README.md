@@ -110,7 +110,7 @@ ships in the English and Japanese Altered Beast and in much of the
 System 16B library, so decoding it once decodes the library. Music is
 YM2151 FM, eight channels. Speech is uPD7759 ADPCM streamed by the Z80
 in slave mode from sample ROMs `opr-11672` and `opr-11673`.
-`SOUND_DRIVER.md` is the decoded map.
+`docs/sound/SOUND_DRIVER.md` is the decoded map.
 
 ---
 
@@ -271,13 +271,14 @@ is confined to what moves to the VDP.
 
 The legacy pipeline scheduled the screen in three bands and shipped a
 frame every three vblanks, 20 Hz, with the bands able to show two
-different game states at once. The current pipeline (`NATIVE.md`)
+different game states at once. The current pipeline (`docs/design/NATIVE.md`)
 deletes the band as a unit. One generation is in flight at a time and
 the generation is the whole frame: inputs are latched at one point, the
 slave composes all rows back to back, the blit ships the whole screen or
-nothing, and the flip lands only a freshly blitted bank. Cadence is
-60 Hz when compose closes inside a vblank and whole-frame-coherent
-30 Hz when it does not. The MD plane scroll packet is built from the
+nothing, and the flip lands only a freshly blitted bank. The design cadence
+is 60 Hz when compose closes inside a vblank and whole-frame-coherent
+30 Hz when it does not; today's ship line measures about half the
+arcade's frame rate, see Status. The MD plane scroll packet is built from the
 same latch, so planes and sprites move together.
 
 ### Sound
@@ -327,7 +328,7 @@ mechanism behind the tearing that was the second item on the fix list.
 4. A play pass on ares is the acceptance gate, and it has overruled the
    metrics repeatedly.
 
-**Negative results are kept.** Every `LOOP*.md` has a section of ideas
+**Negative results are kept.** Every `docs/log/LOOP*.md` has a section of ideas
 that were measured and killed. Most obvious optimisations are in there
 with the number that ended them, so they are not retried.
 
@@ -491,11 +492,11 @@ Concretely:
 
 - `ARCHITECTURE.md`: how the 32X library draws a frame, where this port
   sits, and the pivot. Start here.
-- `NATIVE.md`: the whole-frame pipeline.
+- `docs/design/NATIVE.md`: the whole-frame pipeline.
 - `TOOLKIT.md`: the reusable kit inventory.
-- `SOUND_DRIVER.md`, `SOUND.md`: the decoded Z80 driver and the sound
+- `docs/sound/SOUND_DRIVER.md`, `docs/sound/SOUND.md`: the decoded Z80 driver and the sound
   plan.
-- `LOOP.md`, `LOOP6.md` through `LOOP26.md`: the working log, newest
+- `docs/log/LOOP.md`, `docs/log/LOOP6.md` through `docs/log/LOOP26.md`: the working log, newest
   last, each with a negative-results section.
 - `NOTES.md`: hardware notes and the decoded memory map.
 - `CLAUDE.md`: the standing rules and the MAME versus ares split.
@@ -504,43 +505,33 @@ Concretely:
 
 ## Status
 
-2026-09-02. Shipping build `07d77855+` (branch `native1`). Mike's
-play pass: "good enough to continue working from; not at 100%
-MAME/arcade parity but very, very close."
-
-What works today, on ares:
+Play-passed on ares by the maintainer (the acceptance gate), on the
+level-1 base build of 2026-09-05:
 
 - The arcade program runs natively on the 68000 with the shim as MCU.
-- The Mega Drive VDP draws the background and the non-priority
-  foreground from per-scene static palettes (`PALSTATIC`), with the
-  game's 18-word palette animation played from a baked table
-  (`PALGLOW`).
-- The SH-2s compose sprites (zoom, shadow, baked frames), the priority
-  foreground and the text layer into the framebuffer, whole frame per
-  generation (`NATIVE`), launched before the ack (`LAUNCHEARLY`).
-- Boss, transformation and level-transition scenes render correctly:
-  gravestone, orb, crystal ball, sphere and boss-smoke fixes are in.
+- The SH-2 renderer draws sprites with zoom, the text layer, priority
+  tiles, and shadow, verified against the RTL model.
+- The background and non-priority foreground draw on the Mega Drive
+  VDP with the live packed palette.
+- Whole-frame scheduling: no band tearing, no frame assembled from two
+  game states.
 
-The bar and where we stand against it:
+Measured headless on ares but not yet play-passed:
 
-- The ship bar is 60 Hz, or as close as the machine gives. A locked
-  30 Hz is not progress and is not shipped.
-- Light scenes: about 36% of generations ship in one vint, the rest in
-  two. Sprite-heavy scenes: about 9% single-vint, most in two, a
-  three-vint tail. Slave compose is about 0.93 vint per generation;
-  the map drain is 0.46. Numbers from `PHASECENSUS=1` on Mike's
-  savestates; `BOSSFIGHT.md` has the tables.
-- The route to 60 in order: chase the blit (launch the next
-  generation during the blit, band-ordered), then category-1 tiles on
-  plane A with MD-matched pens, then take the map drain off the close
-  path. Each has a negative-result record to read first.
+- The current ship line runs level 1 at about half the arcade's frame
+  rate: 50 game frames per 100 vblanks. The 60 Hz cadence in
+  `docs/design/NATIVE.md` is the design target, not a result.
 
 Not done:
 
-- Sound is in `sndtest`, not the shipping rom. `INTEGRATION.md` is the
-  merge contract; `HANDOFF-SOUND.md` the state of the driver.
-- Wolf frames drop during the boss-smoke entrance; the level-2 head's
-  light plays level-1 glow rules.
-- The release tooling in section 6 is a plan. The per-title config for
-  the patcher does not exist yet; the Altered Beast facts live in the
-  tools.
+- Sound is in `sndtest`, not the shipping rom. The software YM2151 is
+  in progress.
+- Per-scene static palettes for the transformation and boss scenes were
+  pulled after a play pass found a permanent wrong-palette case. The
+  redesign is in `docs/design/PALSTATIC.md`.
+- MAME cannot pixel-gate current builds; it renders them as noise
+  because it does not model the DREQ landing. The parity statics are
+  from the earlier pipeline. Pixel truth is ares.
+- The release tooling in section 6 is a plan.
+- The per-title config file for the patcher does not exist yet; the
+  Altered Beast facts live in the tools.

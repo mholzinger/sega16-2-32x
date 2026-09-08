@@ -1,4 +1,4 @@
-# PIPELINE.md — every step a pixel takes, and who demands it
+# docs/design/PIPELINE.md — every step a pixel takes, and who demands it
 
 Written 2026-08-22 at Mike's direction: "I keep fighting you because
 you keep preserving a made-up model that should not exist." This is
@@ -157,7 +157,7 @@ Every struck step subtracts from all nine future ports, not one.
 Each strike lands as its own measured build on `rebuild60`:
 falsifier run (deterministic ares + input playback), flip rate,
 handler lines, harvest fails, FB render — before the next strike.
-No compound changes. The graves (REBUILD.md, LOOP*.md NEGATIVE
+No compound changes. The graves (docs/design/REBUILD.md, docs/log/LOOP*.md NEGATIVE
 RESULTS) are re-read before each one.
 
 ## STRIKE RESULTS (2026-08-22, measured same day as the map)

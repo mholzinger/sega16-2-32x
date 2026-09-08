@@ -7,8 +7,11 @@ section 4b, the transformation-exit smear in section 4):
 1. **Random-boot flat sky / missing clouds.** The MD pen pack and the
    VRAM slot map are first-come with LRU eviction, so what a scene
    looks like depends on the order sets and tiles arrive at the cut.
-   The sky set (0x5C) landed on a full line on EVERY boot and took
-   nearest-colour pens; which pens were nearest was luck.
+   On the good boot the sky set (0x5C) arrived while its line still
+   had free pens and got all 8 exact; on the bad boot it arrived last,
+   the line was full, and 5 of its 8 pixels took nearest-colour pens
+   (verified with tools/state_frame.py --report, which reproduces the
+   runtime's own quantisation and DIAG[36] counts).
 2. **Scene-cut smear.** The arcade cuts in one frame; ours settles the
    MD planes and pens over ~20 frames while the allocators churn.
 
@@ -28,7 +31,7 @@ scene to the detector):
 | colour sets referenced by the slot map | 34 | 35 |
 | distinct MD-quantised colours those sets need | 30 | 30 |
 | exact 3-line partition (each line's union <= 15) | FOUND, loads 15/15/6 | FOUND, loads 15/15/6 |
-| pens the dynamic pack actually used | 43 of 45, sky set all-fallback | 43 of 45, sky set all-fallback |
+| pens the dynamic pack used / sets with fallback pixels | 43 of 45 / 6 sets (sky exact) | 38 of 45 / 3 sets (sky 5 of 8 fallback) |
 | slots the two planes reference | 568 | 515 |
 | slots the map holds | 1023 of 1024 | 1023 of 1024 |
 

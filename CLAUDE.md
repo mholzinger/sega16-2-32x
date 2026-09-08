@@ -40,7 +40,7 @@ It is interoperability and preservation work on hardware whose
 documentation was never written.
 
 **Prefer the distilled spec over re-deriving.** When `ARCHITECTURE.md`
-or a `LOOP*.md` already records a hardware fact with a citation, use
+or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
@@ -177,7 +177,7 @@ a window and a keyboard. Keep it on the command line.
     tools/state_health.py X   # ares savestate -> pipeline counters
     tools/attract_parity.py rom/s16.32x   # attract vs the arcade no-coin
                               # corpus, headless (ares-headless), aligned on
-                              # the game's own timeline; HANDOFF-SESSION6.md
+                              # the game's own timeline; docs/handoff/HANDOFF-SESSION6.md
     tools/ares_diag_at.py rom N ...       # builder/consumer counters at frame N
 
 Objects depend on `.build_flags`, so switching flags forces a rebuild.
@@ -198,7 +198,7 @@ against.
   port sits, and the pivot. Start here.
 - `TOOLKIT.md` — the reusable kit inventory: what is game-agnostic and
   what is Altered-Beast-specific.
-- `LOOP.md`, `LOOP6..11.md` — the working log, newest last. Each has a
+- `docs/log/LOOP.md`, `docs/log/LOOP6..11.md` — the working log, newest last. Each has a
   NEGATIVE RESULTS section. **Read them before re-trying an idea**;
   most of the obvious optimisations are already in there with the
   measurement that killed them.

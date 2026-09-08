@@ -582,7 +582,7 @@ candidate, not a probe). Three steps, each measured on the battery:
           rule): see the line below this entry.
 
 RAM: the master's stage-1 row compose is compiled out under the
-all-slave split (NAT_ALL_SLAVE; ORACLE.md measured BANDSHIFT dead) and
+all-slave split (NAT_ALL_SLAVE; docs/design/ORACLE.md measured BANDSHIFT dead) and
 spr_pair moved to the slave stack floor — C1 fits both arms.
 
 WHAT MIKE'S EYE MUST JUDGE (cannot be gated here):

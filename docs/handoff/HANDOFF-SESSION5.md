@@ -1,6 +1,6 @@
 # HANDOFF — session 5 kickoff (written 2026-09-06 00:00, after session 4)
 
-Read HANDOFF-SESSION4.md for the full record of 2026-09-05 (it is long;
+Read docs/handoff/HANDOFF-SESSION4.md for the full record of 2026-09-05 (it is long;
 its last third is tonight). This file is the state you start from and
 the one job: THE ATTRACT-MODE SPLASH, FLAWLESS.
 
@@ -52,7 +52,7 @@ retype it from a handoff.
 ## 2. THE JOB: attract-mode splash, flawless
 
 "Flawless" = frame-for-frame the arcade's ref_arcade/ref_000001..
-002400 (ORACLE.md): 4 black frames then the WHOLE title card (frame
+002400 (docs/design/ORACLE.md): 4 black frames then the WHOLE title card (frame
 20); the SEGA screen; the ALTERED BEAST logo appearing whole (200->235)
 then cycling blue/white/red; the demo cut at 461-465. Ours today
 (screenshots_0905_2312, build 0140ad1f — re-capture on 08fed24 first):

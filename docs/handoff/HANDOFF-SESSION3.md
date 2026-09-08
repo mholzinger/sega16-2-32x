@@ -1,6 +1,6 @@
 # HANDOFF — SESSION 3 (written 2026-09-01 ~14:10, branch native1)
 
-Read this first; PALSTATIC.md, BOSSFIGHT.md, INTEGRATION.md are the
+Read this first; docs/design/PALSTATIC.md, docs/design/BOSSFIGHT.md, docs/design/INTEGRATION.md are the
 arc records. Everything below is paid for by measurement.
 
 ## 0. ROM STATE
@@ -44,18 +44,18 @@ arc records. Everything below is paid for by measurement.
 
 ## 2. NEXT QUEUE (ordered; each bounded)
 
-1. ~~Fixed-SDRAM map audit~~ **DONE 2026-09-01 (BOSSFIGHT.md "MAP
+1. ~~Fixed-SDRAM map audit~~ **DONE 2026-09-01 (docs/design/BOSSFIGHT.md "MAP
    AUDIT", tools/sdram_audit.py; #13=FBCLEAR, #14=snap; free: 0x398E0
    96B, 0x28E38 72B, 0x28F60 32B; .ramtext headroom 48B)**, then
-   ~~the GEN PHASE-SPLIT census~~ **DONE: PHASECENSUS=1, BOSSFIGHT.md
+   ~~the GEN PHASE-SPLIT census~~ **DONE: PHASECENSUS=1, docs/design/BOSSFIGHT.md
    "M8 DONE" — wall 1.19v = echo 1.05 / mtask 1.06, ship +0.54, flip
    +0.80; the period is 2 windows for a ~1.1v job**, then the arc
    itself: **D2 maps pointer walk (+7%), C1 cat-1 to plane A (+6% on
    top; rom/s16_c1.32x = shipping candidate, NEEDS MIKE'S EYE — see
-   BOSSFIGHT.md "C1"). Boss datum still needs Mike's savestate under a
+   docs/design/BOSSFIGHT.md "C1"). Boss datum still needs Mike's savestate under a
    PHASECENSUS=1 build (state_health.py prints the split).** Mike's
    pass 2026-09-01 late: C1 FAILED (pulled; design for a future C1 in
-   BOSSFIGHT.md), rom/s16_d2.32x PASSED = the new shipping candidate
+   docs/design/BOSSFIGHT.md), rom/s16_d2.32x PASSED = the new shipping candidate
    (promote after one more pass). New cosmetics: boss-smoke palette
    flap (scene-detect, one witness), wolf missing frames in the boss
    smoke. Gravestone: savestate anatomy banked; blue moment still
@@ -88,8 +88,8 @@ arc records. Everything below is paid for by measurement.
    BLUE. Diff grp_key/grp_kind/CRAM vs a fresh-boot baseline.
 4. Cosmetics: atomic scene reveal (shadow NT 0xD000 + plane-base
    flip), cloud strip, red orb, grass blink.
-5. **Audio merge** (Mike's second Claude thread, SOUND.md/sndtest):
-   INTEGRATION.md is the contract. Blockers to resolve there: the
+5. **Audio merge** (Mike's second Claude thread, docs/sound/SOUND.md/sndtest):
+   docs/design/INTEGRATION.md is the contract. Blockers to resolve there: the
    ~155KB free cart split (samples vs future bakes), COMM6 lab acks
    must not survive integration, COMM14 handover.
 
@@ -128,7 +128,7 @@ arc records. Everything below is paid for by measurement.
   upload state (68K WRAM). SDRAM scratch: 0x28C80 slave busy
   (phi/8), 0x28C88 miss_n, 0x28C90 text_grp, 0x28CA0 shadow_cur,
   0x28C00 cram_key/keygen, 0x28E28-2C mdspr state, 0x28E30-37 glow
-  state. 0x28F5C psw. Full map: INTEGRATION.md (keep it updated —
+  state. 0x28F5C psw. Full map: docs/design/INTEGRATION.md (keep it updated —
   the audio thread reads it too).
 - sprbake blob now in its own cart section .sprbake @0x340000
   (768KB window, 665KB used); rom pads to 4MB/0xFF; mdsprart
@@ -157,7 +157,7 @@ rom/s16_chase.32x = shipping line + BLITCHASE=1 (5a5eae73+ base). 1092
 ships vs 1068 (play2 1900), fence timeouts 0, rejects/hdlr flat. Awaits
 Mike's play pass: the thing to look for is a SEAM at row 136 (master
 half below, slave half above) — any tear there is a fence bug. Record:
-BOSSFIGHT.md "BLITCHASE". Next: item 2, C1 with MD-matched pens.
+docs/design/BOSSFIGHT.md "BLITCHASE". Next: item 2, C1 with MD-matched pens.
 
 
 ## 2026-09-02 night — CANDIDATE rom/s16_edge.32x (+20% over shipping)
@@ -169,14 +169,14 @@ look at: the scroll-in column at both screen edges (EDGE42), tile
 colour on sprite rows vs the rows around them (PENMATCH: should be one
 colour now), any black tile (C1's old failure), the seam at row 136
 (BLITCHASE). Fallbacks: rom/s16_chase.32x (item 1 only, 1092),
-rom/s16.32x (shipping). Record: BOSSFIGHT.md "C1 DONE RIGHT".
+rom/s16.32x (shipping). Record: docs/design/BOSSFIGHT.md "C1 DONE RIGHT".
 Next on the 60Hz route: the maps drain off the close path (item 3).
 
 
 ## 2026-09-03 — CANDIDATE rom/s16_edge3.32x (edge + black-cell fix)
 
 Mike's pass on s16_edge found black cells and tile bleed: slot-cache
-thrash pinned cut mode (BOSSFIGHT.md "MIKE'S PASS ON s16_edge").
+thrash pinned cut mode (docs/design/BOSSFIGHT.md "MIKE'S PASS ON s16_edge").
 edge3 = same flags, cat-1 tiles never evict hot ways + cut mode not
 re-armed by dirtiness. play2 1276 ships; soak 16771 blits (edge
 15680, shipping 13127); 0 black cells in 3225 sampled soak frames.
@@ -188,8 +188,8 @@ Watch: tile bleed (pre-existing hot-evict class, now on cat-1 cells).
 edge3 + near-pen merge (sky band flat) + vblank-gated CRAM writes with
 a WRAM deferral (story-panel DAC dots gone) + refcount fix. play2 1214,
 soak 15388 (family level; +15% over shipping's 13127). Grass shimmer =
-arcade behaviour (BOSSFIGHT.md). Pop-in = art latency, queued. Record:
-BOSSFIGHT.md "MIKE'S PASS ON s16_edge3".
+arcade behaviour (docs/design/BOSSFIGHT.md). Pop-in = art latency, queued. Record:
+docs/design/BOSSFIGHT.md "MIKE'S PASS ON s16_edge3".
 
 
 ## 2026-09-04 — CANDIDATE rom/s16_edge9.32x (edge8 minus the near merge)
@@ -198,7 +198,7 @@ The merge broke fades (chevrons, load-in, cloud blocks); off by default,
 NEARMERGE=1 to test. edge9 = edge3 + DAC-dot gate. play2 1220. Open:
 Zeus black scale-in (pre-existing, FB pairs), MD-sprite art lag (zombie
 dropout / red block), grass wave phase order vs arcade (needs video
-side-by-side). Record: BOSSFIGHT.md "MIKE'S PASS ON s16_edge8".
+side-by-side). Record: docs/design/BOSSFIGHT.md "MIKE'S PASS ON s16_edge8".
 
 
 ## 2026-09-05 — CANDIDATE rom/s16_zeus2.32x (edge9 + Zeus)
@@ -206,7 +206,7 @@ side-by-side). Record: BOSSFIGHT.md "MIKE'S PASS ON s16_edge8".
 Zeus = the game's one-in-three ghost flicker meeting a one-snapshot
 pair memory. Held-pair window (4 gens) + quick claim at launch. No
 black in the headless scale-in; play2 1227; soak 15274. Record:
-BOSSFIGHT.md "ZEUS SOLVED".
+docs/design/BOSSFIGHT.md "ZEUS SOLVED".
 
 
 ## 2026-09-05 — CANDIDATE rom/s16_cand.32x (zeus2 + HSSHIP + quick-claim LRU fallback)

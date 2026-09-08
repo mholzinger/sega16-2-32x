@@ -1,4 +1,4 @@
-/* sndtest PCM lane — SH-2 PWM voice-pool mixer (SOUND.md P1).
+/* sndtest PCM lane — SH-2 PWM voice-pool mixer (docs/sound/SOUND.md P1).
  * Secondary-side lifecycle + the primary's trigger API. */
 #ifndef SOUND_H
 #define SOUND_H

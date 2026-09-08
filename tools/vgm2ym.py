@@ -5,7 +5,7 @@ VGM logs are the authoritative, COMPLETE song: the exact YM2151 register
 writes from the real S16B hardware WITH an explicit loop point. This
 parses a .vgz (gzipped VGM), returns the seg dict tools/soundmap_build
 .transcode consumes, plus the loop point in seconds — so tracks are
-complete and loop seamlessly (SOUND_DRIVER.md), no capture/attract
+complete and loop seamlessly (docs/sound/SOUND_DRIVER.md), no capture/attract
 guesswork.
 
 Reference: VGM spec 1.50. Commands used by S16B logs: 0x54 aa dd

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the Z80 player blob for the 68K (SOUND.md P3).
+"""Package the Z80 player blob for the 68K (docs/sound/SOUND.md P3).
 
 Reads player.bin (wla-z80 output: an 8KB image that executes from Z80
 RAM) and emits a C header with the code bytes plus the mailbox/ring

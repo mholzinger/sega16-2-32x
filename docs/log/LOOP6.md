@@ -13,11 +13,11 @@
 >
 > The real k1 pre-ack floor was **apply_cram** (0.679 ms/cycle,
 > unconditional ~2112-entry CRAM rewrite every k1). It is now gated and
-> memoized — see LOOP.md "Iteration 6 LANDED" for the mechanism, the
+> memoized — see docs/log/LOOP.md "Iteration 6 LANDED" for the mechanism, the
 > ordering law it cost, and the ares falsifier. The rest of this
 > document is kept as the record of the falsified hypothesis.
 
-Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md, then
+Kickoff doc for a FRESH session. Self-contained: read this + docs/log/LOOP.md, then
 run. The prior session (LOOP 5) landed a PLAYABLE game; this arc takes it
 from ~7Hz/57%-reject to the ~20Hz cadence and kills the strobing.
 
@@ -49,7 +49,7 @@ the k1 handler drops to ~181 (fits) -> the k1-triggered rejects vanish.**
   / demo2 21. eyehold+demo2 at baseline; title/demo carry ~1-frame DMA
   text latency the frame-exact anchors penalize (invisible on hardware).
 
-## The design (from LOOP.md "Iteration 1b" — never implemented)
+## The design (from docs/log/LOOP.md "Iteration 1b" — never implemented)
 
 `copy_pages` exists only because the game's tile writes land in FB
 staging (0x852000 MD / 0x24012000 SH-2) and the master must copy dirty
@@ -59,7 +59,7 @@ so on the k1 critical path. Replace it:
 1. **Thunk the game's tile-store instructions** to ALSO append
    `(offset, value)` to an MD-RAM ring (the store still lands in FB
    staging so game read-backs are unaffected). Store sites are
-   enumerable — LOOP.md iteration 1b lists them (0xD84 fill helper,
+   enumerable — docs/log/LOOP.md iteration 1b lists them (0xD84 fill helper,
    0x2AD4-cluster vint words, 0x6836 seam writers, 0x1BA1C/2C fills,
    etc.); patch_report.txt / patch_game.py has the address-formation
    sites. The dirty-page BITMAP thunks already exist (0xFFB820, tile_
@@ -110,7 +110,7 @@ the worst-handler window span dropping from ~88 toward ~30.
 
 ## First moves for the new session
 
-1. Read LOOP.md (iteration 1b store-site list + LOOP 5 sections) and this
+1. Read docs/log/LOOP.md (iteration 1b store-site list + LOOP 5 sections) and this
    doc. `git log --oneline -10` for the DMA-packet commits (5f0ec0b,
    5a04686).
 2. Enumerate the tile-store sites (patch_report.txt, patch_game.py, the

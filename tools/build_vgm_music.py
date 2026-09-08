@@ -7,7 +7,7 @@ the INTRO (chip init + pre-loop) and the LOOP (the repeating section)
 separately (YM2151->YM2612 via opm2opn), LZSS-compresses each, and emits
 render_music.h with {cmd, intro, loop}. The player plays the intro once
 then loops the loop section — complete, and seamless, unlike a timed
-capture (SOUND_DRIVER.md).
+capture (docs/sound/SOUND_DRIVER.md).
 
   build_vgm_music.py --map "0x94=01 Rise...vgz" ... --audio DIR --out H
 The map is command=vgz-filename; see the assignment in the session log.
@@ -189,7 +189,7 @@ def main():
                 " * authoritative VGM soundtrack rips, split intro+loop at\n"
                 " * the VGM loop point, transcoded + LZSS-compressed. The\n"
                 " * player plays the intro once then loops the loop section\n"
-                " * (SOUND_DRIVER.md). Do not edit. */\n"
+                " * (docs/sound/SOUND_DRIVER.md). Do not edit. */\n"
                 "#include <stdint.h>\n\n")
         for cmd, ci, cl, il, ll, total, lt in tracks:
             f.write(f"static const uint8_t rin_{cmd:02X}[{len(ci)}] = {{\n")

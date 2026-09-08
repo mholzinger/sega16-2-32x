@@ -89,7 +89,7 @@ _Static_assert(PKT_PAL_KMAX <= 7, "K overflows the tag field");
  * KMAX=7 (the 3-bit tag field's ceiling): drain 1.75x, a full storm
  * clears in ~9 cycles instead of 16. If Mike's eyes still catch the
  * tear, the next step is the STORM FLUSH (whole-mirror sync through
- * FB scratch, one cycle) — see LOOP25.md. */
+ * FB scratch, one cycle) — see docs/log/LOOP25.md. */
 #define K2F_PAL_IDS    4u
 #define K2F_PAL_KMAX   4u
 /* (KMAX 7 field-tested 2026-08-21 and REVERTED same night: the wide
@@ -113,7 +113,7 @@ _Static_assert(K2F_PAL_KMAX <= 7, "K overflows the 3-bit tag field");
 #endif
 
 #ifdef R60
-/* REBUILD (REBUILD.md P2) — THE ONE PACKET. One vint = one frame =
+/* REBUILD (docs/design/REBUILD.md P2) — THE ONE PACKET. One vint = one frame =
  * one push, 68K -> SH-2, built at the 68K's vint entry and landed
  * against an IDLE master (the master waits for it before its FM
  * span — the LOOP25 FIFO verdict inverted into a design rule).

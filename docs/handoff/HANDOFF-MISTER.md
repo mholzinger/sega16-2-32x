@@ -5,23 +5,37 @@ work on ares, and (B) the first-ever bring-up on real 32X hardware (MiSTer
 FPGA). Read LOOP27 entries 1-11 for the blow-by-blow; this is the state
 and the unfinished edges.
 
-## READ FIRST — the tree is dirty and one change touches the SHIP line
+## READ FIRST — the ship-line leak is CLOSED (2026-09-08 02:06)
 
-Nothing is committed. Almost everything is behind probe flags EXCEPT one
-thing that leaked into the default build and must be dealt with:
+Nothing is committed. The one change that had leaked into the default
+build — slave cache OFF on every rom plus the permanent slave SDRAM
+warm-up stub — is now **gated behind `MISTERBOOT=1`, default OFF**.
+Both were added chasing the MiSTer slave hang, neither fixed it (arc B),
+and both were unproven weight on the ares ship line.
 
-- **`Makefile` ~line 584: `ifndef SLVCACHEON` adds `--defsym SLV_CACHE_OFF=1`
-  to EVERY build**, and `sh_src/mars_start.s` now has a PERMANENT slave
-  SDRAM warm-up (the heartbeat stub, copied to 0x0603FA00 and run before
-  the jump to _s_main). Both were added chasing the MiSTer slave hang.
-  THEY DID NOT FIX IT (see arc B) and they change the shipping SH-2 boot
-  path: slave cache is now OFF and the warm-up runs on every rom, ares
-  included. ares still boots and plays with them in, but this is unproven
-  weight on the ship line. DECISION NEEDED: revert both (set the default
-  back to cache-on, drop the warm-up) OR keep them gated behind a flag
-  that is OFF by default. Recommend: gate them behind `MISTERBOOT=1` and
-  default OFF until the hang is actually solved, so the ares ship line is
-  clean.
+- `Makefile`: the `ifndef SLVCACHEON` blanket is gone. `MISTERBOOT=1`
+  now sets `--defsym MISTER_BOOT=1` and implies `SLVCACHEOFF=1`;
+  `SLVCACHEOFF=1` alone is still the cache-only probe knob.
+- `sh_src/mars_start.s`: the warm-up call site, its literal pool and the
+  `_slvstub_*` heartbeat body are all inside `.ifdef MISTER_BOOT`.
+
+Verified on a `make ship-us` build (BUILD c79131d3+ 2026-09-08 02:06:24):
+slave `_secondary_cctl` writes `#17` (0x11, purge + cache ON) again, no
+`_slvstub`/`_slvprime` symbols in `rom/s16.lst`, region guard
+`_end = 0x060135c8` (< 0x06019000). A `MISTERBOOT=1` build was checked
+too: `#16` (cache off) and the stub both come back.
+
+NOTE: that rebuild OVERWROTE `rom/s16.32x`, which had been the
+pre-session control binary (BUILD cf83ac94+). The new `rom/s16.32x` is
+the clean ship line from the current tree; the old binary is not
+recoverable byte-for-byte (it was built from a dirty tree).
+
+SEPARATE, PRE-EXISTING: a bare `make` does not compile — `md_hold` /
+`md_hold_seen` are declared at `md_src/md_main.c:491`, inside the
+`#ifdef MD_BG` region opened at line 397, but used unguarded at line
+3423. Every ship build defines MD_BG (MDBGALL=1), so `make ship-us`
+is unaffected; only the flagless `make` in CLAUDE.md's build section
+breaks. Not touched.
 
 ## ARC A — 32X-native 60 Hz (ares) — REAL PROGRESS, awaits a play pass
 
@@ -90,16 +104,32 @@ mister-boot-closed — do not chase unless he re-opens):
    does NOT (beacon RED). **Restart point if re-opened: DIFF those two
    builds** — same stub, one boots and one doesn't, so the difference is
    findable, not a fresh hunt. ROM Storage (SDRAM/DDR3/Auto) RULED OUT.
-2. **Black screen once booted.** The 32X framebuffer LAYER doesn't reach
-   the display while the pipeline runs; the MD text plane does. Gate and
-   mode register RULED OUT (BOOT_GATEOFF, BOOT_MDMODE both black).
-   Suspect: blit target-bank parity vs displayed bank under the per-vint
-   flip = the same flip question as arc A's blocker. Next probe (unbuilt)
-   must read the DISPLAYED bank right after a real flip, blit-parity-aware
-   (the no-flip probes were unsound).
+2. **Black screen once booted.** CORRECTED 2026-09-08 from the session
+   transcript (LOOP27 entry 10b): the 32X framebuffer layer DOES reach
+   the screen on this core — `rom/s16_68kdraw.32x` put a bar up, with
+   the title text behind it, when the **68K** wrote the FB and flipped
+   from its own side. It does not reach the screen when the **SH-2
+   pipeline** drives it. Gate and mode register are still RULED OUT
+   (BOOT_GATEOFF and BOOT_MDMODE both black) — and note those two being
+   black while 68kdraw is VISIBLE is the sharpest clue in the arc: the
+   discriminator is who writes and who flips, not which switch is set.
+   The parked suspect (blit target-bank parity vs displayed bank under
+   the per-vint flip) is still plausible but is no longer the only one.
+   Next probe (unbuilt) must read the DISPLAYED bank right after a real
+   flip, blit-parity-aware (the no-flip probes were unsound), and must
+   draw its markers at ROW 8 OR BELOW — rows 0-7 are off Mike's display.
+
+   LOOSE END, never reconciled: `s16_gateint` reported RED (the master
+   never sees the game's display-on flag) but `s16_words` then showed
+   landed word 20 = 0x6000 on both MiSTer and ares. 0x6000 has no bit
+   15, so if bit 15 were that flag ares would not see it either — yet
+   ares works. Either the flag is not bit 15 of word 20 or the gateint
+   probe read the wrong thing. The session closed on the byte-identity
+   and left the RED unexplained.
 
 ## Rom inventory (all in rom/, none committed)
-- `s16.32x` — SHIP line, build cf83ac94 (the pre-session control). Untouched.
+- `s16.32x` — SHIP line, REBUILT 2026-09-08 02:06 (c79131d3+) with the
+  MiSTer leak gated out. Replaces the cf83ac94+ pre-session control.
 - `s16_txtwram_opt1.32x` — arc A stack (TXTWRAM+LATESTEAL0+LATEKEEP+DRAWADOPT+ARMGATE). For Mike's ares play pass.
 - `s16_txtwram_census.32x` — opt1 + SPR_LATE census counters.
 - `s16_words.32x` — MiSTer probe; BOOTS THE SLAVE (arc B restart control).

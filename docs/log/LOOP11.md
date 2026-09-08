@@ -1,7 +1,7 @@
 # LOOP 11 — THE MK2 PIVOT: hold FM, compose direct, delete the blit
 
-Kickoff doc for a FRESH session. Read this, then LOOP10.md's result
-sections, then LOOP.md's negatives list. This is an ARCHITECTURE change,
+Kickoff doc for a FRESH session. Read this, then docs/log/LOOP10.md's result
+sections, then docs/log/LOOP.md's negatives list. This is an ARCHITECTURE change,
 not another optimisation — LOOP 10 ended with Mike saying the port is
 "looking better while sacrificing playability" and "framerate in the first
 half is kind of ridiculous", and with four separate micro-optimisations
@@ -132,7 +132,7 @@ Ordered by (value / risk):
      THE COST IS REAL AND IT IS THE SKIPS: 546 skipped windows is 546
      deferred blit phases, the scene runs late against the anchor, and
      scream/demo2 move 47->66 and 19->52. **On MAME that is pure loss —
-     its window is ~18 lines (LOOP.md iter6), so there are no held-FM
+     its window is ~18 lines (docs/log/LOOP.md iter6), so there are no held-FM
      scanlines to hand back. The entire payoff is the ~79 lines of
      not-yet-started FM that only ares holds.** This is the "MAME cannot
      see the terms that matter" lesson arriving on schedule; do not read
@@ -447,7 +447,7 @@ text layer, a sprite chip, 128 colour sets. Solve it once.
 # reached, INCLUDING A SUPERSEDED ONE. The FM-hold pivot in "THE PIVOT,
 # IN ORDER" was the plan until the Chaotix disassembly showed we do not
 # need to hold FM at all — only to make the window microseconds and
-# non-blocking. Read it as history, not as instructions. (LOOP9.md became
+# non-blocking. Read it as history, not as instructions. (docs/log/LOOP9.md became
 # a trap exactly this way.) The sections that ARE still live down here:
 # MK2 TECHNIQUES, GATES, THE ares BASELINE, and THE METHOD LESSONS.
 
@@ -568,7 +568,7 @@ the 128 KB-per-frame blit it would let us delete.
         eliminating it, which is what the library survey is looking for.
 3. **Relocate the two 68K FB READ-BACKS** — the collision `tst.w`s at
    `0x6936+` and the round-transition scratch in page 1 at `0x1B760`
-   (LOOP.md iteration 1b). These are the last non-tilemap FB users.
+   (docs/log/LOOP.md iteration 1b). These are the last non-tilemap FB users.
 4. **Hold FM=1 permanently.** The window collapses to a vint handshake
    with no stall: the 68K never waits on the SH-2 again.
 5. **Compose straight into the hidden framebuffer.** Flip first, then

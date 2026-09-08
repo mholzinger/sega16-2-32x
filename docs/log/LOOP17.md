@@ -1,7 +1,7 @@
 # LOOP 17 — THE SPRITE BAKE: precompute in the ROM what the
 # beam-racer had to re-derive per scanline. HANDOFF KICKOFF.
 
-Fresh session: read this, then DEVNOTES.md; LOOP16 has the 2-window
+Fresh session: read this, then docs/log/DEVNOTES.md; LOOP16 has the 2-window
 cycle era in full. Where LOOPs and ARCHITECTURE.md disagree,
 ARCHITECTURE wins. Memory `release-bar-flawless` is the bar.
 
@@ -616,14 +616,14 @@ for CORRECTNESS (build it WITHOUT SPRTRUNC so MAME renders faithfully,
 then diff frames against the same build without BLITSKIP — that is how
 this bug was caught in one run). The SPEED verdict needs ares.
 
-## THIS LOOP IS CLOSED — CONTINUE IN LOOP18.md
+## THIS LOOP IS CLOSED — CONTINUE IN docs/log/LOOP18.md
 
-LOOP18.md is the handoff kickoff: current state, the blit measurements
+docs/log/LOOP18.md is the handoff kickoff: current state, the blit measurements
 that define the next arc, the job order (BLITSKIP attempt 2 first, then
 dirty-rect compose), the instruments, and every trap paid for today.
 What follows below is the original LOOP17 plan, kept for its detail.
 
-## (LOOP17'S OWN NEXT-STEPS, superseded by LOOP18.md)
+## (LOOP17'S OWN NEXT-STEPS, superseded by docs/log/LOOP18.md)
 
 1. **DONE — SPRTRUNC verified on ares (91.3). Mike's call whether it
    folds into the canonical bundle**, which is a gate-rebaseline

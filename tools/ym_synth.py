@@ -7,7 +7,7 @@ loss). This is a per-SAMPLE OPM synth (~480 ops/sample for 8 voices ~=
 half an SH-2 at 22kHz), NOT cycle-accurate like Nuked-OPM (which is ~17x
 too heavy for real-time). Validated offline against the Nuked reference,
 then ported to SH-2 C. Tables + algorithm derived from jt51's opm.c /
-the YM2151 datasheet (SOUND_DRIVER.md, [[sh2-fm-synth]]).
+the YM2151 datasheet (docs/sound/SOUND_DRIVER.md, [[sh2-fm-synth]]).
 
 Standard OPM operator: phase acc -> logsin(phase+mod) -> +env atten +TL
 -> exp -> linear. 4 operators/channel connected by the algorithm, op1

@@ -27,6 +27,20 @@ PAL32 = bool(os.environ.get('PAL32'))
 # SH-2 window (the rte trampoline in md_start.s raises FM AFTER the
 # game's vint upload). Derivation: tools/fmgate_derive.py.
 FMGATE = bool(os.environ.get('FMGATE'))
+# LOOP 27 q4: TXTWRAM=1 takes the text writers the frame timeline shows
+# at the TOP of the game's pass (tools/frame_timeline.py: the credit line
+# at pass line +2, the health bar at +25 — each spins ~60-100 lines on
+# the SH-2's FM span) OFF the framebuffer. Per writer (tools/game_<GAME>.py
+# TABLES['TXT_WRAM_WRITERS']): its text base operand is rebased to the
+# WRAM text mirror 0xFF8000 (glyph area, unused since K2FREE), the entry
+# gets a MARK thunk (dirty byte, plus the live text offset for writers
+# that add a variable), and its FM gate/span are dropped; shared glyph
+# loop heads it calls skip the FM wait for a WRAM destination. The shim
+# copies each dirty writer's footprint into FB text staging at FM=0
+# before the raise (md_main.c TXT_WRAM, table in fmgate_tab.h). Sega's
+# code untouched beyond the rebase; derivation in docs/log/LOOP27.md 4.
+TXTWRAM = bool(os.environ.get('TXTWRAM'))
+TXTW_BASE = 0xFFB0C0       # 4 bytes per writer: [off word][dirty byte][pad]
 
 ROOT = Path(__file__).resolve().parent.parent
 GAME = os.environ.get('GAME', 'altbeast')
@@ -723,7 +737,7 @@ for off, want, thunk in TAS_SITES:
     hrom[off:off+4] = bytes([0x4E, 0xB8, thunk >> 8, thunk & 0xFF])
 # (shim installs the thunks at 0xFFB380/0xFFB38A/0xFFB394/0xFFB3F6)
 
-# TILE DIRTY-BIT THUNKS (write-observer ring, LOOP.md iteration 3c):
+# TILE DIRTY-BIT THUNKS (write-observer ring, docs/log/LOOP.md iteration 3c):
 # every tile-RAM writer roots at a 6-byte lea/immediate whose target
 # page is known AT PATCH TIME. Each site becomes jsr to an MD-RAM
 # thunk (0xFFB820+16i) that ORs its page bits into the dirty bitmap
@@ -1002,6 +1016,19 @@ FMGATE_ENTRIES = T('FMGATE_ENTRIES')
 # spans for part B's defer check (runtime addresses; thunk range added
 # below; zero-terminated)
 FMGATE_SPANS = T('FMGATE_SPANS')
+TXTW = GT.get('TXT_WRAM_WRITERS') if TXTWRAM else []
+if TXTWRAM and not TXTW:
+    raise SystemExit(f'patch_game: TXTWRAM needs tools/game_{GAME}.py TABLES["TXT_WRAM_WRITERS"]')
+if TXTWRAM:
+    assert FMGATE, "TXTWRAM builds on FMGATE (its marks live in the thunk block)"
+    TXTW_SITES = {w['site'] for w in TXTW}
+    TXTW_LOOPS = {l for w in TXTW for l in w.get('loops', [])}
+    TXTW_DROP = {g for w in TXTW for g in w.get('drop_gates', [])}
+    for w in TXTW:
+        for sp in w.get('drop_spans', []):
+            assert tuple(sp) in [tuple(x) for x in FMGATE_SPANS], f"txtwram: span {sp} not in FMGATE_SPANS"
+    FMGATE_SPANS = [sp for sp in FMGATE_SPANS
+                    if tuple(sp) not in {tuple(x) for w in TXTW for x in w.get('drop_spans', [])}]
 fmgate_words = []
 fmgate_base = PAL_THUNK_BASE + len(pal_words) * 2
 if FMGATE:
@@ -1023,10 +1050,48 @@ if FMGATE:
         struct.pack_into('>HH', hrom, off, 0x4EB8, taddr)
         for k in range(4, dlen, 2):
             struct.pack_into('>H', hrom, off + k, 0x4E71)
+        if TXTWRAM and (off in TXTW_SITES or off in TXTW_DROP):
+            # the writer stores into WRAM now: no gate (its mark thunk is
+            # installed below); undo the jsr just planted
+            struct.pack_into(f'>{dlen // 2}H', hrom, off, *disp)
+            continue
+        if TXTWRAM and off in GT.get('TXT_WRAM_CLEAR_SITES', []):
+            # a scene-level text fill invalidates every pending footprint:
+            #   clr.b (slot+2).w  per writer  (CCR already owned by the gate)
+            for wi2 in range(len(TXTW)):
+                fmgate_words += [0x4238, (TXTW_BASE + 4 * wi2 + 2) & 0xFFFF]
+        if TXTWRAM and off in TXTW_LOOPS:
+            # shared glyph loop heads: a WRAM destination needs no FM
+            #   cmpa.l #0x00FF0000,%a1 ; bhs.s <past the spin>
+            # (CCR is rewritten by the displaced moveb/clrb anyway)
+            fmgate_words += [0xB3FC, 0x00FF, 0x0000, 0x6408]
         fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
                          0x6BF8]                      # bmi.s back to tst
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")
+    for wi, w in enumerate(TXTW):
+        slot = TXTW_BASE + 4 * wi
+        site = w['site']
+        got = struct.unpack_from('>H', hrom, site)[0]
+        lea_op = 0x41F9 | (w['reg'] << 9)
+        assert got == lea_op, f"txtwram {site:#x}: first word {got:04X} != lea abs.l,a{w['reg']}"
+        old = struct.unpack_from('>I', hrom, site + 2)[0]
+        assert old >> 12 in (0x410, 0x85F, 0xFF8), f"txtwram {site:#x}: operand {old:#x} not text RAM"
+        newop = 0x00FF8000 | (old & 0xFFF)
+        taddr = fmgate_base + len(fmgate_words) * 2
+        struct.pack_into('>HHH', hrom, site, 0x4EB8, taddr, 0x4E71)
+        words = []
+        if 'off_var' in w:      # record the offset the writer is about to add
+            words += [0x31F8, w['off_var'] & 0xFFFF, slot & 0xFFFF]   # move.w (var).w,(slot).w
+        words += [0x50F8, (slot + 2) & 0xFFFF]                         # st.b (slot+2).w
+        words += [lea_op, newop >> 16, newop & 0xFFFF, 0x4E75]         # lea WRAM text,%aN ; rts
+        fmgate_words += words
+        for alt in w.get('alt_sites', []):
+            g2 = struct.unpack_from('>H', hrom, alt)[0]
+            o2 = struct.unpack_from('>I', hrom, alt + 2)[0]
+            assert g2 == lea_op and o2 >> 12 in (0x410, 0x85F), f"txtwram alt {alt:#x}: {g2:04X} {o2:#x}"
+            struct.pack_into('>I', hrom, alt + 2, 0x00FF8000 | (o2 & 0xFFF))
+        pal_report.append(f"G {site:06X}: TXTWRAM mark -> {taddr:04X}  {w.get('note', '')}")
     fmgate_end = fmgate_base + len(fmgate_words) * 2
     assert fmgate_end <= 0xBFF0, \
         f"fmgate thunks overrun boot stack: end {fmgate_end:#x}"
@@ -1039,6 +1104,26 @@ with open(ROOT / 'md_src' / 'fmgate_tab.h', 'w') as fh:
     fh.write(f"#define FMGATE_ON {1 if FMGATE else 0}\n")
     fh.write(f"#define FMGATE_THUNK_ADDR 0x{fmgate_base:04X}\n")
     fh.write(f"#define FMGATE_THUNK_WORDS {len(fmgate_words)}\n")
+    fh.write(f"#define TXT_WRAM_ON {1 if TXTWRAM else 0}\n")
+    fh.write(f"#define TXTW_N {len(TXTW) if TXTWRAM else 0}\n")
+    fh.write("/* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),\n"
+             " * fixed text byte offset (0xFFFF = read the slot word), words to copy,\n"
+             " * selector byte (0 = none) and the alternate offset it selects when non-zero\n"
+             " * (the health bar: P1 / P2 footprints, never both — a stale mirror of the\n"
+             " * other player's bar must not be re-planted over the game's clear) */\n")
+    fh.write("static const struct { unsigned short slot, off, words, sel, off2; } txtw[] = {\n")
+    for wi, w in enumerate(TXTW if TXTWRAM else []):
+        slot = TXTW_BASE + 4 * wi
+        if 'off_var' in w:
+            fh.write(f"    {{ 0x{slot & 0xFFFF:04X}, 0xFFFF, {w['words']}, 0, 0 }},\n")
+        elif 'ranges' in w:
+            (lo, hi), (lo2, hi2) = w['ranges']
+            assert (hi - lo) == (hi2 - lo2)
+            fh.write(f"    {{ 0x{slot & 0xFFFF:04X}, 0x{lo:04X}, {(hi - lo + 1) // 2}, 0x{w['sel_var'] & 0xFFFF:04X}, 0x{lo2:04X} }},\n")
+        else:
+            lo, hi = w['range']
+            fh.write(f"    {{ 0x{slot & 0xFFFF:04X}, 0x{lo:04X}, {(hi - lo + 1) // 2}, 0, 0 }},\n")
+    fh.write("    { 0, 0, 0, 0, 0 } };\n")
     fh.write("static const unsigned short fmgate_thunks[] = {\n")
     for i in range(0, max(len(fmgate_words), 1), 8):
         row = fmgate_words[i:i+8] or [0x4E75]

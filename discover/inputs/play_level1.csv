@@ -1,5 +1,5 @@
 # Reconstructed gameplay input script (original play2.csv was lost in
-# a session scratchpad). Mapping per REBUILD.md M2: coin = Y, start = START.
+# a session scratchpad). Mapping per docs/design/REBUILD.md M2: coin = Y, start = START.
 # coin
 300,y,1
 310,y,0

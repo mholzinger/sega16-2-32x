@@ -2,7 +2,7 @@
 
 One-screen summary of what this branch delivers, for anyone (including
 future us) landing here cold. Full working logs with measurements and
-negative results: `LOOP14.md`, `LOOP15.md`. Architecture: `ARCHITECTURE.md`.
+negative results: `docs/log/LOOP14.md`, `docs/log/LOOP15.md`. Architecture: `ARCHITECTURE.md`.
 
 ## Where the port stands
 
@@ -24,7 +24,7 @@ negative results: `LOOP14.md`, `LOOP15.md`. Architecture: `ARCHITECTURE.md`.
   decode jobs (74-85% of cost) repeat per cycle; slave idles
   14,427 polls/cycle; 768KB cart free. Hybrid bake with live
   fallback, then cutscene-30Hz and 60Hz-plane-scroll experiments.
-  LOOP17.md is the handoff.
+  docs/log/LOOP17.md is the handoff.
 
 ## Canonical builds
 
@@ -56,7 +56,7 @@ negative results: `LOOP14.md`, `LOOP15.md`. Architecture: `ARCHITECTURE.md`.
     #   0.53/cycle. flip/blit skips 2.8-4.6% -> 0.1%. Handler mean 84.4,
     #   game ~68% of the MD 68K.
     # (superseded) make MDBGALL=1 BQCHUNK=1 CUTBLANK=1 NTWRAP=1 WIN2=1 SPRTRUNC=1
-    # Current loop: LOOP18.md (blit-bound era). LOOP17.md is the log of
+    # Current loop: docs/log/LOOP18.md (blit-bound era). docs/log/LOOP17.md is the log of
     # how we got here.
     # ^ THE canonical line (2026-08-17). SPRTRUNC folded in on the ares
     # verdict: 68K handler mean 106.9 -> 91.3, game ~59% -> ~65% of the

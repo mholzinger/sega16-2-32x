@@ -1,7 +1,7 @@
 # ADVERSARIAL ARCHITECTURE AUDIT — sega16-2-32x
 ### "The only answer is a completely perfect arcade port." Everything below is judged against that bar.
 
-Date: 2026-08-21. Sources: ARCHITECTURE.md, TOOLKIT.md, LOOP.md + LOOP6–25.md (full read),
+Date: 2026-08-21. Sources: ARCHITECTURE.md, TOOLKIT.md, docs/log/LOOP.md + LOOP6–25.md (full read),
 sh_src/m_main.c (6,946 lines, 221 `#if`), md_src/md_main.c (2,188 lines, 81 `#if`),
 md_src/packet_fmt.h, tools/patch_game.py (1,212 lines), Makefile (905 lines, **67 flag blocks, 62 distinct `-D` defines**).
 Canonical build line is currently **14 flags long**:
@@ -60,7 +60,7 @@ cites the LOOP entry.
 |---|---|---|---|---|
 | 1 | **FM window protocol** (raise → 68K spin → ack), 3 generations: whole-window spin → FMGATE trampoline + 49 gated sites → K2FREE flip-hold | 68K and SH-2 sharing one framebuffer that holds BOTH the display and the game's video RAM | The central tax: window/ack ran 73–210+ lines/vint of pure 68K stall for the project's whole life; FMGATE adds an rte-trampoline in md_start.s + generated gate thunks + `fmgate_derive.py` | The 200-line window IS the port's speed history. FMGATE v1–v6: **five failed timing variants** (LOOP23). K2FREE: **six graves** incl. the FPUSH MAME-wedge and the bus-quiet guarantee "nobody wrote down" (LOOP24). The spin turned out to be an accidental bus-quiet contract — removing it broke the flip span (span 82.9→124 lines). |
 | 2 | **DREQ packet family** — 772→852→596/340→variable→84+8n / 4/40..136 word families; 4-word alignment; re-arm per window; split-by-phase; partial apply; **magic tail**; whitelist; per-word vs per-group FPUSH; overpush; double-buffered A/B packet staging; packet_fmt.h single-source | Moving sprite list / text / palette / regs from 68K to SH-2, because ares **discards MD writes to the FB while SH-2 owns FM** (savestate-proven) | packet_fmt.h (121 lines of `_Static_assert`s that exist because 4 consumers desynced); md_main push loops; m_main apply/whitelist; ~48.6 lines/vint of 68K at its peak (LOOP20: "the tail IS the DREQ push") | Two hard 68K deadlocks (LOOP6). 7b: bigger packet → 47% incomplete → artifact field. Overpush **masked** honest truncation as silent −2 word displacement (LOOP13). PAL32 whitelist bug: every palette packet rejected whole, invisible in MAME (LOOP22). KMAX=7 widening: "borderline unplayable" (LOOP25). Verdict on file: *"THE FIFO CANNOT CARRY BULK PALETTE AT THIS POINT IN THE FRAME"* (LOOP25). |
-| 3 | **V-gate + quiet zone + reject/retry** (anti-flash gate, thresholds 11300/10300) | Shipping a half-composed frame; flips outside vblank | Threshold tuning across LOOP3–7; DIAG[7]; retry machinery | The 57–66% reject band was **BUILT** by three individually-correct commits (LOOP.md "THE BAND'S ORIGIN": COMM 70 + palscan 45 + DREQ 49 lines = the tail); six iterations attacked the wrong term. Gate widening under FMGATE did nothing — the class was frame overrun (LOOP23 W). |
+| 3 | **V-gate + quiet zone + reject/retry** (anti-flash gate, thresholds 11300/10300) | Shipping a half-composed frame; flips outside vblank | Threshold tuning across LOOP3–7; DIAG[7]; retry machinery | The 57–66% reject band was **BUILT** by three individually-correct commits (docs/log/LOOP.md "THE BAND'S ORIGIN": COMM 70 + palscan 45 + DREQ 49 lines = the tail); six iterations attacked the wrong term. Gate widening under FMGATE did nothing — the class was frame overrun (LOOP23 W). |
 | 4 | **Blit pipeline**: thirds → WIN_TWO 2-window; band queue depth 4; complete-or-defer; BQ_CHUNK; BANDSHIFT; cat-1 single-slot deferral | Full-frame blit not fitting a 38-line vblank (pres-1.0); strobe (LOOP10 cat1 move) | m_main band-queue state machine; the k1/k2 **split-blit seam** — rows 0-112 and 112-224 from frames one cycle apart | 7f striping: hit its target, lost the play pass. Even-thirds: two permanent seams, reverted on play pass (neg 23). Cat-1 deferral silently ate the FG layer under WIN_TWO (last band had no successor — LOOP17). ~1 band dropped **every cycle forever** until BANDSHIFT (LOOP18); shift=32 overshot. The seam is now the dominant remaining tear (LOOP24 Z3) and its real fix is 60Hz. |
 | 5 | **Page capture/restore "truth" machinery**: copy_pages, pg_pending/pg_watch/pg_deep, COMM10 live-dirty latch, cap_drain budgets, capture-wide⇒restore-wide | The game **reading back** its own tile staging, which lives in a **banked** framebuffer under a double buffer | copy_pages + cap_page/cap_drain/restore_pages in m_main; the deep-watch drain is today's flip-late tail (span max 239–370 lines, LOOP24) | 1a atomic ship: blind copy across banks = letter-soup tilemaps. PGROTOR: backgrounds **cycling between scenes' art** on ares (LOOP14). Restore-narrow: eyehold 8.18→26.56 (LOOP14). Early COMM10 merge: mid-stream captures poisoned truth (LOOP13). Entirely absent from every commercial title, because no commercial title put game-writable state in the FB. |
 | 6 | **Presentation 2.0** (true double buffer, ONE k2 flip in-gate, edge guard, VISRFLIP V-ISR flip, flip-hold) | The strobe: ares defers out-of-vblank FBCTL writes a whole frame; at the edge they latch **instantly mid-scan** (the tear) | flip_span()/visr_vbi in m_main; ~1.9ms ISR steal | **Load-bearing and it worked**: strobe class extinct (0/10,448), flip tear "instrumentally extinct" (LOOP24 Z3). Its own bugs: flip-abort-after-issue corrupted banks (LOOP13 23:00); the ~490 instant out-of-vblank latches needed the edge guard (LOOP24 Z2). |
@@ -124,7 +124,7 @@ palette RAM (4KB) — all of which FIT in WRAM and all of which spent eras there
 moved in and out of the FB as each era rediscovered one horn of the same dilemma:
 
 - **In the FB** → subject to the discard fact (see below) and per-bank skew → torn records, black
-  actors, zeroed palette rows (LOOP.md band's-origin; patch_game comments).
+  actors, zeroed palette rows (docs/log/LOOP.md band's-origin; patch_game comments).
 - **In WRAM** → must be *transported* to the SH-2 → the DREQ packet family and the 68K tail
   (48.6 lines/vint at peak), plus every FIFO loss class.
 
@@ -134,13 +134,13 @@ signature of an architecture fighting its own state placement.
 ### The hardware fact that weaponized B
 
 **ares/hardware discard MD writes to the FB window while the SH-2 owns FM** (savestate-proven:
-torn sprite records, zeroed palette rows — LOOP.md, patch_game.py). MAME is lenient, which is
+torn sprite records, zeroed palette rows — docs/log/LOOP.md, patch_game.py). MAME is lenient, which is
 why the trap was invisible until hardware contact. This fact converted B from "shared memory"
 into "time-division multiplexed memory," and *that* is what forced:
 
 - the whole-window 68K spin (game code must not run while FM=1) → the window/ack tax,
 - the per-vint DREQ narration of state the 68K already possessed (the three commits that built
-  the 57–66% reject band, each "individually right" — LOOP.md),
+  the 57–66% reject band, each "individually right" — docs/log/LOOP.md),
 - the capture/restore truth machinery (banked staging + a double buffer means the game's
   read-backs see the wrong bank unless truth is captured and restored around every flip),
 - FMGATE's 49 gated sites and the rte trampoline (letting the game run during the window by
@@ -305,7 +305,7 @@ Not a new architecture — the CURRENT endpoint, rebuilt clean with 60Hz as the 
 Hardware/system facts (not code). Each cost at least one broken build to learn.
 
 1. **MD writes to the FB window are DISCARDED while the SH-2 owns FM** (ares/hardware strict,
-   MAME lenient). Savestate-proven: torn sprite records, zeroed palette rows. [LOOP.md "band's
+   MAME lenient). Savestate-proven: torn sprite records, zeroed palette rows. [docs/log/LOOP.md "band's
    origin"; patch_game.py sprite-RAM comment]
 2. **An FBCTL flip written outside vblank either defers a whole frame (ares, LOOP7c) or latches
    INSTANTLY mid-scan (the tear — ~490 instant latches, LOOP24 Z).** The flip must be issued
@@ -321,7 +321,7 @@ Hardware/system facts (not code). Each cost at least one broken build to learn.
    LOOP25 KMAX failure]
 4. **COMM costs 1.27 lines/word vs DREQ 0.063** — the cost is the ack round-trip, not the
    payload; and an SH-2 polling adapter MMIO >~100K reads/s disrupts the 68K's own bus.
-   [LOOP.md decisive ratio; LOOP10 32x-builder mining]
+   [docs/log/LOOP.md decisive ratio; LOOP10 32x-builder mining]
 5. **32X-over-MD transparency is CRAM bit 15 (the through bit), not pixel index 0** —
    `cram[0]=0x8000` opens the layer; index-0 with bit 15 clear is opaque black (the black-flash
    family). [ARCH §10]
@@ -332,7 +332,7 @@ Hardware/system facts (not code). Each cost at least one broken build to learn.
    sub-linearly** (−57% stores → −14% cost; −99% loads → −29%; DMAC blit 1.77x slower; cached ≡
    uncached FB writes). Only removing whole rows — reads AND writes — pays. LOOP9's "80%
    bus-stall floor" and "SDRAM reads 5x cheaper" are RETIRED; do not resurrect them. [LOOP18
-   four-probe decomposition; LOOP.md neg 20–21]
+   four-probe decomposition; docs/log/LOOP.md neg 20–21]
 8. **Chaotix's idle-token protocol requires a mostly-idle SH-2** — ported onto a saturated
    master it collapses cadence (3.03→7.48). Interrupt-driven pickup with yielding moves latency
    to band-completion where a no-slack pipeline cannot absorb it. A bounded in-order ISR that

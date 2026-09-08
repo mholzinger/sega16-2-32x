@@ -66,7 +66,7 @@ def main():
               "cheaper than the blit it would let us delete.")
     else:
         print("-> STOP AND RETHINK. The tilemap is genuinely live at this "
-              "rate; streaming it is a much larger problem than LOOP11.md "
+              "rate; streaming it is a much larger problem than docs/log/LOOP11.md "
               "assumes. Do not move code until this is understood.")
     return 0
 

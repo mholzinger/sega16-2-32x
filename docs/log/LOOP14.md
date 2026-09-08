@@ -1,7 +1,7 @@
 # LOOP 14 — MDBGALL BACKGROUNDS: HEAL THE PENS, SPEED THE CUTS
 
 Kickoff for a fresh session. Read this, then `ARCHITECTURE.md` and
-`LOOP13.md` (the transport era: presentation 2.0, the magic-tail DREQ
+`docs/log/LOOP13.md` (the transport era: presentation 2.0, the magic-tail DREQ
 gate, the co-owner pen fix — with the NEGATIVE RESULTS and five slot
 collisions embedded). **Where LOOP13 and ARCHITECTURE.md disagree,
 ARCHITECTURE wins.**

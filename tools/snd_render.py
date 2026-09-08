@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """S16B sound-board renderer — runs the real Z80 driver, captures YM2151.
-KIT (2026-09-01). See SOUND_DRIVER.md.
+KIT (2026-09-01). See docs/sound/SOUND_DRIVER.md.
 
 Boots the sound driver ROM in tools/z80cpu.py inside a faithful S16B
 sound-board harness (memory map + ports from MAME segas16b.cpp:1813-1837,
@@ -9,7 +9,7 @@ the driver's own Timer-A clock, and emits the YM2151 register-write log
 in the exact tap format tools/soundmap_build.py / opm2opn.py consume
 (`<t> Y0 <reg>` / `<t> Y1 <val>`, plus PC/PD for uPD7759). Faithful by
 construction — the driver's LFO/portamento/envelope re-application all
-execute for real, which the isolation tap dropped (HANDOFF-SOUND.md).
+execute for real, which the isolation tap dropped (docs/sound/HANDOFF-SOUND.md).
 
   snd_render.py PROG_ROM --cmd 0x94 --ticks 15000 [--samples s1 s2] \
       [--ym-clock 4000000] [--out log]

@@ -3,7 +3,7 @@
 
 The music opcode streams compress ~3.6x with plain LZSS — enough to hold
 every full-length track inside the 32X's 512KB 68K ROM window without
-banking (SOUND_DRIVER.md). This is the reference compressor + a Python
+banking (docs/sound/SOUND_DRIVER.md). This is the reference compressor + a Python
 decoder for round-trip verification; the 68K streaming decoder
 (sndtest/z80 or md side) implements the exact same format.
 

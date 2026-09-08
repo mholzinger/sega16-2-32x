@@ -16,7 +16,8 @@ is printed too and equals 100 - speed exactly: every miss is a vint the
 
 | rom | what |
 |---|---|
-| rom/s16.32x | US ship line = SESSION 7 line + task 0 (below). 50.4% |
+| rom/s16.32x | US ship line = SESSION 7 line + task 0. 50.4% (CAT1MD shipped and REVERTED 2026-09-07, see section 4) |
+| rom/s16_cat1md_0907.32x | the same line + CAT1MD=1, failed Mike's play pass (shimmer, transform palette). 50.5% |
 | rom/s16_altbeastj.32x | JP, same line; boots and plays (NTSC-J checked) |
 | rom/s16_nocat1.32x | pre-session-6 base, untouched |
 
@@ -145,6 +146,184 @@ they match; the seam Mike declined before is a fidelity call only
 his pass can make. Speed prize if accepted: +1.1 points today, more
 once the frame is near the threshold (it removes ~8 rows/vint from
 the master half).
+
+**MIKE'S CALL, 2026-09-07: CAT1MD colour translation ACCEPTED "for now".**
+Judged on the 4:3 copies (`*_43.png`) of the attract A/B crops and the
+gameplay pairs; top (task 0) and CAT1MD read the same to his eye.
+Pixel evidence agreed: the A/B composites had the bottom half pasted 3px
+low, which made a naive diff read 59% different; aligned, the grass and
+fence rows are pixel-identical at all four anchors and the residual is
+the sprites one vint apart. CAT1MD may join the ship line; the seam
+question is closed until a later step restricts the FB cat1 pass.
+
+**SHIPPED 2026-09-07 ("ship CAT1MD"):** SHIP_US now carries CAT1MD=1
+(Makefile). Re-measured on the same rig the same day, 2600 vints,
+frames 1500-4100: CAT1MD 50.5% (1286 misses) vs pre-flag control
+50.4% (1289 misses) — speed-neutral at today's threshold, exactly as
+section 3 predicts (the ~8 master-half rows only pay once the 68K
+frame is near the boundary). Region guard _end 0x06013530. The
+"dot moved backwards before .bss" linker warning is structural
+(mars.ld places .bss below .ramtext since task 0), not a flag effect.
+
+**PLAY PASS FAILED, REVERTED (2026-09-07 ~15:45):** Mike played the
+CAT1MD ship rom (rom/s16.bs1 saved, BUILD 559b9dd5, vints/cycle 1.02):
+"the grass feels shimmery, and the bottom layer of the screen seems to
+have a different palette that shows through the beast transition
+phase." TWO defects, attributed from his capture (screenshots_0907_1546
+/ now screenshots/, frames 5724-5920) against the arcade oracle and the
+09-05 base capture:
+  (a) SHIMMER = CAT1MD, C1 step 2 (m_main.c ~3041: the FB cat-1 pass
+      draws only over ROWLIVE rows, plane A's 3-bit copy shows
+      elsewhere) — the renderer boundary moves with the sprites every
+      frame. A still frame cannot show it; the attract A/B crops were
+      pixel-identical for that reason.
+  (b) TRANSFORMATION-EXIT PALETTE = the BASE line's hard-cut load lag,
+      NOT CAT1MD. Arcade (ref_arcade 10822->10823): ONE-frame hard cut,
+      no blank, wall at its final colour on the first frame. Ours
+      (CAT1MD rom): 2 frames of garbage (red FB residue + black
+      unresident MD cells) then ~16 frames with the wall band at teal
+      [10,132,100] instead of [135,175,151], correct at +24. The 09-05
+      base capture (screenshots_0905_2312, 4772-4792, pre-display-gate)
+      shows ~20 frames of garbage at the same cut. The display gate
+      cannot help: the arcade does not blank here. This is the PALSTATIC
+      v1.1 / hard-cut scene class (LOOP9, docs/design/PALSTATIC.md), still open.
+      Frames for Mike's eye: screenshots/transform_exit/*_43.png. SHIP_US is back to CAT1MD OFF; both roms
+rebuilt; rom/s16_cat1md_0907.32x + .bs1 kept. Lesson for the kit:
+C1 needs the single-renderer design (docs/design/BOSSFIGHT.md "future arc") or
+it does not ship — no more screenshot-only acceptance for it.
+
+## 4b. "SKY FEELS INCOMPLETE ON A RANDOM BOOT" — DIAGNOSED FROM MIKE'S TWO STATES (2026-09-07 ~16:30)
+
+States: rom/s16_initialized_sky.bs1 (good, level, vint 1321) and
+rom/s16_uninitialized_sky.bs1 (bad, INTRO "rise from your grave" scene,
+vint 499), both BUILD 559b9dd5 (the post-revert ship line). Full-frame
+reconstructions from the states (MD planes + shown 32X bank) and the
+arcade intro (ref_arcade 3880) are in screenshots/sky_states/
+composite_{init,uninit}_43.png and arcade_intro_f3880_43.png. The
+ares .bs1 block offsets used are in the memory note ares-state-layout.
+
+TWO ALLOCATOR-ORDER DEFECTS, both boot-random, neither transport:
+
+ (1) FLAT SKY = the sky set (0x5C, tiles 0x1700-0x170A, 5 distinct MD
+     shades). Good boot: it arrived while line 2 had free pens and got
+     all 8 pixels EXACT. Bad boot: it arrived last, line 2 was full,
+     and 5 of 8 pixels took the nearest-colour fallback (mdp_claim_pen,
+     DIAG[36]) onto pens 4 and 14 -> five shades collapse to two -> the
+     flat sky. (tools/state_frame.py --report reproduces the runtime's
+     quantisation and its DIAG[36] counts; an earlier reading here that
+     said "all fallback on both boots" used the wrong rounding.) Name tables, tags, MD CRAM vs the SH-2 tables: all
+     consistent. The pack is first-come and the sky arrives after the
+     line is full.
+ (2) MISSING CLOUDS = the cloud tiles (set 0x4E, codes 0x139C-E,
+     0x13B7-8) are not in the VRAM slot map in the bad state (1 free
+     slot of 1024 in BOTH states: the title's cycling backdrop saturates
+     it and LRU eviction decides who survives the cut). Cat-0 cells
+     have no FB fallback, so an unresident cat-0 cell is simply absent.
+
+Both are the case the native pivot named: per-scene STATIC assignment
+(the sky set and the scene's BG sets get exact pens first; the scene's
+tile set pre-claims slots at the cut) instead of first-come + LRU.
+Not a CAT1MD effect, not a DREQ/lost-push effect. No code changed.
+MIKE CONFIRMED (16:45): composite_uninit_43.png "is what I saw".
+
+## 4c. STATIC-SCENE ARC — STARTED, FIRST BUILD GATED (2026-09-07 evening)
+
+Mike approved docs/design/STATIC-SCENE.md ("looks good") and said go.
+Built and measured on the ship line + MDSTATIC=1 (rom/s16_mdstatic.32x):
+
+- tools/mdpen_bake.py -> sh_src/pal_scenes_md.h (gitignored, generated
+  like pal_scenes.h; `make tables` regenerates from
+  discover/palscenes/palharv_*.txt + *.bs1). From the two sky states:
+  normal = 37 sets / 31 colours -> exact lines 15/15/6, 9 pens spare.
+  The level-1 harvest (tools/palharvest_tiles_ares.py, play2 400-4000
+  step 20) was still running at write time; re-bake with it.
+- Runtime (m_main.c, MD_STATIC): mds_install() at the PALSTATIC scene
+  load (tables wholesale, refcounts/owners rebuilt, every md_tag
+  invalidated), mds_pin[] honoured by mdp_free_set and the eviction
+  victim loop, pins dropped on the unknown-scene reset, mds_flush()
+  at display-off inside disp_gate. Counters mds_ctr[4] in .bss (the
+  0x28F40 "free" scrap is pg_quiet — stale comment, measured).
+- tools/mdstatic_gate.py = gates 1-3 headless: dumps SDRAM/VRAM/VSRAM/
+  CRAM/DRAM at frames N (+k jitter on every input) and runs
+  tools/state_frame.py's report. RESULT (frames 560 intro / 1321 level,
+  k=0..3):
+    control rom/s16.32x : tables 4 DISTINCT outcomes per frame, DIAG[36]
+                          4-18 -> the random-boot bug reproduces headless.
+    MDSTATIC            : tables IDENTICAL across k (sha 8f9bdfd00d94),
+                          DIAG[36] 12-13 (dynamic sets the 2-state bake
+                          missed; the harvest closes that), no visible
+                          stale cells (the ~600 "stale" are the 64x32
+                          plane's off-window cells, never rewritten by
+                          design). display-gate hold unchanged (59-65).
+- Gate 4 speed: 49.9% vs control 50.4% = noise.
+HARVEST BAKE LANDED (same evening): 178 harvest samples + the 2 states
+-> normal = 39 sets / 36 colours -> exact lines 15/15/11, 4 pens spare.
+rom/s16_mdstatic.32x rebuilt (_end 0x060135C0). Six-boot gate at
+frames 560/1321/3000: DIAG[36] fallbacks = 0 on EVERY boot (control:
+4-18); the baked sets' tables identical across k=0..4; k=5 met two
+sets the harvest never saw (0x29, 0x2A) and gave them exact pens from
+the spare line — the dynamic remainder working, counted separately by
+the gate now. Visible stale cells 0. Display-gate hold 62-65 vs control
+59-65. Speed 49.3% vs control 50.4% (control re-run 50.4 again): NOT a
+68K cost — handler mean 63.1 (control) vs 63.4 (MDSTATIC) lines/vint
+over the same 2600-vint window, slot claims 2562 vs 2622, CRAM writes
+1900 vs 1133, vints/cycle 1.01 both. The 2-state bake of the same code
+read 49.9, so the ~1-point spread is the scripted play diverging
+between roms (inputs keyed to vints; section 4's caveat), not the flag.
+Corpus for `make tables`: discover/palscenes/palharv_level1.txt + the
+two .bs1 (gitignored like the .palsh dumps).
+MIKE'S PASS (rom/s16_mdstatic.bs1, ~19:00): "stage 1 presentation is
+now nearly perfect" — the sky fix holds. REGRESSION: "the splash
+screens for the arcade broken, wrong palettes, the logo never fully
+loads for the title." Reproduced headless (tools/mdstatic_gate.py
+--png at frames 250/350): the PALSTATIC 'normal' detect fires DURING
+THE TITLE (pscene_sw=1 by frame 250 on the control too — the game
+preloads the level palette words the 8 probe pairs sit on), so the
+MD install ran at the title and pinned 39 level sets there; the
+title's own sets (0x25-0x2E) starved and the shared sets 0x72-0x7E
+kept level remaps under title colours (4/4 fallback each), the drift
+check's re-assign refused by the pins 130-221 times. Measured tile-
+half distance to the 'normal' anchor: title 141 words, level 12; the
+bake's TOL is 40. FIX: the install now requires that distance <= 40,
+measured before the image copy overwrites PAL_SH (mds_ctr[4] counts
+refusals). The rule is the bake's own clustering rule, so runtime and
+bake agree by construction. Rebuild + title/level gates + speed
+running at write time.
+TWO MORE TURNS TO GET THE INSTALL SITE RIGHT (all headless, same
+evening; every step in the gate logs):
+  - distance rule alone: title fixed (attract scorecard == control),
+    but the level never installed — PALSTATIC's detect fires once per
+    scene and had already fired (and been refused) at the title.
+  - MD-side installed-scene state (mds_scene_cur) + a retry: first
+    inside the display-on hold, which re-fired at the TITLE because
+    PAL_SH == the just-loaded image until the heal restores the real
+    palette (~9 vints) -> mds_loadgap = 32 vints after any image load.
+  - the retry then never fired at the level: the "same tables, just
+    track" branch also ran while the load gap was open. Fixed: track
+    only when something is installed.
+  - the install is now SELECTIVE (a set whose dynamic remap already
+    equals the table keeps its slots) and the retry runs every 4th
+    vint whenever tables are pending, so a late install re-converts
+    only the changed sets.
+FINAL (build _end 0x060135C8): title refused (attract scorecard ==
+control: boot card 25 by lag 2), level installed FROM THE HOLD at
+the coin->level cut (the level palette is within 8-17 words of the
+anchor for the whole hold), fallbacks 0 on 2 of 3 boot timings and 3
+on the third (dynamic remainder), speed 49.7 vs control 50.4 (the
+scripted-play spread). rom/s16_mdstatic.32x is the candidate.
+SHIPPED (2026-09-07 18:32, Mike: "looking better... ship the fixes,
+anything we've done we can undo"): SHIP_US carries MDSTATIC=1;
+`make ship` rebuilt rom/s16.32x and rom/s16_altbeastj.32x (stamp
+cf83ac94+, _end 0x060135C8). Pre-arc control kept as
+rom/s16_pre_cat1md.32x (559b9dd5).
+NEXT (Mike's order): (1) his pass on the ship rom; (2) the WRITE-TAX
+CENSUS — count the game's per-frame hardware writes by region on
+ares-headless and price each path (dirty-bit thunk ~50 extra cycles,
+FB-window sprite writes + FM stalls, text-RAM handshake spins); if
+the tax inside the "212-line pass" is 50-100 lines it is the 60Hz gap
+itself, with mechanical levers (batch thunks, sprite list to WRAM +
+SH-2 pull, hold FB writes outside the SH-2 span); (3) the Ghidra map
+of the frame + opcode census for the static-recompile decision.
 
 ## 5. THE NEXT LEVER (recommendation), and why it is 68K-side
 

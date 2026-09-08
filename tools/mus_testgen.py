@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the P3 streaming test track (SOUND.md P3).
+"""Generate the P3 streaming test track (docs/sound/SOUND.md P3).
 
 Emits sndtest/md/test_track.h: a stream in the Z80 player's opcode
 format (wait n / $F0 reg val / $F2 psg) playing a four-note FM

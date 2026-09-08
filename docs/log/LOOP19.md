@@ -1,7 +1,7 @@
 # LOOP 19 — SPRITE COLOUR. One root cause under most of the punch list.
 
 Read this, then `CLAUDE.md` ("What MAME is for now"), then `TOOLKIT.md`.
-`LOOP18.md` is the full log of the day this came out of.
+`docs/log/LOOP18.md` is the full log of the day this came out of.
 
 ## WHERE THIS STANDS (2026-08-19)
 

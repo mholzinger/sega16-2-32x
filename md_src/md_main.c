@@ -54,7 +54,7 @@ static volatile uint16_t* const mars_comm2  = (uint16_t*) MARS_COMM2;
 static volatile uint16_t* const mars_comm4  = (uint16_t*) MARS_COMM4;
 static volatile uint16_t* const mars_comm6  = (uint16_t*) MARS_COMM6;
 static volatile uint16_t* const mars_comm8  = (uint16_t*) MARS_COMM8;
-/* per-scene sprite-art upload state (BOSSFIGHT.md); WRAM slots since
+/* per-scene sprite-art upload state (docs/design/BOSSFIGHT.md); WRAM slots since
  * the 68K RAMCODE trick makes .data execute-typed */
 #define mdspr_up_left (*(volatile uint16_t*)0xFFA0DC)
 #define mdspr_up_woff (*(volatile uint16_t*)0xFFA0DE)
@@ -149,7 +149,7 @@ static void md_bg_palette(void) {
 	for (uint16_t i = 0; i < 16; i++)
 		*vdp_data_port = 0;
 #ifdef MDSPR_SPIKE
-	/* M0 SPIKE (P3.md): prove the MD hardware-sprite plumbing under
+	/* M0 SPIKE (docs/design/P3.md): prove the MD hardware-sprite plumbing under
 	 * our transport in one screenshot. Line-0 CRAM colors, 16 tiles of
 	 * striped test art at VRAM 0x8000 (tile index 1024), and TWO 32x32
 	 * sprites mid-screen: entry 0 SAT-priority HIGH, entry 1 LOW —
@@ -408,7 +408,7 @@ __attribute__((section(".data")))
  * 0x85EDC2 -> CRAM entries 1-15 (entry 0, the backdrop, untouched).
  * Autoinc forced to 2 first — the hscroll DMA leaves 32 behind on
  * some paths. */
-/* PER-SCENE ART UPLOAD (BOSSFIGHT.md): chunk state armed by the
+/* PER-SCENE ART UPLOAD (docs/design/BOSSFIGHT.md): chunk state armed by the
  * 0xBA50|scene consume; drained 512 words/vint below. Bank-switching
  * the 0x900000 window inside the vint is safe — the game only runs
  * outside the handler — and the window is restored to bank 3 before
@@ -489,6 +489,9 @@ static void mdspr_consume(void) {
  * rate because the hold left the MD display ON). 0 = no packet seen
  * this vint (keep), 1 = seen without hold, 2 = seen with hold. */
 static uint8_t md_hold_seen, md_hold;
+#ifdef BOOT_PKTCHK
+static uint16_t bm_pushed;               /* probe: last word 20 as pushed */
+#endif
 /* RAMCODE (2026-09-06): the consume ran from cart ROM under the master's
  * compose traffic (nm: 0x8c0b48) — a 4-6x fetch-stall on every
  * instruction; consume B measured 14 lines for a 280-word chunk. */
@@ -641,6 +644,10 @@ static void md_consume(uint32_t pkt_base) {
 						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 							| (((va >> 14) & 3u) | 0x80u);
+#ifdef DMA_CENSUS
+						(*(volatile uint16_t*)0xFFA246)++;      /* tile-record DMAs */
+						(*(volatile uint32_t*)0xFFA248) += 16;  /* words */
+#endif
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008;
@@ -680,6 +687,17 @@ static void md_consume(uint32_t pkt_base) {
 							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 							*vdp_ctrl_wide = ((uint32_t)(0x4000u | (a & 0x3FFFu)) << 16)
 								| (((a >> 14) & 3u) | 0x80u);
+#ifdef DMA_CENSUS
+							/* DMA CENSUS (LOOP27 48). Entry 47 moved the
+							 * suspect from "the 68K reads the FB" (false)
+							 * to "the FB-sourced DMAs are the cost". A DMA
+							 * costs six register writes plus the transfer,
+							 * so MANY SHORT spans are much worse than few
+							 * long ones — and nothing has ever counted
+							 * them. 0xFFA240 spans, 0xFFA242 words. */
+							(*(volatile uint16_t*)0xFFA240)++;
+							(*(volatile uint32_t*)0xFFA242) += l1;
+#endif
 							e += l1;
 							st = (uint16_t)(st + l1);
 							nc2 = (uint16_t)(nc2 - l1);
@@ -744,9 +762,209 @@ static void md_consume(uint32_t pkt_base) {
 					 * still in vblank -> DMA now as always; beam in the
 					 * picture -> copy the block to WRAM and DMA it at the
 					 * next vint top, before anything else. */
+#ifdef BOOT_PALPEEK
+					/* WHAT IS ACTUALLY IN THE PALETTE BLOCK? (2026-09-08,
+					 * LOOP27 32). Forcing the palette through WRAM instead
+					 * of the FB-sourced DMA changed NOTHING on hardware
+					 * (entry 31), and those two paths read the framebuffer
+					 * by completely different means — 68K reads vs VDP DMA.
+					 * Both wrong says the DATA is wrong, not the transport.
+					 * So stop inferring and READ IT, the discipline that
+					 * worked for the framebuffer (s16_abread) and for rom
+					 * identity (BOOTTAGBLUE).
+					 * The 68K peeks the 48 words the master wrote at
+					 * offset 688 and paints the verdict on the MD backdrop,
+					 * which nothing can gate:
+					 *   RED    = all 48 words ZERO. The master never wrote
+					 *            the palette block, or the 68K cannot read
+					 *            it on this core.
+					 *   YELLOW = all 48 identical and non-zero. Landed, but
+					 *            it is a fill pattern, not a palette.
+					 *   GREEN  = varied non-zero, i.e. a plausible palette.
+					 *            Then the data IS there and correct-ish,
+					 *            and the fault is downstream in the upload.
+					 * Note the geometry (name tables, earlier in the same
+					 * packet) is CORRECT on hardware, so a red/yellow here
+					 * means the packet is good early and bad deep. */
+#ifdef BOOT_PALRAMP
+					/* RAMP VERDICT (LOOP27 36). The master wrote
+					 * 0x0100+i into the 48 palette words. Check what
+					 * actually arrived:
+					 *   GREEN  = exact match, every word. The transport
+					 *            is clean and the fault is the SOURCE
+					 *            palette the master builds from, i.e.
+					 *            upstream over DREQ.
+					 *   YELLOW = the ramp is there but SHIFTED by k
+					 *            words. A landing alignment slip — the
+					 *            documented partial-DREQ hazard — and the
+					 *            shift amount is encoded in the green
+					 *            level so k is readable off the screen.
+					 *   RED    = neither: the words are corrupted, not
+					 *            merely displaced. */
+					{
+						uint16_t col;
+						uint16_t exact = 1;
+						for (uint16_t i = 0; i < 48; i++)
+							if (sc[688 + i] != (uint16_t)(0x0100 + i)) { exact = 0; break; }
+						if (exact) {
+							col = 0x00E0;                 /* GREEN */
+						} else {
+							int k = 0;
+							for (k = -8; k <= 8; k++) {
+								if (!k) continue;
+								uint16_t ok = 1;
+								for (uint16_t i = 8; i < 40; i++)
+									if (sc[688 + i] != (uint16_t)(0x0100 + i + k)) { ok = 0; break; }
+								if (ok) break;
+							}
+							if (k >= -8 && k <= 8 && k != 0)
+								col = (uint16_t)(0x00E0 | ((k < 0 ? -k : k) & 7) << 1);  /* YELLOWish, k in red */
+							else
+								col = 0x000E;             /* RED */
+						}
+						*(volatile uint16_t*)0xFFA168 = col;
+					}
+#else
+					{
+						uint16_t z = 0, same = 1, w0 = sc[688];
+						for (uint16_t i = 0; i < 48; i++) {
+							uint16_t v = sc[688 + i];
+							if (v) z = 1;
+							if (v != w0) same = 0;
+						}
+						uint16_t col = !z ? 0x000E          /* RED   */
+									 : same ? 0x00EE        /* YELLOW*/
+									        : 0x00E0;       /* GREEN */
+						/* STASH ONLY. Painting here is useless: the
+						 * real 48-word palette upload runs immediately
+						 * after and overwrites entries 16-63, which is
+						 * exactly what the MD plane draws with. ares
+						 * showed this — the flood left only the border
+						 * green. The flood happens at VINT TOP instead,
+						 * the site BOOTMDPAL proved covers the screen. */
+						*(volatile uint16_t*)0xFFA168 = col;
+#ifdef BOOT_PALSHOW
+						/* SHOW THE VALUE, NOT A VERDICT (LOOP27 34).
+						 * palpeek came back GREEN on hardware: the 48
+						 * words are varied non-zero, a PLAUSIBLE palette.
+						 * So the data is there and the 68K can read it —
+						 * but "plausible" is not "correct", and the
+						 * screen is magenta. The next question is whether
+						 * those words ARE the magenta.
+						 * Stash the raw palette word for CRAM entry 17
+						 * (offset 688+1, the sky pen) and flood the
+						 * screen with it at vint top. If hardware floods
+						 * MAGENTA, the packet itself carries the wrong
+						 * colour and the fault is upstream of the 68K
+						 * entirely — in what the master wrote, hence in
+						 * the palette the master received over DREQ. If
+						 * it floods the arcade's blue, the words are
+						 * right and the upload mangles them. */
+						/* Index 1 was a bad pick: sc[689] reads 0x0000
+						 * on ares too (CRAM 17 is legitimately black
+						 * there), so it would have flooded nothing and
+						 * cost another round trip. Take the FIRST
+						 * NON-ZERO word instead — robust without knowing
+						 * which pen the scene actually uses. */
+						{
+							uint16_t sh = 0;
+							for (uint16_t i = 0; i < 48; i++)
+								if (sc[688 + i]) { sh = sc[688 + i]; break; }
+							*(volatile uint16_t*)0xFFA168 = sh;
+						}
+#endif
+					}
+#endif
+#endif
 					uint16_t vnow = *(volatile uint16_t*)0xC00008;
 					*(volatile uint16_t*)0xFFA090 = vnow;              /* V at pal DMA */
+#ifdef BOOT_CRAMCHK
+					/* DID THE PALETTE UPLOAD ACTUALLY LAND IN CRAM?
+					 * (2026-09-08, LOOP27 46.) Read the value, do not
+					 * infer it from the picture — the rule that has
+					 * worked every time tonight.
+					 * Stash the previous vint's readback verdict first
+					 * (this runs BEFORE this vint's upload, so it grades
+					 * the upload that already happened). MD CRAM read:
+					 * command ((addr & 0x3FFF) << 16) | 0x20, then read
+					 * the data port. Mask to 0x0EEE — the 9 valid BGR
+					 * bits — because the unused bits read back
+					 * undefined. */
+					{
+						static uint16_t verdict;
+						volatile uint16_t *shadow = (volatile uint16_t*)0xFFA1C0;
+						volatile uint16_t *valid  = (volatile uint16_t*)0xFFA1BE;
+						uint16_t match = 0;
+						/* grade against WHAT WAS ACTUALLY LAST SENT, held in
+						 * a WRAM shadow — not against this vint's packet.
+						 * CRAM holds the PREVIOUS upload, and under NT_WRAP
+						 * the palette only uploads when it changed, so
+						 * comparing to the current packet mismatches for
+						 * reasons that have nothing to do with the transfer.
+						 * That flaw made the first cut read 5/48 on ares,
+						 * where the picture is plainly correct. */
+						if (*valid) {
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+							*vdp_ctrl_wide = ((uint32_t)32u << 16) | 0x0002u;   /* CRAM READ */
+							for (uint16_t i = 0; i < 48; i++) {
+								uint16_t got = (uint16_t)(*vdp_data_port & 0x0EEE);
+								if (got == (uint16_t)(shadow[i] & 0x0EEE)) match++;
+							}
+						}
+						for (uint16_t i = 0; i < 48; i++) shadow[i] = sc[688 + i];
+						*valid = 1;
+						verdict = (match == 48) ? 0x00E0      /* GREEN all 48 */
+								: (match >  0)  ? 0x00EE      /* YELLOW some  */
+								                : 0x000E;     /* RED none     */
+						*(volatile uint16_t*)0xFFA168 = verdict;
+						*(volatile uint16_t*)0xFFA16A = match;  /* readable count */
+					}
+#endif
+#ifdef BOOT_PALDIRECT
+					/* DMA-TO-CRAM vs DIRECT CRAM WRITES (2026-09-08,
+					 * LOOP27 45). Colour census of every MiSTer capture
+					 * this session: the hardware has NEVER shown more
+					 * than 9 distinct colours, while ares shows 76-92 on
+					 * the identical rom. So almost every palette entry is
+					 * black on hardware.
+					 * But the probe FLOODS — 64 CRAM entries written one
+					 * at a time straight to the VDP data port — DO land;
+					 * they cover the screen every time. And the geometry
+					 * is correct, which is DMA TO VRAM working.
+					 * The one path that is neither is the palette upload:
+					 * a VDP DMA whose DESTINATION IS CRAM. Hypothesis:
+					 * DMA-to-CRAM does not land on this core (or lands
+					 * truncated) while DMA-to-VRAM and direct CRAM writes
+					 * both do.
+					 * Test AND candidate fix: write the 48 words with
+					 * direct stores instead of a DMA. 48 word writes is
+					 * cheap — the flood already does 64 every vint. */
+					{
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;   /* autoinc 2 */
+						*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+						for (uint16_t i = 0; i < 48; i++)
+							*vdp_data_port = sc[688 + i];
+					}
+					if (0)
+#endif
+#ifdef BOOT_PALWRAM
+					/* FB-SOURCED DMA BYPASS (2026-09-08, LOOP27 31). The
+					 * MD background palette normally reaches CRAM by a
+					 * Mega Drive VDP DMA whose SOURCE IS THE 32X
+					 * FRAMEBUFFER (sc + 688). On the MiSTer the MD plane
+					 * draws correct geometry with a WRONG PALETTE, and
+					 * "does this core serve VDP DMA from the framebuffer"
+					 * has been an untested suspect since the start of the
+					 * arc. The deferred path beside this one already
+					 * copies the 48 words to WRAM (0xFFA100) and DMAs
+					 * them from there at the next vint top — a path that
+					 * never touches the FB as a DMA source. Force it
+					 * always: if the colours come right on hardware, the
+					 * FB-sourced DMA is the fault. */
+					if (0) {
+#else
 					if ((vnow >> 8) >= 0xE0u) {
+#endif
 						uint32_t src = ((uint32_t)(sc + 688)) >> 1;
 						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
 						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
@@ -1374,6 +1592,61 @@ static void r60_push(void) {
 #ifdef PAL_DELTA
 	/* v3 pal section: 1 length word + 8 ids + payload + pad, %4==0 */
 	uint16_t pal_pad = (uint16_t)((0u - (palw + 1u)) & 3u);
+#ifdef BOOT_FBFREE
+	/* Read back the master's sentinels one vint later. A region still
+	 * holding its magic is untouched by everything between; a changed
+	 * one is in use. Encoded as a 4-bit result in the value colour:
+	 * bit0 0x12000, bit1 0x14000, bit2 0x18000, bit3 0x1C000 — set = FREE. */
+	{
+		uint8_t m = 0;
+		if (*(volatile uint16_t*)0x852000 == 0xA51) m |= 1;
+		if (*(volatile uint16_t*)0x854000 == 0xA52) m |= 2;
+		if (*(volatile uint16_t*)0x858000 == 0xA53) m |= 4;
+		if (*(volatile uint16_t*)0x85C000 == 0xA54) m |= 8;
+		*(volatile uint16_t*)0xFFA186 = m;
+	}
+#endif
+#ifdef BOOT_FBTIME
+	/* IS THE FRAMEBUFFER A CHEAPER ROUTE THAN THE DREQ FIFO?
+	 * (2026-09-08, LOOP27 65.) Measured: the push is 99 scanlines for a
+	 * ~52-word packet, 63 for 20 words — roughly 1.1-2.4 lines PER WORD
+	 * through the FIFO, against ~0.15 on ares.
+	 * But the 68K can also write the 32X FRAMEBUFFER directly through
+	 * the 0x840000 window, and s16_68kdraw proved those writes LAND on
+	 * this hardware. If an FB write is materially cheaper than a FIFO
+	 * write, the packet could cross that way instead and the master
+	 * could read it from the FB — no DREQ at all.
+	 * Time 20 writes into the FB packet hole (0x851A00, the buffer the
+	 * master already consumes from) and report with the value
+	 * instrument, directly comparable to the 48-line regs stage. */
+	{
+		volatile uint16_t *fb = (volatile uint16_t*)0x851A00;
+		PSTAMP(0xFFA182);
+		for (uint16_t q = 0; q < 20; q++) fb[q] = q;
+		PSTAMP(0xFFA184);
+	}
+#endif
+#ifdef BOOT_COMMTIME
+	/* IS IT THE DREQ FIFO, OR EVERY 68K->32X ACCESS? (2026-09-08,
+	 * LOOP27 60.) Twenty FIFO writes cost 32-80+ lines on hardware and
+	 * 2-3 on ares (59). Time twenty writes to a HARMLESS 32X register in
+	 * the same build, same place, same load: COMM2 (0xA15122), which the
+	 * 68K already writes every vint with BANK_SHADOW — writing the same
+	 * value twenty more times changes nothing.
+	 * Bucketed with the SAME thresholds as the regs stage so the two are
+	 * directly comparable:
+	 *   equally slow -> the whole 68K<->32X interface is the problem and
+	 *     the data has to cross some other way entirely;
+	 *   fast         -> the DREQ FIFO path specifically is slow, and the
+	 *     fix is bounded. */
+	{
+		volatile uint16_t *c2 = (volatile uint16_t*)0xA15122;
+		uint16_t keep = *c2;
+		PSTAMP(0xFFA17C);
+		for (uint16_t q = 0; q < 20; q++) *c2 = keep;
+		PSTAMP(0xFFA17E);
+	}
+#endif
 	uint16_t tw = (uint16_t)(22u + (rs_ship ? 60u : 0u)
 	                         + (K ? (9u + palw + pal_pad) : 0u)
 	                         + nrec * 8u + 2u);
@@ -1392,7 +1665,71 @@ static void r60_push(void) {
 		(*(volatile uint32_t*)0xFFA0A4) += tw;   /* push words, honest sum */
 		(*(volatile uint16_t*)0xFFA0A8)++;
 	}
+#ifdef BOOT_VALUE
+	/* READ THE NUMBER, NOT A BUCKET (2026-09-08, LOOP27 64).
+	 * Every hardware probe so far has returned one of four buckets, and
+	 * ORANGE spans 32-80 lines — wide enough to hide the entire effect
+	 * of a change. MD CRAM is 9 bits (3 per channel), which is exactly
+	 * enough to carry a 0-255 scanline count as a COLOUR:
+	 *     R = d & 7 , G = (d >> 3) & 7 , B = (d >> 6) & 3
+	 * Flood all 64 entries with it and the exact value is recoverable
+	 * from a screenshot histogram. No buckets, no bisection, one capture
+	 * per number. Reports the regs stage (0xFFA0B6 -> 0xFFA0B8). */
+	{
+#ifdef BOOT_FBFREE
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)*(volatile uint16_t*)0xFFA186;
+#elif defined(BOOT_FBTIME)
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
+#elif defined(BOOT_VALUE_TOTAL)
+		/* whole push: entry 0xFFA0B4 -> records+tail shipped 0xFFA0BC */
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B4 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0BC >> 8);
+#else
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B6 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
+#endif
+		uint8_t d  = (uint8_t)(p2 - p0);
+		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
+		                        | (((d >> 3) & 7) << 5)
+		                        | (( d       & 7) << 1));
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_PUSHDELAY
+	/* IS THE STALL CONTENTION WITH THE MASTER? (2026-09-08, LOOP27 63.)
+	 * The first ~20 words are expensive and the ~32 after them are free
+	 * (61, 62), which points at the master still being busy when the 68K
+	 * starts pushing — ARMGATE's echo says ARMED, not IDLE.
+	 * Wait a deliberate 8 scanlines before starting, then measure the
+	 * regs stage with the same buckets. If the stage SHRINKS, contention
+	 * at push start is confirmed and the lever is WHEN we push. If it
+	 * does not, the stall is intrinsic to the first FIFO writes.
+	 * (8 lines is cheap next to a 32-80 line stage; if it helps, the
+	 * right delay can be tuned or replaced by a real ready signal.) */
+	{
+		uint8_t v_wait = (uint8_t)((*(volatile uint16_t*)0xC00008) >> 8);
+		uint8_t target = (uint8_t)(v_wait + 8);
+		uint16_t guard = 20000;
+		while ((uint8_t)((*(volatile uint16_t*)0xC00008) >> 8) != target
+		       && --guard) ;
+	}
+#endif
 	*ctrl = 4;
+#ifdef BOOT_SETUP
+	/* SETUP OR WORDS? (2026-09-08, LOOP27 62.) Cutting the packet
+	 * 52 -> 20 words did NOT speed the game on hardware (61), yet the
+	 * regs stage (selection-done -> regs-shipped) is the biggest thing
+	 * in the push. Those are only compatible if the cost is a FIXED
+	 * OVERHEAD at the start of the push rather than per-word. Between
+	 * those two stamps sit exactly three things: the length-register
+	 * write (0xA15110 = tw), the DREQ enable (*ctrl = 4), and then the
+	 * 20 words. Stamp right here, after the enable, to split them. */
+	PSTAMP(0xFFA180);
+#endif
 	{
 		uint8_t ok = 1;
 		/* PER-WORD POLL RESTORED (Mike's play pass, 2026-08-22):
@@ -1408,7 +1745,28 @@ static void r60_push(void) {
 #define R60G() do { while (*ctrl < 0 && --spin) ;                      if (!spin) ok = 0; } while (0)
 #define R60P(w) do { R60G(); if (ok) fifo[0] = (w); } while (0)
 		const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
-#ifdef PAL_DELTA
+#ifdef BOOT_NOPOLL
+		/* IS IT THE POLL OR THE WRITE? (2026-09-08, LOOP27 58)
+		 * Shipping 20 words costs ~100 lines on hardware and 2-3 on ares
+		 * (56), and the FIFO is NEVER FULL on either machine — spin
+		 * residual 2600 both sides (57). So the 68K is not waiting for
+		 * the master; each ACCESS is slow. Per word the code does TWO
+		 * 32X register accesses: a READ of *ctrl (0xA15107) in R60G()
+		 * and a WRITE to fifo[0] (0xA15112).
+		 * Drop the per-word poll — sound here precisely because the FIFO
+		 * is provably never full — and ship the 20 words with writes
+		 * only. If the stage roughly HALVES, the poll READ is half the
+		 * cost and 68K reads of 32X registers are the expensive thing.
+		 * If it does not move, the WRITES are.
+		 * MEASUREMENT ONLY: the per-word poll exists because a 4-word
+		 * burst lost words under play load (Mike's 2026-08-22 pass), and
+		 * that risk is unchanged. Do not ship this. */
+		{
+			const uint16_t *lp = (const uint16_t*)0xFF8000 + 0x740;
+			R60G();
+			for (uint16_t g = 0; ok && g < 20; g++) fifo[0] = lp[g];
+		}
+#elif defined(PAL_DELTA)
 		if (r60_ship_words(lr, 20)) ok = 0;
 #else
 		for (uint16_t g = 0; ok && g < 5; g++) {
@@ -1421,6 +1779,22 @@ static void r60_push(void) {
 		}
 #endif
 		PSTAMP(0xFFA0B8);                /* regs shipped (20 words) */
+#ifdef BOOT_PUSHCUT
+		/* DOES PACKET SIZE ACTUALLY BUY SPEED ON HARDWARE? (LOOP27 61.)
+		 * Entry 60: every 68K->32X access costs ~2-4 scanlines, so words
+		 * are the lever — but r60_push's own comment records that
+		 * halving the packet did NOT move the span ON ARES, and ares is
+		 * not per-access bound. Settle it on hardware instead of
+		 * arguing: ship the 20 reg words and ABANDON the rest.
+		 * The picture will be wrong — the master gets no records, no
+		 * palette. That is fine; the only thing being read is the
+		 * GAME-FRAME WHEEL (BOOTMOTIONGAME). If the wheel speeds up
+		 * sharply, packet size is the lever and the fix is bounded.
+		 * If it does not move, words are NOT the cost and entry 60's
+		 * per-access reading is wrong.
+		 * MEASUREMENT ONLY, never ship. */
+		ok = 0;                          /* skip the remaining stages */
+#endif
 		if (ok) {
 			volatile uint16_t *bm = (volatile uint16_t*)0xFFB9FE;
 			/* word 20: bits 0-12 dirty pages, bit 15 display-on, bits
@@ -1430,6 +1804,9 @@ static void r60_push(void) {
 			{
 				static uint8_t push_seq;
 				push_seq = (uint8_t)((push_seq + 1) & 3);
+#ifdef BOOT_PKTCHK
+				bm_pushed = (uint16_t)(*bm | ((IO_MISC & 0x20) ? 0x8000u : 0u));
+#endif
 				R60P((uint16_t)(*bm | ((IO_MISC & 0x20) ? 0x8000u : 0u)
 				                | ((uint16_t)push_seq << 13)));
 			}
@@ -1556,6 +1933,75 @@ static void r60_push(void) {
 		PSTAMP(0xFFA17E);                /* fine: before tail */
 		if (ok) { R60G(); PSTAMP(0xFFA180); if (ok) { R60P(0xA55A); PSTAMP(0xFFA182); R60P(0x5AA5); } }
 		PSTAMP(0xFFA0BC);                /* records+tail shipped */
+#ifdef BOOT_SETUP
+	/* Two buckets in one flood: which half of the regs stage is it?
+	 *   0xFFA0B6 selection-done -> 0xFFA180 DREQ enabled  = SETUP
+	 *   0xFFA180 -> 0xFFA0B8 regs shipped                 = 20 WORDS
+	 *   GREEN  both small (<8)
+	 *   RED    SETUP dominates   -> the length write / DREQ enable
+	 *   BLUE   WORDS dominate    -> the per-word FIFO writes
+	 *   YELLOW comparable */
+	{
+		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B6 >> 8);
+		uint8_t p1 = (uint8_t)(*(volatile uint16_t*)0xFFA180 >> 8);
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
+		uint8_t su = (uint8_t)(p1 - p0), wd = (uint8_t)(p2 - p1);
+		uint16_t col;
+		if (su < 8 && wd < 8)              col = 0x00E0;   /* GREEN  */
+		else if (su > (uint8_t)(wd * 2))   col = 0x000E;   /* RED    */
+		else if (wd > (uint8_t)(su * 2))   col = 0x0E00;   /* BLUE   */
+		else                               col = 0x00EE;   /* YELLOW */
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_COMMTIME
+	/* 20 writes to COMM2, same buckets as the regs stage (LOOP27 60). */
+	{
+		uint8_t c0 = (uint8_t)(*(volatile uint16_t*)0xFFA17C >> 8);
+		uint8_t c1 = (uint8_t)(*(volatile uint16_t*)0xFFA17E >> 8);
+		uint8_t d  = (uint8_t)(c1 - c0);
+		uint16_t col = (d <  8) ? 0x00E0
+					 : (d < 32) ? 0x00EE
+					 : (d < 80) ? 0x006E
+					            : 0x000E;
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_REGLEN
+	/* THE REGS STAGE, IN LINES (2026-09-08, LOOP27 59). Shipping 20
+	 * words: 0xFFA0B6 selection-done -> 0xFFA0B8 regs-shipped.
+	 * ares = 2-3 lines. Run this WITH and WITHOUT BOOTNOPOLL to split
+	 * the poll READ from the FIFO WRITE by magnitude, not ranking.
+	 *   GREEN <8   YELLOW <32   ORANGE <80   RED >=80 */
+	{
+		uint8_t a2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B6 >> 8);
+		uint8_t a3 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
+		uint8_t d  = (uint8_t)(a3 - a2);
+		uint16_t col = (d <  8) ? 0x00E0
+					 : (d < 32) ? 0x00EE
+					 : (d < 80) ? 0x006E
+					            : 0x000E;
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_SPIN
+		/* SPIN RESIDUAL (2026-09-08, LOOP27 57). R60G() spins while
+		 * *ctrl < 0 — DREQ FIFO FULL — before EVERY word, decrementing
+		 * `spin` from 2600. So the residual counts how much of the push
+		 * was spent waiting for the master to drain the FIFO.
+		 * r60_push's own comment records ares showing residual 2600,
+		 * i.e. NEVER FULL. Hardware spends ~100 lines shipping 20 words
+		 * (LOOP27 56, BLUE). If the residual is low here, FIFO-full
+		 * stalling is confirmed as the mechanism and the fault is the
+		 * MASTER'S DRAIN, not the 68K. */
+		*(volatile uint16_t*)0xFFA17A = spin;
+#endif
 #ifdef SHIM_BURN
 		{	/* sensitivity probe: burn ~SHIM_BURN lines of 68K time */
 			PSTAMP(0xFFA186);
@@ -1620,6 +2066,182 @@ void r60_late_post(void)
  * moved. 2.4KB of .data. */
 __attribute__((section(".data"), noinline))
 void shim_vblank(void) {
+#ifdef BOOT_PRECONSUME
+	/* WHERE DOES THE TIME GO BEFORE THE CONSUME? (2026-09-08, LOOP27 53)
+	 * s16_span2 on hardware: the consume itself takes 8-24 lines (YELLOW,
+	 * some GREEN) against <8 on ares. NOT frame-eating. But entry 42
+	 * measured it ENDING deep in the visible picture — so it must be
+	 * STARTING late. Stamp V at the very top of the handler, before any
+	 * gate or announce work, so the gap to the consume's own entry stamp
+	 * (0xFFB0B0) can be bucketed. */
+	*(volatile uint16_t*)0xFFA178 = *(volatile uint16_t*)0xC00008;
+#endif
+/* A/B WRITER PROBE, 68K half: CUT 2026-09-08. The write below —
+ * 68K paints GREEN into FB rows 16-23 at vint top with FM=0, after
+ * forcing the 32X mode on — BLACKS THE SCREEN ON ARES, where the game
+ * plainly runs without it (bisected: master half alone shows the bar
+ * over a live game; this half alone is black). It is unsound the same
+ * way s16_fbpix and the no-flip probes were, and an unsound probe sent
+ * to the FPGA costs a round trip and teaches nothing. The 68K-side
+ * positive control already exists and already passed on hardware:
+ * rom/s16_68kdraw.32x. Use that. Do not resurrect this without finding
+ * out what the write actually lands on first. */
+#ifdef BOOT_MOTION
+	/* ARE WE ACTUALLY STREAMING, AND HOW FAST? (2026-09-08, LOOP27 37.)
+	 * Mike, fairly: "nothing ever shows actual moving streaming frames."
+	 * Every hardware probe this arc has been a STATIC verdict colour, and
+	 * the one cadence datum we have is his "VERY VERY VERY VERY SLOW".
+	 * The rate has never been measured on hardware at all.
+	 *
+	 * Flood the whole MD palette with a colour that steps every 8 vints
+	 * through 8 distinct colours, so ONE FULL CYCLE IS 64 VINTS — almost
+	 * exactly one second at 60 Hz. No instrumentation to read: count the
+	 * cycles against a clock.
+	 *   ~1 cycle per second  -> vints are arriving at 60 Hz.
+	 *   ~1 per 2 seconds     -> 30 Hz, the ship-line cadence.
+	 *   much slower / stuck  -> the vint chain itself is starved on
+	 *                           hardware, and every palette and
+	 *                           framebuffer question so far has been
+	 *                           downstream of a much bigger problem.
+	 * MD CRAM flooded at vint top: the one reporter proven to cover the
+	 * screen on this rig (BOOTMDPAL). */
+	{
+		static const uint16_t wheel[8] = {
+			0x000E, 0x00EE, 0x00E0, 0x0EE0,
+			0x0E00, 0x0E0E, 0x0EEE, 0x0006
+		};
+#ifdef BOOT_MOTION_GAME
+		/* GAME-FRAME WHEEL (LOOP27 39). Same instrument, driven off the
+		 * GAME's own scene timer (WRAM 0xFFF02A, one tick per game frame)
+		 * instead of the vint count. One wheel step per 8 game frames, so
+		 * a full cycle is 64 GAME FRAMES:
+		 *   ~1 cycle/second  -> 60 game-frames/s, full speed
+		 *   ~2 seconds       -> 30 Hz
+		 *   ~4 seconds       -> 15 Hz
+		 * Against the vint wheel's measured 1 cycle/second (entry 38),
+		 * the ratio of the two cycle times IS the hardware miss rate —
+		 * the number the whole 60 Hz arc rests on, never taken on
+		 * silicon. */
+		uint16_t mtick = *(volatile uint16_t*)0xFFF02A;
+#else
+		static uint16_t mtick;
+		mtick++;
+#endif
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		{
+			uint16_t col = wheel[(mtick >> 3) & 7];
+			for (int q = 0; q < 64; q++)
+				*(volatile uint16_t*)0xC00000 = col;
+		}
+	}
+#endif
+#ifdef BOOT_PALPEEK
+	/* PALETTE-DATA VERDICT, painted where it is actually visible: flood
+	 * all 64 MD CRAM entries at vint top with the colour stashed by the
+	 * consume-site peek. BOOTMDPAL proved a flood here covers the whole
+	 * screen on hardware. A flat colour is also unmistakable against a
+	 * stale capture (three so far, md5 72f2caf6 under three rom names) —
+	 * a stale frame shows the graveyard, a live one shows flat colour.
+	 * RED = the 48 palette words are all zero; YELLOW = all identical;
+	 * GREEN = varied, a plausible palette. Black/no flood = the consume
+	 * never ran, which is itself the answer. */
+	{
+		uint16_t col = *(volatile uint16_t*)0xFFA168;
+		if (col) {
+			*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+			for (int q = 0; q < 64; q++)
+				*(volatile uint16_t*)0xC00000 = col;
+		}
+	}
+#endif
+#ifdef BOOT_MDPAL
+	/* WHICH LAYER AM I LOOKING AT? (2026-09-08, LOOP27 29). Neither the
+	 * vblank drain nor hammered direct 32X CRAM stores change the
+	 * magenta/green picture on the MiSTer. So test the assumption every
+	 * probe since entry 18 has rested on: that the picture is the 32X
+	 * layer at all. THE SHIP LINE IS MDBGALL — the background and FG
+	 * cat-0 are drawn by the MEGA DRIVE VDP, not the 32X, and they take
+	 * MD CRAM colours, which the 68K owns and which no 32X palette work
+	 * can touch.
+	 * Paint the WHOLE MD palette RED every vint:
+	 *   picture turns red  -> what we see is the MD PLANE, and the
+	 *     entire 32X palette arc has been aimed at the wrong layer;
+	 *     the magenta/green is a wrong MD CRAM, uploaded from FB
+	 *     staging by the 68K.
+	 *   stays magenta/green -> it really is the 32X layer and MD CRAM
+	 *     is not involved. */
+	{
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int i = 0; i < 64; i++)
+			*(volatile uint16_t*)0xC00000 = 0x000E;   /* red */
+	}
+#endif
+#ifdef BOOT_TAGBLUE
+	/* ROM IDENTITY TAG (2026-09-08, LOOP27 21). s16_abdraw_on and
+	 * s16_palvbl_on produced BYTE-IDENTICAL MiSTer screenshots from
+	 * DIFFERENT roms, which should not be possible with a live game. So
+	 * before reading one more colour off that screen, prove which code
+	 * is actually running: the 68K paints the MEGA DRIVE backdrop BLUE
+	 * every vint. MD CRAM, so FM cannot gate it and the 32X display gate
+	 * cannot hide it. Blue on screen = THIS rom is running. Not blue =
+	 * the machine is still running older code and every reading taken
+	 * from it is about that older code. */
+	*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+	*(volatile uint16_t*)0xC00000 = 0x0E00;      /* blue */
+#endif
+#ifdef BOOT_ABREAD
+	/* A/B READBACK PROBE (2026-09-08, LOOP27 15). s16_abdraw came back
+	 * NO BAR on the MiSTer: the master's in-game FB write never reaches
+	 * the display, while the 68K's does (s16_68kdraw) and the master's
+	 * own BOOT write does (s16_fliptest, green bar). Two live causes:
+	 *   A. the master's in-game write does not land at all;
+	 *   B. it lands in memory the display never shows.
+	 * This splits them WITHOUT a mailbox: the 68K reads the master's bar
+	 * bytes straight out of the framebuffer at FM=0 (the window at
+	 * 0x840000 is ours to read here, same as the packet consume) and
+	 * paints the verdict on the MEGA DRIVE backdrop, which FM cannot
+	 * gate and which shows even with the 32X output off — the reporter
+	 * every one-colour 32X verdict this arc got wrong.
+	 *   GREEN backdrop = the 68K FINDS the master's bar. The write
+	 *     landed; the fault is on the display side (cause B).
+	 *   RED backdrop   = the 68K does NOT find it. Either the write is
+	 *     lost in-game, or master and 68K see different banks — and
+	 *     with s16_abdraw's no-bar that means the master's writes land
+	 *     where neither the 68K nor the display can see them.
+	 * Honest limit: this cannot by itself tell "lost" from "bank the 68K
+	 * cannot see". It does cleanly kill one of the two. */
+	if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
+		const volatile uint32_t *bar = (const volatile uint32_t *)
+			(0x840000u + 0x200u + 8u * 320u);
+		uint16_t col = (bar[0] == 0x01010101u || bar[100] == 0x01010101u)
+			? 0x00E0        /* GREEN: the master's bar is in the FB */
+			: 0x000E;       /* RED:   it is not */
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_MDMODE
+	/* HARDWARE PROBE / candidate fix: the 68K asserts the 32X display mode
+	 * every vint (FM=0 here at entry, before the belt). If this shows the
+	 * game on hardware, the SH-2's mode write is being lost and the 68K
+	 * mirroring it is the fix. */
+	if (!(*(volatile uint16_t*)0xA15100 & 0x8000))
+		*(volatile uint16_t*)0xA15180 = 0x8000 | 0x0080 | 0x0001;
+#endif
+#ifdef BOOT_VPULSE
+	/* HARDWARE PROBE: alternate 32X CRAM 0 every vint once the game runs
+	 * (FM must be 0 here; a raised FM just drops the write). A pulsing
+	 * screen = the vint chain is alive; solid = the 68K is hung. Bit 2
+	 * of the count: ~8-vint blocks so the eye can follow it. */
+	{
+		static uint16_t vp;
+		vp++;
+		if (game_running)
+			*(volatile uint16_t*)0xA15200 = (vp & 8) ? 0x001F : 0x7C00;
+		else
+			*(volatile uint16_t*)0xA15200 = (vp & 8) ? 0x03E0 : 0x03FF;
+	}
+#endif
 	static uint16_t busy;
 #ifdef MD_BG
 	{
@@ -1676,7 +2298,86 @@ void shim_vblank(void) {
 	if (*(volatile uint16_t*)0xA15100 & 0x8000) {
 		uint32_t belt = 4000000UL;
 		fmgate_belt++;
+#ifdef BOOT_FMCHK
+		/* HARDWARE PROBE: acked window but FM still up for ~200k polls ->
+		 * tell the master (COMM10 = 0xDEAD); it paints and retries. */
+		while ((*(volatile uint16_t*)0xA15100 & 0x8000) && --belt)
+			if (belt == 3800000UL && *mars_comm0 == 0)
+				*mars_comm10 = 0xDEAD;
+#else
 		while ((*(volatile uint16_t*)0xA15100 & 0x8000) && --belt) ;
+#endif
+	}
+#endif
+#ifdef BOOT_PKTCHK
+	/* HARDWARE PROBE v16 (FB pixels vs palette — decisive): let the game
+	 * run normally to vint 240 (many clean composed+flipped frames), THEN
+	 * halt and, every iteration while FM is down, force the 32X mode on
+	 * and paint a diagnostic palette: CRAM 0 = OPAQUE blue (no through, so
+	 * the MD plane can NOT show through), CRAM 1..255 = grey ramp. The
+	 * displayed bank is a real, completed game frame.
+	 *   solid blue      = the 32X frame is all pixel 0 (compose/blit did
+	 *                     not land on the displayed bank) -> a blit/flip
+	 *                     bank-parity bug (ours).
+	 *   grey shapes     = the frame HAS pixels; the earlier black was the
+	 *                     game's palette (CRAM) never being applied -> the
+	 *                     master apply_cram / palette path on hardware. */
+	{
+		static uint16_t vp2;
+		if (game_running && ++vp2 == 240) {
+			for (;;) {
+				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
+					*(volatile uint16_t*)0xA15180 = 0x0081;      /* mode 256 + 32X prio */
+					volatile uint16_t *c32 = (volatile uint16_t*)0xA15200;
+					c32[0] = 0x7C00;                             /* opaque blue, no through */
+					for (uint16_t k = 1; k < 256; k++) {
+						uint16_t v = (uint16_t)((k >> 3) & 31);
+						c32[k] = (uint16_t)((v << 10) | (v << 5) | v);
+					}
+				}
+			}
+		}
+	}
+#endif
+#ifdef BOOT_VISRCHK
+	/* HARDWARE PROBE: after 120 vints of game, did the master's V-ISR
+	 * ever run? (FM is 0 here, after the belt.) WHITE = yes, RED = never;
+	 * then halt so nothing repaints the answer. */
+	{
+		static uint16_t vc;
+		if (game_running && ++vc == 120) {
+			*(volatile uint16_t*)0xA15200 = *(volatile uint16_t*)0xA1512A ? 0x7FFF : 0x001F;
+			for (;;) ;
+		}
+	}
+#endif
+#ifdef TXT_WRAM
+#if !TXT_WRAM_ON
+#error fmgate_tab.h generated without TXTWRAM (stale header - rebuild)
+#endif
+	/* LOOP 27 q4 — TOP-OF-PASS TEXT STAGING. The writers in txtw[]
+	 * (credit line, health bar) now store into the WRAM text mirror;
+	 * each mark thunk left a dirty byte (and, for the credit line, the
+	 * byte offset it used). Copy exactly the dirty footprints into FB
+	 * text staging here, at FM=0 before this vint's raise, so the SH-2's
+	 * pre-flip text capture sees them in the same window a direct FB
+	 * write would have reached. ~0.4-0.8 lines per dirty writer. */
+	for (uint8_t ti = 0; txtw[ti].words; ti++) {
+		volatile uint8_t *dirty = (volatile uint8_t*)(0xFF0000u | (txtw[ti].slot + 2u));
+		if (!*dirty)
+			continue;
+		uint16_t toff = txtw[ti].off;
+		if (toff == 0xFFFF)
+			toff = *(volatile uint16_t*)(0xFF0000u | txtw[ti].slot);
+		else if (txtw[ti].sel && *(volatile uint8_t*)(0xFF0000u | txtw[ti].sel))
+			toff = txtw[ti].off2;                /* the other player's footprint */
+		toff &= 0x0FFE;
+		const uint16_t *cs = (const uint16_t*)(0xFF8000u + toff);
+		volatile uint16_t *cd = (volatile uint16_t*)(0x85F000u + toff);
+		for (uint16_t ci = 0; ci < txtw[ti].words; ci++)
+			cd[ci] = cs[ci];
+		*dirty = 0;
+		(*(volatile uint16_t*)0xFFB0CC)++;       /* diag: txtw copies */
 	}
 #endif
 
@@ -1736,8 +2437,29 @@ void shim_vblank(void) {
 			else
 				r60_go = 1;
 		}
-		if (r60_go)
+#ifdef BOOT_GATECHK
+		/* HARDWARE PROBE: why is the 68K not posting? Painted every vint
+		 * the gate declines (FM is 0 here, after the belt), two shades
+		 * alternating every 8 vints so a live 68K reads as a flicker and a
+		 * hung one as a steady colour. RED = entry V outside the gate,
+		 * BLUE = master still open (COMM0 live), GREEN = game mid-span. */
+		{
+			static uint16_t gc; gc++;
+			if (!r60_go) {
+				uint16_t col;
+				if (v_entry < 0xDF || v_entry > 0xE8)      col = (gc & 8) ? 0x001F : 0x000C;
+				else if (*mars_comm0)                      col = (gc & 8) ? 0x7C00 : 0x3000;
+				else                                       col = (gc & 8) ? 0x03E0 : 0x0180;
+				*(volatile uint16_t*)0xA15200 = col;
+			}
+		}
+#endif
+		if (r60_go) {
+#ifdef ARM_GATE
+			*mars_comm4 = 0;                         /* any 0xA001 after this is THIS vint's arm */
+#endif
 			*mars_comm6 = 0xB101;                    /* announce: ISR arms */
+		}
 		/* TORN-PACKET FEEDBACK consume: the master's harvest posts
 		 * 0xBAD1 on COMM8 when a real landing tore (landed>0, packet
 		 * rejected). Re-mark everything that push carried: pal ids
@@ -1804,7 +2526,7 @@ void shim_vblank(void) {
 		}
 #endif
 #ifdef MDSPR
-		/* PER-SCENE SPRITE ART (BOSSFIGHT.md): 0xBA50|scene = start
+		/* PER-SCENE SPRITE ART (docs/design/BOSSFIGHT.md): 0xBA50|scene = start
 		 * the chunked cart->VRAM re-upload of that scene's blob.
 		 * The SH-2 suspends claims for 30 vints; ~11 chunks of 512
 		 * words at ~8 lines each ride the vint during the cut. */
@@ -1884,7 +2606,15 @@ void shim_vblank(void) {
 				*mars_comm2 = BANK_SHADOW;
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
 				*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#ifdef ARM_GATE
+				/* COMM4 was cleared at the announce, so a 0xA001 here is
+				 * THIS vint's arm (the ISR usually arms during our
+				 * consumes). No stale-echo clear: it wiped that echo and
+				 * a previous vint's echo could pass for a fresh one. */
+				uint8_t armed_ok = (*mars_comm4 == 0xA001);
+#else
 				*mars_comm4 = 0;                     /* stale echo clear */
+#endif
 				/* (push-before-post TRIED AND REVERTED same-day: the
 				 * push is ~90 lines of 68K bus writes — CPU-bound, not
 				 * drain-bound — so the post waited ~100 lines and the
@@ -1912,6 +2642,23 @@ void shim_vblank(void) {
 #define FML_PAST(line)  ({ uint8_t _v = FML_V(); (_v < 0xDF && _v >= (line)); })
 				/* both waits bounded by the BEAM (an unarmed pipeline never
 				 * echoes; an iteration bound hung the boot for seconds) */
+				/* LOOP 27 entry 7 — ARM GATE: never push into an unarmed
+				 * DMA. The ISR (or the master's ack site) echoes 0xA001
+				 * after arming; without it the words land on the previous
+				 * transfer's counter (torn, displaced). Bounded: no echo
+				 * = no packet this vint (a stale frame, not a tear + belt
+				 * storm). */
+#ifdef ARM_GATE
+				if (!armed_ok) {
+					uint16_t ga = 600;               /* ~1.5 lines: the body services a late announce within a line */              /* late arm (ack-site or a slow ISR) */
+					while (*mars_comm4 != 0xA001 && --ga) ;
+					if (ga)
+						armed_ok = 1;
+					else
+						(*(volatile uint16_t*)0xFFB0CE)++;   /* pushes skipped: unarmed */
+				}
+				if (armed_ok)
+#endif
 				r60_push();                          /* selection overlaps the
 				                                      * ISR span; the F103 wait +
 				                                      * FM drop sit before its ship */
@@ -1925,6 +2672,23 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA184 =
 					*(volatile uint16_t*)0xC00008;   /* V at ack */
 #else
+				/* LOOP 27 entry 7 — ARM GATE: never push into an unarmed
+				 * DMA. The ISR (or the master's ack site) echoes 0xA001
+				 * after arming; without it the words land on the previous
+				 * transfer's counter (torn, displaced). Bounded: no echo
+				 * = no packet this vint (a stale frame, not a tear + belt
+				 * storm). */
+#ifdef ARM_GATE
+				if (!armed_ok) {
+					uint16_t ga = 600;               /* ~1.5 lines: the body services a late announce within a line */              /* late arm (ack-site or a slow ISR) */
+					while (*mars_comm4 != 0xA001 && --ga) ;
+					if (ga)
+						armed_ok = 1;
+					else
+						(*(volatile uint16_t*)0xFFB0CE)++;   /* pushes skipped: unarmed */
+				}
+				if (armed_ok)
+#endif
 				r60_push();
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
@@ -3262,6 +4026,234 @@ window_done: ;
 	BANK_SHADOW = MCU_BANKREQ;           // tile bank req -> shadow (SH-2 later)
 	*mars_comm12 += 1;                   // frame heartbeat
 
+#ifdef BOOT_SPIN
+	/* Bucket the spin residual published by r60_push.
+	 *   GREEN  == 2600  never FIFO-full (ares' result)
+	 *   YELLOW  > 2000  mild
+	 *   ORANGE  > 1000
+	 *   RED    <= 1000  the push is mostly waiting on the master, and
+	 *                   at 0 the packet is ABORTED (ok=0) */
+	{
+		uint16_t sp = *(volatile uint16_t*)0xFFA17A;
+		uint16_t col = (sp >= 2600) ? 0x00E0
+					 : (sp >  2000) ? 0x00EE
+					 : (sp >  1000) ? 0x006E
+					                : 0x000E;
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_PUSHWHERE
+	/* WHICH PART OF THE PUSH? (2026-09-08, LOOP27 56)
+	 * The push is 96-160 lines on hardware (55). r60_push already
+	 * carries a PUSH AUTOPSY with five stamps, and its own comment
+	 * records the key prior result: cutting the packet 145->52 words did
+	 * NOT move the span, and the spin residual stayed 2600 = **never
+	 * FIFO-full**. So the push is not transport-bound, and my
+	 * "the FIFO fills and the 68K stalls" candidate is already dead.
+	 *   0xFFA0B4 entry -> 0xFFA0BE rotor+compares -> 0xFFA0B6 selection
+	 *   -> 0xFFA0B8 regs (20 words) -> 0xFFA0BA rowscroll+pal
+	 *   -> 0xFFA0BC records+tail
+	 *   WHITE   total < 16 lines
+	 *   RED     entry -> rotor+compares
+	 *   GREEN   rotor -> selection done   <- the palette compare pre-pass
+	 *   BLUE    selection -> regs shipped
+	 *   YELLOW  regs -> rowscroll+pal shipped
+	 *   MAGENTA pal -> records+tail shipped
+	 * GREEN or RED would confirm the frame-threshold-law note that the
+	 * next lever is "the palette compare off the 68K". */
+	{
+		uint8_t a0 = (uint8_t)(*(volatile uint16_t*)0xFFA0B4 >> 8);
+		uint8_t a1 = (uint8_t)(*(volatile uint16_t*)0xFFA0BE >> 8);
+		uint8_t a2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B6 >> 8);
+		uint8_t a3 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
+		uint8_t a4 = (uint8_t)(*(volatile uint16_t*)0xFFA0BA >> 8);
+		uint8_t a5 = (uint8_t)(*(volatile uint16_t*)0xFFA0BC >> 8);
+		uint8_t d1=(uint8_t)(a1-a0), d2=(uint8_t)(a2-a1), d3=(uint8_t)(a3-a2);
+		uint8_t d4=(uint8_t)(a4-a3), d5=(uint8_t)(a5-a4);
+		uint16_t col;
+		if ((uint8_t)(a5-a0) < 16) {
+			col = 0x0EEE;
+		} else {
+			uint8_t m=d1; col=0x000E;
+			if (d2>m){m=d2;col=0x00E0;}
+			if (d3>m){m=d3;col=0x0E00;}
+			if (d4>m){m=d4;col=0x00EE;}
+			if (d5>m){m=d5;col=0x0E0E;}
+		}
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_PUSHLEN
+	/* HOW LONG IS THE DREQ PUSH ON HARDWARE? (2026-09-08, LOOP27 55)
+	 * The tail probe came back BLUE on every hardware capture: of the
+	 * four tail stages, the 68K's DREQ push into the 32X FIFO is the
+	 * biggest. ares measures it at 44-47 scanlines (read from WRAM) out
+	 * of a ~62-line handler, and ares runs the game at ~50%. Hardware
+	 * runs it at ~3%, so the push must be far longer there. This gives
+	 * the number instead of the ranking.
+	 *   GREEN  <48    ares-like, the push is not the problem
+	 *   YELLOW <96
+	 *   ORANGE <160
+	 *   RED    >=160  the push alone is most of a 262-line frame */
+	{
+		uint8_t v2 = (uint8_t)(*(volatile uint16_t*)0xFFA0AA >> 8);  /* pre-push  */
+		uint8_t v3 = (uint8_t)(*(volatile uint16_t*)0xFFA0AC >> 8);  /* post-push */
+		uint8_t d  = (uint8_t)(v3 - v2);
+		uint16_t col = (d <  48) ? 0x00E0
+					 : (d <  96) ? 0x00EE
+					 : (d < 160) ? 0x006E
+					             : 0x000E;
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_TAIL
+	/* WHERE DOES THE HANDLER TAIL GO? (2026-09-08, LOOP27 54)
+	 * Hardware says the consume is 8-24 lines and starts within 16 of
+	 * handler entry (entry 53). So the ~200 remaining lines are in the
+	 * TAIL, and the tail is where the 68K WAITS ON THE MASTER.
+	 * The shipping code already stamps V at four tail points:
+	 *   0xFFA0A0 at post -> 0xFFA0AA pre-push -> 0xFFA0AC post-push
+	 *   -> 0xFFA09E at hold exit
+	 * Bucket the three gaps, flood with the colour of the biggest.
+	 *   WHITE  total < 16 lines: the tail is not it either
+	 *   RED    consume-end -> post   (waiting to be allowed to post)
+	 *   GREEN  post -> pre-push      (the master's window)
+	 *   BLUE   pre-push -> post-push (the DREQ push itself)
+	 *   YELLOW post-push -> hold exit (the flip-hold echo)
+	 * RED or GREEN puts it on the master; BLUE on the FIFO transport;
+	 * YELLOW on the flip. */
+	{
+		uint8_t v0 = (uint8_t)(*(volatile uint16_t*)0xFFA176 >> 8);  /* consume end */
+		uint8_t v1 = (uint8_t)(*(volatile uint16_t*)0xFFA0A0 >> 8);  /* post */
+		uint8_t v2 = (uint8_t)(*(volatile uint16_t*)0xFFA0AA >> 8);  /* pre-push */
+		uint8_t v3 = (uint8_t)(*(volatile uint16_t*)0xFFA0AC >> 8);  /* post-push */
+		uint8_t v4 = (uint8_t)(*(volatile uint16_t*)0xFFA09E >> 8);  /* hold exit */
+		uint8_t d1 = (uint8_t)(v1 - v0), d2 = (uint8_t)(v2 - v1);
+		uint8_t d3 = (uint8_t)(v3 - v2), d4 = (uint8_t)(v4 - v3);
+		uint8_t tot = (uint8_t)(v4 - v0);
+		uint16_t col;
+		if (tot < 16) {
+			col = 0x0EEE;                          /* WHITE */
+		} else {
+			uint8_t m = d1; col = 0x000E;          /* RED    */
+			if (d2 > m) { m = d2; col = 0x00E0; }  /* GREEN  */
+			if (d3 > m) { m = d3; col = 0x0E00; }  /* BLUE   */
+			if (d4 > m) { m = d4; col = 0x00EE; }  /* YELLOW */
+		}
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_PRECONSUME
+	/* Gap from handler entry (0xFFA178) to consume entry (0xFFB0B0), in
+	 * MD scanlines. Vblank is 38 lines, a frame 262.
+	 *   GREEN  <16   the consume starts promptly; the delay is elsewhere
+	 *   YELLOW <48    up to a fifth of the frame gone before it starts
+	 *   ORANGE <112
+	 *   RED    >=112  most of the frame is spent BEFORE the consume, and
+	 *                 that is where the 95% miss rate lives */
+	{
+		uint8_t ve = (uint8_t)(*(volatile uint16_t*)0xFFA178 >> 8);
+		uint8_t vc = (uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8);
+		uint8_t gap = (uint8_t)(vc - ve);
+		uint16_t col = (gap <  16) ? 0x00E0
+					 : (gap <  48) ? 0x00EE
+					 : (gap < 112) ? 0x006E
+					               : 0x000E;
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_STAGEMAX
+	/* WHICH STAGE OF THE CONSUME IS THE SLOW ONE? (2026-09-08, LOOP27 51)
+	 * s16_span2 answers "is the consume the frame". This answers "which
+	 * part of it", so the eventual hardware session is not one bit.
+	 * The shipping consume already stamps the MD V-counter at four
+	 * points (md_main.c 545/627/652/747 and 1074):
+	 *   0xFFB0B0 entry -> 0xFFB0B2 after scroll -> 0xFFB0B4 after the
+	 *   tile/span DMAs -> 0xFFB0B6 after cells -> 0xFFA176 end
+	 * Bucket the four deltas, find the largest, and flood the palette
+	 * with a colour naming that stage. One look, one culprit.
+	 *   WHITE  = nothing is slow (total < 8 lines) — the consume is
+	 *            innocent and the time goes elsewhere in the handler
+	 *   RED    = entry -> scroll
+	 *   GREEN  = scroll -> tile/span DMAs   <- the FB-sourced DMAs
+	 *   BLUE   = spans -> cells
+	 *   YELLOW = cells -> end               <- includes the palette
+	 * GREEN would confirm the FB-sourced DMA suspicion of entry 47/48
+	 * directly; YELLOW would put it back on the palette upload. */
+	{
+		uint8_t v0 = (uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8);
+		uint8_t v1 = (uint8_t)(*(volatile uint16_t*)0xFFB0B2 >> 8);
+		uint8_t v2 = (uint8_t)(*(volatile uint16_t*)0xFFB0B4 >> 8);
+		uint8_t v3 = (uint8_t)(*(volatile uint16_t*)0xFFB0B6 >> 8);
+		uint8_t v4 = (uint8_t)(*(volatile uint16_t*)0xFFA176 >> 8);
+		uint8_t d1 = (uint8_t)(v1 - v0), d2 = (uint8_t)(v2 - v1);
+		uint8_t d3 = (uint8_t)(v3 - v2), d4 = (uint8_t)(v4 - v3);
+		uint8_t tot = (uint8_t)(v4 - v0);
+		uint16_t col;
+		if (tot < 8) {
+			col = 0x0EEE;                        /* WHITE  */
+		} else {
+			uint8_t m = d1; col = 0x000E;        /* RED    */
+			if (d2 > m) { m = d2; col = 0x00E0; }/* GREEN  */
+			if (d3 > m) { m = d3; col = 0x0E00; }/* BLUE   */
+			if (d4 > m) { m = d4; col = 0x00EE; }/* YELLOW */
+		}
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
+#ifdef BOOT_SPAN
+	/* WHERE IS THE 68K WHEN ITS CONSUME FINISHES? (2026-09-08, LOOP27 41)
+	 * Hardware runs ~3 game-frames/s against ~60 vints/s (entry 40): the
+	 * handler is overrunning massively. MDCONSUMEOFF was meant to bisect
+	 * it but it changes the GAME'S BEHAVIOUR, not just its cost, so its
+	 * reading was unusable.
+	 * This does not perturb anything: it reads a stamp the shim ALREADY
+	 * records — the MD V-counter at consume end, 0xFFA176 — and floods
+	 * the palette with which part of the frame that lands in. Vblank
+	 * starts at V=0xE0.
+	 *   GREEN   V >= 0xE0   consume finished inside vblank (healthy)
+	 *   YELLOW  V <  0x20   ran ~32 lines into the visible frame
+	 *   ORANGE  V <  0x60   ~96 lines in
+	 *   RED     otherwise   deep into the picture; the vint is lost
+	 * ares should read GREEN or YELLOW. If hardware reads RED, the
+	 * consume alone is eating the frame and the target is named.
+	 * (First cut of this probe accumulated a wrap counter and latched
+	 * WHITE forever — ares read WHITE at every sample, which is how it
+	 * was caught before it went to hardware. Bucket a single stamp.) */
+	{
+		/* v2 (LOOP27 44): the first cut bucketed the consume's END
+		 * POSITION, which conflates the consume's own cost with
+		 * everything that ran before it in the vint. Both stamps exist —
+		 * 0xFFB0B0 is V at consume ENTRY, 0xFFA176 is V at consume END —
+		 * so bucket the DIFFERENCE and measure the consume itself.
+		 * Caveat kept in view: both are written only when a packet was
+		 * actually present (`live[0] == 0xB6B6`, md_main.c:547), so this
+		 * measures CONSUMING vints, not all vints. That is the right
+		 * population for this question. */
+		uint8_t v0 = (uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8);
+		uint8_t v1 = (uint8_t)(*(volatile uint16_t*)0xFFA176 >> 8);
+		uint8_t dl = (uint8_t)(v1 - v0);            /* lines, wraps ok */
+		uint16_t col = (dl <   8) ? 0x00E0          /* GREEN  <8 lines  */
+					 : (dl <  24) ? 0x00EE          /* YELLOW <24       */
+					 : (dl <  64) ? 0x006E          /* ORANGE <64       */
+					              : 0x000E;         /* RED    >=64      */
+		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
+		for (int q = 0; q < 64; q++)
+			*(volatile uint16_t*)0xC00000 = col;
+	}
+#endif
 }
 
 __attribute__((section(".data")))
@@ -3277,12 +4269,47 @@ void main(void) {
 	// enforced by ares; violating it kills their instruction fetch). The
 	// master posts 0x600D on COMM14 from SDRAM; the slave's SDRAM loop
 	// increments COMM6.
+#ifdef BOOT_SHSTAGE
+	while (*mars_comm14 != 0x600D)       /* probe: backdrop = blue + master's stage tint */
+		vdp_color(0, (uint16_t)(0x800 | ((*mars_comm12 & 7) << 5)));
+#else
 	while (*mars_comm14 != 0x600D) ;
+#ifdef BOOT_SLVALIVE
+	/* MiSTer slave-boot beacon: GREEN if the slave heartbeat (COMM6)
+	 * advances within ~4M polls, RED and halt if not. The permanent
+	 * warm-up should make this green. */
+	{
+		uint16_t c6 = *mars_comm6; uint32_t g = 4000000UL;
+		while (*mars_comm6 == c6 && --g) ;
+		vdp_color(0, g ? 0x0E0 : 0x00E);
+		if (!g) for (;;) ;
+	}
+#endif
+#endif
 	vdp_color(0, 0x0EE);                // YELLOW: master is SDRAM-resident
+#ifdef BOOT_SHSTAGE
+	/* HARDWARE PROBE: the 32X display is on now (the master's init), so
+	 * the MD backdrop is hidden; paint 32X CRAM 0 from here (FM must be
+	 * 0 for the 68K to reach it — the master is done with the VDP). */
+#define MDSTAGE(col) do { *(volatile uint16_t*)0xA15200 = (col); } while (0)
+	*(volatile uint16_t*)0xA15100 &= 0x7FFF;
+	MDSTAGE(0x03FF);                    /* YELLOW: 68K saw 0x600D */
+	{
+		uint16_t c6 = *mars_comm6;
+		uint32_t g = 4000000UL;
+		static const uint16_t sst_col[8] = { 0x03FF, 0x001F, 0x03E0, 0x7C00, 0x7FE0, 0x7C1F, 0x7FFF, 0x7C1F };  /* 6 = WHITE: SDRAM stub ran */
+		while (*mars_comm6 == c6 && --g)
+			MDSTAGE(sst_col[*(volatile uint16_t*)0xA1512A & 7]);   /* slave stage on COMM10 */
+		if (!g) { for (;;) ; }              /* colour stays: the slave's last stage */
+	}
+	MDSTAGE(0x7FE0);                    /* CYAN: slave alive */
+#else
+#define MDSTAGE(col) do { } while (0)
 	{
 		uint16_t c6 = *mars_comm6;
 		while (*mars_comm6 == c6) ;
 	}
+#endif
 	vdp_color(0, 0xEE0);                // CYAN: slave alive too
 
 	// FM=0: 68K owns the FB window during gameplay so the game's remapped
@@ -3290,6 +4317,7 @@ void main(void) {
 	// VDP init (it posted 0x600D from SDRAM); from here it only touches
 	// FB/CRAM inside the render window, where the shim raises FM first.
 	*(volatile uint16_t*)0xA15100 &= 0x7FFF;
+	MDSTAGE(0x0200);                    /* DARK GREEN: heartbeat seen, FM down */
 
 	// UNPAIR MODEL (NOTES.md "REBASE DESIGN v2"): RV stays 0 FOREVER.
 	// The game executes its REBASED copy through the banked 0x900000
@@ -3312,6 +4340,7 @@ void main(void) {
 	*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3000u) << 16) | 3u;
 	for (uint16_t i = 0; i < 320; i++)
 		*vdp_data_port = 0;
+	MDSTAGE(0x7C0F);                    /* PURPLE: VDP clear done, before the bank-2 blob copy */
 #ifdef MDSPR
 	// P3 M1: mob sprite art -> VRAM 0x8000, once, before the game owns
 	// the 0x900000 window. The blob sits at a FIXED cart offset
@@ -3327,7 +4356,38 @@ void main(void) {
 			*vdp_data_port = src[i];
 	}
 #endif
+	MDSTAGE(0x01FF);                    /* ORANGE: before the bank-3 switch */
 	*(volatile uint16_t*)0xA15104 = 3;  // 0x900000 window -> cart bank 3
+#ifdef BOOT_FBDMAHALT
+	/* HARDWARE PROBE: VDP DMA with the 32X FRAMEBUFFER as the source —
+	 * the MD-plane consume path. Fill 64 FB words (FM=0), DMA them to
+	 * VRAM 0, read VRAM back through the data port. WHITE = identical,
+	 * RED = not, then halt. */
+	{
+		volatile uint16_t *fb = (volatile uint16_t*)0x85E000;
+		uint16_t i, bad = 0;
+		for (i = 0; i < 64; i++) fb[i] = (uint16_t)(0x1234 + i * 0x0101);
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;             /* 64 words */
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | ((0x85E000ul >> 1) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((0x85E000ul >> 9) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((0x85E000ul >> 17) & 0x7F));
+		*vdp_ctrl_wide = 0x40000080ul;                           /* VRAM 0, DMA */
+		*vdp_ctrl_wide = 0x00000000ul;                           /* VRAM 0 read */
+		for (i = 0; i < 64; i++)
+			if (*vdp_data_port != (uint16_t)(0x1234 + i * 0x0101)) bad++;
+		MDSTAGE(bad ? 0x001F : 0x7FFF);
+		for (;;) ;
+	}
+#endif
+#ifdef BOOT_BANK3HALT
+	/* HARDWARE PROBE: can the 68K read the game image through bank 3 of
+	 * the banked window? cart 0x300400 = the arcade's bra at 0x400.
+	 * WHITE = yes, RED = wrong word; then halt. */
+	MDSTAGE(*(volatile uint32_t*)0x900400 == 0x6000000Cul ? 0x7FFF : 0x001F);
+	for (;;) ;
+#endif
 
 	// Thunk for the one abs.w-encoded jump the rebase couldn't widen
 	// (US 0x1B5C6: jmp (47E).w -> jmp (FFFFB3F0).w): jmp 0x90047E.l.
@@ -3550,6 +4610,7 @@ void main(void) {
 #endif
 	vdp_color(0, 0x0E0);                // GREEN: handing to the rebased game
 
+	MDSTAGE(0x6318);                    /* GREY: uploads done, before B007 */
 	*mars_comm14 = 0xB007;              // beacon: shim init complete
 	// HOLD THE GAME until the master's V-ISR is armed (COMM14 = 0xB008,
 	// sh_src/m_main.c): the game's blank-loaded boot card (its frames
@@ -3565,6 +4626,7 @@ void main(void) {
 		while ((*mars_comm14 & 0xFE00) != 0xB000 && --hold) ;   /* B008 or B1xx */
 		__asm__ __volatile__("move.w #0x2700,%%sr" ::: "memory");
 	}
+	MDSTAGE(0x3000);                    /* DARK BLUE: hold over, entering the game */
 	game_running = 1;
 
 	// Enter the game's own boot IN PLACE in the rebased high copy

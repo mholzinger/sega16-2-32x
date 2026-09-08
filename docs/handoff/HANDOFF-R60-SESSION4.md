@@ -171,11 +171,11 @@ chronic, fall back to: pal blocks ride the FIFO only on fade frames
 
 ## 5. WHERE EVERYTHING IS WRITTEN
 
-- REBUILD.md — the working log; every conviction/negative this
+- docs/design/REBUILD.md — the working log; every conviction/negative this
   session-era is appended with numbers. Newest entries: the blit-
   is-coherence postmortem, seam-kill, void fix, attempt-4 negative,
   R2 hazard gate, push conviction.
-- P3.md — the MD-sprite offload design + execution log + honest
+- docs/design/P3.md — the MD-sprite offload design + execution log + honest
   bounds (one palette line; BG allocator measured 1/1/4 free pens —
   line steal evicts live colors; per-scene allocation is the path).
 - The plan artifact (Mike-facing scoreboard):

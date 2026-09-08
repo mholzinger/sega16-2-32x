@@ -22,18 +22,50 @@ away from it. The pivot happened. The shipping build is `NATIVE=1`:
   one whole.
 - The Mega Drive VDP draws plane B (background) and plane A
   (non-priority foreground) from per-scene static palettes
-  (`PALSTATIC.md`); the SH-2s draw only what the VDP cannot: zoomed
+  (`docs/design/PALSTATIC.md`); the SH-2s draw only what the VDP cannot: zoomed
   sprites, priority tiles, text, shadow.
 - Measured on ares (`PHASECENSUS=1`): compose 0.93 vint/generation,
   map drain 0.46, blit lands at 0.24 vint into the window, launch at
   0.38. About 36% of light-scene generations ship in one vint.
 - The bar is 60 Hz. The levers left, in order: launch during the blit,
   category-1 tiles on plane A, the map drain off the close path.
-  `BOSSFIGHT.md` and `HANDOFF-SESSION3.md` carry the measurements and
+  `docs/design/BOSSFIGHT.md` and `docs/handoff/HANDOFF-SESSION3.md` carry the measurements and
   the negative results.
 
 The rest of this document is the reasoning that got here and is still
 the reference for every hardware number in it.
+
+---
+
+## 0. Who runs the game (read this first)
+
+Nobody re-implements Altered Beast. Sega's 68000 program, the two
+interleaved program ROMs, executes instruction for instruction on the
+Mega Drive's 68000. The port replaces everything around it:
+
+- `tools/patch_game.py` rebases the program's hardware addresses (tile,
+  text, sprite and palette RAM, I/O) into mirrors the 32X can see, and
+  emits a rebased copy that runs from the high cart window (the UNPAIR
+  project, NOTES.md) so the SH-2s can read the cart at any time.
+- `md_src/md_start.s` is the cartridge's vector table and boot. It sets
+  up the VDP, installs the shim, and enters Sega's reset code.
+- The game's whole per-frame update runs inside its IRQ4 handler. On
+  the arcade the MCU raises IRQ4; here the Mega Drive H-interrupt at
+  line 223 lands on the adapter's writable vector, the shim runs its
+  duties first (pad -> arcade input words in work RAM, tile-bank
+  forward, sound mailbox, dirty palette/tile shipping), then jumps into
+  the game's handler. Its `rte` returns through the shim, which hands
+  the framebuffer to the SH-2s.
+- The main loop is Sega's: it clears a frame flag and spins until IRQ4
+  sets it. A vint where the previous frame has not finished is a
+  repeated frame; that counter is the speed metric.
+
+The one thing that cannot be mimicked is time. The arcade's 10 MHz
+68000 ran the game's ~247 lines of work in ~190; ours at 7.67 MHz
+needs the full 247 plus the shim's ~62, against 262 available. That
+~50-line overrun is the whole speed problem, and every speed lever in
+this document is about taking work off the 68000 or out of its
+vblank. Everything below is about drawing.
 
 ---
 
@@ -237,7 +269,7 @@ something MK2 never did: we stopped using the VDP.**
 
 ### Model B — "Chaotix": MD VDP draws the tile planes, 32X adds sprites and colour
 
-*Knuckles' Chaotix.* (MEASURED, disassembled — see LOOP11.md.)
+*Knuckles' Chaotix.* (MEASURED, disassembled — see docs/log/LOOP11.md.)
 
 The Mega Drive VDP draws the scrolling tile planes in hardware, with
 hardware scrolling, at 60 Hz, for zero CPU. The 32X composites sprites

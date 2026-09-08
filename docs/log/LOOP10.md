@@ -1,8 +1,8 @@
 # LOOP 10 — the purple hue, then the compose overrun
 
-Kickoff doc for a FRESH session. Self-contained: read this, then LOOP.md
-(negatives list, especially 20-24) and LOOP9.md's two PATH sections.
-**Do not read LOOP9.md top-down as a plan** — its opening frames the arc
+Kickoff doc for a FRESH session. Self-contained: read this, then docs/log/LOOP.md
+(negatives list, especially 20-24) and docs/log/LOOP9.md's two PATH sections.
+**Do not read docs/log/LOOP9.md top-down as a plan** — its opening frames the arc
 around the blit being the bottleneck and ranks fixes off MAME numbers.
 Both premises died in LOOP 9. The corrections are further down that file.
 
@@ -212,7 +212,7 @@ every run, so the wait PATH 1 exists to remove is not merely understated,
 it is ABSENT. Add it to the MAME-blindness list next to framebuffer write
 cost. The only readable proxy, the V-gate reject rate (DIAG[7]), got
 WORSE: 13.9% -> 18.2%. That is a real consequence — a V-gate reject is a
-skipped blit is a stale third — but LOOP.md says MAME cannot rank cadence,
+skipped blit is a stale third — but docs/log/LOOP.md says MAME cannot rank cadence,
 and this is exactly such a call. It needs ares, so it waits for one.
 
 Also found while mapping the bands: `ns`, the master's strip count, was
@@ -597,7 +597,7 @@ Counters live in DIAG (0x28000, 64 slots, 0-61 used) and the 28D00-28FFF
 hole. Put new ones where a SAVESTATE reader can find them — ares is the
 target that matters and it cannot be scripted.
 
-## Ruled out — do not re-propose (LOOP.md 20-24 has the numbers)
+## Ruled out — do not re-propose (docs/log/LOOP.md 20-24 has the numbers)
 
 - DMAC channel 1 for the blit: 1.77x slower on ares, 14% of rows dropped.
 - Dirty-row blit: 13-17% skippable during scroll against a ~25% break-even.

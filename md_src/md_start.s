@@ -40,6 +40,14 @@ _except:
 		TRPBG2	0x00E
 
 _start:
+.ifdef BOOT_HALT
+		/* HARDWARE PROBE: paint the backdrop blue with our very first
+		 * instructions and stop. Blue = the BIOS handed the 68K to our
+		 * code; black = it never did (header / cart size / security). */
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x0800,(0xC00000).l
+	9:	bra.s	9b
+.endif
 	;// Clear Work RAM
 		moveq	#0,d0
 		move.w	#0x3FFF,d1
@@ -60,6 +68,10 @@ _start:
 	2:
 		move.w	(a0)+,(a1)+
 		dbf		d0,2b
+.ifdef BOOT_STAGE
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x000E,(0xC00000).l	/* stage: RED = RAM cleared + .data copied */
+.endif
 
 	init_joypads:
 		lea		IO_BASE,a0
@@ -79,6 +91,10 @@ _start:
 		move.w	d0,(a1)					/* set VDP register */
 		add.w	d2,d0					/* + 0x0100 = next register */
 		dbra	d1,init_vdp_reg
+.ifdef BOOT_STAGE
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x00E0,(0xC00000).l	/* stage: GREEN = VDP registers written */
+.endif
 
 		move.l	#VRAM_ADDR_CMD,(a1)		/* write VRAM address 0 */
 		lea		(VDP_DATA_PORT),a2		/* VDP data reg */
@@ -100,16 +116,52 @@ _start:
 		move.l	#0x000000A0,(a2)		/* entry 16 (black) BGR and 17 (green) */
 		move.l	#0xC0400000,(a1)		/* write CRAM address 64 */
 		move.l	#0x0000000A,(a2)		/* entry 32 (black) BGR and 33 (red) */
+.ifdef BOOT_STAGE
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x00EE,(0xC00000).l	/* stage: YELLOW = font + CRAM done */
+.endif
 
 		move.b	#0,(0xA15107)			/* clear RV - allow SH2 to access ROM */
 		move.w	#0,(JoypadState)		/* controller 1 */
 		move.l	#0,(VBlankCounter)		/* clear the vblank count */
+.ifdef BOOT_BEACON
+		/* BOOT BEACON (2026-09-07, MiSTer will not boot): the backdrop
+		 * (CRAM 0) tells the stage. BLUE = waiting for the master's
+		 * M_OK, its green tint = the master's own progress word on
+		 * COMM12 (1 started, 2 bss cleared, 3 ramtext copied, 4 past
+		 * the handshake); GREEN = M_OK seen, waiting for S_OK; YELLOW =
+		 * both SH-2s up; WHITE = handing off to the shim's main. */
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x0800,(0xC00000).l
+.endif
+.ifdef BOOT_STAGE
+	8:	bra.s	8b						/* BLUE = RV cleared; halt here */
+.endif
 	0:
+.ifdef BOOT_BEACON
+		move.w	(0xA1512C).l,d0			/* master's stage word (COMM12) */
+		and.w	#7,d0
+		lsl.w	#5,d0					/* green steps of 0x20 */
+		or.w	#0x0800,d0
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	d0,(0xC00000).l
+.endif
+.ifdef BOOT_ROMCHK
+		bra.s	0b							/* probe: stay here, show the tint */
+.endif
 		cmp.l	#0x4D5F4F4B,(MARS_COMM0)	/* M_OK */
 		bne.s	0b							/* wait for primary ok */
+.ifdef BOOT_BEACON
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x00A0,(0xC00000).l	/* green: M_OK */
+.endif
 	1:
 		cmp.l	#0x535F4F4B,(MARS_COMM4)	/* S_OK */
 		bne.s	1b							/* wait for secondary ok */
+.ifdef BOOT_BEACON
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x00EE,(0xC00000).l	/* yellow: both SH-2s up */
+.endif
 
 		move.w	(0xA15100),d0
 		or.w	#0x8000,d0
@@ -150,6 +202,10 @@ _start:
 		move.b	#0x40,(IO_DATA2)	/* 2P: TH idle high */
 
 		lea		0xFFBFF0,sp			/* boot/shim stack, clear of game work RAM */
+.ifdef BOOT_BEACON
+		move.l	#0xC0000000,(0xC00004).l
+		move.w	#0x0EEE,(0xC00000).l	/* white: into main */
+.endif
 
 		jmp		main				/* RAM-resident; main sets RV=1 itself —
 									   setting RV while executing from the

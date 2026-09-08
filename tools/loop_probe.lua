@@ -1,6 +1,6 @@
 -- Loop-length probe: play each music command and log the sound driver's
 -- per-channel sequence pointers (Z80 RAM F840 + slot*0x28 + 3/4, from
--- SOUND_DRIVER.md) every frame. tools/find_loops.py then finds the exact
+-- docs/sound/SOUND_DRIVER.md) every frame. tools/find_loops.py then finds the exact
 -- loop period per song (when the full pointer state repeats) so each
 -- track can be captured as ONE complete loop, not a timed window.
 --   ST_OUT=loops.log SB_DIR=. mame altbeast -rompath ./mame -skip_gameinfo \

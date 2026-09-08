@@ -3,7 +3,7 @@
 > **STATUS: DONE. Falsifier met (tail 92.4 -> 48.2, palscan 45.1 -> 0.1,
 > COMM stream retired with it), and ares confirms on a full level-1
 > playthrough — every counter improved or held, no colour fault anywhere.
-> See "Iteration 8" in LOOP.md. The one MAME `PRESSURE=1` artifact does
+> See "Iteration 8" in docs/log/LOOP.md. The one MAME `PRESSURE=1` artifact does
 > not reproduce on ares; its mechanism and fix are recorded there.**
 >
 > Two corrections to this document, both measured:
@@ -17,7 +17,7 @@
 >    NO site ships an ALL-dirty mask; the two that genuinely cannot be
 >    known statically compute their region at runtime instead.
 
-Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md
+Kickoff doc for a FRESH session. Self-contained: read this + docs/log/LOOP.md
 (iterations 7a-7k and the negatives list), then run.
 
 ## Where LOOP 7 got to
@@ -80,7 +80,7 @@ the tile sites give table-driven extents.
 3. Delivery: ship dirty regions on the DREQ TEXT packet (base word + N
    words), applied by the master into PAL_U with PAL_SETGEN bumped per
    colour set exactly as `slave_service_stream` does today. DREQ costs
-   0.063 lines/word against COMM's 1.27 — see THE RATIO in LOOP.md.
+   0.063 lines/word against COMM's 1.27 — see THE RATIO in docs/log/LOOP.md.
    Once that lands, COMM has NO tenants left and the stream can go.
 4. The 0xFFA000 sent-copy (4KB) is then dead — free MD RAM.
 
@@ -143,7 +143,7 @@ need an ares round-trip to iterate — unlike everything strobe-related.
    gameplay, worst span 143 lines against a 38-line budget. Bounding
    the latch wait (7j) removed ~19 lines/window of stalled 68K but did
    NOT touch the black frame — it stops us PAYING for the deferral, not
-   the deferral itself. Fixes ruled out with reasons in LOOP.md: skip-
+   the deferral itself. Fixes ruled out with reasons in docs/log/LOOP.md: skip-
    on-predict (would skip 100%), atomic ship (copy_pages still reads FB
    staging), shadow bank (SH-2 may only write the FB with FM=1). What
    is left is making the blit FIT: DMAC channel 1 is free, though note

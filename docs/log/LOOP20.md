@@ -1,7 +1,7 @@
 # LOOP 20 — CLOSED. HANDOFF AT THE TOP; history below.
 
 **Fresh session: read this block, then `CLAUDE.md` ("What MAME is for
-now"), then skim the sections below in order. `LOOP19.md`/`LOOP18.md`
+now"), then skim the sections below in order. `docs/log/LOOP19.md`/`docs/log/LOOP18.md`
 are the prior arcs. Where LOOPs and ARCHITECTURE.md disagree,
 ARCHITECTURE wins. Memory `release-bar-flawless` is the bar.**
 
@@ -81,8 +81,8 @@ The drawing itself fits a 60Hz frame twice over (blit 3.75ms + compose
 (Original kickoff and the arc's working log follow.)
 
 
-Read this, then `CLAUDE.md`, then `TOOLKIT.md`. `LOOP19.md` is the log of
-the palette work this supersedes; `LOOP18.md` is the blit arc.
+Read this, then `CLAUDE.md`, then `TOOLKIT.md`. `docs/log/LOOP19.md` is the log of
+the palette work this supersedes; `docs/log/LOOP18.md` is the blit arc.
 
 **Canonical build** (unchanged, Mike-validated):
 

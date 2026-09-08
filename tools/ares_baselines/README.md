@@ -2,7 +2,7 @@
 
 One JSON per (scene x frame-count x input-script), produced by
 `tools/ares_gate.py baseline` from ares-headless dumps (see
-HANDOFF-ARES.md for the harness contract and gate rules). NEVER
+docs/handoff/HANDOFF-ARES.md for the harness contract and gate rules). NEVER
 compare across scenes: attract and gameplay have different normal
 ranges (rejects ~9-10% attract vs ~6% gameplay; flip-late is
 dominated by scene-load page storms in attract).

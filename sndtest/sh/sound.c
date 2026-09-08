@@ -1,4 +1,4 @@
-/* sndtest PCM lane: SH-2 PWM voice-pool mixer (SOUND.md P1).
+/* sndtest PCM lane: SH-2 PWM voice-pool mixer (docs/sound/SOUND.md P1).
  *
  * The core transport — Mars_InitPWM, the DMA1 ping-pong, the IRQ
  * handler, CHCR1/CTRL values, buffer sizing — is 32x-builder

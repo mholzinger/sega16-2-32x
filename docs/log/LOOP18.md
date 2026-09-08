@@ -2,7 +2,7 @@
 # not what the screen is. HANDOFF KICKOFF.
 
 Fresh session: read this, then `CLAUDE.md` ("What MAME is for now"),
-then `TOOLKIT.md`. LOOP17.md has the full working log of the day this
+then `TOOLKIT.md`. docs/log/LOOP17.md has the full working log of the day this
 came out of. Where LOOPs and ARCHITECTURE.md disagree, ARCHITECTURE
 wins. Memory `release-bar-flawless` is the bar.
 

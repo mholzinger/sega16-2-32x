@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OPM -> OPN2+PSG transcoder (SOUND.md P4).
+"""OPM -> OPN2+PSG transcoder (docs/sound/SOUND.md P4).
 
 Input: a tools/snd_tap.lua log (Y0/Y1 = YM2151 address/data writes with
 machine timestamps, from the mame altbeast oracle). Output: a C header

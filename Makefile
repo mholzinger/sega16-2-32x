@@ -289,7 +289,7 @@ endif
 # `make ... K2FREE=1` = LOOP 24 step 2: the 68K k2 SPIN DIES. The k2
 # shim posts and returns (~5 lines vs 68.2 measured on Y); the SH-2
 # owns FM's fall; the V-ISR arms the DREQ channel and still runs the
-# flip span. Forced along (census-derived, see LOOP24.md K2FREE):
+# flip span. Forced along (census-derived, see docs/log/LOOP24.md K2FREE):
 # sprites return to the 0xFF7000 mirror + the SPR_TRUNC push, layer
 # regs/rowscroll (text >= 0xE80) return to the 0xFF8000 mirror + the
 # prefix-82 packet (patch_game split; glyphs stay FBTEXT-harvested),
@@ -310,7 +310,7 @@ VISRFLIP = 1
 SHCCFLAGS += -DK2_FREE
 MDCCFLAGS += -DK2_FREE
 endif
-# `make ... R60=1` = THE REBUILD (REBUILD.md P1/P2): one vint = one
+# `make ... R60=1` = THE REBUILD (docs/design/REBUILD.md P1/P2): one vint = one
 # frame at 60Hz. Evolves the K2FREE endpoint: every vint is the SAME
 # window (ISR flip + full 224-row blit + captures + MD-plane publish);
 # the k-phase machinery, idle beats, and the two-packet family die;
@@ -322,7 +322,7 @@ endif
 # R60=1  (FMGATE supplies the patch-side writer gates + text split;
 # WIN2/CUT30/K2FREE/BQCHUNK/BANDSHIFT do not apply).
 ifdef R60
-# STRIKE S1 (PIPELINE.md): TRIED AND REVERTED 2026-08-22, three
+# STRIKE S1 (docs/design/PIPELINE.md): TRIED AND REVERTED 2026-08-22, three
 # variants, all measured dead. (1) FBSPR=1 game-direct FB upload:
 # ZERO sprites - the upload runs inside the master's FM=1 span and
 # ares discards MD FB writes at FM=1 (the LOOP24 guard was right).
@@ -440,7 +440,7 @@ endif
 # (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
 # blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
 # MAME models no FB write cost — neither is a build anyone should be
-# able to ship by accident. LOOP.md negatives 20 and 21.)
+# able to ship by accident. docs/log/LOOP.md negatives 20 and 21.)
 # `make FMTEST=1` = LOOP 9: does an SH-2 write to the framebuffer land
 # while FM=0 (outside the window)? That assumption rules out BOTH the
 # shadow bank and composing straight into the FB, and was never tested.
@@ -469,7 +469,7 @@ endif
 # See slave_concurrent_k: compose a band two windows before shipping it.)
 # (BLITBAL retired in LOOP 9 — the even thirds LOST Mike's play pass on
 # the seams they cost. Retired rather than left here to mislead, the same
-# call BLITBURN got. LOOP.md negative 23.)
+# call BLITBURN got. docs/log/LOOP.md negative 23.)
 ifdef WINSPLIT
 SHCCFLAGS += -DWIN_SPLIT_PROBE
 endif
@@ -494,6 +494,365 @@ endif
 ifdef R60
 SHASFLAGS += --defsym VISR_FLIP=1
 SHCCFLAGS += -DVISR_FLIP
+endif
+# `make ... BOOTBEACON=1` = 2026-09-07 hardware boot probe: backdrop colour
+# per boot stage (md_start.s) + the master SH-2's progress on COMM12
+# (mars_start.s). For MiSTer/hardware only; harmless elsewhere.
+ifdef BOOTBEACON
+SHASFLAGS += --defsym BOOT_BEACON=1
+MDASFLAGS += -Wa,--defsym,BOOT_BEACON=1
+endif
+# `make ... BOOTHALT=1` = paint blue at the 68K's first instruction and halt.
+ifdef BOOTHALT
+MDASFLAGS += -Wa,--defsym,BOOT_HALT=1
+endif
+# `make ... BOOTBEACON=1 BOOTSTAGE=1` = a colour per 68K init stage, halt before M_OK.
+ifdef BOOTSTAGE
+MDASFLAGS += -Wa,--defsym,BOOT_STAGE=1
+endif
+# `make ... BOOTBEACON=1 BOOTROMCHK=1` = master reads cart ROM above 2 MB; blue = ok, cyan = wrong.
+ifdef BOOTROMCHK
+SHASFLAGS += --defsym BOOT_ROMCHK=1
+MDASFLAGS += -Wa,--defsym,BOOT_ROMCHK=1
+endif
+# `make ... BOOTSHSTAGE=1` = master SH-2 boot stages: COMM12 tint on the MD backdrop
+# (before the 32X display is on), then 32X CRAM 0 colours; exceptions = magenta + halt.
+ifdef BOOTSHSTAGE
+SHCCFLAGS += -DBOOT_SHSTAGE
+MDCCFLAGS += -DBOOT_SHSTAGE
+SHASFLAGS += --defsym BOOT_SHSTAGE=1
+endif
+# `make ... BOOTSLVNOCACHE=1` = the slave jumps into SDRAM with its cache OFF (probe).
+ifdef BOOTSLVNOCACHE
+SHASFLAGS += --defsym BOOT_SLVNOCACHE=1
+endif
+# `make ... BOOTSHSTAGE=1 BOOTBANK3HALT=1` = 68K reads the game image via bank 3, white/red, halt.
+ifdef BOOTBANK3HALT
+MDCCFLAGS += -DBOOT_BANK3HALT
+endif
+# `make ... BOOTVPULSE=1` = the 68K vint handler alternates 32X CRAM 0 (red/blue once the game runs).
+ifdef BOOTVPULSE
+MDCCFLAGS += -DBOOT_VPULSE
+endif
+# `make ... BOOTWSTAGE=1` = master paints 32X CRAM 0 at render-window stages (red/yellow/green/white).
+ifdef BOOTWSTAGE
+SHCCFLAGS += -DBOOT_WSTAGE
+endif
+# `make ... BOOTSHSTAGE=1 BOOTFBDMAHALT=1` = VDP DMA from the 32X framebuffer: white ok / red bad, halt.
+ifdef BOOTFBDMAHALT
+MDCCFLAGS += -DBOOT_FBDMAHALT
+endif
+# `make ... BOOTFBBAR=1` = master draws a magenta bar into FB rows 0-7 before every flip.
+ifdef BOOTFBBAR
+SHCCFLAGS += -DBOOT_FBBAR
+endif
+# `make ... BOOTVISRCHK=1` = after 120 game vints, white if the master's V-ISR ever ran, red if never; halt.
+ifdef BOOTVISRCHK
+SHCCFLAGS += -DBOOT_VISRCHK
+MDCCFLAGS += -DBOOT_VISRCHK
+endif
+# `make ... BOOTFMCHK=1` = acked window with FM stuck: master paints red, retries the drop, green/blue.
+ifdef BOOTFMCHK
+SHCCFLAGS += -DBOOT_FMCHK
+MDCCFLAGS += -DBOOT_FMCHK
+endif
+# `make ... BOOTGATECHK=1` = 68K paints its window-gate decline reason every vint (flickering shades).
+ifdef BOOTGATECHK
+MDCCFLAGS += -DBOOT_GATECHK
+endif
+# `make ... BOOTPKTCHK=1` = after 120 game vints: red no windows / yellow no whole landings / green ok; halt.
+ifdef BOOTPKTCHK
+SHCCFLAGS += -DBOOT_PKTCHK
+MDCCFLAGS += -DBOOT_PKTCHK
+endif
+# `make ... BOOTFLIPTEST=1` = master: bar in bank A, flip, bar in bank B, flip, halt (display-path test).
+ifdef BOOTFLIPTEST
+SHCCFLAGS += -DBOOT_FLIPTEST
+endif
+# `make ... BOOTFRTCHK=1 BOOTPKTCHK=1` = the master's FRT ticks per vint, classified by the 68K at vint 120.
+ifdef BOOTFRTCHK
+SHCCFLAGS += -DBOOT_FRTCHK
+endif
+ifdef BOOTGATEOFF
+SHCCFLAGS += -DBOOT_GATEOFF
+endif
+# `make ... MISTERBOOT=1` = the 2026-09-08 MiSTer FPGA boot attempt: slave cache
+# OFF *and* the slave SDRAM warm-up stub in mars_start.s. Neither fixed the
+# MiSTer hang (arc closed, docs/handoff/HANDOFF-MISTER.md) and both are unproven
+# on the ares ship line, so the DEFAULT BUILD CARRIES NEITHER. Turn it on only
+# to re-run that experiment.
+# `make ... FLIPDEFER=1` = LOOP27 9, the 60Hz blocker: the K2FREE edge
+# guard DROPS any flip that misses the 38-line vblank, and at one
+# game-frame per vint it misses most of them (flips on ~17% of vints).
+# The FPGA RTL (srcref/S32X_MiSTer rtl/32X/VDP.sv) latches `FS <= FBCR.FS`
+# only when VBLK: real silicon DEFERS a late flip to the next vblank, it
+# does not tear. ares latches immediately mid-scan instead, so we do the
+# deferral in software — arm on the late arrival, commit at the top of
+# the next vblank. Counters: DIAG[6] arms, DIAG[5] commits.
+# `make ... BOOTABDRAW=1` = A/B WRITER PROBE (LOOP27 10b). Does the
+# MASTER's framebuffer write reach the display on the FPGA? The 68K's
+# does (s16_68kdraw), and every SH-2-driven frame is black. Master paints
+# MAGENTA at rows 8-15 as the last FB write of the window; the 68K paints
+# GREEN at rows 16-23 at vint top as the positive control, with the 32X
+# display forced on. Rows 8+ ON PURPOSE: rows 0-7 are off Mike's display,
+# which is what made the original BOOT_FBBAR reading worthless.
+# `make ... BOOTPALTEST=1` = CRAM residue test: hammer CRAM 1 yellow and
+# CRAM 2 red every window, direct stores bypassing cram_set/PALPEN. If
+# the screen changes colour our writes land; if it stays magenta/green
+# the picture is residue and nothing of ours reaches CRAM.
+ifdef BOOTPALTEST
+SHCCFLAGS += -DBOOT_PALTEST
+endif
+ifdef BOOTABDRAW
+SHCCFLAGS += -DBOOT_ABDRAW
+MDCCFLAGS += -DBOOT_ABDRAW
+endif
+# `make ... BOOTABREAD=1` = the follow-up to a NO-BAR abdraw result: the
+# master still paints its bar, and the 68K reads those FB bytes at FM=0
+# and paints the MD backdrop green (found) or red (not found). MD palette
+# because FM cannot gate it. Implies the master half of BOOTABDRAW.
+ifdef BOOTABREAD
+SHCCFLAGS += -DBOOT_ABDRAW
+MDCCFLAGS += -DBOOT_ABREAD
+endif
+# `make ... BOOTABBOTH=1` = the bar written on BOTH sides of the flip, so
+# both banks carry it and bank/flip stops being a variable. Implies the
+# master half of BOOTABDRAW. Pair it with BOOTGATEOFF.
+# `make ... PALVBL=1` = THE FIX for LOOP27 entry 18: 32X CRAM writes are
+# silently dropped outside hblank/vblank on real silicon (PEN, RTL
+# VDP.sv:170/403/405), and our paints run mid-window = active scan, so the
+# whole 32X layer drew black on black on the MiSTer. cram_set now defers
+# into a dirty bitmap and the entries are flushed at the flip, inside
+# vblank — the idiom 32X240pTestSuite ships (pri_vbi_handler).
+# `make ... BOOTTAGBLUE=1` = identity tag: the 68K paints the MD backdrop
+# blue every vint, through MD CRAM which neither FM nor the 32X display
+# gate can touch. Proves WHICH rom is running before any colour on the
+# screen is trusted.
+# `make ... BOOTMDPAL=1` = which layer is on screen? The 68K paints the
+# WHOLE MD palette red every vint. Red picture = we are looking at the MD
+# plane (MDBGALL draws BG/FG-cat0 on the MD VDP), not the 32X layer.
+# `make ... BOOTPALWRAM=1` = force the MD background palette through the
+# WRAM-staged path instead of the DMA whose source is the 32X
+# framebuffer. Tests "does this core serve VDP DMA from the FB", the
+# untested suspect behind the wrong MD palette on the MiSTer.
+# `make ... BOOTPALPEEK=1` = the 68K reads the 48 palette words the
+# master wrote into the FB packet at offset 688 and paints the verdict on
+# the MD backdrop: RED all-zero, YELLOW all-identical, GREEN varied.
+# Answers "is the palette data even there" instead of inferring it.
+# `make ... BOOTPALSHOW=1` = flood the screen with the RAW palette word
+# the packet carries for CRAM 17 (the sky pen), instead of a verdict.
+# Answers "is the packet's palette the wrong colour, or is the upload
+# mangling a right one". Implies BOOTPALPEEK's plumbing.
+# `make ... BOOTPALRAMP=1` = master writes a known ramp (0x0100+i) into
+# the 48 palette words; the 68K checks it and floods GREEN exact /
+# YELLOW-ish shifted (shift in the red level) / RED corrupted. Separates
+# "wrong source palette" from "transport shifts" from "transport
+# corrupts" in one run.
+# `make ... BOOTMOTION=1` = cadence, readable with a wristwatch: the MD
+# palette steps through 8 colours every 8 vints, so one full cycle is 64
+# vints = ~1 second at 60 Hz. Answers "is hardware streaming, and how
+# fast", which no probe in this arc has ever measured.
+ifdef BOOTMOTION
+MDCCFLAGS += -DBOOT_MOTION
+endif
+# `make ... BOOTMOTIONGAME=1` = the same wheel driven by the GAME's scene
+# timer (0xFFF02A) instead of vints. Cycle time reads the game-frame rate
+# straight off a wristwatch; against the vint wheel's 1 cycle/s that
+# ratio is the hardware miss rate.
+# `make ... BOOTSPAN=1` = measure the 68K vint handler's own length on
+# hardware, in MD scanlines, and flood the palette with the bucket:
+# green <64, yellow <131, orange <196, red <262, WHITE = overrunning the
+# frame. Does not perturb the game, unlike MDCONSUMEOFF.
+# `make ... BOOTSTAGEMAX=1` = which stage of the 68K consume is slowest,
+# from the four V stamps the shipping code already writes. Floods WHITE
+# (nothing slow) / RED entry->scroll / GREEN scroll->DMAs / BLUE
+# spans->cells / YELLOW cells->end. The follow-up to BOOTSPAN.
+# `make ... BOOTPRECONSUME=1` = how many scanlines pass between the 68K
+# entering its vint handler and the consume starting. span2 proved the
+# consume itself is only 8-24 lines on hardware, so the frame is going
+# somewhere BEFORE it. GREEN <16 / YELLOW <48 / ORANGE <112 / RED >=112.
+# `make ... BOOTTAIL=1` = which part of the 68K handler TAIL holds the
+# frame, from V stamps the shipping code already writes. WHITE not the
+# tail / RED wait-to-post / GREEN the master's window / BLUE the DREQ
+# push / YELLOW the flip-hold echo.
+# `make ... BOOTPUSHLEN=1` = the DREQ push's LENGTH in scanlines, after
+# BOOTTAIL named it the biggest tail stage on hardware. GREEN <48
+# (ares-like) / YELLOW <96 / ORANGE <160 / RED >=160.
+# `make ... BOOTPUSHWHERE=1` = which of r60_push's five internal stages
+# holds the frame, from the PUSH AUTOPSY stamps already in the code.
+# WHITE none / RED rotor+compares / GREEN selection / BLUE regs /
+# YELLOW pal ship / MAGENTA records ship.
+# `make ... BOOTSPIN=1` = the DREQ FIFO-full spin residual (starts 2600,
+# decrements once per full-FIFO poll). GREEN 2600 never full (ares) /
+# YELLOW >2000 / ORANGE >1000 / RED <=1000 mostly waiting on the master.
+# `make ... BOOTNOPOLL=1` = ship the 20 reg words WITHOUT the per-word
+# FIFO poll (sound only because the FIFO is provably never full, LOOP27
+# 57). Splits "the poll READ is slow" from "the FIFO WRITE is slow".
+# MEASUREMENT ONLY — the poll guards against lost words under play load.
+ifdef BOOTNOPOLL
+MDCCFLAGS += -DBOOT_NOPOLL
+endif
+# `make ... BOOTREGLEN=1` = the regs-ship stage in scanlines (20 words).
+# GREEN <8 / YELLOW <32 / ORANGE <80 / RED >=80. Pair with BOOTNOPOLL to
+# split the poll read from the FIFO write by magnitude.
+# `make ... BOOTCOMMTIME=1` = time 20 writes to a harmless 32X register
+# (COMM2) with the same buckets as the regs stage, to tell "the DREQ FIFO
+# is slow" from "every 68K->32X access is slow".
+# `make ... BOOTPUSHCUT=1` = ship only the 20 reg words and abandon the
+# rest of the packet. Picture will be wrong on purpose; pair with
+# BOOTMOTIONGAME and read ONLY the wheel. Tests whether packet size is
+# the speed lever on hardware. MEASUREMENT ONLY.
+ifdef BOOTPUSHCUT
+MDCCFLAGS += -DBOOT_PUSHCUT
+endif
+# `make ... BOOTSETUP=1` = split the regs stage into SETUP (length reg +
+# DREQ enable) and WORDS (the 20 FIFO writes). GREEN both small / RED
+# setup dominates / BLUE words dominate / YELLOW comparable.
+# `make ... BOOTPUSHDELAY=1` = wait 8 scanlines before starting the DREQ
+# push, to test whether the first-words stall is contention with a master
+# that is armed but not yet idle. Pair with BOOTREGLEN to read the stage.
+# `make ... BOOTVALUE=1` = flood the MD palette with the regs-stage
+# duration ENCODED AS A COLOUR (R=d&7, G=(d>>3)&7, B=(d>>6)&3), so the
+# exact scanline count is read from one screenshot. Replaces bucketing.
+ifdef BOOTVALUE
+MDCCFLAGS += -DBOOT_VALUE
+endif
+# BOOTVALUETOTAL=1 makes BOOTVALUE report the WHOLE push instead of just
+# the regs stage — the number that decides whether packet size matters.
+# `make ... BOOTFBTIME=1` = time 20 68K writes into the 32X FRAMEBUFFER
+# (0x851A00) and report with the value instrument, for direct comparison
+# against the 48-line/20-word DREQ FIFO cost. Tests whether the FB is a
+# cheaper route for the packet than the FIFO.
+# `make ... BOOTFBFREE=1` = probe which framebuffer regions are actually
+# unused: the master stamps magic words at 0x12000/0x14000/0x18000/
+# 0x1C000, the 68K reads them back a vint later and reports a 4-bit mask
+# through the value instrument (bit set = region survived = FREE).
+ifdef BOOTFBFREE
+SHCCFLAGS += -DBOOT_FBFREE
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBFREE
+endif
+ifdef BOOTFBTIME
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBTIME
+endif
+ifdef BOOTVALUETOTAL
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_TOTAL
+endif
+ifdef BOOTPUSHDELAY
+MDCCFLAGS += -DBOOT_PUSHDELAY
+endif
+ifdef BOOTSETUP
+MDCCFLAGS += -DBOOT_SETUP
+endif
+ifdef BOOTCOMMTIME
+MDCCFLAGS += -DBOOT_COMMTIME
+endif
+ifdef BOOTREGLEN
+MDCCFLAGS += -DBOOT_REGLEN
+endif
+ifdef BOOTSPIN
+MDCCFLAGS += -DBOOT_SPIN
+endif
+ifdef BOOTPUSHWHERE
+MDCCFLAGS += -DBOOT_PUSHWHERE
+endif
+ifdef BOOTPUSHLEN
+MDCCFLAGS += -DBOOT_PUSHLEN
+endif
+ifdef BOOTTAIL
+MDCCFLAGS += -DBOOT_TAIL
+endif
+ifdef BOOTPRECONSUME
+MDCCFLAGS += -DBOOT_PRECONSUME
+endif
+ifdef BOOTSTAGEMAX
+MDCCFLAGS += -DBOOT_STAGEMAX
+endif
+ifdef BOOTSPAN
+MDCCFLAGS += -DBOOT_SPAN
+endif
+ifdef BOOTMOTIONGAME
+MDCCFLAGS += -DBOOT_MOTION -DBOOT_MOTION_GAME
+endif
+ifdef BOOTPALRAMP
+SHCCFLAGS += -DBOOT_PALRAMP
+MDCCFLAGS += -DBOOT_PALPEEK -DBOOT_PALRAMP
+endif
+ifdef BOOTPALSHOW
+MDCCFLAGS += -DBOOT_PALPEEK -DBOOT_PALSHOW
+endif
+ifdef BOOTPALPEEK
+MDCCFLAGS += -DBOOT_PALPEEK
+endif
+# `make ... BOOTPALDIRECT=1` = write the MD background palette to CRAM
+# with DIRECT stores instead of a VDP DMA. Tests the hypothesis that
+# DMA-to-CRAM does not land on the MiSTer core while DMA-to-VRAM and
+# direct CRAM writes do — which is what a 9-colour hardware picture
+# against a 76-colour ares picture points at. Also a candidate FIX.
+# `make ... BOOTCRAMCHK=1` = the 68K READS CRAM BACK after the palette
+# upload and counts how many of the 48 entries match what it sent.
+# GREEN all 48 / YELLOW some / RED none, flooded at vint top. Settles
+# "does the upload land" by reading a value instead of inferring from
+# pixels. Needs BOOT_PALPEEK's flood plumbing.
+# `make ... DMACENSUS=1` = count the FB-sourced VDP DMAs the consume
+# issues per vint and the words they move: 0xFFA240 spans / 0xFFA242
+# words / 0xFFA246 tile records / 0xFFA248 words. Sizes whether
+# coalescing short spans is worth building. ares-only, no hardware.
+ifdef DMACENSUS
+MDCCFLAGS += -DDMA_CENSUS
+endif
+ifdef BOOTCRAMCHK
+MDCCFLAGS += -DBOOT_PALPEEK -DBOOT_CRAMCHK
+endif
+ifdef BOOTPALDIRECT
+MDCCFLAGS += -DBOOT_PALDIRECT
+endif
+ifdef BOOTPALWRAM
+MDCCFLAGS += -DBOOT_PALWRAM
+endif
+ifdef BOOTMDPAL
+MDCCFLAGS += -DBOOT_MDPAL
+endif
+ifdef BOOTTAGBLUE
+MDCCFLAGS += -DBOOT_TAGBLUE
+endif
+# `make ... PALPEN=1` = the palette fix that fits OUR architecture: wait
+# for PEN (bit 13 of MARS_VDP_FBCTL) before each CRAM store, so the write
+# lands in hblank where hardware accepts it. PALVBL flushed at the flip
+# instead — the only vblank+FM point we have — and on hardware the flip
+# rarely lands, so nothing reached CRAM at all (LOOP27 22). Bounded spin.
+ifdef PALPEN
+SHCCFLAGS += -DPAL_PEN
+endif
+ifdef PALVBL
+SHCCFLAGS += -DPAL_VBLANK
+endif
+ifdef BOOTABBOTH
+SHCCFLAGS += -DBOOT_ABDRAW -DBOOT_ABBOTH
+endif
+# bisect halves of the A/B probe: M = master bar only, K = 68K bar only
+ifdef BOOTABDRAWM
+SHCCFLAGS += -DBOOT_ABDRAW
+endif
+ifdef BOOTABDRAWK
+MDCCFLAGS += -DBOOT_ABDRAW
+endif
+ifdef FLIPDEFER
+SHCCFLAGS += -DFLIP_DEFER
+endif
+ifdef MISTERBOOT
+SHASFLAGS += --defsym MISTER_BOOT=1
+SLVCACHEOFF = 1
+endif
+# `make ... SLVCACHEOFF=1` = slave jumps to _s_main with cache OFF (the FB-exec
+# workaround variant of the slave SDRAM warm-up; default keeps cache on).
+ifdef SLVCACHEOFF
+SHASFLAGS += --defsym SLV_CACHE_OFF=1
+endif
+ifdef BOOTMDMODE
+MDCCFLAGS += -DBOOT_MDMODE
+endif
+ifdef BOOTSLVALIVE
+MDCCFLAGS += -DBOOT_SLVALIVE
 endif
 MDLDFLAGS  = -T md_src/md.ld -nostdlib
 SHLDFLAGS  = -T sh_src/mars.ld -nostdlib
@@ -900,6 +1259,60 @@ SHCCFLAGS += -DFM_GATE
 MDCCFLAGS += -DFM_GATE
 MDASFLAGS += -Wa,--defsym,FM_GATE=1
 endif
+# `make ... TXTWRAM=1` = LOOP 27 q4: the text writers at the top of the
+# game's pass (credit line, health bar; table in tools/game_<GAME>.py)
+# stage in the WRAM text mirror instead of the framebuffer; their gates
+# become marks and the shim copies each dirty footprint into FB text
+# staging at FM=0 (before the raise). Removes the ~60-100-line FM spin
+# tools/frame_timeline.py shows at the top of the pass. Probe until
+# Mike's pass; gates: speed ladder, read census, attract, mdstatic.
+ifdef TXTWRAM
+MDCCFLAGS += -DTXT_WRAM
+endif
+# `make ... SPRMDFREE=1` = LOOP 27 q4 play-pass follow-up: sprite sets
+# whose records are ALL rendered by the MD VDP (MDSPR) release their 32X
+# CRAM pair — build_maps' used-set scan and the late claim's live mask
+# skip MD-claimed records. Census at every failed late claim: ~1 of the
+# 14 pairs was held this way, 5 by tile-class groups, ~7 by live sets.
+ifdef SPRMDFREE
+SHCCFLAGS += -DSPR_MD_FREE
+endif
+# `make ... SLVPAIR=1` = LOOP 27 q4 play-pass fix: the slave reads the
+# sprite pair table (0x3F800) UNCACHED in the compose. It never purges
+# its cache, so the master's late pair claims were invisible to it for
+# the cycle and the set drew in the shadow ramp (the red silhouettes /
+# missing actors of Mike's first 60 Hz pass; census: 100% of ramp draws
+# on the slave). One uncached byte per record.
+ifdef SLVPAIR
+SHCCFLAGS += -DSLV_PAIR_UNCACHED
+endif
+# `make ... LATESTEAL0=1` = LOOP 27 entry 6 option 1: the late pair claim
+# steals a pair whose owner is absent from THIS snapshot at age 0 (not
+# >= 1) once 9+ sprite sets are live — the map builder's own demand
+# rule, applied to the path every new set takes at one cycle per vint.
+ifdef LATESTEAL0
+SHCCFLAGS += -DLATE_STEAL0
+endif
+# `make ... LATEKEEP=1` = LOOP 27 entry 6: the map rebuild keeps pairs
+# claimed late this cycle (pr_age 0) instead of wiping them — the
+# chunked build completing after the claim was re-ramping claimed sets.
+ifdef LATEKEEP
+SHCCFLAGS += -DLATE_KEEP
+endif
+# `make ... DRAWADOPT=1` = LOOP 27 entry 6: an unmapped record adopts its
+# set's pair from pr_key (the ownership truth) at draw time, uncached.
+ifdef DRAWADOPT
+SHCCFLAGS += -DDRAW_ADOPT
+endif
+# `make ... ARMGATE=1` = LOOP 27 entry 7: torn landings were pushes into an
+# UNARMED DMA (the V-ISR bailed stale and never consumed the announce; the
+# 68K posted after the ack). SH-2: consume + arm at the ack when an announce
+# is pending. 68K: push only after the 0xA001 arm echo (bounded; no echo =
+# no packet this vint, counted at 0xFFB0CE).
+ifdef ARMGATE
+SHCCFLAGS += -DARM_GATE
+MDCCFLAGS += -DARM_GATE
+endif
 # `make ... TEXTCAPSLAVE=1` = LOOP 20: the k2 text capture runs on the
 # SLAVE, in parallel with the master's truth drain, instead of adding
 # ~10 lines to the master's window. Master posts SYNC[4]=0x4000 at k2
@@ -996,7 +1409,7 @@ endif
 # arcade). OFF by default: merging at assignment time is wrong for scenes
 # entered through a fade (everything is near black then) — Mike's
 # transformation chevrons went flat, the level load-in kept the wrong
-# palette. Needs an unmerge-on-drift before it can ship (BOSSFIGHT.md).
+# palette. Needs an unmerge-on-drift before it can ship (docs/design/BOSSFIGHT.md).
 ifdef NEARMERGE
 SHCCFLAGS += -DNEAR_MERGE
 endif
@@ -1112,14 +1525,14 @@ endif
 ifdef TXTCLASS
 SHCCFLAGS += -DTEXT_CLASS
 endif
-# MDSPRSPIKE=1 = P3 M0 spike (P3.md): two hardcoded MD hardware
+# MDSPRSPIKE=1 = P3 M0 spike (docs/design/P3.md): two hardcoded MD hardware
 # sprites (SAT prio 1 and 0) + test art + line-0 colors at first
 # vint. Proves SAT@0xF000 alignment, sprite-vs-plane priority both
 # ways, and FB-vs-sprite mixing in one screenshot. NEVER SHIP.
 ifdef MDSPRSPIKE
 MDCCFLAGS += -DMDSPR_SPIKE
 endif
-# MDSPR=1 = P3 (P3.md): mob-class sprite records render as MD VDP
+# MDSPR=1 = P3 (docs/design/P3.md): mob-class sprite records render as MD VDP
 # hardware sprites. Art blob (tools/bake_mdspr.py) pinned at cart
 # 0x2F0000, 68K uploads it to VRAM 0x8000 at boot; SH-2 claim pass
 # marks eligible records (native, pp==2, key+palette resident, caps)
@@ -1153,7 +1566,7 @@ SHCCFLAGS += -DSELF_CHAIN_EXPERIMENT
 else
 SHCCFLAGS += -DNO_SELF_CHAIN
 endif
-# NATIVE=1 = the whole-frame pipeline (branch native1, NATIVE.md,
+# NATIVE=1 = the whole-frame pipeline (branch native1, docs/design/NATIVE.md,
 # 2026-08-31 — Mike's "gates should be for an entire screen update").
 # ONE generation in flight and it is the WHOLE frame: launch latches
 # regs+records once, the slave composes all three bands from one
@@ -1164,14 +1577,14 @@ endif
 # out. 60Hz when a generation closes in a vint; whole-frame-coherent
 # 30Hz when it does not — never a band, never a mixed frame.
 # NOT the SELFCHAIN experiment (which kept per-band ships racing the
-# compose); see NATIVE.md's ledger notes before citing that negative.
+# compose); see docs/design/NATIVE.md's ledger notes before citing that negative.
 ifdef NATIVE
 ifndef R60
 $(error NATIVE is the R60 whole-frame scheduler - needs R60=1)
 endif
 SHCCFLAGS += -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER
 endif
-# PALSTATIC=1 = per-scene static palettes v1 (PALSTATIC.md): baked
+# PALSTATIC=1 = per-scene static palettes v1 (docs/design/PALSTATIC.md): baked
 # PAL_SH images (tools/palscene_bake.py -> sh_src/pal_scenes.h) load
 # WHOLE on scene detect + all tile/text generations bump, collapsing
 # the scene-cut palette trickle (Mike's blue-white gravestones) to
@@ -1207,6 +1620,23 @@ endif
 MDCCFLAGS += -DGLOW_MASK
 SHCCFLAGS += -DGLOW_ANIM
 endif
+# MDSTATIC=1 = STATIC-SCENE arc (docs/design/STATIC-SCENE.md): per-scene
+# static MD pen tables (tools/mdpen_bake.py -> sh_src/pal_scenes_md.h)
+# installed at the PALSTATIC scene load, the table's sets pinned against
+# eviction and drift-free, and a VRAM slot-map flush at display-off so
+# the old scene's tiles never compete with the new scene's. Fixes the
+# random-boot flat sky / missing clouds (HANDOFF-SESSION8 4b). Needs
+# PALSTATIC=1 (the load site) and MD_BG (the allocator).
+ifdef MDSTATIC
+ifdef PALSTATIC
+SHCCFLAGS += -DMD_STATIC
+else ifneq ($(filter ship ship-us ship-jp,$(MAKECMDGOALS)),)
+# `make ship-us MDSTATIC=1`: the outer make has no PALSTATIC yet; the
+# sub-make carries SHIP_US (PALSTATIC=1) plus this flag and defines it.
+else
+$(error MDSTATIC installs at the PALSTATIC scene load - add PALSTATIC=1)
+endif
+endif
 ifdef SPRBAKE
 SHOBJS += sh_src/sprbake_data.o
 # -DSPR_BAKE is what job 3's compose fast path compiles against, and it
@@ -1238,7 +1668,17 @@ all: release
 # ---- SHIPPING BUILDS, both titles (2026-09-05, Mike: "parity builds,
 # a Japanese rom and a US rom as two build outputs") ----
 # SHIP_US is the canonical line Mike accepted on ares as rom/s16_nocat1.32x
-# (HANDOFF-SESSION4.md): CAT1MD stays OFF. SHIP_JP is the kit baseline
+# (docs/handoff/HANDOFF-SESSION4.md): CAT1MD stays OFF. Shipped with CAT1MD=1 for a
+# few hours on 2026-09-07 after the A/B crops passed Mike's eye; his play
+# pass then failed it ("grass feels shimmery", a second palette on the
+# ground band through the beast transformation) — the two-renderer
+# class docs/design/BOSSFIGHT.md records. Screenshots cannot show it; only play can.
+# rom/s16_cat1md_0907.32x (+ .bs1) keeps that build for reference.
+# MDSTATIC=1 joined the line 2026-09-07 late ("ship the fixes"): the
+# STATIC-SCENE arc (docs/design/STATIC-SCENE.md), Mike's pass "stage 1
+# presentation now nearly perfect" + the title regression fixed and
+# arcade-graded (HANDOFF-SESSION8.md 4c). Needs discover/palscenes/
+# palharv_*.txt + *.bs1 for `make tables` to regenerate pal_scenes_md.h. SHIP_JP is the kit baseline
 # for a title whose census-derived tables do not exist yet (TOOLKIT.md):
 # the canon minus SPRBAKE TILECLASS TXTCLASS MDSPR PALSTATIC PALGLOW
 # PENMATCH (see SHIP_JP below). Objects are shared between titles, so
@@ -1255,7 +1695,7 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1
-SHIP_US = $(SHIP_COMMON) SPRBAKE=1 TILECLASS=1 TXTCLASS=1 MDSPR=1 PALSTATIC=1 PALGLOW=1 PENMATCH=1
+SHIP_US = $(SHIP_COMMON) SPRBAKE=1 TILECLASS=1 TXTCLASS=1 MDSPR=1 PALSTATIC=1 PALGLOW=1 PENMATCH=1 MDSTATIC=1
 # JP ships on the SAME line: the census-derived tables are keyed on art
 # the two sets share byte-for-byte (SH-2 folds the JP code/bank layout
 # onto the US images), and the reduced "kit baseline" subset is an
@@ -1366,7 +1806,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) python3 tools/patch_game.py
+	@GAME=$(GAME) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin
@@ -1434,6 +1874,9 @@ tables: sh_src/tiles.bin sh_src/sprites.bin sh_src/sprbake.bin \
 	@if ls discover/palscenes/*.palsh >/dev/null 2>&1; then \
 	    python3 tools/palscene_bake.py; \
 	else echo "tables: no discover/palscenes/*.palsh - harvest three PAL_SH dumps first (README)"; fi
+	@if ls discover/palscenes/palharv_*.txt >/dev/null 2>&1; then \
+	    python3 tools/mdpen_bake.py $(foreach h,$(wildcard discover/palscenes/palharv_*.txt),--harvest $(h)) $(foreach b,$(wildcard discover/palscenes/*.bs1),--state $(b)); \
+	else echo "tables: no discover/palscenes/palharv_*.txt - run tools/palharvest_tiles_ares.py first (STATIC-SCENE.md)"; fi
 
 clean:
 	rm -f $(MDOBJS) $(SHOBJS) $(MDOBJS:.o=.d) $(SHOBJS:.o=.d)
@@ -1443,7 +1886,7 @@ clean:
 	rm -f $(FLAGSTAMP)
 
 # ---------------------------------------------------------------------------
-# sndtest: the sound-engine lab ROM (SOUND.md P0). Same toolchain, its own
+# sndtest: the sound-engine lab ROM (docs/sound/SOUND.md P0). Same toolchain, its own
 # minimal skeleton (32x-builder lineage, sndtest/): the engine gets built and
 # proven here, then the SAME engine sources link into the shipping rom (P5).
 # Deliberately outside the shipping build: separate object lists, no
@@ -1472,7 +1915,7 @@ sndtest/md/test_track.h: tools/mus_testgen.py
 	python3 tools/mus_testgen.py $@
 # sndmap_data.h (tools/soundmap_build.py over a tools/cmd_sweep.lua
 # log) is generated from transient MAME tap captures and committed —
-# see SOUND.md P4.
+# see docs/sound/SOUND.md P4.
 sndtest/md/md_main.o: sndtest/md/z80_player.h sndtest/md/test_track.h \
                       sndtest/md/sndmap_data.h
 SNDMDASFLAGS = -x assembler-with-cpp -Isndtest/md -m68000 -Wa,--register-prefix-optional

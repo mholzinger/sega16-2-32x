@@ -26,12 +26,13 @@ local cpu = manager.machine.devices[":maincpu"]
 local mem = cpu.spaces["program"]
 local regions = {
     { name = "tileram_fb",  lo = 0x850000, hi = 0x85DFFF, kind = "w" },
+    { name = "fbwin_any",   lo = 0x840000, hi = 0x85FFFF, kind = "w" },
     { name = "textram_fb",  lo = 0x85F000, hi = 0x85FFFF, kind = "w" },
     { name = "textram_wram",lo = 0xFF8000, hi = 0xFF8FFF, kind = "w" },
     { name = "spriteram",   lo = 0xFF7000, hi = 0xFF77FF, kind = "w" },
     { name = "palette",     lo = 0xFF9000, hi = 0xFF9FFF, kind = "w" },
     { name = "io_bank",     lo = 0xFFB000, hi = 0xFFB04F, kind = "w" },
-    { name = "tile_thunk",  lo = 0xFFB820, hi = 0xFFB9E8, kind = "r" },
+    { name = "tile_thunk",  lo = 0xFFB820, hi = 0xFFB9FF, kind = "r" },
     { name = "pal_thunk",   lo = 0xFFBA00, hi = 0xFFBBFF, kind = "r" },
 }
 local frames = 0
@@ -47,7 +48,7 @@ end
 local function set_input(name, val) local f = fields[name]; if f then f:set_value(val) end end
 
 for _, r in ipairs(regions) do
-    per[r.name] = { n = 0, cur = 0, win = 0, winframes = 0, sites = {} }
+    per[r.name] = { n = 0, cur = 0, win = 0, winframes = 0, sites = {}, bins = {} }
     local p = per[r.name]
     local function hook(offset, data, mask)
         p.cur = p.cur + 1
@@ -75,12 +76,16 @@ emu.register_frame_done(function()
     for _, r in ipairs(regions) do
         local p = per[r.name]
         p.n = p.n + p.cur
+        local b = math.floor(frames / 500); p.bins[b] = (p.bins[b] or 0) + p.cur
         if frames >= wa and frames < wb then p.win = p.win + p.cur; p.winframes = p.winframes + 1 end
         p.cur = 0
     end
     if frames >= last then
         local f = assert(io.open(out_path, "w"))
-        f:write(string.format("frames=%d window=%d-%d\n", frames, wa, wb))
+        local timer = mem:read_u16(0xFFF02A); local miss = mem:read_u16(0xFFF144); local disp = mem:read_u8(0xFFB001)
+        local pc = cpu.state["PC"].value; local fm = mem:read_u16(0xA15100)
+        f:write(string.format("68K PC at exit=%06X  FM/adapter reg 0xA15100=%04X\n", pc, fm))
+        f:write(string.format("frames=%d window=%d-%d  scene_timer=%d irq4_misses=%d disp_mailbox=%02X\n", frames, wa, wb, timer, miss, disp))
         f:write("region        total    per-frame(window)  top sites (pc:count)\n")
         for _, r in ipairs(regions) do
             local p = per[r.name]
@@ -89,8 +94,10 @@ emu.register_frame_done(function()
             table.sort(top, function(a, b) return a.n > b.n end)
             local s = {}
             for i = 1, math.min(6, #top) do s[#s + 1] = string.format("%06X:%d", top[i].pc & 0xFFFFFF, top[i].n) end
-            f:write(string.format("%-13s %8d  %10.1f           %s\n", r.name, p.n,
-                p.winframes > 0 and p.win / p.winframes or 0, table.concat(s, " ")))
+            local bb = {}
+            for b = 0, math.floor(frames / 500) do bb[#bb + 1] = tostring(p.bins[b] or 0) end
+            f:write(string.format("%-13s %8d  %10.1f  bins/500f[%s]  %s\n", r.name, p.n,
+                p.winframes > 0 and p.win / p.winframes or 0, table.concat(bb, ","), table.concat(s, " ")))
         end
         f:close()
         manager.machine:exit()

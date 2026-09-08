@@ -1,6 +1,6 @@
 -- Oracle YM2151 tap: mame altbeast plays ONE music command continuously,
 -- tap the real sound driver's YM writes. The reference my offline
--- renderer (tools/snd_render.py) must match (SOUND_DRIVER.md validation).
+-- renderer (tools/snd_render.py) must match (docs/sound/SOUND_DRIVER.md validation).
 -- Injects the command once into the 68K->sound mailbox and taps for the
 -- whole window (NO per-command reset — this is continuous, unlike
 -- cmd_sweep). Env: ST_OUT (log), SB_CMD (hex command, default 94).

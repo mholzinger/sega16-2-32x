@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bake a directory of WAVs into the sndtest speech bank (SOUND.md P1).
+"""Bake a directory of WAVs into the sndtest speech bank (docs/sound/SOUND.md P1).
 
 Reads the unique utterances from tools/upd7759_decode.py's output dir
 (manifest.json + utt_*.wav), resamples every WAV to the mixer rate,

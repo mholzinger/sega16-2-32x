@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the arcade command map + per-command sound data (SOUND.md P4).
+"""Build the arcade command map + per-command sound data (docs/sound/SOUND.md P4).
 
 Input: a cmd_sweep tap log — every command byte 0x01-0xFF injected into
 the sound latch in isolation, 10s captured each, IJ/IX marker lines.

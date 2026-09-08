@@ -1,4 +1,4 @@
-/* sndtest primary SH-2 — the sound-engine lab menu (SOUND.md P0).
+/* sndtest primary SH-2 — the sound-engine lab menu (docs/sound/SOUND.md P0).
  *
  * The whole UI is the arcade's own sound-test idiom: pick a command
  * byte, post it through the engine's front door (HwMdSndCmd -> 68K

@@ -1,7 +1,7 @@
 # LOOP 13 — POLISH THE TWO-PLANE PIVOT
 
 Kickoff for a fresh session. Read this, then `ARCHITECTURE.md` §9-17
-and `DESIGN-FLOW.md` (the decision map). `LOOP12.md` is this era's
+and `docs/design/DESIGN-FLOW.md` (the decision map). `docs/log/LOOP12.md` is this era's
 history — the void hunt, the palette pack, the cadence fixes — with a
 NEGATIVE RESULTS trail embedded; read it before re-trying anything.
 **Where LOOP12 and ARCHITECTURE.md disagree, ARCHITECTURE wins.**

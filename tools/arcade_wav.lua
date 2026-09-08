@@ -1,6 +1,6 @@
 -- Arcade audio capture for level matching (KIT). Injects ONE sound
 -- command into the running altbeast driver and gags the latch so
--- attract mode cannot stop it (SOUND_DRIVER.md ATTRACT-CONTAMINATION),
+-- attract mode cannot stop it (docs/sound/SOUND_DRIVER.md ATTRACT-CONTAMINATION),
 -- then lets MAME's -wavwrite record the real YM2151 + uPD7759 mix.
 --   AW_CMD=94 AW_SECS=60 mame altbeast -rompath ./mame -skip_gameinfo \
 --     -video none -sound none -nothrottle -window -resolution 160x120 \

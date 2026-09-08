@@ -12,7 +12,7 @@ is blocked (historically: an unconditional FIFO group-write into an
 undrained DREQ FIFO, or a COMM0 ack-spin whose acker died).
 
 Prints the mailboxes both sides block on, so the stuck handshake names
-itself. See LOOP.md iter3/iter4 for the two deadlocks this reproduces.
+itself. See docs/log/LOOP.md iter3/iter4 for the two deadlocks this reproduces.
 """
 import struct
 import sys

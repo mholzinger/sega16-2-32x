@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild uPD7759 speech as WAV from a tools/snd_tap.lua log (SOUND.md P1).
+"""Rebuild uPD7759 speech as WAV from a tools/snd_tap.lua log (docs/sound/SOUND.md P1).
 
 The arcade board runs the 7759 in SLAVE mode: the Z80 feeds the byte
 stream by hand (port 0x80 = PD lines in the log), so the sample ROMs

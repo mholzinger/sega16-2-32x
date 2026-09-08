@@ -1,4 +1,4 @@
-/* sndtest 68K main — the sound-engine lab's MD side (SOUND.md P0).
+/* sndtest 68K main — the sound-engine lab's MD side (docs/sound/SOUND.md P0).
  *
  * Trimmed from 32x-builder md_src/md_main.c (same author): the COMM0
  * command server, the busreq-park Z80 discipline, and the proven YM2612
@@ -58,7 +58,7 @@ static uint8_t  speech_serial = 0;
 
 // ---- LZSS streaming decompressor (tools/lzss.py format) --------------
 // Full-length music is stored LZSS-compressed (~4x) so every track fits
-// the 32X 512KB 68K ROM window without banking (SOUND_DRIVER.md). The
+// the 32X 512KB 68K ROM window without banking (docs/sound/SOUND_DRIVER.md). The
 // feeder decompresses straight into the Z80 ring; a 4KB circular window
 // holds recent output for back-references. mus_compressed selects this
 // path; the legacy raw path (test_track) stays for the arpeggio.
@@ -599,7 +599,7 @@ void do_commands(void) {
 		} else if (rt) {
 			// FAITHFUL music (2026-09-01): every music command plays the
 			// full-length render from the REAL arcade driver, LZSS-
-			// compressed (SOUND_DRIVER.md, render_music.h) and stream-
+			// compressed (docs/sound/SOUND_DRIVER.md, render_music.h) and stream-
 			// decompressed into the ring. Replaces the isolation-sweep
 			// trk_XX that faded (the 0x01=volume-1 latch bug).
 			music_start_vgm(rt->intro, rt->intro_len,

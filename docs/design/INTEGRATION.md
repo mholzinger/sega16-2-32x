@@ -1,8 +1,8 @@
-# INTEGRATION.md — the resource contract between the pipeline and
+# docs/design/INTEGRATION.md — the resource contract between the pipeline and
 # the sound engine (2026-09-01, written from the native1 ledger)
 
-The audio thread (SOUND.md, sndtest/) and the pipeline thread
-(PALSTATIC.md, BOSSFIGHT.md) are about to share one machine. This
+The audio thread (docs/sound/SOUND.md, sndtest/) and the pipeline thread
+(docs/design/PALSTATIC.md, docs/design/BOSSFIGHT.md) are about to share one machine. This
 file is the single map of who owns what, written so neither thread
 re-derives or collides. Update it WHENEVER either side claims a
 resource.
@@ -50,7 +50,7 @@ resource.
   AUDITED FREE 2026-09-01 (tools/sdram_audit.py on 41d6bfc5:
   quiet in 7 end-of-run dumps AND no #define in ANY #ifdef
   branch AND outside every declared array's extent — the
-  record is BOSSFIGHT.md "MAP AUDIT"):
+  record is docs/design/BOSSFIGHT.md "MAP AUDIT"):
     0x398E0-0x3993F   96B  (md_dbg_hs end .. snap)
     0x28E38-0x28E7F   72B  (glow_streak end .. 0x28E80 prev_n)
     0x28F60-0x28F7F   32B  (psw end .. DRQR)
@@ -94,7 +94,7 @@ resource.
   Slave SH-2: idle polls 2-3/cycle in play — thin. PWM
   mixing there contends with compose exactly in the
   heavy scenes (the boss). Measure, don't assume.
-  PWM ownership law (SOUND.md): SH-2 only, 68K never
+  PWM ownership law (docs/sound/SOUND.md): SH-2 only, 68K never
   touches PWM regs. The pipeline agrees — it never has.
 
 ## Gates for every integrated build

@@ -5,7 +5,7 @@ Segments a tools/music_sweep.lua log (the arcade ORACLE playing each
 music command full-length), transcodes each via opm2opn, LZSS-compresses
 (tools/lzss.py), and emits sndtest/md/render_music.h: compressed track
 arrays + a {cmd -> ptr,len} lookup the router stream-decompresses
-(SOUND_DRIVER.md). Full songs fit the 512KB 68K window via ~4x LZSS.
+(docs/sound/SOUND_DRIVER.md). Full songs fit the 512KB 68K window via ~4x LZSS.
 
   build_music.py MUSIC_LOG --out sndtest/md/render_music.h [--secs 60]
 """
@@ -41,7 +41,7 @@ def main():
                 " * command captured full-length from the arcade oracle\n"
                 " * (tools/music_sweep.lua), transcoded, LZSS-compressed.\n"
                 " * The router stream-decompresses into the Z80 ring\n"
-                " * (SOUND_DRIVER.md). Do not edit. */\n"
+                " * (docs/sound/SOUND_DRIVER.md). Do not edit. */\n"
                 "#include <stdint.h>\n\n")
         # emit the intro/loop struct the player expects; loop-whole means
         # intro == loop == the whole compressed track (pre-VGZ behaviour).

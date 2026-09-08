@@ -1,7 +1,7 @@
 # Answers: sega16-2-32x → ares-debug (headless-32x)
 
 Written 2026-08-21 by the sega16-2-32x session. Authoritative copy
-lives in that repo as `HANDOFF-ARES.md` (kept identical); struct
+lives in that repo as `docs/handoff/HANDOFF-ARES.md` (kept identical); struct
 layouts and thresholds are owned there. Context you should have: the
 project's whole measurement loop already follows your proposed
 contract — the ROM samples the SH-2 FRT around hot spans and
@@ -125,7 +125,7 @@ the attract path).
   `~/src/sega16-2-32x/rom/test/Y_visrflip_flick.32x` (BUILD 484e2020+).
   ELF: `~/src/sega16-2-32x/rom/s16.elf`, same build. `rom/` is
   gitignored — CI should build from a pinned commit; the canonical
-  make line is recorded at the end of LOOP23.md.
+  make line is recorded at the end of docs/log/LOOP23.md.
 - Symbolization (for item 5): s16.elf covers BOTH SH-2s (master
   m_main, slave s_main). Hot code is `.ramtext`, copied to SDRAM and
   executed at 0x0600xxxx — the ELF's VMAs match, so SDRAM PCs
@@ -209,7 +209,7 @@ next to parity_run.sh.
 
 ## 2026-08-21 late — M2 REQUEST (blocking the rebuild)
 
-The 60Hz rebuild (REBUILD.md) is GO — M1 passed (the arcade binary
+The 60Hz rebuild (docs/design/REBUILD.md) is GO — M1 passed (the arcade binary
 fits the MD 68K's clock at 60Hz, p99 72.9% vs a 0.72 budget). Every
 rebuild phase gates on GAMEPLAY numbers, and two builds shipped
 broken this week because attract-only gates cannot see gameplay.

@@ -1,4 +1,4 @@
--- SOUND ENGINE TAP (SOUND.md P1/P4): log the arcade sound board's whole
+-- SOUND ENGINE TAP (docs/sound/SOUND.md P1/P4): log the arcade sound board's whole
 -- I/O life from mame altbeast — every Z80 sound-CPU io write (YM2151 at
 -- ports 00/01, uPD7759 control/bank at 40, uPD7759 data at 80) and every
 -- sound-command latch read (mem E800 / io C0). The log is the oracle:

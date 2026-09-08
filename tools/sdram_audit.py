@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SDRAM fixed-map audit by DUMP-DIFF (HANDOFF-SESSION3 queue #1).
 
-The fixed-SDRAM map comments carry their era (BOSSFIGHT.md collisions
+The fixed-SDRAM map comments carry their era (docs/design/BOSSFIGHT.md collisions
 #13/#14). Before ANY new fixed placement, audit the LIVE build:
 
     tools/sdram_audit.py run  rom/s16_boss.32x out/      # 7 headless runs

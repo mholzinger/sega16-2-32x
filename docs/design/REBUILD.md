@@ -1535,7 +1535,7 @@ STATE OF THE 60HZ QUESTION after ~15 instrumented attempts: every
 scheduling/caching/skipping lever is measured-dead against the same
 bus-saturation wall; chains run ~1.7-2 frames on heavy scenes and
 the split/banding follows. The remaining REAL exits are the
-architecture items PIPELINE.md always named — per-scene bake
+architecture items docs/design/PIPELINE.md always named — per-scene bake
 (S5/T4), FBSPR-style staged sprite records, MD-side text — each a
 session-plus, each shrinking the actual work, none a scheduling
 trick. Or the fidelity call (coherent-30 under load). Mike's call.

@@ -236,6 +236,25 @@ TABLES = {
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
                      (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC)],
+    # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
+    # in the WRAM text mirror and copied to FB staging by the shim.
+    #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),
+    #    clears 9 glyphs (stride 2) then CREDIT n / INSERT COIN -> 10 words;
+    #    calls the shared copy/clear loop heads 0x3A9A/0x3AA4 (also entered
+    #    by FB writers, so they keep their gate for FB destinations)
+    #  - health bar FUN_4d54: a0 = text 0xCD0 (P1, d7=-4) / 0xCE0 (P2, +4),
+    #    8 longs from table 0x6D5C -> bytes [0xCB4,0xCD4) / [0xCE4,0xD04);
+    #    its LOOP 23 gate (0x4D88) and span (0x4D80,0x4D98) go with it
+    # scene-level text FILL entries (FB path): a pending footprint copy must
+    # not re-plant over the clear (the phantom P2 orbs, 2026-09-07)
+    'TXT_WRAM_CLEAR_SITES': [0x369C],
+    'TXT_WRAM_WRITERS': [
+        {'site': 0x3AAE, 'reg': 1, 'off_var': 0xFFF024, 'words': 10,
+         'loops': [0x3A9A, 0x3AA4], 'note': 'credit line'},
+        {'site': 0x4D54, 'reg': 0, 'alt_sites': [0x4D62],
+         'sel_var': 0xFFF109, 'ranges': [(0xCB4, 0xCD3), (0xCE4, 0xD03)],   # P1 / P2 (tstb 0xFFF109 at 0x4D5C)
+         'drop_gates': [0x4D88], 'drop_spans': [(0x4D80, 0x4D98)], 'note': 'health bar'},
+    ],
     # palette-cycle launch table entries whose script pointer the harvest
     # missed: ([offsets], expected pointer value)
     'PAL_LAUNCH': ([0x1A704, 0x1A70A], 0x1A78E),

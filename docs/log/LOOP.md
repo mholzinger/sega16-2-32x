@@ -23,7 +23,7 @@
 > bottleneck to the 68K's wait on the SH-2 window. Next arc starts there
 > (and at the strobe, which is still a load ceiling).
 
-> ACTIVE ARC: **LOOP9.md** — make it PLAY SMOOTHLY: cut the render
+> ACTIVE ARC: **docs/log/LOOP9.md** — make it PLAY SMOOTHLY: cut the render
 > WINDOW, then make the blit fit inside vblank. Mike's priority order for
 > the rest of the port is framerate, tearing, sprites, sound; this arc is
 > the first two. The defining number is `worst handler total=246
@@ -39,7 +39,7 @@
 > 57.1% -> 0.7-1.4%), tail 170.6 -> 92.4, parity 43.98 -> 22.09 with
 > title at 2.43%.
 >
-> PREVIOUS ARC: **LOOP7.md** — kill the tail (COMM -> DREQ, retire the
+> PREVIOUS ARC: **docs/log/LOOP7.md** — kill the tail (COMM -> DREQ, retire the
 > palette scan). LOOP 6 closed: it falsified its own kickoff, cut
 > apply_cram (ares window 88 -> 64 lines, exactly as predicted), and
 > then found why six iterations of cadence work failed — see "THE
@@ -708,7 +708,7 @@ RANKED REMAINING WORK:RANKED REMAINING WORK:
 
 ### Iteration 7a LANDED — COMM payloads onto the DREQ packet
 
-Did what LOOP7.md step 1 specified. Layer regs (0x740-0x753), the
+Did what docs/log/LOOP7.md step 1 specified. Layer regs (0x740-0x753), the
 rowscroll tables (0x7C0-0x7FB) and the full 0..2047 text rotation all
 ride the DREQ packet now (772 -> 852 words, still 4-aligned); COMM
 carries the palette and nothing else, and its loop EXITS IMMEDIATELY
@@ -947,7 +947,7 @@ this dial is less powerful than it looks.
 
 ### Iteration 6 LANDED — copy_pages was ALREADY dead; apply_cram was the floor
 
-LOOP6.md's premise is FALSIFIED. Measured on MAME (fresh DIAG probe;
+docs/log/LOOP6.md's premise is FALSIFIED. Measured on MAME (fresh DIAG probe;
 profile_32x.lua pointed at a stale base 0x27000, DIAG is 0x28000):
 
     copy_pages   0.005 ms/cycle   (0.25% of the window; bitmap reads 0000)

@@ -39,7 +39,7 @@ truth before building anything else.
    **md_pending leak fix + self-heal** — both Mike-verified earlier in
    the session arc (load-in confetti and banded reveals gone).
 5. **BANDSHIFT=32 / BLITSHIFT=72 rebalance.** Deferrals 1.9→1.1/frame.
-   Sweeps documented in REBUILD.md with the overshoot walls (BAND 36+
+   Sweeps documented in docs/design/REBUILD.md with the overshoot walls (BAND 36+
    inverts ranges; BLIT 112 collapses the window).
 6. **The window is FB-bus-traffic-bound.** Proven both directions:
    shifting blit rows either way moves the 68K handler mean not at
@@ -57,7 +57,7 @@ truth before building anything else.
 9. **CAT1INLINE confirms the deferral race** (5376→256 false claims)
    but costs the documented pickup stall (tears ~600). Diagnostic
    only, as its Makefile comment says.
-10. **Negative results properly recorded in REBUILD.md**: BLITSHIFT
+10. **Negative results properly recorded in docs/design/REBUILD.md**: BLITSHIFT
     as a window lever (bus-bound), slave landing park (no tear
     effect, -300 flips), wholesale mask invalidation (death spiral),
     rotating mask column (~10% skip loss still too much), whole-row
@@ -128,7 +128,7 @@ D. **The audit machinery itself** (verify-per-row, exit-verify,
    sharing free; offline pack is the real fix, LOOP19 "JOB 1").
    Mike's queue has §11 LAST.
 5. **Load-in trickle** — bounded by the ~12-40 tiles/vint transport;
-   the real fix is the per-scene bake (PIPELINE.md S5/T4, the
+   the real fix is the per-scene bake (docs/design/PIPELINE.md S5/T4, the
    toolkit journey).
 
 ## HOW TO RE-ESTABLISH GROUND TRUTH ON THE PURPLE (next session, first hour)

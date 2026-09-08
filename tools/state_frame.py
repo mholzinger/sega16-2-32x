@@ -17,7 +17,7 @@ planes actually use.
 
 State layout (this ares-debug build; memory note ares-state-layout):
   SDRAM +0x23B (word-swapped), CPU RAM found by the pal_thunks code,
-  VRAM found by the md_sprart bytes at VRAM 0x8040, VSRAM 0x50 before
+  VRAM found by the md_sprart bytes at VRAM 0x8040, VSRAM 0x54 before
   the CRAM, CRAM found by the SH-2's own mdp_line_c line-1 pens, 32X
   DRAM found by its line table, 32X CRAM right after DRAM.
 Every anchor is found by CONTENT, never by a fixed offset, because a
@@ -63,7 +63,7 @@ class State:
             sys.exit(f'CRAM anchor: expected one MD-side hit, got {hits}')
         c0 = hits[0] - 4 - 32
         self.cram = struct.unpack_from('<64H', raw, c0)
-        self.vsram = struct.unpack_from('>40H', raw, c0 - 0x50)   # big-endian words
+        self.vsram = struct.unpack_from('>40H', raw, c0 - 0x54)   # big-endian words; a u32 field sits between VSRAM and CRAM
         # 32X DRAM: line table 0x100,0x1A0,0x240,... LE u16 at DRAM+0
         key = b''.join(struct.pack('<H', 0x100 + i * 0xA0) for i in range(4))
         hits = list(find_all(raw, key))
@@ -141,26 +141,38 @@ class State:
         print(f'nearest-colour fallbacks DIAG[36]={diag[36]}  set assigns DIAG[35]={diag[35]}  frees DIAG[37]={diag[37]}')
         live = sum(1 for t in tags if t != 0xFFFFFFFF)
         ref = set()
-        stale = 0
-        for nt in (0xC000, 0xE000):
+        stale = {'visible': 0, 'off-window': 0}
+        freed = {'visible': 0, 'off-window': 0}
+        vs = [self.vsram[0] & 0x3FF, self.vsram[1] & 0x3FF]
+        for pl, nt in ((0, 0xC000), (1, 0xE000)):
+            hs = self.hscroll(0)[pl]
+            col0 = ((-hs) & 0x1FF) // 8               # first visible column
+            row0 = (vs[pl] & 0xFF) // 8
+            vis_cols = {(col0 + c) & 63 for c in range(41)}
+            vis_rows = {(row0 + r) & 31 for r in range(28 + (1 if vs[pl] & 7 else 0))}
             for row in range(32):
                 for col in range(64):
                     slot, pal, _, _, _ = self.cell(nt, row, col)
                     if slot >= 1023 or not any(self.vram[slot * 32:slot * 32 + 32]):
                         continue
                     ref.add(slot)
+                    where = 'visible' if (row in vis_rows and col in vis_cols) else 'off-window'
                     t = tags[slot]
-                    if t != 0xFFFFFFFF and s_line[(t >> 16) & 0x7F] and pal != s_line[(t >> 16) & 0x7F]:
-                        stale += 1
-        print(f'slot map: {live} tags of 1024; planes reference {len(ref)} slots; stale-line cells {stale}')
+                    if t == 0xFFFFFFFF:
+                        freed[where] += 1
+                    elif s_line[(t >> 16) & 0x7F] and pal != s_line[(t >> 16) & 0x7F]:
+                        stale[where] += 1
+        print(f'slot map: {live} tags of 1024; planes reference {len(ref)} slots; '
+              f'stale-line cells visible {stale["visible"]} / off-window {stale["off-window"]}; '
+              f'cells on freed slots visible {freed["visible"]} / off-window {freed["off-window"]}')
         for l in range(3):
             occ = sum(1 for p in range(1, 16) if lc[l * 16 + p] != 0xFFFF)
             print(f'MD line {l + 1}: {occ}/15 pens ' + ' '.join('%03x' % v if v != 0xFFFF else '---' for v in lc[l * 16 + 1:l * 16 + 16]))
-        def s16q(w):
+        def s16q(w):                      # == sh_src/m_main.c mdp_quant
             r = ((w & 0xF) << 1) | ((w >> 12) & 1)
             g = (((w >> 4) & 0xF) << 1) | ((w >> 13) & 1)
             b = (((w >> 8) & 0xF) << 1) | ((w >> 14) & 1)
-            return tuple(round(c / 31 * 7) for c in (r, g, b))
+            return tuple(min(7, (c + 2) >> 2) for c in (r, g, b))
         live_sets = sorted({(t >> 16) & 0x7F for t in tags if t != 0xFFFFFFFF})
         print('set  line  used  exact/fallback pixels')
         for s in live_sets:

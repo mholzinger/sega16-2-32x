@@ -1,4 +1,4 @@
--- SND AUTOPSY (SOUND.md P4 debug): full visibility on the music path in
+-- SND AUTOPSY (docs/sound/SOUND.md P4 debug): full visibility on the music path in
 -- mame 32x. Presses P1 A at SL_PRESS, then once per second logs:
 --   COMM6 (router ack), COMM14 (feed), Z80 MSTAT/RD/WR (from the Z80's
 --   own space), Z80 PC — and screenshots. ALL device lookups happen on

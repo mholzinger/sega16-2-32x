@@ -43,7 +43,7 @@ OUT_MD_H = ROOT / 'md_src' / 'md_sprart_info.h'
 
 # v2 (2026-08-28): ONE MD palette line exists (line 0; the BG allocator
 # measured 1/1/4 free pens — a line steal would evict live BG colours),
-# so ONE anchored colour set at a time. v3 (2026-09-01, BOSSFIGHT.md):
+# so ONE anchored colour set at a time. v3 (2026-09-01, docs/design/BOSSFIGHT.md):
 # PER-SCENE tables — the zombies and the boss never share a screen, so
 # each scene gets its own art blob (uploaded at the scene cut), key
 # slice, and anchor. anchor=None = DYNAMIC: the runtime tracks which

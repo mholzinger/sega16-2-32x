@@ -1,6 +1,6 @@
 # LOOP 21 — FLICKER FUSION (the Zeus fix, cadence-independent)
 
-Read `LOOP20.md`'s top block first; this loop builds its "next item".
+Read `docs/log/LOOP20.md`'s top block first; this loop builds its "next item".
 Status: **BUILT, MAME-GATED, AWAITING MIKE'S ARES PASS** of
 `rom/test/R_flickfuse.32x` (stamped FLICKFUSE).
 

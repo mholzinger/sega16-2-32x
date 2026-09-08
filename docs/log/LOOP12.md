@@ -1,7 +1,7 @@
 # LOOP 12 — FINISH THE MD BACKGROUND (pivot slice 1c)
 
 Kickoff for a FRESH session. Read this, then `ARCHITECTURE.md` sections
-9-16 (the pivot's measured facts). `LOOP11.md` is history — its plan
+9-16 (the pivot's measured facts). `docs/log/LOOP11.md` is history — its plan
 sections are superseded by ARCHITECTURE.md, and several of its numbers
 were corrected. **Where the two disagree, ARCHITECTURE.md wins.**
 

@@ -1,4 +1,4 @@
--- YM TAP for mame 32x + sndtest (SOUND.md P4 debug): log every Z80-side
+-- YM TAP for mame 32x + sndtest (docs/sound/SOUND.md P4 debug): log every Z80-side
 -- YM2612 write (Z80 $4000-4003) and PSG write ($7F11), plus 68K-side YM
 -- writes ($A04000-3), timestamped — the register-level truth of what the
 -- player is telling the chip. Also presses P1 A at frame SL_PRESS.

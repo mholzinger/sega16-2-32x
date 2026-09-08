@@ -1,4 +1,4 @@
-# SOUND.md — the sega16 sound engine design (2026-08-31)
+# docs/sound/SOUND.md — the sega16 sound engine design (2026-08-31)
 
 > **RESOLVED 2026-09-01 — the ROM and the emulator were both fine.**
 > Root cause: `Defocus: Pause` in Mike's ares GUI settings — a
@@ -10,7 +10,7 @@
 > COUNT 00, PAD 1000 = six-button detected, nothing pressed). Comm
 > traces on the headless rig cleared the ROM: one post per press
 > through the full interactive choreography. Fix: set Defocus to
-> Allow. Full write-up in `HANDOFF-SOUND.md`.
+> Allow. Full write-up in `docs/sound/HANDOFF-SOUND.md`.
 
 Research pass over four sources: this repo, `32x-builder` (Mike's own,
 copy freely), `32x-builder/srcref/d32xr` (derive architecture, don't
@@ -371,7 +371,7 @@ All phases through P4 happen in `sndtest.32x`. The main-rom gates
 
 ## Open questions / risks
 
-- **68K vint budget** (`docs_audit/audit_sdkmodel.md:99`): the feeder
+- **68K vint budget** (`docs/audit/audit_sdkmodel.md:99`): the feeder
   and router are main-loop work, but the budget was never provisioned.
   Measure the feeder's worst 512-byte copy against the vint tail early
   in P3.

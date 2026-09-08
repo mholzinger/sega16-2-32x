@@ -1,4 +1,4 @@
--- SND LISTEN (SOUND.md P4 debug): drive the sndtest menu in mame 32x with
+-- SND LISTEN (docs/sound/SOUND.md P4 debug): drive the sndtest menu in mame 32x with
 -- a scripted A press and let -wavwrite capture what the YM/PSG actually
 -- output. The menu boots on CMD 94 (round-1 BGM) as of 2026-09-01, so one
 -- A press = music_start via the router. Pair with:

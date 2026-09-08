@@ -27,7 +27,13 @@ void Hw32xInit(int vmode, int lineskip) {
 	volatile uint16_t *frameBuffer16 = &MARS_FRAMEBUFFER;
 
 	// Wait for the SH2 to gain access to the VDP
+#ifdef BOOT_SHSTAGE
+	*(volatile uint16_t *)0x2000402C = 2;   /* probe: in Hw32xInit, before the FM wait */
+#endif
 	while((MARS_SYS_INTMSK & MARS_SH2_ACCESS_VDP) == 0);
+#ifdef BOOT_SHSTAGE
+	*(volatile uint16_t *)0x2000402C = 3;   /* probe: FM seen, before the flip waits */
+#endif
 
 	if(vmode == MARS_VDP_MODE_256) {
 		// Set 8-bit paletted mode, 224 lines

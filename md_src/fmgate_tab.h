@@ -5,6 +5,15 @@
 #define FMGATE_ON 1
 #define FMGATE_THUNK_ADDR 0xBCF4
 #define FMGATE_THUNK_WORDS 194
+#define TXT_WRAM_ON 0
+#define TXTW_N 0
+/* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),
+ * fixed text byte offset (0xFFFF = read the slot word), words to copy,
+ * selector byte (0 = none) and the alternate offset it selects when non-zero
+ * (the health bar: P1 / P2 footprints, never both — a stale mirror of the
+ * other player's bar must not be re-planted over the game's clear) */
+static const struct { unsigned short slot, off, words, sel, off2; } txtw[] = {
+    { 0, 0, 0, 0, 0 } };
 static const unsigned short fmgate_thunks[] = {
     0x4A79, 0x00A1, 0x5100, 0x6BF8, 0x227C, 0x0085, 0xFD6A, 0x4E75,
     0x4A79, 0x00A1, 0x5100, 0x6BF8, 0x4EB8, 0xB8E0, 0x4E71, 0x4E75,

@@ -1,5 +1,5 @@
 ; =====================================================================
-; SEGA16 SOUND ENGINE — Z80 STREAMING MUSIC PLAYER (SOUND.md P3)
+; SEGA16 SOUND ENGINE — Z80 STREAMING MUSIC PLAYER (docs/sound/SOUND.md P3)
 ;
 ; Executes from the Genesis Z80's 8KB RAM ($0000-$1FFF), uploaded by
 ; the 68K through the $A00000 window (the 32x-builder boot dance:

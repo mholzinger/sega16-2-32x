@@ -1,7 +1,7 @@
 -- Full-length music capture from mame altbeast (the arcade ORACLE),
 -- UNINTERRUPTED. Injects one music command, then GAGS the sound-command
 -- latch to 0x80 (a driver no-op — NOT 0x01 which is volume-1, the fade;
--- SOUND_DRIVER.md THE FADE LAW) so the game's attract logic can't stop
+-- docs/sound/SOUND_DRIVER.md THE FADE LAW) so the game's attract logic can't stop
 -- or change the song. The song then plays and LOOPS on its own; the
 -- capture holds the true song, not ~14s + attract contamination.
 -- Per-command soft-reset isolation (cmd_sweep v3 protocol).

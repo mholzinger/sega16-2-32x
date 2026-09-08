@@ -52,7 +52,7 @@ flowchart TD
 ## 2. What measurement did to that design
 
 Every box below is a measured result, not an opinion; the dead ends are
-recorded with their killing numbers in LOOP*.md NEGATIVE RESULTS.
+recorded with their killing numbers in docs/log/LOOP*.md NEGATIVE RESULTS.
 
 ```mermaid
 flowchart TD

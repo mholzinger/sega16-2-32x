@@ -1,9 +1,9 @@
 # LOOP 7 — Kill the tail: COMM → DREQ, and retire the palette scan
 
-Kickoff doc for a FRESH session. Self-contained: read this + LOOP.md,
+Kickoff doc for a FRESH session. Self-contained: read this + docs/log/LOOP.md,
 then run. LOOP 6 did not ship a cadence win — it found *why* six
 iterations of cadence work failed, and built the instruments that make
-this arc measurable. Read the "THE BAND'S ORIGIN" section of LOOP.md
+this arc measurable. Read the "THE BAND'S ORIGIN" section of docs/log/LOOP.md
 before touching code.
 
 ## Mission (one sentence)
@@ -159,7 +159,7 @@ that the 68K no longer spins on COMM0 anywhere in the tail.
 
 ## First moves for the new session
 
-1. Read LOOP.md ("THE BAND'S ORIGIN", iterations 6/6b/6c) and this doc.
+1. Read docs/log/LOOP.md ("THE BAND'S ORIGIN", iterations 6/6b/6c) and this doc.
 2. `make TAILPROBE=1` and run `tools/win_probe.lua` to reproduce the
    mean tail split (170/70/49/45) — that is your before-number.
 3. Design the packet extension on paper FIRST, keeping 4-word

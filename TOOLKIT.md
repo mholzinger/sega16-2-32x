@@ -212,7 +212,7 @@ k+n. Two rules this port paid for:
 
 Do not fix a compose overrun with more mailbox-poll points. Polling more
 often cannot shorten work that has not been done; it costs more compose
-time than the bounded latency saves (LOOP.md iteration 7f, reverted).
+time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
 
 ## MD-hardware landmines for arcade 68K code (kit-critical)
 
@@ -698,7 +698,7 @@ The renderer is the good news: it implements the BOARD, not the game.
 Its ten `altbeast` mentions are all symbol names for the two ROM
 blobs.
 
-**The sound lane (added 2026-09-01, SOUND.md P0-P4) is a fourth kit
+**The sound lane (added 2026-09-01, docs/sound/SOUND.md P0-P4) is a fourth kit
 column, built title-blind by construction.** The per-title work is a
 pipeline RERUN, not code:
 
@@ -720,7 +720,7 @@ actively corrupts music (below). New kit tools:
   master song table (Altered Beast: `word[$03B4 + 2*(cmd&$7F)]`).
 - `tools/pcm_from_rom.py` — direct uPD7759 ADPCM decode of the sample
   ROM (derive the algorithm from jtcores `jt7759`).
-- `SOUND_DRIVER.md` — the reverse-engineered driver map (I/O ports,
+- `docs/sound/SOUND_DRIVER.md` — the reverse-engineered driver map (I/O ports,
   command table, song-header format, interpreter), with ROM citations.
 - `tools/music_sweep.lua` + `tools/build_music.py` — capture every music
   command full-length from the arcade oracle in one MAME run, transcode,
@@ -730,7 +730,7 @@ actively corrupts music (below). New kit tools:
   with NO banking. The 68K stream-decompresses into the Z80 ring (4KB
   circular window). Compression beat the size limit — do NOT reach for
   banking when the data is this repetitive.
-- **THE FADE LAW** (SOUND_DRIVER.md): sound-command bytes 0x01-0x40 are
+- **THE FADE LAW** (docs/sound/SOUND_DRIVER.md): sound-command bytes 0x01-0x40 are
   MASTER-VOLUME commands; the sound latch is re-read every IRQ, so the
   value it returns WHEN IDLE becomes the volume every tick. Idle must be
   a no-op (0x80), never 0x01 — that is "volume 1" and fades the music.
@@ -901,7 +901,7 @@ Milestone 3 (IN PROGRESS): the JP rom boots and its 68K side tracks the
 JP arcade frame-for-frame in MAME (state byte 0xFFF031 transitions at
 the same frames, layer regs, text name-table and tile-page census equal
 at 600/1200/2400). PIXELS CANNOT BE JUDGED IN MAME FOR ANY NATIVE BUILD
-(BOSSFIGHT.md: MAME renders the MD-plane scheme as confetti — the US
+(docs/design/BOSSFIGHT.md: MAME renders the MD-plane scheme as confetti — the US
 canonical rom is confetti there too). A pixel gate needs either a
 pre-NATIVE flag line built for MAME, or Mike's ares pass.
 The "kit-baseline" flag subset (canon minus SPRBAKE TILECLASS TXTCLASS

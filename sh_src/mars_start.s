@@ -304,6 +304,11 @@ mcont:
 		mov.w   r0,@r1
 
 		mov.l   _primary_stk,r15
+.ifdef BOOT_BEACON
+		mov.l   _beacon_comm12,r1
+		mov     #1,r0
+		mov.w   r0,@r1      /* boot beacon stage 1 */
+.endif
 ! purge cache and turn it off
 		mov.l   _primary_cctl,r0
 		mov     #0x10,r1
@@ -319,6 +324,11 @@ mcont:
 		bf/s    0b
 		add     #4,r1
 
+.ifdef BOOT_BEACON
+		mov.l   _beacon_comm12,r1
+		mov     #2,r0
+		mov.w   r0,@r1      /* boot beacon stage 2 */
+.endif
 ! SESSION 7 task 0: copy .ramtext from its ROM image to 0x06031000
 ! (mars.ld) — the BIOS header copy carries .data only now. This runs
 ! BEFORE M_OK is posted, and the 68K releases BOTH SH-2s (0xACED) only
@@ -336,6 +346,26 @@ mcont:
 		dt      r4
 		bf      3b
 
+.ifdef BOOT_BEACON
+		mov.l   _beacon_comm12,r1
+		mov     #3,r0
+		mov.w   r0,@r1      /* boot beacon stage 3 */
+.endif
+.ifdef BOOT_ROMCHK
+! HARDWARE PROBE: can this SH-2 read cart ROM above 2 MB? Read the game
+! image's bra at cart 0x300400 through the ROM window and report on
+! COMM12: 1 = matches (blue backdrop), 7 = does not (cyan backdrop).
+		mov.l   _romchk_addr,r2
+		mov.l   @r2,r0
+		mov.l   _romchk_want,r1
+		mov.l   _beacon_comm12,r3
+		mov     #1,r4
+		cmp/eq  r0,r1
+		bt      5f
+		mov     #7,r4
+	5:
+		mov.w   r4,@r3
+.endif
 ! handshake with the 68000: keep (re)posting M_OK until the 68000 ACKs
 ! with a different value. The BIOS's own one-shot M_OK post races the
 ! security blob's COMM0 clear when boot is fast (checksum skipped), so a
@@ -355,6 +385,11 @@ mcont:
 		mov     #0,r2
 		mov.l   r2,@r0      /* COMM0 back to idle for runtime protocols */
 
+.ifdef BOOT_BEACON
+		mov.l   _beacon_comm12,r1
+		mov     #4,r0
+		mov.w   r0,@r1      /* boot beacon stage 4 */
+.endif
 ! do all initializers
 		mov.l   _primary_do_init,r0
 		jsr     @r0
@@ -418,6 +453,12 @@ _primary_ack:
 		.long   0x0000ACED  /* MD-ready level on COMM2 */
 _primary_mdrdy:
 		.long   0x20004028  /* COMM8 — COMM2 is clobbered by the M_OK long write */
+_beacon_comm12:
+		.long   0x2000402C  /* COMM12: boot beacon stage word */
+_romchk_addr:
+		.long   0x02300400  /* cart 0x300400 via the SH-2 ROM window (> 2 MB) */
+_romchk_want:
+		.long   0x6000000C  /* the arcade program's bra at 0x400 (high copy) */
 _primary_adapter:
 		.long   0x20004000
 _primary_cctl:
@@ -455,6 +496,11 @@ scont:
 		mov.w   r0,@r1
 
 		mov.l   _secondary_stk,r15
+.ifdef BOOT_SHSTAGE
+		mov.l   _sstage_comm10,r4
+		mov     #1,r5
+		mov.w   r5,@r4      /* slave probe stage 1 */
+.endif
 ! handshake with the 68000: keep (re)posting S_OK on COMM4 until the
 ! 68000 ACKs with 0x55555555 (same sticky scheme as the primary's M_OK —
 ! the BIOS one-shot post is race-prone on fast boots).
@@ -471,6 +517,11 @@ scont:
 		bf      1b
 		mov     #0,r2
 		mov.l   r2,@r0
+.ifdef BOOT_SHSTAGE
+		mov.l   _sstage_comm10,r4
+		mov     #2,r5
+		mov.w   r5,@r4      /* slave probe stage 2 */
+.endif
 
 		mov.l   _secondary_adapter,r1
 		mov     #0x00,r0
@@ -480,8 +531,45 @@ scont:
 
 ! purge cache, turn it on, and run secondary()
 		mov.l   _secondary_cctl,r0
-		mov     #0x11,r1
+.ifdef SLV_CACHE_OFF
+		mov     #0x10,r1    /* purge, cache OFF (slave FB-exec workaround) */
+.else
+		mov     #0x11,r1    /* purge + enable */
+.endif
 		mov.b   r1,@r0
+.ifdef BOOT_SHSTAGE
+		mov.l   _sstage_comm10,r4
+		mov     #3,r5
+		mov.w   r5,@r4      /* slave probe stage 3 */
+.endif
+! SLAVE SDRAM WARM-UP (2026-09-08, MiSTer FPGA — LOOP27 entry 10).
+! MISTERBOOT=1 ONLY: it did not fix the MiSTer hang and it is unproven on the
+! ares ship line, so the default build does not carry it. On
+! real hardware the slave hangs on the first fetch after jmp _s_main
+! (a master-written SDRAM region): the shstage bisection reached stage 3
+! but never stage 4 (s_main body). A register-only spin did NOT fix it;
+! an SDRAM loop the slave WROTE ITSELF and ran (repeated SDRAM fetch +
+! data access) DID. Copy the heartbeat loop to 0x0603FA00 (slave sentinel
+! floor, free at boot) and run it until the shim posts B007 on COMM14 —
+! it also ticks COMM6 so the 68K sees the slave is alive — then jump to
+! _s_main, whose own B007 wait passes at once. ares never needed this.
+.ifdef MISTER_BOOT
+		mov.l   _slvprime_dst,r1
+		mov.l   _slvprime_src,r2
+		mov     #(_slvstub_end - _slvstub_begin)/2,r3
+	7:
+		mov.w   @r2+,r0
+		mov.w   r0,@r1
+		add     #2,r1
+		dt      r3
+		bf      7b
+		mov.l   _slvprime_dst,r1
+		mov.l   _slvw_comm6,r4
+		mov.l   _slvw_comm14,r6
+		mov.l   _slvw_b007,r7
+		jsr     @r1
+		nop
+.endif
 		mov.l   _secondary_go,r0
 		jmp     @r0
 		nop
@@ -505,12 +593,67 @@ _secondary_cctl:
 		.long   0xFFFFFE92
 _secondary_go:
 		.long   _s_main
+_sstage_comm10:
+		.long   0x2000402A  /* COMM10: slave boot probe stage */
+.ifdef MISTER_BOOT
+_slvprime_dst:
+		.long   0x0603FA00  /* slave sentinel floor: free at boot */
+_slvprime_src:
+		.long   _slvstub_begin
+_slvw_comm6:
+		.long   0x20004026
+_slvw_comm14:
+		.long   0x2000402E
+_slvw_b007:
+		.long   0x0000B007
+.endif
+_sstage_comm6:
+		.long   0x20004026
+_sstage_comm14:
+		.long   0x2000402E
+_sstage_b007:
+		.long   0x0000B007
+		.align  2
+.ifdef MISTER_BOOT
+_slvstub_begin:
+	1:	mov.w   @r6,r0      /* COMM14 */
+		extu.w  r0,r0
+		cmp/eq  r7,r0
+		bt      2f
+		mov.w   @r4,r0      /* COMM6++ */
+		add     #1,r0
+		mov.w   r0,@r4
+		bra     1b
+		nop
+	2:	rts
+		nop
+		.align  2
+_slvstub_end:
+.endif
 
 ! Primary exception handler
 
 		.data
 		.align  2
 main_err:
+.ifdef BOOT_SHSTAGE
+		mov.l   _shstage_cram,r1
+		mov.w   _shstage_magenta,r0
+		mov.w   r0,@r1      /* probe: MAGENTA = an SH-2 exception (then halt) */
+		mov.l   _shstage_comm10,r1
+		mov     #5,r0
+		mov.w   r0,@r1      /* and on COMM10 for the 68K to paint (FM may be down) */
+	9:	bra     9b
+		nop
+		.align  2
+_shstage_comm10:
+		.long   0x2000402A
+_shstage_cram:
+		.long   0x20004200
+_shstage_magenta:
+		.word   0x7C1F
+		.align  2
+.endif
 		rte
 		nop
 

@@ -45,11 +45,13 @@ docs_text_ares.png
 discover/palscenes/
 discover/glow/
 sh_src/pal_scenes.h
+sh_src/pal_scenes_md.h
 fpgascreens/
-docs_*_proof.png
+docs/proof/*_proof.png
 inp/private/
 .DS_Store
 *.bak
 pcm_clean/
 sndtest/md/render_music.h
 sndtest/md/render_track.h
+docs/audit/timing_census.json

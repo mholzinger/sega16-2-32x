@@ -132,7 +132,7 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
                          || defined(PKT_SLIM) || defined(IDLE_TOKEN))
 #error K2_FREE requires VISR_FLIP and excludes FBSPR/PKTSLIM/IDLETOKEN (LOOP24)
 #endif
-/* R60 + FB_SPR_READ is the PIPELINE.md S1 strike: the snapshot runs
+/* R60 + FB_SPR_READ is the docs/design/PIPELINE.md S1 strike: the snapshot runs
  * pre-flip in text_capture (slave-parallel), not in the LOOP20 k1
  * window the LOOP24 exclusion was written against. */
 #ifdef K2_FREE
@@ -416,7 +416,7 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * on the MD" (slot dirty or colour set unassigned) — written by the
  * master's plane walk, read by the slave's cat-1 pass, which then
  * draws that row in the FB as before. 0x28F60-0x28F7B: the audited-
- * free 32B span (INTEGRATION.md). Boot-zeroed. */
+ * free 32B span (docs/design/INTEGRATION.md). Boot-zeroed. */
 #define CAT1_PEND ((volatile uint8_t *)0x26028F60)      /* [28] */
 /* 0x3A680 map, all inside FBCLEAR's 384-byte tail below cache_tag:
  *   3A680 ROWLIVE [232]        ends 3A768
@@ -716,7 +716,7 @@ enum { dfb_nohold = 0 };
 #endif
 
 #ifdef NATIVE_FRAME
-/* NATIVE WHOLE-FRAME PIPELINE (NATIVE.md, branch native1). One
+/* NATIVE WHOLE-FRAME PIPELINE (docs/design/NATIVE.md, branch native1). One
  * generation in flight and it is the whole frame; the band as a
  * schedulable unit is deleted. File-scope on purpose: a block static
  * near the launch site read 0 every entry (the DIAG[36] .bss-wipe
@@ -789,7 +789,7 @@ static uint16_t nat_t0;          /* launch FRT stamp — the gen-wall
 #define NAT_TB(rg)  ((rg) == 2 ? ((184 + BAND_SHIFT_RG2) >> 3) \
                                : (((rg) * 72 + 36 + BAND_SHIFT) >> 3))
 #define NAT_TE(rg)  ((rg) == 2 ? 28 : (((rg) + 1) * 9))
-/* BANDSHIFT=36 / RG2SHIFT=40: every master range is EMPTY (ORACLE.md:
+/* BANDSHIFT=36 / RG2SHIFT=40: every master range is EMPTY (docs/design/ORACLE.md:
  * the rebalance measured dead, 4 points). Compile stage 1 out then —
  * the launch goes straight to the maps drain (2026-09-01, ~100B of
  * .ramtext for the C1 arc). Any other split keeps the machinery. */
@@ -806,7 +806,7 @@ static uint8_t nat_my;           /* strip cursor within the band */
 #ifdef PHASE_CENSUS
 /* GEN PHASE-SPLIT CENSUS (pipelining arc datum #1, 2026-09-01): where
  * the ~1.4v per-generation wall goes. Scratch 0x28E40-0x28E7F = the
- * audited-free 0x28E38-0x28E7F span (BOSSFIGHT.md MAP AUDIT), uncached,
+ * audited-free 0x28E38-0x28E7F span (docs/design/BOSSFIGHT.md MAP AUDIT), uncached,
  * boot-zeroed, PROBE-ONLY. Master FRT ticks (12052/vint):
  *   [0] sum echo  = slave chain done (first poll seeing the echo) - launch
  *   [1] sum mtask = master tail done - launch
@@ -927,6 +927,19 @@ static uint8_t nat_genbit;       /* generation parity bit (cmd bit 3,
  * s_main.c's sentinel paint now starts at 0x3F880 so the watermark
  * stays readable. Region guard headroom bought: 128B. */
 #define spr_pair ((uint8_t (*)[64])0x0603F800)          /* [2][64] */
+/* LOOP 27 q4 SLVPAIR: the SLAVE composes from this table but never
+ * purges its cache (s_main.c has no purge), so a pair the master claims
+ * late in the window (LOOP 19 late claim, after the slave last touched
+ * the line) reads as 0xFF there and the set draws in the shadow ramp.
+ * Census 2026-09-07: every ramp draw was on the slave. The compose
+ * reads through the uncached alias — one byte per record. */
+#define BMT_PAR    (*(volatile uint32_t *)0x26028FB8)   /* bm_tail's par, 0xFF idle */
+#define CLAIM_DONE (*(volatile uint32_t *)0x2603A7B0)   /* late claim done this cycle (SLC scratch, DIAG-only otherwise) */
+#ifdef SLV_PAIR_UNCACHED
+#define spr_pair_rd ((volatile uint8_t (*)[64])0x2603F800)
+#else
+#define spr_pair_rd spr_pair
+#endif
 #ifdef CAT1_MD
 /* PEN LINE MEMORY (2026-09-02, Mike's black cells): a set freed by the
  * drift check renders palette 0 — the sprite line, black at pens 13-15 —
@@ -955,7 +968,7 @@ static uint8_t sused_prev[64];
 #ifdef PAL_STATIC
 #include "pal_scenes.h"                  /* generated: palscene_bake.py —
                                           * per-scene PAL_SH images +
-                                          * detect probes (PALSTATIC.md) */
+                                          * detect probes (docs/design/PALSTATIC.md) */
 /* Scene state + LUT rush. A scene switch collapses the cut's palette
  * trickle: the whole tile+text half of PAL_SH loads from the baked
  * image in ONE window and every tile/text memo generation bumps, so
@@ -994,6 +1007,35 @@ static uint8_t pscene_nomatch;  /* consecutive no-match landings; at
                                  * atomic whole-image load (the
                                  * gravestone-smear class). */
 #define PSCENE_SW (*(volatile uint32_t *)0x26028F5C)
+#ifdef MD_STATIC
+/* STATIC-SCENE (docs/design/STATIC-SCENE.md): per-scene static MD pen
+ * tables. At a confirmed scene load the four allocator tables are
+ * installed from the bake (tools/mdpen_bake.py) and the table's sets
+ * are PINNED: eviction and drift-free skip them, so a set's pens are
+ * exact for the whole scene whatever order the walk meets them in.
+ * Sets the table does not name still use the dynamic path on the
+ * spare pens. Unknown scene -> pins drop, dynamic allocator as before.
+ * Tables are plain const in .text (the .palscenes slot is 0x1100 bytes
+ * and pal_scenes.h already fills it). Counters in .bss (the 0x28F40
+ * scrap the old comment called free is pg_quiet/pg_deep — measured:
+ * two of four words read 0 every window): [0] installs, [1] evictions
+ * refused by a pin, [2] slot flushes at display-off, [3] frees refused
+ * by a pin, [4] installs refused because the live palette was not the
+ * scene's (title), [5] installs done from the display-on hold.
+ * tools/mdstatic_gate.py finds them by _mds_ctr. */
+#include "pal_scenes_md.h"
+static uint8_t mds_pin[128];
+static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
+static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
+                                          * PAL_SH is the IMAGE, not the game (heal ~9 vints):
+                                          * the hold-time distance check must not run then
+                                          * (it read 0 at the title and installed there) */
+static volatile uint32_t mds_ctr[6];     /* [4] installs refused (palette
+                                          * beyond MDS_TOL of the anchor),
+                                          * [5] spare */
+#define MDS mds_ctr
+#define MDS_TOL 40                       /* == tools/palscene_bake.py TOL */
+#endif
 #endif
 #ifdef GLOW_ANIM
 #include "glow_tab.h"                    /* generated: glow_bake.py —
@@ -1130,6 +1172,43 @@ static uint8_t pri_max[2];                  /* max level in pri_lut[par] */
  * region guard; these are master-only and boot-initialized in m_main
  * (fixed blocks are NOT zeroed like .bss). */
 #define cram_mirror ((uint16_t *)0x06028900)   /* 512B */
+#ifdef PAL_VBLANK
+/* PALETTE APPLY IN VBLANK (2026-09-08, LOOP27 18). On real 32X silicon a
+ * CRAM write is only accepted while PEN is asserted — vblank, hblank, or
+ * display-off — and is SILENTLY DROPPED during active scan
+ * (srcref/S32X_MiSTer rtl/32X/VDP.sv:170 gates palette access on PEN;
+ * :403/:405 assert PEN on VBLK / H_CNT 0x159..0x016 only). Our paints run
+ * inside the render window, lines ~20-190 = active scan, so on the MiSTer
+ * nearly every one vanished: the whole 32X layer drew black on black,
+ * which is the entire "black screen" arc (entry 18). ares accepts them
+ * all, which is why fifteen probe rounds never saw it.
+ *
+ * The fix is the idiom srcref/32X240pTestSuite uses and ships with:
+ * pri_vbi_handler (src/hw_32x.c:99) writes the whole palette inside the
+ * master's V-blank handler. Here: cram_set keeps updating the mirror and
+ * marks the entry dirty, but does NOT touch CRAM; cram_flush_vbl() drains
+ * every dirty entry at the flip, which the edge guard already pins inside
+ * vblank. 256 bits of dirt, one u32 per 32 entries. */
+#ifndef PAL_PEN
+static uint32_t cram_dirt[8];
+#endif
+static inline void cram_flush_vbl(void)
+{
+    volatile uint16_t *cram = (volatile uint16_t *)&MARS_CRAM;
+    for (int w = 0; w < 8; w++) {
+        uint32_t d = cram_dirt[w];
+        if (!d) continue;
+        cram_dirt[w] = 0;
+        do {
+            int b = __builtin_ctz(d);
+            d &= d - 1;
+            int i = w * 32 + b;
+            cram[i] = (uint16_t)(cram_mirror[i] & 0x7FFF);
+            DIAG[19]++;              /* CRAM writes actually performed */
+        } while (d);
+    }
+}
+#endif
 #define shadow_lut  ((uint8_t *)0x06028B00)    /* 256B */
 static volatile uint8_t shadow_dirty = 1;
 #define shadow_cur (*(volatile uint8_t *)0x26028CA0)  /* rebuild cursor;
@@ -1463,6 +1542,13 @@ static void mdp_free_set(unsigned s)
 {
     if (!mdp_s_line[s])
         return;
+#ifdef MD_STATIC
+    if (mds_pin[s]) {                        /* table set: never freed
+                                              * inside its scene */
+        MDS[3]++;
+        return;
+    }
+#endif
     unsigned l = (unsigned)(mdp_s_line[s] - 1);
     for (int p = 0; p < 8; p++) {
         unsigned pen;
@@ -1660,6 +1746,9 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
                 unsigned age;
                 if (s2 == s || mdp_s_line[s2] != (uint8_t)(bestl + 1))
                     continue;
+#ifdef MD_STATIC
+                if (mds_pin[s2]) { MDS[1]++; continue; }
+#endif
                 age = (uint8_t)(stamp - mdp_s_stmp[s2]);
                 /* >= 12: a set's cells re-stamp every <= 9 windows now
                  * (1 tile + 4 B + 4 A rotation) — the old >= 8 gate
@@ -1706,6 +1795,74 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
     DIAG[35]++;                              /* set assigns */
     return 1;
 }
+#ifdef MD_STATIC
+/* Install scene `sc`'s baked pen tables wholesale and invalidate every
+ * VRAM slot so each pattern re-converts under the table's remap — the
+ * same invalidation mdp_free_set relies on for a relocation, applied to
+ * the whole map. Refcounts and owners are rebuilt from the maps so the
+ * per-window live CRAM refresh keeps tracking fades exactly as now. */
+static void mds_install(unsigned sc, uint8_t stamp)
+{
+    /* SELECTIVE INVALIDATION: a slot's pattern depends only on its set's
+     * (line, pixel->pen map); a set whose dynamic assignment already
+     * equals the table keeps its slots (same remap -> same bytes), so an
+     * install after the reveal re-converts only the sets that change —
+     * the wrong-sky case — instead of blanking the whole plane. */
+    uint8_t changed[128];
+    for (unsigned s2 = 0; s2 < 128; s2++) {
+        int same = mdp_s_line[s2] == mds_s_line[sc][s2];
+        if (same && mdp_s_line[s2])
+            for (int p = 0; p < 8; p++)
+                if ((mds_s_used[sc][s2] & (1u << p))
+                    && mdp_s_map[s2 * 8 + p] != mds_s_map[sc][s2 * 8 + p])
+                    same = 0;
+        changed[s2] = (uint8_t)!same;
+    }
+    for (int i = 0; i < MDP_LINES * 16; i++) {
+        mdp_line_c[i] = mds_line_c[sc][i];
+        mdp_pen_rc[i] = 0;
+        mdp_pen_own[i * 2] = mdp_pen_own[i * 2 + 1] = 0;
+    }
+    for (unsigned s2 = 0; s2 < 128; s2++) {
+        mdp_s_line[s2] = mds_s_line[sc][s2];
+        mdp_s_used[s2] = mds_s_used[sc][s2];
+        mdp_s_vol[s2]  = 0;
+        mdp_s_stmp[s2] = stamp;
+        mds_pin[s2] = mdp_s_line[s2] ? 1 : 0;
+        for (int p = 0; p < 8; p++) {
+            unsigned pen = mds_s_map[sc][s2 * 8 + p];
+            mdp_s_map[s2 * 8 + p] = (uint8_t)pen;
+            mdp_s_qc[s2 * 8 + p]  = mdp_s_line[s2] ? mdp_line_c[(mdp_s_line[s2] - 1) * 16 + pen] : 0;
+            if (mdp_s_line[s2] && (mdp_s_used[s2] & (1u << p))) {
+                unsigned i = (unsigned)(mdp_s_line[s2] - 1) * 16 + pen;
+                if (!mdp_pen_rc[i]) {
+                    mdp_pen_own[i * 2]     = (uint8_t)s2;
+                    mdp_pen_own[i * 2 + 1] = (uint8_t)p;
+                }
+                mdp_pen_rc[i]++;
+            }
+        }
+    }
+    for (int i = 0; i < NSETS * NWAYS; i++)
+        if (md_tag[i] != 0xFFFFFFFFu && changed[(md_tag[i] >> 16) & 0x7F])
+            md_tag[i] = 0xFFFFFFFFu;
+    MDS[0]++;
+}
+
+/* Display-off flush: the old scene's tiles never compete with the new
+ * scene's for slots. Runs inside the blank the display gate already
+ * holds, so nothing visible changes. */
+static void mds_flush(void)
+{
+    for (int i = 0; i < NSETS * NWAYS; i++) {
+        md_tag[i] = 0xFFFFFFFFu;
+        md_ref[i] = 0;
+    }
+    for (int i = 0; i < NSETS * NWAYS / 32; i++)
+        md_dirty[i] = 0;
+    MDS[2]++;
+}
+#endif
 #endif
 
 typedef struct {
@@ -1936,7 +2093,17 @@ RAMCODE static void build_maps(int par, uint16_t bank1)
 
 /* text scan + sprite scan + sticky allocation + priority LUT: the fast
  * final stage, one chunk in the chunked path */
-RAMCODE static void bm_tail(struct bm_state *a, int par)
+RAMCODE static void bm_tail_body(struct bm_state *a, int par);
+#define BMT_DONE ((volatile uint32_t *)0x2603A7B4)   /* [par] bm_tail completions */
+#define BMT_AT_CLAIM ((volatile uint32_t *)0x2603A7BC) /* [par] BMT_DONE seen at the claim */
+static void bm_tail(struct bm_state *a, int par)
+{
+    BMT_PAR = (uint32_t)par;
+    bm_tail_body(a, par);
+    BMT_PAR = 0xFF;
+    BMT_DONE[par & 1]++;
+}
+static void bm_tail_body(struct bm_state *a, int par)
 {
     for (int row = 0; row < 28; row++)
         for (int col = 24; col < 64; col++) {
@@ -1959,6 +2126,13 @@ RAMCODE static void bm_tail(struct bm_state *a, int par)
             continue;
         if ((d[4] & 0x3F) == 0x3F)
             continue;                        /* shadows use reserved pair 15 */
+#if defined(MD_SPR) && defined(SPR_MD_FREE)
+        /* LOOP 27 q4 SPRMDFREE: a record the MD VDP renders needs no
+         * 32X pair; a set live ONLY through such records must not hold
+         * one (census: ~1 of 14 pairs at every failed late claim). */
+        if (d2 & 0x2000)
+            continue;
+#endif
         sused[d[4] & 0x3F] = 1;
     }
 
@@ -2202,7 +2376,16 @@ RAMCODE static void bm_tail(struct bm_state *a, int par)
      * the absent set's colours (Neff black, 2026-09-02) and the FM span
      * grew with the extra paints (the stutter). One pass of memory. */
     for (int q = 1; q < 15; q++)
+#ifdef LATE_KEEP
+        /* LOOP 27 entry 6: a pair claimed LATE this cycle (pr_age 0, owner
+         * absent from the previous snapshot this build scanned) must
+         * survive the rebuild — at one cycle per vint the chunked build
+         * routinely completes after the claim and wiped it, and the set
+         * drew in the shadow ramp for the whole cycle. */
+        if (pr_key[q] != 0xFF && (sused_prev[pr_key[q]] || pr_age[q] == 0))
+#else
         if (pr_key[q] != 0xFF && sused_prev[pr_key[q]])
+#endif
             spr_pair[par][pr_key[q]] = (uint8_t)q;
     for (int sc = 0; sc < 64; sc++)
         /* HELD-PAIR WINDOW (2026-09-05, Zeus): the game shows Zeus one
@@ -2562,14 +2745,91 @@ __attribute__((always_inline))
  * mirror coherent), so gating produces BYTE-IDENTICAL CRAM contents and
  * simply deletes the redundant traffic. Steady state (no fade) = zero
  * CRAM writes. This is removed FM-hold work, not redistributed —
- * LOOP.md's law for the ares cadence fix. */
+ * docs/log/LOOP.md's law for the ares cadence fix. */
+#ifdef PAL_PEN
+/* PEN-GATED CRAM WRITE (2026-09-08, LOOP27 22). Real silicon accepts a
+ * palette write ONLY while PEN is asserted — vblank, hblank, or display
+ * off — and drops it silently during active scan (srcref/S32X_MiSTer
+ * rtl/32X/VDP.sv:170 gates palette access on PEN; :403/:405 assert it on
+ * VBLK or H_CNT 0x159..0x016). PEN is bit 13 of the SAME register we
+ * already read for FS: reg 0xA returns {VBLK,HBLK,PEN,11'h0,FEN,FS}
+ * (VDP.sv:165), i.e. MARS_VDP_FBCTL & 0x2000.
+ *
+ * WHY NOT THE VBLANK FLUSH (PAL_VBLANK, entry 19): that flushed at the
+ * flip, the only point in our frame that is both vblank AND FM=1 — and
+ * on hardware the flip rarely lands, so nothing flushed and the screen
+ * went ENTIRELY to the MD backdrop (entry 22). The test suite's
+ * apply-in-the-VBI-handler idiom assumes the master owns FM outright,
+ * which it does and we do not: our 68K holds FM for most of the frame.
+ * HBLANK is the way out — it comes round every scanline, and the render
+ * window already holds FM, so PEN is the only thing left to wait for.
+ *
+ * BOUNDED: ~1200 FRT ticks, about one scanline, then write anyway. An
+ * unbounded spin would hang on any machine that never reports PEN, and
+ * this must never be able to wedge the pipeline. */
+/* v2 (2026-09-08, entry 23): the per-entry spin was WRONG ON HARDWARE.
+ * A ~1200-tick wait per changed entry, times the hundreds that change on
+ * a scene cut, is hundreds of scanlines of spinning inside the render
+ * window — the window blows its budget, compose and blit never run, the
+ * framebuffer stays all-zero and the screen goes to a flat CRAM 0.
+ * (Mike's MiSTer: uniform green = the BOOT_SHSTAGE stage colour in
+ * entry 0, with an empty FB on top of it. ares never showed it because
+ * ares reports PEN asserted, so the spin never spun.)
+ *
+ * BURST instead: wait for PEN ONCE, then write entries back to back for
+ * as long as PEN holds — hblank fits many stores — and only wait again
+ * when it drops. Plus a hard per-window BUDGET: whatever is still dirty
+ * when the budget runs out stays dirty and goes in the next window. The
+ * palette can lag a frame; the pipeline must never stall. */
+static uint32_t cram_dirt[8];
+static void cram_flush_pen(void)
+{
+    volatile uint16_t *cram = (volatile uint16_t *)&MARS_CRAM;
+    for (int w = 0; w < 8; w++) {
+        uint32_t d = cram_dirt[w];
+        while (d) {
+            /* v5 (entry 28): NO WAIT, EVER. Diffing ares against the RTL
+             * (entry 27) showed a palette write outside hblank/vblank
+             * does not vanish — it STALLS the SH-2 until PEN, in both
+             * implementations (ares io-internal.cpp:355 spins the CPU;
+             * VDP.sv:170 withholds ACK_N). So a software wait for PEN is
+             * a second copy of a stall the bus already does, which is
+             * what starved the window in v1-v2. Check PEN and SKIP: if
+             * it is low, leave the rest dirty and come back. The caller
+             * that matters runs in vblank, where PEN is asserted for the
+             * whole interval and the whole set drains in one burst with
+             * no stall at all. */
+            /* PEN is up: burst while it holds */
+            do {
+                int b = __builtin_ctz(d);
+                d &= d - 1;
+                int i = w * 32 + b;
+                cram[i] = (uint16_t)(cram_mirror[i] & 0x7FFF);
+                DIAG[19]++;
+            } while (d && (MARS_VDP_FBCTL & 0x2000));
+        }
+        cram_dirt[w] = 0;
+    }
+}
+#endif
 static inline void cram_set(volatile uint16_t *dst, int idx, uint16_t v)
 {
     if (cram_mirror[idx] != v) {
         cram_mirror[idx] = v;
+#ifdef PAL_PEN
+        (void)dst;                      /* cram_flush_pen writes by index */
+        cram_dirt[idx >> 5] |= 1u << (idx & 31);
+#elif defined(PAL_VBLANK)
+        /* deferred: the write lands in cram_flush_vbl() at the flip,
+         * inside vblank, where hardware actually accepts it. dst is
+         * unused on this path — the flush addresses CRAM by index. */
+        (void)dst;
+        cram_dirt[idx >> 5] |= 1u << (idx & 31);
+#else
         dst[0] = (uint16_t)(v & 0x7FFF);
-        shadow_dirty = 1;
         DIAG[19]++;                     /* CRAM writes actually performed */
+#endif
+        shadow_dirty = 1;
     }
 }
 
@@ -2757,7 +3017,7 @@ RAMCODE static void apply_cram(int par)
      * gravestone": rom/s16_arttail.bs1 had sprite set 0's pair wearing
      * the intro flash's red/white/blue with PAL_SH holding the greys and
      * PAL_SETGEN[128] still 0 — a memo hit over a stale paint, the third
-     * incident of this class (BOSSFIGHT.md "first paint stood")). The
+     * incident of this class (docs/design/BOSSFIGHT.md "first paint stood")). The
      * verify-per-row law: forget one slot's generation per window, so
      * whatever the memo missed repaints within 32 windows. Cost: one
      * redundant 8/16-entry paint per window. */
@@ -3238,7 +3498,7 @@ static __attribute__((noinline)) const uint8_t *bake_find(uint16_t addr, uint16_
 #endif
 
 #ifdef MD_SPR
-/* ============== P3 M2: MD-VDP MOB OFFLOAD (P3.md) ==============
+/* ============== P3 M2: MD-VDP MOB OFFLOAD (docs/design/P3.md) ==============
  * Claim pass + SAT build, master, once per fresh record landing (the
  * harvest fill site). Claimed records get w2 bit13 (unread by every
  * other consumer — recon 2026-08-28) and never touch compose or the
@@ -3308,7 +3568,7 @@ static int mdspr_pal_equal(unsigned s, unsigned a)
     return 1;
 }
 
-/* PER-SCENE MDSPR (v3, BOSSFIGHT.md): each scene owns an art blob,
+/* PER-SCENE MDSPR (v3, docs/design/BOSSFIGHT.md): each scene owns an art blob,
  * key slice, and anchor. Scene follows the PALSTATIC detect; a
  * switch posts 0xBA50|scene on COMM8 (the heal-channel pattern) so
  * the 68K re-uploads VRAM 0x8000 from the scene's cart blob, and
@@ -3601,10 +3861,41 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             shad = (bottom - top) <= SHAD_CAP;
 #endif
         } else {
-            uint8_t pr = spr_pair[par][d4 & 0x3F];
+            uint8_t pr = spr_pair_rd[par][d4 & 0x3F];
+#ifdef DRAW_ADOPT
+            /* LOOP 27 entry 6 option 1c: the per-parity map is a cache of
+             * pr_key (the ownership truth, one byte per pair). At one
+             * cycle per vint the slave's draw meets maps that lag the
+             * claim; when the map says none, ask the truth (uncached,
+             * 14 compares, only for unmapped records). A set with a pair
+             * anywhere draws with it; only a pairless set ramps. */
+            if (pr == 0xFF) {
+                const volatile uint8_t *pk = (const volatile uint8_t *)0x260283C0;
+                for (int t = 1; t < 15; t++)
+                    if (pk[t] == (uint8_t)(d4 & 0x3F)) { pr = (uint8_t)t; break; }
+            }
+#endif
 #ifdef SPR_LATE
-            if (pr == 0xFF)
+            if (pr == 0xFF) {
                 SPRLATE[3]++;                /* drew in the shadow ramp */
+                /* LOOP 27 q4 play-pass census (lean slots 4-7, 0x3A7E8..):
+                 * WHO draws in the ramp and WHY. [4] on the slave (SP in
+                 * its 0x3F800-0x40000 stack), [5] the set already owns a
+                 * pair in pr_key (a stale map, adoptable at draw time),
+                 * ([6]/[7] belong to the claim-failure census below). */
+                {
+                    uint32_t sp_;
+                    __asm__ __volatile__("mov r15,%0" : "=r"(sp_));
+                    if ((sp_ & 0x000FFFFFu) >= 0x0003F800u)
+                        SPRLATE[4]++;
+                    /* PARITY TEST: does the OTHER parity's map (uncached)
+                     * hold a pair for this set right now? [5] */
+                    if (((volatile uint8_t (*)[64])0x2603F800)[par ^ 1][d4 & 0x3F] != 0xFF)
+                        SPRLATE[5]++;
+                    if (BMT_DONE[par & 1] != BMT_AT_CLAIM[par & 1])
+                        SPRLATE[6]++;        /* map rebuilt AFTER this cycle's claim */
+                }
+            }
 #endif
 #ifdef DIRECT_FB
             /* UNMAPPED = SKIP, not ramp (2026-08-26): under DIRECTFB
@@ -4298,12 +4589,60 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
 __attribute__((noinline)) static void disp_gate(void)
 {
+#ifdef BOOT_GATEOFF
+    /* HARDWARE PROBE: never blank; the SH-2 forces the display on every
+     * call. If the screen shows the game, the gate's blank/release logic
+     * is the blocker (ours). If still black, the SH-2's mode write does
+     * not take on this core. */
+    MARS_VDP_DISPMODE = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X | MARS_VDP_MODE_256;
+    disp_blank = 0; r60_disp_on = 1;
+    return;
+#endif
+
     uint16_t base = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X;
+#ifdef MD_STATIC
+    /* PENDING MD TABLES (2026-09-07): the PALSTATIC detect fires once per
+     * scene and it fires at the TITLE, where the install is (rightly)
+     * refused by the distance rule; the level's palette then FADES IN
+     * after the reveal (measured: the hold releases before the distance
+     * passes), so the retry runs every 4th vint, blank or not, until the
+     * live palette is within TOL of the anchor. The install is selective
+     * (only sets whose remap changes re-convert), so doing it after the
+     * reveal touches the wrong tiles only. */
+    if (mds_loadgap) mds_loadgap--;
+    if (pscene_cur != 0xFF && pscene_cur < MDSTATIC_N) {
+        if (mds_scene_cur != 0xFF
+            && mds_table_of[mds_scene_cur] == mds_table_of[pscene_cur]) {
+            mds_scene_cur = pscene_cur;           /* same tables: just track
+                                                   * (ONLY when something is
+                                                   * installed — the first
+                                                   * cut tracked here while
+                                                   * the load gap was open
+                                                   * and never installed) */
+        } else if (!mds_loadgap) {
+            static uint8_t mds_tick;
+            if ((++mds_tick & 3) == 0) {
+                const uint16_t *ap = pscene_pal[pscene_cur];
+                unsigned dist = 0;
+                for (unsigned i = 0; i < 1024; i++)
+                    dist += (PAL_SH[i] != ap[i]);
+                if (dist <= MDS_TOL) {
+                    mds_install(mds_table_of[pscene_cur], disp_hold);
+                    mds_scene_cur = pscene_cur;
+                    MDS[5]++;                     /* late installs (retry path) */
+                }
+            }
+        }
+    }
+#endif
     if (!r60_disp_on) {
         if (!disp_blank) {
             MARS_VDP_DISPMODE = (uint16_t)(base | MARS_VDP_MODE_OFF);
             disp_blank = 1;
             DISP_CENSUS += 0x10000u;     /* blanks entered */
+#ifdef MD_STATIC
+            mds_flush();
+#endif
         }
         disp_settle = 0; disp_hold = 0;
     } else if (disp_blank) {
@@ -4404,7 +4743,7 @@ static inline int rowslot(int y)
  * (statics pixel-identical), and 1.77x SLOWER on ares — 47.34 -> 83.95
  * us/row with 14% of rows never raising TE. Retired from the tree rather
  * than left behind a flag that would hand someone a 1.77x-slower rom;
- * LOOP.md negative 21 carries the numbers and the two traps (CHCR TS
+ * docs/log/LOOP.md negative 21 carries the numbers and the two traps (CHCR TS
  * bits, per-CPU DMAOR) so it does not have to be rebuilt to be believed.
  * Likewise BLITUNC: cached and uncached FB writes measure 47.34 vs 47.46
  * on ares, so the write-buffer premise below is false — but the CONCLUSION
@@ -4431,7 +4770,7 @@ RAMCODE static void blit_half(int ylo, int yhi)
     vseq++;
 #endif
 #ifdef ROW_DEFER
-    /* ROW-DEFER (2026-08-25, the purple conviction — REBUILD.md):
+    /* ROW-DEFER (2026-08-25, the purple conviction — docs/design/REBUILD.md):
      * complete-or-defer AT THE SHIP. A band mid-compose has cleared-
      * not-yet-redrawn sbuf rows; shipping them writes MD-through zeros
      * over the bank's coherent last frame — measured landing at frame
@@ -5050,7 +5389,7 @@ RAMCODE static void blit_around(int lo, int hi, int bank, unsigned mask)
  * concurrent compose first; the slave services SYNC[4] between compose
  * strips (slave_service_stream) and echoes SYNC[5] when its blit path
  * is done. This removes the full-compose slave_wait from the 68K's
- * pre-ack critical path (LOOP.md iter4: retry-loop saturation). */
+ * pre-ack critical path (docs/log/LOOP.md iter4: retry-loop saturation). */
 /* ---- UNPAIR STEP 2: compose is fully CONCURRENT. Windows now hold
  * only what genuinely needs the 68K stopped: the vblank blit slices
  * and (window 0) the staging snapshot + CRAM. All composition — tile
@@ -5077,7 +5416,7 @@ void text_capture(void)
     volatile uint32_t *td = (volatile uint32_t *)TEXT_U;
     volatile uint32_t *ts = (volatile uint32_t *)FB_TEXT;
 #if defined(R60) && defined(FB_SPR_READ)
-    /* S1 STRIKE (PIPELINE.md): sprite snapshot rides the same
+    /* S1 STRIKE (docs/design/PIPELINE.md): sprite snapshot rides the same
      * pre-flip capture — FB_SPR holds the game's own ordered vint
      * upload (full list + terminator every vint, LOOP20 measured),
      * written into THIS draw bank during the gap. Copy through the
@@ -5176,6 +5515,21 @@ static uint16_t visr_t0;                 /* ISR entry FRT — flip_span's
                                           * (body-fallback calls sample a
                                           * stale one: fallback is ~0.1%,
                                           * tolerated in a probe counter) */
+#ifdef FLIP_DEFER
+/* DEFERRED FLIP (2026-09-08, LOOP27 9): the edge guard below used to
+ * DROP a flip that missed vblank, and at one game-frame per vint it
+ * misses most of them (flips on ~17% of vints = the 60Hz blocker).
+ * The FPGA RTL says hardware does not tear on a late FBCTL write — it
+ * defers: srcref/S32X_MiSTer rtl/32X/VDP.sv latches `FS <= FBCR.FS`
+ * only when VBLK. ares approximates it by latching immediately
+ * mid-scan (the tear the guard exists to dodge), so we cannot simply
+ * write late and rely on the hardware behaviour — Mike's gate is ares.
+ * Instead do in software what the silicon does: on a late arrival ARM
+ * this flag, and commit the flip at the TOP of the next vblank, where
+ * the write is in-window for both ares and hardware. The frame ships
+ * one vint later instead of never. */
+static volatile uint8_t flip_deferred;
+#endif
 #endif
 static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
                                           * (K2_FREE edge guard: too
@@ -5273,6 +5627,22 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * is mandatory and exactly right for the game (restore = the bytes
      * it just wrote), and pg_watch + the builder's claim gate contain
      * its poison. */
+#ifdef PAL_PEN
+    /* PALETTE DRAIN, at the TOP of flip_span (entry 28). This is the one
+     * point in our frame that is inside vblank AND holds FM: the caller
+     * has seen the 68K's post, which guarantees FM, and the edge guard
+     * downstream is what keeps this within the 38-line vblank. PEN is
+     * asserted across all of it, so the whole dirty set drains in one
+     * burst with no stall.
+     *
+     * CRITICALLY IT IS BEFORE EVERY DECLINE PATH — the edge guard, the
+     * DIRECT_FB gate, the NATIVE_FRAME gate. PAL_VBLANK put the drain
+     * after the flip write, so a declined flip drained nothing, and on
+     * hardware most flips decline: CRAM stayed empty and the screen went
+     * to the MD backdrop (entry 22). The palette must not depend on the
+     * flip landing. */
+    cram_flush_pen();
+#endif
     pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
 #ifdef PG_STICKY
     /* marks enter WATCH: a pointer-load mark can arrive
@@ -5323,6 +5693,19 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     if ((uint16_t)(frt() - visr_t0) > 1650) {
         MARS_SYS_COMM4 = 0xF1FF;
         DIAG[44]++;
+#ifdef FLIP_DEFER
+        /* Not a dropped frame any more: arm, and the next vblank's ISR
+         * commits it before it waits for that vint's window. Everything
+         * the decline path already guarantees still holds — the capture
+         * and truth drain above are kept, cycle_dirt carries the restore
+         * set to whichever flip actually lands, and the held 68K is
+         * released on F1FF. The commit re-runs the capture (the game
+         * writes during the intervening vint MUST reach truth, or the
+         * restore writes a stale page into the fresh bank — the bank
+         * disease the k2 comments describe). DIAG[6] counts arms. */
+        flip_deferred = 1;
+        DIAG[6]++;
+#endif
         return 0;
     }
 
@@ -5402,6 +5785,19 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
          * slave the wrong label for a whole window. */
         fb_draw_par ^= 1;
 #endif
+#ifdef PAL_PEN
+        /* Second drain, AFTER the flip: this is inside vblank, where PEN
+         * is asserted for the whole interval, so whatever the window's
+         * opportunistic pass could not place lands here in one burst. */
+        cram_flush_pen();
+#endif
+#ifdef PAL_VBLANK
+        /* THE PALETTE LANDS HERE: immediately after the flip write, which
+         * the edge guard has already pinned inside vblank, so PEN is
+         * asserted and hardware accepts every store. FM is still ours at
+         * this point (same precondition the bar/capture writes rely on). */
+        cram_flush_vbl();
+#endif
         /* ONCE THE WRITE IS ISSUED THE FLIP IS COMMITTED. Mike's
          * first pres-2.0 ares state read [31]=10 in 645 cycles:
          * even inside the gate, ares sometimes latches this write
@@ -5425,6 +5821,27 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
             if ((uint16_t)(frt() - w0) >= 200)
                 DIAG[31]++;          /* late latch (was: abort) */
         }
+#ifdef BOOT_ABBOTH
+        /* BOTH-BANKS BAR (2026-09-08, LOOP27 17). The pre-flip bar goes
+         * into the bank being drawn; this one goes into the bank the
+         * flip just handed us. Two writes per vint, one either side of
+         * the flip, so BOTH banks carry the bar and "which bank is
+         * displayed" stops being a variable at all. Same rows 8-15,
+         * same fixed index 1, still FM=1 and still ours.
+         *
+         * If the bar is STILL invisible on the FPGA with the mode forced
+         * on (BOOTGATEOFF) and the write proven to land (s16_abread came
+         * back green), then the master's in-game FB writes do not reach
+         * the display no matter which bank they are in, and banks and
+         * flips are both eliminated. This is the boot-time fliptest —
+         * which WORKED on hardware — moved into the live pipeline. */
+        {
+            volatile uint32_t *px2 = (volatile uint32_t *)
+                (0x24000000u + 0x200u + 8u * 320u);
+            for (int i = 0; i < 8 * 320 / 4; i++)
+                px2[i] = 0x01010101u;
+        }
+#endif
 #ifdef CRAM_FLIP
         /* ARC B v2: drain slots that have seen TWO flips since their
          * remap — both banks now carry the new-pair pixels, so the
@@ -5543,6 +5960,12 @@ void visr_vbi(void)
     if (!visr_arm)
         return;
     DIAG[49]++;
+#ifdef BOOT_FRTCHK
+    { static uint16_t t_last; uint16_t t = frt(); *(volatile uint16_t *)0x2000402C = (uint16_t)(t - t_last); t_last = t; }
+#endif
+#ifdef BOOT_VISRCHK
+    *(volatile uint16_t *)0x2000402A = (uint16_t)DIAG[49];   /* probe: V-ISR count on COMM10 */
+#endif
     /* VBLANK COUNT on COMM14 (2026-09-06): free after the boot handshake
      * (68K B007 -> master B008); the 68K stamps it at vint entry and at
      * the game's rte so a handler span is read unambiguously in frames.
@@ -5564,6 +5987,34 @@ void visr_vbi(void)
                                           * vint's post anyway) */
         return;
     }
+#ifdef FLIP_DEFER
+    int deferred_flipped = 0;
+    /* DEFERRED COMMIT: a flip armed last vint outside vblank lands HERE,
+     * at the top of this one, where visr_t0 is fresh so flip_span's edge
+     * guard passes by construction. COMM0 is clear (checked above), so no
+     * window is live and the FB is ours — the same precondition the
+     * window path relies on. The frame in the hidden bank was finished
+     * last vint; nat_shipped is still set (the decline returned before
+     * that gate), so the whole-frame gate accepts it. If flip_span
+     * declines again for a REAL reason (no fresh blit), the arm is spent
+     * and this vint falls through to the normal window path. DIAG[5]
+     * counts commits; DIAG[5] vs DIAG[6] is the deferral's yield. */
+    if (flip_deferred) {
+        flip_deferred = 0;
+        if (flip_span()) {
+            visr_flip_done = 1;
+            deferred_flipped = 1;        /* this vint's flip is spent */
+            DIAG[5]++;
+            DIAG[58]++;                  /* an ISR flip like any other */
+        }
+    }
+    /* DO NOT RETURN HERE. The loop below services the k1 announce
+     * (COMM6 0xB101 -> dreq_rearm + the 0xA001 echo), and under ARMGATE
+     * the 68K pushes ONLY after that echo. Returning on the commit
+     * starved every push: measured 3.4% speed, the game barely
+     * advancing. Fall through, arm and echo as usual, and skip only the
+     * second flip. */
+#endif
     do {
         c0 = MARS_SYS_COMM0;
         if (c0)
@@ -5686,6 +6137,13 @@ void visr_vbi(void)
         return;
     }
 #endif
+#ifdef FLIP_DEFER
+    if (deferred_flipped)
+        return;                          /* already flipped at the top of
+                                          * this vblank; the window was
+                                          * still armed and echoed above,
+                                          * which is all the 68K needs */
+#endif
     if (!flip_span())
         return;                          /* declined: body sees the flag
                                           * clear, tries later, declines
@@ -5727,7 +6185,7 @@ void slave_window_k(uint16_t cmd)
      * frame. Full eviction of staging (true double-buffer) is blocked
      * by 68K read-backs: collision tst.w's (0x6936+) and the round-
      * transition scratch save/restore in page 1 (0x1B760) — see
-     * LOOP.md iteration 1b findings. */
+     * docs/log/LOOP.md iteration 1b findings. */
     /* LOOP 7d THIRDS. The claim above — "~0.8ms, inside vblank even at
      * ares speed" — is MEASURED FALSE: 845 of 845 blit windows finished
      * their flip/restore pair OUTSIDE vblank, worst 55 lines against a
@@ -6001,7 +6459,7 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
      * only get away with it because their 72-row bands finish inside one
      * window gap; R2 is 80 rows and does not, so 32.2% of k=1 windows
      * pick up mid-compose and the master sits on SYNC[2] (6.39 lines
-     * against 0.21 for the other two — LOOP.md negative 25).
+     * against 0.21 for the other two — docs/log/LOOP.md negative 25).
      * rg = k instead: the outstanding compose is then R(k-1) against a
      * ship of R(k+1), disjoint in every window, and each band gets TWO
      * window-gaps to compose. No second compose slot is needed — the
@@ -6061,7 +6519,7 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
 #endif
     }
 #ifdef ROW_DEFER
-    /* ROW-DEFER (2026-08-25, the purple conviction — REBUILD.md): from
+    /* ROW-DEFER (2026-08-25, the purple conviction — docs/design/REBUILD.md): from
      * here until this band's cat1+text land (next link's drain above,
      * or the rg==2 inline drain below), the band's sbuf rows pass
      * through a cleared-not-yet-redrawn state. A blit slice that ships
@@ -6300,6 +6758,9 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
  * halves empty, 14 downward). ROM-resident, once per launch, <= 24
  * records. */
 #define QCLAIM_N (*(volatile uint32_t *)0x26028FB4)
+/* LOOP 27 q4 ramp census timing flags (uncached so the slave sees them
+ * live): which parity bm_tail is rebuilding right now (0xFF idle), and
+ * whether this cycle's late claim has completed for the composing par. */
 __attribute__((noinline))
 static void nat_quick_claim(int par)
 {
@@ -7121,8 +7582,23 @@ __attribute__((noinline)) static void nat_ph_flip(void)
     st_m(0x88);
 }
 #endif
+#ifdef BOOT_WSTAGE
+#define WSTAGE(col) do { ((volatile uint16_t *)0x20004200)[0] = (col); } while (0)
+#else
+#define WSTAGE(col) do { } while (0)
+#endif
+#ifdef BOOT_SHSTAGE
+/* HARDWARE BOOT PROBE (2026-09-07, MiSTer): stage word on COMM12 (the
+ * 68K's 0x600D wait paints the MD backdrop from it while the 32X display
+ * is still off) and 32X CRAM entry 0 (visible once the display is on). */
+#define SHSTAGE(n, col) do { *(volatile uint16_t *)0x2000402C = (n); \
+                             ((volatile uint16_t *)0x20004200)[0] = (col); } while (0)
+#else
+#define SHSTAGE(n, col) do { } while (0)
+#endif
 __attribute__((noinline)) static void m_boot_init(void)
 {
+    SHSTAGE(6, 0x7C00);                  /* BLUE: boot init entered */
     /* COLD-BOOT ZERO (2026-09-05, Mike's cold-start "blue and white
      * gravestones"). These fixed-address blocks are outside .bss, so a
      * power-on start leaves them as random SDRAM while a reset inherits
@@ -7195,6 +7671,7 @@ __attribute__((noinline)) static void m_boot_init(void)
 #endif
     for (int i = 0; i < 13 * 0x800; i++)
         TILEMAP_U[i] = 0;
+    SHSTAGE(7, 0x03FF);                  /* YELLOW: sbuf purchase done */
     for (int i = 0; i < 2048; i++)
         TEXT_U[i] = 0;
 #ifdef TILE_CLASS
@@ -7388,6 +7865,7 @@ __attribute__((noinline)) static void m_boot_init(void)
     }
     SYNC[0] = SYNC[1] = SYNC[2] = SYNC[3] = 0;
 #ifdef MD_SPR
+    SHSTAGE(7, 0x7FE0);                  /* CYAN: P3 scratch */
     /* P3: SAT/palette scratch starts clean — an all-zero entry 0
      * (link 0) ends the MD sprite scan immediately, so pre-claim
      * publishes ship an EMPTY table, never boot garbage. */
@@ -7456,6 +7934,34 @@ __attribute__((noinline)) static void m_boot_init(void)
     }
 
     /* Master is SDRAM-resident from here on: the MD may set RV=1 now. */
+#ifdef BOOT_FLIPTEST
+    /* HARDWARE PROBE: the display path alone. Bank A rows 0-7 = index 1
+     * (magenta), flip; bank B rows 8-15 = index 2 (green), flip; halt.
+     * Hardware semantics: the screen shows bank A = one magenta bar at
+     * the top. Green bar = the displayed bank is the one being drawn.
+     * Both = single buffer. Neither = SH-2 FB writes are not displayed. */
+    {
+        volatile uint32_t *px = (volatile uint32_t *)(0x24000000u + 0x200u);
+        ((volatile uint16_t *)0x20004200)[0] = 0x0000;
+        ((volatile uint16_t *)0x20004200)[1] = 0x7C1F;
+        ((volatile uint16_t *)0x20004200)[2] = 0x03E0;
+        for (int i = 0; i < 8 * 320 / 4; i++) px[i] = 0x01010101u;
+        {
+            uint16_t fs = MARS_VDP_FBCTL & 1;
+            MARS_VDP_FBCTL = fs ^ 1;
+            while ((MARS_VDP_FBCTL & 1) == fs) ;
+        }
+        px = (volatile uint32_t *)(0x24000000u + 0x200u + 8u * 320u);
+        for (int i = 0; i < 8 * 320 / 4; i++) px[i] = 0x02020202u;
+        {
+            uint16_t fs = MARS_VDP_FBCTL & 1;
+            MARS_VDP_FBCTL = fs ^ 1;
+            while ((MARS_VDP_FBCTL & 1) == fs) ;
+        }
+        for (;;) ;
+    }
+#endif
+    SHSTAGE(7, 0x7FFF);                  /* WHITE: about to post 0x600D */
     MARS_SYS_COMM14 = 0x600D;
 
 }
@@ -7500,12 +8006,15 @@ RAMCODE void m_main(void)
 {
     /* Release the secondary SH-2 from its S_OK wait. */
     MARS_SYS_COMM4 = 0;
+    SHSTAGE(1, 0x001F);                  /* m_main entered (SDRAM code runs) */
 
     Hw32xInit(MARS_VDP_MODE_256, 0);
+    SHSTAGE(4, 0x001F);                  /* RED: Hw32xInit done */
 #ifdef FBDMA_PROBE
     fb_probe();
 #endif
     MARS_VDP_DISPMODE = MARS_NTSC_FORMAT | MARS_224_LINES | MARS_VDP_PRIO_32X | MARS_VDP_MODE_256;
+    SHSTAGE(5, 0x03E0);                  /* GREEN: display mode set */
     m_boot_init();
 
     int par = 0;
@@ -7744,6 +8253,31 @@ RAMCODE void m_main(void)
          * snapshots staging (regs, sprite list, pages, CRAM) for the
          * next frame and flips parity. ---- */
         if ((c0 & 0xFFCF) != 0x2000) {
+#ifdef BOOT_FMCHK
+            if (*(volatile uint16_t *)0x2000402A == 0xDEAD) {
+                ((volatile uint16_t *)0x20004200)[0] = 0x001F;     /* RED: 68K says FM stuck */
+                MARS_SYS_INTMSK &= 0x7FFF;                          /* try the drop again */
+                ((volatile uint16_t *)0x20004200)[0] =
+                    (MARS_SYS_INTMSK & 0x8000) ? 0x7C00 : 0x03E0;   /* BLUE: cannot clear / GREEN: cleared */
+                *(volatile uint16_t *)0x2000402A = 0;
+            }
+#endif
+#ifdef ARM_GATE
+            /* LOOP 27 entry 7 — LATE ANNOUNCE SERVICE. No window is open
+             * here. When the previous window overran the vint, the V-ISR
+             * bailed "stale" at line 0 and the 68K's announce came after
+             * its ack (line ~20+): nobody armed, and the push landed on
+             * the old transfer's counter (displaced; Mike's census: 88 of
+             * 97 tears). Service it now, exactly as the ISR would: the
+             * last landing is harvested (its window closed) and nothing
+             * is in flight (the 68K pushes only after this echo). */
+            if (MARS_SYS_COMM6 == 0xB101) {
+                MARS_SYS_COMM6 = 0;
+                dreq_rearm(1);
+                MARS_SYS_COMM4 = 0xA001;
+                ((volatile uint32_t *)0x2603A7C8)[0]++;   /* late arms (body) */
+            }
+#endif
             /* no window pending: advance the queued band by ONE strip.
              * SELF-PACING: heavy single-shot phases (fills, build_maps)
              * only run in the EARLY part of the frame — near the next
@@ -8054,7 +8588,7 @@ RAMCODE void m_main(void)
                  * stopped rather than recomputing it.
                  * Phases 4/5/default are single-shot and stay atomic. */
 #ifndef CMD_INT
-                /* CMDINT IS RETIRED (see LOOP11.md): the shipping build
+                /* CMDINT IS RETIRED (see docs/log/LOOP11.md): the shipping build
                  * keeps the original ATOMIC strip. The yieldable form
                  * below costs ~5% of compose on ares for a preemption
                  * that nothing sets, and it reads win_pend, which only
@@ -8388,7 +8922,7 @@ RAMCODE void m_main(void)
 
             /* (iter4) the previous window's concurrent compose is NO
              * LONGER drained here: that slave_wait stalled the 68K for a
-             * whole compose (the retry-loop saturation, LOOP.md iter4).
+             * whole compose (the retry-loop saturation, docs/log/LOOP.md iter4).
              * The wait moves POST-ACK (off the 68K's critical path), and
              * the per-window blit reaches the slave via the SYNC[4]
              * preempt mailbox — pickup latency <=1 compose strip. */
@@ -8604,6 +9138,7 @@ RAMCODE void m_main(void)
             if (k == 2 && !skip)
                 flip_span();
 #endif
+            WSTAGE(0x03E0);                      /* GREEN: flip span done */
             diag_add(6, tp);                 /* slot 6: flip+truth+restore */
 #if (defined(DIRECT_FB) || defined(NATIVE_FRAME)) && defined(R60)
             /* STAGE-2 A/B RESULT (2026-08-27): deleting the landing wait
@@ -8623,6 +9158,7 @@ RAMCODE void m_main(void)
             if (0)   /* v2: blit DURING the push; the 68K waits for our ack */
 #endif
             {
+                WSTAGE(0x001F);                  /* RED: window, at the landing wait */
                 uint16_t w0 = frt();
                 uint32_t t_prev = SH2_DMA_TCR0 & 0xFFFFFFu;
                 while ((uint16_t)(frt() - w0) < 4000) {
@@ -8634,6 +9170,7 @@ RAMCODE void m_main(void)
                     t_prev = t_now;
                 }
             }
+            WSTAGE(0x03FF);                      /* YELLOW: landing wait done */
 #endif
 #ifdef FM_LATE
             /* FM LATE (2026-09-06): the 68K drops FM after our F103 and
@@ -8771,7 +9308,7 @@ RAMCODE void m_main(void)
 #endif
                 /* LOOP 7d thirds — master takes the upper half of each
                  * band, the slave the lower (see slave_window_k).
-                 * DO NOT EVEN THESE THIRDS — LOOP.md negative 23. */
+                 * DO NOT EVEN THESE THIRDS — docs/log/LOOP.md negative 23. */
 #ifdef WIN_TWO
                 /* 2-window cycle, EVEN split (v8 ares: 144/80 rows made
                  * k1 fat -> rejects 4.7%): k1 ships rows 0-112 (R0 +
@@ -9218,6 +9755,11 @@ RAMCODE void m_main(void)
                              * safely under (~10 landings). */
                             pscene_nomatch = 0;
                             pscene_cur = 0xFF;
+#ifdef MD_STATIC
+                            for (unsigned s2 = 0; s2 < 128; s2++)
+                                mds_pin[s2] = 0;   /* foreign span: dynamic rules */
+                            mds_scene_cur = 0xFF;
+#endif
                         }
                         if (hit < PSCENE_N && hit != pscene_cur) {
                             if (hit != pscene_cand) {
@@ -9249,6 +9791,24 @@ RAMCODE void m_main(void)
                                     unsigned s = hit;
                                     pscene_cur = (uint8_t)s;
                                     const uint16_t *sp3 = pscene_pal[s];
+#ifdef MD_STATIC
+                                    /* The MD tables install ONLY for a live
+                                     * palette the bake itself would have
+                                     * classified as this scene: tile-half
+                                     * distance to the anchor within the
+                                     * bake's TOL (40). The 8-pair probes
+                                     * match at the TITLE too (the game
+                                     * preloads the level palette words the
+                                     * probes sit on) — the title's own sets
+                                     * differ by hundreds of words, and an
+                                     * install there pinned 39 level sets
+                                     * over the logo (Mike's pass 2026-09-07).
+                                     * Measured before the image copy below
+                                     * overwrites PAL_SH. */
+                                    unsigned mds_dist = 0;
+                                    for (unsigned i = 0; i < 1024; i++)
+                                        mds_dist += (PAL_SH[i] != sp3[i]);
+#endif
                                     for (unsigned i = 0; i < 1024; i += 4) {
                                         PAL_SH[i + 0] = sp3[i + 0];
                                         PAL_SH[i + 1] = sp3[i + 1];
@@ -9257,6 +9817,17 @@ RAMCODE void m_main(void)
                                     }
                                     for (unsigned g2 = 0; g2 < 128; g2++)
                                         PAL_SETGEN[g2]++;
+#ifdef MD_STATIC
+                                    if (s < MDSTATIC_N && mds_dist <= MDS_TOL) {
+                                        mds_install(mds_table_of[s], (uint8_t)win_no);
+                                        mds_scene_cur = (uint8_t)s;
+                                    } else
+                                        MDS[4]++;        /* refused: foreign palette
+                                                          * (the title) — the hold
+                                                          * check retries at the
+                                                          * next cut */
+                                    mds_loadgap = 32;
+#endif
                                     pscene_rush = 8;
                                     /* HEAL CHANNEL (v1.1a): every
                                      * scene load posts 0xBAD2 — the
@@ -9293,6 +9864,9 @@ RAMCODE void m_main(void)
                      * Remember where this vint's whole records landed;
                      * the launch copies the freshest OK landing. */
                     nat_spr_ok = 1;
+#ifdef BOOT_PKTCHK
+                    { static uint16_t okl; okl++; *(volatile uint16_t *)0x2000402A = okl; }   /* probe: whole landings */
+#endif
                     nat_rec0 = (uint16_t)rec0;
                     nat_nrec = (uint16_t)nrec;
 #else
@@ -9325,6 +9899,22 @@ RAMCODE void m_main(void)
                 } else {
                     DRQR[7]++;               /* torn/short: stale beats it */
                     DIAG[17]++;              /* counts as incomplete */
+#ifdef R60
+                    /* LOOP 27 entry 7 — TEAR CENSUS (GUI-only tears, headless
+                     * never enters this branch): DRQR[0..4] are free under
+                     * R60. [0] landed 1..25 (header never arrived), [1]
+                     * 26..923 (length/tail mismatch), [2] >= 924 (TE set or
+                     * TCR stale: nothing was armed this vint), [3] last
+                     * landed, [4] last tag length seen. */
+                    if (landed > 0) {
+                        if (landed < R60_HDR)      DRQR[0]++;
+                        else if (landed < 924)     DRQR[1]++;
+                        else                       DRQR[2]++;
+                        DRQR[3] = landed;
+                        DRQR[4] = (landed >= R60_HDR && landed < 924)
+                                  ? (SPR_LAND[R60_W_TAG] & 0x3FFu) : 0u;
+                    }
+#endif
 #ifdef NATIVE_FRAME
                     if (landed > 0)
                         nat_spr_ok = 0;      /* the tear overwrote part of
@@ -10112,6 +10702,7 @@ RAMCODE void m_main(void)
                 }
                 diag_add(0, tp);
                 par ^= 1;                    /* now composing the next frame */
+                CLAIM_DONE = 0;
 #ifdef SPR_LATE
                 /* LOOP 19 — LATE CLAIM. spr_pair[] is rebuilt only by
                  * build_maps, and its ONLY caller passes `b->bpar ^ 1`:
@@ -10148,6 +10739,9 @@ RAMCODE void m_main(void)
                  * strictly the better artifact. First pass: who is
                  * live right now. */
                 uint32_t tc_live[2] = { 0, 0 };
+                uint32_t tc_live32x[2] = { 0, 0 };   /* census: live via a
+                                                      * record the 32X draws */
+                unsigned nl_live = 0;                /* live sets (LATE_STEAL0) */
                 for (int i = 0; i < 64; i++) {
                     volatile uint16_t *sd = SPR_SNAP + i * 8;
                     uint16_t sd2 = sd[2];
@@ -10157,8 +10751,35 @@ RAMCODE void m_main(void)
                     if ((sd2 & 0x4000) || (sd0 & 0xFF) >= (sd0 >> 8))
                         continue;
                     unsigned sc = sd[4] & 0x3F;
+#if defined(MD_SPR) && defined(SPR_MD_FREE)
+                    if (sd2 & 0x2000)
+                        continue;            /* SPRMDFREE: MD-drawn, not live here */
+#endif
                     tc_live[sc >> 5] |= 1u << (sc & 31);
+                    if (!(sd2 & 0x2000))
+                        tc_live32x[sc >> 5] |= 1u << (sc & 31);
                 }
+#ifdef SPR_LATE
+                /* LOOP 27 q4 demand census per late-claim scan: [5] max
+                 * live 32X-drawn sets in one snapshot, [6] their sum,
+                 * [7] scans (mean = [6]/[7]); MD-claimed records ride
+                 * QCLAIM_N's neighbour below. */
+                {
+                    unsigned nl = (unsigned)(__builtin_popcount(tc_live32x[0])
+                                             + __builtin_popcount(tc_live32x[1]));
+                    nl_live = (unsigned)(__builtin_popcount(tc_live[0])
+                                         + __builtin_popcount(tc_live[1]));
+                    unsigned nmd = 0;
+                    for (int i = 0; i < 64; i++) {
+                        volatile uint16_t *sd = SPR_SNAP + i * 8;
+                        uint16_t sd2 = sd[2];
+                        if (sd2 & 0x8000) break;
+                        if (sd2 & 0x2000) nmd++;
+                    }
+                    SPRLATE[7]++;
+                    SPRLATE[9] += nmd;                 /* MD-claimed records, sum */
+                }
+#endif
 #endif
                 for (int i = 0; i < 64; i++) {
                     volatile uint16_t *sd = SPR_SNAP + i * 8;
@@ -10171,6 +10792,10 @@ RAMCODE void m_main(void)
                     unsigned sc = sd[4] & 0x3F;
                     if (sc == 0x3F)
                         continue;            /* shadows own reserved 15 */
+#if defined(MD_SPR) && defined(SPR_MD_FREE)
+                    if (sd2 & 0x2000)
+                        continue;            /* SPRMDFREE: MD-drawn, needs no pair */
+#endif
                     if (spr_pair[par][sc] != 0xFF)
                         continue;            /* already mapped */
                     SPRLATE[0]++;            /* sets the map missed */
@@ -10240,6 +10865,23 @@ RAMCODE void m_main(void)
                              * his halo as a black silhouette (measured:
                              * ba>=0 arm, s0750). */
                             uint8_t ba = 1;
+#ifdef LATE_STEAL0
+                            /* LOOP 27 q4 option 1 (demand-aware late
+                             * steal): at one cycle per vint every new
+                             * set arrives through this path, and the
+                             * capacity census at each failure found the
+                             * only slack to be a pair whose owner left
+                             * THIS snapshot (age 0). build_maps releases
+                             * such pairs under demand (PAIR_HOLD: hold 2
+                             * once >= 8 sets want pairs); mirror that
+                             * here: with >= 9 live sets, age 0 is
+                             * stealable. Cost: a possible one-frame
+                             * recolour of a DEPARTING actor's still-
+                             * displayed bank, the trade the age>=1 rule
+                             * already makes for arriving ones. */
+                            if (nl_live >= 9)
+                                ba = 0;
+#endif
                             for (int t = 14; t >= 1; t--) {  /* 14: ramp */
                                 uint8_t ow = pr_key[t];
                                 if (ow == 0xFF
@@ -10256,6 +10898,20 @@ RAMCODE void m_main(void)
 #endif
                         if (q < 1) {
                             SPRLATE[1]++;    /* nothing stealable either */
+                            /* LOOP 27 q4 CAPACITY CENSUS at the failure:
+                             * where did the 14 pairs go? [7] owner live in
+                             * this snapshot, [8] a half owned by a tile
+                             * group, [9] held by an absent owner too young
+                             * to steal. Sum over failures = 14 x [1]. */
+                            for (int t = 14; t >= 1; t--) {
+                                uint8_t ow = pr_key[t];
+                                if (grp_key[2 * t] != 0xFF || grp_key[2 * t + 1] != 0xFF)
+                                    SPRLATE[8]++;
+                                else if (ow != 0xFF && (tc_live[ow >> 5] & (1u << (ow & 31))))
+                                    ;               /* live owner (was [7]; [6]/[7] now time the ramp draws) */
+                                else
+                                    ;   /* young absent owner (retired count) */
+                            }
                             continue;
                         }
                     }
@@ -10265,6 +10921,8 @@ RAMCODE void m_main(void)
                     SPRLATE[2]++;            /* claimed in time */
                 }
 #endif
+                CLAIM_DONE = 1;
+                BMT_AT_CLAIM[par & 1] = BMT_DONE[par & 1];
 #ifdef LAUNCH_EARLY
                 nat_window_launch(par, bank1, t_vint, win_no, &tile_cmd, &pend_wait);
 #endif
@@ -10288,6 +10946,7 @@ RAMCODE void m_main(void)
                     { uint16_t tw = frt();
 #endif
                     while (SYNC[5] != scmd && --guard) ;  /* slave half done */
+                WSTAGE(0x7FE0);                      /* CYAN: master blit + slave half done */
 #ifdef WAIT_PROBE
                     RG_COUNT[10] += (uint16_t)(frt() - tw); RG_COUNT[12]++; }
 #endif
@@ -10307,6 +10966,7 @@ RAMCODE void m_main(void)
 #endif
                 tp = frt();
                 apply_cram(par);
+                WSTAGE(0x7C1F);                      /* MAGENTA: palette painted */
                 diag_add(2, tp);
             }
 #ifndef NT_WRAP
@@ -10368,6 +11028,7 @@ RAMCODE void m_main(void)
              * has a draining transfer when the MD pushes after the ack —
              * the fix for the drains-once-then-blocks hang. */
 #ifndef K2_FREE
+            WSTAGE(0x01FF);                      /* ORANGE: at the DREQ re-arm, before the ack path */
             dreq_rearm(k);
 #endif  /* K2FREE: the V-ISR armed at vblank, BEFORE the 68K's push —
          * a body rearm here would reset TCR under a completed landing
@@ -10403,6 +11064,7 @@ RAMCODE void m_main(void)
                                               * decided before the publish so
                                               * the packets carry this vint's
                                               * hold state to the 68K */
+                WSTAGE(0x03FF);                      /* YELLOW: display gate done */
                 volatile uint32_t *d = (volatile uint32_t *)0x24011A00u;
                 const uint32_t *ssrc = (const uint32_t *)md_pktA;
 #ifdef HS_SHIP
@@ -10418,11 +11080,13 @@ RAMCODE void m_main(void)
                         k2f_pendA = 0;
                     }
                 }
+                WSTAGE(0x7FE0);                      /* CYAN: plane packet A published */
                 d = (volatile uint32_t *)0x2401E800u;
                 ssrc = (const uint32_t *)md_pkt;
 #ifdef HS_SHIP
                 if (k2f_pendB && 1) hs_patch(md_pkt, 0, d);
 #endif
+                WSTAGE(0x0200);                      /* DARK GREEN: B hs_patch done */
                 if (k2f_pendB) {
                     DIAG[39]++;
                     if ((d[0] >> 16) == 0xB6B6u) {
@@ -10434,9 +11098,11 @@ RAMCODE void m_main(void)
                         k2f_pendB = 0;
                     }
                 }
+                WSTAGE(0x7C0F);                      /* PURPLE: B copy done */
 #ifdef HS_SHIP
                 if (HS_OFFS[3] && !HS_OFFS[6]) hs_stub();   /* shipped, nothing copied */
 #endif
+                WSTAGE(0x4210);                      /* DARK GREY: hs_stub done; MDSPR publish next */
             }
 #else
             {
@@ -10476,6 +11142,95 @@ RAMCODE void m_main(void)
                     dd[i2] = ss2[i2];
             }
 #endif
+#ifdef BOOT_PALTEST
+            /* CRAM RESIDUE TEST (2026-09-08, LOOP27 25). s16_palpen5
+             * shows the SAME magenta sky / green stones as the abdraw
+             * probe — but palpen5 contains NO CRAM 1/2 writes. Either
+             * the core keeps 32X CRAM across rom loads and we are
+             * looking at RESIDUE from the abdraw runs (in which case
+             * nothing of ours lands, and the palette diagnosis is
+             * strengthened), or those colours have a source I have not
+             * identified (in which case entry 18 is wrong).
+             * DIFFERENT COLOURS decide it: hammer CRAM 1 = YELLOW and
+             * CRAM 2 = RED every window, direct stores that bypass
+             * cram_set and PALPEN entirely, exactly as abdraw did.
+             *   yellow sky / red stones -> our hammered writes DO land;
+             *     the magenta was residue and CRAM is otherwise empty.
+             *   still magenta / green    -> nothing of ours reaches CRAM
+             *     at all, not even hammered, and the abdraw picture was
+             *     never ours either. */
+            ((volatile uint16_t *)0x20004200)[1] = 0x03FF;   /* yellow */
+            ((volatile uint16_t *)0x20004200)[2] = 0x001F;   /* red    */
+#endif
+#ifdef BOOT_FBFREE
+            /* WHICH FB REGIONS ARE ACTUALLY FREE? (2026-09-08, LOOP27 66)
+             * The FB transport needs ~300 bytes nobody else touches. The
+             * documented 2KB hole at 0x1E800 is FULL (md_pkt B 1472B +
+             * pal 64B at 0x1EDC0 + SAT 512B at 0x1EE00 = exactly 2KB).
+             * Visible pixels end at 0x200 + 224*320 = 0x11A00, which is
+             * where md_pkt A starts, and A is 1472B ending ~0x11FC0.
+             * So 0x11FC0..0x1E800 LOOKS free — but "looks free" is how I
+             * put census counters on top of live WRAM twice tonight.
+             * Stamp four candidates with a magic word every window and
+             * have the 68K check them; anything that changes is in use.
+             * Master writes the sentinels; the 68K reads and reports. */
+            {
+                ((volatile uint16_t *)0x24012000)[0] = 0xA51;
+                ((volatile uint16_t *)0x24014000)[0] = 0xA52;
+                ((volatile uint16_t *)0x24018000)[0] = 0xA53;
+                ((volatile uint16_t *)0x2401C000)[0] = 0xA54;
+            }
+#endif
+#ifdef BOOT_ABDRAW
+            /* A/B WRITER PROBE (2026-09-08, LOOP27 10b). The recovered
+             * transcript shows s16_68kdraw put a bar ON SCREEN when the
+             * 68K wrote the FB, while every SH-2-driven frame stayed
+             * black. This asks the missing half directly: does the
+             * MASTER's framebuffer write reach the display?
+             *
+             * WHY THIS IS NOT JUST BOOT_FBBAR AGAIN: that probe drew at
+             * rows 0-7, and rows 0-7 ARE OFF MIKE'S DISPLAY (established
+             * the same night, after fbbar had already been read as "no
+             * bar"). Its result was uninterpretable, not negative. Same
+             * write, rows 8-15, is the whole fix.
+             *
+             * MAGENTA (CRAM 1), fixed index — not bank-coded. This asks
+             * "does the master's write show", not "which bank shows";
+             * the bank question needs a sound readback and this is not
+             * it. Last FB write of the window, FM still ours, so the
+             * compose cannot paint over it. */
+            {
+                volatile uint32_t *px = (volatile uint32_t *)
+                    (0x24000000u + 0x200u + 8u * 320u);
+                for (int i = 0; i < 8 * 320 / 4; i++)
+                    px[i] = 0x01010101u;
+                ((volatile uint16_t *)0x20004200)[1] = 0x7C1F;  /* magenta */
+                ((volatile uint16_t *)0x20004200)[2] = 0x03E0;  /* green   */
+            }
+#endif
+#ifdef BOOT_FBBAR
+            /* HARDWARE PROBE v2: rows 0-7 of the draw bank = index 1 if the
+             * display currently shows bank 1 (so this bank is 0) else index
+             * 2; CRAM 1 = magenta, CRAM 2 = green. Alternating magenta/green
+             * = flips switch the displayed bank; one steady colour = the
+             * display never switches; no bar = the shown bank is one we never
+             * write. Last FB write of the window, FM still ours. */
+            {
+                uint32_t fill = (MARS_VDP_FBCTL & 1) ? 0x01010101u : 0x02020202u;
+                volatile uint32_t *px = (volatile uint32_t *)(0x24000000u + 0x200u);
+                for (int i = 0; i < 8 * 320 / 4; i++)
+                    px[i] = fill;
+                ((volatile uint16_t *)0x20004200)[1] = 0x7C1F;
+                ((volatile uint16_t *)0x20004200)[2] = 0x03E0;
+            }
+#endif
+            /* (The in-window palette drain was REMOVED, entry 28. The
+             * render window is active scan by construction, so every
+             * CRAM store here stalls the SH-2 until the next hblank —
+             * hundreds of them is the window gone and an empty
+             * framebuffer. The palette drains in vblank instead, at the
+             * top of flip_span.) */
+            WSTAGE(0x6318);                      /* GREY: packet B published, before the FM drop */
 #ifdef FM_GATE
             /* LOOP 23: the 68K no longer spins — WE hand the FB back.
              * FM clears BEFORE the ack so a gated store that unblocks
@@ -10486,6 +11241,12 @@ RAMCODE void m_main(void)
              * removed for the JP region guard) */
 #ifdef FM_LATE
             ((volatile uint32_t *)0x26028FF4)[2] = (uint16_t)(frt() - t_vint);     /* ->ack */
+#endif
+            WSTAGE(0x7FFF);                      /* WHITE: acking */
+#ifdef BOOT_PKTCHK
+            *(volatile uint16_t *)0x2000402C = SPR_LAND[R60_W_BM];       /* probe: landed word 20 */
+            *(volatile uint16_t *)0x2000402A = SPR_LAND[R60_W_BM - 1];   /* landed word 19 */
+            *(volatile uint16_t *)0x20004028 = SPR_LAND[R60_W_BM + 1];   /* landed word 21 (tag) */
 #endif
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
 #ifdef PHASE_CENSUS
@@ -11745,6 +12506,18 @@ RAMCODE void m_main(void)
                                             | (((q >> 3) & 7) << 5)
                                             | ((q & 7) << 1));
                         }
+#ifdef BOOT_PALRAMP
+                        /* KNOWN PATTERN THROUGH THE PALETTE PATH
+                         * (2026-09-08, LOOP27 36). The packet's palette
+                         * word reads 0x0686 on ares and roughly double
+                         * that per channel on hardware (entry 35), which
+                         * is what a one-bit shift looks like — but that
+                         * could be a wrong SOURCE palette or a corrupted
+                         * TRANSPORT, and colour cannot tell them apart.
+                         * So stop shipping colours: write a RAMP the 68K
+                         * knows exactly, 0x0100+i, and let it check. */
+                        cw = (uint16_t)(0x0100 + i);
+#endif
                         chg |= (uint16_t)(sc[688 + i] ^ cw);
                         sc[688 + i] = cw;
                     }

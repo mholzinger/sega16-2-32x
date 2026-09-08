@@ -5,7 +5,7 @@ Usage: strobe_scan.py <dir> [glob]      (default glob: frame_*.png)
 
 WHY THIS EXISTS: the black-frame strobe is invisible to MAME by
 construction (it latches FBCTL immediately and never defers — see
-LOOP.md iteration 7c), so for a long time the only way to see it was a
+docs/log/LOOP.md iteration 7c), so for a long time the only way to see it was a
 savestate counter and Mike's eyes. A full ares capture run makes the
 symptom itself measurable locally, which is a much shorter loop.
 

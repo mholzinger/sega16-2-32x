@@ -1,6 +1,6 @@
 # LOOP 9 — Make it PLAY SMOOTHLY (the window, then the tearing)
 
-## SUPERSEDED — START FROM LOOP10.md
+## SUPERSEDED — START FROM docs/log/LOOP10.md
 
 This is a RECORD of LOOP 9, not a plan. It was written as a kickoff and
 its opening premises did not survive the arc:
@@ -16,7 +16,7 @@ its opening premises did not survive the arc:
 
 Read top-down and you get this arc's conclusions in reverse order behind
 premises they replaced. The corrections are inline further down, each
-next to the claim it replaces. **For the next session, read LOOP10.md.**
+next to the claim it replaces. **For the next session, read docs/log/LOOP10.md.**
 
 MIKE'S PRIORITY ORDER for the whole remaining port: **framerate, screen
 tearing, sprites, sound** — and explicitly: *"right now it's just getting
@@ -68,7 +68,7 @@ RANKED, cheapest-credible first:
    vblank 0.4-2.2% -> 14.1%, and 14% of rows never completed. Statics
    were pixel-identical so the comparison is sound. MAME called it 18%
    faster; MAME models no FB write cost whatsoever. Full numbers and the
-   two implementation traps are LOOP.md negatives 20 and 21 — READ THEM
+   two implementation traps are docs/log/LOOP.md negatives 20 and 21 — READ THEM
    BEFORE RE-PROPOSING THIS, it is a whole session.
    The caveat that was already on the record ("MEASURE BEFORE BELIEVING
    DMA WINS") was correct, and for a reason nobody had guessed: the
@@ -162,7 +162,7 @@ Two things this ruled out, both cheaply:
   window rather than vanishing.
 
 The k=1 rebalance was BUILT AND REVERTED — it cost two thin permanent
-seams and lost Mike's play pass (LOOP.md negative 23). So the only lever
+seams and lost Mike's play pass (docs/log/LOOP.md negative 23). So the only lever
 left on this list is the ~2 lines between the vint and pickup at V=E1,
 against a deficit of 8.
 

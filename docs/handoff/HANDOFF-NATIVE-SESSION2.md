@@ -20,7 +20,7 @@ unquoted scalar passes ONE bogus arg and builds a flag chimera):
 
 ## 0. WHERE THE PROJECT STANDS
 
-NATIVE (NATIVE.md) is the shipping architecture: one generation =
+NATIVE (docs/design/NATIVE.md) is the shipping architecture: one generation =
 one whole frame, shipped whole-screen-or-nothing, flipped only when
 fresh. Band queue / chain / ROW_DEFER / cat1 deferral are compiled
 out. Frozen bands are structurally impossible and Mike confirmed it
@@ -40,7 +40,7 @@ Mike's standing asks, in his priority order:
      cell-mode hscroll), red transform orb (rebase-layer sprite
      corruption), grass blink residual.
 
-## 1. THE ORACLE (ORACLE.md, tools/oracle_grade.py)
+## 1. THE ORACLE (docs/design/ORACLE.md, tools/oracle_grade.py)
 
 `ref_arcade/` (gitignored, local): 17,528 frame-true 320x224 PNGs of
 a full arcade level-1 run. Scene map + measured truths inside.
@@ -82,7 +82,7 @@ effects.
 
 ## 3. PALSTATIC — PULLED; v1.1 REQUIREMENTS (do this arc next)
 
-Design PALSTATIC.md; v1 corpus + bake are GOOD and banked
+Design docs/design/PALSTATIC.md; v1 corpus + bake are GOOD and banked
 (discover/palscenes/*.palsh, tools/palscene_bake.py ->
 sh_src/pal_scenes.h, cart .palscenes section in mars.ld). Three
 level-1 scenes: normal / boss_smoke / transform (transform palette
