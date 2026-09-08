@@ -543,8 +543,11 @@ scont:
 		mov.w   r5,@r4      /* slave probe stage 3 */
 .endif
 ! SLAVE SDRAM WARM-UP (2026-09-08, MiSTer FPGA — LOOP27 entry 10).
-! MISTERBOOT=1 ONLY: it did not fix the MiSTer hang and it is unproven on the
-! ares ship line, so the default build does not carry it. On
+! DEFAULT ON since 2026-09-08 (LOOP27 69). A 2x2 on the MiSTer settled it:
+! neither = black, cache-off alone = black, WARM-UP ALONE = BOOTS, both =
+! boots. This stub is the whole fix. On ares the ship line's counters are
+! identical with and without it, so it is free there. NOSLVWARM=1 removes
+! it. (The note that used to sit here said it did not fix the hang.) On
 ! real hardware the slave hangs on the first fetch after jmp _s_main
 ! (a master-written SDRAM region): the shstage bisection reached stage 3
 ! but never stage 4 (s_main body). A register-only spin did NOT fix it;

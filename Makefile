@@ -576,11 +576,13 @@ endif
 ifdef BOOTGATEOFF
 SHCCFLAGS += -DBOOT_GATEOFF
 endif
-# `make ... MISTERBOOT=1` = the 2026-09-08 MiSTer FPGA boot attempt: slave cache
-# OFF *and* the slave SDRAM warm-up stub in mars_start.s. Neither fixed the
-# MiSTer hang (arc closed, docs/handoff/HANDOFF-MISTER.md) and both are unproven
-# on the ares ship line, so the DEFAULT BUILD CARRIES NEITHER. Turn it on only
-# to re-run that experiment.
+# `make ... MISTERBOOT=1` = both MiSTer boot changes together: the slave
+# SDRAM warm-up stub in mars_start.s AND the slave cache off. SUPERSEDED —
+# the warm-up is now default (see below) and it is the only half that
+# does anything. MISTERCACHE=1 is the cache-off alone; it has never been
+# shown to help. The old note here said the default carries neither and
+# that neither fixed the hang; both statements were wrong, and six black
+# captures on 2026-09-08 were spent finding that out.
 # `make ... FLIPDEFER=1` = LOOP27 9, the 60Hz blocker: the K2FREE edge
 # guard DROPS any flip that misses the 38-line vblank, and at one
 # game-frame per vint it misses most of them (flips on ~17% of vints).
@@ -902,6 +904,31 @@ SHCCFLAGS += -DFLIP_DEFER
 endif
 ifdef MISTERBOOT
 SHASFLAGS += --defsym MISTER_BOOT=1
+SLVCACHEOFF = 1
+endif
+# MISTERBOOT bundles TWO independent changes and nothing had ever
+# separated them. These split it: MISTERWARM=1 is the SDRAM warm-up stub
+# alone, MISTERCACHE=1 the slave cache-off alone.
+ifdef MISTERWARM
+SHASFLAGS += --defsym MISTER_BOOT=1
+endif
+# THE WARM-UP IS NOW DEFAULT ON (2026-09-08, LOOP27 69). The 2x2 above was
+# finally run on the MiSTer and it is not ambiguous:
+#     neither -> black    cache-off only -> black
+#     warm-up -> BOOTS    both           -> BOOTS
+# The warm-up is the whole fix and the cache-off does nothing. On ares the
+# ship line's counters are IDENTICAL with and without it (vints, packets,
+# tiles, batches, all columns, frames 200 and 400), so it costs nothing on
+# the emulator and it is the difference between a rom that runs on real
+# 32X hardware and a black screen. NOSLVWARM=1 takes it back out.
+ifndef NOSLVWARM
+ifndef MISTERWARM
+ifndef MISTERBOOT
+SHASFLAGS += --defsym MISTER_BOOT=1
+endif
+endif
+endif
+ifdef MISTERCACHE
 SLVCACHEOFF = 1
 endif
 # `make ... SLVCACHEOFF=1` = slave jumps to _s_main with cache OFF (the FB-exec
