@@ -411,8 +411,39 @@ exactly why r60_push was moved to RAMCODE and why the compose is
 described as the heaviest cart reader. It is arbitration, not wait
 states.
 
-Still untested on the MiSTer: nothing in this section has been run,
-only derived.
+**HOW A SHIPPING 5 MB 32X TITLE ACTUALLY DOES IT** — from the Doom 32X
+Resurrection source at ~/src/32x-builder/srcref/d32xr, which confirms
+every line of the derivation above:
+
+  - `mars-ssf.ld`: `rom (rx) : ORIGIN = 0x02000000, LENGTH = 0x00500000`
+    — the SH-2 linker script simply declares 5 MB of ROM space.
+  - `ENABLE_SSF_MAPPER` + `MAPPER = "SEGA SSF"` in the Makefile writes
+    the header field.
+  - The SH-2 does NOT page. `I_SetBankPage()` (marsnew.c) fetches a
+    function pointer out of thread-local storage and calls a 68K-side
+    routine to do it — exactly what TIME_N implies.
+  - Every pointer into the banked region goes through `I_RemapPtr`:
+
+        page   = (ptr - 0x02000000) >> 19;      // 512 KB pages
+        bank   = I_SetBankPage(page);           // 68K switches
+        newptr = (ptr & 0x0007FFFF) + 512*1024*bank + 0x02000000;
+
+  - **`Mars_ClearCache()` after every switch** — the same addresses now
+    hold different bytes, so the SH-2 cache must be dropped.
+  - MD side writes 0xA130F0/F1/FF (src-md/crt0.s), with EverDrive and
+    MegaSD variants.
+
+**WHAT THIS MEANS FOR THIS PORT.** A bank switch costs a 68K round trip
+plus an SH-2 cache flush, so it is COARSE-GRAINED — a level's worth of
+art, not a sprite's. Our compose reads many different frames per vint,
+so banked art only works if the hot working set stays resident: keep it
+in the unbanked first 4 MB, or hold one bank stable for the whole scene
+and swap at scene cuts. That is the shape the port already has
+(per-scene palettes under PAL_STATIC, per-scene sprite blobs under
+MDSPR), so the machinery to decide "what does this scene need" exists.
+
+Still untested here: nothing in this section has been built or run on
+our rig, only derived and cross-read against a shipping title.
 
 ---------------------------------------------------------------------
 ## 5. WHAT IS STILL NOT KNOWN
