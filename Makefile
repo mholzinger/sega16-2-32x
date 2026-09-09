@@ -848,6 +848,12 @@ endif
 # frame instead of every other. The inline path's R60 halving is the
 # suspected cause of its wrong pixels; the slave path it replaces
 # captures every frame.
+# TEXTCAPDUAL=1 = LOOP28 101 diagnostic: inline capture PLUS the slave
+# post+join, so the barrier is kept and only the capture moves. Separates
+# "the join was a barrier" from "the capture is wrong". Saves nothing.
+ifdef TEXTCAPDUAL
+SHCCFLAGS += -DTEXTCAP_DUAL
+endif
 ifdef TEXTCAPFULL
 SHCCFLAGS += -DTEXTCAP_FULL
 endif

@@ -5678,6 +5678,20 @@ static int flip_span(void)
 #endif
 #ifdef FB_TEXT_READ
 #ifdef TEXTCAP_SLAVE
+#ifdef TEXTCAP_DUAL
+    /* LOOP28 101 DIAGNOSTIC: do the capture inline AND keep the slave
+     * post+join. If the band clears, the fault is the missing barrier
+     * (the join was letting something else finish); if it stays, the
+     * fault is in the capture itself. Saves nothing by design. */
+    {
+        volatile uint32_t *td = (volatile uint32_t *)TEXT_U;
+        volatile uint32_t *ts = (volatile uint32_t *)FB_TEXT;
+        for (int i = 0; i < 928; i += 4) {
+            td[i + 0] = ts[i + 0]; td[i + 1] = ts[i + 1];
+            td[i + 2] = ts[i + 2]; td[i + 3] = ts[i + 3];
+        }
+    }
+#endif
     /* capture runs on the SLAVE, in parallel with the truth
      * drain below. Post BEFORE the drain, join AFTER it:
      * both sides work, the window shortens by the overlap. */

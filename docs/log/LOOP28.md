@@ -605,3 +605,69 @@ written. If so the fix is to wait on the slave's BLIT rather than on its
 text capture — a much shorter wait — not to put the capture back.
 
 That is the first thing to test next.
+## 101. THE "CORRUPT BAND" WAS THE GAME'S OWN FENCE
+
+Entry 100 called a defect on the double-buffered inline-capture build: a
+band of the stone wall rendering as black-and-white garbage. It is the
+balustrade. The unmodified control build renders the identical fence at
+the identical frame. I read game art as corruption, which is the third
+false reading in this log and the second one caught only by taking a
+control.
+
+The `TEXTCAP_DUAL` diagnostic (inline capture AND the slave post+join,
+so the barrier is kept and only the capture moves) was built to separate
+"the join was a barrier" from "the capture is wrong". It answered a
+question that did not exist. It is kept, default off, because the
+question WILL exist again the next time a barrier is removed.
+
+## 102. THE ARCADE SCORECARD ON BOTH CANDIDATES
+
+`tools/attract_parity.py` against `ref_arcade`, mean |luma| diff per
+scene across a lag ladder. The control is the double-buffered build of
+entry 93; the candidate adds the inline capture at full rate.
+
+    scene           control (lag 0 / best)   candidate (lag 0 / best)
+    boot card              30 / 25                 31 / 26
+    logo rewrite           21 / 20                 59 / 29
+    logo red               75 / 27                 75 / 28
+    cut black               5 / 0                   5 / 0
+    demo scene            132 / 48                132 / 48
+    face                  106 / 99                105 / 99
+    eye                   110 / 105                111 / 105
+    eye pan               113 / 109                109 / 109
+    demo 2                 46 / 46                  48 / 46
+
+Two readings, and the second matters more than the first.
+
+**On the candidate:** no parity regression except `logo rewrite`, which
+is worse at low lag (59 vs 21) and recovers by lag 12. Every other scene
+is within a point or two. So the +4.6 logic and +10.7 screen updates a
+second of entry 100 cost nothing measurable in pixels.
+
+**On the port as a whole:** `face`, `eye` and `eye pan` sit at 99-113
+mean luma diff across EVERY lag column, in both builds. That is not a
+timing lag, it is a scene that does not match. `cut black` collapses to
+0, so the rig and the alignment work. **Three attract scenes are simply
+wrong and have been all along**, and no speed work touches them. That is
+the largest untouched parity gap in the project and nothing in this log
+was aimed at it.
+
+## 103. STANDING STATE AT THE END OF THE NIGHT
+
+    build                                  logic   updates/s   parity
+    ship-us FBXPORT=1  (accepted)          49.7%      11.7     control
+    + FBXSTAGE FBXBOTH FLIPEDGEOFF         30.3%      25.3     control
+    + TEXTCAPMASTER TEXTCAPFULL            34.9%      36.0     no regression
+
+`rom/U_dblfast.32x` is the third line, stamped 8f0b0526, for the MiSTer.
+It is the first build that both flips and presents 36 screen updates a
+second, and its logic rate is still well below the accepted line's.
+
+Next, in the order I would take them:
+
+  1. **The face/eye scenes.** Largest measured parity gap, untouched,
+     and the oracle rig already scores it.
+  2. The 26.9-line wait for the 68K's post and `cap_drain`'s 24.5 —
+     what is left of the vblank budget after the slave wait is gone.
+  3. The tile-routine patch, as a level-load smoothing item, not a
+     pipeline fix (entry 99).
