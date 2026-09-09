@@ -71,3 +71,67 @@ heavy window (2000-2012 sits in it) and a light one (3000-3012, 98.9).
 Frame f2000 read: level-1 with two purple enemies, HUD intact; the
 intro caption has already scrolled off because the faster line is
 further along at the same frame (the frame-indexed script, LOOP28 88).
+
+## 109. A3: THE TIMELINES — ON OPT1 THE MISSING VINTS HAVE NO SPIN ON THE DECIDING PATH (01:46-01:47)
+
+`tools/frame_timeline.py`, both roms, 12 vints each at 2000 (heavy
+window, 58.6% on opt1) and 3000 (light, 98.9%). Lines from vblank start,
+262 per vint. Full output in `rom/night/tl_*/`. Reading the columns:
+`raise` = the shim's post (end of the shim's own work), `irq4` = the
+game's IRQ4 entry, `miss` = the game counted a lost frame at that entry,
+`gate` = the first FM spin inside the game's pass and its length,
+`idle` = the pass reached the frame-flag wait.
+
+Base, heavy (2000-2011), one game frame = two vints, every pair alike:
+
+    even vint   raise 69-97   irq4 77-105   pass starts 103-134
+                SPIN 8-120 lines at 0xffbe54 (the text writer, TXTWRAM off)
+                until the master's FM drop at 144-227
+    odd vint    raise 65-105  irq4 73-113 = MISS   pass ends (idle) 217-256
+
+    head (shim + IRQ4)   ~105     spin ~110     work ~206     total ~420
+
+Base, light (3000-3011): the same shape, spin 105-119, work ~150,
+total ~360. Both regimes cost two vints on base because the spin alone
+is 110 lines.
+
+Opt1, heavy (2000-2011), still two vints per frame, different anatomy:
+
+    even vint   raise 66-83   irq4 74-91   pass starts 100-109
+                NO spin (fm reads 0/8); first FB writer reached only in
+                the next vblank ("drop 1")
+    odd vint    irq4 81-91 = MISS at entry; then gate #13 (0xffbdd2)
+                at 104-122, spin 14-116 lines to the drop; idle 136-245
+
+    head ~105   work in the even vint 153 (all that fits before the
+    next shim)   work remaining ~30-40   -> heavy pass ~185-190 lines
+
+The odd vint's spin comes AFTER the miss is already counted at IRQ4
+entry, so on opt1 the spin is not on the deciding path; the miss is
+decided by head + heavy pass = ~105 + ~190 = ~295 > 262.
+
+Opt1, light (3000-3011): NO misses, pass starts 92-131, idle at
+92-131 of the next vint with 300-1170 idle reads: light work ~150 fits
+in the 153-line slot with a few lines to spare, which is the 98.9.
+
+**Attribution.** The vint has three terms before the game's pass can
+start: our shim (0 to the raise, 66-98 lines), the game's IRQ4 (the
+upload, ~25-30 lines incl. our thunks), and ~2 lines to the pass. The
+pass then has 262 minus that head. Light passes (~150) fit, heavy
+passes (~190) do not, by ~35-40 lines. THE PRIZE IS THE HEAD, AND THE
+SHIM IS TWO THIRDS OF IT.
+
+    shim (this measurement)     66-98 lines, typical ~72
+    needed to fit heavy frames  shim <= ~35
+    PALROTOROFF ceiling 94.7    consistent: rotor+compares are 21-24
+                                of the shim (frame-threshold note)
+
+B1 is therefore the stage trace of the shim on opt1: where do the 72
+lines go today, on the FB transport. B2 (the FM span) is NOT a lever
+on opt1: no missing vint on this line spins before its miss. B0
+(FMLATE) is about the same span and is expected dead; it is cheap,
+run it once for the record.
+
+Also seen: base 3008 has no raise at all and IRQ4 at line 27 — a vint
+where our shim did not post (the previous vint's pass ran through the
+vblank). One in 24 on base; none on opt1.
