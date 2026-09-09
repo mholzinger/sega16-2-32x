@@ -6201,6 +6201,9 @@ void visr_vbi(void)
     visr_t0 = t0;
 #ifdef FLIP_CENSUS
     CEN[18]++;                           /* V-ISR entries = denominator */
+#ifdef NT_PROBE
+    CEN[49]++;
+#endif
 #ifdef CSET_CENSUS
     cs_flush();                          /* per VINT, the real cadence */
 #endif
@@ -12470,6 +12473,18 @@ RAMCODE void m_main(void)
 #endif
                                 continue;
                             }
+#ifdef NT_PROBE
+                            /* LOOP28 106: what does the name-table pass
+                             * actually DO with a background cell whose
+                             * tilemap word went to zero? [47] cells seen,
+                             * [48] of them zero, [49] passes. If the zero
+                             * count tracks the title screen's sparse map
+                             * then the pass reaches them and the staleness
+                             * is downstream — the upload or the slot's
+                             * tile data, not this walk. */
+                            CEN[47]++;
+                            if (!isfg && w == 0) CEN[48]++;
+#endif
                             unsigned code = w & 0x1FFF;
                             if (code & 0x1000)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;

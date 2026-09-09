@@ -855,6 +855,14 @@ endif
 # just a cleared foreground one. The game zeroes the tilemap at a scene
 # change and the background kept drawing tile 0 of set 0, so the previous
 # scene survived under the new one — the missing title-screen eye.
+# NTPROBE=1 = LOOP28 106. Counts what the name-table pass sees: CEN[47]
+# background+foreground cells walked, CEN[48] of them BACKGROUND cells
+# whose tilemap word is zero, CEN[49] vints. Answers whether the walk
+# reaches the title screen's cleared cells at all.
+ifdef NTPROBE
+SHCCFLAGS += -DNT_PROBE -DFLIP_CENSUS
+MDCCFLAGS += -DFLIP_CENSUS
+endif
 ifdef BGBLANK0
 SHCCFLAGS += -DBG_BLANK0
 endif

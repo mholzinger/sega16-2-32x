@@ -748,3 +748,48 @@ slot rather than releasing it, and the name-table pass is chunked
 several windows. Neither explains a graveyard that survives 200+ frames
 on its own, so the first probe is to instrument what the name-table pass
 actually writes for a cell that went to zero.
+## 106. THE BACKGROUND NAME TABLE IS NOT REACHING PLANE B
+
+Entry 104's diagnosis was wrong in its last step and the probe found the
+real one. Instrumented and dumped at the same frame, demo (f1000) vs
+title (f1834):
+
+    what                                    demo        title
+    tilemap truth, nonzero words           11639        2424
+    truth pages holding data              p0..p12    p0-p3, p10-p12
+                                                     (p4-p9 all zero)
+    page-select words (0xFF8E80)      0101 5656    0101 5656  UNCHANGED
+    our SDRAM name table, distinct BG slots   341           4
+    our SDRAM name table, distinct FG slots    52           1
+    MD VRAM Plane A, distinct entries         148           2
+    MD VRAM Plane B, distinct entries         338         207
+
+Read the last two rows against the two above them.
+
+  - The page selects do NOT change, so both scenes use BG pages 0/1 and
+    FG pages 5/6. The game rewrites those pages' CONTENTS; at the title,
+    pages 0/1 hold the eye and pages 5/6 are empty.
+  - **Our name-table pass is correct.** It produced 4 distinct BG slots
+    and 1 FG slot at the title — a near-blank field, which is right for a
+    sparse title map.
+  - **Plane A followed it (148 -> 2). Plane B did not (338 -> 207).**
+
+So the background name table is computed correctly in SDRAM and never
+reaches Plane B. Plane B keeps the demo's graveyard and draws it over the
+32X framebuffer, which had the eye all along — which is why `BGBLANK0`
+appeared to "fix" the title screen in entry 104. It was not drawing the
+eye; it was getting the stale plane out of the way.
+
+**That also explains the demo regression.** Blanking exposed the
+framebuffer everywhere, including rows where the MD plane is the only
+thing drawing, so the grass vanished. `BGBLANK0` is not a partial fix, it
+is a different bug's workaround, and it stays off.
+
+**The bug is the BG name-table upload path to Plane B**, not the walk,
+not the capture, not the cache, not the page selects. Every one of those
+is now measured innocent. Plane A's upload works from the same pass, so
+the two paths differ and that difference is the whole defect.
+
+Next probe, and it is a narrow one: instrument the upload for Plane B —
+how many cells it ships per window and which — against Plane A's, at the
+frame the scene changes.
