@@ -728,3 +728,23 @@ and navy. That is the Mega Drive plane's 48-pen limit meeting a
 full-screen image, which is exactly the pressure entry 99 measured at
 7-45 sets on 29% of vints. The allocator's cost has now been SEEN, not
 just counted.
+## 105. RULED OUT ON THE WAY: SH-2 CACHE COHERENCY
+
+The compose walks `TILEMAP_C` at 0x06019000, the CACHED alias of
+`TILEMAP_U` at 0x26019000, and `cap_page` writes truth through the
+uncached alias. That is the shape of a classic write-uncached /
+read-cached staleness bug and it would explain the surviving graveyard
+exactly.
+
+It is not the cause. `cache_purge()` runs every window (m_main.c 9582,
+9648) and again whenever pages or maps change in-window (12008, 12027).
+Recorded so the next session does not spend the same hour on it.
+
+What is left, and where to look next: the MD RESIDENCY ALLOCATOR's
+`md_tag`, which by its own comment keeps a slot "as long as it stays on
+screen". A cell whose tilemap word became 0 may be holding its claimed
+slot rather than releasing it, and the name-table pass is chunked
+(`build_maps_chunk`, 4 chunks), so a scene change is spread over
+several windows. Neither explains a graveyard that survives 200+ frames
+on its own, so the first probe is to instrument what the name-table pass
+actually writes for a cell that went to zero.
