@@ -207,6 +207,7 @@ def finish(row, t0):
              row.get("speed_total", row.get("error", "")),
              g("1500-2200"), g("2200-2900"), g("2900-3600"), g("3600-4100"),
              row.get("irq4_miss_pct", ""),
+             "/".join(str(mw[k]) for k in sorted(mw, key=lambda s: int(s.split("-")[0]))) if mw else "",
              (row.get("anim") or {}).get("mean", ""),
              "/".join(str(fr[s]["black_pct"]) for s in map(str, SHOTS) if s in fr),
              "/".join(str(fr[s]["colours"]) for s in map(str, SHOTS) if s in fr),
