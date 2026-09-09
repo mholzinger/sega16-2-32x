@@ -31,3 +31,43 @@ with the record. Rig cost: 148 s including the clean build.
 Note: the rom that was in `rom/s16.32x` before this tick carried the
 FBXSTAGE+FBXBOTH stamp (a double-buffer probe, 46.1%, black 17.9%);
 it is in the ledger as `smoke_current` and is not a result.
+
+## 108. A2: OPT1 READS 85.2%, THE LAST TWO WINDOWS ARE AT THE BAR (01:41-01:43)
+
+    make clean; make ship-us FBXPORT=1 TXTWRAM=1 LATESTEAL0=1 LATEKEEP=1 DRAWADOPT=1
+    md5 b436ea15   _end 0x60135d0   build 237fda56+
+
+    total [1500,4100]   85.2%      IRQ4 misses 14.8% of vints
+    1500-2200           58.6
+    2200-2900           87.6
+    2900-3600           98.9
+    3600-4100          100.0
+    anim mean           28.0
+    black% / colours    3.7/6188  3.6/4632  3.6/3967
+    SPRLATE[3]          1099   (base 1919)
+
+Two expectations from the protocol did not hold, and neither is a
+problem:
+
+  - md5 b62237e5 cannot reproduce: `sh_src/buildstamp.h` bakes the git
+    short hash into DIAG[18] (m_main.c:8541), so every commit changes
+    the rom. The protocol's md5 expectation was wrong; the number is
+    what reproduces.
+  - 85.2 is not 82.3, and LOOP28 already read this line at 85.2/85.3
+    (LOOP28 144, 159, 240) later in that session. The 3 points sit
+    inside the 5.9-point floor of LOOP28 88.
+
+The `diff vs base` column (1,317,320 bytes) is not the stale-bake test
+here: base and opt1 differ in flags, so the asset region moves
+legitimately. That test applies only between same-flag siblings.
+
+**The finding.** The last two windows are 98.9 and 100.0: for 1400 of
+the 2600 vints the game runs at the bar on this line. The whole
+shortfall is the first window (58.6) and part of the second (87.6),
+which is the intro and the first enemies. So the remaining cost is not
+uniform; it is a heavy-regime cost. A3's timelines should sample the
+heavy window (2000-2012 sits in it) and a light one (3000-3012, 98.9).
+
+Frame f2000 read: level-1 with two purple enemies, HUD intact; the
+intro caption has already scrolled off because the faster line is
+further along at the same frame (the frame-indexed script, LOOP28 88).
