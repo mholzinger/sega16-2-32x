@@ -5814,7 +5814,19 @@ static int flip_span(void)
     pg_pending |= pg_watch;      /* unstable pages: recapture the
                                   * latest stream state pre-flip */
     VBS(2);                             /* after the page merge */
+#ifdef DRAIN_CUT
+    /* LOOP28 107, THE 60 FPS SHAPE. The flip write must land within 35.9
+     * lines of ISR entry or the FPGA defers it to the next vblank and the
+     * frame is lost (Mike's MiSTer verdict on U_dblfast: near-perfect
+     * frames, far too few of them). 26.9 of those lines are already spent
+     * waiting for the 68K's post, and this drain is 25.0 more at 9.23
+     * pages a flip. It cannot be shortened into the budget, so it does
+     * not belong in the flip path at all: take DRAIN_CUT pages here and
+     * leave the rest to the body, which has the whole active display. */
+    cap_drain(DRAIN_CUT);
+#else
     cap_drain(13);               /* ALL of it — correctness */
+#endif
     VBS(3);                             /* after the truth drain */
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     {

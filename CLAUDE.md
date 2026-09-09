@@ -44,10 +44,13 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
-## Start here (2026-09-08)
+## Start here (2026-09-09)
 
-`docs/handoff/HANDOFF-PIPELINE.md` — current state, the bind, the next
-stage, and the build rules that must be followed before any measurement.
+`docs/handoff/START-HERE.md` — THE BAR (60 fps, and nothing else is the
+bar), the scope, the accepted rom, the dead ends, and the four rules for
+measuring without fooling yourself. Read it before opening anything else.
+
+`docs/handoff/HANDOFF-PIPELINE.md` — the transport detail behind it.
 
 ## The scope (2026-09-08)
 

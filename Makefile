@@ -859,6 +859,12 @@ endif
 # background+foreground cells walked, CEN[48] of them BACKGROUND cells
 # whose tilemap word is zero, CEN[49] vints. Answers whether the walk
 # reaches the title screen's cleared cells at all.
+# DRAINCUT=N = LOOP28 107. Cap the truth drain INSIDE the flip path at N
+# pages instead of all 13, so the flip write can reach vblank. The rest
+# drains in the body. N=0 empties the flip path of it entirely.
+ifdef DRAINCUT
+SHCCFLAGS += -DDRAIN_CUT=$(DRAINCUT)
+endif
 ifdef NTPROBE
 SHCCFLAGS += -DNT_PROBE -DFLIP_CENSUS
 MDCCFLAGS += -DFLIP_CENSUS
