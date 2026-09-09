@@ -40,7 +40,8 @@ NIGHT = os.path.join(ROOT, "rom", "night")
 LEDGER_DIR = os.path.join(ROOT, "docs", "log", "night-0909")
 FRAMES = [1500, 2200, 2900, 3600, 4100]
 SHOTS = [2000, 3000, 4000]
-SPRLATE = "0x3A780:0x40"       # sh_src/m_main.c:605, 16 u32
+SPRLATE = "0x3A7D8:0x28"       # sh_src/m_main.c:610: the lean (ship) build parks
+                               # SPRLATE[0..9] at 0x3A7D8; [3] = shadow-ramp draws
 REGION_LIMIT = 0x06019000
 
 
