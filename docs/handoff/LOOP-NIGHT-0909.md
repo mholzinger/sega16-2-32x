@@ -84,11 +84,13 @@ blind:
   (74.1 / 57.9: the compare is compression) and PALSTREAK/PALBACKOFF
   found no structure. So the third design needs the stage cost, not
   another sweep. Stage trace recipe: add a probe flag `STAGETRACE=1`
-  that writes a stage id to a free WRAM word (0xFFA1F0 is inside the
-  diagnostic page; confirm it is unused with `grep -n FFA1F0 md_src/*`)
-  at every boundary of the vint shim (entry, rotor, compare, selection,
+  that writes a stage id to a free WRAM word. Use 0xFF5FF0: the census
+  in LOOP28 84 proved 0xFF2200-0xFF5FFF unwritten after boot and unread
+  ever, and it sits just below PAL_SHADOW (0xFF6000); the 0xFFA1xx page
+  is NOT free (md_main.c:898 keeps a shadow at 0xFFA1C0). Write it at
+  every boundary of the vint shim (entry, rotor, compare, selection,
   MD upload, push, tail, exit), then trace that word with
-  `--trace-access 0xFFA1F0:0xFFA1F1:stage:2000:2012` and print the
+  `--trace-access 0xFF5FF0:0xFF5FF1:stage:2000:2012` and print the
   line of each write. One write per stage, no timing distortion. The
   table of stage lines on the opt1 line is the deliverable; the diet
   is whatever the biggest stage allows.
