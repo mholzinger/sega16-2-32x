@@ -56,8 +56,9 @@ ceiling probe first.
   NO spin on the deciding path. The lever is the shim's ~72 lines,
   target <= ~35. B2 is not a lever on opt1. B1 (stage trace) is next
   after A4.
-- A4 `opt1_rotoroff`: opt1 + `PALROTOROFF=1`, `--base opt1`. Expect
-  94.7. Confirms the palette prize (12.4) on today's source.
+- A4 `opt1_rotoroff`: DONE (LOOP29 110): 94.5 by misses, prize 9.3
+  points, all in the heavy windows. The scene timer can stall with
+  zero misses; rank on the `by-miss` figures when the two disagree.
 
 ### B. The ladder above opt1 (the night's work)
 
