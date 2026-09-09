@@ -1211,10 +1211,36 @@ static uint8_t glow_live;
  * length, tag and tear rule downstream still holds. */
 static uint16_t fbx_i;                   /* word cursor into the FB packet */
 static uint8_t  fbx_seq_pub;             /* publish sequence */
+#ifdef FBX_STAGE
+/* STAGE THE PACKET IN WRAM, BLAST IT AT THE TAIL (LOOP28 89).
+ *
+ * The bind (HANDOFF-PIPELINE section 3): the 68K cannot touch the
+ * framebuffer at FM=1, so today the WHOLE packet build — rotor, palette
+ * compare, record packing, ~56 scanlines of it — has to sit in an FM=0
+ * window. Before the post it drives V-at-post to 43 and the flip dies
+ * (0.3 Hz); at the tail (FBX_TAIL) it runs ahead of the game's IRQ4 and
+ * costs 33 points of game speed.
+ *
+ * Neither placement is wrong about the window. What is wrong is that the
+ * BUILD is in it at all: only the FB WRITES need FM=0, and they are ~2
+ * lines of the 56. So the build writes into WRAM, where FM does not
+ * apply and it can overlap the master's blit, and a straight-line copy
+ * moves it into the framebuffer in the FM=0 window at the tail.
+ *
+ * The buffer is R60_ARM words = 1872 bytes of the 15,916 free between
+ * __bss_end and PAL_SHADOW (LOOP28 84); md.ld's ASSERT is the fence.
+ * One vint of packet latency, which the harvest already tolerates: a
+ * stale publish yields landed = 0 and last frame's records stand. */
+static uint16_t fbx_stage[R60_ARM];      /* packet under construction */
+static uint16_t fbx_stage_n;             /* words staged, 0 = nothing */
+#define FBX_DST  fbx_stage
+#else
+#define FBX_DST  ((volatile uint16_t*)FBX_PKT_MD)
+#endif
 __attribute__((section(".data"), noinline))
 static uint16_t r60_ship_words(const uint16_t *src, uint16_t nw)
 {
-	volatile uint16_t *d = (volatile uint16_t*)FBX_PKT_MD + fbx_i;
+	volatile uint16_t *d = FBX_DST + fbx_i;
 	for (uint16_t i = 0; i < nw; i++) d[i] = src[i];
 	fbx_i = (uint16_t)(fbx_i + nw);
 	return 0;                            /* an FB write cannot fall short */
@@ -1888,7 +1914,7 @@ static void r60_push(void) {
 #ifdef FB_XPORT
 /* no FIFO to poll and no word can be dropped: the FB is memory */
 #define R60G() do { } while (0)
-#define R60P(w) do { ((volatile uint16_t*)FBX_PKT_MD)[fbx_i++] = (uint16_t)(w); } while (0)
+#define R60P(w) do { FBX_DST[fbx_i++] = (uint16_t)(w); } while (0)
 #else
 #define R60G() do { while (*ctrl < 0 && --spin) ;                      if (!spin) ok = 0; } while (0)
 #define R60P(w) do { R60G(); if (ok) fifo[0] = (w); } while (0)
@@ -2089,6 +2115,13 @@ static void r60_push(void) {
 		 * A master that reads a stale sequence simply keeps last
 		 * frame's records, which is the existing no-packet path. */
 		if (ok) {
+#ifdef FBX_STAGE
+			/* Nothing reaches the framebuffer here: the packet is in
+			 * WRAM and r60_blast() moves it at the tail, at FM=0.
+			 * Handing over the length is the whole handover — a
+			 * non-zero fbx_stage_n IS the "a packet is ready" flag. */
+			fbx_stage_n = fbx_i;
+#else
 			volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
 			pub[1] = fbx_i;              /* exact word count */
 			fbx_seq_pub++;
@@ -2101,6 +2134,7 @@ static void r60_push(void) {
 			*(volatile uint16_t*)0xFFA192 = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
 			*(volatile uint16_t*)0xFFA194 = fbx_i;
 			*(volatile uint16_t*)0xFFA196 = pub[0];   /* read-back */
+#endif
 #endif
 		}
 #endif
@@ -2206,6 +2240,50 @@ static void r60_push(void) {
 #undef R60G
 	}
 }
+#ifdef FBX_STAGE
+/* THE BLAST (LOOP28 89). The only part of the packet path that must run
+ * at FM=0, and the only part that touches the framebuffer. It is a
+ * straight copy of what r60_push staged in WRAM plus the publish word,
+ * so its cost is the packet's length and nothing else: ~150 words on a
+ * play frame, under 2 scanlines.
+ *
+ * Ordering is the same contract the FIFO route had. The 68000 completes
+ * writes in program order, so the publish written last cannot precede
+ * its own payload, and a master that reads a stale sequence keeps last
+ * frame's records — the existing no-packet path.
+ *
+ * Longs, not words: the packet is word-aligned by construction and the
+ * FB window takes long writes, which halves the bus transactions. An
+ * odd trailing word is copied on its own. */
+__attribute__((section(".data"), noinline))
+static void r60_blast(void) {
+	uint16_t n = fbx_stage_n;
+	if (!n) return;                      /* no packet staged this vint */
+	fbx_stage_n = 0;
+	{
+		const uint32_t *sp = (const uint32_t*)fbx_stage;
+		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
+		uint16_t nl = (uint16_t)(n >> 1);
+		while (nl--) *dp++ = *sp++;
+		if (n & 1)
+			((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
+	}
+	{
+		volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+		pub[1] = n;                      /* exact word count */
+		fbx_seq_pub++;
+		pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+#ifdef FLIP_CENSUS
+		(*(volatile uint16_t*)0xFFA190)++;
+		*(volatile uint16_t*)0xFFA192 = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+		*(volatile uint16_t*)0xFFA194 = n;
+		*(volatile uint16_t*)0xFFA196 = pub[0];   /* read-back */
+#endif
+	}
+	*(volatile uint16_t*)0xFFA186 =
+		*(volatile uint16_t*)0xC00008;   /* V after the blast */
+}
+#endif
 #endif /* R60 */
 #if defined(K2_FREE) && defined(IDLE_TOKEN)
 #error K2_FREE claims COMM4 for the arm echo; IDLE_TOKEN also lives there
@@ -2844,13 +2922,19 @@ void shim_vblank(void) {
 					PSTAMP(0xFFA184);
 				}
 #endif
-#if defined(FB_XPORT) && !defined(FBX_TAIL)
+#if defined(FB_XPORT) && !defined(FBX_TAIL) && !defined(FBX_STAGE)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
 				 * to: the 68K cannot reach the framebuffer at FM=1.
 				 * Push-before-post was tried and reverted in August
 				 * because the push was ~90 lines of FIFO writes and the
 				 * flip then never made vblank — through the FB it is
-				 * ~2, so the objection is gone with the FIFO. */
+				 * ~2, so the objection is gone with the FIFO.
+				 *
+				 * It is NOT ~2 lines: the ~56-line BUILD is in here too,
+				 * and that is what drives V-at-post to 43 and the flip
+				 * to 0.3 Hz. FBX_STAGE takes the build out of this
+				 * window entirely (LOOP28 89) and adds nothing ahead of
+				 * the post. */
 				r60_push();
 #endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
@@ -2915,6 +2999,20 @@ void shim_vblank(void) {
 #else
 				(void)0;                 /* FB route: shipped at FM=0 */
 #endif
+#ifdef FBX_STAGE
+				/* THE BUILD, OFF THE FM=0 WINDOW (LOOP28 89). Every
+				 * word goes to WRAM, so FM=1 does not apply and this
+				 * overlaps the master's blit, which we wait out below
+				 * either way. r60_blast() moves it to the framebuffer
+				 * at the tail.
+				 *
+				 * OUTSIDE the arm gate on purpose: arming is a DREQ
+				 * concern and the FB route has no DMA to arm. The
+				 * FBXPORT line builds unconditionally today and this
+				 * must not quietly start dropping packets on a vint
+				 * the ISR was slow to echo. */
+				r60_push();
+#endif
 				/* (FM_LATE arm: selection overlaps the ISR span; the
 				 * F103 wait + FM drop sit before its ship) */
 				*(volatile uint16_t*)0xFFA0AC =
@@ -2949,6 +3047,20 @@ void shim_vblank(void) {
 #else
 				(void)0;                 /* FB route: shipped at FM=0 */
 #endif
+#ifdef FBX_STAGE
+				/* THE BUILD, OFF THE FM=0 WINDOW (LOOP28 89). Every
+				 * word goes to WRAM, so FM=1 does not apply and this
+				 * overlaps the master's blit, which we wait out below
+				 * either way. r60_blast() moves it to the framebuffer
+				 * at the tail.
+				 *
+				 * OUTSIDE the arm gate on purpose: arming is a DREQ
+				 * concern and the FB route has no DMA to arm. The
+				 * FBXPORT line builds unconditionally today and this
+				 * must not quietly start dropping packets on a vint
+				 * the ISR was slow to echo. */
+				r60_push();
+#endif
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 #endif
@@ -2962,6 +3074,19 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA09E =
 					*(volatile uint16_t*)0xC00008;   /* V at hold exit */
 				*(volatile uint16_t*)0xFFA0A2 = *mars_comm4;
+#ifdef FBX_STAGE
+				/* THE BLAST, AT THE TAIL (LOOP28 89). Same window
+				 * FBX_TAIL uses and for the same reason — the master
+				 * dropped FM at its ack, so the 68K can reach the
+				 * framebuffer here, and it costs the post nothing
+				 * because the post already happened.
+				 *
+				 * What is different from FBX_TAIL is what runs here.
+				 * FBX_TAIL put the whole ~56-line build in this window
+				 * and the game's IRQ4 waited for all of it: 49.1%
+				 * against 60.7 without. Only the copy is here now. */
+				r60_blast();
+#endif
 #ifdef FBX_TAIL
 				/* PUSH AT THE TAIL, NOT BEFORE THE POST (LOOP27 75).
 				 * Measured: pushing before the post moves V-at-post from

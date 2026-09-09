@@ -1668,6 +1668,17 @@ endif
 ifdef LAYOUTPROBE
 MDCCFLAGS += -DLAYOUT_PROBE
 endif
+# FBXSTAGE=1 = LOOP28 89, THE STAGING SPLIT. Needs FBXPORT. Separates the
+# packet BUILD from the framebuffer WRITE: the build runs after the post,
+# into 1872 bytes of WRAM (free space audited in LOOP28 84), where FM=1
+# does not apply and it overlaps the master's blit; a straight copy moves
+# it into the FB at the tail, in the FM=0 window the master's ack opens.
+# Costs one vint of packet latency, which the harvest already tolerates.
+# The point is that V-at-post stops paying for the build: FBXPORT alone
+# posts at V=43 and flips 0.3 times a second.
+ifdef FBXSTAGE
+MDCCFLAGS += -DFBX_STAGE
+endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
 # 0xFFA0C2 after it) next to the push-autopsy stamps 0xFFA0B4..BE.

@@ -118,7 +118,28 @@ convey ~85 words of real change (LOOP27 80); 85 words through the FIFO
 is still ~204 scanlines.
 
 ---------------------------------------------------------------------
-## 4. THE NEXT STAGE
+## 4. THE NEXT STAGE — DONE, AND IT REVEALED THE REAL ONE (2026-09-08)
+
+**Read this before section 4's body, which is now history.** The staging
+split below is implemented as `FBXSTAGE=1` and it works: V at post goes
+21 -> 243, the flip rate on the hardware line goes 0.0 -> 21.9 Hz, and
+the WRAM it needed was there (15,916 bytes free, LOOP28 84). It costs 0.9
+points on the accepted hardware line, inside the resolution floor.
+
+**It is still not shippable, and neither was what came before it.** Every
+FB-transport build that actually flips renders a 94-98% BLACK screen —
+`FBXSTAGE` and the older `FBXTAIL` alike — while the 0 Hz build shows the
+game at 18% black. The DREQ ship line flips at the same 21.5 Hz and
+renders correctly. The master composes one bank and the flip swaps to a
+bank nothing composed: the "bank disease" `sh_src/m_main.c` already
+names, latent for as long as FBXPORT never flipped.
+
+**THE NEXT STAGE IS THE SECOND BANK.** Compose it, or restore into it on
+the flip. Until then a flip-rate number is not a display and must not be
+ranked as one. LOOP28 89-90.
+
+---------------------------------------------------------------------
+## 4a. THE STAGING SPLIT (implemented; kept for its reasoning)
 
 **Make the master's FM=1 window shorter and scheduled, so an FM=0 window
 exists that is not in front of the post.** That is the only escape from

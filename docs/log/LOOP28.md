@@ -211,3 +211,69 @@ is left OFF in the shipping build (entry 85's `PAL_DIET` gate), the
 counter fix is kept because the code was broken either way, and the
 12.4-point PALROTOROFF ceiling (entry 86) stays the real target because
 it is the one gap comfortably outside this noise.
+## 89. THE STAGING SPLIT IS BUILT, AND IT MOVES THE POST BACK INTO VBLANK
+
+HANDOFF-PIPELINE section 4's decomposition, implemented as `FBXSTAGE=1`
+(needs `FBXPORT`, default off).
+
+**What it does.** The packet BUILD — rotor, palette compare, record
+packing — writes into `fbx_stage[936]` in WRAM instead of straight into
+the framebuffer, and runs after the post, where FM=1 does not apply to
+it. `r60_blast()` then copies staging into the framebuffer at the tail,
+in the FM=0 window the master's ack opens, and writes the publish word
+last. One vint of packet latency, which the harvest already tolerates.
+The buffer is 1872 of the 15,916 free bytes from entry 84; `md.ld`'s
+ASSERT is the fence and `__bss_end` moves 0xFF21D0 -> 0xFF27FA.
+
+**It does the thing it was designed to do.** V at post, from the 68K's
+own stamp at 0xFFA0A0:
+
+    make ship-us FBXPORT=1 <opt1>                 V at post = 21
+    make ship-us FBXPORT=1 <opt1> FBXSTAGE=1      V at post = 243
+
+243 is inside vblank, so the ISR can flip again. Measured with ares
+`--trace-flip` over frames 1500-4100, which is the display truth:
+
+    build                                   game speed   flips
+    make ship-us FBXPORT=1                     49.7%      0.0 Hz
+    make ship-us FBXPORT=1 FBXSTAGE=1          48.8%     21.9 Hz
+    + opt1                                     85.2%      0.0 Hz
+    + opt1 + FBXSTAGE=1                        50.3%     14.8 Hz
+
+On the accepted hardware line the split costs 0.9 points — inside the
+resolution floor of entry 88 — and takes the flip rate from nothing to
+21.9 Hz. On the opt1 line it costs 35 points, which is outside the floor
+and real: the ~69-line build now sits between the post and the game's
+IRQ4, which is section 4's constraint 3 violated.
+
+## 90. BUT A FLIPPING FB-TRANSPORT BUILD RENDERS BLACK, AND ALWAYS DID
+
+Before treating any of entry 89's flip rates as progress: **count what is
+on the screen, not how often it changes.** Eight consecutive frames
+(2400-2407) of the level-1 run, percentage of the frame that is pure
+black:
+
+    make ship-us FBXPORT=1                0 Hz     18% black,  95 colours
+    make ship-us FBXPORT=1 FBXSTAGE=1  21.9 Hz     98% black,  35 colours
+    make ship-us FBXPORT=1 FBXTAIL=1   ~12 Hz      94% black,  66 colours
+    make ship-us  (DREQ ship line)     21.5 Hz     17% black, 102 colours
+
+Not alternating — every one of the eight frames is 98% black. So:
+
+  1. **The build that "never refreshes" is the one showing the game.**
+     At 0 Hz the master keeps composing into the single visible buffer.
+     A flip rate read on its own inverted the ranking.
+  2. **This is not FBXSTAGE's bug.** `FBXTAIL`, which predates it, does
+     the same thing. Both are FB-transport builds that flip; both go
+     black. The DREQ ship line flips at the same rate and renders.
+  3. **So the defect is the second bank, not the post's position.** The
+     master composes into one buffer; the flip swaps to one that was
+     never composed. `sh_src/m_main.c` already names this — "the bank
+     disease the k2 comments describe" — and carries `cycle_dirt` and
+     the restore set for it. Under FBXPORT with no flips that machinery
+     never ran, so the fault has been latent.
+
+**FBXSTAGE is therefore NOT a shipping candidate**, and it is kept
+default-off. What it bought is a correct diagnosis: section 4's next
+stage is done and it was not the thing in the way. The FB transport's
+real blocker is composing the second bank.
