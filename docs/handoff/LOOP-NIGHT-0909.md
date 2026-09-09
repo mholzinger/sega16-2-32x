@@ -51,11 +51,11 @@ ceiling probe first.
   `--base base`. DONE: 85.2 (LOOP29 108). md5s never reproduce across
   commits (the git hash is baked in). `diff vs base` is a stale-bake
   test only between SAME-flag siblings.
-- A3 timelines: `frame_timeline.py` on both roms, windows 2000-2012 and
-  3000-3012. Produce ONE table per rom: per vint, irq4 line, miss y/n,
-  raise, drop, gate spin lines, idle line. Then the attribution for the
-  missing vints: how many lines over 262, and of those how many are FM
-  spin vs work. This table is what B chooses from. Write it in full.
+- A3 timelines: DONE (LOOP29 109). Result: on opt1 the missing vints
+  are head (shim ~72 + IRQ4 ~30) + heavy pass ~190 = ~295 > 262, with
+  NO spin on the deciding path. The lever is the shim's ~72 lines,
+  target <= ~35. B2 is not a lever on opt1. B1 (stage trace) is next
+  after A4.
 - A4 `opt1_rotoroff`: opt1 + `PALROTOROFF=1`, `--base opt1`. Expect
   94.7. Confirms the palette prize (12.4) on today's source.
 
