@@ -195,9 +195,10 @@ def finish(row, t0):
                     "Windows are 700-vint slices of [1500,4100]. anim/black/colours/ramp "
                     "are guards, not rankings. A gap under 6 points is noise (LOOP28 88).\n\n"
                     "| tag | flags | md5 | total% | 1500-2200 | 2200-2900 | 2900-3600 | 3600-4100 "
-                    "| miss% | anim mean | black% f2000/3000/4000 | colours | ramp[3] | diff vs base | wall s | note |\n"
-                    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+                    "| miss% | by-miss windows | anim mean | black% f2000/3000/4000 | colours | ramp[3] | diff vs base | wall s | note |\n"
+                    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
     w = row.get("speed_windows", {})
+    mw = row.get("miss_speed_windows", {})
     fr = row.get("frames", {})
     def g(k):
         v = w.get(k)
