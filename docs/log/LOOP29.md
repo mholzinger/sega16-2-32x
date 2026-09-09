@@ -384,6 +384,10 @@ ranked.
 
 ## 114. THE GAME ALREADY RUNS OUR PALETTE ALLOCATOR, AND ITS TABLE IS IN OUR WORK RAM (17:40)
 
+**ITS DIAGNOSIS SECTION IS WRONG — CORRECTED BY 115. The addresses, the
+verification and the namespace correspondence all stand; the claim that
+the missing slot 6 is the shadow-ramp defect does not.**
+
 Mike supplied `srcref/alteredbeast` (Michael J Archer's commented S16
 disassembly). Critical read first: it is a DISASSEMBLY, not a
 decompilation — 61,014 lines, 44% raw data, 4,132 labels, no reassembly
@@ -455,3 +459,63 @@ arcade's allocation. It is also the first concrete instance of LOOP27
 game's slot index EXACTLY rather than 7-of-8-by-coincidence. One frame
 is not a correspondence proof. Next step is a multi-frame census of
 `d[4]&0x3F` against the refcount table before any code is written.
+
+## 115. CORRECTION: THE REFCOUNT TABLE IS NOT A "NEEDS A PAIR" SIGNAL (18:05)
+
+Entry 114 ended by claiming the game's refcount table diagnoses our
+shadow-ramp draws, on the evidence that slot 6 is refcounted live in
+10 of 10 frames and our `pr_key` never holds it. I was about to build on
+that. The verification it demanded first says it is wrong.
+
+Dumped the game's sprite RAM (0xFF7000, the mirror our own push reads,
+md_main.c:1332) alongside the refcount table at f2000:
+
+    live sprite records                      16
+    palette field (d[4]&0x3F) -> records     0:7  2:1  7:1  9:3  10:2  11:2
+    game refcount > 0                        0 2 6 7 8 9 10 11
+    our pr_key                               0 2   7 8 9 10 11
+
+    slot 6: game refcount 1, ON-SCREEN RECORDS USING PALETTE 6 = ZERO
+
+**So not claiming slot 6 is CORRECT.** The refcount counts OBJECT
+references in the game's actor list — an actor that exists but is
+off-screen, inactive, or not drawing still holds one. It is not a
+"this palette is on screen" signal, and our allocator is right to ignore
+it. At this frame there is no allocator failure at all: six palettes are
+on screen, we hold all six, plus slot 8 which `PRHOLD=6` deliberately
+keeps for a departed set.
+
+**What survives from 114, and it is still worth having:**
+
+  - The routine addresses and table addresses, all derived from our own
+    objdump (0x3B2E / 0x3BCE / 0x3B6C, tables 0xFFF440 / 0xFFF480 /
+    0xFFF500).
+  - The object offsets $0A palette_bank / $0B palette_index, confirmed
+    by `%fp@(10)` / `%fp@(11)` in our binary.
+  - **The namespace correspondence, which is proven and useful**: our
+    `d[4] & 0x3F` IS the game's palette slot index. 81 game-live slots
+    over 10 frames and we hold exactly one the game calls dead. That
+    means the game's per-slot data (which palette DATA a slot holds, via
+    the 0xFFF500 request table and palette_bank 0-175) can be read
+    directly against our own keys with no translation layer.
+
+**What it does NOT give**: a cheaper or more correct answer to "which
+sets need a pair THIS cycle". We already compute that from the sprite
+records, which is the right source, and at the frames sampled we compute
+it correctly.
+
+**Where the defect actually lives, restated honestly.** SPRLATE[3] is
+1099 ramp draws on opt1 over 2600 vints, so the failure is real but it
+is NOT happening at the frames sampled here. It is a CAPACITY failure
+under load — more live sets than pairs — which the capacity census
+(m_main.c "CAPACITY CENSUS") was built to measure and which LOOP27 6
+already characterised. Finding it needs sampling at a ramp draw, not at
+an arbitrary frame.
+
+**Method note for the next session.** The disassembly is a strong source
+of ADDRESSES and STRUCTURE and a weak source of SEMANTICS. Both of
+today's uses of it followed the same shape: the structural claim
+verified perfectly against our binary, and the behavioural inference
+drawn from it was wrong until measured against a running frame. Verify
+structure by objdump, verify meaning by ares dump, and never skip the
+second.
