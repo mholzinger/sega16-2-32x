@@ -97,7 +97,13 @@ blind:
   was "no change" on the DREQ line (HANDOFF-SESSION7 3c); the FB
   transport moved the push, so one clean re-measure is owed. If it is
   within 6 points of opt1, it stays dead.
-- B1 the palette path (prize 12.4, LOOP28 86). PALNOCMP failed twice
+- B1 DONE (LOOP29 111), and no probe build was needed — the shipping
+  shim's own `PSTAMP` writes are traceable. The 73-line shim splits:
+  rotor+compares 21.5, ship phase 16.5, everything else under 6.5.
+  The two candidates that remain are therefore (a) the rotor, priced
+  at 9.3 points by A4, and (b) the ship phase, never priced. Do (b)
+  first: it is unexplored and the rotor has failed three designs.
+- B1-OLD the palette path (prize 12.4, LOOP28 86). PALNOCMP failed twice
   (74.1 / 57.9: the compare is compression) and PALSTREAK/PALBACKOFF
   found no structure. So the third design needs the stage cost, not
   another sweep. Stage trace recipe: add a probe flag `STAGETRACE=1`
