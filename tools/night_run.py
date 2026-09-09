@@ -147,11 +147,10 @@ def main():
     dm = (misses[FRAMES[-1]] - misses[FRAMES[0]]) & 0xFFFF
     row["irq4_miss_pct"] = round(100.0 * dm / vints, 1)
     row["diag_hash"] = f"0x{struct.unpack_from('>I', diags[FRAMES[-1]], 18 * 4)[0]:08x}"
-    sl_a = struct.unpack(">16I", extras[FRAMES[0]])
-    sl_b = struct.unpack(">16I", extras[FRAMES[-1]])
+    sl_a = struct.unpack(">10I", extras[FRAMES[0]])
+    sl_b = struct.unpack(">10I", extras[FRAMES[-1]])
     row["sprlate"] = {"ramp3": (sl_b[3] - sl_a[3]) & 0xFFFFFFFF,
-                      "reloc12": (sl_b[12] - sl_a[12]) & 0xFFFFFFFF,
-                      "nomove13": (sl_b[13] - sl_a[13]) & 0xFFFFFFFF}
+                      "raw_a": list(sl_a[:4]), "raw_b": list(sl_b[:4])}
 
     # 6. frames
     fr = {}
