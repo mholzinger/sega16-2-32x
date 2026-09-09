@@ -839,6 +839,22 @@ endif
 # those. A page is fresh in a bank once restored into it and stops being
 # fresh in BOTH the moment cap_page sees its truth change. Needs BLITSKIP
 # (fb_draw_par is the bank label).
+# CSETCENSUS=1 = LOOP28 99. Distinct System 16 colour SETS drawn per vint
+# on the Mega Drive plane, into CEN[39] sum / [40] max / [41] samples.
+# The MD plane has 3 lines x 16 pens and an S16 background tile is 3bpp
+# (<=8 pens), so six sets fit without eviction. This says whether the
+# LRU in mdp_assign_set ever has anything to do. Implies FLIPCENSUS.
+# TEXTCAPFULL=1 = LOOP28 100. With TEXTCAPMASTER, capture text EVERY
+# frame instead of every other. The inline path's R60 halving is the
+# suspected cause of its wrong pixels; the slave path it replaces
+# captures every frame.
+ifdef TEXTCAPFULL
+SHCCFLAGS += -DTEXTCAP_FULL
+endif
+ifdef CSETCENSUS
+SHCCFLAGS += -DCSET_CENSUS -DFLIP_CENSUS
+MDCCFLAGS += -DFLIP_CENSUS
+endif
 ifdef PGFRESH
 SHCCFLAGS += -DPG_FRESH
 endif

@@ -1702,6 +1702,40 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft);
  * exactly the used pixels. FG claims drop bit 0 — the shipper forces
  * FG pixel 0 to pen 0 (transparent), so its (often garbage) colour
  * must not spend a pen. */
+#ifdef CSET_CENSUS
+/* COLOUR-SET PRESSURE (LOOP28 99). The Mega Drive plane has MDP_LINES*16
+ * = 48 pens and a tile may draw from ONE 16-pen line, while a System 16
+ * background tile is 3bpp — at most 8 pens out of its colour set. So two
+ * sets share a line comfortably and three lines hold six sets. The
+ * question the allocator exists to answer is how many DISTINCT sets are
+ * live at once; if it is <= 6 there is nothing to evict and the LRU is
+ * dead weight. This counts distinct csets per vint: sum, max, samples. */
+static uint32_t cs_seen[4];
+static uint8_t cs_disp_on = 1;           /* mirror of the game's display
+                                          * enable, set where r60_disp_on
+                                          * is (declared later than this) */
+static void cs_note(unsigned cset)
+{
+    cs_seen[(cset >> 5) & 3] |= 1u << (cset & 31);
+}
+static void cs_flush(void)
+{
+    unsigned n = 0;
+    for (int i = 0; i < 4; i++) { n += (unsigned)__builtin_popcount(cs_seen[i]); cs_seen[i] = 0; }
+    CEN[39] += n;
+    if (n > CEN[40]) CEN[40] = n;
+    CEN[41]++;
+    /* histogram: does the 6-set capacity hold almost always, or not?
+     * [42] <=6 (fits, nothing to evict)  [43] 7-12  [44] 13-24  [45] 25+
+     * [46] counts the <=6 vints where the game had the display BLANKED,
+     * which is a load and shows nothing anyway. */
+    if (n <= 6) CEN[42]++;
+    else if (n <= 12) CEN[43]++;
+    else if (n <= 24) CEN[44]++;
+    else CEN[45]++;
+    if (n > 6 && !cs_disp_on) CEN[46]++;    /* over capacity WHILE BLANKED */
+}
+#endif
 static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
                           uint8_t stamp, int soft)
 {
@@ -5687,7 +5721,16 @@ static int flip_span(void)
          * declining at 60Hz. */
         static uint8_t r60_txt_alt;
         r60_txt_alt ^= 1;
+        /* LOOP28 100: the 30Hz halving is why the inline path renders
+         * wrong. The SLAVE path captures EVERY frame, so switching the
+         * capture to the master silently also halved its rate, and the
+         * restore then spread half-stale text truth into both banks.
+         * TEXTCAPFULL restores the every-frame rate; the capture is 4.3
+         * scanlines, against the 31.8 the master spends waiting for the
+         * slave to pick it up (LOOP28 96). */
+#ifndef TEXTCAP_FULL
         if (r60_txt_alt)
+#endif
         for (int i = 0; i < 928; i += 4) {
 #elif defined(K2_FREE)
         for (int i = 0; i < 928; i += 4) {   /* 0x740 words = 928 longs
@@ -6144,6 +6187,9 @@ void visr_vbi(void)
     visr_t0 = t0;
 #ifdef FLIP_CENSUS
     CEN[18]++;                           /* V-ISR entries = denominator */
+#ifdef CSET_CENSUS
+    cs_flush();                          /* per VINT, the real cadence */
+#endif
 #ifdef FLIP_RATE_POST
     /* HARDWARE READOUT OF THE FLIP RATE. The FS-write census is SH-2
      * side and the only channel off the FPGA is a screenshot, which is
@@ -9926,6 +9972,9 @@ RAMCODE void m_main(void)
                     /* tilemap dirty bitmap (13 bits); bit 15 = the game's
                      * display-enable (DISPLAY GATE below) */
                     r60_disp_on = (uint8_t)(SPR_LAND[R60_W_BM] >> 15);
+#ifdef CSET_CENSUS
+                    cs_disp_on = r60_disp_on;
+#endif
                     {   /* LOST-PUSH BELT v3: sequence gap = a push that
                          * landed nothing (no tear to echo). Measured
                          * need: Mike's s16.bs1 lost 104 words (3 blocks)
@@ -12400,6 +12449,10 @@ RAMCODE void m_main(void)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
                             GAME_TILE_REMAP(code);      /* per-game code fold (no-op US) */
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
+#ifdef CSET_CENSUS
+                            cs_note(cset);   /* every ON-SCREEN tile, not
+                                              * just the ones being claimed */
+#endif
                             mdp_s_stmp[cset] = (uint8_t)win_no;
                             /* MD RESIDENCY ALLOCATOR (§16): md_tag, same
                              * set/way geometry as the render cache but

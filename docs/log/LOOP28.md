@@ -510,3 +510,98 @@ oracle that judges pixels. The tool now prints this in its own output.
 Standing state after this: the shipping line and the double-buffered
 line of entry 93 are the only two configurations with verified-good
 frames. `TEXTCAPMASTER` is kept default-off with this entry attached.
+## 98. THE RE-MEASUREMENT: EVERY NEGATIVE HELD, AND THE GATE IS DETERMINISTIC
+
+Mike's instruction: re-measure what was crossed off, and do not mark it
+measured without counting twice. Protocol: each flag built CLEAN TWICE,
+independently, three disjoint windows per build, a frame captured from
+each. Result counts only if both builds agree.
+
+    flag        pass 1 windows      pass 2 windows      verdict
+    baseline    58.6 87.6 98.9      58.6 87.6 98.9      —
+    PALNOCMP    45.4 51.7 57.0      45.4 51.7 57.0      NEGATIVE HOLDS
+    FBXTAIL     50.0 50.0 50.0      50.0 50.0 50.0      HOLDS (a cadence
+                                                        lock, not a rate)
+    CLAIMNEW    53.1 72.7 97.6      53.1 72.7 97.6      HOLDS
+
+**Both passes are byte-identical in every case, from roms with different
+md5s.** So the gate is perfectly deterministic for a given source; the
+18-point spread of entry 88 is sensitivity to code LAYOUT, not run-to-run
+noise. That is a sharper and much more usable rule:
+
+> An A/B is trustworthy exactly when the two builds differ only in the
+> thing under test, and untrustworthy the moment a change moves code
+> around. Two clean builds of the same source will agree exactly.
+
+PALNOCMP is slower in all three windows, so LOOP27 80a stands.
+
+## 99. TWO CLAIMS OF MINE, BOTH WRONG THE SAME WAY
+
+Both were totals read as rates. Recording the pattern, not just the
+corrections.
+
+**"System 16 has 2048 palette entries against our 256, an 8:1 squeeze."**
+The 2048 is the size of palette RAM, not the number of colours in use.
+Measured: 294-314 distinct VALUES live at once, and the arcade's own
+frames (`ref_arcade`, ten samples) show at most **112 distinct colours on
+screen**, typically 17-106. Against 256 slots that is 2x headroom, not a
+squeeze — **on the 32X layer**.
+
+**But the sky is not on the 32X layer.** The background runs through the
+Mega Drive plane, which has `MDP_LINES` = 3 lines x 16 pens = 48, and a
+tile may draw from ONE line. An S16 background tile is 3bpp, so <= 8
+pens, so six sets fit without eviction. Distinct colour sets ON SCREEN
+per vint, 4188 vints:
+
+    <= 6  (fits, nothing to evict)   70.7%
+    7-12                             22.9%
+    13-24                             6.3%
+    25+                               0.1%
+    mean 5.72, max 45
+
+So the allocator has real work about 29% of the time and Mike's lookup
+table is right for the 32X layer and wrong for the MD plane. What the
+shipping build actually pays, though, is small: `MDSTATIC`'s per-scene
+pinning means only **87 set assigns in 4200 frames**, with 93
+nearest-colour substitutions — 93 wrong colours per 70 seconds, each
+persisting until reassigned. Real, and not the big lever.
+
+**"Patching three routines deletes 136,411 writes."** True as a total and
+misleading as a rate. Tile-staging writes per frame over 3000 frames:
+mean 162, median 116, p90 197, max 10856. **Ten frames (0.3%) carry 19%
+of all the writes** — the clears and the RLE loader are level-load
+bursts, and the display gate blanks loads anyway. Amortised the patch is
+45 writes a frame. Worth doing, not a pipeline fix.
+
+## 100. THE INLINE TEXT CAPTURE, ALMOST
+
+Entry 97's `TEXTCAPMASTER` rendered confetti. The cause is one line: the
+inline path carries an R60 alternation that captures text every OTHER
+frame, while the slave path it replaces captures every frame. Switching
+the capture to the master silently halved its rate, and the restore then
+spread half-stale truth into both banks. `TEXTCAPFULL=1` restores the
+rate.
+
+    build                              logic   updates/sec   frame
+    shipping                           49.7%      11.7       correct
+    shipping + TCM + TCFULL            49.6%      12.7       one bad object
+    double-buffered (C)                30.3%      25.3       correct
+    double-buffered + TCM + TCFULL     34.9%      36.0       one bad band
+
+On the shipping line the saving buys nothing, because that line declines
+almost every flip anyway and the pre-flip path's length never matters.
+On the double-buffered line, where the flip actually happens, it is
+**+4.6 points of logic and +10.7 screen updates a second** — the best
+presentation result in this log.
+
+**And it still has a defect**, so it is not a win yet: a band of the
+stone wall renders as black-and-white garbage. HUD, sprites, background
+and text are all correct.
+
+**Hypothesis for that band, untested:** the join we deleted was also
+acting as a barrier that let the SLAVE finish its blit half. Without it
+the master reaches the flip earlier and reveals a band the slave had not
+written. If so the fix is to wait on the slave's BLIT rather than on its
+text capture — a much shorter wait — not to put the capture back.
+
+That is the first thing to test next.
