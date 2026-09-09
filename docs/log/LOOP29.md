@@ -381,3 +381,77 @@ VDP reg 1 and can hold the MD plane OFF) and the Sept 6 attract-parity
 work (blank mode, the pipeline-armed handshake, display release waiting
 two cell-walk rotations). Those need a probe flag each before they can be
 ranked.
+
+## 114. THE GAME ALREADY RUNS OUR PALETTE ALLOCATOR, AND ITS TABLE IS IN OUR WORK RAM (17:40)
+
+Mike supplied `srcref/alteredbeast` (Michael J Archer's commented S16
+disassembly). Critical read first: it is a DISASSEMBLY, not a
+decompilation — 61,014 lines, 44% raw data, 4,132 labels, no reassembly
+to a matching rom, and its comments are ChatGPT/DeepSeek-assisted with
+the author stating "not 100% perfect" and "no 68000 expert". So nothing
+below is believed on its say-so; every claim is re-derived from our own
+rom. Handling is jtcores' rule: srcref is gitignored, DERIVE NEVER COPY.
+
+**It is our program.** Three facts our own probes found independently
+appear at the same addresses: `sync_check` at 0x3982 is
+`tst.b (unk_FFF01C).w / beq.s sync_check` (our frame-flag idle loop, pc
+0x903982); 0x2D82 is the one pure delay loop; 0x2AAC is a routine
+boundary where we trace IRQ4.
+
+**THE FINDING. Altered Beast contains a reference-counted palette slot
+allocator, and we have been running a second one that guesses at it.**
+
+Verified by disassembling OUR `roms/altbeast/prog68k.bin`, not by
+reading the .asm — every instruction below is from our own objdump:
+
+    0x3B2E  RequestPaletteUpdate    115 call sites
+    0x3BCE  ReleasePaletteSlot       90 call sites  ("decrements
+                                     reference count, frees if unused")
+    0x3B6C  AllocatePaletteSlot
+
+    3b2e: lea 0xfffff500,%a0     palette_request_table
+    3b34: moveb %fp@(11),%d0     palette_index  = object offset $0B
+    3b3e: cmpiw #63,%d1          63 = "unassigned"
+    3b44: moveb 0xfffff400,%d1   queue head
+    3b54: moveb 0xfffff401,%d1   fallback slot
+    3b60: clrb  %fp@(10)         palette_bank   = object offset $0A
+    3b76: lea 0xfffff480,%a1     slot table, indexed slot*2
+    3bbc: lea 0xfffff440,%a0     slot reference counts
+
+The object-structure offsets the .asm documents ($0A palette_bank,
+$0B palette_index) are confirmed by the `%fp@(10)` / `%fp@(11)`
+addressing in our own binary. That is the cross-check that makes the
+rest of its struct table usable.
+
+**The tables are LIVE IN OUR PORT.** ares dump of the shipping build at
+f2000, 253 of 384 bytes nonzero, stable across 6 frames:
+
+    0xFFF480 slot table   0032 0003 0008 003A 0049 0058 004B 002F
+                          0001 0028 0029 002A 0007 0000 0057 FFFF
+    0xFFF440 refcounts       7 0 1 0 0 0 1 1 1 3 3 3 0 0 0 0
+    0xFFF400 queue head   0x0F      0xFFF401 fallback  0x03
+
+**AND IT DIAGNOSES THE SHADOW-RAMP DEFECT.** Our SH-2 keeps `pr_key[16]`
+(0x060283C0) + `pr_age[16]` with age eviction, and our key is
+`d[4] & 0x3F` (m_main.c:2194) — the 6-bit palette field off the sprite
+record, which IS the game's slot index. Both allocators read at the same
+frame:
+
+    game slots with refcount > 0    0, 2, 6, 7, 8, 9, 10, 11   (8)
+    our pairs in use                0, 2,    7, 8, 9, 10, 11   (7)
+
+We get 7 of 8. The game holds a live reference on slot 6 and our LRU
+never claimed it; an actor on slot 6 draws with base 15, the shadow ramp
+— SPRLATE[3], 1099 draws on opt1, the red rectangle at f4000.
+
+**The change.** Ship the 16 refcount bytes (or the 32-byte slot table)
+each vint and assign pairs from the game's own accounting. That deletes
+`pr_age`, the age eviction, the late claim, the capacity census and the
+ramp fallback, and it cannot disagree with the arcade because it IS the
+arcade's allocation. It is also the first concrete instance of LOOP27
+80's architecture: ship meaning the game emits, not deltas we discover.
+
+**Not yet verified, and it gates the build:** that our key equals the
+game's slot index EXACTLY rather than 7-of-8-by-coincidence. One frame
+is not a correspondence proof. Next step is a multi-frame census of
+`d[4]&0x3F` against the refcount table before any code is written.
