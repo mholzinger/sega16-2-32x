@@ -19,8 +19,14 @@ import argparse, collections, csv, statistics, sys
 NAMES = {
     0xFFB0B0: "cons.entry", 0xFFB0B2: "cons.scroll", 0xFFB0B4: "cons.dmas", 0xFFB0B6: "cons.cells",
     0xFFA170: "cons.spans", 0xFFA172: "cons.pal", 0xFFA174: "cons.mark", 0xFFA176: "cons.END",
-    0xFFA0B4: "push.entry", 0xFFA0C4: "push.ndirty", 0xFFA0C6: "push.preglow", 0xFFA0C8: "push.sentinel",
-    0xFFA0CA: "push.postglow", 0xFFA0C0: "push.rotor0", 0xFFA0BE: "push.rotorDONE", 0xFFA0C2: "push.c2",
+    0xFFA0B4: "push.entry", 0xFFA0BE: "push.rotorDONE",
+    # 0xFFA0C0-0xFFA0CA are stamps ONLY under PAL_STAMP2, which the ship line
+    # does NOT define. In a ship build 0xFFA0C0 is the LOST-PUSH BELT's id
+    # list (md_main.c:1846) and reads as a convincing but fake stage boundary
+    # near line 51 (LOOP29 111). Check the flag before believing these names.
+    0xFFA0C0: "belt.ids/palstamp2?", 0xFFA0C2: "belt.ids+2/palstamp2?",
+    0xFFA0C4: "palstamp2?.ndirty", 0xFFA0C6: "palstamp2?.preglow",
+    0xFFA0C8: "palstamp2?.sentinel", 0xFFA0CA: "palstamp2?.postglow",
     0xFFA178: "push.palnext", 0xFFA17A: "push.rs0", 0xFFA17C: "push.rs1", 0xFFA17E: "push.rs2",
     0xFFA182: "push.blast0", 0xFFA184: "push.blastDONE",
     0xFFA0B6: "push.selection", 0xFFA0B8: "push.regs", 0xFFA0BA: "push.pal", 0xFFA0BC: "push.records",
