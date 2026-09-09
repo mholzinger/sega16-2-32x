@@ -308,3 +308,76 @@ the run's own output.
 because WRAP-UP never ran. Restored 15:53 to `make ship-us FBXPORT=1`,
 build de975574, `_end 0x060135D0`. If a rom was played from that path
 this morning, that is what it was.
+
+## 113. THE REGRESSION IS FBXPORT, AND EVERY METRIC WE USED HID IT (16:30)
+
+Mike, at the coffee shop: "since you agreed on an arch to move in, I
+haven't gotten a single build from you that has moved frames... this
+build further has zero moving frames." He is right, it is measurable,
+and the accepted rom is the worst one in the ladder.
+
+New instrument: `tools/presented_fps.py`. Over 60 consecutive ares
+frames it counts frames differing from their predecessor by >5% of the
+active area (MOTION: a scroll step, a sprite moving) and, separately,
+by >0.25% (any-change). MOTION is the headline. The any-change count is
+the same trap `anim_rate.py` fell into — opt1 reads 12 "new pictures" at
+f1800 of which 2 are substantial, and calling that 21 fps was the wrong
+story to tell about a picture that updates twice a second.
+
+Same script, same windows, level-1:
+
+    rom                                  MOTION   any-change   windows
+    make ship-us          (Sep 8)          5.0       22.0      7,5,3
+    make ship-us FBXPORT=1 (ACCEPTED)      1.3        4.0      0,4,0
+    opt1 + FBXPORT                         6.3       21.0      2,3,14
+    opt1 without FBXPORT                   8.3       16.3      12,4,9
+
+**The accepted rom froze completely for a full second.** Window f3400:
+ZERO pixels changed across 60 consecutive frames, not even the HUD. Over
+that same stretch its scene timer advanced 350 ticks in 700 vints — so
+the LOGIC ran at ~50% while the PICTURE stood still. Both statements
+are true of the same rom at the same instant, which is the whole problem.
+
+**Mechanism, already in this log and never acted on.** LOOP28 92: under
+FBXPORT the framebuffer flips 9 times in 2988 vints. The master composes
+into the bank being displayed, so a new picture appears only when a whole
+compose finishes, and a long compose shows as a still frame. FBXPORT
+exists for exactly one reason — without it the port is a black screen on
+the MiSTer (HANDOFF-PIPELINE 2, screenshot-verified). It buys hardware
+boot and it costs 22 -> 4 picture updates a second.
+
+**Why it stayed invisible for eight days.** Every ranking instrument
+adopted since 2026-09-01 measures the 68K's logic:
+
+  - `gameplay_speed.py` = scene-timer ticks per vint. Reads 49.7% on a
+    rom that freezes for a second.
+  - `START-HERE.md`, written 2026-09-09 01:23, states "THE BAR. There is
+    only one. 60 frames per second... The metric is gameplay_speed.py"
+    and explicitly rules out "flip rate... screen updates per second."
+    That instruction is what the overnight loop followed for four hours.
+  - LOOP28 93 had ALREADY measured this divergence (logic 49.7 /
+    updates 11.7 vs logic 29.6 / updates 25.3) and recorded Mike's play
+    pass overruling the gate. The finding was written down and then the
+    next document made the gate the only bar anyway.
+
+The Sept 1 era ranked builds on `ships` — generations actually delivered
+to screen, printed as an fps by `tools/nat_score.py` — and on "% single-
+vint frames". Those are presentation metrics. The bar drifted from what
+reaches the player to what the 68K computes, and the port followed it.
+
+**Not done here:** the Sept 1 rom itself was not rebuilt for comparison.
+Commit 9dfc8ee does not compile (the auto-commit hook means most commits
+are mid-edit snapshots, so history is not a source of buildable
+references) and Mike's instruction was reference-only, no importing. The
+regression is therefore bisected on FLAGS against today's source, which
+is the more useful axis anyway.
+
+**Open, and bigger than FBXPORT:** the best rom in the ladder still only
+moves 8.3 times a second. FBXPORT explains 5.0 -> 1.3; it does not
+explain 30 -> 5. The next suspects are unconditional (not flag-gated) and
+therefore invisible to a flag bisect — chiefly the display gate added
+2026-09-05 (md_main.c:4433, mirrors the arcade's video-enable bit into MD
+VDP reg 1 and can hold the MD plane OFF) and the Sept 6 attract-parity
+work (blank mode, the pipeline-armed handshake, display release waiting
+two cell-walk rotations). Those need a probe flag each before they can be
+ranked.
