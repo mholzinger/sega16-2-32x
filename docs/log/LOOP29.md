@@ -135,3 +135,53 @@ run it once for the record.
 Also seen: base 3008 has no raise at all and IRQ4 at line 27 — a vint
 where our shim did not post (the previous vint's pass ran through the
 vblank). One in 24 on base; none on opt1.
+
+## 110. A4: THE ROTOR CEILING IS 94.5% BY MISSES, AND THE SCENE TIMER CAN STALL (01:51-01:53)
+
+    make clean; make ship-us <opt1> PALROTOROFF=1     md5 c0c78277
+    .build_flags carries -DPALROTOR_OFF                _end ok
+
+                        timer%   IRQ4 misses   by-miss%
+    total [1500,4100]    87.3       5.5%         94.5
+    1500-2200            83.0    119/700         83.0
+    2200-2900            96.6     24/700         96.6
+    2900-3600           100.0      0/700        100.0
+    3600-4100            62.8      0/500        100.0   <- disagree
+    anim mean 10.7; black 8.0; colours ~3500; ramp[3] 731
+
+Raw counters (WRAM 0xFFF02A timer / 0xFFF144 misses) at each point:
+
+    opt1          925/112  1335/402  1948/489  2640/497  3140/497
+    opt1_rotoroff 981/59   1562/178  2238/202  2938/202  3252/202
+    base          807/176  1155/528  1516/867  1866/1217 2100/1483
+
+Two things.
+
+1. **The ceiling reproduces by the miss counter: 94.5 (LOOP28 86: 94.7).**
+   The prize over opt1 is 14.8 - 5.5 = 9.3 points of misses, all of
+   it in the two heavy windows (41% -> 17% and 12% -> 3%). The rotor
+   and its compares are ~20 lines of the ~72-line shim, and cutting
+   them halves the heavy-window misses. Consistent with entry 109's
+   arithmetic (head + heavy pass ~295, over by ~35).
+
+2. **The scene timer is not a clock in every game state.** Window
+   3600-4100 on the rotor-off rom advanced the timer 314 in 500 vints
+   with ZERO misses. Frame f4000 (read): frozen palette, confetti
+   ground, HUD gone, black box where the player was — the run diverged
+   (frame-indexed inputs on different content) into a state where the
+   game does not tick 0xFFF02A. So `speed_total` from the timer can
+   read LOW on a build that misses nothing. START-HERE defines speed
+   as 100 minus the miss rate; the rig now records both per window
+   (`by-miss windows` column) and the raw counters. When they
+   disagree, the content diverged and the miss figure is the one the
+   bar is defined on.
+
+3. **Opt1 has a visible defect on this script.** opt1 f4000 (read): a
+   solid RED RECTANGLE where base f4000 draws the textured tomb; the
+   shadow-ramp fallback (SPRLATE[3] = 1099 on opt1). This is the
+   failure Mike's pass called on 2026-09-07. Every B candidate sits on
+   opt1 and inherits it; it is an SH-2 pair-claim item, not a speed
+   one, and it goes in the handoff as the blocker between opt1 and an
+   accepted rom.
+
+B1 next: the stage trace of the ~72-line shim on opt1.
