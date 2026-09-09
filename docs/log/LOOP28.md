@@ -277,3 +277,72 @@ Not alternating — every one of the eight frames is 98% black. So:
 default-off. What it bought is a correct diagnosis: section 4's next
 stage is done and it was not the thing in the way. The FB transport's
 real blocker is composing the second bank.
+## 91. THE FRAMEBUFFER SWAPS AND IT EATS THE PACKET — ONE PER FLIP
+
+Entry 90 said a flipping FB-transport build renders black and blamed the
+second bank. Right region, wrong mechanism. The master's own lift census
+(`FLIPCENSUS=1`, CEN[10]=1 verified on every run below), 3000 frames:
+
+    build                       lifts/windows   stale seq   FS writes
+    FBXPORT=1                    2908 / 2908         0           9
+    + FBXSTAGE=1                 1428 / 2921      1180        1186
+
+**1180 stale against 1186 flips: one lost packet per flip.** The packet
+lives IN the framebuffer (0x12000, `FBX_PKT_MD`), the framebuffer window
+maps one bank at a time, and the bank the master's lift reads is not the
+bank the 68K's blast wrote. The master then finds an already-seen
+sequence, keeps last frame's records, and — because the PALETTE rides
+the same packet — CRAM never updates. 98% black is a missing palette,
+not a missing image.
+
+`FBXLATE=1` (lift below the flip instead of above it) does not help:
+1302 lifted, 1395 stale. The position of the lift is not the variable.
+
+**The fix, `FBXBOTH=1`:** write the packet twice, at the tail and again
+before the next post, with a flip possibly between them, carrying the
+SAME sequence so a master that already lifted it skips it. Two ~2-line
+copies. It works completely:
+
+    + FBXSTAGE=1 FBXBOTH=1       2889 / 2890         0          41
+                                 f2400: 88 colours, 17% black
+
+Delivery goes to 2889 of 2890 and the picture comes back.
+
+**But full delivery overruns the master's vblank.** FS writes collapse
+to 41: the master now harvests and applies a packet every window instead
+of every other one, and the flip write lands past the vblank edge guard,
+which declines it. Dropping the guard (`FLIPEDGEOFF=1`, which the RTL
+says is safe on real silicon — `srcref/S32X_MiSTer rtl/32X/VDP.sv`
+defers a late FS write instead of tearing):
+
+    + FBXBOTH=1 FLIPEDGEOFF=1    2879 / 2880         0         993
+                                 f2400: 110 colours, 17% black
+                                 20.0 Hz, game speed 29.6%
+
+That is the first FB-transport build that flips AND shows the game.
+
+## 92. CORRECTION: "0 Hz" NEVER MEANT A FROZEN SCREEN
+
+Entry 90 and HANDOFF section 2 both read the flip-rate column as refresh
+rate. It is not. `make ship-us FBXPORT=1` writes FS nine times in 2988
+vints and its picture still changes 24.5% of pixels over 50 frames — the
+master composes into the bank that is being displayed, so updates appear
+without a flip. It is SINGLE-BUFFERED, not frozen.
+
+So the FBXPORT line's problem was never "the display refreshes 0.3 times
+a second". It is that it composes into the visible bank, which is a
+tearing question and therefore a play-pass question, not something any
+screenshot count answers. The whole double-buffer effort above is worth
+its cost only if that tearing is visible.
+
+**What to ask before spending more on this:** does the current MiSTer
+build tear? If it does not, single-buffered is the answer and entries
+89-91 are insurance. If it does, the ladder is:
+
+    FBXPORT=1                                49.7%   single-buffered
+    + FBXSTAGE=1 FBXBOTH=1                   45.9%   single-buffered
+      (delivery fixed, edge guard declines)
+    + FLIPEDGEOFF=1                          29.6%   20.0 Hz, renders
+
+and the 16 points between the last two are the master's vblank budget —
+which is section 4's original target, reached from the other side.

@@ -1233,6 +1233,10 @@ static uint8_t  fbx_seq_pub;             /* publish sequence */
  * stale publish yields landed = 0 and last frame's records stand. */
 static uint16_t fbx_stage[R60_ARM];      /* packet under construction */
 static uint16_t fbx_stage_n;             /* words staged, 0 = nothing */
+#ifdef FBX_BOTH
+static uint8_t  fbx_stage_live;          /* the staged packet is worth
+                                          * writing into the other bank */
+#endif
 #define FBX_DST  fbx_stage
 #else
 #define FBX_DST  ((volatile uint16_t*)FBX_PKT_MD)
@@ -2256,10 +2260,28 @@ static void r60_push(void) {
  * FB window takes long writes, which halves the bus transactions. An
  * odd trailing word is copied on its own. */
 __attribute__((section(".data"), noinline))
-static void r60_blast(void) {
+static void r60_blast(int bump) {
 	uint16_t n = fbx_stage_n;
 	if (!n) return;                      /* no packet staged this vint */
+#ifdef FBX_BOTH
+	/* THE PACKET LIVES IN THE FRAMEBUFFER, AND THE FRAMEBUFFER SWAPS
+	 * (LOOP28 91). Measured: with flips running, the master's lift finds
+	 * an already-seen sequence on 1180 of 2921 windows — one lost packet
+	 * per flip — because the bank it reads is not the bank the blast
+	 * wrote. So write BOTH: once at the tail, once before the next post,
+	 * with a flip possibly in between. The second write carries the SAME
+	 * sequence, so a master that already lifted it correctly skips it;
+	 * what it buys is that whichever bank the master reads carries the
+	 * latest packet. Two ~2-line copies instead of one. */
+	if (!bump) {
+		if (!fbx_stage_live) return;     /* nothing worth repeating */
+	} else {
+		fbx_stage_live = 1;
+	}
+#else
+	(void)bump;
 	fbx_stage_n = 0;
+#endif
 	{
 		const uint32_t *sp = (const uint32_t*)fbx_stage;
 		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
@@ -2271,7 +2293,7 @@ static void r60_blast(void) {
 	{
 		volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
 		pub[1] = n;                      /* exact word count */
-		fbx_seq_pub++;
+		if (bump) fbx_seq_pub++;
 		pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
 #ifdef FLIP_CENSUS
 		(*(volatile uint16_t*)0xFFA190)++;
@@ -2922,6 +2944,13 @@ void shim_vblank(void) {
 					PSTAMP(0xFFA184);
 				}
 #endif
+#if defined(FBX_STAGE) && defined(FBX_BOTH)
+				/* THE OTHER BANK (LOOP28 91). FM is still down here —
+				 * it goes up on the next line — so the framebuffer is
+				 * ours, and a flip may have swapped banks since the
+				 * tail write. Same packet, same sequence. */
+				r60_blast(0);
+#endif
 #if defined(FB_XPORT) && !defined(FBX_TAIL) && !defined(FBX_STAGE)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
 				 * to: the 68K cannot reach the framebuffer at FM=1.
@@ -3085,7 +3114,7 @@ void shim_vblank(void) {
 				 * FBX_TAIL put the whole ~56-line build in this window
 				 * and the game's IRQ4 waited for all of it: 49.1%
 				 * against 60.7 without. Only the copy is here now. */
-				r60_blast();
+				r60_blast(1);
 #endif
 #ifdef FBX_TAIL
 				/* PUSH AT THE TAIL, NOT BEFORE THE POST (LOOP27 75).

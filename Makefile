@@ -1679,6 +1679,16 @@ endif
 ifdef FBXSTAGE
 MDCCFLAGS += -DFBX_STAGE
 endif
+# FBXBOTH=1 = LOOP28 91. Needs FBXSTAGE. The packet lives IN the
+# framebuffer and the framebuffer swaps: with flips running, the master's
+# lift reads an already-seen sequence on one window per flip, because the
+# bank it reads is not the bank the blast wrote. This writes the packet
+# twice — at the tail and again before the next post, with a flip
+# possibly between — carrying the SAME sequence, so a master that already
+# lifted it skips it.
+ifdef FBXBOTH
+MDCCFLAGS += -DFBX_BOTH
+endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
 # 0xFFA0C2 after it) next to the push-autopsy stamps 0xFFA0B4..BE.
