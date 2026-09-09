@@ -399,17 +399,13 @@ CEN[10]=1:
     after the truth drain (cap_drain)  4316    93.8   +28.0
     edge guard                         1650    35.9
 
-**65 of the 94 lines are gone before `flip_span` is entered at all.**
-That is the ISR waiting on the 68K's k2 window: the post lands at V=249
-and the master's gate at m_main.c wants the window within 1650 ticks of
-ISR entry, so it takes the DIAG[47] "too late to flip in vblank" exit and
-leaves the flip to the body fallback. `cap_drain` is the only other fat
-term at 28 lines, and the palette drain and page merge are noise.
-
-The last stamp (at the FS write) reads 1865 ticks, LOWER than the
-cap_drain boundary, because it is only reached on flips that were not
-declined — selection bias, not a contradiction. Those flips land at 40.5
-lines against a 35.9-line guard: just over.
+**THIS TABLE IS WRONG. Corrected in entry 96 — read that instead.** Two
+faults: `flip_span` is also called from the body fallback, where
+`visr_t0` is a stale ISR stamp, and the rows had different denominators
+because a stamp was committed as it was reached rather than buffered
+until the call finished. DIAG[47], the exit this entry blamed, is
+measured at ZERO. The entry is kept because the mistake is the point:
+the numbers looked coherent and were not.
 
 ## 95. NEGATIVE: PER-BANK RESTORE FRESHNESS BUYS 2 LINES AND NO SPEED
 
@@ -443,3 +439,74 @@ thing, and it is not the restore.** The master holds FM from the post to
 its ack, the game's gated writers spin for all of it, and double
 buffering adds the whole ~94-line flip path to that window. The two fat
 terms are the 65-line wait for the 68K's window and `cap_drain`'s 28.
+## 96. THE VBLANK BUDGET, MEASURED CORRECTLY THIS TIME
+
+Entry 94's table was wrong twice over. Fixed: `flip_span` is reached
+from the body fallback as well as the ISR, and only ISR calls have a
+meaningful `visr_t0`; and the stamps are now BUFFERED and committed only
+if the call reaches the FS write, so every row shares one denominator.
+`VBSPAN=1`, double-buffered line, 3000 frames, CEN[10]=1, 821 samples:
+
+    boundary                        ticks   lines   delta
+    ISR entry -> flip_span entry     1240    26.9   +26.9
+    after the palette drain          1264    27.5    +0.5
+    after the page merge             1298    28.2    +0.7
+    after the truth drain            2426    52.7   +24.5
+    slave PICKED UP the capture      3890    84.6   +31.8
+    slave FINISHED the capture       4088    88.9    +4.3
+    at the FS write                  4100    89.1    +0.3
+    edge guard                       1650    35.9
+
+Three real terms, and the largest is not work:
+
+  1. **26.9 lines waiting for the 68K's k2 window.** Irreducible from
+     the master's side — the capture cannot run before the game has
+     finished writing text, and the post is what says it has.
+  2. **24.5 lines in `cap_drain`.** Real work, correctness-critical.
+  3. **31.8 lines waiting for the SLAVE to notice a mailbox**, for a
+     capture that then takes 4.3. The master delegates a 4-line job and
+     waits 32 for the pickup. `TEXTCAP_SLAVE`'s design note says the
+     post-before-drain / join-after-drain overlap shortens the window;
+     it does, and the slave is still 31.8 lines late.
+
+## 97. THE FALSE POSITIVE: A CORRUPT BUILD SCORED 3x ON THE NEW GATE
+
+`TEXTCAPMASTER=1` (added here, default off) runs the text capture inline
+instead of posting it to the slave. It removes exactly the term entry 96
+identified:
+
+    pre-flip path         89.1 -> 57.8 lines
+    logic rate, dbl-buf   30.3% -> 34.8%
+    logic rate, shipping  49.7% -> 49.3%
+    screen updates/sec    11.7 -> 36.7      on the shipping line
+
+Three times the animation at the same logic rate, which would have been
+the largest presentation win in this log.
+
+**The frame is confetti.** The bottom third of the shipping-line build
+is red/white/blue noise, the player sprite is corrupt, the HUD icons are
+wrong. On the double-buffered line the same flag renders a good frame
+with a mangled text layer. The inline path is bit-rotted; it was written
+for an older pipeline.
+
+**Nothing automatic caught it.** The numbers that looked fine:
+
+    metric                      good frame   confetti frame
+    distinct colours                    95              61
+    fraction pure black                18%             21%
+    colour transitions per row       126.3           124.1
+
+Colour count, black fraction and a transition-density noise metric are
+all in range on the broken frame, because the game's own art is busy.
+`anim_rate.py` scores it HIGH precisely because noise changes every
+frame.
+
+**The rule this forces:** `anim_rate.py` counts change, not
+correctness. No cheap metric here separates a good frame from a corrupt
+one. Before believing any presentation number, LOOK at a frame, or run
+`tools/attract_parity.py` against the arcade corpus, which is the only
+oracle that judges pixels. The tool now prints this in its own output.
+
+Standing state after this: the shipping line and the double-buffered
+line of entry 93 are the only two configurations with verified-good
+frames. `TEXTCAPMASTER` is kept default-off with this entry attached.

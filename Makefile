@@ -343,7 +343,13 @@ endif
 # supersedes their packet paths with the R60 family. MD side: the R60
 # shim replaces the whole window/cadence block; only FM_GATE (from
 # FMGATE=1 in the canonical line) is needed there.
-SHCCFLAGS += -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DTEXTCAP_SLAVE
+SHCCFLAGS += -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30
+# TEXTCAP_SLAVE is in the bundle but must be switchable: LOOP28 96 measured
+# the master waiting 31.8 scanlines for the slave to PICK UP a capture that
+# then takes 4.3. `make ... TEXTCAPMASTER=1` runs it inline instead.
+ifndef TEXTCAPMASTER
+SHCCFLAGS += -DTEXTCAP_SLAVE
+endif
 MDCCFLAGS += -DR60
 endif
 # `make ... PALDELTA=1` = the palette-transport arc's packet diet

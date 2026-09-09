@@ -59,6 +59,14 @@ def main():
     print(f"mean {sum(rates)/len(rates):.1f} of a possible 60")
     if 0 in rates:
         print("A WINDOW READ 0: the picture stood still for a full second.")
+    print()
+    print("THIS COUNTS CHANGE, NOT CORRECTNESS. A build rendering confetti")
+    print("scores HIGH here — TEXTCAPMASTER read 36.7 against the shipping")
+    print("line's 11.7 and its bottom third was noise (LOOP28 97). A colour")
+    print("count and a black-fraction do not catch it either; both were in")
+    print("range on the broken frame. Before believing any number above,")
+    print("LOOK at a frame, or run tools/attract_parity.py against the")
+    print("arcade corpus, which is the only oracle that judges the pixels.")
 
 
 if __name__ == "__main__":

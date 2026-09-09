@@ -75,6 +75,13 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     if (bc == 0x4000) {                  /* k2 text capture (LOOP 20) */
         SYNC[4] = 0;
+#ifdef VB_SPAN
+        SYNC[7] = 0x4001;                /* LOOP28 96: PICKED IT UP. The
+                                          * master's join is its single
+                                          * biggest vblank term; this
+                                          * splits it into our latency
+                                          * and our copy. */
+#endif
         text_capture();
         SYNC[6] = 0x4000;                /* echo AFTER the copy lands */
         return;

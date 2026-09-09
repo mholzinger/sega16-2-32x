@@ -5593,11 +5593,31 @@ static volatile uint8_t flip_deferred;
  * boundary of the pre-flip path, summed with a count so the reader takes
  * means. ~46 ticks = one scanline; the edge guard is 1650 = 38 lines.
  * CEN[29] is the denominator; every other slot is a running sum. */
-#define VBS(slot) do { CEN[slot] += (uint16_t)(frt() - visr_t0); } while (0)
+/* ONLY the ISR's own calls. flip_span is also reached from the body
+ * fallback, where visr_t0 is a stale ISR-entry stamp and the delta is
+ * meaningless; mixing the two produced a 65-line "wait for the window"
+ * that does not exist (LOOP28 94, corrected in 96). */
+static uint8_t vbs_isr;
+static uint16_t vbs_t[5], vbs_t2[2];
+/* Stamps are BUFFERED and committed only if this call reaches the FS
+ * write, so every slot shares one denominator (CEN[36]). Committing as
+ * you go mixes calls that declined early into the early slots and not
+ * the late ones, which is how entry 94's numbers came out incomparable
+ * across rows. */
+#define VBS(i) do { if (vbs_isr) vbs_t[i] = (uint16_t)(frt() - visr_t0); } while (0)
 #else
 #define VBS(slot) do { } while (0)
 #endif
-static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
+#ifdef VB_SPAN
+static int flip_span_inner(void);
+/* clears vbs_isr on EVERY exit, so a body-fallback call that follows an
+ * ISR call in the same vint is never counted as one */
+static int flip_span(void) { int r = flip_span_inner(); vbs_isr = 0; return r; }
+static int flip_span_inner(void)
+#else
+static int flip_span(void)
+#endif
+                                         /* 1 = flipped; 0 = DECLINED
                                           * (K2_FREE edge guard: too
                                           * late in vblank — a dropped
                                           * frame beats a mid-scan bank
@@ -5608,8 +5628,8 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
                                           * only 182 deferred.) */
 {
 #ifdef VB_SPAN
-    CEN[29]++;                           /* samples (the denominator) */
-    VBS(24);                             /* entry */
+
+    VBS(0);                             /* entry */
 #endif
 #ifdef R60
     /* FM_TEST read-half verdict: FM=1 here; compare against the
@@ -5628,6 +5648,9 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * drain below. Post BEFORE the drain, join AFTER it:
      * both sides work, the window shortens by the overlap. */
     SYNC[6] = 0;
+#ifdef VB_SPAN
+    SYNC[7] = 0;
+#endif
     SYNC[4] = 0x4000;
 #else
     /* text capture: 512 longs FB -> TEXT_U truth.
@@ -5713,7 +5736,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * flip landing. */
     cram_flush_pen();
 #endif
-    VBS(25);                             /* after the palette drain */
+    VBS(1);                             /* after the palette drain */
     pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
 #ifdef PG_STICKY
     /* marks enter WATCH: a pointer-load mark can arrive
@@ -5733,13 +5756,23 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     cycle_dirt |= pg_pending;
     pg_pending |= pg_watch;      /* unstable pages: recapture the
                                   * latest stream state pre-flip */
-    VBS(26);                             /* after the page merge */
+    VBS(2);                             /* after the page merge */
     cap_drain(13);               /* ALL of it — correctness */
-    VBS(27);                             /* after the truth drain */
+    VBS(3);                             /* after the truth drain */
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     {
         uint32_t g2 = 2000000;
+#ifdef VB_SPAN
+        {   /* split the join: latency to pickup, then the copy itself */
+            uint32_t g3 = 2000000;
+            while (SYNC[7] != 0x4001 && SYNC[6] != 0x4000 && --g3) ;
+            if (vbs_isr) vbs_t2[0] = (uint16_t)(frt() - visr_t0);
+        }
+#endif
         while (SYNC[6] != 0x4000 && --g2) ;
+#ifdef VB_SPAN
+        if (vbs_isr) vbs_t2[1] = (uint16_t)(frt() - visr_t0);
+#endif
         if (!g2) {
             DIAG[22]++;          /* slave never captured: fall
                                   * back on the master, late
@@ -5847,7 +5880,15 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     HSC_RING[(HSC_IDX & 15) * 2 + 1] = (uint16_t)(0x8000 | hsc_win); HSC_IDX++;  /* ISR flip */
 #endif
 #endif
-    VBS(28);                             /* at the FS write */
+    VBS(4);                             /* at the FS write */
+#ifdef VB_SPAN
+    if (vbs_isr) {
+        CEN[36]++;                       /* the one denominator */
+        for (int q = 0; q < 5; q++) CEN[24 + q] += vbs_t[q];
+        CEN[37] += vbs_t2[0];            /* slave picked the capture up */
+        CEN[38] += vbs_t2[1];            /* slave finished it */
+    }
+#endif
     {
         uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
 #ifdef FLIP_CENSUS
@@ -6159,6 +6200,9 @@ void visr_vbi(void)
      * counts commits; DIAG[5] vs DIAG[6] is the deferral's yield. */
     if (flip_deferred) {
         flip_deferred = 0;
+#ifdef VB_SPAN
+        vbs_isr = 1;
+#endif
         if (flip_span()) {
             visr_flip_done = 1;
             deferred_flipped = 1;        /* this vint's flip is spent */
@@ -6301,6 +6345,9 @@ void visr_vbi(void)
                                           * this vblank; the window was
                                           * still armed and echoed above,
                                           * which is all the 68K needs */
+#endif
+#ifdef VB_SPAN
+    vbs_isr = 1;
 #endif
     if (!flip_span())
         return;                          /* declined: body sees the flag
