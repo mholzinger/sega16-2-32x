@@ -146,6 +146,16 @@ def main():
     row["speed_windows"] = win
     dm = (misses[FRAMES[-1]] - misses[FRAMES[0]]) & 0xFFFF
     row["irq4_miss_pct"] = round(100.0 * dm / vints, 1)
+    # Speed by the game's own miss counter (START-HERE: speed = 100 - miss
+    # rate). The scene timer can STALL with zero misses (LOOP29 110:
+    # rotor-off window 3600-4100 read 62.8 by the timer, 100.0 by misses),
+    # so both are kept; when they disagree, the run diverged in content.
+    row["miss_speed_windows"] = {
+        f"{lo}-{hi}": round(100.0 - 100.0 * ((misses[hi] - misses[lo]) & 0xFFFF) / (hi - lo), 1)
+        for lo, hi in zip(FRAMES, FRAMES[1:])}
+    row["miss_speed_total"] = round(100.0 - row["irq4_miss_pct"], 1)
+    row["timers"] = {str(n): timers[n] for n in FRAMES}
+    row["misses"] = {str(n): misses[n] for n in FRAMES}
     row["diag_hash"] = f"0x{struct.unpack_from('>I', diags[FRAMES[-1]], 18 * 4)[0]:08x}"
     sl_a = struct.unpack(">10I", extras[FRAMES[0]])
     sl_b = struct.unpack(">10I", extras[FRAMES[-1]])
