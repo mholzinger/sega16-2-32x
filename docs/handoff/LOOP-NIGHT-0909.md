@@ -48,8 +48,9 @@ ceiling probe first.
 
 - A1 `base`: `FBXPORT=1`. Expect 49.7. This is the accepted rom.
 - A2 `opt1`: `FBXPORT=1 TXTWRAM=1 LATESTEAL0=1 LATEKEEP=1 DRAWADOPT=1`,
-  `--base base`. Expect 82.3 and md5 b62237e5... If not, stop and find
-  out why before anything else (stale bake? source drift since 01:07?).
+  `--base base`. DONE: 85.2 (LOOP29 108). md5s never reproduce across
+  commits (the git hash is baked in). `diff vs base` is a stale-bake
+  test only between SAME-flag siblings.
 - A3 timelines: `frame_timeline.py` on both roms, windows 2000-2012 and
   3000-3012. Produce ONE table per rom: per vint, irq4 line, miss y/n,
   raise, drop, gate spin lines, idle line. Then the attribution for the
