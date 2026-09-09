@@ -346,3 +346,42 @@ build tear? If it does not, single-buffered is the answer and entries
 
 and the 16 points between the last two are the master's vblank budget —
 which is section 4's original target, reached from the other side.
+## 93. MIKE'S PLAY PASS OVERRULED THE GATE AGAIN, AND IT WAS RIGHT
+
+Hardware verdict on the two roms of entry 91, MiSTer, level 1:
+
+  - **Neither rom tears.** So entry 92's open question is answered:
+    composing into the visible bank is not visibly wrong, and the whole
+    double-buffer effort is insurance rather than a fix.
+  - **The double-buffered rom shows MORE animation** — while measuring
+    29.6% against 49.7% on the speed gate.
+
+The second half is the finding. `gameplay_speed.py` measures the game's
+LOGIC advancing: scene-timer ticks per vint. It says nothing about how
+often a new picture reaches the player. Measured (new tool,
+`tools/anim_rate.py`: one second of consecutive ares frames per window,
+counting frames that differ from their predecessor by >0.05% of the
+screen):
+
+    build            logic rate    screen updates/sec at f1800/2600/3400
+    T_singlebuf         49.7%           21, 14, 0      mean 11.7
+    T_dblbuf            29.6%           30, 26, 20     mean 25.3
+
+**The build with the faster logic presents less than half the
+animation**, and in one window the single-buffered picture DID NOT
+CHANGE FOR A FULL SECOND while its logic rate said 49.7%.
+
+Why: single-buffered, the master composes into the bank being displayed,
+so a new picture appears only as fast as it can compose a whole one, and
+a long compose shows as a still frame. Double-buffered, every flip
+presents a complete frame and the flip rate is the floor.
+
+**What this changes.** The speed gate has been the project's ranking
+instrument and it has been measuring the wrong half of the pipeline.
+Nothing measured with it is wrong about logic; it is just not the number
+a player experiences. From here, rank a presentation change on
+`anim_rate.py` and keep `gameplay_speed.py` for what it actually is —
+whether the 68K is keeping up with its own frame.
+
+Entry 88's resolution floor applies to both: a trajectory-sensitive
+metric on a frame-indexed script. Three windows, not one.
