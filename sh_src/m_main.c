@@ -12450,6 +12450,18 @@ RAMCODE void m_main(void)
                             if (isfg && (w == 0 || (w & 0x8000))) {
                                 /* FG: empty or cat-1 cell -> transparent */
 #endif
+#ifdef BG_BLANK0
+                                ;
+                            } else if (w == 0) {
+                                /* LOOP28 104: a CLEARED background cell.
+                                 * The blank above is foreground-only, so on
+                                 * the background an empty entry rendered as
+                                 * tile code 0 with colour set 0 and the
+                                 * previous scene's cell survived. The game
+                                 * clears the whole 64KB tilemap at a scene
+                                 * change (routine 0x36b0), so this is what
+                                 * a scene change looks like on the BG. */
+#endif
 #ifdef NT_WRAP
                                 CB(col) = MD_BLANK_SLOT;
 #else

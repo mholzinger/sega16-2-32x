@@ -671,3 +671,60 @@ Next, in the order I would take them:
      what is left of the vblank budget after the slave wait is gone.
   3. The tile-routine patch, as a level-load smoothing item, not a
      pipeline fix (entry 99).
+## 104. THE MISSING TITLE SCREEN, AND WHY IT IS A NAME-TABLE UPDATE BUG
+
+Entry 102 called the `face` / `eye` / `eye pan` scores the largest
+untouched parity gap. Diagnosed. It is not timing and not a lag.
+
+**What the arcade shows** at attract frame 1360: a full-screen brown eye,
+the ALTERED BEAST logo in blue, CREDIT 1, (C)SEGA 1988.
+
+**What we show** at the aligned frame: the DEMO's graveyard background,
+still animating, with the logo (white, not blue), INSERT COIN and the
+copyright drawn over it. The eye never appears, at any frame.
+
+**The game is not at fault.** Our own tilemap truth between a demo frame
+and the title frame:
+
+    TILEMAP_U demo f1000 vs title f1834   86.8% of bytes differ
+    nonzero words                         11639  ->  2424
+    MD VRAM                               17.5% of bytes differ
+    32X CRAM                              262 of 512 bytes differ
+
+The game rewrote the tilemap, our capture took it, and both planes'
+hardware state moved. The title map is SPARSE — the eye plus a lot of
+cleared cells — and the cleared cells are where the graveyard survives.
+
+**So cells that go to zero are not being updated.** The name-table pass
+blanks an empty cell only on the FOREGROUND (`isfg && (w == 0 || w &
+0x8000)`); on the background an entry that became 0 keeps whatever slot
+it had. The previous scene therefore survives underneath every new one.
+
+**`BGBLANK0=1` proves it and is the wrong fix.** Blanking a zero
+background cell makes the title screen appear — eye, blue logo, correct
+text, structurally right. And it breaks the demo: the grass band turns
+to confetti, because **tile code 0 is a REAL TILE** (it is the grass),
+not a sentinel for "empty". Blanking it deletes legitimate art and
+exposes the 32X framebuffer underneath, which holds stale bytes in rows
+the MD plane normally covers.
+
+**The correct fix is neither skip nor blank: a cell that changes to 0
+must be UPDATED to draw tile 0.** That renders the title screen's cleared
+field as tile 0 of colour set 0 (which is what the arcade's own hardware
+does) and leaves the demo's grass intact. The bug is that the update path
+treats 0 as "nothing to do".
+
+`BGBLANK0` is kept default-off as the proof, with this entry attached.
+
+**Second finding, free:** the confetti that `BGBLANK0` exposes in the
+demo's ground band is the same signature entry 97 saw under
+TEXTCAPMASTER. There is standing garbage in the 32X framebuffer's lower
+rows which the Mega Drive plane normally hides. It is not caused by
+either flag; both merely uncover it. Worth its own probe.
+
+**Third, and it changes the colour work:** with the eye actually drawn,
+its palette is visibly wrong — the arcade's browns render as red, white
+and navy. That is the Mega Drive plane's 48-pen limit meeting a
+full-screen image, which is exactly the pressure entry 99 measured at
+7-45 sets on 29% of vints. The allocator's cost has now been SEEN, not
+just counted.

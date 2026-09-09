@@ -851,6 +851,13 @@ endif
 # TEXTCAPDUAL=1 = LOOP28 101 diagnostic: inline capture PLUS the slave
 # post+join, so the barrier is kept and only the capture moves. Separates
 # "the join was a barrier" from "the capture is wrong". Saves nothing.
+# BGBLANK0=1 = LOOP28 104. Blank a CLEARED background cell (w == 0), not
+# just a cleared foreground one. The game zeroes the tilemap at a scene
+# change and the background kept drawing tile 0 of set 0, so the previous
+# scene survived under the new one — the missing title-screen eye.
+ifdef BGBLANK0
+SHCCFLAGS += -DBG_BLANK0
+endif
 ifdef TEXTCAPDUAL
 SHCCFLAGS += -DTEXTCAP_DUAL
 endif
