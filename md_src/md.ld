@@ -32,3 +32,12 @@ SECTIONS {
 	} > ram
 	__bss_size = SIZEOF(.bss);
 }
+
+/* .data + .bss grow upward from 0xFF0100 into free WRAM. The first thing
+ * above them is PAL_SHADOW at 0xFF6000 (md_src/packet_fmt.h), then
+ * spriteram at 0xFF7000 — none of it linked, so the linker cannot see
+ * the collision. LOOP28 84 audited the gap (15,916 bytes, zero writes
+ * after boot over 4100 level-1 and 9000 attract frames) and this is its
+ * fence. If a staging buffer takes the room, this is what tells you. */
+ASSERT(__bss_end <= 0x00FF6000,
+       "68K .data+.bss overran free WRAM and hit PAL_SHADOW at 0xFF6000")

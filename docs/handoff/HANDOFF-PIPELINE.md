@@ -136,14 +136,29 @@ The obvious decomposition, not yet built: do the packet BUILD where the
 push is today (after the post, FM=1, WRAM-only work that overlaps the
 master's blit) into a staging buffer, and BLAST staging->FB in the ~2
 line FM=0 window before the next post. That costs one vint of packet
-latency, which the harvest already tolerates. The blocker is finding
-~1.8 KB of free 68K WRAM for the staging buffer; that has not been
-audited.
+latency, which the harvest already tolerates.
 
-Also open and cheaper: the 4.1 points between the rotor being on and off
-(`PALROTOR_OFF` = 86.1% vs 82.0%) are in NOT VISITING palette blocks —
-scheduling again, not arithmetic. `PALSTREAK=` / `PALBACKOFF=` tune it
-and have not been swept.
+**The WRAM blocker is CLEARED (LOOP28 84).** There is not 1.8 KB free,
+there is **15,916 bytes**, contiguous, from the linker's high-water mark
+`__bss_end` = 0xFF21D4 up to `PAL_SHADOW` at 0xFF6000. Proven twice: full
+WRAM dumps at three frames show the region all-zero and unchanged, and
+an ares write/read census over 4100 level-1 frames and 9000 attract
+frames counts ZERO writes after boot and ZERO reads ever. Declare the
+staging buffer as a normal static array; the linker grows .bss into it.
+Add `ASSERT(__bss_end <= 0xFF6000, ...)` to `md_src/md.ld` first — there
+is no collision guard today.
+
+The palette rotor, RE-MEASURED CLEAN on this line (LOOP28 86): the
+ceiling is `PALROTOROFF` = **94.7%** against 82.3%, so the prize is
+**12.4 points**, not the 4.1 recorded from the DREQ era. That is the
+largest single scheduled cost left in the 68K's vint.
+
+**Do not sweep `PALSTREAK=` / `PALBACKOFF=` again.** They were dead code
+until 2026-09-08 (the streak counter was declared, read, and never
+written — LOOP28 85); with the counter fixed, a 25-point sweep found no
+structure, and the metric cannot resolve it anyway (LOOP28 88, and
+section 5 below). The flags are now gated OFF by default behind
+`PAL_DIET`.
 
 ---------------------------------------------------------------------
 ## 5. INSTRUMENTS — what to trust
@@ -153,6 +168,28 @@ and have not been swept.
     reports WRAM 0xFFF144, vints where the game's pass had not finished.
     Attract mode and flip rate are NOT the gate; measuring them cost a
     day.
+
+    **IT HAS A RESOLUTION FLOOR, MEASURED (LOOP28 88).**
+    `LAYOUTPROBE=1` adds 64 bytes of unreferenced `.data` and changes no
+    behaviour at all; it moves the canonical window from 85.3% to 67.2%.
+    Sliced into 700-vint windows, 5.9 of those points are a real floor
+    (the port sits on the IRQ4 threshold, so a few cycles of address
+    arithmetic flip whole frames across the deadline) and the rest is
+    trajectory divergence: a build that falls behind on a frame-indexed
+    input script is measured on different content. The ladder's big
+    steps (48.7 -> 60.7 -> 82.3) survive that. **A ranking of two builds
+    a few points apart does not — do not build on one.** Slice the run
+    into windows before believing a gap, and for small effects use the
+    handler-mean A/B in `tools/health_mame.lua` or
+    `tools/frame_timeline.py` instead.
+
+    The same rom also reads 67.2% over [1500,2600] and 93.3% over
+    [2600,4100]: the content in the window differs, not the machine.
+    And the scene timer at 0xFFF02A RESTARTS with the scene — before
+    2026-09-08 a window crossing that reset printed a number anyway
+    (2546.7% on the shipping rom over [3000,5500]). The tool now refuses
+    and exits 2. The level-1 script holds one scene from ~f1200 to
+    ~f4500; stay inside it.
   - **ares `--trace-flip`** is the display-refresh truth. It comes from
     the emulator, not our memory, and it was the only number that stayed
     consistent all session.

@@ -1274,6 +1274,13 @@ static void r60_push(void) {
 	uint16_t spin = 2600;
 	static uint8_t pal_retry[8];
 	static uint8_t pal_next;
+#ifdef LAYOUT_PROBE
+	/* LOOP28 88 control: 64 bytes of unreferenced .data, present only to
+	 * SHIFT the code below it. Changes no behaviour whatsoever. */
+	static volatile uint8_t layout_probe_pad[64] = {1};
+	(void)layout_probe_pad;
+#endif
+#ifdef PAL_DIET
 	static uint8_t pal_streak[64];       /* consecutive equal compares
 	                                      * per block — the chronic
 	                                      * redundant writers (census:
@@ -1288,6 +1295,7 @@ static void r60_push(void) {
 #ifndef PAL_BACKOFF_M
 #define PAL_BACKOFF_M 3              /* visit 1 vint in (M+1) once backed off */
 #endif
+#endif	/* PAL_DIET */
 	uint8_t ids[16];
 	uint16_t K = 0, nrec = 1;
 	volatile uint8_t *pd = (volatile uint8_t*)0xFFBA00;
@@ -1453,6 +1461,13 @@ static void r60_push(void) {
 				 * detection is <=3 vints late on a slow pulse);
 				 * retry transitions are exempt (ship-twice must
 				 * finish) and storms bypass via the open clamp. */
+#ifdef PAL_DIET
+				/* OFF unless PALSTREAK=/PALBACKOFF= asks for it
+				 * (LOOP28 85).  The counter below was never
+				 * written until 2026-09-08, so this branch had
+				 * never fired in a shipped rom; turning it on by
+				 * default would change colour timing under the
+				 * accepted hardware base without a play pass. */
 				if ((pd[by] & bit) && !(pal_retry[by] & bit)
 				    && pal_streak[r] >= PAL_STREAK_N && kcap == 8
 				    && (uint8_t)((fr2 + r) & PAL_BACKOFF_M)) {
@@ -1460,6 +1475,7 @@ static void r60_push(void) {
 					n++;
 					continue;
 				}
+#endif
 				ncmp++;
 				const uint32_t *mp4 = (const uint32_t*)
 					((const uint16_t*)0xFF9000 + ((uint16_t)r << 5));
@@ -1490,6 +1506,9 @@ static void r60_push(void) {
 					pal_force[by] &= (uint8_t)~bit;
 					ids[K++] = (uint8_t)(r | R60_PAL_RAW);
 					palw += 32;
+#ifdef PAL_DIET
+					pal_streak[r] = 0;
+#endif
 				} else {
 					/* FAST PRE-SCAN (unattended slice 1): retry
 					 * blocks compare EQUAL end to end (~half of
@@ -1504,6 +1523,17 @@ static void r60_push(void) {
 						uint16_t eq = 16;
 						while (eq && *qa++ == *qb++) eq--;
 						if (!eq) {
+							/* THE STREAK COUNTER (2026-09-08).
+							 * It was declared and READ at the
+							 * backoff test but never written, so
+							 * PALSTREAK/PALBACKOFF were inert for
+							 * every N >= 1 — a 16-point sweep read
+							 * one number.  This is the increment
+							 * the diet was designed around. */
+#ifdef PAL_DIET
+							if (pal_streak[r] != 255)
+								pal_streak[r]++;
+#endif
 							if (pd[by] & bit) {
 								pd[by] &= (uint8_t)~bit;
 								pal_retry[by] |= bit;
@@ -1534,6 +1564,9 @@ static void r60_push(void) {
 						}
 						sp4++;
 					}
+#ifdef PAL_DIET
+					if (cnt) pal_streak[r] = 0;
+#endif
 					if (cnt > R60_PAL_DMAX) {
 						ids[K++] = (uint8_t)(r | R60_PAL_RAW);
 						palw += 32;

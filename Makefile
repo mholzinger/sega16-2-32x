@@ -1642,17 +1642,31 @@ MDCCFLAGS += -DPAL_NOCMP
 endif
 # PALSTREAK=N / PALBACKOFF=M tune the rotor's visit rate: a palette block
 # that compared equal N consecutive visits is then visited 1 vint in
-# (M+1). PALROTOR_OFF (no visits at all) measures 86.1% against the
-# baseline's 82.0%, so the prize is in NOT VISITING; PALNOCMP (visit but
+# (M+1).  Either flag turns the diet ON (PAL_DIET); it is OFF in the
+# shipping build.  UPDATED 2026-09-08 (LOOP28 85-88): the streak counter
+# was never written, so before that date BOTH flags were inert for every
+# N >= 1 and any measurement of them read the baseline.  With the counter
+# implemented, a 26-point sweep on the FBXPORT line found no setting that
+# beats the baseline outside the metric's own trajectory spread — read
+# LOOP28 88 before sweeping these again.  The ceiling (PALROTOROFF, no
+# visits at all, colours freeze) re-measures at 94.7% against 82.3%, not
+# the 86.1/82.0 recorded here from the DREQ era.  PALNOCMP (visit but
 # ship raw instead of comparing) measured 74.1% and was reverted.
 ifdef PALSTREAK
-MDCCFLAGS += -DPAL_STREAK_N=$(PALSTREAK)
+MDCCFLAGS += -DPAL_DIET -DPAL_STREAK_N=$(PALSTREAK)
 endif
 ifdef PALBACKOFF
-MDCCFLAGS += -DPAL_BACKOFF_M=$(PALBACKOFF)
+MDCCFLAGS += -DPAL_DIET -DPAL_BACKOFF_M=$(PALBACKOFF)
 endif
 ifdef PALROTOROFF
 MDCCFLAGS += -DPALROTOR_OFF
+endif
+# LAYOUTPROBE=1 = LOOP28 88 CONTROL. Adds 64 bytes of unreferenced .data
+# inside r60_push and changes nothing else. Any speed difference it
+# produces is the level-1 ladder's sensitivity to code layout, not to a
+# change in behaviour. Measured 85.3% vs 82.4% on the FBXPORT line.
+ifdef LAYOUTPROBE
+MDCCFLAGS += -DLAYOUT_PROBE
 endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
