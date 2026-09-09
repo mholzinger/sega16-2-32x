@@ -184,6 +184,26 @@ section 5 below). The flags are now gated OFF by default behind
 ---------------------------------------------------------------------
 ## 5. INSTRUMENTS — what to trust
 
+**READ THIS FIRST (2026-09-08, LOOP28 93). The speed gate measures the
+game's LOGIC, not what the player sees, and the two disagree.** On the
+MiSTer, Mike found the double-buffered rom shows MORE animation than the
+single-buffered one while scoring 29.6% against 49.7%. Measured with
+`tools/anim_rate.py`:
+
+    build          logic rate   screen updates/sec at f1800/2600/3400
+    T_singlebuf       49.7%         21, 14, 0     mean 11.7
+    T_dblbuf          29.6%         30, 26, 20    mean 25.3
+
+The faster-logic build presents less than half the animation, and one of
+its windows did not change for a whole second. **Rank any presentation
+change on `anim_rate.py`.** Use `gameplay_speed.py` for the question it
+actually answers: is the 68K keeping up with its own frame.
+
+Also settled: NEITHER rom tears on hardware. Composing into the visible
+bank is not visibly wrong, so the double-buffer work (FBXSTAGE, FBXBOTH,
+FLIPEDGEOFF) is insurance, not a fix.
+
+
   - **`tools/gameplay_speed.py ROM`** is THE speed gate: game-frames per
     vint on the level-1 input script, 100% = 60 game-frames/s. It also
     reports WRAM 0xFFF144, vints where the game's pass had not finished.
