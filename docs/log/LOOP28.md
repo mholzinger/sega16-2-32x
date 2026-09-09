@@ -385,3 +385,61 @@ whether the 68K is keeping up with its own frame.
 
 Entry 88's resolution floor applies to both: a trajectory-sensitive
 metric on a frame-indexed script. Three windows, not one.
+## 94. WHERE THE MASTER'S VBLANK GOES — MEASURED, NOT REASONED
+
+`VBSPAN=1` stamps the FRT through `flip_span`'s pre-flip path into
+CEN[24..28] with CEN[29] as the count. ~46 ticks is one scanline; the
+edge guard is 1650 (35.9 lines). Double-buffered line, 3000 frames,
+CEN[10]=1:
+
+    boundary                          ticks   lines   delta
+    ISR entry -> flip_span entry       2997    65.1   +65.1
+    after the palette drain            3009    65.4    +0.3
+    after the page merge               3028    65.8    +0.4
+    after the truth drain (cap_drain)  4316    93.8   +28.0
+    edge guard                         1650    35.9
+
+**65 of the 94 lines are gone before `flip_span` is entered at all.**
+That is the ISR waiting on the 68K's k2 window: the post lands at V=249
+and the master's gate at m_main.c wants the window within 1650 ticks of
+ISR entry, so it takes the DIAG[47] "too late to flip in vblank" exit and
+leaves the flip to the body fallback. `cap_drain` is the only other fat
+term at 28 lines, and the palette drain and page merge are noise.
+
+The last stamp (at the FS write) reads 1865 ticks, LOWER than the
+cap_drain boundary, because it is only reached on flips that were not
+declined — selection bias, not a contradiction. Those flips land at 40.5
+lines against a 35.9-line guard: just over.
+
+## 95. NEGATIVE: PER-BANK RESTORE FRESHNESS BUYS 2 LINES AND NO SPEED
+
+`restore_pages` replays TILEMAP_U truth into the bank the flip just
+handed us, for `cycle_dirt | pg_watch`. Measured per flip:
+
+    pages restored          2.35 of 13
+      from cycle_dirt       0.10
+      from pg_watch         2.25
+    restore span           18.3 lines
+
+96% of the work is watched pages, not dirtied ones, which looks like
+pure waste: a page whose truth has not changed since it was last written
+into this same bank is being rewritten with bytes already there.
+`PGFRESH=1` tracks that — a page is fresh in a bank once restored into
+it and stops being fresh in BOTH the moment `cap_page` sees its truth
+change, which is the whole invariant because nothing else writes truth.
+
+    pages restored          2.35 -> 2.05
+    restore span            18.3 -> 16.3 lines
+    logic rate              30.3% -> 29.6%   (no change; entry 88 floor)
+
+**It is not waste.** The watched pages genuinely change truth almost
+every cycle — they are hot streams, which is exactly why PG_STICKY
+watches them. The restore is doing necessary work and 16.3 lines is
+close to irreducible under this design. Kept default-off with this entry
+attached so nobody re-derives it.
+
+**So the 20-point gap between single- and double-buffered is not one
+thing, and it is not the restore.** The master holds FM from the post to
+its ack, the game's gated writers spin for all of it, and double
+buffering adds the whole ~94-line flip path to that window. The two fat
+terms are the 65-line wait for the 68K's window and `cap_drain`'s 28.

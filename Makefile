@@ -821,6 +821,25 @@ endif
 ifdef FBXLATE
 SHCCFLAGS += -DFBX_LATE
 endif
+# VBSPAN=1 = LOOP28 94. FRT stamps through flip_span's PRE-FLIP path into
+# CEN[24..28] with CEN[29] as the count, so the reader takes means. ~46
+# ticks is one scanline and the edge guard is 1650 (38 lines); the whole
+# path measured 4717 ticks (~103 lines) on the double-buffered line, which
+# is why almost every flip declines. Implies FLIPCENSUS.
+# PGFRESH=1 = LOOP28 95. restore_pages replays truth into the bank the
+# flip just handed us; measured 2.35 pages per flip of which only 0.10
+# came from cycle_dirt — the rest are pg_watch pages whose truth has not
+# changed since they were last written into that same bank. This skips
+# those. A page is fresh in a bank once restored into it and stops being
+# fresh in BOTH the moment cap_page sees its truth change. Needs BLITSKIP
+# (fb_draw_par is the bank label).
+ifdef PGFRESH
+SHCCFLAGS += -DPG_FRESH
+endif
+ifdef VBSPAN
+SHCCFLAGS += -DVB_SPAN -DFLIP_CENSUS
+MDCCFLAGS += -DFLIP_CENSUS
+endif
 ifdef FLIPCENSUS
 SHCCFLAGS += -DFLIP_CENSUS
 MDCCFLAGS += -DFLIP_CENSUS

@@ -4474,6 +4474,21 @@ static uint16_t cycle_dirt;                  /* pages the game wrote into the
                                               * under VISR_FLIP). Init at the
                                               * top of m_main, like
                                               * pg_pending. */
+#ifdef PG_FRESH
+/* PER-BANK RESTORE FRESHNESS (LOOP28 95). restore_pages replays TILEMAP_U
+ * truth into the bank the flip just handed us, for cycle_dirt | pg_watch.
+ * Measured on the double-buffered line: 2.35 pages per flip, of which
+ * cycle_dirt contributes 0.10 — the other 2.25 are pg_watch pages whose
+ * TRUTH HAS NOT CHANGED since the last time they were written into this
+ * same bank, so the copy writes bytes that are already there. At 18.3
+ * scanlines per flip and 964 flips that is the bulk of what double
+ * buffering costs.
+ *
+ * A page is fresh in a bank once restored into it, and stops being fresh
+ * in BOTH banks the moment cap_page sees its truth change. That is the
+ * whole invariant: nothing else writes TILEMAP_U. */
+static uint16_t pg_fresh[2];
+#endif
 RAMCODE static void cap_page(int pg)
 {
     volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
@@ -4492,6 +4507,11 @@ RAMCODE static void cap_page(int pg)
         RG_PGCAP |= 1u << pg;            /* master only (flip_span / body) */
 #endif
     if (ch) {
+#ifdef PG_FRESH
+        /* truth moved: neither bank holds it any more */
+        pg_fresh[0] &= (uint16_t)~(1u << pg);
+        pg_fresh[1] &= (uint16_t)~(1u << pg);
+#endif
         pg_watch |= (uint16_t)(1u << pg);
 #ifdef PG_STICKY
         pg_quiet[pg] = 0;
@@ -4544,6 +4564,10 @@ RAMCODE static void cap_drain(int budget)
  * while the game is fading. */
 RAMCODE static void restore_pages(uint16_t bm)
 {
+#ifdef VB_SPAN
+    CEN[30] += (unsigned)__builtin_popcount(bm & 0x1FFF);  /* pages written */
+    CEN[31]++;                                             /* calls */
+#endif
     for (int pg = 0; pg < 13; pg++) {
         if (!(bm & (1u << pg)))
             continue;
@@ -5564,6 +5588,15 @@ static uint16_t visr_t0;                 /* ISR entry FRT — flip_span's
 static volatile uint8_t flip_deferred;
 #endif
 #endif
+#ifdef VB_SPAN
+/* VBLANK BUDGET BREAKDOWN (LOOP28 94). FRT ticks from ISR entry to each
+ * boundary of the pre-flip path, summed with a count so the reader takes
+ * means. ~46 ticks = one scanline; the edge guard is 1650 = 38 lines.
+ * CEN[29] is the denominator; every other slot is a running sum. */
+#define VBS(slot) do { CEN[slot] += (uint16_t)(frt() - visr_t0); } while (0)
+#else
+#define VBS(slot) do { } while (0)
+#endif
 static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
                                           * (K2_FREE edge guard: too
                                           * late in vblank — a dropped
@@ -5574,6 +5607,10 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
                                           * out of vblank = the tear;
                                           * only 182 deferred.) */
 {
+#ifdef VB_SPAN
+    CEN[29]++;                           /* samples (the denominator) */
+    VBS(24);                             /* entry */
+#endif
 #ifdef R60
     /* FM_TEST read-half verdict: FM=1 here; compare against the
      * announce-time FM=0 read of the same 68K-untouched word. */
@@ -5676,6 +5713,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * flip landing. */
     cram_flush_pen();
 #endif
+    VBS(25);                             /* after the palette drain */
     pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
 #ifdef PG_STICKY
     /* marks enter WATCH: a pointer-load mark can arrive
@@ -5695,7 +5733,9 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     cycle_dirt |= pg_pending;
     pg_pending |= pg_watch;      /* unstable pages: recapture the
                                   * latest stream state pre-flip */
+    VBS(26);                             /* after the page merge */
     cap_drain(13);               /* ALL of it — correctness */
+    VBS(27);                             /* after the truth drain */
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     {
         uint32_t g2 = 2000000;
@@ -5807,6 +5847,7 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
     HSC_RING[(HSC_IDX & 15) * 2 + 1] = (uint16_t)(0x8000 | hsc_win); HSC_IDX++;  /* ISR flip */
 #endif
 #endif
+    VBS(28);                             /* at the FS write */
     {
         uint16_t fs_o = MARS_VDP_FBCTL & MARS_VDP_FS;
 #ifdef FLIP_CENSUS
@@ -5947,7 +5988,22 @@ static int flip_span(void)               /* 1 = flipped; 0 = DECLINED
      * the bank disease at k2. Capture-wide REQUIRES
      * restore-wide; the deep-watch k2 cost is inherent and
      * is bounded by pg_deep instead.) */
+#ifdef VB_SPAN
+    CEN[32] += (unsigned)__builtin_popcount(cycle_dirt & 0x1FFF);
+    CEN[33] += (unsigned)__builtin_popcount(pg_watch & 0x1FFF);
+    VBS(34);                             /* before the restore */
+#endif
+#ifdef PG_FRESH
+    {
+        uint16_t bm = (uint16_t)((cycle_dirt | pg_watch) & 0x1FFF);
+        bm &= (uint16_t)~pg_fresh[fb_draw_par];
+        restore_pages(bm);
+        pg_fresh[fb_draw_par] |= bm;
+    }
+#else
     restore_pages((uint16_t)(cycle_dirt | pg_watch));
+#endif
+    VBS(35);                             /* after the restore */
 #ifdef FB_TEXT_READ
     /* text restore: unlike the sprite list (fully rewritten
      * every vint) the game writes text SPARSELY, so the new
