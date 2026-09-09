@@ -7,17 +7,36 @@ spend a night optimising the wrong number.
 
 ## THE BAR. There is only one.
 
-**60 frames per second.** That means the game's 68K pass completes
-inside every vint. The metric is `tools/gameplay_speed.py`, and the
-number it prints IS the bar: 100% = 60 fps. Speed = 100 minus the IRQ4
-miss rate.
+**60 frames per second REACHING THE SCREEN.** Two numbers say whether a
+build has it, and a build needs BOTH:
 
-    accepted line today                49.7%
-    the bar                           100%
+    tools/presented_fps.py ROM    MOTION: substantial picture changes
+                                  per 60 frames. THE PLAYER'S FRAME RATE.
+    tools/gameplay_speed.py ROM   the 68K's logic keeping up with its
+                                  own frame. A PRECONDITION, NOT THE BAR.
 
-Nothing else is the bar. Not flip rate. Not screen updates per second.
-Not colour counts. If you find yourself ranking builds on any of those,
-you have lost the plot — that is exactly what happened on 2026-09-08.
+    accepted line today   logic 49.7%   MOTION 1.3 fps
+    the bar               logic  100%   MOTION  60
+
+**CORRECTED 2026-09-09 16:30 (LOOP29 113). The paragraph that stood here
+said the logic rate was the only bar and explicitly ruled out "flip
+rate... screen updates per second." That was wrong, it was written into
+this file at 01:23, and an overnight loop then ranked four hours of
+builds on it.** The accepted rom scores 49.7% logic while showing ZERO
+changed pixels across 60 consecutive frames — its scene timer advanced
+350 ticks over the same second. Mike, unprompted, the next morning: "I
+haven't gotten a single build from you that has moved frames."
+
+The two numbers diverge because the port is single-buffered under
+FBXPORT: the master composes into the bank being displayed, so a long
+compose shows as a still frame no matter how fast the 68K runs. Rank on
+MOTION. Use the logic rate for what it measures — whether the 68K
+finished its pass — and never as a substitute for looking at the screen.
+
+LOOP28 93 measured this same divergence on 2026-09-08 and Mike's play
+pass overruled the gate then too. It has now cost two sessions. If a
+future document tells you one number is the whole bar, check it against
+`presented_fps.py` before you believe it.
 
 ## THE SCOPE
 
