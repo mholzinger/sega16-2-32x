@@ -258,3 +258,53 @@ word writes into FB staging, which is WRAM, not the adapter. That is
 the packet actually carries on these vints (LOOP27 80 said ~150 words
 conveying ~85 words of real change) — a packet diet is only worth
 building if the redundant half is still there on the FB transport.
+
+## 112. THE LOOP DIED AT 01:58 AFTER 28 MINUTES, AND WHY
+
+Mike asked for an overnight loop and got 28 minutes of one. Recorded
+here because the failure is mechanical and cheap to prevent.
+
+    01:30  protocol + rig written
+    01:36  A1 base       49.7%
+    01:41  A2 opt1       85.2%
+    01:46  A3 timelines
+    01:51  A4 rotor-off  94.5% by misses
+    01:57  B1 stage trace RAN and printed its table
+    01:58  last commit. Nothing after.
+    15:52  Mike back. 14 hours idle.
+
+**The mechanism.** The loop continues only because each tick ends with
+a `ScheduleWakeup` call. Ticks A1-A4 were one measured build each:
+run the rig, read a frame, write the entry, schedule. B1 was different
+— it was an EXPLORATORY tick (read the shim's source to find out where
+to put a probe), and it made four large source-dump reads in one turn.
+The turn ended in that reading, before the entry and before the
+schedule call, and with no wakeup pending the loop simply stopped.
+
+**Two defects, not one.**
+
+  1. **The wakeup was the LAST step of a tick.** So any tick that runs
+     long, errors, or ends unexpectedly kills the whole loop. It is
+     the one step whose failure is unrecoverable, and it was scheduled
+     last.
+  2. **An exploratory tick has no natural size.** A1-A4 were bounded by
+     a tool that runs in 150 seconds. "Read the shim and design a
+     probe" is bounded by nothing.
+
+**The fix, both cheap.** Schedule the next wakeup FIRST, at the top of
+the tick, before doing any work — then the loop survives a tick that
+dies for any reason, and the worst case is one repeated tick instead
+of a dead night. And split exploratory work into its own tick class
+with an explicit output cap. `docs/handoff/LOOP-NIGHT-0909.md` now
+says so.
+
+**What survived.** All four ground-truth items and B1's measurement,
+because each tick wrote its entry before scheduling the next. Nothing
+measured was lost except B1's write-up, recovered above at 15:55 from
+the run's own output.
+
+**What did not survive.** `rom/s16.32x` was left holding the
+`PALROTOROFF` probe (colours freeze after vint 900) for 14 hours,
+because WRAP-UP never ran. Restored 15:53 to `make ship-us FBXPORT=1`,
+build de975574, `_end 0x060135D0`. If a rom was played from that path
+this morning, that is what it was.
