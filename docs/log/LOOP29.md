@@ -185,3 +185,76 @@ Two things.
    accepted rom.
 
 B1 next: the stage trace of the ~72-line shim on opt1.
+
+## 111. B1: THE SHIM'S 73 LINES, SPLIT — ROTOR 21.5, SHIP 16.5 (01:57)
+
+MEASURED 2026-09-09 01:57, WRITTEN 15:55 from the run's own output; the
+loop stopped before this got written (entry 112). The numbers are the
+trace's, not a reconstruction.
+
+No probe build was needed. The shipping shim already writes V-counter
+stamps at its own stage boundaries (`PSTAMP`, md_main.c:1344), so a
+plain `--trace-access` over the stamp words reads the SHIP BUILD's own
+timing with nothing added. `tools/stage_lines.py` decodes it:
+
+    ~/src/ares-debug/.../ares-headless --frames 2013 \
+      --input discover/inputs/play_level1.csv --trace-access-out t.csv \
+      --trace-access 0xFFA09E:0xFFA0CC:push:2000:2012 \
+      --trace-access 0xFFB0B0:0xFFB0B8:cons:2000:2012 \
+      --trace-access 0xFFA170:0xFFA186:fine:2000:2012 \
+      --trace-access 0xA15100:0xA15101:fm:2000:2012 \
+      --trace-access 0xA15120:0xA15121:comm0:2000:2012 \
+      --trace-access 0x902AAC:0x902AAD:irq4:2000:2012 \
+      --trace-access 0xFFF144:0xFFF145:miss:2000:2012  rom/night/opt1.32x
+    python3 tools/stage_lines.py t.csv
+
+opt1, 12 vints (2000-2011), median line from vblank start:
+
+    boundary                     line    stage cost
+    consume entry                  14
+    consume END                  14.5    (MD-plane packets ~0.5)
+    r60_push entry                 21    gates+announce 6.5
+    rotor+compares DONE          42.5    ** ROTOR + COMPARES 21.5 **
+    pal_next / record scan         45    sprite record scan 2.5
+    rowscroll compare done       49.5    rowscroll compare 4.5
+    selection done                 52    belt + bookkeeping 2.5
+    regs staged                  54.5    2.5
+    pal staged                     56    1.5
+    records+tail staged          72.5    ** SHIP PHASE 16.5 **
+    FM RAISE                     72.5
+    POST comm0                     73
+    game IRQ4 entry              80.5    IRQ4 handoff 7.5
+    game MISS written              85    (6 of 12 vints)
+
+**The shim is 73 lines and two blocks are 38 of them (52%).**
+
+  1. **The palette rotor and its compares: 21.5 lines**, entry 21 ->
+     42.5. This is the block `PALROTOROFF` deletes, and A4 measured
+     deleting it as worth 9.3 points (entry 110). The two measurements
+     are independent and they agree, which is the first time this
+     lever has been priced in lines and in points at once.
+  2. **The ship phase: 16.5 lines**, pal staged (56) -> records+tail
+     staged (72.5). This is the packet's words being written into FB
+     staging. It has never been separately priced and nothing in the
+     dead-end list covers it.
+
+Everything else is small: no stage between them exceeds 6.5 lines, so
+there is no third lever here, and a diet that trims the small stages
+cannot reach the ~35-line target entry 109 set.
+
+**CAVEAT — A STAMP-ALIASING TRAP, and it would have bitten the next
+reader.** `PAL_STAMP2` is NOT in the ship flag set, so 0xFFA0C0-0xFFA0CA
+are not stage stamps in this build. But 0xFFA0C0 IS written every vint
+by the LOST-PUSH BELT (`lp = (volatile uint8_t*)0xFFA0C0`,
+md_main.c:1846), so the raw table shows a plausible-looking
+"push.rotor0@51.5" that is really the belt writing its id list. The
+decoder now labels that address `belt.ids` instead. Any future stamp
+read over 0xFFA0Cx must check `PAL_STAMP2` before believing a name.
+This is the same class as the DIAG-slot aliasing in HANDOFF-PIPELINE 5.
+
+Next, and B1's real deliverable: the ship phase's 16.5 lines are 68K
+word writes into FB staging, which is WRAM, not the adapter. That is
+~150 words at ~0.11 lines/word. Before designing anything, price what
+the packet actually carries on these vints (LOOP27 80 said ~150 words
+conveying ~85 words of real change) — a packet diet is only worth
+building if the redundant half is still there on the FB transport.
