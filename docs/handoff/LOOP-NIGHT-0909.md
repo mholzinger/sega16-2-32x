@@ -22,6 +22,21 @@ that answer it await his pass. Its 82.3% is real and reproduces clean.
 
 ## ONE TICK = ONE EXPERIMENT
 
+**STEP 0, BEFORE ANY WORK: `ScheduleWakeup` 60 s with this prompt.**
+The 2026-09-09 loop died because the wakeup was the LAST step and one
+long tick never reached it — 28 minutes of a 6-hour night (LOOP29 112).
+Schedule first and the worst case is a repeated tick, not a dead night.
+Re-schedule at the end of the tick too if the work changed how long the
+next one should wait.
+
+**Tick classes, and the second one has a cap.**
+  - MEASURE tick: one `night_run.py` candidate or one timeline run.
+    Self-bounding, ~3 minutes.
+  - EXPLORE tick (read source, design a probe): CAP IT — at most 3
+    source reads, and never a whole function dumped when `grep -n` with
+    context answers the question. If the design is not settled when the
+    cap is hit, write what you have to LOOP29 and take another tick.
+
 1. `date`. Read the tail of `docs/log/LOOP29.md` and
    `docs/log/night-0909/LEDGER.md`. The queue below says what is next;
    the log says what is done.
