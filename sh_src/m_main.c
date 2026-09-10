@@ -82,6 +82,11 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 #define hsc_win  (*(volatile uint16_t *)0x26028D82)   /* vint counter (ISR entry) */
 #define HSC_RING ((volatile uint16_t *)0x26028D40)   /* [16][2]: pkt win, flip win */
 #define HSC_IDX  (*(volatile uint16_t *)0x26028D80)
+/* 0x28D80 is ALSO win_pend (m_main.c, shipping under CLAIMNEW/NATIVE).
+ * HS_CENSUS is probe-only, so the two must never build together. */
+#ifdef NATIVE_FRAME
+#error "HS_CENSUS ring at 0x28D80 collides with the shipping win_pend"
+#endif
 #endif
 /* CLAIMNEW (LOOP27 77): the late claim scans the sprite list to decide
  * which colour sets need a pair. It has always scanned SPR_SNAP, the
@@ -600,6 +605,10 @@ static uint16_t sl_buf[224 * 3];
  * [7] worst distinct sets among MD-ELIGIBLE sprites only
  * [8..14] histogram of eligible distinct-set count: 1,2,3,4,5-6,7-8,>8
  * [15] cycles counted */
+#if defined(SPR_LATE_DIAG) || defined(FB_PROBE)
+#error "SPR_LINE_PROBE's SLC is 0x3A780, which SPR_LATE_DIAG (SPRLATE) and \
+FB_PROBE (FBP) also claim - collision #16, build them separately"
+#endif
 #define SLC ((volatile uint32_t *)0x2603A780)
 #endif
 
@@ -4897,6 +4906,12 @@ __attribute__((noinline)) static void disp_gate(void)
  * [0..2] pickups from INSIDE the concurrent compose, by k;
  * [3..5] pickups from the s_main IDLE loop (compose already done), by k.
  * Idle-loop pickups at k=0/k=2 and in-compose pickups at k=1 confirm it. */
+/* The #define below is unconditional (harmless: nothing reads PSRC unless
+ * the probe is on), so guard on the probe ACTUALLY being enabled. */
+#if defined(PICKUP_SRC_PROBE) && defined(NATIVE_FRAME)
+#error "PICKUP_SRC_PROBE's PSRC is 0x28F50, the shipping NAT_WALL - \
+build the probe without NATIVE"
+#endif
 #define PSRC ((volatile uint32_t *)0x26028F50)
 extern volatile uint8_t slave_in_compose;
 /* blit_half runs on BOTH CPUs (the slave owns 0..35, 72..107, 144..183),

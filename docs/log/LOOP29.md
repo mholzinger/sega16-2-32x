@@ -1062,3 +1062,46 @@ LINES, not because of any rendering requirement.
 So the palette-line problem is not one blocker among several. It is the
 single thing standing between this port and giving 39% of its frame budget
 back to hardware that does the work for nothing.
+
+## 128. THE COLLISION TRIAGE, AND A CORRECTION TO MY OWN #16 CLAIM
+
+`tools/sdram_map.py` found five declared-extent collisions. Triaged; two
+are correct by construction and three were latent.
+
+**Safe by construction, no action:**
+
+  - `STR` / `sused_prev` at 0x398E0 — mutually exclusive on PHASE_CENSUS
+    (with it, `sused_prev` is a real static; without it, it is #defined at
+    0x398E0 and `STR` does not exist). Good design.
+  - `FBCLEAR` / `MDSPR_PAL` at 0x3A300 — deliberate reuse under DIRECT_FB,
+    documented at the declaration.
+
+**Latent, now guarded with `#error` (the house pattern, as at the
+MD_SPR/ROWHASH guard):**
+
+  - `SLC` (SPR_LINE_PROBE) vs `SPRLATE` (SPR_LATE_DIAG) / `FBP` (FB_PROBE),
+    all 0x3A780. The FBP comment already said "SPR_LATE owns them
+    otherwise - do not combine the two flags" and nothing enforced it.
+  - `HSC_IDX` (HS_CENSUS) on `win_pend` — win_pend is SHIPPING code in the
+    documented 28D80 block. Guarded against NATIVE_FRAME.
+  - `PSRC` (PICKUP_SRC_PROBE) on `NAT_WALL` — NAT_WALL is shipping NATIVE
+    state. **`make ship-us FBXPORT=1 PICKUPSRC=1` now fails to compile;
+    before today it silently wrote the probe over the cadence counters.**
+
+One guard was wrong on the first attempt and the failure is instructive:
+the `PSRC` #define is UNCONDITIONAL in m_main.c (harmless, since nothing
+reads it without the probe), so guarding on `NATIVE_FRAME` alone broke
+every shipping build. It now guards on
+`defined(PICKUP_SRC_PROBE) && defined(NATIVE_FRAME)`. Adding a guard
+without checking whether the declaration was conditional is the same
+class of mistake as everything else this week.
+
+**CORRECTION to LOOP29 120 and the sdram_map docstring.** I wrote that
+collision #16 (SLC over SPRPEN) is why the span census read 403 distinct
+colour sets out of a possible 64. That is not established. `SPR_LATE_DIAG`
+and `HS_CENSUS` have NO dedicated Makefile flag — they are reachable only
+via `XDEF=NAME` — so `SPRPEN` is not normally written at all, and it
+cannot be assumed to be what corrupted SLC. What IS established about the
+census is entry 120's other finding: its call site counted 1 frame in
+2600, so it is dead code on the R60/NATIVE path. **The census is dead for
+that reason; the 403 remains unexplained and should not be attributed.**
