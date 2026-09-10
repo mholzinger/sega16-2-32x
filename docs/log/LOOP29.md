@@ -1907,3 +1907,26 @@ at the guard, mean post wait, no-post bails, same instrument).
 
 Consequences: GAMEGATE (141) paced the game to this 2-6 Hz clock and
 halved it (142); it stays default-off. vi4 remains the line to play.
+
+## 144. THE PRE-FLIP HALF ON SILICON: THE 68K SIDE MATCHES ARES, THE MASTER'S FB READS DOUBLE (2026-09-10 18:45)
+
+Same instrument (`FLIPRATEMEAN=50/52`, `FLIPRATEDIAG=60`), five rig
+shots each, ares calibration in brackets, lines from ISR entry:
+
+    post wait (flip_span entry)   FPGA 23 21 25 25 24    [ares 21]
+    at the guard check            FPGA 43 41 45 44       [ares 31]   (one garbage read)
+    no-post bails per 64 vints    FPGA  0  5  1  1       [ares 4]
+
+The 68K's consumes and post land where ares says. What grows is the
+master's own work between entry and the guard: text capture (928 longs
+of FB reads), packet lift (up to 462 longs), page merge and drain --
+~10 lines on ares, ~20 on the FPGA. Real framebuffer reads by the SH-2
+cost about twice what ares charges. With the guard at 35.9 the write
+misses by ~8 lines on almost every vint (143).
+
+Fix direction: take the FB reads off the master's critical path. The
+text capture goes back to the SLAVE, posted at ISR ENTRY (not after the
+post): the slave waits for FM itself and copies while the master waits
+for the 68K, and the master only joins. LOOP28 96's 31.8-line pickup
+latency is hidden under the 21-line post wait instead of added to it.
+If that is not enough, the packet lift follows the same route.
