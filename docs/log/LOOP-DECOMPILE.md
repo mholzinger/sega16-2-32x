@@ -741,3 +741,64 @@ test mode screen.
 That makes the game its own speedometer. The same four digits can be read
 on the arcade and on our port, on real hardware, with no probe build and
 no emulator support. Worth wiring into the acceptance pass.
+
+---------------------------------------------------------------------
+## 23. What already fits the MD VDP, and the four patch points
+
+Mike: what can be patched so the game fits the shape of the Genesis VDP?
+Everything below comes from entries 10-13, 21 and 22, so it is stated
+against our own bytes rather than against the general System 16 case.
+Altered Beast turns out to use a small, well-behaved subset of what the
+System 16B video hardware can do.
+
+**ALREADY THE SAME SHAPE**
+
+  1. **Scroll is whole-plane, both layers, and that is provable.** All
+     four scroll writes in IRQ4 mask with `andi.w #$1FF` before storing
+     (0x2ACE, 0x2ADC, 0x2AEA, 0x2AF8), which clears bit 15. Bit 15 of
+     hpos is the row-scroll enable and bit 15 of vpos the column-scroll
+     enable (`jts16_mmr.v:67-70`). And the row/column scroll tables at
+     text RAM 0xF00-0xFFF are NEVER WRITTEN — zero references in the
+     program. So there is no per-row or per-column scroll to emulate.
+     Two 9-bit values per layer per frame, which fits inside the MD's
+     10-bit full-screen scroll with room over.
+  2. **Page selects are constant** (entry 11): foreground page 7,
+     background page 0, written at two sites with the same immediates and
+     never varied. An MD name table base register is set once at init and
+     left alone. There is no page remapping to chase.
+  3. **Plane geometry matches.** A System 16 page is 64x32 tiles, which
+     is an MD plane size. The text layer is 64x28 with only columns 24-63
+     visible (entry 21).
+  4. **Tile palettes are 3bpp** so two share a 16-pen MD line, which the
+     port already builds on (`sh_src/m_main.c:1758`, LOOP28 99).
+
+**STILL THE WRONG SHAPE**
+
+  5. Sprites are horizontal strips with a signed pitch and 5-bit X and Y
+     zoom (entry 21's layout); the MD has tile-based sprites and no
+     scaling. LOOP29 119 measured only 2.0-3.8% of records as genuinely
+     zoomed, so this is a small residue, not the bulk.
+  6. Sprite palettes are 64 lines of 16 against the MD's 4, and entry 9
+     showed no two live level-1 palettes union to 15 or fewer.
+
+**THE FOUR PATCH POINTS, ranked by ratio of payoff to risk**
+
+  A. **The four scroll writes** at 0x2AD2, 0x2AE0, 0x2AEE, 0x2AFC. Each
+     is a `move.w d0,$410Exx` with the value already masked to the MD's
+     range. Retargeting them writes MD scroll directly and deletes a
+     conversion step from the shim. Four instructions, and finding 1
+     proves nothing else is needed for correctness.
+  B. **The sprite upload loop** at 0x2B16 (entry 13, entry 15). One
+     writer, both inputs in work RAM, and the hardware owns words 6 and 7
+     so a replacement must not write them (entry 21).
+  C. **The two page-select writes** at 0x1B0D6 and 0x1BA42. They can
+     become no-ops once the MD name table bases are fixed at init.
+  D. **The tilemap unpacker** at 0x16BE and 0x16DE. Note the ordering
+     constraint from entry 10: the high and low bytes of every name table
+     word arrive in SEPARATE FULL PASSES, so a per-write conversion never
+     sees a complete word. Intercept at the two loop heads, not at the
+     stores.
+
+NOT MEASURED HERE: whether the System 16 and MD scroll sign conventions
+agree, and what the tile priority bit costs. Both are rendering-thread
+questions.
