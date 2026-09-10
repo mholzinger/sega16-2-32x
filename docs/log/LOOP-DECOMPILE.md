@@ -614,3 +614,64 @@ blind to it.
 
 The inventory names 11 routines and leaves 64 unnamed on purpose. An
 address is not a meaning.
+
+---------------------------------------------------------------------
+## 21. There is primary System 16B documentation in the tree, and it confirms entries 3, 10, 11 and 13
+
+Mike pointed at `srcref/jtcores/cores/s16` and `cores/s16b`. Two things
+follow.
+
+**`cores/s16b` has no video RTL.** It is CPU, mapper, sound, timer and
+the MC8123 (`jts16b_main.v`, `jts16b_mapper.v`, `jts16b_snd.v`,
+`jts16b_timer.v`, `jtmc8123.v`). The video is shared from `cores/s16`
+with the `S16B` macro set — `jts16_video.v:95` reads
+`localparam MODEL = \`ifdef S16B 1 \`else 0` and `cores/s16b/cfg/macros.def`
+defines `S16B`. So the MODEL==1 paths in `jts16_obj_scan.v` and
+`jts16_mmr.v` that entries 7 and 11 cite ARE the System 16B spec.
+
+**`cores/s16b/doc/` is primary documentation**, which CLAUDE.md's "no
+published documentation for most of what matters" does not lead you to
+expect: Charles MacDonald's System 16B hardware notes (`s16b.txt`,
+2001-2003, tested on a board), MAME's `segas16b.cpp` and `segaic16_m.cpp`,
+and the 315-5195 mapper schematics as a PDF.
+
+Everything this thread derived independently agrees with it:
+
+  - **Colour word format** (entry 3, derived by checking 0x7FFF -> white):
+    D15 shade, D12/D13/D14 the low bit of R/G/B, D0-D3 red bits 1-4,
+    D4-D7 green, D8-D11 blue. Exactly the layout.
+  - **Sprite palette field** (entry 7): word 4 is `1111bbbbppcccccc`,
+    c = bits 5-0. Three sources now agree — the notes, the RTL and
+    LOOP29 126's reading.
+  - **Sprite palette base** (entry 3, derived from 0x3C20): "Sprites use
+    color entries 1024-2047, divided into 64 16-color palettes". Entry
+    1024 is byte 0x800, so `0x840800 + 32*slot` is exactly right, and the
+    64 slots are why the allocator bounds against 63 (entry 2).
+  - **Visible text columns** (entry 14, derived from the block writers):
+    "the viewable portion starts at column 24 and goes to column 63".
+  - **Register offsets** (entry 11): $E80/$E82 page select, $E90/$E92
+    vertical scroll, $E98/$E9A horizontal, alternates at +4, plus column
+    scroll tables at $F00/$F40 and row scroll at $F80/$FC0.
+
+TWO THINGS THE DOCUMENT ADDS.
+
+1. **Entry 13's "words 6 and 7 are never rewritten" is not a quirk, it is
+   required.** Word 7 ($0E) is the sprite END ADDRESS and *the hardware
+   writes it*: "the final address used when the sprite has been rendered
+   is written to the sprite end address field of the sprite RAM entry".
+   Word 6 ($0C) is unused. The upload copies words 0-5 because those are
+   exactly the six the software owns. Any write-through that replays all
+   eight words would fight the sprite engine.
+
+2. **Entry 11 named the layers by RTL signal; the document names them by
+   function.** $E80/scr1 is the FOREGROUND page select and $E82/scr2 is
+   the BACKGROUND. So "scr2 always draws page 0" reads: the BACKGROUND
+   plane always draws tile page 0. That is the plane START-HERE's open
+   bug is about, and it confirms entry 12's conclusion — the 4 KB to
+   instrument, 32X DRAM 0x12000, is the background source page.
+
+CHECKED AND NOT NEW: the notes say tile layers use 128 EIGHT-colour
+palettes (confirmed by `jts16_scr.v:56`, "1 priority + 7 palette + 3
+colour"), which suggests two tile sets per 16-pen MD line. The port
+already knows: `sh_src/m_main.c:1758` and LOOP28 99 state it and the
+allocator is built on it. Not a finding.
