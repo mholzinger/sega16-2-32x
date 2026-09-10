@@ -41,9 +41,23 @@ future document tells you one number is the whole bar, check it against
 ## THE SCOPE
 
 The 68000 clock is not the loss. The game needs 2780 instructions per
-vint and the budget covers it. **Our pipeline costs about 2882
-instructions per vint — as much as the game itself.** That is the whole
-gap between 49.7% and the bar. Everything else is a detail.
+vint and the budget covers it.
+
+**CORRECTED 2026-09-10 (HANDOFF-20260910 section 2b, LOOP29 117/123/124).
+This section used to end "our pipeline costs 2882 instructions per vint,
+that is the whole gap". It is not the gap.** Measured per generation —
+and a GENERATION IS 3.6 VINTS, not 1:
+
+    MASTER accounted work    0.44 vints/gen   the master is IDLE
+    SLAVE compose            1.40 vints/gen   0.0 idle polls per vint
+      of which cat1 tiles    0.67             = 48% of it
+    MASTER maps drain        0.95 vints/gen
+
+**The 68K is not the frame-rate constraint and has not been for some
+time.** The SLAVE is the saturated processor. That retires a week of
+shim/rotor/FM/transport work which moved the logic rate and never the
+picture — and 39% of the frame budget is the slave PAINTING IN SOFTWARE
+what the MD VDP would draw for free.
 
 ## THE ACCEPTED ROM
 
@@ -55,10 +69,24 @@ default-off.
 
 ## DEAD ENDS — do not re-open without new evidence
 
-  - **Double buffering** (`FBXSTAGE`, `FBXBOTH`, `FLIPEDGEOFF`). Mike's
-    hardware verdict: the single-buffered line does NOT tear, so it
-    solves nothing, and it costs 15 points of game speed. He played it
-    on ares and MiSTer: "painfully slow", both rigs agreeing.
+  - **Double buffering** (`FBXSTAGE`, `FBXBOTH`, `FLIPEDGEOFF`) — **NO
+    LONGER A DEAD END, and this entry was wrong. Corrected 2026-09-10.**
+    It was dead-ended for "costing 15 points of game speed", which is the
+    LOGIC metric this file's own bar section now disowns. Ranked on
+    MOTION it is 1.3 -> 16.7 fps, a 13x improvement, and Mike's MiSTer
+    pass called it "an order of magnitude improvement... not enough
+    frames to be playable" and later "more concurrent frames displayed
+    but no speed improvement".
+    It is a REAL TRADE, measured: `FBXSTAGE+FBXBOTH` costs 2.6 points and
+    buys almost nothing (the vblank edge guard declines most flips);
+    `FLIPEDGEOFF` buys all the motion and costs 12 points of game speed
+    (47.1 -> 34.9). Frames OR speed, and nobody has got both.
+    **Where those 12 points go is UNEXPLAINED and is the top open
+    question** — HANDOFF-20260910 section 5.1. Measure it with
+    `tools/stage_lines.py`; one hypothesis (bank incoherency) already
+    died on a stride error.
+    The build is `rom/night/dblfast_clean.32x`, on the MiSTer as
+    `dblfast-20260910.32x`.
   - **`PALSTREAK` / `PALBACKOFF`.** Were dead code until 2026-09-08 (the
     counter was never written). Fixed, swept 25 ways, no setting wins.
   - **`TEXTCAPMASTER`.** Needs `TEXTCAPFULL` or it renders confetti. Even
