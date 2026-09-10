@@ -1235,3 +1235,54 @@ of live records into hardware) is worth more and is unblocked — but this
 is a confirmed defect on the line we are trying to ship, and it is the
 first candidate whenever the double-buffered build shows a tile-level
 artifact.
+
+## 132. MDSPRTOP: +19% CLAIMS FROM ONE BETTER-CHOSEN LINE, AND THE 3-LINE PLAN HITS THE BG WALL
+
+**Built and measured.** `make ... MDSPRTOP=1` runs the existing dynamic
+anchor election in EVERY scene (it was gated to the wildcard boss scene)
+and switches on a 2-record margin held 5 passes, instead of only when the
+incumbent owns nothing. Rationale: the scene table pins the normal scene
+to set 0x09, which the band census puts at 3 records while set 0 carries
+7 — line 0 was being spent on the wrong palette.
+
+    MDSPR_WHY census, level-1, same flags, ~600 vints:
+
+                        without MDSPRTOP   with
+      CLAIMED                 477           569     +19%
+      NO BAKED KEY           1313          1204
+      palette mismatch        890          1076     (a different anchor
+      records examined       2785          2931      misses different sets)
+
+    both reconcile: reasons sum to records examined (2785, 2931).
+
+**And a structural fact that caps this whole line of work.** The 68K
+uploads the sprite palette as a 15-word DMA to CRAM offset 2
+(`md_main.c` mdspr_consume, `0x930F` + `0xC002`) — that is MD CRAM LINE 0,
+pens 1-15. The Mega Drive has FOUR palette lines TOTAL, shared globally
+between planes and sprites, and ours are spent:
+
+    line 0   text grey ramp + the MDSPR sprite anchor
+    line 1-3 the background colour pack (m_main.c:288)
+
+So the decompile thread's "three CRAM lines cover 70% of live records"
+(LOOP-DECOMPILE 7-9) is right about the DEMAND and assumes a SUPPLY we do
+not have. Three sprite lines means the background drops to one, which is
+the `BGPACK2` experiment that blacked the sky (entry 122).
+
+**But entry 122's verdict is not safe, and that matters now.** The black
+sky was traced (entry 128 area, and the BGPACK2 investigation) to
+`mdp_s_line[s2] = mds_s_line[sc][s2]` at m_main.c:1921 — the MD_STATIC
+per-scene path assigning lines from a table BAKED WHEN THE PACK HAD THREE
+LINES, so five sets kept pointing at a line whose CRAM was no longer
+refreshed. The flag was never fully applied. **Whether the background
+actually survives two lines is therefore still unknown**, and it is now
+the gate on a 70%-of-sprites prize rather than a curiosity.
+
+Order from here:
+  1. MDSPRTOP as measured: +19% claims, one flag, needs a play pass for
+     colour flicker at an anchor switch (LOOP29 130 says one switch per
+     19 frames, so the exposure is small).
+  2. Regenerate the MD_STATIC line tables for a 2-line pack and re-test
+     BGPACK2. That is the real experiment; the first one was confounded.
+  3. If the background survives, sprites get a second line and the claim
+     rate should move far more than 19%.

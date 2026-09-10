@@ -1588,6 +1588,16 @@ endif
 ifdef BGPACK2
 SHCCFLAGS += -DBG_PACK2
 endif
+# `make ... MDSPRTOP=1` = LOOP29 132: choose the MD sprite palette line by
+# RECORD COUNT instead of the baked per-scene anchor. The scene table pins
+# the normal scene to set 0x09 (3 records at f3000) while set 0 carries 7,
+# so line 0 is spent on the wrong palette. Runs the existing leader
+# election in every scene and switches on a 2-record margin held 5 passes
+# instead of only when the incumbent owns nothing. Gate: MDSPR_WHY census
+# (claims/gen) then a play pass for colour flicker.
+ifdef MDSPRTOP
+SHCCFLAGS += -DMDSPR_TOP
+endif
 ifdef MDSPR_WHY
 SHCCFLAGS += -DMDSPR_WHY
 endif

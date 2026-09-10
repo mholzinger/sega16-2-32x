@@ -3750,7 +3750,19 @@ __attribute__((noinline)) static void mdspr_claim(void)
                                           * until the leader election
                                           * sees live records */
     anchor = mdspr_danchor;
+#ifdef MDSPR_TOP
+    /* LOOP29 132. The scene table PINS the normal scene's anchor to set
+     * 0x09, so MD CRAM line 0 always holds 0x09's palette -- and the
+     * band census says 0x09 carries 3 records at f3000 while set 0
+     * carries 7. Line 0 is being spent on the wrong palette. Run the
+     * leader election in EVERY scene, not just the wildcard boss one.
+     * The decompile thread's record-count metric (LOOP-DECOMPILE 7-9) is
+     * what makes this the right question: the top palettes by RECORD
+     * COUNT cover 65-75% of what is drawn. */
+    unsigned dynamic = 1;
+#else
     unsigned dynamic = (sc9->anchor == 0xFF);
+#endif
     if (dynamic)
         for (unsigned z = 0; z < 64; z++)
             setn[z] = 0;
@@ -3874,6 +3886,23 @@ __attribute__((noinline)) static void mdspr_claim(void)
         unsigned an = (anchor <= 0x3F) ? setn[anchor] : 0;
         for (unsigned z = 0; z < 64; z++)
             if (setn[z] > ln) { ln = setn[z]; lead = z; }
+#ifdef MDSPR_TOP
+        /* MARGIN switch instead of "the anchor owns NOTHING". The old
+         * rule only followed a leader once the incumbent was dead, which
+         * is right for a boss phase change and useless when two sets are
+         * concurrently live -- exactly the normal-scene case. Require a
+         * 2-record margin held 5 passes; LOOP29 130 measured the winning
+         * trio changing once in 19 consecutive frames, so the flap risk
+         * this guard exists for is small and the hysteresis covers it. */
+        if (lead != anchor && ln >= an + 2) {
+            if (++mdspr_flip_run >= 5) {
+                mdspr_flip_run = 0;
+                mdspr_danchor = (uint8_t)lead;
+            }
+        } else {
+            mdspr_flip_run = 0;
+        }
+#else
         if (lead != anchor && ln >= 3 && an == 0) {
             if (++mdspr_flip_run >= 5) {
                 mdspr_flip_run = 0;
@@ -3881,6 +3910,7 @@ __attribute__((noinline)) static void mdspr_claim(void)
             }
         } else
             mdspr_flip_run = 0;
+#endif
     }
     /* SAT image, reverse record order, link = physical successor */
     unsigned s2 = 0;
