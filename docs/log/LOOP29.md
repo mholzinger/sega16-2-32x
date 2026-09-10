@@ -801,3 +801,46 @@ the SH-2 composes none of it.
 per key against the S16 source's 778 B (180,477 B / 232 keys), so the
 bounding-rect padding costs ~25%, not a multiple. Worth fixing, not the
 reason we compose in software.
+
+## 121. THE FIRST SPRITE PALETTE LINE IS FREE: THE BG PACK CARRIES 10 DUPLICATE ENTRIES
+
+Mike asked what the background actually loses if it gives a palette line
+to sprites. Measured off MD CRAM directly (ares `--dump "VDP CRAM"`,
+64 entries x 4 lines), not from the pack's own bookkeeping.
+
+    raw distinct CRAM words in lines 1-3   40
+    distinct COLOURS after 9-bit decode    30   <- 10 are duplicates
+
+Sampled across the whole level-1 run (f300 700 1100 1500 2000 2800 3400
+4000): 29, 30, 30, 30, 30, 30, 30, 30. Never above 30.
+
+**So the background fits in TWO lines (30 pens) with ZERO colour loss,
+everywhere in level 1.** The third line is free for sprites today.
+
+The second line is not free. Packing 30 colours into one line (15 pens),
+greedy nearest-merge in the 3-bit-per-channel MD space:
+
+    colours that must move   26 of 30
+    mean shift               0.51 of 7 steps per channel
+    worst shift              1.00 of 7
+
+A one-step shift in eight is subtle but real and it is a play-pass
+question, not an arithmetic one.
+
+**The ladder, with the sprite side priced from LOOP29 119's census
+(2723 live records per 597 generations):**
+
+    move             BG cost                    sprite gain
+    3 -> 2 lines     ZERO (verified 8 frames)   set 0x0A: 689 rec = 25.3%
+    2 -> 1 line      26/30 shift, worst 1/7     set 0x0B: 689 rec = 25.3%
+
+**Caveat, stated:** level-1 only. m_main.c:288 claims the worst visible BG
+window needs 36 distinct MD-quantised colours, which would NOT fit two
+lines (36 > 30). PALSTATIC is already per-scene, so the line allocation
+can be per-scene too: three lines where a scene needs them, two where it
+does not. The attract scenes have not been sampled.
+
+**Why this was invisible:** the pack was sized against 45 pens and 21
+S16 colour sets and never asked how many DISTINCT COLOURS survive the
+9-bit quantisation. It is the same shape as LOOP29 119's caps — a budget
+defended against the wrong quantity.
