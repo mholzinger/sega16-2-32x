@@ -1338,3 +1338,44 @@ was reverted on 2026-09-07 for shimmer and a second ground-band palette
 through the transform — a rendering defect with a knowable cause, not a
 capacity wall. It is now the only large lever left that is not blocked by
 hardware.
+
+## 134. MIKE'S PLAY PASS ON dblfast: "MORE FRAMES, NO SPEED" — AND THE NUMBERS AGREE
+
+Hardware pass on `dblfast-20260910.32x`: "I see more concurrent frames
+displayed but no speed improvement." Exactly right, and the metrics say
+it is a LOSING trade, not a neutral one:
+
+    build                          game logic   IRQ4 miss   MOTION
+    base (ship-us FBXPORT=1)          49.7%       50.3%      1.3 fps
+    + FBXSTAGE FBXBOTH                47.1%       52.9%      3.7
+    + FLIPEDGEOFF TEXTCAP (dblfast)   34.9%       65.1%     16.7
+
+**The double-buffered build runs the GAME 30% slower** (49.7 -> 34.9)
+while presenting 13x the frames. The player sees the same or fewer game
+events per second, displayed more smoothly. That is what he felt.
+
+**Where the cost is.** `FBXSTAGE+FBXBOTH` is nearly free — 2.6 points —
+but buys almost nothing, because the vblank edge guard declines most
+flips (3.7 motion). `FLIPEDGEOFF` is what actually buys the 4.5x motion
+and it costs 12 points of game speed. With the current flags the choice
+is frames OR speed.
+
+**HYPOTHESIS, and it links two open findings.** Flipping should not cost
+the 68K anything by itself — the MiSTer RTL defers a late FS write rather
+than tearing (LOOP28 91, `srcref/S32X_MiSTer rtl/32X/VDP.sv`). But entry
+131 measured the two FB banks diverging by 88%, with one bank nearly
+frozen, and `FBXBOTH` double-writes only the R60 packet, not the tile
+staging. Under the edge guard the FB almost never flipped (9 FS writes in
+2988 vints, LOOP28 92), so that incoherency was UNREACHABLE. Drop the
+guard and the FB flips constantly, so the 68K stages into whichever bank
+is current while the master reads the other, and work is redone.
+
+**If that holds, the 12 points are not the price of flipping — they are
+the price of the bank incoherency, and fixing it gets frames AND speed.**
+That makes entry 131 the top item, ahead of CAT1MD: it is the only lead
+that could give back both halves of the trade rather than choosing one.
+
+Falsifier: extend the double-write (or a restore-on-flip) to the tile
+staging, keep FLIPEDGEOFF, and re-measure both columns. If logic returns
+toward 47% while motion stays near 16.7, the hypothesis holds. If logic
+stays at 34.9, flipping is intrinsically expensive and the trade is real.
