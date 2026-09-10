@@ -37,34 +37,53 @@ WORD = {"uint8_t": 1, "int8_t": 1, "char": 1,
 
 
 def parse_size(line, tail):
-    """Recover a block's byte extent from its declaration + comment."""
+    """Recover a block's extent from its OWN declaration line only.
+
+    Comment prose two lines down is not evidence: the first cut of this
+    tool parsed neighbouring sentences and announced pri_lut as 256 KB.
+    Same-line, unambiguous forms only; everything else is UNKNOWN, and
+    UNKNOWN is reported rather than guessed.
+    """
+    del tail                       # deliberately not consulted
     unit = 1
     for t, w in WORD.items():
         if t in line:
             unit = w
             break
-    text = line + " " + tail
-    # explicit byte counts: "896B", "512 B", "ends 0x3A800"
-    m = re.search(r'ends\s+0x[02]?60?([0-9A-Fa-f]{5})', text)
-    if m:
-        return ("end", int(m.group(1), 16))
-    m = re.search(r'\b(\d+)\s*B\b', text)
-    if m:
-        return ("size", int(m.group(1)))
-    # "32 x 4 words", "16 words", "[3][16]", "[128][8]"
-    m = re.search(r'\b(\d+)\s*x\s*(\d+)\s*words?', text)
+    cm = line.split("/*", 1)[1] if "/*" in line else ""
+    m = re.search(r'\b(\d+)\s*x\s*(\d+)\s*words?\b', cm)
     if m:
         return ("size", int(m.group(1)) * int(m.group(2)) * 2)
-    m = re.search(r'\b(\d+)\s*words?', text)
+    m = re.search(r'\b(\d+)\s*words?\b', cm)
     if m:
         return ("size", int(m.group(1)) * 2)
-    dims = re.findall(r'\[\s*(\d+)\s*\]', text)
+    m = re.search(r'\b(\d+)\s*B\b', cm)
+    if m:
+        return ("size", int(m.group(1)))
+    dims = re.findall(r'\[\s*(\d+)\s*\]', cm)
     if dims:
         n = 1
         for d in dims:
             n *= int(d)
         return ("size", n * unit)
     return (None, None)
+
+
+# Aliases that are DELIBERATE. A cached (0x060xxxxx) and uncached
+# (0x260xxxxx) view of one block is the same memory on purpose, and some
+# names are #ifdef alternatives that can never both be live. Everything
+# NOT listed here is reported as a genuine collision.
+INTENTIONAL = {
+    ("TILEMAP_C", "TILEMAP_U"),        # cached / uncached view
+    ("TEXT_C", "TEXT_U"),              # cached / uncached view
+    ("spr_pair", "spr_pair_rd"),       # write / uncached read view
+    ("MDSPR_SAT", "ROWHASH"),          # guarded by an #error in m_main.c
+    ("FBCLEAR", "MDSPR_SAT"),          # DIRECT_FB vs canonical, exclusive
+}
+
+
+def is_intentional(a, b):
+    return (a, b) in INTENTIONAL or (b, a) in INTENTIONAL
 
 
 def main():
@@ -101,22 +120,37 @@ def main():
     unknown = [b for b in blocks if not b["size"]]
 
     overlaps = []
-    for i, a in enumerate(known):
-        for b in known[i + 1:]:
-            if b["addr"] >= a["addr"] + a["size"]:
-                break
-            if a["name"] == b["name"]:
-                continue          # same block redeclared under #ifdef
+    for i, a in enumerate(blocks):
+        if not a["size"]:
+            continue
+        nxt = [x for x in blocks[i + 1:] if x["addr"] > a["addr"]]
+        if not nxt:
+            continue
+        b = nxt[0]
+        if a["addr"] + a["size"] > b["addr"] and a["name"] != b["name"]:
             overlaps.append((a, b))
+    # exact aliases: two different names at the same address
+    for i, a in enumerate(blocks):
+        for b in blocks[i + 1:]:
+            if b["addr"] != a["addr"]:
+                break
+            if a["name"] != b["name"]:
+                overlaps.append((a, b))
 
     if not quiet:
         print("STATIC SDRAM EXTENT MAP (32X SDRAM, 0x06000000 base)\n")
         print("  %-26s %-9s %-8s %s" % ("name", "addr", "size", "declared"))
-        for b in blocks:
-            sz = "%d" % b["size"] if b["size"] else "UNKNOWN"
-            end = " -> %05X" % (b["addr"] + b["size"]) if b["size"] else ""
-            print("  %-26s %05X     %-8s %s%s"
-                  % (b["name"], b["addr"], sz, b["where"], end))
+        for i, b in enumerate(blocks):
+            nxt = next((x["addr"] for x in blocks[i + 1:]
+                        if x["addr"] > b["addr"]), None)
+            gap = (nxt - b["addr"]) if nxt else None
+            sz = "%d" % b["size"] if b["size"] else "?"
+            tight = ""
+            if b["size"] and gap is not None and b["size"] > gap:
+                tight = "  <-- NEEDS %d, ONLY %d TO NEXT" % (b["size"], gap)
+            print("  %-24s %05X  size %-6s gap %-6s %s%s"
+                  % (b["name"], b["addr"], sz,
+                     str(gap) if gap is not None else "-", b["where"], tight))
         print("\n  %d blocks, %d with a recoverable extent, %d UNKNOWN"
               % (len(blocks), len(known), len(unknown)))
         if unknown:
@@ -125,15 +159,22 @@ def main():
             for b in unknown:
                 print("    %-26s %05X  %s" % (b["name"], b["addr"], b["where"]))
 
-    if overlaps:
-        print("\n  OVERLAPS (%d):" % len(overlaps))
-        for a, b in overlaps:
-            print("    %s [%05X+%d, %s]" % (a["name"], a["addr"], a["size"], a["where"]))
-            print("      collides with %s [%05X, %s]  by %d bytes"
-                  % (b["name"], b["addr"], b["where"],
-                     a["addr"] + a["size"] - b["addr"]))
+    real = [(a, b) for a, b in overlaps if not is_intentional(a["name"], b["name"])]
+    known_ok = len(overlaps) - len(real)
+    if known_ok:
+        print("\n  %d alias pair(s) skipped as deliberate (cached/uncached "
+              "views, #ifdef alternatives)." % known_ok)
+    if real:
+        print("\n  COLLISIONS (%d):" % len(real))
+        for a, b in real:
+            print("    %s [%05X + %s, %s]"
+                  % (a["name"], a["addr"],
+                     ("%d" % a["size"]) if a["size"] else "alias", a["where"]))
+            over = a["addr"] + (a["size"] or 0) - b["addr"]
+            print("      runs into %s [%05X, %s]  by %d bytes"
+                  % (b["name"], b["addr"], b["where"], over))
         return 1
-    print("\n  no overlap among blocks with a recoverable extent.")
+    print("\n  no unexplained collision among blocks with a recoverable extent.")
     return 0
 
 
