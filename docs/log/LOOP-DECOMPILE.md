@@ -1071,3 +1071,104 @@ NEXT: name 0x22 by watching it. Dump 0xFFC000-0xFFDFFF across consecutive
 frames; fields that change every frame are position and animation, fields
 that change only at state transitions are configuration. That separates
 the two classes without reading a handler.
+
+---------------------------------------------------------------------
+## 29. The motion block, and HANDOFF-DECOMPILE's struct is WRONG from $0E on
+
+Reading the high-fan-in functions (entry 30) gave the motion layout
+outright, because the integrators state it in code.
+
+    3f24:  move.w  $14(fp),d0      ; take the velocity
+    3f28:  ext.l   d0
+    3f2a:  lsl.l   #8,d0           ; << 8
+    3f2c:  add.l   d0,$0C(fp)      ; ADD IT TO A LONG AT $0C
+    3f32:  move.w  $1A(fp),d0      ; and the other axis
+    3f3a:  add.l   d0,$10(fp)      ; LONG AT $10
+
+    3f40:  move.w  $14(fp),d0      ; velocity
+    3f44:  move.w  $16(fp),d1      ; delta
+    3f4a:  add.w   d1,d0
+    3f4c:  cmp.w   $18(fp),d0      ; against a limit
+    3f50:  bgt.s   ...             ; clamp
+
+So the motion block is
+
+    $0C  long   X position, 16.16 fixed ($0C.w is the pixel, $0E the fraction)
+    $10  long   Y position, 16.16 fixed ($10.w is the pixel, $12 the fraction)
+    $14  word   X velocity, 8.8 (added to X as vel<<8, so 256 = 1 px/frame)
+    $16  word   X acceleration
+    $18  word   X velocity limit
+    $1A  word   Y velocity
+    $1C  word   Y acceleration   (by symmetry with 0x3F40's other arm)
+    $1E  word   Y velocity limit
+
+**HANDOFF-DECOMPILE lists `$0E x_vel, $12 y_vel, $14 anim_frame,
+$16 anim_timer`. Those four labels are wrong.** $0E and $12 are the
+FRACTIONAL halves of the positions at $0C and $10; $14 and $16 are the X
+velocity and its acceleration. Treat the brief as superseded from $0E on
+unless someone produces a handler that uses them as it says.
+
+CONFIRMED ON A RUNNING FRAME. Dumping 0xFFC000-0xFFDFFF at frames
+2400-2405 and counting per-byte changes over the 19 active slots:
+
+    0x0D  13%    integer LOW byte of X   — moves
+    0x0E  11%    fraction HIGH byte of X — accumulates
+    0x0C   0%    integer HIGH byte of X  — never, in 5 frames
+
+That is exactly the signature of a 16.16 position: the fraction and the
+low integer byte move, the high integer byte does not. A word-sized
+position at $0C with a separate velocity at $0E could not produce it.
+
+(Change rates are low across the board because most of the 19 live slots
+are static scenery and, at a 49% miss rate (entry 22), the game does not
+advance on every frame. Rank the rates against each other, not against
+100%.)
+
+---------------------------------------------------------------------
+## 30. Fan-in: 25 functions absorb 55% of the call graph, and 22 had no name
+
+Ranking all 720 functions by caller count:
+
+    callers  entry      size  what it is
+        77   0x03352     104  unnamed (touches the MCU mailbox)
+        76   0x03F04      28  HIDE THIS OBJECT'S SPRITE — named below
+        62   0x03B2E      62  request_palette_update
+        59   0x03BCE      30  release_palette_slot
+        47   0x065AA      32  RESTORE POSITION — named below
+        38   0x0669C     162  unnamed
+        36   0x0D47E      58  unnamed
+        34   0x03DD8     298  unnamed
+        30   0x03F20       4  the motion integrator (entry 29)
+        23   0x065CA     124  SAVE POSITION — named below
+
+The top 25 absorb 725 of 1324 call edges. Three were named before today.
+Naming here is worth ten times naming a handler.
+
+**0x3F04 — hide this object's sprite.** This is what the dispatcher calls
+for every slot the solo filter excludes (entry 28), and 76 other sites
+call it directly:
+
+    3f04:  bclr  #3,(fp)          clear status bit 3
+    3f0c:  move.b $08(fp),d6      sprite_slot
+    3f10:  lsl.w  #4,d6           * 16 bytes per record
+    3f12:  add.w  #-2048,d6       + 0xF800 = THE RECORD POOL (entry 13)
+    3f18:  clr.l  (a0)            zero word 0 = top/bottom
+
+Zeroing word 0 makes top >= bottom, which the sprite hardware skips
+outright (`s16b.txt`: "If the top value is equal to or greater than the
+bottom value, the sprite is not displayed"). So this is the standard
+hide, and it independently confirms that $08 indexes the pool at
+0xFFF800.
+
+**0x65AA / 0x65CA — restore and save position.**
+
+    65aa:  move.w $40(fp),d0 ; move.w d0,$0C(fp) ; move.w d0,$28(fp)
+    65b6:  move.w $44(fp),d0 ; move.w d0,$10(fp) ; move.w d0,$2A(fp)
+    65ca:  move.w $0C(fp),$40(fp)      (the reverse)
+
+So **$40 and $44 are a saved X/Y pair**, and $28/$2A are a mirror updated
+alongside the live position. 47 callers restore, 23 save.
+
+NEXT: 0x03352 (77 callers, the highest in the program, touches the MCU
+mailbox) and 0x0669C (38 callers, 162 bytes) are the two biggest unnamed
+pieces of infrastructure left.
