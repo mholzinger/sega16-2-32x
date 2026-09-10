@@ -675,3 +675,69 @@ palettes (confirmed by `jts16_scr.v:56`, "1 priority + 7 palette + 3
 colour"), which suggests two tile sets per 16-pen MD line. The port
 already knows: `sh_src/m_main.c:1758` and LOOP28 99 state it and the
 allocator is built on it. Not a finding.
+
+---------------------------------------------------------------------
+## 22. The game is frame-locked, it counts its own overruns, and it shows the count on screen
+
+Mike's model: the game code is gated by the 60 Hz screen, not by 68000
+throughput, so the 32X's slower 7.67 MHz part costs nothing. The
+mechanism is confirmed. The conclusion needs one correction.
+
+**The gate is four instructions and the whole program has four
+references to the flag.**
+
+    397e:  clr.b  $FFF01C          the main loop gives up the frame
+    3982:  tst.b  $FFF01C
+    3986:  beq.s  0x3982           spin until IRQ4 sets it
+    3988:  dbf    d0,0x397E        d0+1 frames, so callers can wait N
+    398c:  rts
+
+11 call sites. The only other references to 0xFFF01C are the two in
+IRQ4. There is no second path and no timer fallback: the main loop
+BLOCKS until vblank, so the game cannot run faster than 60 Hz whatever
+CPU it is given. The arcade's 10 MHz part and our 7.67 MHz part sit in
+the same three-instruction spin. That part of the model is exactly right.
+
+**The game notices when the frame did not fit, and degrades on purpose.**
+
+    2ab0:  tst.b  $FFF01E          suspend latch -> skip everything
+    2ab4:  bne.w  0x2C7E
+    2ab8:  tst.b  $FFF01C          flag STILL set?
+    2abc:  beq.s  0x2AC6           no: the loop is waiting, normal frame
+    2abe:  addq.w #1,$FFF144       yes: the loop overran. COUNT IT
+    2ac2:  bra.w  0x2C06           and take the SHORT PATH
+    2ac6:  addq.b #1,$FFF01C       normal: release the loop, then the
+    2aca:  ...                     scroll regs and the sprite upload
+
+The short path at 0x2C06 skips the four scroll register writes AND the
+sprite upload (entry 13) entirely. So an overrun does not tear; it holds
+the previous frame's video state and slips the animation by one frame.
+0xFFF144 is incremented at exactly one place, cleared at 0x930, and read
+at 0xBE2. Nothing else touches it.
+
+**Measured on our rom.** The counter is the game's own verdict and needs
+no instrumentation:
+
+    ares-headless --frames N --input discover/inputs/play_level1.csv \
+        --dump wram:0xFFF140:0x10:miss.bin rom/s16.32x
+
+    frame 1200   0xFFF144 =   52
+    frame 2400   0xFFF144 =  635    +583 over 1200 frames = 49% missed
+    frame 3600   0xFFF144 = 1220    +585 over 1200 frames = 49% missed
+
+Half the vints overrun during level 1. So we ARE losing speed — but not
+to the clock, which is what the model gets right. The frame budget is
+shared, and CLAUDE.md's own figures put the game at ~2780 instructions
+per vint and the port's pipeline at ~2882 on top of it, in the same 60 Hz
+box. The 68000 is not slow; the box has twice as much in it.
+
+**And the game displays the counter.** 0xBE2 reads 0xFFF144, rotates out
+four nibbles, converts each to ASCII hex and writes them to 0x4101D4 —
+text row 3, column 42, which is visible column 18 (entry 21). The
+containing routine is 0x005BE, the largest function in the program, which
+reads the IO ports and is reached through a dispatch case: the service /
+test mode screen.
+
+That makes the game its own speedometer. The same four digits can be read
+on the arcade and on our port, on real hardware, with no probe build and
+no emulator support. Worth wiring into the acceptance pass.
