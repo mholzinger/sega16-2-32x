@@ -5820,6 +5820,9 @@ static uint16_t vbs_t[5], vbs_t2[2];
 #ifdef FLIPRATE_MEANSUM
 static uint8_t fs_from_isr;              /* LOOP29 143 probe: flip_span called from the ISR */
 #endif
+#ifdef TEXTCAP_EARLY
+static volatile uint8_t fs_posted_early; /* LOOP29 145: the ISR posted this vint's capture */
+#endif
 #ifdef PG_SKIP_PKT
 static uint16_t mir_a, mir_b;            /* packet magic words read pre-flip
                                           * (the mailbox mirror, LOOP29 139) */
@@ -5897,11 +5900,17 @@ static int flip_span(void)
     /* capture runs on the SLAVE, in parallel with the truth
      * drain below. Post BEFORE the drain, join AFTER it:
      * both sides work, the window shortens by the overlap. */
+#ifndef TEXTCAP_EARLY
     SYNC[6] = 0;
 #ifdef VB_SPAN
     SYNC[7] = 0;
 #endif
     SYNC[4] = 0x4000;
+#else
+    if (!fs_posted_early) { SYNC[6] = 0; SYNC[4] = 0x4000; }  /* body-fallback
+                                          * flip on a vint whose ISR did not
+                                          * post: post now, join below */
+#endif
 #else
     /* text capture: 512 longs FB -> TEXT_U truth.
      * MUST RUN PRE-FLIP. The first cut ran in the snapshot
@@ -6054,11 +6063,11 @@ static int flip_span(void)
             if (vbs_isr) vbs_t2[0] = (uint16_t)(frt() - visr_t0);
         }
 #endif
-        while (SYNC[6] != 0x4000 && --g2) ;
+        while (SYNC[6] != 0x4000 && SYNC[6] != 0x4002 && --g2) ;
 #ifdef VB_SPAN
         if (vbs_isr) vbs_t2[1] = (uint16_t)(frt() - visr_t0);
 #endif
-        if (!g2) {
+        if (!g2 || SYNC[6] == 0x4002) {  /* 0x4002: the slave saw no FM */
             DIAG[22]++;          /* slave never captured: fall
                                   * back on the master, late
                                   * but pre-flip — correctness
@@ -6523,6 +6532,18 @@ void visr_vbi(void)
                                           * vint's post anyway) */
         return;
     }
+#if defined(TEXTCAP_EARLY) && defined(TEXTCAP_SLAVE)
+    /* TEXT CAPTURE POSTED AT ISR ENTRY (LOOP29 145). On the FPGA the
+     * master's own FB reads between entry and the guard cost ~20 lines
+     * (144) and the flip misses the guard almost every vint (143). The
+     * slave waits for FM itself and copies while the master waits for
+     * the 68K's post; flip_span only joins. The game writes no text
+     * between here and the post (it is inside the shim), so the truth is
+     * the same bytes the after-post capture read. */
+    fs_posted_early = 1;                 /* cleared by the body at window pickup */
+    SYNC[6] = 0;
+    SYNC[4] = 0x4000;
+#endif
 #ifdef FLIP_DEFER
     int deferred_flipped = 0;
     /* DEFERRED COMMIT: a flip armed last vint outside vblank lands HERE,
@@ -9734,6 +9755,9 @@ RAMCODE void m_main(void)
              * below swaps banks. FBXLATE=1 moves this call below the flip
              * so the two positions can be compared on the same rig. */
 #ifndef FBX_LATE
+#ifdef TEXTCAP_EARLY
+            fs_posted_early = 0;         /* this vint's early post is spent */
+#endif
 #ifdef FBX_ISRLIFT
             if (!fbx_landed)             /* FBXISRLIFT: flip_span's entry
                                           * lifted already on the ISR path;

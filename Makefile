@@ -830,6 +830,15 @@ SHCCFLAGS += -DFLIPRATE_MEANSUM=$(FLIPRATEMEAN)
 endif
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER
 endif
+# TEXTCAPEARLY=1 = LOOP29 145. With the slave text capture (TEXTCAPMASTER
+# OFF), the master posts the capture at its V-ISR ENTRY instead of after
+# the 68K's post; the slave waits for FM itself and copies while the
+# master waits for the post. Takes ~10 (ares) / ~20 (FPGA) lines of FB
+# reads off the pre-flip path so the FS write lands inside the guard on
+# silicon (143/144).
+ifdef TEXTCAPEARLY
+SHCCFLAGS += -DTEXTCAP_EARLY
+endif
 ifdef FBXLATE
 SHCCFLAGS += -DFBX_LATE
 endif

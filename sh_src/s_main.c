@@ -82,6 +82,17 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
                                           * splits it into our latency
                                           * and our copy. */
 #endif
+#ifdef TEXTCAP_EARLY
+        /* LOOP29 145: posted at the master's ISR entry, BEFORE the 68K
+         * has raised FM. An FB read at FM=0 is garbage, so wait for FM
+         * (the 68K's post follows within ~25 lines); if it never comes
+         * this vint, say so and let the master decide. */
+        {
+            uint32_t g = 60000;          /* ~40 lines */
+            while (!(MARS_SYS_INTMSK & 0x8000) && --g) ;
+            if (!g) { SYNC[6] = 0x4002; return; }
+        }
+#endif
         text_capture();
         SYNC[6] = 0x4000;                /* echo AFTER the copy lands */
         return;

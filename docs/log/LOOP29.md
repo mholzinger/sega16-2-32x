@@ -1930,3 +1930,23 @@ post): the slave waits for FM itself and copies while the master waits
 for the 68K, and the master only joins. LOOP28 96's 31.8-line pickup
 latency is hidden under the 21-line post wait instead of added to it.
 If that is not enough, the packet lift follows the same route.
+
+## 145. TEXTCAPEARLY: THE TEXT CAPTURE LEAVES THE MASTER'S CRITICAL PATH (2026-09-10 18:50)
+
+`TEXTCAPEARLY=1` with the slave capture (TEXTCAPMASTER off): the master
+posts SYNC[4]=0x4000 at V-ISR entry, right after the live-window check;
+the slave's handler waits for FM (bounded ~40 lines, answers 0x4002 if
+it never rises) and copies; flip_span skips its own post and only
+joins, falling back to the inline capture on 0x4002. A body-fallback
+flip on a vint whose ISR did not post still posts before its join
+(`fs_posted_early`, cleared at window pickup).
+
+    vi7 = FBXPORT FBXSTAGE FBXPEND FBXISRLIFT PGSKIPPKT TEXTCAPEARLY
+    ares, 4000 vints: FS writes 474 421 457 477 per 1000, 1 deferred;
+    ISR flips 1809, body 814, held 1288, edge 1424, slave-nocap 2, torn 4;
+    game logic 49.8%; CRAM full; stills correct.
+
+On ares it is par with vi4 (edge declines somewhat higher: the join
+sometimes waits on the slave's pickup). The point is the FPGA, where the
+master's inline capture was half of the ~20 lines that missed the guard
+(144). Rig numbers: below.
