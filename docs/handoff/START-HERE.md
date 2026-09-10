@@ -59,6 +59,18 @@ shim/rotor/FM/transport work which moved the logic rate and never the
 picture — and 39% of the frame budget is the slave PAINTING IN SOFTWARE
 what the MD VDP would draw for free.
 
+## THE PIVOT (2026-09-10 18:00, Mike's order)
+
+"It's never the 68K." Stop bending the 32X into a beam-racing shape;
+patch the program's gates so it runs to OUR clock. Hardware speed is
+read ONLY off the game's own dropped-frame counter painted on the rig
+(`BOOTGAMERATE=1`, LOOP29 140): the accepted rom runs the game at ~15%
+on the MiSTer, vi4 at ~44%; ares says 50% for both and is an upper
+bound. Patch 1 is in: `GAMEGATE=1` (LOOP29 141) makes IRQ4 release the
+main loop once per presented frame; overruns drop to zero and the game's
+speed IS the flip rate. Line: `rom/night/vi6.32x`. Next lever: the
+slave's compose (cat1 tiles = 48%), which sets the flip rate.
+
 ## THE ACCEPTED ROM
 
     make ship-us FBXPORT=1          # tag mister-keeper-20260908
