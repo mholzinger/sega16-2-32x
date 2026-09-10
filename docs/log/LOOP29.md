@@ -971,3 +971,42 @@ the OTHER half. Slave compose splits ~50/50 between sprites (0.73) and
 cat1 tiles (0.67), so bigger pre-baked sprite units attack the sprite half
 and CAT1MD attacks the tile half. They are complementary, not competing —
 but both land on the slave, which is the right target.
+
+## 125. THE INDEXED-TILE BAKE: SHARING DOES NOT PAY, PADDING DOES
+
+Mike's notion: bake SH-2-sized tile pages and have the 68K feed tile
+quadrants to the VDP by index from the sprite page, rather than baking
+each sprite as its own padded rect.
+
+**Priced on the full bake (244 keys, 239,328 B = 7479 MD 8x8 tiles).**
+The MD VDP reads a sprite's tiles CONTIGUOUSLY from a start index, so
+sharing is only expressible at whole-run granularity:
+
+    run length        tiles kept     saving
+    1 tile             4525 (60.5%)   39%   <- NOT expressible
+    2 tiles            5666 (75.8%)   24%
+    4 tiles (2x2)      6588 (88.1%)   12%
+    8 tiles            7088 (94.8%)    5%
+    16 tiles (4x4)     7424 (99.3%)  0.7%
+
+**Sharing collapses with run length**, because each animation frame is
+distinct art. At the sub-sprite sizes real sprites use, an indexing layer
+buys 12% at best and 0.7% at worst. NOT WORTH BUILDING for the sharing.
+
+**The other half of the notion is right.** 1610 of 7479 tiles (21.5%) are
+FULLY BLANK — bounding-rect padding, from `bake_mdspr.py`'s "a key's rect
+width is the max drawn extent over its rows". A tighter sub-sprite
+decomposition (several small boxes skipping empty regions instead of one
+padded rect) recovers most of that, needs no indexing scheme, and is
+exactly Mike's earlier "make them at their original size".
+
+**BUT NEITHER IS ON THE CRITICAL PATH, and that is the finding.** After
+the LOOP29 119 bake widening the normal scene uses 9120 B of its 12288 B
+VRAM window — 74%, not full. The claim census says 41.5% of records now
+fail on PALETTE MISMATCH and 0.0% on caps or space. **Art size has never
+been what stops a claim.**
+
+So the packing work is real and buys ~21%, and it buys nothing today. It
+becomes correct the moment VRAM IS the constraint — which is exactly when
+the palette-line problem is solved and claims jump. Second move, not
+first. Banked here so it is not re-derived.
