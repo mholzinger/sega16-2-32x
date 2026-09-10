@@ -1154,3 +1154,46 @@ against 3 usable MD lines of 15 pens. There is no packing, collapsing or
 swapping of the game's own palettes that fits that. Any solution has to
 either reduce what the game asks for (lossy, a play-pass question) or
 accept that most sprites stay in software.
+
+## 130. THE SEAM QUESTION: THE WINNING TRIO DOES NOT CHURN
+
+The decompile thread (LOOP-DECOMPILE 7-9) inverted my palette conclusion
+by changing the metric. I counted DISTINCT COLOUR SETS per band and got
+"6 sets, 3 lines, hopeless" (entry 126). They counted LIVE SPRITE
+RECORDS: the top 3 palettes by record count cover 65-75% of everything
+drawn, with no colour change and no palette surgery. **Their metric is
+the right one** — what matters is how many sprites reach hardware, not
+how many palettes exist. The port renders ~4% in hardware today.
+
+They left one question, correctly flagged as a rendering-thread call:
+does choosing the three lines per frame create a visible seam when the
+winning palette changes? Measured on `rom/night/dblfast_clean.32x`:
+
+    consecutive frames 3000-3006   trio changed 0 of 6   (0%)
+    every 100 frames, 1500-2800    trio changed 4 of 13  (31%)
+    mean top-3 coverage            76.2% of live records
+
+    1500-1600  [9,10,11]
+    1700-1900  churn: +[2,7]-[10,11], +[8]-[7], +[10,11]-[2,8]
+    2000-2500  [9,10,11] STABLE for 600 frames
+    2600-2800  [0,9,10]
+
+**Frame-to-frame churn is ZERO.** The changes cluster at actor
+transitions (three in a row across 1700-1900, a scene change) and are
+isolated events a handful of times across the level. A reassignment
+therefore costs at most ONE frame of those sprites falling back to
+software — a blink, not a seam — and `mdspr_danchor` already implements
+sustained-majority hysteresis for exactly this case, on one anchor. The
+change is to extend it from one line to three.
+
+**Caveat, stated:** 100-frame sampling cannot see changes between
+samples, so "4 of 13" is a lower bound on the number of change EVENTS.
+What it is not is evidence of per-frame churn, which the consecutive run
+rules out directly. Consecutive frames ACROSS a transition (e.g.
+1690-1710) would tighten this and were not run.
+
+**Process note:** the sweep's output collided with earlier dumps in
+/tmp/pal (files named w2000/w2600 from the mtask work were picked up by
+a w*.bin glob and parsed as frames 22000/22600). They were caught by a
+short-dump guard, but the scratchpad exists to prevent this and I should
+have used it.
