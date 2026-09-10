@@ -93,8 +93,11 @@ default-off.
     ISR path, and move the 68K's packet blast out of the pre-post slot
     into the FM-gate spin. `make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1
     FBXISRLIFT=1 PGSKIPPKT=1 TEXTCAPMASTER=1 TEXTCAPFULL=1` =
-    `rom/night/vi.32x`: ~29 Hz flips, none deferred, logic 50.1%.
-    **Awaiting Mike's play pass; not the accepted rom.**
+    `rom/night/vi2.32x`: ~29 Hz flips, none deferred, logic 50.1%.
+    vi.32x (LOOP29 137) drew black backgrounds on Mike's pass: the
+    packet sat in tilemap page 0, the BACKGROUND page — LOOP29 138 moves
+    it to page 12 and the attract title eye renders clean for the first
+    time. **Awaiting Mike's play pass on vi2; not the accepted rom.**
     The build is `rom/night/dblfast_clean.32x`, on the MiSTer as
     `dblfast-20260910.32x`.
   - **`PALSTREAK` / `PALBACKOFF`.** Were dead code until 2026-09-08 (the

@@ -1696,3 +1696,51 @@ flip trace: 95-100 FS writes per 200 vints, none deferred.
 **Next: Mike's play pass on `rom/night/vi.32x` against `dblfast_clean`,
 then the MiSTer.** The MOTION metric needs an input script keyed to the
 game's timer before it can rank roms of different speed.
+
+## 138. MIKE'S PASS ON vi: BLACK BACKGROUND — THE PACKET WAS INSIDE THE BACKGROUND PLANE'S PAGE (2026-09-10 12:05)
+
+Mike, ares GUI: `vi.32x` "black background, stuttering frames";
+`dblfast_clean` "more frames but gameplay very slow". Headless, vi kept a
+full palette and correct stills on every input script to frame 12000,
+so his failure is on a scene the scripts never reach.
+
+Cause, by reading rather than reproduction: the R60 packet sat at FB
+0x12000 = tilemap PAGE 0, and page 0 is the game's BACKGROUND plane page
+(page selects never change: BG = 0, FG = 7, NOTES-FROM-DECOMPILE 2 /
+LOOP-DECOMPILE 11). The compose reads TILEMAP_C, the captured truth.
+Entry 137's PGSKIPPKT hole stopped capturing page 0 longs 0x000-0x20F,
+i.e. name-table rows 0-16, so any scene that shows those rows drew them
+from the zeros boot wrote: black. Level 1 does not show them; the title
+and later scenes do. And the SHIPPING line has been showing the PACKET
+there: `base.32x` attract at frame 2000 renders the title eye with
+packet bytes as tiles across its top rows (`scratchpad base_attr_2000`),
+which is START-HERE's "attract title never renders" bug, or the visible
+half of it.
+
+Fix (packet_fmt.h, m_main.c PG_LO/PG_HI): the packet moves to page 12's
+first half, FBX_PKT 0x1E000, publish word 0x1E7F8 (max packet 924
+words = 0x738 bytes, fits). Page 12 is the blank page the game never
+writes; its second half already carries MD-plane packet B; its first
+half is the FB_SPR mirror only the FBSPR probe uses (`#error` guards
+the pair). Page 0 is captured whole again; page 12 is skipped whole and
+TILEMAP_U page 12 stays zero, which is what "blank" means.
+
+    rom/night/vi2.32x   same flags as 137:
+    make clean && make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 \
+                               PGSKIPPKT=1 TEXTCAPMASTER=1 TEXTCAPFULL=1
+
+    game logic 50.1%, misses 49.9% (unchanged from vi)
+    FS writes per 500 frames, 0-7000: 221-265, 1 deferred in 3357
+    ISR flips 3340 / body 457 / held 3041 / edge 618 in 6838 cycles
+    torn landings 4 in 6838; late blasts 6087
+    CRAM lines at 7000: [14, 15, 15, 10]
+    stills: level 1 f2100/f2600/f6000 correct; ATTRACT TITLE EYE CLEAN
+    at frame 2000 where base shows packet garbage in its top rows.
+
+The stutter: vi's inter-flip intervals over 1000 frames are 233 x 2
+vints, 13 x 3, 2 x 6, 2 x 1 — a regular 30 Hz, generation-bound (held
+= no closed generation on ~45% of vints). dblfast's are 21 x 1, 12 x 2,
+71 x 3, 63 x 4. If 30 Hz reads as stutter, the next lever is the slave's
+compose (cat1 tiles, 48% of it), not the flip.
+
+Not play-passed. `vi.32x` is superseded; do not hand it over.

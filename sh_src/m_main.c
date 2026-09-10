@@ -4674,8 +4674,13 @@ static uint16_t pg_fresh[2];
  * (pg_watch read 0x1001 in steady play) and get RESTORED across banks --
  * a stale publish word written into the other bank. Neither is game
  * truth; both are skipped by capture AND restore. */
-#define PG_LO(pg)  ((pg) == 0  ? 0x210 : 0)
-#define PG_HI(pg)  ((pg) == 12 ? 0x200 : 0x400)
+/* LOOP29 138: the R60 packet moved out of page 0 into page 12's first
+ * half (packet_fmt.h). Page 0 is the BACKGROUND plane's page and is
+ * captured whole again; page 12 is the blank page, holds only pipeline
+ * packets, and is skipped whole -- TILEMAP_U page 12 stays the zeros
+ * boot wrote, which is what "blank" means. */
+#define PG_LO(pg)  0
+#define PG_HI(pg)  ((pg) == 12 ? 0 : 0x400)
 #else
 #define PG_LO(pg)  0
 #define PG_HI(pg)  0x400
