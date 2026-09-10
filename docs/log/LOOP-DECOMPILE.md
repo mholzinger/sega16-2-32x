@@ -343,3 +343,92 @@ byte-identical to bank1 at frame 700, 300 frames stale, while bank0 has
 moved on; 266 of 40960 bytes differ. The game writes tiles into whichever
 bank is current and nothing carries them to the other. Not enough to
 explain the title screen, and worth a look on its own.
+
+---------------------------------------------------------------------
+## 13. Sprite RAM has exactly ONE writer, and it is a loop in IRQ4 (2026-09-10)
+
+HANDOFF-DECOMPILE question 3. A census of every reference to the arcade
+sprite-RAM range 0x440000-0x44FFFF finds three sites, two of which write
+the same end marker. Note that objdump prints ABSOLUTE operands in hex
+but IMMEDIATE operands in DECIMAL, so a grep for `0x440000` misses the
+`movea.l #$440000` sites entirely; search for 4456448 as well.
+
+The upload is 0x2B16-0x2B46, inside the IRQ4 handler that starts at
+0x2AAC:
+
+    2b16:  movea.w #$EC80,a0        order list, 256 bytes
+    2b1a:  movea.w #$F800,a1        record pool
+    2b1e:  movea.l #$440000,a2      hardware sprite RAM
+    2b24:  move.w  #255,d1
+    2b2c:  move.b  (a0)+,d0         one order byte per entry
+    2b2e:  bmi     ...              bit 7 set: skip, dest does NOT advance
+    2b30:  lsl.w   #4,d0            record index * 16
+    2b32:  lea     (a1,d0.w),a3
+    2b36:  move.l  (a3)+,(a2)+      three longs = 12 of the 16 bytes
+    2b3c:  addq.w  #4,a2            words 6 and 7 are never rewritten
+    2b42:  move.w  #-1,(a2)         end markers
+    2b46:  move.w  #-1,4(a2)
+
+So the order list is a 256-entry display list of record indices, the
+hardware list is COMPACTED (a skipped entry consumes no hardware slot),
+and the pool holds at most 128 records of 16 bytes at 0xFFF800.
+
+The clear routine at 0x36C4 zeroes 0x440000 and 0xFFF800 in lockstep,
+62 iterations, which is the pairing stated independently.
+
+VERIFIED ON A RUNNING FRAME. Dumping all three regions together
+
+    ares-headless --frames 3000 --input discover/inputs/play_level1.csv \
+        --dump wram:0xFFEC80:0x100:order.bin \
+        --dump wram:0xFFF800:0x800:pool.bin \
+        --dump wram:0xFF7000:0x800:hwspr.bin  rom/s16.32x
+
+and replaying the loop above in Python reproduces the rebased hardware
+mirror: 12 of 256 order entries live, and 194 of the first 198 bytes
+match. Two of the four misses are bytes 194-195, which the loop leaves
+untouched between its two end markers, so the real skew is two bytes
+inside records — the pool moved on after the vint wrote the mirror.
+
+The twelve live entries are the same twelve live records the band census
+counted at frame 3000 (entry 9), from a different dump.
+
+---------------------------------------------------------------------
+## 14. Text RAM is the opposite: 61 scattered writers
+
+Same census over 0x410000-0x410FFF. The layer is 64 words per row and
+the visible 40 columns start at column 24, which the tilemap blocks in
+entry 10 confirm (0x40A230 is row 4, column 24, and is 40 wide).
+
+Six sites write the base 0x410000 and are clear or fill routines; one of
+them, 0x369C, clears all 4096 bytes as 1024 longs. Six write the layer
+register block (entry 11). The remaining ~49 are individual `lea` sites
+each aimed at one screen position, for example
+
+    0x0057E, 0x01608, 0x090D8   row  0 col 24   the HUD row
+    0x04554, 0x04568, 0x0457C   rows 7-9        attract text
+    0x1B020..0x1B856            rows 2-25       the service-mode screens
+
+There is no single upload and no shared thunk. Every writer stores
+straight into the layer.
+
+---------------------------------------------------------------------
+## 15. What this means for the O(writes) pipeline
+
+LOOP27 80 specified a write-through at the patch thunk and said the
+blocker was that we intercept writes blindly. Entries 13 and 14 split
+that problem in two, and the halves want opposite treatments.
+
+  - SPRITE RAM needs no interception at all. There is one writer, its
+    address is known, and both its inputs (0xFFEC80 and 0xFFF800) are in
+    work RAM the shim can read directly. Replacing the loop at 0x2B16
+    with our own pass is exact, because nothing else writes the region.
+    That deletes the interception, the compare, the shadow and the
+    packing for the sprite half in one move.
+  - TEXT RAM cannot be done that way. 49 independent writers store
+    straight into the layer, so the blind write-through is the right
+    mechanism there and should stay.
+
+Unproven: what the loop at 0x2B16 costs per vint, and whether replacing
+it interacts with the FM window (the sprite upload is currently
+DELIBERATELY ungated, tools/patch_game.py:1004). Both are
+rendering-thread measurements, not decompile ones.
