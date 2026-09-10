@@ -1559,6 +1559,16 @@ endif
 # FRT ticks, scratch 0x28E40 — the audited-free span). Probe-only; the
 # arithmetic is ROM-resident so .ramtext pays only the stamps. Read with
 # tools/nat_score.py (headless dump) or tools/state_health.py (savestate).
+# `make ... MDSPR_WHY=1` = LOOP29 119: WHY does the MD-VDP sprite offload
+# claim only 1.0 record per generation (cap 20, MD hardware 80)? Counts
+# each rejection reason in the claim loop: [0] zoomed [1] pp!=2 [3] X<=0
+# [4] NO BAKED KEY [5] no anchor [6] palette mismatch [7] caps
+# [8] claimed [9] live records examined. Counters live in .bss (the
+# 0x28Fxx scratch is crowded and this repo has numbered its collisions to
+# #15); read the `mdspr_why` symbol out of rom/s16.lst. PROBE ONLY.
+ifdef MDSPR_WHY
+SHCCFLAGS += -DMDSPR_WHY
+endif
 ifdef PHASECENSUS
 SHCCFLAGS += -DPHASE_CENSUS
 endif

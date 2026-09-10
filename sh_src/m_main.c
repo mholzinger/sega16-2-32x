@@ -3654,6 +3654,22 @@ static int mdspr_pal_equal(unsigned s, unsigned a)
 #define mdspr_danchor  (*(volatile uint8_t *)0x26028E2B)
 #define mdspr_flip_run (*(volatile uint8_t *)0x26028E2C)
 
+#ifdef MDSPR_WHY
+/* MDSPR REJECTION CENSUS (2026-09-10, LOOP29 119). Claims measured at
+ * 1.0 record/generation against a cap of 20 and MD hardware capacity of
+ * 80 — 1.3% of the chip. Five rules can reject a claim and they need
+ * different fixes, so count them. In .bss deliberately: the 0x28Fxx
+ * scratch span is crowded and this repo has numbered its slot
+ * collisions to #15; the linker cannot collide. Read the symbol address
+ * out of rom/s16.lst. PROBE ONLY. */
+static volatile uint32_t mdspr_why[10];
+static volatile uint32_t mdspr_nokey_set[64];  /* which colour sets lack
+                                          * baked art (LOOP29 119) */   /* volatile: nothing READS this
+                                          * array, so -O2 -flto dead-store
+                                          * eliminated 8 of the 10 counters
+                                          * and the census read all-zero
+                                          * (LOOP29 119). */
+#endif
 __attribute__((noinline)) static void mdspr_claim(void)
 {
     uint8_t crec[24], ckey[24];
@@ -3695,18 +3711,41 @@ __attribute__((noinline)) static void mdspr_claim(void)
         uint16_t d2 = e[2];
         if (d2 & 0x8000)
             break;
-        if (d2 & 0x4000)
+#ifdef MDSPR_WHY
+        mdspr_why[9]++;                      /* live records examined */
+#endif
+        if (d2 & 0x4000) {
+#ifdef MDSPR_WHY
+            mdspr_why[2]++;                  /* d2 bit14 set */
+#endif
             continue;
-        if (e[5] & 0x3FF)
+        }
+        if (e[5] & 0x3FF) {
+#ifdef MDSPR_WHY
+            mdspr_why[0]++;
+#endif
             continue;                        /* zoomed: SH-2 forever */
+        }
         uint16_t d4 = e[4];
-        if (((d4 >> 6) & 3) != 2)
+        if (((d4 >> 6) & 3) != 2) {
+#ifdef MDSPR_WHY
+            mdspr_why[1]++;
+#endif
             continue;                        /* pp==2 only (v1) */
+        }
         unsigned top = e[0] & 0xFF, bot = e[0] >> 8;
-        if (top >= bot)
+        if (top >= bot) {
+#ifdef MDSPR_WHY
+            mdspr_why[1]++;                  /* degenerate top>=bot */
+#endif
             continue;
-        if ((e[1] & 0x1FF) < 57)
+        }
+        if ((e[1] & 0x1FF) < 57) {
+#ifdef MDSPR_WHY
+            mdspr_why[3]++;
+#endif
             continue;                        /* X<=0 = SAT mask trick */
+        }
         unsigned set = d4 & 0x3F;
 #ifdef GAME_ALTBEASTJ
         /* baked keys carry the US bank numbering; fold the game's bank
@@ -3727,8 +3766,13 @@ __attribute__((noinline)) static void mdspr_claim(void)
                 ki = (int)j; break;
             }
         }
-        if (ki < 0)
+        if (ki < 0) {
+#ifdef MDSPR_WHY
+            mdspr_why[4]++;
+            mdspr_nokey_set[set & 0x3F]++;
+#endif
             continue;
+        }
         if (dynamic)
             setn[set]++;
         /* STATIC anchor (bug found on ares, first M2 run): a per-frame
@@ -3738,12 +3782,27 @@ __attribute__((noinline)) static void mdspr_claim(void)
          * resident through gameplay; the v1 scenery classes claimed
          * ZERO records across the whole 900-1600 stretch). Other sets
          * claim only while their live pens are IDENTICAL. */
-        if (anchor > 0x3F)
+        if (anchor > 0x3F) {
+#ifdef MDSPR_WHY
+            mdspr_why[5]++;
+#endif
             continue;                    /* no anchor yet: count only */
-        if (set != anchor && !mdspr_pal_equal(set, (unsigned)anchor))
+        }
+        if (set != anchor && !mdspr_pal_equal(set, (unsigned)anchor)) {
+#ifdef MDSPR_WHY
+            mdspr_why[6]++;
+#endif
             continue;
-        if (nclaim >= 20 || nsat + mdspr_keys[ki].nsub > MDSPR_NSAT)
+        }
+        if (nclaim >= 20 || nsat + mdspr_keys[ki].nsub > MDSPR_NSAT) {
+#ifdef MDSPR_WHY
+            mdspr_why[7]++;
+#endif
             continue;                        /* caps: overflow stays SH-2 */
+        }
+#ifdef MDSPR_WHY
+        mdspr_why[8]++;                      /* CLAIMED */
+#endif
         crec[nclaim] = (uint8_t)i;
         ckey[nclaim] = (uint8_t)ki;
         nclaim++;
