@@ -1105,3 +1105,52 @@ cannot be assumed to be what corrupted SLC. What IS established about the
 census is entry 120's other finding: its call site counted 1 frame in
 2600, so it is dead code on the R60/NATIVE path. **The census is dead for
 that reason; the 403 remains unexplained and should not be attributed.**
+
+## 129. THE PER-BAND CENSUS: THE CHEAP PALETTES ARE NEVER IN THE CROWDED BAND
+
+The decompile thread (LOOP-DECOMPILE 1-6) answered handoff question 1 —
+sharing is not a lever, 12 real palettes need 123 distinct colours at
+once and zero pairs fit one 15-pen line — and left one thread open:
+five live palettes carry effectively one colour across all 14 pens
+(0x00, 0x01, 0x03, 0x07, 0x49), so collapsing them frees four slots.
+**Are any of them in the crowded 28-line band?** Measured; no.
+
+**Their claim, verified against our rom bytes** (source 0x242A0 + 28*index,
+14 words — their derivation, re-run here):
+
+    13 palette indices have ALL 14 pens identical: 0x00-0x07 (pure
+    primaries: black, blue, green, cyan, red, magenta, yellow, white)
+    and 0xA9-0xAD.
+    Of their five: 0x00, 0x01, 0x03, 0x07 confirmed single-colour.
+    0x49 is 13-of-14 identical (30FF then thirteen 7FFF) -- 2 pens, not
+    1. The substance holds; it still collapses.
+
+**The per-band census** (slot -> index via the request table at 0xFFF500,
+Y spans from the game's sprite RAM at 0xFF7000, 28-line bands):
+
+    frame  sets/band                busiest  palettes in it (distinct colours)
+    2600   0 0 4 4 4 1 1 0          band 2   0x2F:14 0x28:14 0x29:13 0x2A:11
+    3000   0 1 5 4 4 1 2 1          band 2   0x08:14 0x2F:14 0x28:14 0x29:13 0x2A:11
+    3400   0 0 3 3 6 3 2 0          band 4   0x32:14 0x08:14 0x2F:14 0x28:14
+                                             0x2B:14 0x2C:14
+
+    cheap (<=2 colour) palettes in the busiest band: 0, 0, 0
+
+**And the cheap five are never on screen at all.** They hold slots in the
+game's allocator at every sampled frame and NO live sprite record
+references them:
+
+    frame 2600/3000: 15 palettes hold a slot, 5 cheap, 0 of those on screen
+    frame 3400:      17 palettes hold a slot, 5 cheap, 0 on screen
+
+So collapsing them frees slots in the GAME's 63-slot allocator, which is
+not a resource we are short of. It frees nothing in MD CRAM, because they
+never occupy an MD line in the first place. **The open thread from
+question 1 is closed, negative.**
+
+**What the crowded band actually needs**, and this is the number that
+matters: 6 palettes of 11-14 distinct colours each in one 28-line band,
+against 3 usable MD lines of 15 pens. There is no packing, collapsing or
+swapping of the game's own palettes that fits that. Any solution has to
+either reduce what the game asks for (lossy, a play-pass question) or
+accept that most sprites stay in software.
