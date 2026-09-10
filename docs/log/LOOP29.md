@@ -1010,3 +1010,55 @@ So the packing work is real and buys ~21%, and it buys nothing today. It
 becomes correct the moment VRAM IS the constraint — which is exactly when
 the palette-line problem is solved and claims jump. Second move, not
 first. Banked here so it is not re-derived.
+
+## 126. NEGATIVE: SPRITES DO NOT CLUSTER BY BAND, SO CRAM SWAPS BUY NOTHING
+
+The dead span census (LOOP29 120) was going to answer "how few CRAM swaps
+buy the demand", on the premise from m_main.c:627 that sprites CLUSTER
+VERTICALLY. Measured directly off the game's sprite RAM (0xFF7000, 8-word
+records, Y span = w[0] top|bot<<8, colour set = w[4]&0x3F) instead of
+re-siting the census:
+
+    frame | b0 b1 b2 b3 b4 b5 b6 b7 | whole frame   (28-line bands)
+     1800 |  0  0  0  1  4  4  3  0 |   5
+     2600 |  0  0  4  4  4  1  1  0 |   6
+     3000 |  0  1  5  4  4  1  2  1 |   6
+     3400 |  0  0  3  3  6  3  2  0 |   6
+     3800 |  0  0  3  4  4  1  1  0 |   5
+
+    worst BAND 6 colour sets;  worst WHOLE FRAME 6
+
+**The premise is false.** The worst band holds as many sets as the whole
+frame — one band routinely carries nearly everything on screen. Banding
+buys NOTHING, so per-band CRAM swaps cannot solve the palette problem
+however cheap the H-interrupts get. The 68K having spare cycles (LOOP29
+117) does not rescue this idea. Closed.
+
+## 127. THE FRAMEBUFFER IS THE TAX: 39% OF THE FRAME PAINTS WHAT THE VDP DRAWS FREE
+
+Mike: "how much cycle time would be wasted building a fuller frame to send
+to the VDP before updating the screen? as in the sega16 races the beam,
+and the genesis VDP isn't built that way."
+
+Right, and it is measurable. System 16 races the beam; the MD VDP also
+renders per scanline out of VRAM in hardware at zero CPU cost. Our port
+composes into the 32X FRAMEBUFFER, so an entire 320x224 picture must be
+painted in software before anything is shown. Per generation (3.6 vints):
+
+    slave compose (sprites + cat1 tiles)   1.40 vints   FRAMEBUFFER TAX
+    master drain (MD name table)           0.95 vints   real VDP feeding
+                                                        (needed either way)
+
+**1.40 of 3.6 vints = 39% of the frame budget is spent painting pixels the
+Genesis VDP would draw for free** — if they could be expressed as tiles and
+sprites inside four palette lines.
+
+And nearly all of them could be. The MDSPR claim census (LOOP29 119) puts
+only 2.0-3.8% of live records in the "zoomed: SH-2 forever" bucket, which
+is the sole class the VDP genuinely cannot render (no scaling hardware).
+The other ~96% are ordinary sprites sitting in software because of PALETTE
+LINES, not because of any rendering requirement.
+
+So the palette-line problem is not one blocker among several. It is the
+single thing standing between this port and giving 39% of its frame budget
+back to hardware that does the work for nothing.
