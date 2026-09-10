@@ -1549,3 +1549,126 @@ the spin was hiding: until the latch, the "new draw bank" is the bank
 STILL ON SCREEN, so nothing may compose into it before vblank — the spin
 was accidentally the tear guard. Whether the slave starts a compose in
 that gap has to be checked before the split is worth building.
+
+## 137. FRAMES AND SPEED: THE FLIP LANDS INSIDE VBLANK ON A GUARD-ON LINE (2026-09-10 04:45)
+
+Built and measured on ares, NOT play-passed. Three flags, all default
+off, and the rom is `rom/night/vi.32x`:
+
+    make clean && make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 \
+                               PGSKIPPKT=1 TEXTCAPMASTER=1 TEXTCAPFULL=1
+
+    same measurements, same rig       base/noedge   dblfast     vi
+    game logic (gameplay_speed)        47.1/49.7%    34.9%     50.1%
+    IRQ4 misses                        52.9/50.3%    65.1%     49.9%
+    FS writes per 120 vints (2000+)         0          37        58
+      of which deferred to next vblank      0          33         0
+      write position (raw vcounter)         -          26       507 = vblank
+    FS writes per 2600 frames              12         ~842     1275
+    68K post line / IRQ4 line            31 / 94     30 / 95   21 / 72
+    late vint entries (of 120)              0          43         0
+    torn landings (2600 vints)              0           0         5
+    MD CRAM lines 1-3 at f2600           full        full      full
+    frame at f2100 / f2600 / f4000       correct     correct   correct
+
+Flips run at ~29 Hz in level play (95-100 per 200 frames, 1 deferred in
+2600), every one latched at the vblank it was written in, and the game
+logic is 3 points ABOVE the accepted line rather than 12 below it. The
+flip rate is generation-bound now: 303 of 600 ISR entries declined for
+"nothing shipped" (CEN[23]), 21 on the edge guard.
+
+`presented_fps.py` on the default windows reads 4.3 MOTION for vi
+against 16.7 for dblfast, and that number is NOT comparable: the game
+runs 43% faster on vi, so the fixed frame windows land on standing
+fights (the scene timer reads 837 at f1500 on vi vs 612 on dblfast).
+Any-change reads 24.7 fps. See the multi-window sweep below.
+
+### The pre-flip half, VBSPAN on both lines, steady play (600 vints)
+
+    boundary                        dblfast (162 flips)    vi (282 flips)
+    ISR entry -> flip_span entry           31.1 lines           21.6
+    text capture (TEXTCAPMASTER)            9.8                 10.0
+    page merge                              0.7                  0.7
+    truth drain                            23.0                  0.2
+    at the FS write                        64.6 = vcounter 26   32.6 < 35.9 guard
+
+The two numbers that moved are the two components:
+
+**PGSKIPPKT — the truth drain was capturing the pipeline's own packets.**
+`pg_watch` read 0x1001 in steady play: pages 0 and 12. Page 0 holds the
+R60 packet + publish word (0x12000-0x1283F), page 12 holds MD-plane
+packet B (0x1E800-0x1EFFF); both are written every vint by the
+pipeline, so cap_page saw them change every flip and PG_STICKY kept them
+watched forever: 2.04 pages x 11.5 lines of capture, plus ~20 lines of
+restore, per flip, for bytes that are not game truth. The game itself
+writes ZERO tilemap pages in steady level-1 play (60-vint trace of every
+68K FB access on dblfast: 627 game + 247 thunk writes, all in FB page
+31 = text, lines 101-260). cap_page/restore_pages now skip those two
+regions (PG_LO/PG_HI, m_main.c). Isolated on the dblfast line (vd:
+dblfast + PGSKIPPKT): renders correctly, CRAM full, 1212 FS writes per
+2600 vs ~842, 463 of them no longer deferred.
+
+**FBXISRLIFT + FBXPEND — the packet blast leaves the pre-post slot.**
+The 68K's post sat at line 30 because FBXBOTH blasts the R60 packet
+into the FB before every post (12 lines of 68K FB writes at FM=0). That
+second blast exists because the ISR flips at vblank top and the body's
+lift then read the OTHER bank. Two changes:
+  - FBXISRLIFT: `fbx_lift()` runs at the top of `flip_span`, before the
+    FS write, so it reads the bank the tail blast wrote; the body's lift
+    is a guarded fallback (`if (!fbx_landed)`).
+  - FBXPEND: the tail blast runs only if FM reads 0; otherwise the
+    packet stays staged (WRAM word 0xFFA0FE) and the generated FM-gate
+    spin blasts it the moment FM drops, in game context, through a
+    vector at 0xFFA0F8 (patch_game.py emits one shared spin routine at
+    FMGATE_SPIN_ADDR; every gate thunk jsr's it instead of spinning
+    inline; `fbx_late_blast` refuses V >= 0xC0 so no vint can fire
+    inside the blast). 2171 of 2518 vints blasted late; the pre-post
+    slot is the fallback for the rest.
+  The post moved 30 -> 21 and IRQ4 94 -> 72.
+
+### The dead path, so nobody re-walks it
+
+FBXISRLIFT WITHOUT FBXPEND (rom ve: dblfast + FBXISRLIFT, no FBXBOTH):
+BLACK SCREEN, MD CRAM lines 1-3 empty from frame 1200, 116 torn
+landings per 1500 vints. Cause: a 68K FB write at FM=1 is DROPPED —
+ares `bus-external.cpp:45/56` (`if(vdp.framebufferAccess) return;`)
+and the FPGA `IF.sv:946` (`if (!ADCR.FM)`) alike — and FBXSTAGE's tail
+blast at line ~85 runs inside the master's window (FM up until ~140-
+190). FBXBOTH's "redundant" second blast was the only one landing. The
+MD palette never loads because the scene classification rides the
+packet.
+
+The same rom built with holes but no BOTH and no PEND (invbl2) showed
+the identical black-background failure at 30 Hz flips: also transport.
+
+### Traps hit this session, stated once
+
+  - **zsh does not word-split an unquoted variable.** `F="A=1 B=1";
+    make ship-us $F` passes ONE argument. Five bisect roms (va-ve, first
+    pass) and the first "invbl" were all `make ship-us FBXPORT="1 ..."`
+    = the base rom; invbl differed from invbl2 by 1.3 MB for that
+    reason. Spell the flags out, or use `eval`/arrays. Verify every
+    probe build's `.build_flags` before reading a number from it.
+  - `--trace-access` sees the 68K bus only; SH-2 writes to FBCTL/COMM
+    are invisible. `--trace-flip` is the flip instrument.
+  - A rom whose game logic differs cannot be compared on frame-indexed
+    windows: the fixed input script lands on different game moments.
+    Compare flips per vint, any-change, and CRAM/screens; MOTION needs
+    the game's own timeline.
+  - The FBFREE "hole" at 0x12000 sits inside tilemap page 0, which the
+    truth machinery captures and restores whole. That is why FBXBOTH's
+    LOOP28 91 diagnosis ("the bank it reads is not the bank the blast
+    wrote") was true and incomplete: the restore was also copying a
+    stale publish word across banks every flip.
+
+### What is NOT established
+
+  - No play pass. Text (HUD) and sprites look right on stills at four
+    frames; nothing temporal has been judged by a human.
+  - Hardware: the late blast relies on the FM drop being observable in
+    game context and on the V-counter guard; both are the same on the
+    FPGA by the RTL, but the MiSTer has not run this rom.
+  - Torn landings 5 per 2600 (dblfast 0): the late blast and the ISR
+    lift are separated by the FM protocol, not by a barrier; find those
+    5 before shipping.
+  - Motion on a matched game timeline: see the sweep line below.

@@ -1245,6 +1245,12 @@ static uint8_t  fbx_seq_pub;             /* publish sequence */
  * stale publish yields landed = 0 and last frame's records stand. */
 static uint16_t fbx_stage[R60_ARM];      /* packet under construction */
 static uint16_t fbx_stage_n;             /* words staged, 0 = nothing */
+#ifdef FBX_PEND
+/* tail blast skipped (FM up): a WRAM word the generated gate spin
+ * (patch_game.py, FMGATE_SPIN_ADDR) tests before calling fbx_late_blast
+ * through the vector at 0xFFA0F8. 0xFFA0FC counts late blasts. */
+#define fbx_pend (*(volatile uint16_t*)0xFFA0FE)
+#endif
 #ifdef FBX_BOTH
 static uint8_t  fbx_stage_live;          /* the staged packet is worth
                                           * writing into the other bank */
@@ -2345,6 +2351,23 @@ void r60_late_post(void)
 	*(volatile uint16_t*)0xFFA09E = *(volatile uint16_t*)0xC00008;
 }
 #endif
+#if defined(FBX_PEND) && defined(FBX_STAGE)
+/* GAME CONTEXT (LOOP29 137): reached from the shared FM-gate spin the
+ * moment FM reads 0, every register saved by the caller. FM can only
+ * rise again from our own vint handler, so a blast that starts at FM=0
+ * completes at FM=0 provided no vint fires inside it: skip the last ~31
+ * active lines and vblank itself, and the pre-post slot picks those up. */
+__attribute__((section(".data"), noinline))
+void fbx_late_blast(void)
+{
+	uint8_t vv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+	if (vv >= 0xC0) return;
+	if (*(volatile uint16_t*)0xA15100 & 0x8000) return;
+	fbx_pend = 0;
+	r60_blast(1);
+	(*(volatile uint16_t*)0xFFA0FC)++;
+}
+#endif
 /* RAMCODE (2026-09-06): the whole vint shim executed from the cart
  * window (nm: 0x8c1150) under SH-2 contention; only r60_push had been
  * moved. 2.4KB of .data. */
@@ -2963,6 +2986,12 @@ void shim_vblank(void) {
 				 * tail write. Same packet, same sequence. */
 				r60_blast(0);
 #endif
+#if defined(FBX_STAGE) && defined(FBX_PEND)
+				/* FBXPEND: the tail found FM up and left the packet
+				 * staged; FM is 0 here (the consumes above needed it),
+				 * so this is the one blast that packet gets. */
+				if (fbx_pend) { fbx_pend = 0; r60_blast(1); }
+#endif
 #if defined(FB_XPORT) && !defined(FBX_TAIL) && !defined(FBX_STAGE)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
 				 * to: the 68K cannot reach the framebuffer at FM=1.
@@ -3126,7 +3155,19 @@ void shim_vblank(void) {
 				 * FBX_TAIL put the whole ~56-line build in this window
 				 * and the game's IRQ4 waited for all of it: 49.1%
 				 * against 60.7 without. Only the copy is here now. */
+#ifdef FBX_PEND
+				/* FBXPEND: a 68K FB write at FM=1 is DROPPED (ares
+				 * bus-external.cpp:45, FPGA IF.sv:946), and FM can only
+				 * RISE from this CPU, so a blast that starts at FM=0
+				 * completes at FM=0. Blast now if we can; otherwise hold
+				 * the staged packet for the pre-post slot next vint. */
+				if (*(volatile uint16_t*)0xA15100 & 0x8000)
+					fbx_pend = 1;
+				else
+					r60_blast(1);
+#else
 				r60_blast(1);
+#endif
 #endif
 #ifdef FBX_TAIL
 				/* PUSH AT THE TAIL, NOT BEFORE THE POST (LOOP27 75).
@@ -4981,6 +5022,11 @@ void main(void) {
 			(volatile uint16_t*)(0xFF0000uL | FMGATE_THUNK_ADDR);
 		for (uint16_t i = 0; i < FMGATE_THUNK_WORDS; i++)
 			ft[i] = fmgate_thunks[i];
+#ifdef FBX_PEND
+		*(volatile uint32_t*)0xFFA0F8 = (uint32_t)&fbx_late_blast;
+		fbx_pend = 0;
+		*(volatile uint16_t*)0xFFA0FC = 0;
+#endif
 	}
 #endif
 	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span

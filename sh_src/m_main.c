@@ -4665,12 +4665,27 @@ static uint16_t cycle_dirt;                  /* pages the game wrote into the
  * whole invariant: nothing else writes TILEMAP_U. */
 static uint16_t pg_fresh[2];
 #endif
+#ifdef PG_SKIP_PKT
+/* PACKET HOLES IN THE PAGE TRUTH (LOOP29 137). Two pipeline regions sit
+ * inside game tile-RAM pages and are written every vint by the pipeline
+ * itself: the R60 packet + publish word at 0x12000-0x1283F (page 0, longs
+ * 0x000-0x20F) and MD-plane packet B at 0x1E800-0x1EFFF (page 12, longs
+ * 0x200-0x3FF). Captured as truth they keep both pages watched forever
+ * (pg_watch read 0x1001 in steady play) and get RESTORED across banks --
+ * a stale publish word written into the other bank. Neither is game
+ * truth; both are skipped by capture AND restore. */
+#define PG_LO(pg)  ((pg) == 0  ? 0x210 : 0)
+#define PG_HI(pg)  ((pg) == 12 ? 0x200 : 0x400)
+#else
+#define PG_LO(pg)  0
+#define PG_HI(pg)  0x400
+#endif
 RAMCODE static void cap_page(int pg)
 {
     volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
     volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
     uint32_t ch = 0;
-    for (int i = 0; i < 0x400; i += 4) {
+    for (int i = PG_LO(pg); i < PG_HI(pg); i += 4) {
         uint32_t v0 = src[i + 0], v1 = src[i + 1];
         uint32_t v2 = src[i + 2], v3 = src[i + 3];
         ch |= v0 ^ dst[i + 0]; dst[i + 0] = v0;
@@ -4750,7 +4765,7 @@ RAMCODE static void restore_pages(uint16_t bm)
         volatile uint32_t *src = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
         volatile uint32_t *dst = (volatile uint32_t *)
             (0x04012000u + (unsigned)pg * 0x1000u);
-        for (int i = 0; i < 0x400; i += 4) {
+        for (int i = PG_LO(pg); i < PG_HI(pg); i += 4) {
             dst[i + 0] = src[i + 0];
             dst[i + 1] = src[i + 1];
             dst[i + 2] = src[i + 2];
@@ -5790,6 +5805,11 @@ static uint16_t vbs_t[5], vbs_t2[2];
 #else
 #define VBS(slot) do { } while (0)
 #endif
+#if defined(FBX_ISRLIFT) && defined(FB_XPORT)
+RAMCODE static void fbx_lift(void);      /* defined below (FB_XPORT) */
+static unsigned fbx_landed;              /* tentative; the definition
+                                          * sits with fbx_lift */
+#endif
 #ifdef VB_SPAN
 static int flip_span_inner(void);
 /* clears vbs_isr on EVERY exit, so a body-fallback call that follows an
@@ -5809,6 +5829,18 @@ static int flip_span(void)
                                           * out of vblank = the tear;
                                           * only 182 deferred.) */
 {
+#if defined(FBX_ISRLIFT) && defined(FB_XPORT)
+    /* LIFT BEFORE THE FLIP, ON THE ISR PATH TOO (LOOP29 137). The 68K's
+     * tail blast wrote the packet into the bank that is hidden NOW; the
+     * FS write below is the only thing that changes that, so reading
+     * here is always the right bank. The body's pre-flip lift (LOOP27
+     * 72) only covered the body-fallback flip; on the ISR path the flip
+     * happened at vblank top and the body then read the OTHER bank,
+     * which is what FBXBOTH's second blast papered over at 12 lines of
+     * 68K FB writes per vint. Guarded: a packet lifted and not yet
+     * harvested is kept, not re-zeroed. */
+    if (!fbx_landed) fbx_lift();
+#endif
 #ifdef VB_SPAN
 
     VBS(0);                             /* entry */
@@ -9615,6 +9647,11 @@ RAMCODE void m_main(void)
              * below swaps banks. FBXLATE=1 moves this call below the flip
              * so the two positions can be compared on the same rig. */
 #ifndef FBX_LATE
+#ifdef FBX_ISRLIFT
+            if (!fbx_landed)             /* FBXISRLIFT: flip_span's entry
+                                          * lifted already on the ISR path;
+                                          * this is the body fallback */
+#endif
             fbx_lift();
 #endif
 #endif
