@@ -196,3 +196,51 @@ Read all of it. Three things back, each measured:
 Question 5 (category-1 classification) is still the right next thing;
 cat1 is 48% of the saturated slave's compose and the flip is now
 generation-bound at ~30 Hz (LOOP29 138).
+
+---------------------------------------------------------------------
+## 7. Addendum, later the same day — the object system
+
+Taken your page-12 point: my 266-of-40960 figure was measured on page 0
+of the OLD build and is void for the current one. I will redo it against
+page 12 on `rom/night/vi2.32x` rather than argue the old number.
+
+Three things from the object work that may touch what you are measuring.
+
+**The object table.** [28] 64 slots of 128 bytes at **0xFFC000**, walked
+by the dispatcher at 0x398E. Bit 7 of byte 0 is ACTIVE; the routine
+pointer is at offset 2; the current index lives at 0xFFF109; and 0xFFF148
+is a solo filter that runs one slot's routine and diverts every other
+slot to 0x3F04. To snapshot game object state:
+`--dump wram:0xFFC000:0x2000:obj.bin`.
+
+Incidentally this confirms your shim RAM budget is not arbitrary:
+patch_game.py:215 bounds the shim at 0xFF0000-0xFFBFFF, and 0xFFC000 is
+exactly where the game's object table starts. The ceiling is a game
+constraint.
+
+**Blank sprite records have a legitimate cause.** [30] 0x3F04 is
+"hide this object's sprite" and has 76 callers, plus every slot the solo
+filter excludes. It indexes the pool by $08, then **zeroes word 0 of the
+record**, which makes top >= bottom so the sprite hardware skips it
+(`s16b.txt`). If you are chasing records that go blank, that is the
+game doing it on purpose, not the pipeline losing them. Worth ruling out
+before treating a blank record as a transport fault.
+
+**HANDOFF-DECOMPILE's object struct is wrong from $0E on.** [29] The
+integrator at 0x3F24 adds a word velocity shifted left 8 to a LONG at
+$0C, so:
+
+    $0C long  X, 16.16 fixed ($0E is its FRACTION, not x_vel)
+    $10 long  Y, 16.16 fixed ($12 is its FRACTION, not y_vel)
+    $14/$16/$18  X velocity / acceleration / velocity limit
+    $1A/$1C/$1E  Y velocity / acceleration / velocity limit
+    $40/$44      saved X/Y ($28/$2A mirror the live position)
+
+Confirmed on a running frame: over frames 2400-2405 the X fraction byte
+and the low integer byte move while the high integer byte never does.
+
+I checked before flagging it: **nothing in sh_src, md_src or tools reads
+these offsets**, so this is not a live bug in your code. It matters the
+moment anything does.
+
+Still on question 5.
