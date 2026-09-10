@@ -517,3 +517,56 @@ fall-through and branch-reached code behind them does not.
 The order is import once, seed once, stop. `tools/ghidra/rebuild.sh`
 does exactly that and reproduces 534/11765 exactly from an empty project.
 Do not run `-process` without `-noanalysis` against this project.
+
+---------------------------------------------------------------------
+## 19. Seeding converged: 100% of the functions, 99.82% of the instructions
+
+Entry 17 left 178 functions and 3240 instructions unreached. Closing them
+took three more passes and two mistakes worth recording.
+
+The reference disassembly is, as HANDOFF-DECOMPILE says, a STRONG source
+of ADDRESSES. Using its 433 function starts as seeds — every one of which
+still has to disassemble in OUR bytes to count — is the sanctioned use of
+it, and it is what closed the gap.
+
+    pass 1  4 dispatch tables + 275 routine pointers   534 fn  11765 ins
+    pass 2  + 433 reference function starts            714 fn  16514 ins
+    pass 3  + 191 missing-run starts                   901 fn  19107 ins
+    pass 4  + every missing reference instruction     2121 fn  20355 ins
+    pass 5  entry points separated from disassembly    714 fn  20355 ins
+    pass 6  + the repair pass, run FIRST               714 fn  20355 ins
+
+    final: 433 of 433 reference function starts present (100%)
+           19102 of 19137 reference instructions (99.82%)
+           0 instructions above the 0x1F000 code ceiling
+
+MISTAKE 1, pass 4: creating a function at every seeded address. Coverage
+was right and the program was ruined — 2121 functions for 433 real ones,
+because every address that merely needed disassembling became an entry
+point and the call graph fragmented. `seed_apply.py` now takes
+`function_seeds` separately from `seeds`; only genuine entries (table
+targets, routine pointers, reference function starts) become functions.
+
+MISTAKE 2, pass 5: a speculative seed can land ONE WORD inside a real
+instruction, and Ghidra then disassembles the whole run misaligned. At
+0x1580 it produced `btst.b D1,-(A2)`, which is the second half of the
+`lea` at 0x157E; the identical lea/bra pairs at 0x1576, 0x1586 and 0x158E
+prove the alignment. The main loop's guard only rejects a seed landing in
+an instruction that ALREADY exists, so a bad seed applied first wins.
+`seed_apply.py` now runs a REPAIR PASS FIRST: any reference instruction
+address that is not an instruction start has whatever covers or blocks it
+cleared and is re-disassembled. Ordering matters — running repair after
+the seeds fixed 10 runs, running it first fixed 116.
+
+Of the 35 instructions still missing, one is 0x181D, an ODD address. A
+68000 instruction cannot start there, so the reference is wrong at that
+point and our bytes win. Fourteen of the rest are above 0x1D000, in the
+tail past the last marked function.
+
+1253 instructions are Ghidra-only. They are UNVERIFIED: some will be code
+the reference left as data, some will be Ghidra disassembling data.
+Nothing sits above the code ceiling, which is the only check applied.
+
+    tools/ghidra/rebuild.sh     # import, repair, seed — reproduces the above
+
+Do not re-run `-process` without `-noanalysis` afterwards (entry 18).
