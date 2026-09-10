@@ -40,6 +40,7 @@ FMGATE = bool(os.environ.get('FMGATE'))
 # before the raise (md_main.c TXT_WRAM, table in fmgate_tab.h). Sega's
 # code untouched beyond the rebase; derivation in docs/log/LOOP27.md 4.
 TXTWRAM = bool(os.environ.get('TXTWRAM'))
+FBXPEND = bool(os.environ.get('FBXPEND'))   # LOOP29 137: gate spin blasts the pending packet
 TXTW_BASE = 0xFFB0C0       # 4 bytes per writer: [off word][dirty byte][pad]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -782,6 +783,33 @@ if os.environ.get('MDHSCR') == '1':
     print(f'MDHSCR: 2 sites rewritten, thunks at 0xFF{HSCR_BASE:04X}/'
           f'0xFF{HSCR_BASE + 0x20:04X}')
 
+# MDSPRPROBE (LOOP-DECOMPILE 27) — COST PROBE, RENDERS WRONG BY DESIGN.
+# The sprite upload at 0x2B16 copies 12 of each 16-byte record from the
+# pool at 0xFFF800 into the hardware mirror, for every live entry in the
+# 256-byte order list (entry 13). This blanks the COPY while keeping the
+# list geometry identical — the destination still advances 16 bytes per
+# live entry, so the same number of slots is produced and the end markers
+# still land in the same place. The mirror therefore goes stale and the
+# picture is wrong; the only thing this build measures is how much 68000
+# time the copy itself costs, read off the game's own missed-frame
+# counter at 0xFFF144 (entry 22).
+#
+#   2b30  lsl.w #4,d0          ]
+#   2b32  lea (a1,d0.w),a3     ] 14 bytes replaced by
+#   2b36  move.l (a3)+,(a2)+   ]   lea 16(a2),a2
+#   2b38  move.l (a3)+,(a2)+   ]   + 5 nops
+#   2b3a  move.l (a3)+,(a2)+   ]
+#   2b3c  addq.w #4,a2         ]
+if os.environ.get('MDSPRPROBE') == '1':
+    if GAME not in ('altbeast', 'altbeastj'):
+        raise SystemExit('MDSPRPROBE: site is altbeast-only')
+    _o = 0x2B30
+    _want = bytes([0xE9, 0x48, 0x47, 0xF1, 0x00, 0x00,
+                   0x24, 0xDB, 0x24, 0xDB, 0x24, 0xDB, 0x58, 0x4A])
+    assert hrom[_o:_o+14] == _want, f'MDSPRPROBE: {hrom[_o:_o+14].hex()}'
+    hrom[_o:_o+14] = bytes([0x45, 0xEA, 0x00, 0x10]) + b'\x4E\x71' * 5
+    print('MDSPRPROBE: sprite record copy blanked at 0x2B30 (renders wrong)')
+
 # TAS REPLACEMENT: the MD bus arbiter drops the write phase of the
 # 68K's locked read-modify-write cycle, so TAS never sets its latch
 # on 32X (works on System 16B). Every tas/bne latch in the game
@@ -1091,6 +1119,7 @@ if TXTWRAM:
     FMGATE_SPANS = [sp for sp in FMGATE_SPANS
                     if tuple(sp) not in {tuple(x) for w in TXTW for x in w.get('drop_spans', [])}]
 fmgate_words = []
+spin_fixups = []
 fmgate_base = PAL_THUNK_BASE + len(pal_words) * 2
 if FMGATE:
     for off, dlen, w0, note in FMGATE_ENTRIES:
@@ -1126,8 +1155,16 @@ if FMGATE:
             #   cmpa.l #0x00FF0000,%a1 ; bhs.s <past the spin>
             # (CCR is rewritten by the displaced moveb/clrb anyway)
             fmgate_words += [0xB3FC, 0x00FF, 0x0000, 0x6408]
-        fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
-                         0x6BF8]                      # bmi.s back to tst
+        if FBXPEND:
+            # jsr (spin).w ; nop ; nop  -- same 8 bytes as the inline spin,
+            # so the TXTWRAM bhs.s +8 above still lands past it. The spin
+            # routine is appended after the table; its address is patched in
+            # below once the table is complete.
+            fmgate_words += [0x4EB8, 0x0000, 0x4E71, 0x4E71]
+            spin_fixups.append(len(fmgate_words) - 3)
+        else:
+            fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
+                             0x6BF8]                      # bmi.s back to tst
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")
     for wi, w in enumerate(TXTW):
@@ -1153,6 +1190,27 @@ if FMGATE:
             assert g2 == lea_op and o2 >> 12 in (0x410, 0x85F), f"txtwram alt {alt:#x}: {g2:04X} {o2:#x}"
             struct.pack_into('>I', hrom, alt + 2, 0x00FF8000 | (o2 & 0xFFF))
         pal_report.append(f"G {site:06X}: TXTWRAM mark -> {taddr:04X}  {w.get('note', '')}")
+    if FBXPEND:
+        # THE SHARED GATE SPIN (LOOP29 137). Every gate thunk jsr's here
+        # instead of spinning inline. Spin on FM as before; when FM reads 0
+        # and the shim has a packet pending (WRAM word 0xFFA0FE, set by the
+        # tail when it found FM up), call the shim's late blast through the
+        # vector at 0xFFA0F8 with every register saved. The game was going
+        # to wait for FM anyway; the blast rides the tail of that wait, so
+        # the packet never has to take the pre-post slot and the post keeps
+        # its early line.
+        spin_addr = fmgate_base + len(fmgate_words) * 2
+        for i in spin_fixups:
+            fmgate_words[i] = spin_addr & 0xFFFF
+        fmgate_words += [0x4A79, 0x00A1, 0x5100,      # spin: tst.w (0xA15100).l
+                         0x6BF8,                      #       bmi.s spin
+                         0x4A79, 0x00FF, 0xA0FE,      #       tst.w (0xFFA0FE).l   pending?
+                         0x6710,                      #       beq.s done
+                         0x48E7, 0xFFFE,              #       movem.l d0-d7/a0-a6,-(sp)
+                         0x2079, 0x00FF, 0xA0F8,      #       movea.l (0xFFA0F8).l,a0
+                         0x4E90,                      #       jsr (a0)
+                         0x4CDF, 0x7FFF,              #       movem.l (sp)+,d0-d7/a0-a6
+                         0x4E75]                      # done: rts
     fmgate_end = fmgate_base + len(fmgate_words) * 2
     assert fmgate_end <= 0xBFF0, \
         f"fmgate thunks overrun boot stack: end {fmgate_end:#x}"
@@ -1165,6 +1223,7 @@ with open(ROOT / 'md_src' / 'fmgate_tab.h', 'w') as fh:
     fh.write(f"#define FMGATE_ON {1 if FMGATE else 0}\n")
     fh.write(f"#define FMGATE_THUNK_ADDR 0x{fmgate_base:04X}\n")
     fh.write(f"#define FMGATE_THUNK_WORDS {len(fmgate_words)}\n")
+    fh.write(f"#define FMGATE_SPIN_ADDR 0x{(spin_addr if (FMGATE and FBXPEND) else 0):04X}\n")
     fh.write(f"#define TXT_WRAM_ON {1 if TXTWRAM else 0}\n")
     fh.write(f"#define TXTW_N {len(TXTW) if TXTWRAM else 0}\n")
     fh.write("/* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),\n"

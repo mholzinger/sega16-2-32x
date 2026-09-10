@@ -1437,6 +1437,10 @@ endif
 ifdef MDHSCR
 MDCCFLAGS += -DMD_HSCROLL_DIRECT
 endif
+# `make ... MDSPRPROBE=1` = LOOP-DECOMPILE 27. COST PROBE, RENDERS WRONG.
+# Blanks the sprite-record copy inside the game's own upload loop while
+# keeping the list geometry, to price the copy off the game's missed-frame
+# counter. Never ship; never pixel-gate.
 # `make ... FLICKFUSE=1` = LOOP 21 flicker fusion. The arcade renders the
 # Zeus/orb apparition's translucency TEMPORALLY: the record's presence in
 # the sprite list is duty-modulated (measured fade-in 1/8 -> 1/4 -> 1/3,
@@ -1830,6 +1834,19 @@ endif
 ifdef FBXISRLIFT
 SHCCFLAGS += -DFBX_ISRLIFT
 endif
+# FBXPEND=1 = LOOP29 137. Needs FBXSTAGE, replaces FBXBOTH. The tail
+# blast runs ONLY when FM is already 0 (a 68K FB write at FM=1 is
+# dropped by ares bus-external.cpp:45 and by the FPGA IF.sv:946 alike --
+# that is why FBXBOTH's second blast was load-bearing and why ve, built
+# without it, landed torn packets and a black screen). When FM is still
+# up at the tail the packet stays staged and is blasted once before the
+# NEXT post, at FM=0 by construction. On vints whose tail blast landed the
+# post keeps its early line; only the vints after a long master window
+# pay the 12 lines. Pair with FBXISRLIFT so the lift reads the bank the
+# blast wrote.
+ifdef FBXPEND
+MDCCFLAGS += -DFBX_PEND
+endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
 # 0xFFA0C2 after it) next to the push-autopsy stamps 0xFFA0B4..BE.
@@ -2158,7 +2175,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MDHSCR=$(MDHSCR) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) python3 tools/patch_game.py
+	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

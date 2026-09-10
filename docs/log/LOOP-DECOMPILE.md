@@ -950,3 +950,49 @@ smallest chunk in the program — two words a frame. The same mechanism
 applied to the sprite upload (entry 13: one loop, up to 128 records of 12
 bytes, one writer, both inputs in work RAM) is the payload where "bigger
 chunks without flooding the VDP" has something to bite on.
+
+---------------------------------------------------------------------
+## 27. NEGATIVE — deleting the whole sprite copy does not move the frame rate
+
+`make ship-us MDSPRPROBE=1`. RENDERS WRONG BY DESIGN: the record copy
+inside the game's own upload loop (0x2B30, 14 bytes) is replaced by
+`lea 16(a2),a2` plus nops, so the list geometry and end markers are
+unchanged but no record data is written. It prices the copy — up to
+128 records x 12 bytes per vint — off the game's own missed-frame
+counter (entry 22).
+
+    frame   probe miss   base miss   delta
+      400           71          77      -6
+      800          129         147     -18
+     1200           57          44     +13
+     1600          240         235      +5
+     2200          540         551     -11
+     3000          927         950     -23
+
+Mixed sign, and the runs desync from 1200 on, same as entry 25. Deleting
+the single largest 68000 memory-to-memory copy in the frame does not
+reduce missed frames.
+
+**This corroborates the rendering thread from a different direction.**
+Their 2026-09-10 measurement (commit 801be42) says the master is IDLE at
+0.44 vints/generation while the slave is saturated at 1.40 vints of
+compose with zero idle polls. If that is right, no amount of 68000 work
+removed should move the frame rate — and none does. Two unrelated methods,
+the same conclusion.
+
+**CORRECTION TO MY OWN ENTRY 15.** It called the sprite write-through
+architecture the thing that "unblocks the O(writes) pipeline", inheriting
+LOOP27 80's premise that the 68K pipeline is the frame-rate constraint.
+That premise is stale. The single-writer result stands and is still worth
+building — as a SIMPLIFICATION, deleting the interception, the compare,
+the shadow and the packing — but it is not a speed lever and entry 15
+should not be read as promising one.
+
+I also worked for several hours against a stale ranking because I did not
+`git pull`. The other thread's replies (801be42, 53700ee, 8681991) were
+committed to this repo, not sent through chat. READ THE LOG BEFORE
+RANKING WORK.
+
+Their question 5 — how the game classifies a tile as CATEGORY 1, which is
+48% of the saturated processor's work — is aimed at the actual bottleneck
+and is where this thread should go next.
