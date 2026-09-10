@@ -1842,19 +1842,23 @@ static void r60_push(void) {
 #elif defined(BOOT_FBTIME)
 		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
-#elif defined(BOOT_BURN_W)
-		/* the SHIM_BURN loop executing from 68K WRAM, in scanlines */
-		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA186 >> 8);
-		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 >> 8);
-#elif defined(BOOT_BURN_R)
-		/* THE SAME LOOP executing from CART ROM, in scanlines. The two
-		 * differ only in where the instructions are fetched from, so
-		 * ROM minus WRAM is the 32X adapter's fetch tax on 68K code —
-		 * the rate question, measured rather than assumed. ares reports
-		 * both at 39 lines (it models no cart contention); hardware is
-		 * the only place this can be read. */
-		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA188 >> 8);
-		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA18A >> 8);
+#elif defined(BOOT_BURN_W) || defined(BOOT_BURN_R)
+		/* LOOP29 142: the stamps are the raw V counter, which runs
+		 * 0xE0..0xEA then JUMPS BACK to 0xE5..0xFF inside vblank, so a
+		 * burn straddling the jump read negative (clamped 127). Convert
+		 * both to lines from vblank start before subtracting.
+		 * W: the SHIM_BURN loop from 68K WRAM; R: the same loop from
+		 * cart ROM. R minus W is the adapter's fetch tax. */
+#define VLINE(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		/* stamps moved to 0xFFA1A0/A2/A4: 0xFFA186 and 0xFFA188 are written
+		 * by the landing diag and the rate probe, which clobbered p0. */
+#ifdef BOOT_BURN_W
+		uint8_t p0 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A0 >> 8));
+		uint8_t p2 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A2 >> 8));
+#else
+		uint8_t p0 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A2 >> 8));
+		uint8_t p2 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A4 >> 8));
+#endif
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
@@ -2232,12 +2236,12 @@ static void r60_push(void) {
 #endif
 #ifdef SHIM_BURN
 		{	/* sensitivity probe: burn ~SHIM_BURN lines of 68K time */
-			PSTAMP(0xFFA186);
+			PSTAMP(0xFFA1A0);
 			volatile uint16_t bi;
 			for (bi = 0; bi < (uint16_t)(SHIM_BURN * 40u); bi++) ;
-			PSTAMP(0xFFA188);
+			PSTAMP(0xFFA1A2);
 			shim_burn_rom();                 /* same loop, ROM-resident */
-			PSTAMP(0xFFA18A);
+			PSTAMP(0xFFA1A4);
 		}
 #endif
 		if (!ok) (*(volatile uint16_t*)0xFFB0E0)++;
@@ -2411,7 +2415,14 @@ void shim_vblank(void) {
 		 * so this read 64 everywhere. Use the game's own missed-frame
 		 * counter instead: value = 64 - misses per 64 vints = game frames
 		 * per 64 vints, the same number gameplay_speed.py reports. */
+#ifdef GAME_GATE
+		/* under GAMEGATE the game never overruns; its rate is the
+		 * release count (0xFFA0F6) -- report releases per 64 vints */
+		uint16_t t = (uint16_t)(0 - *(volatile uint16_t*)0xFFA0F6);   /* negated: the
+		                     * subtraction below yields 64 - (-releases)... see gr_val */
+#else
 		uint16_t t = *(volatile uint16_t*)0xFFF144;
+#endif
 		(void)*(volatile uint16_t*)0xFFA18E;          /* was: game IRQ4
 		                     * completions, counted in md_start.s at
 		                     * fmgate_ret — the game's own scene timer
@@ -2424,7 +2435,12 @@ void shim_vblank(void) {
 			 * scene (the first read clamped at 127 on the ship line —
 			 * a countdown, not a fast game); magnitude is the rate */
 			uint16_t sd = (uint16_t)(t - gr_base);        /* misses in 64 vints */
+#ifdef GAME_GATE
+			sd = (uint16_t)(0 - sd);                      /* releases in 64 vints */
+			gr_val = (uint8_t)(sd > 64 ? 64 : sd);
+#else
 			gr_val = (uint8_t)(sd > 64 ? 0 : 64 - sd);    /* game frames in 64 vints */
+#endif
 			gr_base = t;
 			gr_vc = 0;
 		}
