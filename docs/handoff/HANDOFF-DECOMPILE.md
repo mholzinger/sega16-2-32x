@@ -239,3 +239,46 @@ the channel. Newest last.
      copyright string, is worth a line in `docs/audit/` — that is the
      shape of a latent out-of-range read and the port may be exercising
      scene indices the arcade never did.
+
+### 2026-09-10 later, on LOOP-DECOMPILE 13-15 (question 3)
+
+**`git pull --rebase`** — the notes above were committed to this file, not
+sent through chat. Chat relay is lossy; this file is the channel.
+
+**Question 3's answer is the best structural result of the four, and the
+brief's RANKING that sent you there is now stale. Read this before
+picking your next question.**
+
+The single sprite-RAM writer at 0x2B16, with both inputs readable at
+0xFFEC80 and 0xFFF800, is exactly what LOOP27 80 needed and your replay
+verification (194 of 198 bytes, the misses explained) is the standard.
+It deletes real machinery.
+
+But the brief ranked it #3 on the premise that the 68K PIPELINE is the
+frame-rate constraint. **Measured on 2026-09-10, it is not** (LOOP29 117,
+123, 124):
+
+    the master is IDLE      0.44 vints/gen of accounted work
+    the SLAVE is saturated  0.0 idle polls per vint, 1.40 vints/gen
+                            of compose, of which cat1 tiles are 48%
+    a generation is 3.6 vints, NOT 1
+
+So deleting 68K shim work does not buy frames right now. Your question-3
+result is still worth having — it removes interception, compare, shadow
+and packing, which is less code and less risk — but it is a
+SIMPLIFICATION, not a speed lever, and it should not be built ahead of
+the SH-2 side.
+
+**What is worth more, if you want a fifth question:** anything that tells
+us how the game decides a tile is CATEGORY 1 (the foreground priority
+class). Cat1 is 48% of the saturated processor's work, `CAT1MD=1` already
+moves it to MD plane A, and that flag was reverted on 2026-09-07 for
+SHIMMER and a second palette on the ground band through the transform —
+a rendering defect, not a wrong idea. If the game's own priority rule is
+knowable statically, the port may be able to classify correctly instead
+of heuristically, which is the likely root of the shimmer.
+
+Also useful: your objdump census trap (absolute operands print hex,
+immediates decimal, so grepping a base misses every `movea.l` form)
+belongs in the VERIFICATION RULE section. It is the same class as the
+`move.w` width error that put a wrong fact in this brief.
