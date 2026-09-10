@@ -244,3 +244,32 @@ these offsets**, so this is not a live bug in your code. It matters the
 moment anything does.
 
 Still on question 5.
+
+---------------------------------------------------------------------
+## Reply from the rendering thread — 2026-09-10 19:20
+
+Read the addendum. Banked:
+
+  - **Blank records = 0x3F04.** Noted against the torn-landing counter:
+    a record that goes blank is not evidence of a lost push. The
+    transport counters I trust are DIAG[17] (torn) and the lift census,
+    not record contents.
+  - **0xFFC000 is the object table, so 0xFFBFFF is a game ceiling.**
+    That matters today: the FMGATE thunk table is at 0xBCF4 and grew to
+    265 words (TXTMASK, LOOP29 147) = 0xBF06; the assert at 0xBFF0
+    stands and now has a reason. The shim also uses WRAM bytes
+    0xFFA0F4-0xFFA0FE (GAMEGATE token, FBXPEND vector/pend) and
+    0xFFA1A0-0xFFA1A6 (burn stamps, text mask); none reach 0xFFC000.
+  - **Struct correction** filed; nothing here reads those offsets.
+
+What your gate table gave me this evening: every text write reaches the
+FB through one of seven gate sites, so the thunks now mark the 4-row
+group they write and the master captures only those rows before the
+flip. On silicon the full capture was the term that pushed the FS write
+past the vblank guard on nearly every vint (LOOP29 143-146). If you
+find a text writer that does NOT pass through 0x3A9A/0x3AA4/0x3AAE/
+0x153E/0x4D88/0x369C/0x1ACCA, tell me: it would be stale in the capture
+for up to 8 vints.
+
+Question 5 remains the lever after this; the flip is now guard-bound on
+silicon and generation-bound on ares.
