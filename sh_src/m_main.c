@@ -636,6 +636,15 @@ static uint32_t sl_set[2], sl_seteg[2];      /* 64-bit used-set masks */
  * the 4-swap and 2-swap answers for free from the same data. */
 #define SL_SPANS 8                           /* 224 / 28 */
 static uint32_t sl_span[SL_SPANS][2];
+/* SWAP ANSWERS IN .bss (LOOP29 120). These used to report into
+ * SLC[16..21] at 0x3A780+0x40 = 0x3A7C0, which is SPRPEN's address and
+ * inside SPRLATE's lean block — collision #16. The census read 403
+ * distinct colour sets out of a possible 64 and had clearly never been
+ * believed by anyone. volatile: nothing reads them, so LTO would
+ * dead-store them (the mdspr_why lesson, LOOP29 119). */
+static volatile uint32_t sl_ans[8];   /* [0] worst-frame sets [1] w8 [2] w4
+                                       * [3] w2 [4] fits3@8 [5] fits3@4
+                                       * [6] fits3@2 [7] frames */
 static unsigned sl_pop(uint32_t a, uint32_t b)
 {
     return (unsigned)(__builtin_popcount(a) + __builtin_popcount(b));
@@ -9435,6 +9444,7 @@ RAMCODE void m_main(void)
                     unsigned na = sl_pop(sl_set[0], sl_set[1]);
                     unsigned ne = sl_pop(sl_seteg[0], sl_seteg[1]);
                     if (na > SLC[6]) SLC[6] = na;
+                    if (na > sl_ans[0]) sl_ans[0] = na;
                     if (ne > SLC[7]) SLC[7] = ne;
                     if (na | ne) {
                         SLC[15]++;
@@ -9461,11 +9471,18 @@ RAMCODE void m_main(void)
                         if (v > w2) w2 = v;
                     }
                     if (w8 > SLC[16]) SLC[16] = w8;
+                    if (w8 > sl_ans[1]) sl_ans[1] = w8;
                     if (w4 > SLC[17]) SLC[17] = w4;
+                    if (w4 > sl_ans[2]) sl_ans[2] = w4;
                     if (w2 > SLC[18]) SLC[18] = w2;
+                    if (w2 > sl_ans[3]) sl_ans[3] = w2;
+                    if (w8 <= 3) sl_ans[4]++;
                     if (w8 <= 3) SLC[19]++;          /* cycles 8 swaps would serve */
+                    if (w4 <= 3) sl_ans[5]++;
                     if (w4 <= 3) SLC[20]++;
+                    if (w2 <= 3) sl_ans[6]++;
                     if (w2 <= 3) SLC[21]++;
+                    sl_ans[7]++;
                     for (int sp = 0; sp < SL_SPANS; sp++)
                         sl_span[sp][0] = sl_span[sp][1] = 0;
                     sl_set[0] = sl_set[1] = sl_seteg[0] = sl_seteg[1] = 0;

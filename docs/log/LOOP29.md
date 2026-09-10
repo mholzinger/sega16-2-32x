@@ -737,3 +737,67 @@ CLUSTER VERTICALLY and a span census (`sl_span`, 8 x 28-line spans) was
 built to price "how FEW swaps buy the demand". A handful of H-interrupts,
 not 224, could give sprites their own line only in the bands where they
 appear. That census has never been read out.
+
+## 120. THE SPAN CENSUS IS DEAD CODE, AND THE STREAMING PIPELINE IS THE RIGHT SHAPE
+
+**The span census cannot be read, for two independent reasons.**
+
+  1. It reported into `SLC[16..21]`. `SLC` is 0x2603A780, so SLC[16] is
+     0x3A7C0 — which is `SPRPEN`, and SLC[22..31] is `SPRLATE`'s lean
+     block. Collision #16. Read raw it claimed 403 distinct colour sets
+     out of a possible 64.
+  2. Relocated to `.bss` (collision-proof, volatile) it counted **1 frame
+     in 2600**. Its call site is on a pipeline path `R60`/`NATIVE`
+     retired. The instrument has been unreachable for a long time.
+
+So "how few CRAM swaps buy the demand" is still unanswered, and the
+answer would cost a re-siting. Parked, not concluded.
+
+## MIKE'S ARCHITECTURE CALL, AND THE NUMBERS THAT SUPPORT IT
+
+His words: the bottleneck was never the sheer amount of sprites and
+tiles — that was a misreading of what running the real compiled 68K code
+costs. "Our obvious path is to make them at their original size and
+construct a pipeline that FEEDS them to the VDP as fast as the 68k
+assigns the addresses."
+
+**Priced, by baking every native key with the VRAM cap lifted:**
+
+    all level-1 native keys, MD tile format   230 keys   222,880 B
+    boss scene                                 14 keys    16,448 B
+    total                                     244 keys   239,328 B (234 KB)
+
+    live records per generation                4.5   (measured, LOOP29 119)
+    average art per key                        ~970 B
+    ART ON SCREEN AT ONCE                      ~4.4 KB
+    existing MDSPR VRAM window                 12 KB   (0x8000-0xB000)
+    68K DMA budget per vblank                  ~7 KB
+
+**A frame's sprite art fits in a third of a VRAM window we already have,
+and the per-frame DELTA is far smaller** — actors hold an animation frame
+for several vints, so only changed keys need filling. Demand-fill from
+cart is comfortably inside one vblank.
+
+That reframes the whole offload. The static 16-key bake was never the
+right unit: it pre-picks a fixed set by census frequency and everything
+else falls to SH-2 compose. A VRAM tile CACHE with 68K demand-fill from
+pre-converted cart art serves whatever the game actually asks for, and
+the SH-2 composes none of it.
+
+**What the numbers say is still in the way, in order:**
+
+  1. **PALETTE LINES, unchanged and still the hard one.** MD sprites get
+     4 CRAM lines; level-1 needs at least 7 colour sets (0x09 0x0A 0x0B
+     0x00 0x02 0x07 0x08) and no two of the top three share a single pen
+     (LOOP29 119). Serving 0x09+0x0A+0x0B alone would cover 2008 of 2723
+     records = **74% of all sprite records**, which is the prize.
+  2. **Cart space.** 234 KB of pre-converted art against a cart
+     HANDOFF-PIPELINE calls full at 4.00 MB. The SSF2 mapper path is
+     documented in SILICON.md 4e but unbuilt.
+  3. Runtime cache management (which key is resident, eviction) is new
+     68K work — but the 68K has the headroom now (LOOP29 117).
+
+**The bake's rect padding is real but secondary**: MD art averages 970 B
+per key against the S16 source's 778 B (180,477 B / 232 keys), so the
+bounding-rect padding costs ~25%, not a multiple. Worth fixing, not the
+reason we compose in software.
