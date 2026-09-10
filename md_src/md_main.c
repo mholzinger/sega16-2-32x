@@ -3150,6 +3150,24 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA09E =
 					*(volatile uint16_t*)0xC00008;   /* V at hold exit */
 				*(volatile uint16_t*)0xFFA0A2 = *mars_comm4;
+#ifdef GAME_GATE
+				/* THE GO TOKEN (LOOP29 141): one game frame per presented
+				 * frame. F102 = the ISR flipped this vint. The fallback
+				 * keeps loads, blanks and a stalled compose from freezing
+				 * the game. 0xFFA0F6 counts releases, 0xFFA0F4 fallbacks. */
+				{
+					static uint8_t gg_wait;
+					uint16_t c4 = *mars_comm4;   /* F102 = flipped; F103 = flipped
+					                              * and restored (the ISR writes both) */
+					uint8_t flipped = (c4 == 0xF102 || c4 == 0xF103);
+					if (flipped || ++gg_wait >= GAMEGATE_MAXWAIT) {
+						if (!flipped) (*(volatile uint8_t*)0xFFA0F4)++;
+						*(volatile uint8_t*)0xFFA0F5 = 1;
+						(*(volatile uint16_t*)0xFFA0F6)++;
+						gg_wait = 0;
+					}
+				}
+#endif
 #ifdef FBX_STAGE
 				/* THE BLAST, AT THE TAIL (LOOP28 89). Same window
 				 * FBX_TAIL uses and for the same reason — the master
@@ -5028,6 +5046,11 @@ void main(void) {
 			(volatile uint16_t*)(0xFF0000uL | FMGATE_THUNK_ADDR);
 		for (uint16_t i = 0; i < FMGATE_THUNK_WORDS; i++)
 			ft[i] = fmgate_thunks[i];
+#ifdef GAME_GATE
+		*(volatile uint8_t*)0xFFA0F5 = 1;        /* first frame is free */
+		*(volatile uint8_t*)0xFFA0F4 = 0;
+		*(volatile uint16_t*)0xFFA0F6 = 0;
+#endif
 #ifdef FBX_PEND
 		*(volatile uint32_t*)0xFFA0F8 = (uint32_t)&fbx_late_blast;
 		fbx_pend = 0;

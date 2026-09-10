@@ -41,6 +41,7 @@ FMGATE = bool(os.environ.get('FMGATE'))
 # code untouched beyond the rebase; derivation in docs/log/LOOP27.md 4.
 TXTWRAM = bool(os.environ.get('TXTWRAM'))
 FBXPEND = bool(os.environ.get('FBXPEND'))   # LOOP29 137: gate spin blasts the pending packet
+GAMEGATE = bool(os.environ.get('GAMEGATE'))  # LOOP29 141: the game's frame release is ours
 TXTW_BASE = 0xFFB0C0       # 4 bytes per writer: [off word][dirty byte][pad]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1190,6 +1191,31 @@ if FMGATE:
             assert g2 == lea_op and o2 >> 12 in (0x410, 0x85F), f"txtwram alt {alt:#x}: {g2:04X} {o2:#x}"
             struct.pack_into('>I', hrom, alt + 2, 0x00FF8000 | (o2 & 0xFFF))
         pal_report.append(f"G {site:06X}: TXTWRAM mark -> {taddr:04X}  {w.get('note', '')}")
+    if GAMEGATE:
+        # THE FRAME GATE (LOOP29 141, from LOOP-DECOMPILE 22). IRQ4 at
+        # 0x2AB8 tests the loop's frame flag: clear = the loop is waiting,
+        # release it (0x2AC6 addq.b #1,$FFF01C); set = the loop overran,
+        # count it (0x2ABE) and take the short path (0x2C06). We own the
+        # decision now: the thunk returns Z=1 (release) only when the shim's
+        # go token (0xFFA0F5) is set AND the loop is waiting, consuming the
+        # token; otherwise Z=0 and IRQ4 takes its own short path. The
+        # overrun count becomes nops so 0xFFF144 stays a pure overrun
+        # counter on the arcade and never counts our pacing.
+        _o = 0x2AB8
+        _want = bytes.fromhex('4a38f01c' '6708' '5278f144' '60000142')
+        assert hrom[_o:_o+14] == _want, f'GAMEGATE site: {hrom[_o:_o+14].hex()}'
+        gg_addr = fmgate_base + len(fmgate_words) * 2
+        fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
+                         0x670C,              # beq.s  nogo
+                         0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?
+                         0x6606,              # bne.s  nogo           (still mid-frame: hold)
+                         0x4238, 0xA0F5,      # clr.b  (0xFFA0F5).w   consume, Z=1
+                         0x4E75,              # rts
+                         0x7001,              # nogo: moveq #1,d0     Z=0 (d0 is reloaded at 0x2ACA)
+                         0x4E75]              # rts
+        struct.pack_into('>HH', hrom, _o, 0x4EB8, gg_addr)          # jsr (thunk).w
+        struct.pack_into('>HH', hrom, _o + 6, 0x4E71, 0x4E71)       # overrun count -> nops
+        pal_report.append(f"G {_o:06X}: GAMEGATE frame release -> {gg_addr:04X}")
     if FBXPEND:
         # THE SHARED GATE SPIN (LOOP29 137). Every gate thunk jsr's here
         # instead of spinning inline. Spin on FM as before; when FM reads 0
@@ -1224,6 +1250,7 @@ with open(ROOT / 'md_src' / 'fmgate_tab.h', 'w') as fh:
     fh.write(f"#define FMGATE_THUNK_ADDR 0x{fmgate_base:04X}\n")
     fh.write(f"#define FMGATE_THUNK_WORDS {len(fmgate_words)}\n")
     fh.write(f"#define FMGATE_SPIN_ADDR 0x{(spin_addr if (FMGATE and FBXPEND) else 0):04X}\n")
+    fh.write(f"#define GAMEGATE_ON {1 if (FMGATE and GAMEGATE) else 0}\n")
     fh.write(f"#define TXT_WRAM_ON {1 if TXTWRAM else 0}\n")
     fh.write(f"#define TXTW_N {len(TXTW) if TXTWRAM else 0}\n")
     fh.write("/* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),\n"

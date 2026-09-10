@@ -1852,6 +1852,15 @@ endif
 ifdef FBXPEND
 MDCCFLAGS += -DFBX_PEND
 endif
+# GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
+# 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
+# 0xFFA0F5: the main loop advances one frame per token, the token is set
+# on every flip echo (F102) or after GAMEGATE_MAXWAIT vints without one,
+# and a held vint takes the game's own short path uncounted. The game
+# runs to our presentation clock instead of racing the beam.
+ifdef GAMEGATE
+MDCCFLAGS += -DGAME_GATE -DGAMEGATE_MAXWAIT=$(if $(GAMEGATEWAIT),$(GAMEGATEWAIT),4)
+endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
 # 0xFFA0C2 after it) next to the push-autopsy stamps 0xFFA0B4..BE.
@@ -2180,7 +2189,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) python3 tools/patch_game.py
+	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

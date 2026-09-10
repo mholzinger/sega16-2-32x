@@ -6,6 +6,7 @@
 #define FMGATE_THUNK_ADDR 0xBCF4
 #define FMGATE_THUNK_WORDS 194
 #define FMGATE_SPIN_ADDR 0x0000
+#define GAMEGATE_ON 0
 #define TXT_WRAM_ON 0
 #define TXTW_N 0
 /* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),

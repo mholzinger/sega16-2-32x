@@ -1830,3 +1830,32 @@ pre-post footprint copy costs flips, edge declines 3449 in 4000 vints).
 The BOOTBURNW/R fetch-tax probes were rebuilt on this line but the W
 instrument reads 127 (clamped) on ares before touching hardware; fix
 the stamps before reading it on the rig.
+
+## 141. THE PIVOT, PATCH 1: THE GAME'S FRAME RELEASE IS OURS (2026-09-10 18:00)
+
+`GAMEGATE=1` (patch_game.py, Makefile, md_main.c). LOOP-DECOMPILE 22
+found the gate: the main loop blocks at 0x397E until IRQ4 releases it
+at 0x2AC6, and IRQ4 counts an overrun at 0x2ABE and takes a short path
+when the loop is late. Fourteen bytes at 0x2AB8 now read
+
+    jsr (thunk).w ; beq.s 0x2AC6 ; nop ; nop ; bra.w 0x2C06
+
+and the thunk (appended to the FMGATE table) returns Z=1 only when the
+shim's go token at 0xFFA0F5 is set AND the loop is waiting, consuming
+the token; otherwise Z=0 and IRQ4 takes its own short path, uncounted.
+The shim sets the token at its hold exit on a flip echo (F102 or F103 --
+the ISR writes both, and reading only F102 halved the game: 26.3%) or
+after 4 vints without one (loads and blanks must not freeze).
+
+    vi6 = vi4 + GAMEGATE, ares, 4000 vints:
+      game logic 47.9% (vi4 50.1)     overruns counted by the game: 0
+      releases 1958 = flips 1877 + fallback 98
+      FS writes per 1000: 516 421 478 462 (vi4: ~470)   torn 4
+      stills f2100/f3000 correct
+
+The game now advances exactly once per presented frame. Its speed IS
+the flip rate; there are no wasted passes and no uncounted short paths.
+This does not make it faster than vi4 (the flip rate is the same,
+generation-bound, ~29 Hz); it makes the 68K's frame irrelevant to the
+budget and hands the pacing to us. The next two patches (sprite writer,
+tilemap loop heads) build on that.
