@@ -1172,3 +1172,71 @@ alongside the live position. 47 callers restore, 23 save.
 NEXT: 0x03352 (77 callers, the highest in the program, touches the MCU
 mailbox) and 0x0669C (38 callers, 162 bytes) are the two biggest unnamed
 pieces of infrastructure left.
+
+---------------------------------------------------------------------
+## 31. QUESTION 5 ANSWERED — cat1 is a ROM bit, fully static, decodable at bake time
+
+The rendering thread's question 5 (801be42): how does the game decide a
+tile is CATEGORY 1? Cat1 is 48% of the saturated slave's compose, and
+CAT1MD was reverted for shimmer, which they read as a classification
+defect "likely fixable if the priority rule is knowable statically".
+
+**It is knowable statically. The game does not decide at all.**
+
+`s16b.txt` section 6 gives the tile word: bit 15 is the PRIORITY FLAG,
+the lower bits carry the palette and the 8192-entry tile index. Cat1 is
+that bit. And bit 15 of the word is bit 7 of the HIGH BYTE — which is
+exactly what the unpacker's first pass writes (entry 10, 0x16BE), from a
+run-length stream of (count, value) pairs in the rom.
+
+So the priority of every tile in every scene is determined before the
+game runs. Decoding the high-byte pass straight out of the rom for all
+five scenes:
+
+    scene  data ptr   cat1 tiles   share   distinct high bytes
+      0    0x29E00        2312     11.3%          13
+      1    0x2EF10        8960     43.8%           6
+      2    0x324D0        7360     35.9%           6
+      3    0x369C0        1280      6.2%           5
+      4    0x3B0E0        3520     17.2%           6
+
+Five to thirteen distinct values across a whole 20480-tile scene is
+itself a check on the decode; a wrong offset gives noise.
+
+**VERIFIED AGAINST A RUNNING FRAME, EXACTLY.**
+
+    ares-headless --frames N --input discover/inputs/play_level1.csv \
+        --dump dram:0x12000:0xA000:tm.bin \
+        --dump wram:0xFFF140:0x10:sc.bin  base.32x
+
+Game tile RAM 0x400000 is FB staging 0x852000 is 32X DRAM 0x12000, so
+the even bytes of that dump are the live high bytes. At frames 1200 and
+2400, with 0xFFF142 = 0:
+
+    live vs rom decode, byte for byte:   20480 / 20480   (100.0%)
+    priority bit alone:                  20480 / 20480   (100.0%)
+
+The rom decode reproduces the live map exactly, at two frames 1200 apart.
+
+**Three consequences.**
+
+  1. Cat1 promotion can be a BAKE-TIME decision. A per-scene bitmap of
+     20480 bits is 2560 bytes; all five scenes are 12.5 KB. Nothing has
+     to be classified per frame.
+  2. A static decision CANNOT SHIMMER. Whatever CAT1MD's shimmer was, it
+     was not the classification being genuinely ambiguous — the input is
+     constant. That reopens CAT1MD as a fixable idea rather than a
+     rejected one.
+  3. Scene 3 is 6.2% cat1 and scene 1 is 43.8%. The cost of composing
+     cat1 in software is a SEVENFOLD swing between scenes, so any
+     measurement of "cat1 costs 48%" is scene-specific and level 1
+     (scene 0, 11.3%) is at the cheap end.
+
+**AND IT CLOSES MY OWN LOOSE END.** Entry 12 reported page 0 changing by
+197 bytes between frames 700 and 1000 and read it as the scrolling plane
+rewriting its incoming column. Wrong: the high bytes of the entire map
+are byte-identical to the rom at frames 1200 apart, so the game does not
+rewrite the map at all — it scrolls the view across static pages. Those
+changing bytes were the R60 packet living inside page 0, which the
+rendering thread has since moved to page 12 (LOOP29 138). Their
+correction was right and my reading of it was wrong.
