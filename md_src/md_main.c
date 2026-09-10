@@ -2406,7 +2406,13 @@ void shim_vblank(void) {
 	{
 		static uint16_t gr_base, gr_vc;
 		static uint8_t  gr_val;
-		uint16_t t = *(volatile uint16_t*)0xFFA18E;   /* game IRQ4
+		/* LOOP29 140: IRQ4 COMPLETIONS run at vint rate on every build
+		 * (a missed frame takes IRQ4's short path and still completes),
+		 * so this read 64 everywhere. Use the game's own missed-frame
+		 * counter instead: value = 64 - misses per 64 vints = game frames
+		 * per 64 vints, the same number gameplay_speed.py reports. */
+		uint16_t t = *(volatile uint16_t*)0xFFF144;
+		(void)*(volatile uint16_t*)0xFFA18E;          /* was: game IRQ4
 		                     * completions, counted in md_start.s at
 		                     * fmgate_ret — the game's own scene timer
 		                     * runs at scene-dependent rates and in both
@@ -2417,8 +2423,8 @@ void shim_vblank(void) {
 			/* the scene timer runs in either direction depending on the
 			 * scene (the first read clamped at 127 on the ship line —
 			 * a countdown, not a fast game); magnitude is the rate */
-			uint16_t sd = (uint16_t)(t - gr_base);
-			gr_val = (uint8_t)(sd > 127 ? 127 : sd);
+			uint16_t sd = (uint16_t)(t - gr_base);        /* misses in 64 vints */
+			gr_val = (uint8_t)(sd > 64 ? 0 : 64 - sd);    /* game frames in 64 vints */
 			gr_base = t;
 			gr_vc = 0;
 		}
