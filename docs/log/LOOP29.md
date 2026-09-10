@@ -566,3 +566,62 @@ screenshot diffs.
 double-buffer flags. It is last night's binary, not today's source. If
 the play pass likes it, rebuild it clean before anything is decided on
 it.
+
+## 117. MIKE'S HARDWARE PASS: AN ORDER OF MAGNITUDE, STILL NOT PLAYABLE — AND THE NEXT LIMIT IS THE MASTER'S COMPOSE (04:00)
+
+Play pass on the double-buffered line, MiSTer, his words: "OOOH not
+perfect but a significant improvement", then "again we dont have enough
+frames to be playable. but we do have a magnitude of improvement".
+
+That is exactly the measurement: accepted 1.3 -> dblfast 16.7 MOTION fps,
+13x, and 16.7 is not 60.
+
+**The flag set rebuilds clean and reproduces**, so it is today's source
+and not last night's lucky binary:
+
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXBOTH=1 FLIPEDGEOFF=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1
+    build 8bc6f189   _end 0x060135D0   MOTION 16.7  windows [4,40,6]
+    (U_dblfast, 8f0b0526, read 16.7 windows [4,40,6] — identical)
+
+Note `TEXTCAPMASTER` is an INVERTED flag (`ifndef TEXTCAPMASTER` gates
+the slave path), so a correct build shows `-DTEXTCAP_FULL` and NO master
+define. Do not read its absence from `.build_flags` as the flag missing.
+
+**PHASECENSUS on that build, 2600 frames, and it is unambiguous:**
+
+    ships 803 = 19.2 fps          generation wall  2.74 vints
+      mtask  2.73   <- the master's per-gen work, launch -> tail done
+      echo   1.61      ship 0.58     flip 0.69     lag 0.01
+    ship period bins (1/2/3/4+):  28 / 230 / 193 / 352
+    mtask latency bins:  60 13 0 5 2 1 1 722   (722 of 804 in the top bin)
+
+`mtask` 2.73 IS the wall 2.74. Echo, ship and flip overlap it and are off
+the critical path — this is why every 68K-side lever this project has
+chased (the shim diet, the rotor, the FM span, the packet transport) has
+moved the logic rate and not the picture. **The 68K is not the frame-rate
+constraint and has not been for some time. The master's compose is.**
+
+Only 3% of generations fit in one vint (28 of 803); 44% take four or
+more. 60 / 2.74 = 21.9, which is the ~20 Hz on screen.
+
+**The target is now a single number: mtask 2.73 vints -> ~1.0.**
+
+Levers, in the order the evidence supports, none measured yet:
+
+  1. **Draw less on the SH-2.** Every pixel the MD VDP draws is a pixel
+     the master does not compose. This is the NATIVE pivot's own thesis
+     and it is only partly done (MD_BG, MDSPR, TILECLASS shipped;
+     CAT1MD reverted on a play pass for shimmer, LOOP28/cat1md note).
+  2. **Split with the slave.** `mtask` is the MASTER's tail. If the slave
+     is idle during it, that is a 2x sitting there. `SHIPBLITSHIFT` (24
+     today) and `BANDSHIFT` are the existing dials. MEASURE THE SLAVE'S
+     OCCUPANCY FIRST — this lever is worth nothing if it is already busy.
+  3. The 3-band structure itself: 44% of generations spanning 4+ vints
+     suggests the bands are not the right unit under load.
+
+**Instrument note:** `tools/nat_score.py` on a PHASECENSUS build is the
+right tool for this question and it already existed. It uses play2.csv,
+not the level-1 script, so its ships/fps is not directly comparable to
+`presented_fps.py` — use it for the PHASE SPLIT, and presented_fps for
+the rate.
