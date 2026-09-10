@@ -1373,7 +1373,12 @@ static uint8_t flick_bay[16];               /* 4x4 Bayer, boot-built,
  * complement) and the blit is 56 rows each — but on top of that the
  * MASTER alone carries the flip, the page drain and restore, CRAM,
  * build_maps, the shadow LUT, the sprite snapshot and the band queue
- * itself. The slave finishes early and idles ~15,500 polls/cycle; its
+ * itself. (STALE, corrected 2026-09-10: the slave finishes early and
+ * idles ~15,500 polls/cycle was true of an older pipeline. MEASURED on
+ * the current line, LOOP29 118: the slave idle meter at 0x28FA8 does
+ * NOT MOVE during gameplay on either the accepted or the double-
+ * buffered build -- 0.0 idle polls per vint. The slave is SATURATED
+ * and has no spare capacity.) Its
  * echo is what PUSHES the next band, while the master's progress is
  * what DRAINS one. Pushes therefore outrun drains and the depth-4 queue
  * sheds ~1 band per cycle, every cycle.
@@ -3637,7 +3642,10 @@ static __attribute__((noinline)) const uint8_t *bake_find(uint16_t addr, uint16_
  * reused FBCLEAR's block, which is live under the blit). Canonical
  * scratch sits in the audited 28D80-28FFF free span (win_pend takes
  * 0x28D80; the REBUILD-era squatters start at 0x28F20). SAT capped
- * at 32 entries BOTH ways — real claims run 8-12 (zombies are 2
+ * at 32 entries BOTH ways — real claims run 8-12 (STALE: MEASURED at
+ * 1.0 claims per GENERATION on the level-1 script, 2026-09-10,
+ * LOOP29 119 -- 1.3%% of the MD VDP's 80-sprite capacity. Neither cap
+ * binds; the palette-coherence rule does) (zombies are 2
  * subsprites each); the 68K DMAs 128 words and VDP entries 32-79
  * stay behind the link-0 terminator. Under canonical every claimed
  * record is TRIPLE leverage: compose shrinks (the deferral tears),
@@ -12095,6 +12103,8 @@ RAMCODE void m_main(void)
                  * chain's links used to relaunch via THIS poll loop on
                  * each echo — a full master round trip per band, and
                  * the profiler showed the cost: slave 34% idle-polling
+                 * (STALE: 0.0 idle polls/vint measured 2026-09-10,
+                 * LOOP29 118 -- the slave no longer idles at all)
                  * for its next command, master 13% spinning on SYNC[2],
                  * chain pending at 52% of k2s while BOTH CPUs waited on
                  * each other. Bit 0x40 tells the slave to run all three

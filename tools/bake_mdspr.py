@@ -9,7 +9,10 @@ sh_src/sprites.bin (the interleaved sprite ROM), REUSING bake_sprites'
 decoder — the one that ships with a byte-identical replay gate — so the
 pixel walk here is the proven one, not a re-derivation.
 
-Emits, for the v1 class list (S16 colour sets 0x00, 0x10, 0x0B):
+Emits, for the colour sets listed in SCENES below -- READ THAT TABLE,
+not this line. (It said 0x00, 0x10, 0x0B for months while the code
+baked set 0x09 alone; that stale sentence is part of why nobody noticed
+75%% of live sprite records had no baked art -- LOOP29 119.)
   sh_src/md_sprart.bin   MD 4bpp tiles, per-key per-subsprite,
                          column-major within a subsprite (the VDP's
                          multi-tile order: tileNumber = tileX*htiles).

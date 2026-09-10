@@ -6,10 +6,12 @@
 
 The companion to `tools/sdram_audit.py`, which finds LIVE spans by
 dump-diff and says of itself: "the tool cannot know extents". That blind
-spot is the whole problem. Collision #16 (2026-09-10) was `SLC[16..21]`
-at 0x3A7C0 landing on `SPRPEN`, both blocks legitimately live, both
-written every frame -- a liveness diff cannot see that, only declared
-extents can.
+spot is the whole problem: `SLC[16..21]` runs from 0x3A780 onto
+`SPRPEN` at 0x3A7C0, and `SLC`/`SPRLATE`/`FBP` all declare the same
+base. A liveness diff cannot see a declared-extent overrun; only
+declared extents can. (Whether both blocks are ever live TOGETHER is a
+separate question -- SPR_LATE_DIAG has no dedicated Makefile flag, so
+do not assume it: LOOP29 128.)
 
 This parses every fixed 32X SDRAM address declared in sh_src/ (EVERY
 #ifdef branch: the grep that skips the inactive-looking branch is how

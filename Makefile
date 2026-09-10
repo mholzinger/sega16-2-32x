@@ -1240,7 +1240,9 @@ endif
 # MASTER to the SLAVE. Compose is split 112/112 and the blit 56/56, but
 # the master alone also does the flip, page drain/restore, CRAM,
 # build_maps, the shadow LUT, the sprite snapshot and the band queue —
-# so it finishes late while the slave idles ~15,500 polls/cycle. The
+# so it finishes late while the slave idles ~15,500 polls/cycle (STALE:
+# the slave idle meter reads 0.0 polls/vint on the current line,
+# LOOP29 118 -- it is saturated). The
 # slave's echo PUSHES bands and the master's progress DRAINS them, so
 # the queue sheds ~1 band/cycle and the dropped band is always the
 # MASTER's rows: rows 72 and 144, exactly where Mike's tears are.
