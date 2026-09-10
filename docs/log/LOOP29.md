@@ -1820,3 +1820,13 @@ TXTWRAM (the text writers store to WRAM and never gate on FM): ares
 the sprite-pair symptom that failed TXTWRAM's play pass on 2026-09-07
 is still present but far below that session's 247. Hardware number: see
 the line below.
+
+    vi5_gr (vi4 + TXTWRAM + probe), clean pass:  48 64 28 27 13 64 30 27 40
+
+Same population as vi4 (median ~30 vs 28). TXTWRAM does not move the
+hardware speed: the text writers' FM spins are not where the silicon's
+time goes either. vi4 stays the line; TXTWRAM stays a probe (and its
+pre-post footprint copy costs flips, edge declines 3449 in 4000 vints).
+The BOOTBURNW/R fetch-tax probes were rebuilt on this line but the W
+instrument reads 127 (clamped) on ares before touching hardware; fix
+the stamps before reading it on the rig.
