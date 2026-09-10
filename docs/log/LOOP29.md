@@ -1207,6 +1207,11 @@ have used it.
 
 ## 131. THE FB BANK DIVERGENCE, VERIFIED INDEPENDENTLY AND WORSE THAN REPORTED
 
+**WRONG — RETRACTED BY 135. I used a 64 KB bank stride; the framebuffer
+bank is 128 KB (`FBX_PKT_SH` 0x24012000). Every figure below compares the
+two HALVES OF ONE BANK against each other, which of course differ: they
+are different parts of the same picture. There is no divergence.**
+
 The decompile thread (LOOP-DECOMPILE 10-12) found the two framebuffer
 banks diverging in the staged tile region while chasing the Plane B bug,
 and correctly handed it to this thread. Verified here on
@@ -1341,6 +1346,11 @@ hardware.
 
 ## 134. MIKE'S PLAY PASS ON dblfast: "MORE FRAMES, NO SPEED" — AND THE NUMBERS AGREE
 
+**The measured ladder below STANDS. The HYPOTHESIS at the end (that bank
+incoherency is what FLIPEDGEOFF costs) is RETRACTED by 135: it rested on
+entry 131, which was a stride error. FLIPEDGEOFF's 12 points are still
+unexplained.**
+
 Hardware pass on `dblfast-20260910.32x`: "I see more concurrent frames
 displayed but no speed improvement." Exactly right, and the metrics say
 it is a LOSING trade, not a neutral one:
@@ -1379,3 +1389,38 @@ Falsifier: extend the double-write (or a restore-on-flip) to the tile
 staging, keep FLIPEDGEOFF, and re-measure both columns. If logic returns
 toward 47% while motion stays near 16.7, the hypothesis holds. If logic
 stays at 34.9, flipping is intrinsically expensive and the trade is real.
+
+## 135. RETRACTION: THERE IS NO FB BANK DIVERGENCE — I USED THE WRONG STRIDE
+
+Before building the fix entry 134 proposed, I re-checked the measurement
+it rested on. It was wrong.
+
+**The 32X framebuffer bank is 128 KB, not 64 KB.** `md_src/packet_fmt.h:170`
+puts the R60 packet at `FBX_PKT_SH 0x24012000` — offset 0x12000 into the
+SH-2's framebuffer window, which is therefore at least 0x20000 wide.
+Entry 131 dumped 0x20000 of 32X DRAM and split it as two 64 KB banks. That
+compared the TOP AND BOTTOM HALVES OF A SINGLE BANK. They differ because
+they are different parts of the same picture.
+
+Re-measured with the correct 0x20000 stride, `rom/night/dblfast_clean.32x`:
+
+    bank0  f700 -> f1000 :  8667 of 131072 bytes changed
+    bank1  f700 -> f1000 :  7283            <- BOTH banks active
+    bank0 vs bank1 @f1000:  6583  (5.0%)    <- two different frames
+    packet region 0x12000-0x12800, bank0 vs bank1: 60 of 2048 (2.9%)
+
+**Both banks are live, neither is frozen, and a 5% difference between
+them is what double buffering is supposed to look like. There is no
+incoherency defect.** Entry 131 is retracted and entry 134's hypothesis
+with it.
+
+**Note for the decompile thread**: their LOOP-DECOMPILE 10-12 figure
+("bank 1 byte-identical to itself 300 frames earlier, 266 of 40960 bytes
+differ") should be re-checked against the 0x20000 stride. If they used
+64 KB the same artifact applies.
+
+**So FLIPEDGEOFF's 12 points of game speed are UNEXPLAINED.** The honest
+next step is to measure where they go — the 68K stage trace
+(`tools/stage_lines.py`, which worked on the shim this morning) run with
+and without the flag — rather than propose another mechanism. Three
+hypotheses today have died on measurement; this one should start there.
