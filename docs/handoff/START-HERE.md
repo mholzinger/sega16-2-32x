@@ -86,8 +86,15 @@ default-off.
     FPGA defer the latch to vblank, and the master spins on that latch
     with FM held (~198 lines). The game's text writer waits on FM to
     the end of the frame and the next vint enters late; 33 of 33
-    deferred flips did this.** The candidate fix is to release FM at the
-    write and run the post-latch restore from the V-ISR — not built.
+    deferred flips did this.** BUILT AND MEASURED, LOOP29 137: the fix
+    was not to release FM but to get the FS write INSIDE vblank with the
+    guard on — stop capturing the two packet regions as page truth
+    (23 lines of drain per flip), lift the packet before the flip on the
+    ISR path, and move the 68K's packet blast out of the pre-post slot
+    into the FM-gate spin. `make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1
+    FBXISRLIFT=1 PGSKIPPKT=1 TEXTCAPMASTER=1 TEXTCAPFULL=1` =
+    `rom/night/vi.32x`: ~29 Hz flips, none deferred, logic 50.1%.
+    **Awaiting Mike's play pass; not the accepted rom.**
     The build is `rom/night/dblfast_clean.32x`, on the MiSTer as
     `dblfast-20260910.32x`.
   - **`PALSTREAK` / `PALBACKOFF`.** Were dead code until 2026-09-08 (the
