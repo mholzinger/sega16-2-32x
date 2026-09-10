@@ -844,3 +844,40 @@ does not. The attract scenes have not been sampled.
 S16 colour sets and never asked how many DISTINCT COLOURS survive the
 9-bit quantisation. It is the same shape as LOOP29 119's caps — a budget
 defended against the wrong quantity.
+
+## 122. BGPACK2 IS BUILT AND IT BREAKS THE SKY — THE PACKER CANNOT REALISE THE FREE LINE
+
+`make ... BGPACK2=1` (MDP_LINES 3 -> 2, default-off) built clean and MD
+CRAM line 3 does go free (all zero, confirmed at f2000 and f3000). The
+background does NOT survive it.
+
+    3-line pack   lines 1-3 hold 30 distinct colours
+    2-line pack   lines 1-2 hold 21 distinct colours   <- 9 LOST
+    frame diff at f2000: 23.0% of pixels
+    LOOKED AT IT: the SKY IS BLACK. Trees and the upper band drop to
+    backdrop. Not shippable.
+
+**Entry 121's arithmetic was right and its conclusion was wrong, in a
+shape this project keeps repeating.** 30 distinct colours do fit in 30
+pens. But the packer assigns a line PER COLOUR SET and never dedupes
+across lines: with 3 lines it spent 40 CRAM entries on 30 distinct
+colours (10 cross-line duplicates), and with 2 lines it simply runs out
+and the unplaced sets render as backdrop. The headroom is real; the
+allocator cannot reach it.
+
+I measured the right quantity and then assumed an allocator that does
+not exist. Same failure as LOOP29 114 (the game's refcount table was
+real, the inference from it was not) and LOOP29 119 (the cap was real,
+it was not the constraint). **Structure by measurement, behaviour by
+measurement, and never infer the second from the first.**
+
+**What would actually buy the line:** global colour dedupe in the pack.
+Two sets whose quantised colours coincide should share pens on one line
+instead of each taking their own. The measured duplicate count says that
+is worth exactly the 10 entries needed. `NEARMERGE=1` already exists for
+near-pen merging (Makefile 1623) and was never turned on for this — it
+is the nearest existing machinery.
+
+`BGPACK2` stays default-off and is kept: it is the falsifier for any
+future dedupe work. If the packer ever dedupes properly, this flag
+should render identically to the 3-line line.

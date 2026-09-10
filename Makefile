@@ -1566,6 +1566,16 @@ endif
 # [8] claimed [9] live records examined. Counters live in .bss (the
 # 0x28Fxx scratch is crowded and this repo has numbered its collisions to
 # #15); read the `mdspr_why` symbol out of rom/s16.lst. PROBE ONLY.
+# `make ... BGPACK2=1` = LOOP29 121: pack the MD background into TWO
+# palette lines instead of three, freeing MD CRAM line 3 for a second
+# sprite palette. Measured free on level-1: lines 1-3 carry 40 CRAM
+# entries but only 30 DISTINCT colours (9-bit decode), 29-30 at every
+# sampled frame, so 2 lines x 15 pens holds it exactly. NOT proven for
+# attract (m_main.c:288 claims a worst window of 36 distinct). Gate:
+# background colour count and a play pass.
+ifdef BGPACK2
+SHCCFLAGS += -DBG_PACK2
+endif
 ifdef MDSPR_WHY
 SHCCFLAGS += -DMDSPR_WHY
 endif

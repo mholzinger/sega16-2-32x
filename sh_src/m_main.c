@@ -298,7 +298,20 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * static between repacks. A round-robin drift check (4 sets/window)
  * reassigns a set whose live colours no longer match its pens.
  * State is master-only, in fixed SDRAM after md_tag (ends 0x3C400). */
+/* BGPACK2 (LOOP29 121): the pack was sized against 45 pens but the
+ * background only ever holds 30 DISTINCT COLOURS after the 9-bit MD
+ * decode — 10 of its 40 CRAM entries are duplicates, measured at 8
+ * frames across level-1 (29,30,30,30,30,30,30,30). Two lines therefore
+ * hold it with ZERO colour loss and free MD CRAM line 3 for a second
+ * sprite palette (set 0x0A = 25.3% of all sprite records). Per-scene:
+ * m_main.c:288 claims a worst BG window of 36 distinct, which does NOT
+ * fit two lines, and the attract scenes are unsampled — so this stays
+ * default-off until a play pass says otherwise. */
+#ifdef BG_PACK2
+#define MDP_LINES  2
+#else
 #define MDP_LINES  3
+#endif
 #define mdp_line_c ((uint16_t *)0x0603C400) /* [3][16] 9-bit colour, FFFF free */
 #define mdp_pen_rc ((uint8_t  *)0x0603C460) /* [3][16] pen refcount */
 #define mdp_s_line ((uint8_t  *)0x0603C4A0) /* [128] line+1, 0 = unassigned */
