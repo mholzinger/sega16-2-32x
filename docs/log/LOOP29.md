@@ -663,3 +663,77 @@ NATIVE pipeline.
 
 Both are SH-2-side. Nothing on the 68K side can move the frame rate from
 here, which is the single most useful thing this session established.
+
+## 119. THE MD SPRITE OFFLOAD IS STARVED, AND THE CHAIN IS NOW FULLY CHARACTERISED
+
+Mike: "enough time measuring", and: why are frames capped at 20? Answer
+to the second: they are not — the cap is 20 RECORDS per frame and we were
+running at 0.83. The MD VDP will draw 80 sprites a frame for free while
+the master burns 2.73 vints compositing in software, and we were handing
+it 1.3% of its capacity (LOOP29 117 makes that the whole frame-rate gap).
+
+**Instrument.** `make ... MDSPR_WHY=1` counts every rejection in
+`mdspr_claim`. Counters live in `.bss` on purpose — the 0x28Fxx scratch
+is crowded and this repo has numbered its slot collisions to #15 — read
+via the `_mdspr_why` symbol in `rom/s16.lst`.
+
+**Two probe bugs, both of which produced confident wrong answers:**
+
+  1. Counters inserted between `if (cond)` and `continue;` WITHOUT BRACES
+     made five `continue`s UNCONDITIONAL, disabling the offload entirely.
+     The census then read 0 claims and 0 rejections and looked like a
+     finding. Caught only by checking that the reasons summed to the
+     records examined. **Any probe that edits control flow must reconcile
+     its own totals before a single number is believed.**
+  2. `static uint32_t mdspr_why[10]` is never READ by the program, so
+     -O2 -flto dead-store-eliminated 8 of the 10 counters. Must be
+     `volatile`. Same class as the inert `pal_streak` of LOOP28 85.
+
+**The census, level-1, 597 generations, 2723 live records:**
+
+    reason              before bake   after bake
+    NO BAKED KEY           75.2%        33.5%
+    palette mismatch        0.0%        41.5%   <- now binding
+    CLAIMED                18.1%        21.8%
+    zoomed                  3.8%         2.0%
+    pp!=2 / degenerate      2.9%         1.1%
+    caps hit                0.0%         0.0%   <- never the constraint
+
+**Fix 1, done: the bake was covering one colour set.**
+`tools/bake_mdspr.py` SCENES had `('normal','play.csv',(0x09,),40,0x09)`
+— set 0x09 only, while the scene used 6944B of its 12288B VRAM window.
+(The module docstring claiming sets 0x00/0x10/0x0B is stale.) Widened to
+(0x09, 0x0A, 0x0B): keys 8 -> 16, art 6944B -> 9120B, still under cap,
+nothing dropped. MDSPR_NKEYS 21 -> 29.
+
+**Result: claims 0.83 -> 0.99 per generation. The rejections MOVED rather
+than cleared** — two gates in series, and gate 2 is now the wall.
+
+**Fix 2, NOT done — it is an architecture decision, not a code change.**
+The claim rule needs a record's colour set to be palette-coherent with
+the MD CRAM line its SAT entry points at. Measured at f2400, pens 1..14:
+
+    0x09 vs 0x0A   0/14 match
+    0x09 vs 0x0B   0/14
+    0x0A vs 0x0B   0/14      (so they cannot share one line either)
+    and NO set in 0..0x3F matches the 0x09 anchor on all 14 pens,
+    so there is no free claimant anywhere: 0 of the 2038 missing.
+
+Sets 0x0A and 0x0B are 67.6% of the missing art (689 records each per 600
+vints — an exactly-paired actor) and each needs its OWN MD palette line.
+
+**And all four MD lines are allocated** (m_main.c:288): line 0 is the text
+grey ramp, which the MDSPR anchor also rides; lines 1-3 are the background
+colour pack, 21 S16 sets merged into 45 pens with ~9 pens of slack. Taking
+a line for sprites costs background fidelity, and "accuracy before speed"
+is a standing rule, so this is Mike's call and not mine.
+
+**The third option, and it is the one the evidence favours.** m_main.c:627
+already reasons about mid-frame CRAM swaps and rejects them: "per-SCANLINE
+swapping costs 224 interrupts on a 68K that is already the bottleneck."
+**That objection is dead** — LOOP29 117 measured the 68K off the critical
+path (mtask 2.73 of a 2.74-vint wall). The same comment notes sprites
+CLUSTER VERTICALLY and a span census (`sl_span`, 8 x 28-line spans) was
+built to price "how FEW swaps buy the demand". A handful of H-interrupts,
+not 224, could give sprites their own line only in the bands where they
+appear. That census has never been read out.
