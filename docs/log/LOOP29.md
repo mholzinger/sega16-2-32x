@@ -1199,3 +1199,39 @@ rules out directly. Consecutive frames ACROSS a transition (e.g.
 a w*.bin glob and parsed as frames 22000/22600). They were caught by a
 short-dump guard, but the scratchpad exists to prevent this and I should
 have used it.
+
+## 131. THE FB BANK DIVERGENCE, VERIFIED INDEPENDENTLY AND WORSE THAN REPORTED
+
+The decompile thread (LOOP-DECOMPILE 10-12) found the two framebuffer
+banks diverging in the staged tile region while chasing the Plane B bug,
+and correctly handed it to this thread. Verified here on
+`rom/night/dblfast_clean.32x` (32X DRAM, two 64 KB banks):
+
+    bank0  f700 -> f1000 :  8320 bytes changed
+    bank1  f700 -> f1000 :   347 bytes changed    <- 24x less active
+    bank0 vs bank1 @f1000: 57389 bytes differ     <- 88% of the bank
+
+    staged region (bank-relative 0x2000, where FBX_PKT_MD lives):
+    bank0 f700->f1000 7498 / bank1 40 / bank0-vs-bank1 36190
+
+Their figures (bank 1 byte-identical across 300 frames, 266 of 40960
+differing) do not match mine exactly — almost certainly rom drift, since
+`rom/s16.32x` was rebuilt a dozen times on 2026-09-10. **The shape
+reproduces and is worse than reported:** one bank is nearly frozen and
+the banks disagree on most of their content.
+
+This is LOOP28 91's bank disease, still live. `FBXBOTH` double-writes
+the R60 PACKET at the tail and again before the next post; it does NOT
+cover the tile staging, so anything the game stages into the current
+bank is invisible to a master reading the other one.
+
+**Why it matters more now than last week:** under the DREQ line the FB
+never flipped (9 FS writes in 2988 vints, LOOP28 92), so a stale second
+bank was inert. The double-buffered line Mike accepted as "an order of
+magnitude improvement" flips constantly, which makes this reachable.
+
+OPEN. Not the top item — the three-line sprite offload (entry 130, 70%
+of live records into hardware) is worth more and is unblocked — but this
+is a confirmed defect on the line we are trying to ship, and it is the
+first candidate whenever the double-buffered build shows a tile-level
+artifact.
