@@ -625,3 +625,41 @@ right tool for this question and it already existed. It uses play2.csv,
 not the level-1 script, so its ships/fps is not directly comparable to
 `presented_fps.py` — use it for the PHASE SPLIT, and presented_fps for
 the rate.
+
+## 118. NEGATIVE: THE SLAVE HAS NO SPARE CAPACITY (04:10)
+
+Entry 117 listed "split with the slave" as lever 2 and said to measure
+the slave's occupancy before building it. Measured; the lever is dead.
+
+The SLAVE IDLE METER at 0x26028FA8 (s_main.c:384) counts no-command poll
+visits, spilling every 64. It is UNCONDITIONAL code — not behind a flag,
+so this is not another PALSTREAK-style inert counter (LOOP28 85). Read at
+three frames on the play2 script:
+
+    build            f2000   f2600   f3200    idle polls/vint
+    base (accepted)   8128    8128    8128         0.0
+    dblfast_clean     6528    6528    6528         0.0
+
+Both frozen at a boot-era value; neither moves during gameplay. **The
+slave never takes its idle branch, on either build.** Its spare capacity
+is zero and handing it compose rows buys nothing.
+
+Corroborated independently: LOOP28 96 measured the master waiting 31.8
+lines for the slave to NOTICE a mailbox for a job that then takes 4.3 —
+the profile of a processor that is busy, not one that is waiting. The
+code comments claiming "the slave finishes early and idles ~15,500
+polls/cycle" (m_main.c:1331, Makefile:1243) and "slave 34% idle-polling"
+(m_main.c:11964) are STALE and should not be trusted; they predate the
+NATIVE pipeline.
+
+**So of entry 117's three levers on mtask 2.73 -> 1.0, only two remain:**
+
+  1. **Draw less on the SH-2** — every pixel the MD VDP takes is a pixel
+     the master does not compose. Partly done (MD_BG, MDSPR, TILECLASS);
+     CAT1MD was reverted on a play pass for shimmer, not for being wrong
+     in principle. This is now the PRIMARY lever.
+  3. **Restructure the bands** — 44% of generations span 4+ vints, which
+     says the 3-band unit is wrong under load.
+
+Both are SH-2-side. Nothing on the 68K side can move the frame rate from
+here, which is the single most useful thing this session established.
