@@ -1859,3 +1859,29 @@ This does not make it faster than vi4 (the flip rate is the same,
 generation-bound, ~29 Hz); it makes the 68K's frame irrelevant to the
 budget and hands the pacing to us. The next two patches (sprite writer,
 tilemap loop heads) build on that.
+
+## 142. TWO HARDWARE NUMBERS: THE FETCH TAX IS 20%, AND THE FPGA FLIPS AT A THIRD OF ARES' RATE (2026-09-10 18:20)
+
+Both read off the rig with the value instrument, five shots each, after
+fixing the probes (commit b1e399d: the burn stamps are converted through
+the V-counter jump and moved off words the landing diag clobbers; the
+rate probe reports releases under GAMEGATE).
+
+**Fetch tax.** `SHIMBURN=5` loop, 200 volatile iterations:
+    from 68K WRAM   ares 24-25 lines   FPGA 25 25 25 25 25
+    from cart ROM   ares 24-25 lines   FPGA 32 29 30 31 30
+The adapter charges ~20% on ROM-resident 68K code with the pipeline
+live. ares charges nothing. Every game instruction runs from ROM, so a
+150-185-line game frame is 180-220 on silicon before any shim -- part
+of why the accepted rom reads 15% there and 50% on ares.
+
+**Release rate under GAMEGATE (vi6_gr): 17 10 17 16 19 per 64 vints.**
+The game paced to flips runs at ~25% on the FPGA against vi4's ~44%
+running free (LOOP29 140). So the hardware presents far fewer frames
+than ares' 29 Hz -- the slave's compose (real FB write stalls) or the
+edge guard on real timing. Measuring the FS-write rate directly on vi4
+(`FLIPRATE=1`) next. **GAMEGATE as built is the wrong policy for
+hardware today**: pacing the game to a ~10-19 Hz flip clock halves it.
+The gate is correct and stays; its token policy must be "release every
+vint" until the flip rate is worth pacing to, or better, a policy that
+releases on flip OR every vint whose previous frame completed.
