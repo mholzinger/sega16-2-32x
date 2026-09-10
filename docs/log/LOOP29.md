@@ -1977,3 +1977,39 @@ is doing them BEFORE the post, at FM=0 -- which ares says returns
 garbage (FM_TEST, LOOP27 12) and which has never been checked on the
 FPGA. The rom's DIAG[24]/[25] pair (FM=0 read of a 68K-untouched word
 vs the FM=1 read) answers that on the rig with the value instrument.
+
+## 147. TEXTCAPMASK: THE TEXT WRITERS SAY WHICH ROWS TO CAPTURE (2026-09-10 19:15)
+
+On silicon the master's reads after the post are ~20 lines and the
+guard is 35.9 - 25 (post) = ~11 (144, 146); the text capture (928 longs)
+is the fat one, and it copies 29 rows for ~14 game writes a vint that
+touch one or two of them. The FM-gate thunks already sit in front of
+every text writer, so they now MARK the 4-row group they are about to
+write (WRAM byte 0xFFA1A6, `TXTMASK` in patch_game.py):
+
+    0x3A9A / 0x3AA4   shared copy / clear loop heads: group from a1
+                      at every iteration, text page (0x85Fxxx) only
+    0x3AAE            credit writer: group from its offset var 0xFFF024
+    0x153E / 0x4D88   fixed rows 25-26 (group 6)
+    0x369C / 0x1ACCA  clear-all: every group
+
+The shim posts the byte in COMM2's high byte (the master reads bits
+0-2 for the bank) and clears it when it sees the master's echo; every
+8th vint the mask is forced full so an ungated writer is stale for at
+most 8 vints. The master's inline capture copies only the marked
+groups (128 longs each).
+
+Which gates run in level play, from the 68K trace's FM reads by thunk
+address (dbl_noedge, 120 vints): 0x3716 dispatcher flag gate 222/vint
+(spinning), 0x3AAE 400/vint (spinning), 0x3A9A 14/vint (the glyph
+copies), 0x4D88 1/vint; the clear-alls never. Thunk table 211 -> 265
+words, still under the 0xBFF0 ceiling, which LOOP-DECOMPILE 28 shows is
+the game's object table at 0xFFC000, not a budget we chose.
+
+    vi8 = vi4 + TEXTCAPMASK, ares 4000 vints:
+      FS writes 525 485 475 484 per 1000, 1 deferred (vi4: 501 488 468 481)
+      edge declines 229 (vi4 ~350 over 4000), ISR flips 1947, torn 5
+      game logic 50.1%, CRAM full, HUD/credit/lives text correct on stills
+      mask byte in steady play: 0x01 (the HUD row group)
+
+Rig numbers: below.

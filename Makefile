@@ -847,6 +847,19 @@ endif
 ifdef TEXTCAPEARLY
 SHCCFLAGS += -DTEXTCAP_EARLY
 endif
+# TEXTCAPMASK=1 = LOOP29 147. The game's text writers mark the 4-row
+# group they write (patch_game.py TXTMASK, WRAM byte 0xFFA1A6); the shim
+# posts the mask in COMM2's high byte (the master reads only bits 0-2 of
+# COMM2 for the bank) and clears it once the master has captured; every
+# 8th vint the mask is forced full so an ungated writer is never stale
+# for more than 8 vints. The master's inline capture copies only the
+# marked groups: ~14 text writes a vint touch 1-2 groups of 128 longs
+# instead of 928. On the FPGA the full capture was the largest term
+# past the guard (144).
+ifdef TEXTCAPMASK
+SHCCFLAGS += -DTEXTCAP_MASK
+MDCCFLAGS += -DTXT_MASK
+endif
 ifdef FBXLATE
 SHCCFLAGS += -DFBX_LATE
 endif
@@ -2212,7 +2225,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) python3 tools/patch_game.py
+	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

@@ -42,6 +42,7 @@ FMGATE = bool(os.environ.get('FMGATE'))
 TXTWRAM = bool(os.environ.get('TXTWRAM'))
 FBXPEND = bool(os.environ.get('FBXPEND'))   # LOOP29 137: gate spin blasts the pending packet
 GAMEGATE = bool(os.environ.get('GAMEGATE'))  # LOOP29 141: the game's frame release is ours
+TXTMASK = bool(os.environ.get('TXTMASK'))    # LOOP29 147: text writers mark their 4-row group
 TXTW_BASE = 0xFFB0C0       # 4 bytes per writer: [off word][dirty byte][pad]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -1166,6 +1167,42 @@ if FMGATE:
         else:
             fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
                              0x6BF8]                      # bmi.s back to tst
+        if TXTMASK:
+            # TEXT ROW MASK (LOOP29 147). Every text write reaches the FB
+            # through one of these gates; each marks the 4-row group it is
+            # about to write in WRAM byte 0xFFA1A6 (bit = rows 4g..4g+3),
+            # so the master captures only those rows before the flip
+            # instead of all 928 longs. The two shared loop heads derive
+            # the row from a1 at every iteration (and only for the text
+            # page, 0x85Fxxx); the credit writer from its offset variable;
+            # the health bar and the 0x153E writer are fixed rows; the two
+            # clear-alls mark everything.
+            _txt = remap(0x410000)
+            assert isinstance(_txt, int) and (_txt & 0xFFF) == 0, _txt
+            if TXTWRAM:
+                raise SystemExit('TXTMASK: not with TXTWRAM (its writers bypass the FB)')
+            if off in (0x3A9A, 0x3AA4):
+                fmgate_words += [0x2F00,                          # move.l d0,-(sp)
+                                 0x2009,                          # move.l a1,d0
+                                 0x0280, 0x00FF, 0xF000,          # andi.l #0xFFF000,d0
+                                 0x0C80, (_txt >> 16) & 0xFFFF, _txt & 0xFFFF,   # cmpi.l #text,d0
+                                 0x660E,                          # bne.s  skip (+14)
+                                 0x2009,                          # move.l a1,d0
+                                 0x0240, 0x0FFF,                  # andi.w #0xFFF,d0   byte offset in page
+                                 0xE048,                          # lsr.w  #8,d0
+                                 0xE248,                          # lsr.w  #1,d0       /512 = 4-row group
+                                 0x01F8, 0xA1A6,                  # bset   d0,(0xFFA1A6).w
+                                 0x201F]                          # skip: move.l (sp)+,d0
+            elif off == 0x3AAE:
+                fmgate_words += [0x2F00,                          # move.l d0,-(sp)
+                                 0x3038, 0xF024,                  # move.w (0xFFF024).w,d0  credit offset
+                                 0x0240, 0x0FFF, 0xE048, 0xE248,  # -> group
+                                 0x01F8, 0xA1A6,                  # bset   d0,(0xFFA1A6).w
+                                 0x201F]                          # move.l (sp)+,d0
+            elif off in (0x153E, 0x4D88):
+                fmgate_words += [0x08F8, 0x0006, 0xA1A6]          # bset #6,(0xFFA1A6).w  rows 24-27
+            elif off in (0x369C, 0x1ACCA):
+                fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")
     for wi, w in enumerate(TXTW):

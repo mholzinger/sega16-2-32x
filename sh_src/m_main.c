@@ -5953,6 +5953,23 @@ static int flip_span(void)
          * TEXTCAPFULL restores the every-frame rate; the capture is 4.3
          * scanlines, against the 31.8 the master spends waiting for the
          * slave to pick it up (LOOP28 96). */
+#ifdef TEXTCAP_MASK
+        /* LOOP29 147: only the 4-row groups the game's text writers
+         * marked (COMM2 high byte, posted by the shim). 128 longs per
+         * group; group 7 is the last row (928 longs = 29 rows). */
+        {
+            uint8_t tm = (uint8_t)(MARS_SYS_COMM2 >> 8);
+            for (int g = 0; g < 8; g++) {
+                if (!(tm & (1u << g))) continue;
+                int lo = g * 128, hi = (lo + 128 > 928) ? 928 : lo + 128;
+                for (int i = lo; i < hi; i += 4) {
+                    td[i + 0] = ts[i + 0]; td[i + 1] = ts[i + 1];
+                    td[i + 2] = ts[i + 2]; td[i + 3] = ts[i + 3];
+                }
+            }
+        }
+        if (0)
+#endif
 #ifndef TEXTCAP_FULL
         if (r60_txt_alt)
 #endif

@@ -1245,6 +1245,10 @@ static uint8_t  fbx_seq_pub;             /* publish sequence */
  * stale publish yields landed = 0 and last frame's records stand. */
 static uint16_t fbx_stage[R60_ARM];      /* packet under construction */
 static uint16_t fbx_stage_n;             /* words staged, 0 = nothing */
+#ifdef TXT_MASK
+#define txt_mask (*(volatile uint8_t*)0xFFA1A6)   /* LOOP29 147: 4-row groups the
+                                                    * game's text writers touched */
+#endif
 #ifdef FBX_PEND
 /* tail blast skipped (FM up): a WRAM word the generated gate spin
  * (patch_game.py, FMGATE_SPIN_ADDR) tests before calling fbx_late_blast
@@ -3041,7 +3045,13 @@ void shim_vblank(void) {
 				r60_push();
 #endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
+				#ifdef TXT_MASK
+				/* mask in the high byte; every 8th vint force it full */
+				*mars_comm2 = (uint16_t)(BANK_SHADOW
+				              | ((uint16_t)(txt_mask | ((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)) << 8));
+#else
 				*mars_comm2 = BANK_SHADOW;
+#endif
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
 				*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #ifdef ARM_GATE
@@ -3177,6 +3187,13 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA09E =
 					*(volatile uint16_t*)0xC00008;   /* V at hold exit */
 				*(volatile uint16_t*)0xFFA0A2 = *mars_comm4;
+#ifdef TXT_MASK
+				{	/* the master captured with this post's mask: start afresh.
+					 * No echo (bailed vint) = keep accumulating. */
+					uint16_t c4m = *mars_comm4;
+					if (c4m == 0xF102 || c4m == 0xF103 || c4m == 0xF1FF) txt_mask = 0;
+				}
+#endif
 #ifdef GAME_GATE
 				/* THE GO TOKEN (LOOP29 141): one game frame per presented
 				 * frame. F102 = the ISR flipped this vint. The fallback
@@ -5073,6 +5090,9 @@ void main(void) {
 			(volatile uint16_t*)(0xFF0000uL | FMGATE_THUNK_ADDR);
 		for (uint16_t i = 0; i < FMGATE_THUNK_WORDS; i++)
 			ft[i] = fmgate_thunks[i];
+#ifdef TXT_MASK
+		txt_mask = 0xFF;                         /* first capture is full */
+#endif
 #ifdef GAME_GATE
 		*(volatile uint8_t*)0xFFA0F5 = 1;        /* first frame is free */
 		*(volatile uint8_t*)0xFFA0F4 = 0;
