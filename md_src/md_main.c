@@ -728,9 +728,18 @@ static void md_consume(uint32_t pkt_base) {
 						 * 0xFC00 (A) and 0xFC02 (B) matter — two header words,
 						 * sc[3] and sc[7], in EVERY packet (2026-09-05). The 56-
 						 * word per-strip DMAs wrote a table the VDP ignored. */
+#ifdef MD_HSCROLL_DIRECT
+						/* MDHSCR phase 2 (LOOP-DECOMPILE 26): the GAME writes
+						 * both entries itself, from its own scroll stores in
+						 * IRQ4, one vint fresher than this packet. Doing it
+						 * again here would only overwrite the newer value with
+						 * the older one. sc[3]/sc[7] are still carried; only
+						 * this write is dropped. */
+#else
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
 						*vdp_data_port = sc[3];
 						*vdp_data_port = sc[7];
+#endif
 					}
 #ifdef ART_TAIL
 					if (sc[1] & 0x4000u) {   /* art tail: [n] n x [slot][16 words] */

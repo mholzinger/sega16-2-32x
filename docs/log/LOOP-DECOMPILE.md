@@ -905,3 +905,48 @@ This entry is the evidence that the game side of it works.
 
 VERTICAL IS DELIBERATELY NOT PATCHED. Entry 24 could not establish its
 sign, because level 1 never scrolls vertically.
+
+---------------------------------------------------------------------
+## 26. MDHSCR phase 2 — correct, and NEUTRAL, because scroll is two words
+
+Mike's framing: a patch is three phases. Change what the program ASKS FOR
+so bigger chunks do more without flooding the VDP; then change the C that
+builds the 32X side; then rebake art if its shape changed. Entry 25 did
+phase 1 as an ADDITION and stopped at the phase-2 boundary, which is why
+it could not show a saving. Phase 2 is now done: under
+`MD_HSCROLL_DIRECT` md_main.c drops its own
+`*vdp_data_port = sc[3]/sc[7]` pair, because the game wrote both entries
+itself one vint earlier. Phase 3 does not apply — no art changes shape.
+
+    frame  S16 fgH   MD hsA/hsB   exact   phase2 miss   base miss   base fgH
+      400      192        0    0     yes           75          77        192
+      800      192        0    0     yes          149         147        192
+     1200      174     1006 1006     yes           46          44        174
+     1600      156      988  988     yes          240         235        156
+     2200      132      965  965      no*         552         551        140
+     3000       54      886  886     yes          943         950         57
+
+The shim no longer writes hscroll at all and the picture still tracks:
+the conversion holds exactly at five of six samples. (*The 2200 miss is
+one pixel and is a sampling artefact — 0xFFF0E2 is the game's source
+word and the main loop can advance it after IRQ4 has already written the
+VDP from it. The baseline shows the same skew.)
+
+**NEUTRAL ON SPEED, and that is the real result.** Miss counts move by a
+few in both directions (75/149/46/240/552/943 against 77/147/44/235/551/
+950). Removing the shim's hscroll write deletes ONE control write and TWO
+data writes per vint. Against the ~2882 instructions per vint the pipeline
+costs (CLAUDE.md), that is far below what this rig can resolve.
+
+Game state is IDENTICAL to the baseline through frame 1600 and diverges
+by 2200, same as entry 25 — two thunk calls per vint still flip frames at
+a 49% miss rate.
+
+**So the deliverable is the MECHANISM, not this payload.** What is now
+proven end to end: a six-byte in-place rewrite of a game store, into a
+patcher-generated thunk that knows the active flag set's remap, driving
+the MD VDP directly, with the shim's duplicate removed. Scroll was the
+smallest chunk in the program — two words a frame. The same mechanism
+applied to the sprite upload (entry 13: one loop, up to 128 records of 12
+bytes, one writer, both inputs in work RAM) is the payload where "bigger
+chunks without flooding the VDP" has something to bite on.
