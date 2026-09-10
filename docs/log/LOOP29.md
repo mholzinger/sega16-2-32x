@@ -1959,3 +1959,21 @@ master's inline capture was half of the ~20 lines that missed the guard
     ares and is not a hardware improvement; vi4 stays the line.
     Next: the 68K's own hardware timeline (entry line, post line), since
     the 21-25-line post wait is now the largest term.
+
+## 146. THE 68K SIDE ON SILICON MATCHES ARES (2026-09-10 19:05)
+
+`BOOTENTRYV=1` / `BOOTPOSTV=1` (value instrument, lines from vblank
+start), five rig shots each, vi7 line:
+
+    68K vint entry line   FPGA  5 37  7 (121 garbage)  4    [ares 11]
+    68K post line         FPGA 27 23 25 45 (one garbage)    [ares 21]
+
+Entry is early (the 37 is a belt wait on a late ack), the post is where
+ares puts it. So the post wait (144) is not the hardware term; the
+master's own reads after the post are (~20 lines on silicon vs ~10),
+and TEXTCAPEARLY (145) made it worse because the slave's pickup is
+late on real strips. What would take those reads off the critical path
+is doing them BEFORE the post, at FM=0 -- which ares says returns
+garbage (FM_TEST, LOOP27 12) and which has never been checked on the
+FPGA. The rom's DIAG[24]/[25] pair (FM=0 read of a 68K-untouched word
+vs the FM=1 read) answers that on the rig with the value instrument.
