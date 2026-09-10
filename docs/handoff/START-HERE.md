@@ -100,6 +100,22 @@ Next probe: instrument Plane B's upload against Plane A's at the frame
 the scene changes. Both come from the same pass, so the difference
 between the two upload paths is the entire defect.
 
+## THE LAST SESSION
+
+`docs/handoff/HANDOFF-20260910.md` — the 2026-09-09/10 rendering session,
+in full: the FBXPORT motion regression and how eight days of instruments
+missed it, the frames-or-speed trade the double-buffered line makes, where
+a generation's 3.6 vints actually go (the master is idle, the SLAVE is
+saturated, cat1 tiles are 48% of it), the palette question closed by
+exhaustive search, the five-item diagnostic refactor, and a full account
+of four retracted claims with the failure pattern behind them. Read
+section 4 before trusting any LOOP29 entry and section 7 before writing a
+probe.
+
+`docs/log/LOOP29.md` entries 107-135 is that session's log.
+`docs/handoff/HANDOFF-DECOMPILE.md` briefs the parallel Ghidra thread;
+`docs/log/LOOP-DECOMPILE.md` is its log.
+
 ## THE WORKING LOG
 
 `docs/log/LOOP28.md` is this session. Entry 94 is marked WRONG in place
