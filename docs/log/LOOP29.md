@@ -1785,3 +1785,38 @@ off the pre-flip path.
     before reading them.)
 
 MiSTer result for vi4: see the line below.
+
+## 140. HARDWARE SPEED, READ OFF THE GAME'S OWN COUNTER: THE ACCEPTED ROM RUNS AT ~15% ON THE FPGA, vi4 AT ~44% (2026-09-10 14:50)
+
+`BOOTGAMERATE=1` now paints (64 - misses at 0xFFF144 per 64 vints) into
+the MD palette (commit 1f00bef; the old probe counted IRQ4 completions,
+which run at vint rate on every build and read 64 everywhere). Decoder:
+scratchpad gr_decode.py — quantise the dominant MD-plane colour to
+3-3-2 bits, value = R | G<<3 | B<<6, bit 7 is the bias. Calibrated on
+ares: both roms read 32 = the 50% gameplay_speed reports.
+
+MiSTer, attract demo, nine screenshots 20 s apart per rom, game frames
+per 64 vints (the counter resets at scene cuts, so a sample that
+straddles a cut reads low; the population is what to read):
+
+    base_gr (accepted line + probe):  25 14 17 55  8  6 11 13 10
+    vi4_gr  (LOOP29 139 + probe):     46 28 28 24 48 29 28 26 48
+
+**On silicon the accepted rom runs the game at roughly 15%; vi4 at
+roughly 44%, 2-3x faster, with the picture at ~29 Hz.** Mike's verdict
+"clean presentation, too slow to play" on vi4 stands: 44% is slow. But
+it is the fastest rom the rig has run, and the accepted line is far
+slower on hardware than the 47-50% ares shows for it. The ares/FPGA gap
+on the base line is the master's FM span: real framebuffer writes and
+real SH-2 bus arbitration hold FM longer, and the game's text writers
+spin on it. ares does not model that cost; every "logic rate" this log
+quotes from ares is an upper bound on the hardware.
+
+**This closes the flip arc.** vi4 is the line to build on. What limits
+the game on hardware is FM time, and the game's own gates are the lever
+now — the pivot Mike asked for. First step, built as vi5 = vi4 +
+TXTWRAM (the text writers store to WRAM and never gate on FM): ares
+51.7% (+1.6 over vi4), flips ~42-48 per 100, SPRLATE ramp draws 57 —
+the sprite-pair symptom that failed TXTWRAM's play pass on 2026-09-07
+is still present but far below that session's 247. Hardware number: see
+the line below.
