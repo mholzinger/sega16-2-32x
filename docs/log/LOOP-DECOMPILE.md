@@ -570,3 +570,47 @@ Nothing sits above the code ceiling, which is the only check applied.
     tools/ghidra/rebuild.sh     # import, repair, seed — reproduces the above
 
 Do not re-run `-process` without `-noanalysis` afterwards (entry 18).
+
+---------------------------------------------------------------------
+## 20. The video surface is 75 functions and 8814 bytes — and a census that reads only absolute operands misses most of it
+
+With the program fully disassembled (entry 19), the question "how much of
+this rom is video" becomes answerable.
+
+    tools/ghidra_run.sh script video_map.py OUT.json
+    tools/ghidra/video_map_md.py OUT.json > docs/audit/video_map.md
+
+75 functions touch tileram, textram, palette, spriteram, the IO ports,
+the MCU mailboxes or the frame flag. 8814 bytes, 3.4% of the rom.
+
+    spriteram    3 accesses / 3 functions      palette  31 / 17
+    tileram     25 accesses / 12 functions     io       24 /  9
+    textram     57 accesses / 37 functions     mailbox   8 /  4
+
+TWO MEASUREMENT BUGS, both mine, both worth the space because either one
+alone produces a confident wrong number.
+
+  1. `timing_census.py` counts an access only when the ADDRESS IS THE
+     OPERAND. This program mostly does
+         movea.l #$440000,a2 ... move.l (a3)+,(a2)+
+     so the sprite upload — the busiest video routine in the game
+     (entry 13) — does not appear in its output at all. Its census found
+     39 functions where the correct count is 75, and it missed
+     `set_level_palettes` at 0x3952, which entry 3 had already read by
+     hand. Counting both forms is the fix.
+  2. My first `video_map.py` was WORSE, at 17 functions and zero
+     immediates, because Ghidra answers `getOffset()` for an Address
+     operand and `getValue()` for a Scalar, and I asked only for the
+     first inside a bare `except: continue`. A silent exception handler
+     turned a whole addressing mode into "no hits found".
+
+Separately: **0x2AAC, the IRQ4 handler, was not a function at all.** It
+is reached by `bra.w` from the vector trampoline at 0x404, and Ghidra
+creates functions at CALL targets, not branch targets. Resolving the
+exception vectors one branch deep and seeding the results fixes it; the
+handler is 784 bytes and touches six of the eight regions, more than any
+other routine in the program. Any census that ran before this entry was
+blind to it.
+
+The inventory names 11 routines and leaves 64 unnamed on purpose. An
+address is not a meaning.

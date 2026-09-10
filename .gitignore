@@ -58,3 +58,5 @@ sndtest/md/render_track.h
 docs/audit/timing_census.json
 docs/audit/palette_demand.json
 docs/audit/altbeast_seeds.json
+docs/audit/video_map.md
+docs/audit/video_map.json
