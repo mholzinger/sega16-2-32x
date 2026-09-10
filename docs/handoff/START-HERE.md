@@ -81,10 +81,13 @@ default-off.
     buys almost nothing (the vblank edge guard declines most flips);
     `FLIPEDGEOFF` buys all the motion and costs 12 points of game speed
     (47.1 -> 34.9). Frames OR speed, and nobody has got both.
-    **Where those 12 points go is UNEXPLAINED and is the top open
-    question** — HANDOFF-20260910 section 5.1. Measure it with
-    `tools/stage_lines.py`; one hypothesis (bank incoherency) already
-    died on a stride error.
+    **Where those 12 points go is MEASURED (2026-09-10, LOOP29 136):
+    with the guard off the FS write lands mid-scan, both ares and the
+    FPGA defer the latch to vblank, and the master spins on that latch
+    with FM held (~198 lines). The game's text writer waits on FM to
+    the end of the frame and the next vint enters late; 33 of 33
+    deferred flips did this.** The candidate fix is to release FM at the
+    write and run the post-latch restore from the V-ISR — not built.
     The build is `rom/night/dblfast_clean.32x`, on the MiSTer as
     `dblfast-20260910.32x`.
   - **`PALSTREAK` / `PALBACKOFF`.** Were dead code until 2026-09-08 (the

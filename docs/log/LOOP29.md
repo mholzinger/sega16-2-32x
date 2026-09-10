@@ -1424,3 +1424,128 @@ next step is to measure where they go — the 68K stage trace
 (`tools/stage_lines.py`, which worked on the shim this morning) run with
 and without the flag — rather than propose another mechanism. Three
 hypotheses today have died on measurement; this one should start there.
+
+## 136. WHERE FLIPEDGEOFF'S 12 POINTS GO: THE MASTER SPINS ON A DEFERRED LATCH WITH FM HELD (2026-09-10)
+
+MEASURED, not inferred. Handoff 5.1 said measure with the shipping
+build's own stamps before proposing a mechanism; this entry is that
+measurement. Both roms are the ones on disk, `rom/night/dbl_noedge.32x`
+(FBXPORT FBXSTAGE FBXBOTH) and `rom/night/dblfast_clean.32x` (the same
++ FLIPEDGEOFF TEXTCAPMASTER TEXTCAPFULL), same rig, same input script,
+window vints 2000-2119. Three traces, all read-only:
+
+    ares-headless --frames 2121 --input discover/inputs/play_level1.csv \
+      --trace-access-out X.csv \
+      --trace-access 0xFFB0B0:0xFFB0B2:cons:2000:2120 \
+      --trace-access 0xA15100:0xA15101:fm:2000:2120 \
+      --trace-access 0xA15120:0xA15121:comm0:2000:2120 \
+      --trace-access 0x902AAC:0x902AAD:irq4:2000:2120 \
+      --trace-access 0xFFF144:0xFFF145:miss:2000:2120 rom/night/R.32x
+    ares-headless --frames 2121 --input ... --trace-flip X_flip.csv rom/night/R.32x
+    python3 tools/stage_lines.py t.csv        (the 12-vint stamp trace, LOOP29 111 form)
+
+`--trace-access` is the 68K bus only (headless-ui/main.cpp:487, the
+MegaDrive read/write hooks); SH-2 writes to FBCTL/COMM are invisible to
+it. `--trace-flip` is the VDP's own FS write/latch log with the raw
+vcounter and a `deferred` flag (vdp.cpp:95-103).
+
+### The numbers
+
+    120 vints                       dbl_noedge      dblfast_clean
+    FS writes in window                 0               37
+      of which deferred                 0               33   (2121-frame run: 687 writes, 623 deferred)
+      written inside vblank             0                4
+    deferred-write vcounter             -        21..27, median 26   (active line; latch at 224)
+    latch delay                         -        median 198 lines
+    68K vint entry late (>line 20)      0               43   (entry at line 50-161)
+    lines late, total                   0             2555   = 21 lines per vint
+    IRQ4 misses                     61 (50.8%)      81 (67.5%)
+    FM raise->drop seen by the 68K   120/120         75/120  (45 never see the drop)
+    FM-gate spin polls, 0xffbe54    48054            78879   (+64%; line max 251 -> 261)
+    FM-gate spin polls, 0xffbdca    26626            45210
+
+### The chain, each link measured
+
+  1. Under FLIPEDGEOFF the master writes FS at raw vcounter 21-27 —
+     active line ~26, i.e. ~64 lines after vblank start — because the
+     FBXPORT post lands late (LOOP27 74) and the guard that used to
+     decline it is `if (0)`.
+  2. ares DEFERS a mid-scan FS write to the next vblank:
+     `selectFramebuffer` returns early when `!vblank && latch.mode`
+     (ares/md/m32x/vdp.cpp:95-97) and `M32X::vblank()` applies the
+     pending select at vblank start (m32x.cpp:72). 623 of 687 writes
+     deferred. The Makefile's "ares latches FS immediately mid-scan and
+     tears" (line 785) does not describe this fork.
+  3. The master then WAITS FOR THE LATCH WITH FM STILL RAISED:
+     `while ((MARS_VDP_FBCTL & MARS_VDP_FS) != (fs_o ^ 1) && frt()-w0 <
+     18000)` (m_main.c ~6188, "wait for the latch as long as it takes").
+     Median 198 lines. FM is not dropped until the restore half after
+     it. Exactly the flip vints (2000, 2005, 2008, 2011, 2014, 2018,
+     2023 ...) are the 45 vints in which the 68K never sees FM drop.
+  4. The game's pass hits gate #22 (the text writer, 0xffbe54, LOOP27
+     129) and spins on FM to the end of the frame: +64% polls, spin
+     reaching line 261.
+  5. The game frame overruns. The NEXT vint's shim entry is late — 33 of
+     33 deferred-flip vints are followed by an entry at line 50-161; the
+     other 10 late vints are the second vint of the same chain (2001->
+     2002, 2009->2010, 2019->2020 ...). IRQ4 misses on every late vint
+     (miss rate 1.00 on late, 0.51 on on-time).
+
+Miss rate +16.7 points in this window against the ladder's +12.2
+(65.1 vs 52.9 over gameplay_speed's longer interval); same sign, same
+order. **That is where the 12 points go: every accepted flip costs the
+game the rest of that frame, because the master holds FM through a
+latch the hardware defers to vblank.**
+
+### This is hardware behaviour, not an ares artefact
+
+`srcref/S32X_MiSTer/rtl/32X/VDP.sv:400` — `if (VBLK || MODE == 2'b0)
+FS <= FBCR.FS;` — and line 165, the FBCR readback returns the LATCHED
+`FS`, not the written bit. So on the FPGA the same spin also lasts until
+VBLK. The FLIP_EDGE_OFF comment ("expect the FPGA not to tear") is right
+about the latch and silent about the readback the spin polls.
+
+Mike's MiSTer verdict on dblfast, "more frames, no speed", is this
+entry.
+
+### Caveats, stated
+
+  - dbl_noedge vs dblfast_clean differ in TEXTCAPMASTER/TEXTCAPFULL as
+    well as FLIPEDGEOFF. The flip trace ties the delay to the deferred
+    flips (33 of 33), not to the text-capture flags, but a
+    FLIPEDGEOFF-only rom would make it a one-variable A/B. Not built.
+  - The stamp trace shows a second, smaller spin present only on
+    dblfast: 29510 FM-register reads from pc 0xff1730 in shim_vblank,
+    lines 1-161, 616 polls in late vints vs 37 in on-time ones. It is
+    the `fmgate_belt` wait at shim_vblank+0x47e (read 0xA15100 until
+    bit 15 clears, bounded 4M iterations) — the shim entering while the
+    master still holds FM from the latch spin. A consequence of the late
+    flip, not a cause. Identified from the .data disassembly of the
+    dblfast md_start.elf (0xff1728-0xff1734).
+  - `make clean && make ship-us <dblfast flags>` reproduced
+    dblfast_clean.32x in code but NOT byte-for-byte: 43321 bytes differ,
+    25460 in the 0x240000 block and 17783 in 0x2f0000 (baked assets),
+    63 scattered in 0x41208-0x45603, 1 at the stamp. The asset bake is
+    not deterministic across clean builds even at the same flags. Rank
+    only roms that were measured, never a "same flags" rebuild.
+
+### What NOT to do
+
+Do not put the edge guard back: it is the 1.3 fps picture. Do not
+re-try FLIPDEFER as built (LOOP27 12): committing the WRITE at the ISR
+top needs the FM=1 capture that is not there.
+
+### The split this suggests (not built, not measured)
+
+The FS write is committed at issue (m_main.c ~6175: "the write cannot
+be taken back"). Nothing between the write and the restore half needs
+the latch. So the candidate is: after an FS write that lands outside
+vblank, DROP FM AND RETURN (release the game), and run only the
+post-latch half — `restore_pages(cycle_dirt | pg_watch)`, the text
+restore, the F103 echo — from the V-ISR at the next vblank, once FBCTL
+reads the new bank. That is LOOP27 12's option (a): the restore is FB
+WRITES, and FM_TEST has counters for whether FM=0 writes land. One trap
+the spin was hiding: until the latch, the "new draw bank" is the bank
+STILL ON SCREEN, so nothing may compose into it before vblank — the spin
+was accidentally the tear guard. Whether the slave starts a compose in
+that gap has to be checked before the split is worth building.
