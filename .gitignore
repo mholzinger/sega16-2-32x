@@ -57,3 +57,4 @@ sndtest/md/render_music.h
 sndtest/md/render_track.h
 docs/audit/timing_census.json
 docs/audit/palette_demand.json
+docs/audit/altbeast_seeds.json

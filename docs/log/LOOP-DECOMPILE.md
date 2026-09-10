@@ -432,3 +432,88 @@ Unproven: what the loop at 0x2B16 costs per vint, and whether replacing
 it interacts with the FM window (the sprite upload is currently
 DELIBERATELY ungated, tools/patch_game.py:1004). Both are
 rendering-thread measurements, not decompile ones.
+
+---------------------------------------------------------------------
+## 16. The program is 19137 instructions in 433 functions, and all code is below 0x1EF1E
+
+Scope measurement, so the decompile can be sized rather than guessed.
+
+Classifying every address-bearing line of the reference disassembly by
+its directive (a count, not a copy) gives 19137 code lines and 26942 data
+lines, 433 functions, and a highest code address of 0x1EF1E. Everything
+above that is data: 135938 bytes, 52% of the rom. The rom budget is
+
+    0x00000-0x242A0  code and tables        56.5%
+    0x242A0-0x255E0  sprite palette table    1.9%   (entry 3)
+    0x255E0-0x29E00  tables                  7.0%
+    0x29E00-0x40000  packed tilemap data    34.6%   (entry 10)
+
+The reference has 1223 hand-named labels against 2909 auto-generated
+ones, and its author disclaims the enemy handlers, so roughly 30% of it
+carries a human reading and the rest does not.
+
+Of the functions Ghidra reached before seeding, 31 touch textram,
+tileram, palette, spriteram, io, the MCU mailboxes or the frame flag —
+5834 bytes. That is the subset this thread exists to document. 124 of
+234 were under 64 bytes and only 3 over a kilobyte.
+
+---------------------------------------------------------------------
+## 17. Jump-table seeding: 234 functions to 534, 46% of instructions to 61%
+
+Ghidra's auto-analysis stopped at two shapes, both of which put the
+target in DATA so nothing in the instruction stream refers to it:
+
+  A. a PC-relative table of longs, dispatched as
+         lea TABLE(pc),a0 ; movea.l (a0,dN.w),a0 ; jmp (a0)
+     Four of them: 0x026DC (8 entries, site 0x1ECA), 0x06D70 (20, site
+     0x49A6), 0x06DA0 (8, site 0x4C00), 0x0DE22 (6, site 0xD9F6).
+  B. a routine pointer stored into an object field by
+         move.l #ADDR,$xx(aN)
+     and later reached through the object struct's $02 routine field
+     (0x39A8: movea.l 2(a6),a0 ; jsr (a0)). 275 distinct targets from
+     293 sites.
+
+    tools/ghidra/seed_harvest.py LISTING.dis roms/altbeast/prog68k.bin --json S.json
+    tools/ghidra_run.sh script seed_apply.py S.json
+
+303 seeds, of which 204 were bytes Ghidra had never disassembled. Three
+seeds failed and were discarded (0x3000, 0x7C38, 0x18F7E).
+
+    before   234 functions   8822 instructions (46% of the program)
+    after    534 functions  11765 instructions (61%)
+
+Cross-checked against the reference's 433 function starts: 255 agree,
+178 are still missed, 279 are Ghidra-only. The Ghidra-only entries are
+mostly finer granularity rather than error — they include 0x36C4, 0x3BEC
+and 0x170A, all of which entries 3, 10 and 13 read by hand. NO function
+landed above the 0x1F000 code ceiling, which is the check that would
+have caught seeds disassembling data.
+
+The 178 still missing are a reachability cascade, not a third dispatch
+shape. The run at 0x6936 is reached by plain `bsr` from 0x6850, 0x6888
+and 0x68FE, callers that were themselves unreached.
+
+The `adda.w (a0),a0` sites are NOT a third shape. The real one, at
+0xE052-0xE062, builds a data pointer from a self-relative word table at
+0x1D33E indexed by 0xFFF142, and is never jumped to. The rest are
+phantoms from disassembling data linearly.
+
+---------------------------------------------------------------------
+## 18. NEGATIVE RESULT — re-running Ghidra analysis over seeded code destroys it
+
+Having seeded, the obvious next move is to let the analyser chase the
+call graph from the newly reached code. It does the opposite.
+
+    analyzeHeadless PROJ altbeast -process prog68k.bin      (no -noanalysis)
+
+    seeded        534 functions  11765 instructions
+    re-analysed   450 functions   9423 instructions
+    re-seeded     536 functions  10130 instructions
+
+The analysers clear code they do not believe, and re-applying the seeds
+afterwards does not recover it: the seed addresses come back but the
+fall-through and branch-reached code behind them does not.
+
+The order is import once, seed once, stop. `tools/ghidra/rebuild.sh`
+does exactly that and reproduces 534/11765 exactly from an empty project.
+Do not run `-process` without `-noanalysis` against this project.
