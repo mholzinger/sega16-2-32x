@@ -56,6 +56,21 @@ not re-derive:
                    $08 sprite_slot, $09 priority, $0A palette_bank,
                    $0B palette_index, $0C x, $0E x_vel, $10 y,
                    $12 y_vel, $14 anim_frame, $16 anim_timer
+
+    **$0A vs $0B — CORRECTED 2026-09-10 by the decompile thread
+    (LOOP-DECOMPILE 1-6), and the original error is instructive.**
+    An earlier version of this file said "$0A palette_bank is a
+    COMPILE-TIME CONSTANT" and cited `move.w #$5D,palette_bank(a6)`
+    at 0x1FE0. That is a WORD write at offset $0A: it puts 0x00 in
+    $0A and 0x5D in $0B. All six immediate word writes leave $0A
+    zero. So:
+        $0A  RUNTIME slot, 0-63, written by the allocator at 0x3B6C
+        $0B  COMPILE-TIME identity, 0-0xAE
+    Enumerating writes to $0A enumerates the wrong field. The
+    rendering thread's `d[4] & 0x3F` sprite key is the SLOT ($0A),
+    not the identity.
+    The offset was verified correctly (`clrb %fp@(10)`); the WIDTH
+    of the write was not. Verify both.
     live tables: 0xFFF400 queue head, 0xFFF401 fallback slot,
                  0xFFF440 slot refcounts, 0xFFF480 upload queue,
                  0xFFF500 request table (indexed by palette_index)
@@ -154,8 +169,12 @@ rebuilding the game.
 ---------------------------------------------------------------------
 ## HANDLING — non-negotiable
 
-  - `srcref/` and `docs/audit/` are GITIGNORED and stay that way. They
-    name and quote Sega's code.
+  - `srcref/` is GITIGNORED and stays that way. **`docs/audit/` is NOT
+    gitignored wholesale** — only named artifacts are (`timing_census.json`,
+    `palette_demand.json`), and four audit files are already tracked.
+    Corrected 2026-09-10; add a line per artifact rather than untracking
+    what is there. Anything naming or quoting Sega's code must be ignored
+    before it is written.
   - Treat `srcref/alteredbeast` exactly as `srcref/jtcores` is treated:
     **DERIVE, NEVER COPY.** Cite `file:line` for a fact. Do not paste
     Sega's disassembly, or the third-party comments on it, into any
