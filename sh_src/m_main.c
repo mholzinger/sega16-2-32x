@@ -5817,6 +5817,9 @@ static uint16_t vbs_t[5], vbs_t2[2];
 #else
 #define VBS(slot) do { } while (0)
 #endif
+#ifdef FLIPRATE_MEANSUM
+static uint8_t fs_from_isr;              /* LOOP29 143 probe: flip_span called from the ISR */
+#endif
 #ifdef PG_SKIP_PKT
 static uint16_t mir_a, mir_b;            /* packet magic words read pre-flip
                                           * (the mailbox mirror, LOOP29 139) */
@@ -5856,6 +5859,9 @@ static int flip_span(void)
      * 68K FB writes per vint. Guarded: a packet lifted and not yet
      * harvested is kept, not re-zeroed. */
     if (!fbx_landed) fbx_lift();
+#endif
+#ifdef FLIPRATE_MEANSUM
+    if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
 #endif
 #ifdef VB_SPAN
 
@@ -6075,6 +6081,9 @@ static int flip_span(void)
      * landing in the last ~2 lines of vblank latches mid-scan often
      * enough to see. ~2-line safety margin; the marginal flips
      * become clean declines instead of tears. */
+#ifdef FLIPRATE_MEANSUM
+    if (fs_from_isr) { CEN[50] += (uint16_t)(frt() - visr_t0) / 46u; CEN[51]++; }  /* at the guard, lines */
+#endif
 #ifdef FLIP_EDGE_OFF
     /* THE EDGE GUARD, OFF (LOOP27 74). It drops any flip that misses the
      * vblank edge because ares latches FS immediately and tears. Real
@@ -6461,11 +6470,32 @@ void visr_vbi(void)
      * mistaken for a reading. */
     {
         static uint16_t fr_n, fr_base, fr_val;
+#ifdef FLIPRATE_DIAG
+        /* LOOP29 143: post a DIAG slot's delta instead of FS writes
+         * (44 = edge declines, 58 = ISR flips, 60 = no-post bails). */
+#define FR_SRC DIAG[FLIPRATE_DIAG]
+#else
+#define FR_SRC CEN[17]
+#endif
+#ifdef FLIPRATE_MEANSUM
+        /* LOOP29 143: post a MEAN: CEN[MEANSUM] accumulates lines,
+         * CEN[51] counts the samples (both stamped in flip_span). */
+        static uint16_t fr_cbase;
         if (++fr_n >= 64) {
-            fr_val = (uint16_t)(CEN[17] - fr_base);
-            fr_base = (uint16_t)CEN[17];
+            uint16_t sn = (uint16_t)(CEN[FLIPRATE_MEANSUM] - fr_base);
+            uint16_t cn = (uint16_t)(CEN[51] - fr_cbase);
+            fr_val = cn ? (uint16_t)(sn / cn) : 0;
+            fr_base = (uint16_t)CEN[FLIPRATE_MEANSUM];
+            fr_cbase = (uint16_t)CEN[51];
             fr_n = 0;
         }
+#else
+        if (++fr_n >= 64) {
+            fr_val = (uint16_t)(FR_SRC - fr_base);
+            fr_base = (uint16_t)FR_SRC;
+            fr_n = 0;
+        }
+#endif
         /* post when the channel is free OR already carries our own value:
          * on the baseline build COMM8 is busy enough with the BAxx heal
          * traffic that a free-only test never fired on hardware, and the
@@ -6655,6 +6685,11 @@ void visr_vbi(void)
 #endif
 #ifdef VB_SPAN
     vbs_isr = 1;
+#endif
+#ifdef FLIPRATE_MEANSUM
+    fs_from_isr = 1;
+    { int fsr = flip_span(); fs_from_isr = 0; if (!fsr) return; }
+    if (0)
 #endif
     if (!flip_span())
         return;                          /* declined: body sees the flag

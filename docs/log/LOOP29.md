@@ -1885,3 +1885,25 @@ hardware today**: pacing the game to a ~10-19 Hz flip clock halves it.
 The gate is correct and stays; its token policy must be "release every
 vint" until the flip rate is worth pacing to, or better, a policy that
 releases on flip OR every vint whose previous frame completed.
+
+## 143. ON THE FPGA THE FLIP MISSES THE GUARD ALMOST EVERY VINT (2026-09-10 18:30)
+
+`FLIPRATE=1` variants posting a DIAG slot's delta per 64 vints
+(`FLIPRATEDIAG=N`, commit pending), five rig shots each, ares calibration
+in brackets:
+
+    FS writes  (CEN[17])     FPGA  1  7  3 (+2 garbage reads)   [ares 32]
+    edge declines (DIAG[44]) FPGA 63 63 63 63 63 (clamped)      [ares 0]
+    ISR flips (DIAG[58])     FPGA  3  4 10  5  2                  [ares 32]
+
+So the in-vblank flip that entry 137 built lands on ares and not on
+silicon: on the MiSTer the ISR reaches the FS write past the 35.9-line
+guard on nearly every vint, and the picture updates 2-6 times a second
+-- Mike's "slideshow", which the game-speed numbers (vi4 ~44%) hid. The
+ares pre-flip budget (post wait 21.6 + text capture 10.0 + merge/drain
+0.9 = 32.6 lines) leaves 3 lines of margin that the hardware does not
+have; which term grows on silicon is the next measurement (mean lines
+at the guard, mean post wait, no-post bails, same instrument).
+
+Consequences: GAMEGATE (141) paced the game to this 2-6 Hz clock and
+halved it (142); it stays default-off. vi4 remains the line to play.
