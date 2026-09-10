@@ -519,3 +519,50 @@ verified perfectly against our binary, and the behavioural inference
 drawn from it was wrong until measured against a running frame. Verify
 structure by objdump, verify meaning by ares dump, and never skip the
 second.
+
+## 116. THE DOUBLE-BUFFER DEAD END WAS CALLED ON THE WRONG METRIC (2026-09-10 03:55, MiSTer back)
+
+START-HERE lists double buffering (`FBXSTAGE`/`FBXBOTH`/`FLIPEDGEOFF`)
+as a dead end: "the single-buffered line does NOT tear, so it solves
+nothing, and it costs 15 points of game speed." Fifteen points of GAME
+SPEED — the logic metric that entry 113 showed is not the bar. Re-ranked
+on motion (`tools/presented_fps.py`, level-1 script):
+
+    rom                                MOTION   any-change
+    ship-us FBXPORT=1  (ACCEPTED)        1.3        4.0
+    ship-us (no FBXPORT, ares only)      6.3       21.7
+    T_dblbuf                             6.3       25.0
+    U_dblfast                           16.7       35.7
+
+**U_dblfast moves 13x the accepted rom and keeps FBXPORT**, so unlike the
+no-FBXPORT builds it is alive on hardware. LOOP28 93 already had Mike's
+hardware verdict — the double-buffered rom "shows MORE animation" — and
+it was overruled by the speed gate. That was the wrong call and this is
+the second time the same instrument made it.
+
+**Hardware, this session.** Rig up, MiSTer main running (unlike the
+2026-09-08 night session), screenshot path verified fresh. Deployed and
+captured six frames: the attract sequence renders CORRECTLY — logo,
+player, enemies, graveyard, grass, HUD, "©SEGA 1988" — and the logo
+cycles white -> red -> white across captures, which is the arcade's own
+`logo rewrite`/`logo red` scene pair. It is not confetti and it is not
+black.
+
+**Known defect, ares, NOT seen in the hardware attract captures:** at
+level-1 f2600/f2620 U_dblfast shows intermittent WHITE BLOCKS in the
+lower-middle band, 2 of 3 frames, different positions each time — the
+uncomposed-rows signature of LOOP28 90's bank disease. Needs a look at
+level-1 gameplay on hardware, not just attract.
+
+**Instrument limit found:** MiSTer screenshots throttle to ~4 Hz (12
+requests took 3032 ms), so captures CANNOT measure hardware frame rate —
+at 1.5 s sampling every pair differs on every build. Hardware motion
+needs an in-rom counter painted into the 32X layer (two shots, subtract,
+divide by wall time), or Mike's eye. Do not try to infer fps from
+screenshot diffs.
+
+**Caveat on the rom itself:** `U_dblfast.32x` is stamped 8f0b0526 from
+2026-09-09 00:26 and carries `TEXTCAPMASTER TEXTCAPFULL` on top of the
+double-buffer flags. It is last night's binary, not today's source. If
+the play pass likes it, rebuild it clean before anything is decided on
+it.
