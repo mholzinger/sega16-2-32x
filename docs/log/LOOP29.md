@@ -804,6 +804,11 @@ reason we compose in software.
 
 ## 121. THE FIRST SPRITE PALETTE LINE IS FREE: THE BG PACK CARRIES 10 DUPLICATE ENTRIES
 
+**WRONG — SUPERSEDED BY 133. The 30-colour figure is a SINGLE-FRAME MD
+CRAM read and undercounts the scene's demand; the pen bake's exhaustive
+search says 36 colours over 180 samples, which does not fit 2 lines.
+The line is NOT free.**
+
 Mike asked what the background actually loses if it gives a palette line
 to sprites. Measured off MD CRAM directly (ares `--dump "VDP CRAM"`,
 64 entries x 4 lines), not from the pack's own bookkeeping.
@@ -1286,3 +1291,50 @@ Order from here:
      BGPACK2. That is the real experiment; the first one was confounded.
   3. If the background survives, sprites get a second line and the claim
      rate should move far more than 19%.
+
+## 133. THE PALETTE SUPPLY IS CLOSED, BY EXHAUSTIVE SEARCH
+
+The 70%-of-sprites prize (LOOP-DECOMPILE 7-9, entry 132) needs three MD
+CRAM lines for sprites. The MD has four total and the background holds
+three. So the question is whether the background fits in two, and I have
+now asked the one tool that can answer it definitively rather than by
+sampling.
+
+`tools/mdpen_bake.py` partitions the scene's colour sets across lines by
+EXHAUSTIVE SEARCH, requiring each line's union of quantised colours to be
+<= 15 pens, and fails loudly rather than falling back to nearest-colour.
+Parameterised its line count (env `MDPEN_LINES`) and asked:
+
+    MDPEN_LINES=3  normal: 39 sets, 36 colours -> lines [15,15,11]
+                            (4 pens spare)      BAKES
+    MDPEN_LINES=2  BAKE FAIL: scene normal: 39 sets / 36 colours have no
+                   exact 2x15 partition -- a real capacity limit, not a
+                   bug to paper over
+
+**36 colours do not fit 30 pens. The background needs three lines and
+that is arithmetic, not tuning.**
+
+**This corrects entry 121, and the error is the same one I keep making.**
+I read MD CRAM at ONE level-1 frame, counted 30 distinct colours, and
+declared the third line free. The bake counts 36 over 180 classified
+samples. A single frame is not a scene. Entry 122's black sky was the
+right verdict reached through a wrong mechanism (I blamed the packer's
+dedupe, then the baked `mds_s_line` table); the actual reason is that
+there is no partition to find.
+
+**So the palette supply is CLOSED:**
+
+    4 MD CRAM lines total
+    3 to the background   (proven: no 2-line partition exists)
+    1 to sprites          (shared with the text ramp)
+
+`MDSPRTOP` (entry 132) makes that one line count for +19% claims and is
+the end of this road, not a step along it. The 70% figure describes a
+demand we cannot supply on this hardware.
+
+**Where the frame-rate work goes instead:** `CAT1MD`. Cat1 tiles are 48%
+of the SATURATED processor's compose (entry 124), the flag exists, and it
+was reverted on 2026-09-07 for shimmer and a second ground-band palette
+through the transform — a rendering defect with a knowable cause, not a
+capacity wall. It is now the only large lever left that is not blocked by
+hardware.

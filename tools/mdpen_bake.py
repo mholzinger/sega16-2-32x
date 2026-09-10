@@ -34,7 +34,17 @@ SRC = ROOT / 'discover' / 'palscenes'
 sys.path.insert(0, str(ROOT / 'tools'))
 import palscene_bake as psb                      # anchors, TOL, REGION, load()
 
-NLINES, NPENS = 3, 15
+# LOOP29 132: the line count is the question, not a constant. Three MD
+# CRAM lines hold the background today and sprites get ONE (shared with
+# the text ramp). If the background partitions into TWO, the third line
+# goes to sprites and the MDSPR claim rate moves a great deal -- the
+# decompile thread measured the top 3 palettes covering 65-75% of live
+# sprite records. This bake does an EXHAUSTIVE partition search and fails
+# loudly when none exists, so it answers the question without rendering
+# anything.  --lines N to ask.
+import os as _os
+NLINES = int(_os.environ.get("MDPEN_LINES", "3"))
+NPENS = 15
 SD = 0x23B
 MD_TAG, MDP_S_USED = 0x3B400, 0x3E380
 
