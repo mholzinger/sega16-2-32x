@@ -1426,6 +1426,17 @@ ifdef FBTEXT
 SHCCFLAGS += -DFB_TEXT_READ
 MDCCFLAGS += -DFB_TEXT_READ
 endif
+# `make ... MDHSCR=1` = LOOP-DECOMPILE 25. The game's two HORIZONTAL scroll
+# stores (0x2AD2 foreground, 0x2AEE background) are rewritten to thunks that
+# do the original store AND write the MD hscroll table directly, converting
+# with MD = S16 - 192 (measured, LOOP-DECOMPILE 24: same sign, and 192 is the
+# 24-column visible-window origin). Row scroll is provably unused, so a
+# whole-plane value is the whole story (LOOP-DECOMPILE 23).
+# ADDITIVE: the shim still writes sc[3]/sc[7] from its own packet, so this
+# build should be PIXEL-IDENTICAL to the baseline. That is the gate.
+ifdef MDHSCR
+MDCCFLAGS += -DMD_HSCROLL_DIRECT
+endif
 # `make ... FLICKFUSE=1` = LOOP 21 flicker fusion. The arcade renders the
 # Zeus/orb apparition's translucency TEMPORALLY: the record's presence in
 # the sprite list is duty-modulated (measured fade-in 1/8 -> 1/4 -> 1/3,
@@ -1799,6 +1810,26 @@ endif
 ifdef FBXBOTH
 MDCCFLAGS += -DFBX_BOTH
 endif
+# PGSKIPPKT=1 = LOOP29 137. The page truth (cap_page/restore_pages)
+# excludes the two packet regions that live inside game tile-RAM pages:
+# the R60 packet + publish word in page 0 (0x12000-0x1283F) and MD-plane
+# packet B in page 12 (0x1E800-0x1EFFF). Measured on the dblfast line in
+# steady play: pg_watch = 0x1001 -- exactly those two pages, watched
+# forever because the pipeline's own writes dirty them every vint, 23
+# lines of capture and ~20 of restore per flip for bytes that are not
+# game truth. The game writes zero tilemap pages in steady level-1 play.
+ifdef PGSKIPPKT
+SHCCFLAGS += -DPG_SKIP_PKT
+endif
+# FBXISRLIFT=1 = LOOP29 137. fbx_lift() runs at the top of flip_span,
+# BEFORE the FS write, so it reads the bank the 68K's tail blast wrote
+# (no flip can have intervened). That makes FBXBOTH's second blast
+# before the post unnecessary -- the 12 lines of 68K FB writes between
+# the consumes and the raise. The body's lift stays as a fallback for
+# vints where the ISR did not reach flip_span.
+ifdef FBXISRLIFT
+SHCCFLAGS += -DFBX_ISRLIFT
+endif
 # PALSTAMP=1 = SESSION 7: extra HV stamps inside the 68K packet build
 # (0xFFA0C4 after the dirty count, 0xFFA0C0 before the rotor loop,
 # 0xFFA0C2 after it) next to the push-autopsy stamps 0xFFA0B4..BE.
@@ -2031,6 +2062,12 @@ $(MDOBJS) $(SHOBJS): $(FLAGSTAMP)
 # flag flip can compile md_main.o against the stale header (the #error
 # guard in md_main.c is the backstop that caught it)
 md_src/md_main.o: md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h
+# MDHSCR generates one more header in the same patch_game run; without this
+# edge md_main.o compiles before it exists (LOOP-DECOMPILE 25).
+ifdef MDHSCR
+md_src/md_main.o: md_src/hscr_thunks.h
+md_src/hscr_thunks.h: md_src/game_body.bin
+endif
 
 # build stamp header: git short hash as u32 -> DIAG[18] at boot, so every
 # savestate self-identifies its commit. Regenerated when HEAD changes.
@@ -2121,7 +2158,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) python3 tools/patch_game.py
+	@GAME=$(GAME) MDHSCR=$(MDHSCR) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin
