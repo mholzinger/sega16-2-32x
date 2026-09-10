@@ -881,3 +881,47 @@ is the nearest existing machinery.
 `BGPACK2` stays default-off and is kept: it is the falsifier for any
 future dedupe work. If the packer ever dedupes properly, this flag
 should render identically to the 3-line line.
+
+## 123. THE MASTER IS NOT BUSY: ONLY 29% OF mtask IS WORK
+
+Built `make ... MTASKWHY=1` to split the master's per-generation tail
+before committing to the palette/streaming arc. It changed the diagnosis.
+
+**First, a fact that reframes LOOP29 117.** The ship line sets
+BANDSHIFT=36 / RG2SHIFT=40, which trips `NAT_ALL_SLAVE 1` (m_main.c:842):
+**every master compose range is EMPTY.** The master composes no bands at
+all; its per-generation tail is maps-ONLY (text moved whole to the slave).
+So mtask was never sprite compose, and "the master's compose is the
+critical path" (entry 117) was wrong in attribution.
+
+**Measured, play2 script, 600 vints, 167-595 generations:**
+
+    mtask span (PHASECENSUS PH[1])     3.32 vints/gen
+    ticks actually inside the drain    0.95 vints/gen   = 28.7%
+    build_maps_chunk calls             10.0 /gen, 1151 ticks each (25 lines)
+    drain branch visits                 1.5 /gen
+    gate skips past NAT_DRAIN_CUT      59.7 /gen  (poll iterations in the
+                                       last 6% of the vint; NAT_DRAIN_CUT
+                                       is 11300 of 12052, so the gate is
+                                       WIDE and is not the constraint)
+
+    all accounted master DIAG tasks    0.44 vints/gen
+
+**So the master's SPAN is on the critical path and the master's WORK is
+not.** It is waiting. Combined with LOOP29 118 (the slave never takes its
+idle branch), the saturated processor is the SLAVE, and mtask is long
+because the master's tail queues behind the slave's compose: `echo` has
+the slave finishing at 1.61 vints and the master's tail landing 1.7 vints
+after that.
+
+**UNRESOLVED DISCREPANCY — do not build on either number yet.** My
+`mt_drain_ticks` says the drain costs 0.95 vints/gen; the shipping
+`DIAG[11]` says 0.27. `diag_add(11, ...)` is called from three different
+sites (m_main.c:8970, 9109, 9179) so the slot is shared across code paths
+and I trust my own placement more — but 3.5x is too big to wave through,
+and this project has lost days to exactly that. Reconcile before using it.
+
+**What it implies if it holds:** the sprite offload is still the right
+direction but for a different reason than entry 119 assumed — it would
+unload the SLAVE, which is saturated, not the master, which is idle. The
+palette-line work remains the gate on that.

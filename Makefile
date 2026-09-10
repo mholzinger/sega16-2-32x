@@ -1573,6 +1573,16 @@ endif
 # sampled frame, so 2 lines x 15 pens holds it exactly. NOT proven for
 # attract (m_main.c:288 claims a worst window of 36 distinct). Gate:
 # background colour count and a play pass.
+# `make ... MTASKWHY=1` = LOOP29 123: split the master's per-generation
+# tail. PHASECENSUS puts mtask at 2.73 of a 2.74-vint wall and the ship
+# line's tail is maps-ONLY (NAT_ALL_SLAVE=1). Counts FRT ticks actually
+# spent inside the build_maps drain, chunks, visits, gate skips and
+# completions -- separating "2.73 vints of work" from "a short drain
+# spread across three vints". Counters in .bss; read the mt_* symbols
+# from rom/s16.lst. PROBE ONLY.
+ifdef MTASKWHY
+SHCCFLAGS += -DMTASK_WHY
+endif
 ifdef BGPACK2
 SHCCFLAGS += -DBG_PACK2
 endif

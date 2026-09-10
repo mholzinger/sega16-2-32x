@@ -847,6 +847,20 @@ static uint16_t nat_t0;          /* launch FRT stamp — the gen-wall
 static uint8_t nat_bank;         /* the generation's bank word (cat1) */
 static uint8_t nat_mrg;          /* master compose cursor: band */
 static uint8_t nat_mphase;       /* 0 clear, 1 sprites, 2 cat1, 3 text */
+#ifdef MTASK_WHY
+/* MTASK SPLIT (LOOP29 123). PHASECENSUS says mtask is 2.73 of the
+ * 2.74-vint generation wall, and on the ship line NAT_ALL_SLAVE=1 makes
+ * the master's tail maps-ONLY. So is that 2.73 vints of build_maps WORK,
+ * or a short drain spread thin because the master round-robins it against
+ * its other tasks? Different fixes. volatile + .bss: the mdspr_why
+ * lessons (LTO dead-stores a never-read static; the 0x28Fxx scratch has
+ * collisions to #16). PROBE ONLY. */
+static volatile uint32_t mt_drain_ticks;   /* FRT actually inside the drain */
+static volatile uint32_t mt_drain_chunks;  /* build_maps_chunk calls */
+static volatile uint32_t mt_drain_visits;  /* times the drain branch ran */
+static volatile uint32_t mt_gate_skips;    /* mtask set but past the cut */
+static volatile uint32_t mt_done;          /* drains that completed */
+#endif
 static uint8_t nat_my;           /* strip cursor within the band */
 #define NAT_WALL ((volatile uint32_t *)0x26028F50)
 #ifdef PHASE_CENSUS
@@ -8911,10 +8925,18 @@ RAMCODE void m_main(void)
                 if (dt > 6500)
                     continue;
 #else
-                if (dt > NAT_DRAIN_CUT)
+                if (dt > NAT_DRAIN_CUT) {
+#ifdef MTASK_WHY
+                    mt_gate_skips++;
+#endif
                     continue;
+                }
 #endif
                 uint16_t tq = frt();
+#ifdef MTASK_WHY
+                mt_drain_visits++;
+                uint16_t mt_t0 = frt();
+#endif
                 TOK(0);                  /* busy: the maps drain */
                 /* the tail is maps-ONLY (text moved whole to the slave:
                  * one sbuf writer per generation). Drain chunks until
@@ -8927,8 +8949,15 @@ RAMCODE void m_main(void)
                     int done;
                     do {
                         done = build_maps_chunk(nat_par ^ 1);
+#ifdef MTASK_WHY
+                        mt_drain_chunks++;
+#endif
                     } while (!done
                              && (uint16_t)(frt() - t_vint) <= NAT_DRAIN_CUT);
+#ifdef MTASK_WHY
+                    mt_drain_ticks += (uint16_t)(frt() - mt_t0);
+                    if (done) mt_done++;
+#endif
                     if (done) {
                         nat_mtask = 0;
 #ifdef PHASE_CENSUS
