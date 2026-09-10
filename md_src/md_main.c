@@ -1862,6 +1862,17 @@ static void r60_push(void) {
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
+#elif defined(BOOT_ENTRYV) || defined(BOOT_POSTV)
+		/* LOOP29 146: the 68K's own timeline on hardware, in lines from
+		 * vblank start: ENTRYV = the vint handler's consume entry stamp
+		 * (0xFFB0B0), POSTV = the V at post (0xFFA0A0). */
+#define VLINE2(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		uint8_t p0 = 0;
+#ifdef BOOT_ENTRYV
+		uint8_t p2 = VLINE2((uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8));
+#else
+		uint8_t p2 = VLINE2((uint8_t)(*(volatile uint16_t*)0xFFA0A0 >> 8));
+#endif
 #elif defined(BOOT_VALUE_SEL)
 		/* the SELECTION phase alone: entry -> selection/compare done.
 		 * Under FB_XPORT the whole push read 217 lines against the FIFO

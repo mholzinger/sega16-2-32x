@@ -1950,3 +1950,12 @@ On ares it is par with vi4 (edge declines somewhat higher: the join
 sometimes waits on the slave's pickup). The point is the FPGA, where the
 master's inline capture was half of the ~20 lines that missed the guard
 (144). Rig numbers: below.
+
+    vi7 on the rig: mean lines at the guard 61 63 42 42 (two "42 no-bias"
+    = channel not posted); FS writes per 64 vints 4 0 7 (two not posted).
+    NO GAIN ON SILICON. The slave's pickup latency, which ares hides
+    under the post wait, adds on the FPGA: its service points come
+    between compose strips that run at real speed. vi7 renders fine on
+    ares and is not a hardware improvement; vi4 stays the line.
+    Next: the 68K's own hardware timeline (entry line, post line), since
+    the 21-25-line post wait is now the largest term.

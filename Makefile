@@ -802,6 +802,14 @@ endif
 # executed from 68K WRAM / from cart ROM, through the value instrument.
 # ROM minus WRAM is the adapter's fetch tax on 68K code. Pair with
 # SHIMBURN=N.
+# BOOTENTRYV=1 / BOOTPOSTV=1: LOOP29 146, paint the 68K's vint entry line
+# / post line (lines from vblank start) through the value instrument.
+ifdef BOOTENTRYV
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
+endif
+ifdef BOOTPOSTV
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_POSTV
+endif
 ifdef BOOTBURNW
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_BURN_W
 endif
