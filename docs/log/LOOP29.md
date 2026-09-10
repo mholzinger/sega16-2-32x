@@ -1672,3 +1672,27 @@ the identical black-background failure at 30 Hz flips: also transport.
     lift are separated by the FM protocol, not by a barrier; find those
     5 before shipping.
   - Motion on a matched game timeline: see the sweep line below.
+
+### The motion sweep (13 windows, 1600-4000, every 200 frames)
+
+    rom            MOTION  any-change   per-window MOTION
+    vi               4.7      24.4      3 3 4 11 3 8 8 3 1 2 14 0 1
+    dblfast_clean   17.0      33.5      5 4 1 0 1 40 44 44 43 6 10 12 11
+    base             2.7       8.2      1 0 2 8 4 4 8 3 1 0 1 1 2
+    dbl_noedge       3.4       8.2      0 2 2 1 8 9 8 4 1 0 1 2 6
+
+dblfast's four 40-44 windows are frames 2600-3200, scene timer 991-
+1181. vi reaches that timer range at frames 1806-2186, where the
+frame-indexed input script is doing something else, and its windows
+there read 3-4. **The fixed script gives a faster rom different inputs
+at the same game moment, so MOTION is not an A/B across logic rates.**
+What IS measured on vi at 2600-2640 (the script's hold-right stretch):
+the background band shifts -12 px then -8 px per 20 frames (dblfast: -4,
+0) and 48-52% of the area changes per 20 frames, so the planes scroll
+and the picture moves; consecutive-frame changes are sprite-sized, under
+the 5% MOTION threshold. The honest presented-frame number for vi is the
+flip trace: 95-100 FS writes per 200 vints, none deferred.
+
+**Next: Mike's play pass on `rom/night/vi.32x` against `dblfast_clean`,
+then the MiSTer.** The MOTION metric needs an input script keyed to the
+game's timer before it can rank roms of different speed.
