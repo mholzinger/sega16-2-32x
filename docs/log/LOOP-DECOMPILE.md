@@ -996,3 +996,78 @@ RANKING WORK.
 Their question 5 — how the game classifies a tile as CATEGORY 1, which is
 48% of the saturated processor's work — is aimed at the actual bottleneck
 and is where this thread should go next.
+
+---------------------------------------------------------------------
+## 28. The object table: 64 slots of 128 bytes, and the struct by census
+
+The dispatcher at 0x398E, read against our bytes:
+
+    398e:  movea.w #$C000,fp        object table base = 0xFFC000
+    3996:  tst.b   (fp)             bit 7 of $00 = ACTIVE
+    399a:  bpl.s   0x39B6           inactive: skip
+    39a8:  movea.l 2(fp),a0         $02 = routine pointer
+    39ac:  jsr     (a0)
+    39b6:  lea     128(fp),fp       STRIDE 128
+    39be:  cmpi.b  #64,$FFF109      64 SLOTS
+    39c4:  bcs.s   0x3996
+
+So objects live at 0xFFC000-0xFFDFFF, 64 x 128 bytes, and 0xFFF109 is the
+current index. 0xFFF148 is a SOLO FILTER: when non-zero, only the slot
+whose index matches runs its routine and every other slot is sent to
+0x3F04 instead.
+
+HANDOFF-DECOMPILE lists fields $00-$16. That is 23 bytes of 128, so 82%
+of every object was undocumented.
+
+**Derived by census, not by reading.** A6 is the object base by
+convention (the dispatcher sets it; handlers inherit it), so every
+`(d16,A6)` access in the program is a field access:
+
+    tools/ghidra_run.sh script object_census.py OUT.json
+
+5608 accesses, 90 of the 128 offsets touched. The heaviest:
+
+    off   accs  funcs  writes/reads   note
+    0x22   535    152      503/32     byte
+    0x21   422    114      311/111    byte
+    0x24   324     96      280/44     LONG — patch_game already knows
+                                      this one: DATA_PTR_NORM 0xDBA8
+                                      `movea.l (0x24,A6),A4`
+    0x14   267     66      215/52     anim_frame (known)
+    0x20   258     78      228/30     byte
+    0x23   252     44      227/25     byte
+    0x2E   242     80      228/14     byte
+    0x00   225    120      196/29     status (known)
+    0x02   101     74       99/2      routine pointer — 99 writes, and
+                                      the 2 reads are the dispatcher
+
+Four structural results the census gives for free:
+
+  1. **0x22 is the busiest field in the program** — more accesses than
+     any other, touched by 152 functions, and written 16 times for every
+     read through A6. A flag handlers SET and something else consumes
+     through a different register. It is the single most valuable unknown
+     in the struct.
+  2. **0x20-0x23 is a hot four-byte cluster**, all byte-sized and all
+     write-dominated. Likely one group, not four unrelated flags.
+  3. **0x6C is an ARRAY** — the census flags indexed access, which
+     matches 0x5D18 `move.b (0x6c,A6,D0w),(0xa,A6)`: a per-object table
+     of palette slots selected by index. 0x6C-0x6F.
+  4. **The object is 128 bytes but the dense core is 0x00-0x4F.** Above
+     0x50 the counts collapse into single digits and few functions —
+     per-class scratch, not shared structure.
+
+The untouched offsets are almost all ODD (0x03, 0x05, 0x07, 0x0F, 0x11,
+0x13, ...), which is the interior of word fields and is a consistency
+check on the widths rather than a gap.
+
+UNPROVEN. This says WHERE the fields are and how they are used, not what
+they mean. The width column in the generated map is crude — it takes the
+dominant access size and stops at the next touched offset, so a long at
+0x02 or 0x24 is displayed as 2 bytes because the following word is also
+addressed directly. Read the size histogram, not the width.
+
+NEXT: name 0x22 by watching it. Dump 0xFFC000-0xFFDFFF across consecutive
+frames; fields that change every frame are position and animation, fields
+that change only at state transitions are configuration. That separates
+the two classes without reading a handler.
