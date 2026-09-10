@@ -1169,7 +1169,9 @@ They left one question, correctly flagged as a rendering-thread call:
 does choosing the three lines per frame create a visible seam when the
 winning palette changes? Measured on `rom/night/dblfast_clean.32x`:
 
-    consecutive frames 3000-3006   trio changed 0 of 6   (0%)
+    consecutive frames 3000-3019   trio changed 1 of 19  (5%)   [full run]
+    (the first read of this, over only 3000-3006, said 0 of 6 -- the
+     full 20 frames find one change, so "zero churn" was too strong)
     every 100 frames, 1500-2800    trio changed 4 of 13  (31%)
     mean top-3 coverage            76.2% of live records
 
@@ -1178,7 +1180,7 @@ winning palette changes? Measured on `rom/night/dblfast_clean.32x`:
     2000-2500  [9,10,11] STABLE for 600 frames
     2600-2800  [0,9,10]
 
-**Frame-to-frame churn is ZERO.** The changes cluster at actor
+**Frame-to-frame churn is ~5%, one change in 19 transitions.** The changes cluster at actor
 transitions (three in a row across 1700-1900, a scene change) and are
 isolated events a handful of times across the level. A reassignment
 therefore costs at most ONE frame of those sprites falling back to
