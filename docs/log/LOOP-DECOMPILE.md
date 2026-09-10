@@ -802,3 +802,50 @@ System 16B video hardware can do.
 NOT MEASURED HERE: whether the System 16 and MD scroll sign conventions
 agree, and what the tile priority bit costs. Both are rendering-thread
 questions.
+
+---------------------------------------------------------------------
+## 24. The scroll conversion is a constant: MD hscroll = S16 hpos - 192
+
+Entry 23 left the scroll sign convention unmeasured, and it gates the
+cheapest patch. Measured on our own rom rather than read out of the shim:
+
+    ares-headless --frames N --input discover/inputs/play_level1.csv \
+        --dump wram:0xFFF0E0:0x10:s16.bin \
+        --dump vram:0xFC00:0x8:hs.bin  rom/s16.32x
+
+0xFC00 is the MD hscroll table (md_start.s:242 sets reg 0x8D), plane A at
++0 and plane B at +2.
+
+    frame   S16 fgH bgH   MD hsA hsB   (md - s16) mod 1024
+     1400       156 156      988 988          832
+     2200       147 147      979 979          832
+     3000       112 112      945 945          833
+     3800        53  53      885 885          832
+
+**Same sign, constant offset.** 832 mod 1024 is -192, and 192 is 24 tile
+columns — exactly the visible-window origin entry 21 got from the
+hardware notes ("the viewable portion starts at column 24"). The
+conversion is not a convention to be discovered, it is the difference
+between a 64-column name table shown from column 24 and an MD plane shown
+from column 0.
+
+The single 833 at frame 3000 is one pixel and appears once in four
+samples; the likely cause is sampling the two memories at different
+points within a frame, not a second rule. Unproven either way.
+
+VERTICAL IS UNMEASURABLE IN THIS SCENE. Both vertical registers sit at 32
+for the whole of level 1 across 2400 sampled frames, and the MD VSRAM
+value equals them exactly. That is consistent with a straight copy at
+offset 0 and it does NOT establish the sign, because nothing moved. A
+vertically scrolling scene is needed before anyone relies on it.
+
+Also worth recording: **the two tile layers scroll together in level 1.**
+fgH and bgH are equal at every frame sampled. Whatever parallax the game
+has, it is not in this scene.
+
+**This makes patch point A a six-byte in-place rewrite.** The store is
+`move.w d0,$410E9x` = 33C0 + 4 bytes. A `jsr abs.l` is 4EB9 + 4 bytes.
+Identical length, so each of the four sites can become a call to a
+handler with no reflow and no address shifting — the shape
+`tools/patch_game.py` already uses for its dispatcher thunks (it writes
+`0x4EB8` + word + `nop` at DISPATCHERS).
