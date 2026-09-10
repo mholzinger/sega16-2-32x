@@ -1744,3 +1744,44 @@ vints, 13 x 3, 2 x 6, 2 x 1 — a regular 30 Hz, generation-bound (held
 compose (cat1 tiles, 48% of it), not the flip.
 
 Not play-passed. `vi.32x` is superseded; do not hand it over.
+
+## 139. THE FPGA NEEDS THE MD-PLANE MAILBOX MIRRORED ACROSS THE BANK SWAP (2026-09-10 12:25)
+
+Mike's "black background" verdicts on vi and vi2 were from the MiSTer,
+not ares. His ares state of vi2 (`rom/night/vi2.bs1`, vint 344,
+`tools/state_frame.py` after fixing its VRAM anchor for repeated art)
+renders the full Zeus intro; his MiSTer shots of the same scene
+(`20260910_161115/161450-vi2.png`) show the 32X layer (Zeus, text, the
+grave) over BLACK: the MD planes are missing on hardware only.
+
+Isolation on the rig, one build each, screenshots via /dev/MiSTer_cmd:
+
+    vi3 = vi2 + PGKEEPB (page 12 second half captured/restored again):
+          attract graveyard with sky, trees, temple. Background BACK.
+          Headless cost: FS write past the guard on most vints, 10637 edge
+          declines in 6915 cycles, flips ~21 per 100 (vi2: 48).
+
+So the page-12 restore was doing a second job: carrying MD-plane packet
+B (0x1E800) into the new draw bank at every flip. On ares the 68K's
+vint-top consume always finds the packet in the bank the master wrote it
+to; on the FPGA it does not, and without the mirror the planes never get
+their tiles/pens. Why the FPGA differs is NOT established (a
+consume-vs-latch ordering difference is the candidate); the mirror is
+what the hardware needs, so the mirror stays, made cheap:
+
+**vi4** (`rom/night/vi4.32x`, same flags as vi2): flip_span reads the
+two packet magic words before the FS write (two loads) and, after the
+latch, replays a still-unconsumed packet A/B from the master's own
+staging image (`md_pktA` 0x06039A00 / `md_pkt` 0x0603E780, 368 longs,
+blank bit re-applied) into the new bank, or zeroes the slot if it was
+consumed -- exactly what the page restore used to do for those bytes,
+off the pre-flip path.
+
+    vi4 headless, 0-7000: FS writes 454-501 per 1000 frames, 1 deferred
+    of 3340; ISR flips 3325, held 3035, edge 620; torn 4; CRAM full;
+    game logic 50.1%, misses 49.9%; level-1 stills correct.
+    (DIAG[39]/[42] are shared with the window's pend counters -- the
+    "carried" counts there are not separable; give them their own slots
+    before reading them.)
+
+MiSTer result for vi4: see the line below.

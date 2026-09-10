@@ -4679,8 +4679,15 @@ static uint16_t pg_fresh[2];
  * captured whole again; page 12 is the blank page, holds only pipeline
  * packets, and is skipped whole -- TILEMAP_U page 12 stays the zeros
  * boot wrote, which is what "blank" means. */
+#ifdef PG_KEEP_B
+/* LOOP29 139 probe: keep capturing/restoring MD-plane packet B (page 12
+ * second half) across banks; skip only the R60 packet in the first half. */
+#define PG_LO(pg)  ((pg) == 12 ? 0x200 : 0)
+#define PG_HI(pg)  0x400
+#else
 #define PG_LO(pg)  0
 #define PG_HI(pg)  ((pg) == 12 ? 0 : 0x400)
+#endif
 #else
 #define PG_LO(pg)  0
 #define PG_HI(pg)  0x400
@@ -5810,6 +5817,10 @@ static uint16_t vbs_t[5], vbs_t2[2];
 #else
 #define VBS(slot) do { } while (0)
 #endif
+#ifdef PG_SKIP_PKT
+static uint16_t mir_a, mir_b;            /* packet magic words read pre-flip
+                                          * (the mailbox mirror, LOOP29 139) */
+#endif
 #if defined(FBX_ISRLIFT) && defined(FB_XPORT)
 RAMCODE static void fbx_lift(void);      /* defined below (FB_XPORT) */
 static unsigned fbx_landed;              /* tentative; the definition
@@ -6013,6 +6024,20 @@ static int flip_span(void)
     cap_drain(13);               /* ALL of it — correctness */
 #endif
     VBS(3);                             /* after the truth drain */
+#ifdef PG_SKIP_PKT
+    /* MD-PLANE MAILBOX MIRROR (LOOP29 139). The page-12 restore used to
+     * carry MD-plane packet B across the bank swap, and the FPGA NEEDS
+     * that: without it the 68K's consume misses the packet the master
+     * wrote and the MD planes go black on the MiSTer (vi2 black, vi3
+     * with the page-12 capture back: full background). Restoring the
+     * half page cost ~6 lines on the pre-flip path and put the FS write
+     * past the guard again (vi3: 10637 edge declines in 6915 cycles).
+     * So: read the two magic words here (2 loads), and after the latch
+     * replay a still-unconsumed packet from the master's own staging
+     * image into the new bank, or zero the slot if it was consumed. */
+    mir_a = (*(volatile uint32_t *)0x24011A00u) >> 16;
+    mir_b = (*(volatile uint32_t *)0x2401E800u) >> 16;
+#endif
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     {
         uint32_t g2 = 2000000;
@@ -6297,6 +6322,28 @@ static int flip_span(void)
     }
 #else
     restore_pages((uint16_t)(cycle_dirt | pg_watch));
+#endif
+#ifdef PG_SKIP_PKT
+    {
+        /* md_pktA / md_pkt: the exact FB images the window wrote (the
+         * #defines sit later in this file; the addresses are theirs). */
+        volatile uint32_t *da = (volatile uint32_t *)0x24011A00u;
+        volatile uint32_t *db = (volatile uint32_t *)0x2401E800u;
+        if (mir_a == 0xB6B6u) {
+            const uint32_t *sa = (const uint32_t *)0x06039A00u;
+            for (int i2 = 1; i2 < 368; i2++) da[i2] = sa[i2];
+            da[0] = sa[0] | (disp_blank ? 0x2000u : 0u);
+            DIAG[42]++;                  /* A carried across the swap */
+        } else
+            da[0] = 0;
+        if (mir_b == 0xB6B6u) {
+            const uint32_t *sb = (const uint32_t *)0x0603E780u;
+            for (int i2 = 1; i2 < 368; i2++) db[i2] = sb[i2];
+            db[0] = sb[0] | (disp_blank ? 0x2000u : 0u);
+            DIAG[39]++;                  /* B carried across the swap */
+        } else
+            db[0] = 0;
+    }
 #endif
     VBS(35);                             /* after the restore */
 #ifdef FB_TEXT_READ

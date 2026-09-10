@@ -1825,6 +1825,11 @@ endif
 ifdef PGSKIPPKT
 SHCCFLAGS += -DPG_SKIP_PKT
 endif
+# PGKEEPB=1 = LOOP29 139 hardware probe: with PGSKIPPKT, still mirror MD-plane
+# packet B (page 12 second half) across banks through the page truth.
+ifdef PGKEEPB
+SHCCFLAGS += -DPG_KEEP_B
+endif
 # FBXISRLIFT=1 = LOOP29 137. fbx_lift() runs at the top of flip_span,
 # BEFORE the FS write, so it reads the bank the 68K's tail blast wrote
 # (no flip can have intervened). That makes FBXBOTH's second blast
