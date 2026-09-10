@@ -2013,3 +2013,11 @@ the game's object table at 0xFFC000, not a budget we chose.
       mask byte in steady play: 0x01 (the HUD row group)
 
 Rig numbers: below.
+
+    vi8 on the rig, five shots each:
+      mean lines at the guard    63 32 31 32 32   (vi4: 43 41 45 44)
+      FS writes per 64 vints     16 19 21 23 21   (vi4: 1 7 3)
+    The write is inside the 35.9-line guard on silicon now, and the
+    FPGA presents ~18 frames a second instead of 2-6. Still short of
+    ares' 32 per 64: the remaining declines and the generation holds
+    on real strips are the next split. vi8 is the line for Mike's eye.
