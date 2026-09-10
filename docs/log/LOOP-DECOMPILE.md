@@ -145,3 +145,91 @@ instructions and will invent sites. Neither number is the demand.
 Conclusion: do not quote a Ghidra-only census as the full palette
 demand. The reliable statement today is the runtime one in entry 4,
 because it counts what the game actually allocated.
+
+---------------------------------------------------------------------
+## 7. The sprite record's colour field is word 4, bits 5-0 (2026-09-10)
+
+LOOP29 126 read the sprite colour set as `w[4] & 0x3F` off the game's
+sprite RAM. That is correct and it is now grounded in the RTL rather
+than in convention.
+
+`srcref/jtcores/cores/s16/hdl/jts16_obj_scan.v:184` assigns
+`pal <= tbl_dout[5:0]` at state 5 on the System 16B path (`MODEL`).
+The word index is pinned by state 2 two cycles earlier, which takes
+`xpos <= tbl_dout[8:0]` — word 1 — so state 5 is reading word 4.
+Bank is bits 11-8 and priority bits 7-6 of the same word.
+
+The field holds the SLOT the allocator handed out ($0A,
+docs/log/LOOP-DECOMPILE.md 2), so a census of sprite RAM must map it
+back through the request table at 0xFFF500 before it means a palette.
+
+---------------------------------------------------------------------
+## 8. NEGATIVE RESULT — collapsing the trivial palettes buys one line, not four
+
+Entry 5 found five single-colour palettes each burning a hardware line
+and asked whether any of them sit in the crowded band. Measured:
+
+    tools/palette_bands.py rom/s16.32x
+
+which dumps sprite RAM at 0xFF7000 and the request table at 0xFFF500
+together, at frames 1800/2600/3000/3400/3800 of play_level1, and splits
+each 28-line band into real and trivial colour sets:
+
+    frame | b0  b1  b2    b3    b4    b5   b6   b7  | frame
+     1800 | 0+0 0+0 5+0   4+0   4+0   1+0  1+0  0+0 | 6+0
+     2600 | 0+0 0+0 4+1   3+1   3+1   1+0  1+0  0+0 | 5+1
+     3000 | 0+0 0+0 2+1   2+1   5+1   3+0  2+0  0+0 | 5+1
+     3400 | 0+0 0+0 3+1   3+1   3+1   1+0  4+0  2+0 | 7+1
+     3800 | 0+0 0+0 3+1   3+1   3+1   1+0  4+0  2+0 | 7+1
+
+    worst BAND real colour sets: 5
+
+Only one of the five trivial palettes ever reaches a band: 0x01, solid
+(30,0,0), in bands 2/3/4 of four of the five frames. The other four hold
+slots without being drawn.
+
+Conclusion: collapsing the trivial palettes takes the worst band from
+six sets to five. The port has three sprite lines after the text ramp,
+so this does not close the gap on its own. Entry 5's "frees four of the
+seventeen" is right about slots and wrong about lines; four of those
+slots were not costing a line in the first place.
+
+Every slot referenced by a sprite record was present in the request
+table at all five frames, so nothing was dropped from the count.
+
+NOT a reproduction of LOOP29 126. That entry's per-frame whole-frame
+counts were 5/6/6/6/5 and these are 6/6/6/8/8, and the rows do not line
+up frame for frame. Different rom build is the obvious candidate and it
+has not been checked. Take the shape of the result, not the row.
+
+---------------------------------------------------------------------
+## 9. Three CRAM lines cover 70% of live sprite records, with no colour change
+
+Same five dumps as entry 8, counting live sprite RECORDS per palette
+rather than distinct sets per band:
+
+    frame  records  top1  top2  top3  top4
+     1800       21   33%   52%   71%   90%
+     2600       15   47%   60%   73%   87%
+     3000       12   58%   67%   75%   83%
+     3400       15   53%   60%   67%   73%
+     3800       20   35%   50%   65%   80%
+
+    three lines cover 58 of 83 records across the five frames = 70%
+
+One palette dominates every frame: index 0x32 carries 7 or 8 records on
+its own, 33-58% of the frame. The next three are 0x28, 0x29 and 0x2A,
+which are a related family by eye (all begin 5CEF) but union to 20-23
+colours, so they cannot be merged into one line without changing what
+the game looks like.
+
+Conclusion: picking the three sprite lines per frame by record count
+sends about 70% of records to the VDP with no colour drift at all. The
+port renders roughly 4% in hardware today (LOOP29 127), and that entry
+puts 39% of the frame budget in the framebuffer paint those records
+cause. This is a lever on that number and it needs no palette surgery.
+
+Unproven here: whether the per-frame choice can be made without a
+visible seam when the winning set changes between frames, and whether
+records-per-palette is the right proxy for painted pixels. Both are
+rendering-thread questions.
