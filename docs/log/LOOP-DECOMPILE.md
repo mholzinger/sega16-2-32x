@@ -233,3 +233,113 @@ Unproven here: whether the per-frame choice can be made without a
 visible seam when the winning set changes between frames, and whether
 records-per-palette is the right proxy for painted pixels. Both are
 rendering-thread questions.
+
+---------------------------------------------------------------------
+## 10. The tilemap unpacker, decoded (2026-09-10)
+
+HANDOFF-DECOMPILE question 2. Verified against our bytes with
+
+    $MARSDEV/m68k-elf/bin/m68k-elf-objdump -D -b binary -m 68000 \
+        --start-address=0x1694 --stop-address=0x1760 roms/altbeast/prog68k.bin
+
+`unpack_level_tilemap` (0x1694) indexes a six-byte descriptor at 0x1CE2
+with `0xFFF142 & 7`. The word goes to 0xFFF095, which is the same
+location `set_level_palettes` reads to pick its background palette block
+(entry 3). The long is the packed data pointer.
+
+    scene 0  block 1  data 0x029E00      scene 3  block 2  data 0x0369C0
+    scene 1  block 1  data 0x02EF10      scene 4  block 2  data 0x03B0E0
+    scene 2  block 1  data 0x0324D0
+
+There are five entries. Indices 5-7 read into the copyright string, so
+the mask at 0x169C is wider than the table and 0xFFF142 must never
+exceed 4.
+
+The map arrives as TWO separate full sweeps of the same region, not one:
+
+  - 0x16BE writes the HIGH byte of every tile word, from 0x400000,
+    stride 2, 20480 words. Encoding is (count, value) pairs; the count
+    drives a `dbf`, so a run is count+1 bytes.
+  - 0x16DE writes the LOW byte, from 0x400001, same stride and count.
+    A non-zero byte is a literal. Zero is the escape: the next byte is a
+    run length of zeros, and a zero length means a single zero literal.
+
+That is 40960 individual byte writes per scene load, in one burst, before
+`set_level_palettes` is called at 0x760. Two smaller writers follow:
+0x174E lays a 40x20 block at 0x40A230 with a constant high byte of 0xA5,
+and 0x170A lays a blocked pattern at 0x40B230 with a constant high byte
+of 0x04. Both step 128 bytes per row, so they sit in 64-tile-wide pages.
+
+The rebase is intact: the three `lea $400000` in the arcade program
+appear as `lea $852000` in `md_src/game_body.bin`, same count.
+
+---------------------------------------------------------------------
+## 11. Plane B is tile page 0 and Plane A is page 7, for the whole game
+
+The System 16B layer registers live in a 0x200-byte block at text RAM
+0x410E00. Offsets from `srcref/jtcores/cores/s16/hdl/jts16_mmr.v:94-105`:
+
+    0xE80 scr1_pages_std   0xE82 scr2_pages_std
+    0xE84 scr1_pages_alt   0xE86 scr2_pages_alt
+    0xE90 scr1_vpos_std    0xE92 scr2_vpos_std
+    0xE94 scr1_vpos_alt    0xE96 scr2_vpos_alt
+    0xE98 scr1_hpos_std    0xE9A scr2_hpos_std
+    0xE9C scr1_hpos_alt    0xE9E scr2_hpos_alt
+
+A `pages` word is four 4-bit page numbers, one per quadrant
+(`jts16_scr.v:107-110`, upper-left in bits 15-12 down to lower-right in
+bits 3-0).
+
+The whole program writes the page selects at exactly two sites, both
+with the same constants and no register-indirect writer anywhere:
+
+    1b0d6:  move.w #$7777,$410E80      scr1 = page 7 in all four
+    1b0de:  move.w #$0000,$410E82      scr2 = page 0 in all four
+    1ba42:  move.w #$7777,$410E80
+    1ba4a:  clr.w  $410E82
+
+The four scroll registers are written every vint from inside the IRQ4
+handler (0x2AD2, 0x2AE0, 0x2AEE, 0x2AFC — hpos and vpos for both
+planes), so scroll moves and pages never do.
+
+Conclusion: scr2 always draws tile page 0 and scr1 always draws page 7.
+A scene change rewrites page CONTENT, never the selects. Page 0 is
+0x400000-0x400FFF, which is FB staging 0x852000 and 32X DRAM 0x12000.
+
+---------------------------------------------------------------------
+## 12. NEGATIVE RESULT — the tilemap source is healthy; the Plane B defect is downstream
+
+The two-pass structure in entry 10 suggested a parity split: if a
+framebuffer bank flip landed between the high-byte sweep and the
+low-byte sweep, one bank would hold high bytes over stale low bytes.
+Measured and false.
+
+    ares-headless --frames N --dump dram:0:0x80000:dram_N.bin rom/s16.32x
+
+at N = 400, 700, 1000, no input. The staged region (DRAM 0x12000, and
+the second bank at 0x32000) is populated in both parities and in both
+banks:
+
+    frame 700 bank0   hi nonzero 17985/20480   lo nonzero 17642/20480
+    frame 700 bank1   hi nonzero 17976/20480   lo nonzero 17632/20480
+
+And both source pages from entry 11 fill and then behave as expected:
+
+    page 0 (scr2)  frame 400   42 distinct words -> 700  507 -> 1000  530
+    page 7 (scr1)  frame 400   56 distinct words -> 700  400 -> 1000  400
+
+Page 0 keeps changing after the load (197 bytes between 700 and 1000),
+which is the scrolling plane rewriting its incoming column. Page 7 is
+static after the load.
+
+Conclusion: the unpacker, the rebase and the framebuffer staging are all
+innocent. START-HERE's location of the defect in Plane B's UPLOAD path
+stands, and the 4 KB to instrument is DRAM 0x12000-0x12FFF, the source
+page scr2 draws from.
+
+One real but separate finding from the same dumps: the two framebuffer
+banks diverge in the staged tile region. At frame 1000 bank1 is
+byte-identical to bank1 at frame 700, 300 frames stale, while bank0 has
+moved on; 266 of 40960 bytes differ. The game writes tiles into whichever
+bank is current and nothing carries them to the other. Not enough to
+explain the title screen, and worth a look on its own.
