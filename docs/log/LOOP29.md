@@ -925,3 +925,49 @@ and this project has lost days to exactly that. Reconcile before using it.
 direction but for a different reason than entry 119 assumed — it would
 unload the SLAVE, which is saturated, not the master, which is idle. The
 palette-line work remains the gate on that.
+
+## 124. THE SLAVE SPLIT, AND ENTRY 123'S DISCREPANCY WAS MY OWN DENOMINATOR
+
+**First, the flagged discrepancy is RESOLVED and both instruments were
+right.** Entry 123 could not reconcile my `mt_drain_ticks` (0.95 vint/gen)
+with the shipping `DIAG[11]` (0.27). Two different denominators:
+
+    DIAG[9]      595 CYCLES     over 600 vints   (~1 per vint)
+    NAT_WALL[1]  167 GENERATIONS                 (~1 per 3.6 vints)
+    595 / 167  = 3.56   <- exactly the "3.5x" gap
+
+    DIAG[11] x 595 x 12052 = 1,935,865 ticks
+    mt_drain_ticks         = 1,921,403 ticks     agree to 0.7%
+
+START-HERE rule 4 is "divide before you claim" and I broke it. Nothing was
+wrong with either counter. **A GENERATION IS NOT A VINT: 167 generations
+in 600 vints, one per 3.6.** Every per-gen figure in this log should be
+read against that.
+
+**The slave pass split** (st_s/STB, already in the tree under
+PHASE_CENSUS; slave FRT is phi/8 = 48208/vint, 4x the master's):
+
+    SLAVE  clear + sprites      0.73 vints/gen
+    SLAVE  cat1 tiles           0.67 vints/gen
+    SLAVE  compose total        1.40 vints/gen
+    MASTER maps drain           0.95 vints/gen
+    generation wall             ~2.74-3.32 vints
+
+That is a coherent picture at last: slave compose 1.40 + master drain 0.95
+= 2.35 of a ~3-vint wall, the two partly overlapping. Nothing is missing
+and nothing is mysterious.
+
+**THE LEVER: cat1 is 48% of the slave's compose work.** The slave is the
+saturated processor (LOOP29 118) and category-1 foreground tiles are half
+of what it does. `CAT1MD=1` already exists to draw those on MD plane A
+instead — it passed the still-image gate on 2026-09-07 and FAILED Mike's
+play pass for shimmer and a second palette on the ground band through the
+transform (see the cat1md note). It was reverted for a RENDERING defect,
+not because the idea was wrong, and it is worth 0.67 vints/gen on the one
+processor that has no slack.
+
+**On Mike's notion** (hardcoded map, larger baked sprites): it addresses
+the OTHER half. Slave compose splits ~50/50 between sprites (0.73) and
+cat1 tiles (0.67), so bigger pre-baked sprite units attack the sprite half
+and CAT1MD attacks the tile half. They are complementary, not competing —
+but both land on the slave, which is the right target.
