@@ -99,23 +99,62 @@ def main():
             print("    %-22s adds %s" % (flag, ", ".join("-D" + d for d in defs)))
 
     # INERT STATE: a static array read by a guard but never written.
+    # Regex cannot do this: indices nest (`pal_retry32[pal_blk[j] >> 3] =`)
+    # and writes happen through `&name[...]` pointers. The first cut used
+    # `[^\]]*` and reported three writes-that-exist as inert. Match
+    # brackets properly instead.
     print("\n  INERT-STATE SCAN (static arrays read but never assigned):")
     inert = []
     for path, text in sorted(src.items()):
-        for m in re.finditer(r'^\s*static\s+(?:volatile\s+)?\w+\s+(\w+)\s*\[', text, re.M):
+        for m in re.finditer(r'^\s*static\s+(?:volatile\s+)?\w+\s+(\w+)\s*\[',
+                             text, re.M):
             name = m.group(1)
-            reads = len(re.findall(r'\b%s\s*\[' % re.escape(name), text))
-            writes = len(re.findall(
-                r'\b%s\s*\[[^\]]*\]\s*(?:=[^=]|\+\+|--|[-+*/|&^]=)' % re.escape(name), text))
-            writes += len(re.findall(r'\+\+\s*%s\s*\[' % re.escape(name), text))
-            if reads >= 2 and writes == 0:
+            # A macro alias hides the write: `#define RG_ACC(b) (rg_acc[b])`
+            # is written as `RG_ACC(0)[i] |= d[i]`, which never mentions
+            # rg_acc. If the name appears in ANY #define body, something
+            # else may write it and we cannot tell. Conservative on purpose.
+            if re.search(r'^\s*#\s*define\s+\w+(?:\([^)]*\))?[^\n]*\b%s\b'
+                         % re.escape(name), text, re.M):
+                continue
+            reads = writes = escapes = 0
+            for occ in re.finditer(r'(?<![\w.>])(&?)%s\b' % re.escape(name), text):
+                i = occ.end()
+                if occ.group(1) == "&":
+                    escapes += 1
+                    continue
+                if i >= len(text) or text[i] != "[":
+                    # bare mention: decays to a pointer, may be written afar
+                    if text[occ.start()-1:occ.start()] not in ".>":
+                        escapes += 1
+                    continue
+                depth = 0
+                while i < len(text):
+                    if text[i] == "[":
+                        depth += 1
+                    elif text[i] == "]":
+                        depth -= 1
+                        if depth == 0 and (i + 1 >= len(text) or text[i+1] != "["):
+                            break
+                    i += 1
+                j = i + 1
+                while j < len(text) and text[j] in " \t":
+                    j += 1
+                nxt = text[j:j+2]
+                if (nxt[:1] == "=" and nxt[1:2] != "=") or \
+                   nxt in ("++", "--", "+=", "-=", "*=", "/=", "|=", "&=", "^="):
+                    writes += 1
+                else:
+                    reads += 1
+            if reads >= 2 and writes == 0 and escapes == 0:
                 inert.append((path, name, reads))
     if inert:
         for path, name, reads in inert:
-            print("    %-28s %-22s %d reads, 0 writes  <-- pal_streak class"
+            print("    %-24s %-18s %2d reads, 0 writes, address never taken"
                   % (path, name, reads))
+            print("      ^ pal_streak class: a guard reading this is false forever")
     else:
-        print("    none found.")
+        print("    none. (Every static array is written, or its address "
+              "escapes so something else may write it.)")
 
     if dead:
         return 1
