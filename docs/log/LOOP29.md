@@ -2021,3 +2021,28 @@ Rig numbers: below.
     FPGA presents ~18 frames a second instead of 2-6. Still short of
     ares' 32 per 64: the remaining declines and the generation holds
     on real strips are the next split. vi8 is the line for Mike's eye.
+
+## 148. vi8 ON THE RIG: THE REMAINING GAP IS THE GUARD'S TAIL, NOT THE COMPOSE (2026-09-10 19:40)
+
+Per 64 vints, five shots each (ares in brackets, vi8):
+
+    edge declines DIAG[44]   32 20 16 33 18   [~2]
+    holds DIAG[29]           36 28 31 26 11   [~32]
+    game frames (misses)     33 64 39 30 34   [32]  (vi4: 24-48, median 28)
+    FS writes                16 19 21 23 21   [30]
+
+Holds match ares: the slave's compose is not slower on silicon in a way
+that costs frames. Declines do not: with the guard mean at 31-32 lines
+the distribution's tail still crosses 35.9 on a quarter to a half of
+the vints. The post wait is the term with the tail (21-27 on the rig,
+146), and its hardware excess over ares is the 68K's own path from
+entry to post: ~19 lines on silicon (entry 4-7, post 23-27) against ~10
+on ares (11 -> 21). The consumes are VDP DMAs out of the framebuffer
+through the adapter; measuring their span on the rig next
+(`BOOTCONSV=1`: V at cons.mark minus V at cons.entry).
+
+Two levers if that is it: DMA only what changed (the SAT and the
+sprite palette go every vint today), or the two-post protocol -- post
+before the consumes so the flip lands at ~15 lines, drop FM for the
+DMAs, post again for the window; the 139 mirror already carries the
+plane packets across the swap that this reorders.
