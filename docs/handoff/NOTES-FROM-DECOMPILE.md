@@ -576,3 +576,82 @@ any frame. And your point that the sky palette is static rom data per
 scene rather than anything allocated stands on its own merits — that is
 still a better story than the allocator-ordering theory, and it is worth
 a look independent of everything above.
+
+---------------------------------------------------------------------
+## 12. IF YOU READ ONE SECTION, READ THIS ONE
+
+Consolidated from the whole session. Ordered by what it changes for you,
+not by when I found it. Entry numbers are `docs/log/LOOP-DECOMPILE.md`.
+
+### Act on these
+
+**1. The sprite order list is BANDED, four banks of 64.** [48] 0xFFEC80
+is not a flat 256-entry list — it is `band*64 + slot`, where band is the
+object's priority band at $2F. So the upload loop's walk order IS the
+draw order: band 0, then 1, 2, 3. If your claim pass or SAT builder
+assumes a flat list, it is assuming the wrong ordering semantics.
+
+**2. Zoom is object field $4E, and the scale table is static rom at
+0x20000.** [48] 32-byte rows indexed by a size class from the frame data,
+column = `$4E & 31`, matching System 16's documented 5-bit zoom. LOOP29
+119 measured 2.0-3.8% of records as "zoomed: SH-2 forever" — you can now
+identify those from the OBJECT rather than by inspecting the record, and
+the scale ladder itself is rom you can bake.
+
+**3. The cat1 bitmap is baked and waiting.** [31] `tools/bake_cat1map.py`
+-> `sh_src/cat1map.bin` + `.h`. One bit per tile, 2560 bytes per scene,
+12800 total. Verified byte-for-byte against live tile ram. A static input
+cannot shimmer, so CAT1MD's failure was in how promotion was APPLIED.
+
+**4. Twelve unpatched STOP instructions, all in test mode.** [37] And the
+game's dropped-frame counter is displayed on exactly that screen, so
+wiring up that oracle means entering the one region with unpatched STOPs.
+Patch first.
+
+**5. Static per-scene rom data you can bake.** [31][35][44][46] Floor
+geometry (0xDEC4, height + X span triples), two sky palettes
+(0x32AE gradient, 0x4050 flat), per-scene music (0x1858), three actor
+palette identities (0x73DA, 0x92EA, 0x173A0), the cat1 map. None of this
+needs discovering at runtime.
+
+### Know these
+
+**6. Level 1 is not representative, and the spread is large.** [31][36]
+The cat1 share swings SEVENFOLD across scenes — scene 0 is 11.3%, scene 1
+is 43.8%. Scene 1's floor is a single flat segment across the level while
+scene 2 has 22. Any budget measured on level 1 understates the game.
+
+**7. Frame-number A/B is invalid for any timing change.** [25][44] Two
+thunk calls per vint desync a run by frame 2200. A two-run control proved
+the baseline is deterministic, so it is the change, not the rig. I then
+made the same mistake AGAIN comparing our rom against `mame altbeast`
+by frame number when the arcade had no inputs and was in attract. Use the
+game's-own-timeline alignment.
+
+**8. There are three palette write paths** (queue drain, colour cycler,
+per-scene block) and the object struct is mapped — sections 9-11 above.
+
+**9. TAS: safe now, conditional forever.** [38][39] $3E is an object
+claim lock; the tst/st replacement has a window a real TAS does not. I
+traced that interrupt context cannot reach a claim, so it is safe HERE.
+For any other title, re-run that check — a game that runs object logic
+from vblank needs a real atomic replacement.
+
+### Things I said that were WRONG
+
+Marked in the log, listed here so you do not act on a retracted claim:
+
+  - **Page 0 changing between frames** [12] — retracted [31]. The map does
+    not change; that was your packet. You were right.
+  - **"save position" at 0x65CA** [30] — retracted [35]. It is an
+    animation driver; I named it from two instructions.
+  - **Sprite frame table "182 entries", word = Y coordinate** [48] —
+    retracted [49]. It is 400 entries and the word is an offset.
+  - **Jump table at 0x6D70 "20 entries"** [17] — retracted [47]. It is 8;
+    my scan ran into 0x6D90's 12. Your REBASE_TABLES had it right.
+  - **"the hazard census reproduces TAS_SITES exactly"** [37] — it did
+    not, until I fixed a false positive and a false negative.
+
+The common cause in four of five: I judged whether a value LOOKED like a
+valid address instead of following it to its consumer. If I hand you a
+structure and do not say what reads it, treat it as unverified.
