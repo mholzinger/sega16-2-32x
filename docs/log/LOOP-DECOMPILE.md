@@ -1240,3 +1240,77 @@ rewrite the map at all — it scrolls the view across static pages. Those
 changing bytes were the R60 packet living inside page 0, which the
 rendering thread has since moved to page 12 (LOOP29 138). Their
 correction was right and my reading of it was wrong.
+
+---------------------------------------------------------------------
+## 32. The two biggest unnamed functions: the sound queue, and the animation driver
+
+Entry 30 left 0x03352 (77 callers, the most in the program) and 0x0669C
+(38 callers) unnamed. Both decode cleanly.
+
+**0x3352 — enqueue a sound command, with de-duplication.**
+
+    3352:  tst.b   d0              ; d0 = command
+    3354:  beq.w   0x33B0          ; command 0 = RESET
+    3372:  move.w  #$2700,sr       ; INTERRUPTS OFF while reading the
+    3376:  movea.w $FFF03E,a0      ;   write pointer and
+    337a:  move.b  $FFF03C,d1      ;   the count
+    337e:  move.w  #$2300,sr       ; on again
+    3396:  cmp.b   (a0)+,d0        ; scan the pending entries
+    3398:  beq.s   0x33AE          ; ALREADY QUEUED -> drop it
+    339a:  cmpa.w  #$F060,a0       ; ring wraps at 0xFFF060
+    33a0:  movea.w #$F040,a0       ;   back to 0xFFF040
+    33a8:  move.b  d0,(a0)         ; append
+    33aa:  addq.b  #1,$FFF03C      ; count++
+    33b0:  move.b  d0,$FFF03C      ; reset path: count = 0
+    33b4:  move.b  d0,$FFF0C4      ;   and the MCU mailbox byte
+
+So the sound queue is a 32-byte ring at 0xFFF040-0xFFF05F, write pointer
+0xFFF03E, count 0xFFF03C, drained into the MCU mailbox at 0xFFF0C4. The
+de-dup scan is why a held button does not stack a hundred copies of one
+effect. 77 callers: everything in the game that makes a noise.
+
+**0x669C — the animation driver. And it names $22, the busiest field in
+the program.**
+
+    669c:  move.w  $0C(fp),$40(fp)   ; save X   (confirms $40/$44, entry 30)
+    66a2:  move.w  $10(fp),$44(fp)   ; save Y
+    66a8:  movea.l $24(fp),a0        ; THE ANIMATION SCRIPT POINTER
+    66ae:  move.b  $21(fp),d0        ; current frame index
+    66b2:  subq.b  #1,$22(fp)        ; TICK THE FRAME TIMER
+    66b6:  beq.s   0x66C0            ; expired -> advance
+    66b8:  addq.l  #3,a0             ; not yet: skip this entry
+    66c0:  addq.w  #1,d0             ; advance the frame index
+    66c2:  cmp.w   (a0)+,d0          ; against the script's loop count
+    66c6:  moveq   #0,d0             ; wrap
+    66ca:  move.b  (a0)+,$22(fp)     ; RELOAD THE TIMER from the script
+    66ce:  bclr #0,(fp) ; bclr #1,(fp) ; then pull new status bits,
+    66da:  move.b  (a0)+,d0 ; or.b d0,(fp)  ;   offsets and sizes
+    66f8:  btst    #7,$2E(fp)        ; flip flag
+    66fe:  bchg #0,(fp) ; neg.w d0 ; neg.b d2 ; neg.b d3 ; exg d2,d3
+
+**$22 is the ANIMATION FRAME TIMER** — a per-object countdown ticked here
+and reloaded from the script when it expires. That explains every number
+in the entry 28 census: 503 "writes" against 32 reads because
+`subq.b #1,$22(fp)` is a read-modify-write; 228 of the immediate writes
+being `#1` because that is a handler saying "advance on the next tick";
+compares against 1 and 2 because callers test whether it is about to
+expire; and 152 functions touching it because every animated actor does.
+
+So the animation block is
+
+    $21  byte  current frame index
+    $22  byte  frame timer, counts down to 0 then reloads from the script
+    $24  long  animation script pointer  (the field patch_game already
+               normalizes as DATA_PTR_NORM 0xDBA8)
+    $2E  bit 7 horizontal flip
+    $32  word  read from the script each advance
+    $40/$44   saved X/Y
+
+This is further evidence HANDOFF-DECOMPILE's `$14 anim_frame,
+$16 anim_timer` are wrong (entry 29): the real animation fields are $21
+and $22, and $14/$16 are X velocity and acceleration.
+
+CONSISTENT WITH THE RUNNING FRAME. $22 was the most-changing field across
+frames 2400-2405 at 19%, highest of any offset. Not 100%, because most of
+the 19 live slots are static scenery whose handlers never call this, and
+the game skips work on missed vints (entry 22).
