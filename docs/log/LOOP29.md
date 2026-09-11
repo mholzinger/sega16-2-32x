@@ -2823,3 +2823,54 @@ pressure for tile stability on a curve nobody has measured. At 6,000
 frames the gain is 74% and at 12,000 it is 65%, so it decays slowly with
 scene variety. `DRIFTTOL=27` (160) is an orthogonal 21% that costs
 attract-screen colour nothing and is untested in play.
+
+## 165. THE COLOUR CYCLER'S WRITES NEVER REACH THE SH-2: 8% OF THE BACKGROUND IS ONE CYCLE STEP BEHIND (2026-09-11 03:10)
+
+The decompile thread asked whether the game's colour cycler is missing
+from `PAL_DIRTY_SITES` (LOOP-DECOMPILE 42), then walked the question back
+(43) because the queue drain is also absent and sprite palettes work.
+**The walk-back is wrong. The original question was right.**
+
+Diff the live 68K palette (WRAM 0xFF9000) against the SH-2 mirror
+(SDRAM 0x27000), same frame, headless ares, vi16, play2 input:
+
+    frame 2000     9 words differ, colour sets 19, 20, 21
+    frame 4000    14 words differ, colour sets 19, 20, 21, 6
+    frame 8000     7 words differ, colour set 19
+
+    live[153]=4900   mirror[153]=4A00
+    live[154]=4A00   mirror[154]=4B00      the mirror is one
+    live[155]=4B00   mirror[155]=4C00      ROTATION STEP behind
+
+Read the cycler's own slot table (WRAM 0xFFF300, 8 bytes/slot) at f4000:
+
+    slot 0   set 19   active   countdown 1   script 0x91A70E
+    slot 1   set 20   active   countdown 3   script 0x91A78E
+    slot 2   set 21   active   countdown 3   script 0x91A78E
+
+**The same three sets, from both ends.** Sets 19 and 20 carry 800 and 728
+tilemap cells -- 4.1% and 3.7% of every non-empty cell in level 1. So
+about 8% of the background renders one cycle step behind, permanently,
+and a cycling palette cannot be seen in a still frame by definition. It
+has passed every still gate this project has ever run.
+
+Corrections to the decompile thread's reading, both from the
+disassembly at 0x30B2: the store loop is FOUR `move.l (a0)+,(a1)+` =
+16 bytes = **8 words = one whole colour set**, not six colours; and the
+target is `0x840000 + (set & 127) * 16`, one set's line exactly.
+
+**The third path is clean.** 0x3108 writes entries 32-47 = sets 4 and 5,
+and neither set appears in the mismatch list at any frame. Its `lea
+$840040,a1` IS in PAL_DIRTY_SITES and is working.
+
+**Why the drain's absence proves nothing about the cycler:** the drain
+writes SPRITE palettes, which the port delivers over the DREQ palette
+packet, not the dirty bitmap. Tile colour sets come through the bitmap,
+which is the path with the hole.
+
+**The fix.** The structural rule is real -- a thunk rooted at a constant
+`lea` cannot cover a runtime-computed target -- but a thunk RUNS at
+runtime with the register loaded, so it can compute the dirty block
+itself. Block = `(a1 - 0x840000) / 64` for 32-word PAL32 blocks. 0x30D0
+(`movea.l (a5,2),a0`) is four bytes, exactly a `jsr abs.w`, and sits
+after a1 is computed and before the stores.

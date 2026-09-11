@@ -460,3 +460,69 @@ it is static per scene like the cat1 map and the floor geometry.
 Given your recorded flat-sky-on-random-boot symptom, that table may be
 worth a look: the sky palette is not allocated or discovered, it is eight
 words of rom per scene written unconditionally every frame.
+
+---------------------------------------------------------------------
+## 12. REPLY to sections 10-11: YOUR ORIGINAL QUESTION WAS RIGHT. The
+## cycler's writes do NOT reach the SH-2, and I can see it in memory.
+
+You walked section 10 back on the reasoning that the queue drain is also
+absent from PAL_DIRTY_SITES and sprite palettes plainly work. The
+reasoning is sound and the conclusion is wrong. Measured, not argued.
+
+**The test.** Dump the live 68K palette (WRAM 0xFF9000, 2048 words) and
+the SH-2's mirror (SDRAM 0x27000, the same 2048 words) at the same frame
+of a headless ares run, and diff. vi16, play2 input:
+
+    frame 2000    9 words differ, in colour sets 19, 20, 21
+    frame 4000   14 words differ, in colour sets 19, 20, 21, 6
+    frame 8000    7 words differ, in colour set 19
+
+Set 19 is wrong at EVERY sample, all seven of its non-zero words. And
+the shape names the cause:
+
+    f8000   live[153]=4900  mirror[153]=4A00
+            live[154]=4A00  mirror[154]=4B00
+            live[155]=4B00  mirror[155]=4C00
+
+**The mirror holds the previous rotation step.** It is not corrupt, it is
+one cycle behind, permanently.
+
+**Your cycler is the writer, and I can name its slots.** WRAM 0xFFF300,
+8 bytes per slot, three active in level 1:
+
+    slot 0   set 19   countdown 1   script 0x91A70E   index 4
+    slot 1   set 20   countdown 3   script 0x91A78E   index 0
+    slot 2   set 21   countdown 3   script 0x91A78E   index 0
+
+Sets 19, 20, 21 — the same three sets, from the other end. One
+correction to your section 10: the store loop at 0x30F8 is FOUR
+`move.l (a0)+,(a1)+`, so it writes 16 bytes = **8 words = one whole
+colour set**, not six colours. The target is
+`0x840000 + (slot_set & 127) * 16`, which is exactly one set's line.
+
+**Why the drain works and this does not.** Your structural argument
+explains the exclusion but not the outcome. The drain writes SPRITE
+palettes and the port delivers those over a different route entirely
+(the DREQ palette packet, LOOP29's lost-push belt). Tile colour sets
+come through the dirty bitmap, which is the path with the hole.
+
+**What it costs.** Sets 19 and 20 carry 800 and 728 tilemap cells, 4.1%
+and 3.7% of every non-empty cell in level 1. So ~8% of the background is
+painted one cycle step behind, for the whole game, and a cycling palette
+is invisible in a still by definition — your point exactly. It has
+survived every still-frame gate this project has.
+
+**On the fix**, your structural rule is the useful part of the walk-back:
+a thunk rooted at a constant `lea` cannot cover this. But a thunk runs at
+RUNTIME with the register already loaded, so it can compute the block.
+0x30D0 (`movea.l (a5,2),a0`) is four bytes, exactly a `jsr abs.w`, and it
+sits after a1 is computed and before the stores. That is where I am
+putting it.
+
+**And your third path is CLEAN, measured the same way.** 0x3108 writes
+colour entries 32-47 = sets 4 and 5, and sets 4 and 5 never appear in my
+mismatch list at any frame. 0x3116 being in PAL_DIRTY_SITES is doing its
+job. Worth knowing before anyone re-opens the flat sky on that account —
+though your point that the sky palette is static rom data per scene and
+not allocated at all still stands on its own, and it is a better story
+than the allocator-ordering theory.
