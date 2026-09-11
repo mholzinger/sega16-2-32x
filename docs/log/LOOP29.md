@@ -3292,3 +3292,72 @@ vi22-vi25 under their own names and left `probe.32x` pointing at vi20 --
 the build with the stale-skip corruption -- so the file he launches by
 habit was three builds stale. probe.32x now tracks whatever build is
 being asked about, and the name goes in the message.
+
+## 173. THE IRQ4 GATE INVENTORY: SIX WORKERS RUN EVERY VINT WHILE OUR GATE RELEASES THE GAME EVERY SECOND VINT (2026-09-11 14:20)
+
+The decompile thread named all six functions IRQ4 calls (LOOP-DECOMPILE
+39, 41, and the sky path in 43). That list is worth re-reading from the
+port's side, because `GAMEGATE` changed what a vint MEANS here: IRQ4
+still fires 60 times a second and still runs all six, but it only
+releases the main loop once per PRESENTED frame, which is currently
+every second vint. **Anything IRQ4 does per vint now runs at twice the
+game's rate.**
+
+    0x2DBC  palette queue DRAIN     14 words per entry, drains what the
+                                    game queued. Faster than the filler:
+                                    harmless.
+    0x2E50  sound byte streamer     one byte per vint from a ring at
+                                    0xFFF040 to the sound latch 0xFFF0C4,
+                                    count at 0xFFF03C. Drain-faster-than-
+                                    fill again: harmless.
+    0x2E74  coin/service EDGES      masks bits 0,1,3 and calls the credit
+                                    routines INSIDE the interrupt
+                                    (0x2FBA, 0x3036, 0x3044). CLEARED as
+                                    an input-loss suspect: the edges never
+                                    wait for the main loop, so our gate
+                                    cannot drop a coin. Gameplay input is
+                                    read by the main loop per game frame
+                                    and is unaffected.
+    0x30B2  colour cycler           per-slot countdowns tick PER VINT.
+                                    See below.
+    0x3108  per-scene sky block     16 words into colour entries 32-47
+                                    EVERY VINT from a static per-scene
+                                    rom table at 0x32AE. See below.
+    0x3128  per-vint state machine  gated on 0xFFF026 bit 0, dispatches on
+                                    0xFFF028/29 into 0xFFFFE000. Not yet
+                                    named; no port claim either way.
+
+**TWO of the six are worth acting on.**
+
+**0x3108, the sky block, is a redundant write we pay for.** It copies
+eight longs from `0x32AE + scene*32` into palette entries 32-47 on every
+single vint, and those bytes cannot change unless the scene index at
+0xFFF142 changes. Its `lea $840040,a1` IS in `PAL_DIRTY_SITES`
+(LOOP-DECOMPILE 43 confirmed it, and LOOP29 166 confirmed sets 4 and 5
+never go stale), so the thunk marks that block dirty 60 times a second
+for ever. The game's own gate is patchable here: compare 0xFFF142
+against a saved copy and skip the routine when it matches.
+**NOT YET MEASURED -- `PAL_DELTA` is in the ship flags, so the SH-2 may
+already be comparing those 32 words away to nothing, in which case the
+cost is one compare per vint and not worth a patch.** Measure the
+palette packet's per-vint word count with and without the mark before
+building anything. (This is the entry-166 lesson: I nearly built the
+fix before checking whether the mechanism it assumed was even absent.)
+
+**0x30B2, the colour cycler, runs at twice the game's rate.** Its
+countdowns tick per vint; the game advances per presented frame. In the
+arcade both are 60 Hz and the cycle is in step with gameplay. Here the
+game is at ~30 and the cycler is at 60, so **every glow and fade
+animates twice as fast relative to the action as the arcade does.**
+Motion-only, so no still-frame gate can see it -- the same family as the
+CAT1MD shimmer and the Zeus text.
+
+This also explains a number I could not account for in 166: I measured
+set 19's ramp advancing TWO steps per frame, which is what a per-vint
+cycler looks like sampled per game frame.
+
+It is an accuracy defect under standing rule 1, and it SELF-RESOLVES the
+moment the generation wall goes under 1.00 vint and the game runs at 60.
+So it is an argument for the threshold work, not a separate fix — unless
+Mike's eye calls it out first, in which case gating the countdown to the
+presented frame is a two-instruction change.
