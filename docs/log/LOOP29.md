@@ -3894,3 +3894,60 @@ same vint without either starving -- which is what `GAMEGATE` was
 reaching for and got backwards by discarding instead of scheduling.
 
 probe.32x restored to vi28 so there is something playable on the rig.
+
+## 184. WHY RELBANK GOES BLACK: THE DISCARDED VINT WAS THE TRANSPORT'S SLOT (2026-09-11 19:25)
+
+Mike on vi32, and vi31 before it: **"doesnt update the screen at all.
+black attract mode, starting the game only renders background grass and
+text hud."** His screenshot of the attract graveyard is the diagnosis:
+**the frame that does land is PERFECT** -- statues, temple, tombstones,
+grass, HUD, credits line, all clean. The compose is right. Only delivery
+has stopped.
+
+That matches the counters exactly: `nopost` 52 -> 225, `stale` 109 ->
+249, `bad1` 3 -> 10. One good frame arrives and then the 68K stops
+posting.
+
+**So the game's idle vint was not waste. It was the slot our transport
+runs in.** The four instructions at 0x397E discard a release and force
+the game to wait for a fresh one, and that enforced idle is when the 68K
+does our consumes, our post and our packet blast. `RELBANK` hands that
+time back to the game, the game takes all of it, and the picture stops.
+Same shape as NBUILD1 (172) and NTSKIP's flood (170): **three times now,
+making a producer faster has starved the consumer, and each time the
+slack that looked like waste was load-bearing.**
+
+**The arithmetic was in CLAUDE.md the whole time.** "The game needs 2780
+instructions/vint and our 7.670 MHz budget covers that at any cost up to
+46 cycles per instruction." 2780 x 46 = 127,880 cycles; a vint at
+7.67 MHz is ~127,800. **The budget covers the game with ZERO margin.**
+Our 68K handler costs 47-54 lines of 262, about 20% of the vint, so the
+game gets 80% of the cycles it needs, takes 1.25 vints, and quantises to
+2. That is the 50%, derived rather than measured, and it says the 68K
+clock IS a loss once our own handler is counted against it.
+
+**A measurement of mine that is INVALID, stated before anyone uses it.**
+I added a pass counter to the RELBANK thunk and read 1.563 and 1.744
+passes per vint -- above 100%, which is impossible when IRQ4 increments
+once per vint. The thunk sits at 0x397E, which the `dbf` loop RE-ENTERS
+once per frame waited, and two attract callers wait 120 and 240 frames
+(LOOP-DECOMPILE 67). So the counter counts thunk entries, not game
+frames, and attract's long delays dominate it. **Fourth time this arc
+that a counter measured something adjacent to the question.** To do it
+properly the count belongs at the gameplay loop's OWN call site (0x904 or
+0x922), not in the shared wait.
+
+**Where this leaves the arc.** The wall is 0.81 with RELBANK, which is
+under the quantum, and unusable. The two numbers have to come down
+together:
+
+    the game's pass         ~1.25 vints incl. our handler
+    our 68K handler         47-54 lines of 262  (~0.20 vints)
+    both must fit           1.00 vint
+
+Removing our handler ENTIRELY still leaves ~1.05. So 60 Hz needs the
+GAME'S pass shortened, which is Mike's own pivot -- patch the program --
+and not any further transport or compose work. The decompile thread's
+main-loop reading is the asset that makes that possible.
+
+probe.32x is vi28, which plays.

@@ -1179,7 +1179,13 @@ if os.environ.get('RELBANK'):
     cap = int(os.environ.get('RELBANK', '1') or 1)
     if cap < 1:
         cap = 1
+    # COUNT THE PASSES (LOOP29 184). This thunk runs once per completed
+    # game pass, which is the only build-independent way to measure the
+    # game's rate: the scene timer is per-scene and scene-dependent, so
+    # comparing it across builds compares different scenes (183).
+    # 0xFFA0EE, a word, read straight out of the wram dump.
     pal_words += [
+        0x5278, 0xA0EE,                 # addq.w #1,$FFA0EE   passes
         0x0C38, 0x0000 | cap, 0xF01C,   # cmpi.b #cap,$FFF01C
         0x6306,                         # bls.s  .consume   (<= cap)
         0x11FC, 0x0000 | cap, 0xF01C,   # move.b #cap,$FFF01C  (clamp)
