@@ -2624,3 +2624,64 @@ conservative choice for a play pass. If Mike's eye likes vi14's
 backgrounds, vi15 is the next one to hand him, and the question it asks
 is narrow: is the attract logo cleaner without anything else getting
 worse.
+
+## 161. THE SPEED QUESTION, MEASURED ON vi14: CAT1MD CUTS THE SLAVE 21% AND BUYS 1.6% OF FRAMES (2026-09-10 22:35)
+
+Mike: "sprites don't feel on par with mame speed YET." START-HERE names
+the next lever as "the slave's compose (cat1 tiles = 48%)". That figure
+is RIGHT and the lever is nearly worthless. Both measured on vi14.
+
+**Slave compose split** (PHASECENSUS, STB, per generation, play2 input):
+
+                        vi14      +CAT1MD
+    clear + sprites     0.575      0.576
+    cat1 tiles          0.512      0.289     -43%
+    slave total         1.088      0.864     -21%
+
+cat1 is 47% of the slave's compose, exactly as entry 124 said. CAT1MD
+removes 43% of it.
+
+**What that buys:**
+
+                        vi14      +CAT1MD
+    generation wall     1.57 v     1.55 v
+    ships               2042       2075      +1.6%
+    single-vint ships    15%        19%
+    echo phase          1.45       1.31
+    mtask phase         1.45       1.48
+
+**0.22 vints/gen off the slave moves the wall 0.02.** Nine percent
+pass-through. The compose is not what the frame rate is waiting on.
+
+**Why: ships are VINT-QUANTISED.** The period bins say 80% of ships take
+2 vints and 15% take 1. A generation that finishes in 1.2 vints still
+waits for the next vint, so it costs 2 and the flip lands at 30 Hz. The
+bar is one generation per vint. We are at 1.55-1.62 and the slave's
+ENTIRE remaining compose is 0.86, so 60 Hz needs ~0.6 vints/gen removed
+from a budget where no single component is that big.
+
+**The master is idle, confirmed independently** (`MTASKWHY=1`, which
+entry 123 built and never ran on this line):
+
+    mtask PHASE        1.41 vints/gen
+    drain WORK         0.437 vints/gen      = 31% of the phase
+    drain visits       1.7 /gen
+    drains completed   1.00 /gen
+    gate skips        26.0 /gen
+
+Entry 123's open question -- "2.73 vints of build_maps WORK, or a short
+drain spread thin?" -- answers **spread thin** on vi14: 0.44 vints of
+work inside a 1.41-vint phase, completing once per generation in 1.7
+visits. The master's accounted work matches entry 123's 0.44 exactly. The
+26 gate skips are poll iterations inside the 6% of a vint past
+`NAT_DRAIN_CUT` (11300 of 12052 ticks), not 26 lost vints.
+
+**So neither processor is saturated on vi14.** Slave work 1.09, master
+work 0.44, wall 1.57. The generation is longer than either CPU's work,
+which means the cost is in the HANDOFFS between them, not in the
+computing. That is where the next speed work goes, and it is not CAT1MD.
+
+**This supersedes START-HERE's "the SLAVE is the saturated processor"**
+(entry 124, measured on the pre-GAMEGATE single-buffered line). On vi14
+the slave's own compose census says 1.09 vints of work in a 1.52-vint
+echo phase: it is idle 28% of its own phase.
