@@ -2473,3 +2473,67 @@ finds sets 37-46 but **never set 33 at all**, and the ten it does find
 appear in only 4 samples each with the palette mid-fade, which the bake
 rejects by design as a fade witness. **The static table cannot cover a
 transient flash palette.** Whatever set 33 is, it is next.
+
+## 158. WHAT SET 33 IS, AND HOLDING ITS PENS: 74% FEWER TILES DESTROYED, MORE FLIPS, BETTER PIXELS (2026-09-10 22:06)
+
+**Identified at the event** (`MDALLOCWHY` arms a one-shot capture in
+`mdp_free_set` for `MDA_WATCH`, default 33):
+
+    colour set 33 (0x21), MD line 1, used mask FF
+    pen map (pixel->pen)  10 13 13 13 13 15 7 7   -- only 4 DISTINCT pens
+    tile codes            0x850 0x851 ... 0x857   -- eight CONSECUTIVE
+
+Rendering those eight from `sh_src/tiles.bin`: a large solid mass with a
+soft gradient edge, pens 7 down to 1. Eight consecutive codes, four
+distinct colours, all eight pixel values in use. **It is a big terrain
+or silhouette mass, and it FADES** -- which is why it drifts, and why it
+is 65% of all on-screen tile destruction.
+
+**Why 157 only rescued 4 frees of 16:** `mdp_free_set` releases the
+set's CRAM pens, another set takes them, and the re-assign then cannot
+go home. `PENHOLD=1` (needs TAGKEEP) keeps the refcount so the pens stay
+reserved across the free/re-assign gap.
+
+    over 4000-6000 frames        line    TAGKEEP   +PENHOLD
+    drift frees @f6000             62        62        19
+    old placement reused          n/a    4 of 16    8 of 16
+    WIPED WHILE ON SCREEN       2,500       897       644     -74%
+    blkdrt @f6000               8,037     5,483     3,050     -62%
+    resident tags @f4000          617       745       800
+    isr-flips / 3983 vints      1,724     1,729     1,845     +7%
+    game logic                   48.7%     48.7%     48.9%
+
+**Pixels, against the arcade** (`attract_parity.py`, mean |luma|):
+
+    logo rewrite   line 36/31     vi13 35/35      even
+    logo red       line 72/29/73  vi13 74/28/74   even
+    demo scene k45 line 133       vi13 60         -55%
+
+vi13 gets DRIFTMEAS's demo-scene gain (155: 58) **without** its
+logo-screen regression (155: 50/52 and 88/41/88). TAGKEEP's late
+degradation is also gone -- frees hold at 19 through f6000 where both
+the line and TAGKEEP alone return to 62.
+
+**On `presented_fps`: it still cannot separate these builds, and this
+time the reason is visible in the data.** vi13 reads MOTION 10.6 against
+the line's 5.9, but the windows are [4,3,59,4,8,5,0,2] against
+[7,1,10,7,3,0,17,2] -- one scene-transition window carries it. Drop each
+build's largest window and they are even (26 against 30). The metric
+that DOES move monotonically here is isr-flips, and it says vi13 presents
+7% more frames.
+
+    rom/night/vi13.32x
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 TEXTCAPEARLY=1 \
+                 TEXTCAPMASK=1 TAGKEEP=1 PENHOLD=1
+
+**KNOWN DEBT, and it must be paid before this is a ship and not a
+probe:** a set that is freed and NEVER re-assigned leaks its held pens.
+Nothing releases them. Over a 6000-frame run this costs nothing
+measurable (CRAM stays full, pixels are even or better), but a scene the
+run does not reach could starve the line. The release path is a stamp on
+the held pens and a sweep that frees any held longer than N windows --
+`mds_install` already zeroes the tables at a scene change, which bounds
+the leak to one scene.
+
+Not play-passed. On the rig for Mike.

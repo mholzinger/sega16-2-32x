@@ -1707,6 +1707,14 @@ endif
 ifdef TAGKEEP
 SHCCFLAGS += -DTAGKEEP
 endif
+# `make ... PENHOLD=1` = LOOP29 158, needs TAGKEEP. mdp_free_set releases
+# the set's CRAM pens; another set takes them; TAGKEEP's re-assign then
+# cannot land where it was (4 of 16). Keep the refcount so the pens stay
+# reserved across the free/re-assign gap. PROBE: a set that never comes
+# back leaks its pens until a release timeout exists.
+ifdef PENHOLD
+SHCCFLAGS += -DPEN_HOLD
+endif
 ifdef PHASECENSUS
 SHCCFLAGS += -DPHASE_CENSUS
 endif

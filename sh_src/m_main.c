@@ -459,6 +459,15 @@ volatile uint32_t mdalloc_relo[128];
  * on-screen tile); this is the one that says which sets the scene table
  * must cover. */
 volatile uint32_t mdalloc_onscr[128];
+/* LOOP29 158: WHAT IS SET 33? It is 65% of the on-screen tiles destroyed
+ * (156) and it never appears in a tile harvest (157), so identify it at
+ * the event: [0] cset [1] its MD line [2] the owner set it conflicts
+ * with [3] on-screen cells naming its slots [4] tiles wiped, then 16
+ * tile codes. Armed once, for the first free of the set in MDA_WATCH. */
+#ifndef MDA_WATCH
+#define MDA_WATCH 33
+#endif
+volatile uint32_t mdalloc_id[24];
 volatile uint8_t  mdalloc_pin[128];
 #define MDA(i) (mdalloc_ctr[i]++)
 #define MDA_ADD(i, n) (mdalloc_ctr[i] += (uint32_t)(n))
@@ -1700,6 +1709,21 @@ static void mdp_free_set(unsigned s)
     }
 #endif
 #ifdef MD_ALLOC_WHY
+    if (s == MDA_WATCH && !mdalloc_id[0]) {
+        mdalloc_id[0] = 0x100u | s;
+        mdalloc_id[1] = mdp_s_line[s];
+        mdalloc_id[5] = mdp_s_used[s];
+        for (int p = 0; p < 8; p++) {
+            mdalloc_id[8 + p] = mdp_s_map[s * 8 + p];
+            mdalloc_id[2] = mdp_pen_own[(((unsigned)mdp_s_line[s] - 1) * 16
+                                         + mdp_s_map[s * 8 + p]) * 2];
+        }
+        for (int i = 0, k = 0; i < NSETS * NWAYS && k < 8; i++)
+            if (md_tag[i] != 0xFFFFFFFFu
+                && ((md_tag[i] >> 16) & 0x7F) == s)
+                mdalloc_id[16 + k++] = md_tag[i];
+    }
+    if (s == MDA_WATCH) mdalloc_id[4]++;
     mdalloc_relo[s & 127]++;
 #ifdef MD_STATIC
     mdalloc_pin[s & 127] = mds_pin[s & 127];
@@ -1711,6 +1735,19 @@ static void mdp_free_set(unsigned s)
     for (int p = 0; p < 8; p++)
         old_map[p] = mdp_s_map[s * 8 + p];
 #endif
+#ifdef PEN_HOLD
+    /* LOOP29 158: HOLD THE PENS. 157's land-where-you-were only rescued
+     * 4 frees of 16 because this loop releases the set's pens, another
+     * set takes them, and the re-assign cannot go home. Set 33 -- 65% of
+     * all on-screen tile destruction, eight consecutive tile codes of a
+     * large gradient mass with only 4 distinct pens -- is a FADING set,
+     * so it is freed and re-assigned over and over while its pens are up
+     * for grabs. Keeping the refcount reserves them across the gap. The
+     * cost is pens held by a set that is not currently assigned; a set
+     * that never comes back leaks them, which is why this is a probe
+     * until the release timeout exists. */
+    (void)l;
+#else
     for (int p = 0; p < 8; p++) {
         unsigned pen;
         if (!(mdp_s_used[s] & (1u << p)))
@@ -1719,6 +1756,7 @@ static void mdp_free_set(unsigned s)
         if (mdp_pen_rc[l * 16 + pen] && !--mdp_pen_rc[l * 16 + pen])
             mdp_line_c[l * 16 + pen] = 0xFFFF;
     }
+#endif
     mdp_s_line[s] = 0;
     mdp_s_used[s] = 0;
     MDA(13);
