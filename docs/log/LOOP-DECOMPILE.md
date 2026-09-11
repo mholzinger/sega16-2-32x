@@ -2366,3 +2366,42 @@ more machinery.
 
 **Disassembly coverage is now finished.** Instructions match the reference,
 bounding is 98%, and what is left is naming: 560 functions, about 45 named.
+
+---------------------------------------------------------------------
+## 55. The annotated function map: all 560 classified
+
+`tools/ghidra/classify.py` -> `docs/audit/function_map.md`. Every function
+in the program, with size, callers, the object fields it touches, and a
+class. **45 rows are marked READ — read to their return. The other 515
+are SIGNATURE matches and are hypotheses**, per entry 50's rule, and the
+map says which is which on every row.
+
+The signatures are grounded even though applying them is mechanical: each
+one comes from a routine that WAS read. $21/$22/$24 is the animation
+triple from entry 32; $0C/$10 with $14/$1A is the 16.16 motion block from
+29; $34-$3A, $54-$5A and $60-$66 are the three hitboxes from 34 and 45;
+$3E/$3C are the claim locks from 38; a call to 0x3F04 hides a sprite (30),
+to 0x3DD8 draws one (33), to 0x3352 makes a sound (32).
+
+    leaf / helper   150      despawns          15
+    hardware        117      state change      13
+    animation        88      draws             12
+    claim / lock     48      palette           12
+    collision        33      sound              9
+    motion           17      named by reading  45
+
+**410 of 560 functions now carry a behavioural class**, and the shape of
+the program is legible from the totals alone: animation is the single
+biggest behavioural class at 88, and 48 functions touch a claim lock,
+which is a lot of actor-to-actor interaction for a game this size and
+explains why the TAS dependency (entries 38, 39) is load-bearing rather
+than incidental.
+
+The 150 leaf/helpers touch no object field and no hardware — pure
+computation on registers and locals. They are the arithmetic the rest of
+the program is built from, and they are the least valuable thing left to
+name.
+
+**This completes the coverage task.** Instructions match the reference,
+98% of bounds are correct, every function is classified, and every claim
+in the map declares whether it was read or inferred.
