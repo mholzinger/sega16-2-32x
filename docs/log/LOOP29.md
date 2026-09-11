@@ -3092,3 +3092,77 @@ of which a naive `continue` gets wrong:
 
 `NOMAPS=1` and `NOCLEAR=1` are committed as default-off ablations. They
 render wrong by construction and exist only to produce the wall.
+
+## 170. NTSKIP: THE WALK SKIPS 91% OF ROWS, AND vi20 IS FASTER AND CLEANER THAN vi16 ON BOTH AXES (2026-09-11 04:00)
+
+`NTSKIP=1` implements 169's skip: per (plane,row) key of
+(vxr, vyr, pq[0..2]) plus a tilemap generation `cap_page` bumps whenever
+a page's content moves. All four of 169's hazards respected -- the skip
+re-stamps `md_ref` from the mirror row, sits after the `NT_WRAP` shift
+and before the `CAT1_PEND` clear.
+
+    rows skipped 43,946   walked 4,158   =  91.4% skipped
+    wall 1.60 -> 1.34, ships 2042 -> 2209
+
+**And it broke the transport, which is the interesting part.** First
+measurement:
+
+    68K handler mean   58.3 -> 84.2 lines
+    consume mean        5.7 -> 16.2
+    nopost             315 -> 2,766 of 3,988
+    isr-flips        1,724 -> 715
+
+With the walk nearly free the master runs all eight cell phases in ONE
+gap instead of eight, and floods the transport: the 68K cannot finish
+its consumes inside the window and stops posting. **Making a producer
+faster starved the consumer.** `NBUILD1=1` (one packet build per gap
+instead of two) is the brake and recovers most of it: handler 60.5,
+consume 10.6, nopost 630, isr-flips 1,638.
+
+**The 58 fps ablation does NOT starve the 68K** (handler 59.5, consume
+5.8, nopost 134), so this is an NTSKIP-specific throughput artefact and
+not a wall that 60 Hz has to hit.
+
+**vi20 = NTSKIP + NBUILD1 + MDSPRTOP.** Against vi16, everything
+measured over the same runs:
+
+                              vi16      vi20
+    generation wall           1.60v     1.42v
+    ships                  31.3fps   32.5fps
+    isr-flips / 3982 vints    1,724     2,001    +16%
+    68K handler mean            58.3      58.7
+    consume mean                 5.7       7.7
+    skips / flip-late            0/0       0/1
+    on-screen tiles destroyed     644         1     over 12,000 frames
+    cells blanked, art missing  6,372     4,603
+
+**One on-screen tile destroyed in 12,000 frames.** Skipping the walk
+also stabilises the residency, because a skipped row makes no claims and
+no evictions -- the background fix and the speed fix compound instead of
+fighting.
+
+**CAT1MD ruins it again, third time.** `NTSKIP+NBUILD1+CAT1MD+MDSPRTOP`
+reads 37.5 fps and 42% single-vint, the best speed of the night, and its
+allocator numbers are on-screen destroyed 174 and blanked 15,196 against
+vi20's 1 and 4,603. Same trade as vi17: CAT1MD pushes every cat-1 colour
+set into the MD residency map and the churn comes back. **Do not stack
+CAT1MD without reading the allocator counters** -- this is the third
+build where it looked like a speed win and was a background regression.
+
+    rom/night/vi20.32x   ON THE RIG as vi20.32x and probe.32x
+                         md5 20ef3c94
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 TEXTCAPEARLY=1 \
+                 TEXTCAPMASK=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 \
+                 NTSKIP=1 NBUILD1=1 MDSPRTOP=1
+
+**CAVEAT, and it needs Mike's eye rather than another ares run:**
+`attract_parity.py` produced NO comparisons for vi20 -- every anchor
+column is a dash and the OFFSET bisect returned 122 against vi16's 195.
+vi20 reaches the game's display-blank cut 73 frames earlier, which is
+consistent with it running faster, but it means the attract oracle
+cannot align it and I have no pixel gate for this build. Direct frames
+at f2400 render normally (97 distinct colours, 7.6% black against vi16's
+110 and 4.8%, and the two are at different game moments because vi20 is
+ahead). **Fixing the parity rig's alignment for a faster build is the
+next tooling job.**

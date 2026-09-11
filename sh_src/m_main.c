@@ -4967,6 +4967,21 @@ RAMCODE static void cache_fill(int budget)
  * is one extra SDRAM read per long against the FB read we already pay —
  * noise. */
 static uint16_t pg_watch;                    /* see cap_page */
+#ifdef NT_SKIP
+/* LOOP29 170. The name-table walk rebuilds 2,240 cells a generation and
+ * 169 measured its answer unchanged in 56 of 56 rows at five points in
+ * play -- MD_BG scrolls with the VDP's own hscroll registers, so a
+ * scroll never rewrites the table. Skip a row whose INPUTS are
+ * unchanged: its (vxr, vyr, pq) key, and a tilemap generation that
+ * cap_page bumps whenever a page's content moves.
+ * [0] rows skipped [1] rows walked. */
+static uint32_t nt_key[56];
+static uint16_t nt_gen[56];
+static uint16_t tm_gen = 1;                  /* 0 = "never walked" */
+#define NTS ((volatile uint32_t *)0x26028FD0)   /* free: SPRBK ends 0x28FC4,
+                                                 * band attribution 0x28FC8
+                                                 * is 3 longs -> 0x28FD4 */
+#endif
 #ifdef PG_STICKY
 /* Fixed scrap 0x28F40-4F (region guard: CUT_BLANK+PG_STICKY together
  * pushed .bss 16 bytes over 0x19000). NOT zeroed like .bss — boot
@@ -5073,6 +5088,11 @@ RAMCODE static void cap_page(int pg)
         pg_fresh[1] &= (uint16_t)~(1u << pg);
 #endif
         pg_watch |= (uint16_t)(1u << pg);
+#ifdef NT_SKIP
+        tm_gen++;                            /* tilemap content moved:
+                                              * every row key is stale */
+        if (!tm_gen) tm_gen = 1;             /* 0 means never walked */
+#endif
 #ifdef PG_STICKY
         pg_quiet[pg] = 0;
 #endif
@@ -12925,7 +12945,16 @@ RAMCODE void m_main(void)
                  * chunk, or two chunks) — the ship line built one, so a
                  * 600-tile cut took ~80 vints. Display-on keeps one build:
                  * a second consume pushes the post past the V-gate. */
+#ifdef NBUILD1
+                /* LOOP29 170: with NT_SKIP the cell walk is nearly free,
+                 * so the master runs all 8 phases in one gap instead of
+                 * eight, and floods the transport -- the 68K's handler
+                 * went 58 -> 84 lines and 2766 of 3988 posts were
+                 * missed. One build per gap is the obvious brake. */
+                int md_nbuild = 1;
+#else
                 int md_nbuild = 2;
+#endif
                 /* (one build per vint with the display on tried 2026-09-06 as
                  * a 68K diet: -6 lines, no speed change, and the credit-path
                  * logo rewrite littered for ~100 frames instead of ~25) */
@@ -13170,6 +13199,39 @@ RAMCODE void m_main(void)
 #else
                         (sc + 8 + 280)[row - cell0 / 40] =
                             (uint16_t)(-(vxr & 7) & 0x3FF);
+#endif
+#ifdef NT_SKIP
+                        /* hazard 2: an unchanged key implies dc == 0, so
+                         * the mirror shift above was a no-op and placing
+                         * the test here costs nothing.
+                         * hazard 3: this is BEFORE the CAT1_PEND clear,
+                         * so a skipped row keeps its previous value. */
+                        {
+                            unsigned ridx = (unsigned)((isfg ? 28 : 0) + row);
+                            uint32_t nk = ((uint32_t)(vxr & 0x3FF))
+                                | ((uint32_t)(vyr & 0x1FF) << 10)
+                                | ((uint32_t)(pqb[0] & 0xF) << 19)
+                                | ((uint32_t)(pqb[1] & 0xF) << 23)
+                                | ((uint32_t)(pqb[2] & 0xF) << 27);
+                            if (nt_key[ridx] == nk && nt_gen[ridx] == tm_gen) {
+                                /* hazard 1: the walk is the residency
+                                 * re-stamp source. Re-stamp from the
+                                 * mirror row instead -- 40 byte writes
+                                 * against 42 tilemap reads plus claims. */
+                                const uint16_t *mr = md_dbg_nt
+                                    + (isfg ? 1120 : 0) + row * 40;
+                                for (int i2 = 0; i2 < 40; i2++) {
+                                    unsigned sl = mr[i2] & 0x7FF;
+                                    if (sl < NSETS * NWAYS)
+                                        md_ref[sl] = (uint8_t)win_no;
+                                }
+                                NTS[0]++;
+                                continue;
+                            }
+                            nt_key[ridx] = nk;
+                            nt_gen[ridx] = tm_gen;
+                            NTS[1]++;
+                        }
 #endif
                         int vy = (vyr - (vyr & 7) + row * 8) & 0x1FF;
                         const uint16_t *pg0 = TILEMAP_C

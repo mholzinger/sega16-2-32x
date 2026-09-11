@@ -1737,6 +1737,23 @@ endif
 ifdef NOCLEAR
 SHCCFLAGS += -DNO_CLEAR
 endif
+# `make ... NTSKIP=1` = LOOP29 170. Skip the name-table walk for a row
+# whose inputs have not changed. 169 measured the walk's answer identical
+# in 56 of 56 rows at five points in play (MD_BG scrolls with the VDP's
+# own hscroll, so a scroll never rewrites the table), and the master's
+# maps drain is worth 0.29 of the 1.60-vint generation wall. Respects the
+# four hazards in 169: md_ref is re-stamped from the mirror, the skip
+# sits after the NT_WRAP shift and before the CAT1_PEND clear, and
+# cap_page bumps a tilemap generation so any tile write invalidates
+# every row key. Gate: the arcade pixel diff, and NTS skip/walk counts.
+ifdef NTSKIP
+SHCCFLAGS += -DNT_SKIP
+endif
+# `make ... NBUILD1=1` = one MD packet build per gap instead of two.
+# Brake for NTSKIP's transport flood (LOOP29 170).
+ifdef NBUILD1
+SHCCFLAGS += -DNBUILD1
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old
