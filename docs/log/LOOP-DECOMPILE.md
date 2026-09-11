@@ -1816,3 +1816,57 @@ symptom the port has recorded.
 So the palette write paths are: the QUEUE (built 0x3BEC, drained 0x2DBC,
 14-word sprite palettes), the CYCLER (0x30B2, 6 colours on its own
 countdown), and this PER-SCENE BLOCK (0x3108, 16 words every vint).
+
+---------------------------------------------------------------------
+## 44. Two sky palette writers — and my oracle run was INVALID, by a rule this project already wrote down
+
+Following entry 43, there are TWO routines writing colour entries 32-47
+from per-scene 32-byte tables, and they disagree by construction:
+
+    0x3838  table 0x4050   both 8-word halves IDENTICAL in all 5 scenes
+            called once from 0x8E4
+    0x3108  table 0x32AE   both halves DIFFER in all 5 scenes
+            called from 0x2BD6, inside the IRQ4 handler
+
+0x3108 sits on the NON-BLANK branch of a fade routine: when d0 is non-zero
+0x2BC8 zeroes 64 colour entries and skips both sky writers; when it is
+zero, 0x2BD0 copies 64 words and then calls 0x3108.
+
+**MISTAKE 1, caught before it shipped.** I compared live memory against
+table 0x32AE, saw the second half differ, and briefly had a "the port
+drops half the sky" bug. It matches table 0x4050 EXACTLY, 16 of 16. I had
+compared against the wrong writer's table.
+
+**MISTAKE 2, the methodology one.** Our rom shows the flat table at every
+sampled frame from 700 on, so I ran `mame altbeast` as the oracle and
+dumped 0x840040 at the same frame numbers:
+
+    frame   300   arcade FFFF...      ours FFFF...        agree
+    frame   700   arcade flat         ours flat           agree
+    frame  1000   arcade flat         ours flat           agree
+    frame  1800   arcade flat         ours flat           agree
+    frame  2400   arcade DIFFERING    ours flat           ??
+    frame  3000   arcade scene 1      ours scene 0        ??
+
+The last two rows are worthless. **The arcade run had no inputs, so it is
+in attract mode, while ours is playing level 1 from
+`play_level1.csv`.** By frame 3000 the arcade is in SCENE 1 and we are
+still in scene 0 — different game states, compared by frame number.
+
+That is precisely the error this repo already documents: entry 25 and
+`tools/attract_parity.py` both exist because frame-number alignment across
+differently-driven runs is meaningless. I wrote entry 25's warning myself
+this session and then did it anyway.
+
+**WHAT IS ACTUALLY ESTABLISHED:**
+
+  - Frames 300-1800, same state on both: arcade and port agree EXACTLY.
+    The port is correct in that window and the flat sky there is right.
+  - The arcade at frame 2400 shows a palette with DIFFERING halves, so
+    the gradient path is reachable on real hardware — 0x3108 is not dead
+    code.
+  - Whether OUR rom reaches it at the equivalent game state is UNTESTED.
+
+To settle it the arcade has to be driven with the same inputs and aligned
+on the game's own timeline, which is what `tools/attract_parity.py`
+already does. Not asserted to the builder thread until then.
