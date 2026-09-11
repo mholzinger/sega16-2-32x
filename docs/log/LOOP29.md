@@ -3239,3 +3239,56 @@ A/B on the rig instead, one flag apart:
 If the Zeus lines render on vi23 and not vi22, the mask is dropping an
 ungated writer and the fix is a thunk for it. If both are broken, the
 mask is innocent and the writer never reaches WRAM in the first place.
+
+## 172. THE PACKET BRAKE IS MANDATORY ON SILICON, AND ares UNDER-MODELS THE CONSUMER BY TWO ORDERS OF MAGNITUDE (2026-09-11 14:10)
+
+Mike's rig, three builds one flag apart:
+
+    vi25  = vi16 - TEXTCAPMASK                 "a slideshow, 1 frame / 3 seconds"
+    vi24  = vi25 + MDSPRTOP                    "same story, unplayable"
+    vi23  = vi25 + MDSPRTOP + NBUILD1          "frames working again"
+
+**`NBUILD1` -- one MD packet build per gap instead of two -- is the
+difference between 0.33 fps and playable. On the hardware it is not an
+optimisation, it is a requirement.**
+
+ares says the opposite, or near enough to have fooled me: isr-flips 1,869
+for vi25 against 2,065 for vi23, a 10% gap, no hint of a cliff. **On
+silicon the same change is 100x.** I removed the brake on 171's reasoning
+that "most of the transport win was NBUILD1 and the age bound, not the
+skip" and that it cost backgrounds -- both true in ares, both irrelevant
+next to this.
+
+**Why two builds per gap falls off a cliff.** `md_nbuild` is how many MD
+packets the master PREPARES per gap. Each one has to be CONSUMED by the
+68K as a VDP DMA inside its vint. Queue faster than the 68K can drain and
+the handler overruns its window, the post is missed, the flip is
+declined, and the screen stops updating -- exactly the 2,766-missed-posts
+signature NTSKIP produced in 170. The brake does not gate graphics; it
+matches the producer to the consumer. **Past the consumer's rate, more
+packets deliver FEWER frames.** ares' modelled consumer is fast enough
+that the second build nearly fits; the FPGA's is not, and the cliff is
+between them.
+
+**Standing consequence: `NBUILD1=1` belongs in the ship line and any
+build handed to the rig without it is invalid.** And every transport
+A/B in this log measured in ares alone should be read as a ranking of
+ares' consumer, not ours (CLAUDE.md says this about MAME; it is now
+measured about ares too).
+
+**And it reopens NTSKIP.** The skip needs the brake to be safe, and the
+brake is now compulsory, so 171's "not currently worth its risk" no
+longer applies. `rom/night/vi26.32x` = vi23's flags + the bounded skip
+(NTMAXAGE=8 + the display-gate invalidate):
+
+    ships 2148 = 33.0 fps, wall 1.44v
+    68K handler 52.2 lines  (vi16 58.3)
+    isr-flips 2,095, nopost 69, fallback 136, skips 0, flip-late 0
+
+Best 68K handler mean of the whole arc. On the rig as probe.32x.
+
+**A process fix, because this cost Mike three launches.** I deployed
+vi22-vi25 under their own names and left `probe.32x` pointing at vi20 --
+the build with the stale-skip corruption -- so the file he launches by
+habit was three builds stale. probe.32x now tracks whatever build is
+being asked about, and the name goes in the message.
