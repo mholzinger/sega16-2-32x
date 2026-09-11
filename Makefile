@@ -1731,6 +1731,12 @@ endif
 ifdef NOMAPS
 SHCCFLAGS += -DNO_MAPS
 endif
+# `make ... NOCLEAR=1` = LOOP29 169 ablation. Skip the per-row FB clear
+# entirely. RENDERS WRONG (last frame's pixels persist); the only
+# meaningful output is the generation wall. NEVER SHIP.
+ifdef NOCLEAR
+SHCCFLAGS += -DNO_CLEAR
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old

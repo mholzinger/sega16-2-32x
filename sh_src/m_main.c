@@ -7555,10 +7555,21 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
 #ifdef DIRECT_FB
             uint8_t *d = DROW(8 + r);
             RL_ZERO(8 + r);                    /* MARK-FIRST, as below */
+#ifdef NO_CLEAR
+            /* LOOP29 169 ABLATION, never a ship. What does the
+             * unconditional row clear COST? Under DIRECT_FB the
+             * ROWLIVE skip above is disabled (the dst bank is two
+             * intervals stale) and the comment defers the fix to "stage
+             * 2", which never happened -- so every one of 224 rows eats
+             * 320 bytes of FB writes every generation, on the hardware
+             * where FB writes are the documented stall floor. */
+            (void)d;
+#else
             for (int x = 0; x < 320; x += 4)   /* LONG fills: the FB
                                                 * DISCARDS zero BYTE
                                                 * writes */
                 *(uint32_t *)(d + x) = 0;
+#endif
 #else
             uint8_t *d = &sbuf[(8 + r) * SBUF_W];  /* sbuf row = screen
                                                     * row + 8, per
@@ -7569,8 +7580,12 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
                                                 * precedes the wipe so a
                                                 * racing deferred draw's
                                                 * MARK always lands last */
+#ifdef NO_CLEAR
+            (void)d;                        /* LOOP29 169 ablation */
+#else
             for (int x = 0; x < SBUF_W; x += 4)
                 *(uint32_t *)(d + x) = 0;
+#endif
 #endif
         }
         slave_service_stream();

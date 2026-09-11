@@ -3020,3 +3020,75 @@ covers and what the rest is doing.
 
 That is the next measurement, and for the first time in this arc there is
 a number to aim at that is known to pay: **wall < 1.00**.
+
+## 169. THE NAME TABLE IS REBUILT 2,240 CELLS A GENERATION TO PRODUCE THE SAME ANSWER: 100% OF ROWS ARE SKIPPABLE (2026-09-11 03:50)
+
+168 said the master's maps drain is worth 0.29 of the 1.60-vint wall.
+This is what the drain is doing.
+
+**The row clear is innocent, and I checked it first.** `NOCLEAR=1`
+ablation (skip the per-row sbuf clear entirely): wall 1.60 -> 1.65,
+ships 2042 -> 2031. It costs NOTHING -- the `DIRTY_ROW`/ROWLIVE skip
+above it already handles it. (First cut of that ablation went into the
+`DIRECT_FB` arm, which **is not in the shipping flags** -- dead code,
+and the "identical numbers" it produced were real. Check the arm you
+are ablating is the one that compiles.)
+
+**The sprite bake is also already doing its job.** 75,793 hits against
+2,243 misses over 4000 frames = **97.1%**, 37.1 hits and 1.1 misses per
+generation. Extending the bake is worth 3%.
+
+**So the maps drain is the name-table walk, and the walk is redundant.**
+Diff the shipped mirror (`md_dbg_nt`, 2 planes x 28 rows x 40 cells)
+between nearby frames of the same run:
+
+    f3000 vs f3001    56 of 56 rows IDENTICAL
+    f3000 vs f3002    56 of 56
+    f3000 vs f3003    55 of 56
+    f1500, f2200, f4500, f6000, all +2    56 of 56 every time
+
+**Nothing changes.** And the reason is structural, not luck: `MD_BG`
+scrolls with the VDP's own hscroll registers (`HS_SHIP`, hscr_thunks),
+so a scroll does not rewrite the name table at all. `NT_WRAP` then
+shifts the mirror by the scroll delta and ships only the newly exposed
+column. The table changes when a new tile COLUMN enters (one of 40 per
+8 pixels) or when the game writes the tilemap. The walk recomputes all
+2,240 cells every generation regardless.
+
+**Where the real flag combinations stand** (measured, 4000 frames):
+
+    vi16                                    1.60v   31.3 fps
+    CAT1MD + MDSPRTOP                       1.55v   32.1 fps
+    NOMAPS + CAT1MD                         1.17v   36.8 fps
+    NOMAPS + MDSPRTOP + CAT1MD              1.11v   39.0 fps
+    NOMAPS + SPROBE (sprites off)           0.90v   58.3 fps
+
+So a legitimate maps-skip plus CAT1MD plus MDSPRTOP lands about 1.11 --
+**39 fps, and still the wrong side of the 1.00 threshold.** The last
+0.12 has to come out of the 0.589 sprite compose, where the bake is
+already at 97% and the MD offload claims ~1 record of 37.
+
+**THE SKIP, and the four hazards I found reading the walk.** Per
+(plane,row) keep the row's input key -- `vxr`, `vyr`, `pqb[0..3]` -- and
+a tilemap generation counter bumped by `cap_page` whenever a page's
+content changes. Skip the 42-column loop when both match. Hazards, all
+of which a naive `continue` gets wrong:
+
+  1. **`md_ref` must still be re-stamped** or the residency LRU evicts
+     live tiles -- the walk is the re-stamp source and the code's own
+     comment sizes the window at <= 9 windows. Re-stamp from the mirror
+     row's 40 slots: 40 byte writes against 42 tilemap reads plus
+     claims plus packing.
+  2. **The `NT_WRAP` mirror shift must not be skipped** -- except that
+     an unchanged row key implies `dc == 0`, so placing the skip AFTER
+     the shift block makes this free.
+  3. **`CAT1_PEND[row]` is cleared at the top of the column loop** and
+     re-set per cell. Skipping must leave the previous value, so the
+     skip has to land BEFORE that clear.
+  4. **The span ship's bookkeeping** -- under `NT_WRAP` the ship is a
+     changed-span diff, so an unchanged row ships nothing anyway; the
+     `#else` arm's `*o++` per cell would break, but that arm is not in
+     the shipping flags.
+
+`NOMAPS=1` and `NOCLEAR=1` are committed as default-off ablations. They
+render wrong by construction and exist only to produce the wall.
