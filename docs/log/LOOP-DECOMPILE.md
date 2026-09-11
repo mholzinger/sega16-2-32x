@@ -2512,3 +2512,56 @@ result collapses without it. `jts16_colmix.v` / `jts16_prio.v` settle it
 and I have not read them for this purpose.
 
 Recorded so nobody retries the two dead ones.
+
+---------------------------------------------------------------------
+## 58. The occlusion rule is CONFIRMED BY RTL, and 1.11 is not enough on its own
+
+Entry 57's result rested on an assumption: that the foreground layer beats
+the background when both are priority level 2. `jts16_prio.v` settles it
+and the assumption is discharged.
+
+    lyr0 <= char (text)
+    lyr1 <= tile_or_obj(obj, scr1_g, scr1_g[10], obj_prio>=2)   FOREGROUND
+    lyr2 <= tile_or_obj(obj, scr2_g, scr2_g[10], obj_prio>=1)   BACKGROUND
+    lyr3 <= scr2 with the low bits cleared
+
+    {shadow,pal_addr} = lyr0 opaque ? lyr0 :
+                        lyr1 opaque ? lyr1 :
+                        lyr2 opaque ? lyr2 : lyr3
+
+**The mixer tests lyr1 before lyr2, unconditionally.** And
+`tile_or_obj` (line 58) returns either the sprite or THE TILE — never
+nothing — so if the foreground tile pixel is opaque, lyr1 is opaque
+whichever branch it takes, and lyr2 is never reached.
+
+**So a background cat1 tile under a fully-opaque foreground tile is
+unconditionally invisible.** Not near-certain. Read out of the mixer.
+Entry 57's 50% stands: 2373 of 4724 cat1 cells across the five scenes.
+
+**NOW THE COST, AND IT IS NOT THE GOOD NEWS IT LOOKS LIKE.**
+
+    now                                 1.44 vints/gen   22% single-vint
+    cat1 occlusion cull   -0.34    ->   1.10 vints/gen
+
+**The quantum is 1.00, and 1.10 is still over it.** A generation costing
+1.10 takes two vints exactly as one costing 1.44 does. What changes is the
+DISTRIBUTION: at a 1.44 mean, 22% of generations fell under 1.0; at 1.10
+a much larger share will, so the single-vint percentage — the metric that
+matters — should move substantially. The CEILING does not move at all
+until the mean crosses 1.00.
+
+So this is worth building and it is not a solve, and anyone reporting it
+as "1.44 down to 1.10" is quoting a number that does not by itself change
+what the player sees.
+
+**What crosses.** The sprite half is 0.73 and LOOP29 127 puts ~96% of
+records in software for want of palette lines. Entry 9 measured that
+three CRAM lines cover 70% of live records with NO colour change, and
+MDSPRTOP already got +19% claims choosing the line by record count.
+
+    + sprites, 70% of records to hardware   -0.51   ->   0.59 vints/gen
+
+0.59 is comfortably under the quantum. **Neither lever crosses alone;
+together they clear it with room.** That is the shape of the answer: the
+cat1 work is necessary and not sufficient, and the sprite-palette work is
+the other half.
