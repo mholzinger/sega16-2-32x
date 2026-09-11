@@ -2926,3 +2926,41 @@ time axis, and I reached for the fix before I had it.**
 Entry 165's measurements all stand -- the sets, the slot table, the cell
 counts, the disassembly corrections (four `move.l`, 8 words, one whole
 colour set). Its conclusion does not.
+
+## 167. MIKE'S RIG VERDICT: THE BACKGROUNDS RENDER. NEW BUG: LEFTOVER ZEUS TEXT (2026-09-11 03:20)
+
+vi16 on the MiSTer, Mike: **"backgrounds render - but... leftover text
+from Zeus."** The screenshot shows level 1 with correct background, sky,
+tombstones, grass and sprites, and two stale glyph groups burned into the
+upper middle of the playfield: `FRO` at about screen row 5 and `OH` at
+row 7 — remnants of the Zeus cut-scene text, still on the text layer
+after the scene changed.
+
+**The background arc (152-164) is DONE and vi16 is its result.** The
+colour-set drift free was destroying ~2,500 on-screen tile slots per
+4,000 frames; holding a set's pen indices across the free and repainting
+its own pens took that to 644 and the picture with it.
+
+**The new bug is the TEXT layer, not the tiles.** It is a different
+subsystem (TEXTCAPMASK's 4-row groups, LOOP29 147) and the failure shape
+says so: the stale rows are two SMALL GROUPS, not a region, and they
+survive a scene change. TEXTCAPMASK ships only the groups a gated writer
+marked, with a forced full mask every 8th vint as the backstop. A
+clear-all that runs through an UNGATED path would clear WRAM and never
+mark, so the master would keep re-shipping its stale copy — and 147
+records that the clear-alls (0x369C, 0x1ACCA) "never" fire in the
+traced window, so they have never been exercised in this design.
+First suspect, not yet measured.
+
+**Mike's priority, verbatim: "focus on parity in speed. and frames. do
+not wait for me."** So the text bug is LOGGED AND PARKED here, with the
+suspect written down, and this thread goes to the generation wall.
+
+**A counter collision I made and am recording rather than leaving.** I
+started a reject-reason census for the remaining old-placement rejects
+and put it in `mdalloc_ctr[16..20]` — slots 154's free-site split
+already uses. The reading came back "notsubset 65", which is the
+drift-free count, not a reject reason. Reverted, unbuilt, and noted
+because this log now has TWO counter-collision entries (152's DIAG arm
+and this one) and the lesson did not take the first time: **a counter
+block needs a written map before the second user, not after.**
