@@ -2019,3 +2019,56 @@ Lesson for the harvester: "read entries until one looks implausible" MERGES
 ADJACENT TABLES. Bound them by the next known table start instead, or by
 a stated extent. The false table it produced was 20 entries of real code
 pointers, so nothing downstream would have flagged it.
+
+---------------------------------------------------------------------
+## 48. The sprite pipeline's data: frame table, zoom table, and a BANDED order list
+
+Entry 46 left two large unattributed blocks. Finding who READS them cracked
+both, and turned up a structural fact about the sprite order list.
+
+**0x255E0 is the SPRITE FRAME TABLE**, read by 0x3C84:
+
+    3c86:  move.w  $06(fp),d0      ; sprite_id
+    3c8a:  add.l d0,d0 ; adda.l a0,a0 ; adda.l d0,a0   ; * 6
+    3c90:  move.l  #$255E0,d2      ; the base
+    3c9c:  move.w  (a0)+,d1        ; a word
+    3c9e:  movea.l (a0),a1         ; and a long pointer
+
+Six bytes per sprite_id: a word and a pointer. `patch_game.py` already
+knows this base — its IMM_OVERRIDES comment calls 0x3C92 "sprite
+frame-table base consumed via adda.l D2" — so the port had the address
+without the structure. The valid prefix is **182 entries**, ending at
+0x25A24, and the word field spans 0x0F34-0x15C0, which straddles the 4096
+world bias (entry 33), so it is a Y coordinate.
+
+**0x20000 is the ZOOM SCALE TABLE**, read by 0x3CD4:
+
+    3cd4:  lea     $20000,a2
+    3ce0:  move.b  (a0)+,d0        ; a size class from the frame data
+    3ce2:  lsl.w   #5,d0           ; 32-BYTE ROWS
+    3ce6:  move.b  $4E(fp),d0
+    3cea:  andi.w  #31,d0          ; 0-31 — the ZOOM LEVEL
+    3cee:  move.b  (a2,d0.w),d6    ; scaled result
+
+MacDonald's notes give System 16 zoom as 5 bits, 0 to 31 (entry 21), and
+this indexes exactly 0..31 within a 32-byte row. The rows are a scale
+ladder — row 3 reads `03 03 03 03 03 03 03 03 03 03 03 02 02 02 02 02`,
+holding at 3 then dropping to 2 — and the monotonic decay curve entry 46
+spotted at 0x210C4 is more of the same table. **$4E is the zoom level.**
+
+**AND THE ORDER LIST IS BANDED BY PRIORITY.** 0x3CA6:
+
+    3cb6:  lea     $FFEC80,a0      ; the order list (entry 13)
+    3cbc:  move.b  $08(fp),d0      ; sprite slot
+    3caa:  move.b  $2F(fp),d1      ; the PRIORITY BAND (entry 34)
+    3cae:  lsl.w   #6,d1           ; * 64
+    3cb0:  move.b  d0,(a0,d1.w)    ; band*64 + slot
+
+So the 256-byte order list entry 13 found is **FOUR BANKS OF 64**, indexed
+by the depth band. That is why it is 256 bytes, and it means the upload
+loop's walk order IS the draw order: band 0 first, then 1, 2, 3. Three
+findings that were separate — the order list (13), the depth bands (34)
+and the floor heights (36) — are one mechanism.
+
+Block A also holds four TILE UPLOAD BLOCKS at 0x26C20, 0x2726C, 0x278B8
+and 0x28B84, fed to the blitter at 0x258A as [dest][count][count][words].
