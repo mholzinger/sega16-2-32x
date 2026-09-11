@@ -3544,3 +3544,72 @@ mechanism that looks applied and is not. The counter-collision entries
 **Where the speed stands.** vi27: wall 1.13, 42% single-vint, isr-flips
 2,418, 68K handler 53.1 -- the best transport of the arc, and NOT
 shippable until the allocator is out of the cat-1 path.
+
+## 177. NTSKIP IS A DEAD END, AND ITS "91.4% SKIPPED" WAS A COUNTER COLLISION (2026-09-11 18:20)
+
+Following the decompile thread's advice on my three bugs -- "every new
+emitter should print what it emitted and fail loudly on a count it did
+not expect" -- I went back and read NTSKIP's own counter from an address
+I had checked against the scratch map. It had never been checked.
+
+**`NTS` was at 0x28FD0. The band-deferral block is at 0x28FC8, three
+longs, ending 0x28FD4. NTS[0] overlapped its third long.** The
+"91.4% of rows skipped" in entry 170 was the skip count plus band-2
+deferrals. Moved to 0x28FD8 and the scratch map from 0x28F80 to 0x29000
+is now written into the source above the define, because this log has
+three collision entries (152, 167, 176) and every one was a counter
+landing on a live block.
+
+Read correctly, on the same build:
+
+    rows skipped 0   walked 23,800   ->  0.0%
+
+**The flag has been doing nothing.** Two causes, both mine:
+
+  1. **`tm_gen` was global.** `cap_page` bumps it when ANY page's content
+     moves, and the game streams tilemap columns continuously while
+     scrolling, so every generation invalidated every row. Fixed to
+     per-page generations folded into the row key, so a write to a page
+     a row does not read costs that row nothing.
+  2. **The age bound could never be satisfied.** A row is revisited once
+     per full eight-phase walk, and `win_no` advances per window, so the
+     age at revisit is 8-16 and `NT_MAXAGE=8` rejected every row. With
+     both fixed:
+
+    NTMAXAGE=64    63.9% skipped     21% single-vint
+    NTMAXAGE=200   67.5% skipped     21% single-vint
+    (zero skips)    0.0% skipped     20% single-vint
+
+**Skipping two thirds of the name-table walk buys ONE POINT. NTSKIP is
+dead and comes out of the line.**
+
+**And that corrects my attribution for three builds.** vi20's 1.42 wall,
+vi21's and vi26's transport numbers were all credited partly to NTSKIP.
+The skip was inert in vi21 and vi26 (age bound) so those gains were
+NBUILD1 + MDSPRTOP alone -- which is exactly why vi22, built with no
+NTSKIP at all, measured within noise of vi21 (entry 171 noticed the
+coincidence and drew the wrong conclusion from it). vi20's skip was
+UNBOUNDED, so it did fire, and that is the corruption Mike saw.
+
+**The maps drain is still the real 0.44, and I had the wrong function.**
+`NOMAPS=1` ablates `build_maps_chunk`; the cell walk NTSKIP targets is
+the packet-build path inside the window. Two different pieces. The
+ablation's 0.29 of wall belongs to `build_maps_chunk` and **nothing has
+touched it yet.**
+
+**Live from the decompile thread, both unattempted:**
+
+  - **The hole punch is cheaper than I costed it.** Four scenes of five
+    have no partial cat1 row, so the test is one screen-row compare with
+    no bitmap. Per cell, a cat1 cell whose tile is BLANK needs no hole at
+    all -- 1,204 of scene 1's 1,792. 68% of scene 0's cells and 82% of
+    scene 1's resolve per cell. **The sprite loop wants two bits per
+    cell, not one.**
+  - **The game already knows when it did not advance.** On an overrun it
+    increments a counter and takes a path writing no scroll and no
+    sprite upload, so the composed output is IDENTICAL to the previous
+    frame. Our generations run at 0.62/vint against the game's 0.50, so
+    a fifth of them recompose an unchanged frame. Detecting it is a byte
+    compare over the staged sprite list and the latched regs. It makes
+    the frames either side free, which is where a bimodal 42/57 split
+    hurts most.

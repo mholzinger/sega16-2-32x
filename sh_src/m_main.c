@@ -5002,14 +5002,29 @@ static uint32_t nt_key[56];
 static uint16_t nt_gen[56];
 static uint8_t  nt_win[56];                  /* last window this row was
                                               * actually WALKED */
-static uint16_t tm_gen = 1;                  /* 0 = "never walked" */
+/* PER-PAGE generations (LOOP29 177). A single global counter was the
+ * bug: cap_page bumps on ANY page's content moving, the game streams
+ * tilemap columns continuously while scrolling, so every generation
+ * invalidated every row and the skip fired ZERO times in 4000 frames.
+ * A row reads only the pages its pq[] names, so key on those. */
+static uint8_t  tm_pgen[16];                 /* per tilemap page */
+static uint16_t tm_gen = 1;                  /* scene-cut invalidate only */
 #ifndef NT_MAXAGE
 #define NT_MAXAGE 16                         /* windows a row may go
                                               * unwalked; see LOOP29 171 */
 #endif
-#define NTS ((volatile uint32_t *)0x26028FD0)   /* free: SPRBK ends 0x28FC4,
-                                                 * band attribution 0x28FC8
-                                                 * is 3 longs -> 0x28FD4 */
+/* 0x28F80-0x29000 SCRATCH MAP, written down because this log now has
+ * three collision entries (152, 167, 176) and every one was a counter
+ * landing on a live block:
+ *   0x28F7C  DISP_CENSUS            1 long   -> 0x28F80
+ *   0x28FA0  cut-blank [0],[1]      2 longs  -> 0x28FA8
+ *   0x28FBC  SPRBK hits/misses      2 longs  -> 0x28FC4
+ *   0x28FC8  band deferral [rg]     3 longs  -> 0x28FD4
+ *   0x28FD8  NTS skipped/walked     2 longs  -> 0x28FE0
+ *   0x28FE0  GNS skipped/launched   2 longs  -> 0x28FE8
+ * NTS WAS AT 0x28FD0 AND OVERLAPPED THE BAND BLOCK's third long, so the
+ * 91.4%-skipped figure in 170 was NTS[0] plus band-2 deferrals. Moved. */
+#define NTS ((volatile uint32_t *)0x26028FD8)
 #endif
 #ifdef PG_STICKY
 /* Fixed scrap 0x28F40-4F (region guard: CUT_BLANK+PG_STICKY together
@@ -5118,9 +5133,7 @@ RAMCODE static void cap_page(int pg)
 #endif
         pg_watch |= (uint16_t)(1u << pg);
 #ifdef NT_SKIP
-        tm_gen++;                            /* tilemap content moved:
-                                              * every row key is stale */
-        if (!tm_gen) tm_gen = 1;             /* 0 means never walked */
+        tm_pgen[pg & 15]++;                  /* THIS page's content moved */
 #endif
 #ifdef PG_STICKY
         pg_quiet[pg] = 0;
@@ -13253,6 +13266,13 @@ RAMCODE void m_main(void)
                                 | ((uint32_t)(pqb[0] & 0xF) << 19)
                                 | ((uint32_t)(pqb[1] & 0xF) << 23)
                                 | ((uint32_t)(pqb[2] & 0xF) << 27);
+                            /* fold in the CONTENT generation of every
+                             * page this row can read, so a write to a
+                             * page the row does not touch costs nothing */
+                            nk += (uint32_t)tm_pgen[pqb[0] & 15] * 0x01010101u;
+                            nk ^= (uint32_t)tm_pgen[pqb[1] & 15] << 3;
+                            nk ^= (uint32_t)tm_pgen[pqb[2] & 15] << 11;
+                            nk ^= (uint32_t)tm_pgen[pqb[3] & 15] << 19;
                             /* BOUNDED STALENESS (LOOP29 171). The skip
                              * trusts cap_page's content compare to notice
                              * every tilemap change, and on the FPGA that
