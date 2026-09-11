@@ -3417,3 +3417,65 @@ is the plan's step 5.
 rewrite tile pen values through the map so a tile indexes its assigned
 line directly, and stop the FB cat-1 pass. The number to read is
 **percentage of single-vint frames** -- 22% on vi26 -- and not fps.
+
+## 175. STEP 3 MEASURED: THE TILE HALF LEAVES COMPOSE, 20% -> 40% SINGLE-VINT, AND THE PER-PIXEL PRIORITY BIT IS THE MISSING PIECE (2026-09-11 16:25)
+
+**First, a hardware fact that changes the plan's implementation.** The
+plan's priority table puts sprites at rank 4, between plane A HIGH
+(cat1) and plane A LOW (cat0). The 32X cannot interleave with the MD's
+internal priority resolution -- but it does not have to, because
+**the 32X layer's priority is PER PIXEL**:
+
+    srcref/S32X_MiSTer/rtl/32X/VDP.sv:506
+    assign YSO_N = !MODE ? 1'b1 : ~(PRI ^ PIX_COLOR[15]) & YS_N_SYNC;
+
+`PIX_COLOR[15]` is bit 15 of the 32X PALETTE ENTRY for that pixel, XORed
+with the global PRI bit. **Our port already relies on this** -- m_main.c
+3488: "bit 15 of the CRAM ENTRY, not pixel index == 0", and `cram[0] =
+0x8000` is what makes an unwritten FB pixel show the MD.
+
+So cat1 does NOT need drawing over sprites. **A sprite pixel merely
+needs SUPPRESSING where a cat-1 cell covers it**, and the MD's plane A
+HIGH shows through the hole. That replaces 0.509 v/gen of tile drawing
+with a per-cell bit test against a bitmap that is already baked and
+static (`sh_src/cat1map.bin`, verified 20480/20480).
+
+**Step 3's measurement.** `C1NOFB=1` deletes the FB cat-1 pass outright
+(needs CAT1MD). Same flags otherwise, 4000 frames, play2:
+
+    build                        wall    ships   SINGLE-VINT
+    vi26                         1.46v   32.8f       20%
+    + CAT1MD                     1.29v   35.5f       35%
+    + CAT1MD + C1NOFB            1.12v   37.1f       40%
+
+**Step 3's kill condition -- "the percentage does not move" -- is NOT
+met. It doubled.** Slave compose falls 1.088 -> 0.597 v/gen, which is
+the 0.49 the cat1 pass was costing, matching 161's 0.509 to within
+measurement.
+
+**We are at 1.12 and the quantum is 1.00.** The plan projected 0.77; the
+difference is that the slave and master phases overlap, so removing
+0.49 of slave work moved the wall 0.34. What is left, per generation:
+
+    slave  clear + sprites + text   0.597
+    master maps drain               ~0.44
+    echo phase                      1.02   <- slave works 0.597 of it
+    mtask phase                     0.96
+    wall                            1.12
+
+**0.42 of the echo phase is the slave NOT WORKING** -- waiting for its
+launch, parked, or in the handoff. That is where the last 0.12 is
+cheapest to find, and it is not more compute removal.
+
+    rom/night/vi27.32x  ON THE RIG as vi27.32x and probe.32x, md5 2cf7569c
+    isr-flips 2,418 (vi16 1,724, vi26 2,095) -- best of the arc
+    68K handler 53.1, consume 4.6 (BETTER than vi16's 58.3 / 5.7)
+    nopost 56, fallback 132, skips 0, flip-late 0
+
+**KNOWN ARTEFACT, and it is why this is not the ship: sprites wrongly
+cover cat-1 tiles where they overlap.** The FB writes a sprite pixel,
+the 32X layer wins per pixel, and the MD's cat1 is hidden. On level 1
+cat-1 is 11.3% of tiles and sprite area is small, so the overlap is
+rare -- a sprite briefly in front of a fence it should be behind. Mike's
+eye is the right instrument for whether that is visible at all before I
+spend the sprite loop's budget masking it.

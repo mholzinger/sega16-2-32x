@@ -1762,6 +1762,15 @@ endif
 ifdef NTMAXAGE
 SHCCFLAGS += -DNT_MAXAGE=$(NTMAXAGE)
 endif
+# `make ... C1NOFB=1` = LOOP29 175 / PLAN-TILES-TO-VDP step 3. Needs
+# CAT1MD. Removes the FB cat-1 pass entirely so MD plane A's priority
+# bit carries cat1 on its own. Sprites then wrongly cover cat1 where
+# they overlap, because the 32X layer wins per pixel wherever the FB
+# wrote one -- so this is the step-3 MEASUREMENT and not a ship. Read
+# the percentage of single-vint frames.
+ifdef C1NOFB
+SHCCFLAGS += -DC1_NOFB
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old

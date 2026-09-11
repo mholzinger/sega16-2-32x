@@ -3770,6 +3770,16 @@ static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
          * after). Everywhere else the FB stays 0 = MD-through, and
          * plane A's own priority copy of the tile shows. MD-claimed
          * sprites are handled by the MD (cell pri 1 over sprite pri 0). */
+#ifdef C1_NOFB
+        /* LOOP29 175, PLAN-TILES-TO-VDP step 3 measurement. Delete the
+         * FB cat-1 pass outright and let MD plane A's priority bit carry
+         * cat1 alone. RENDERS SPRITES OVER CAT1 where they overlap --
+         * the 32X layer wins per pixel wherever the FB wrote one -- so
+         * this is a measurement, not a ship. The number it produces is
+         * the percentage of SINGLE-VINT frames. */
+        if (catsel == 2)
+            return;
+#endif
         int c1_all = 1;
         if (catsel == 2) {
             c1_all = 0;
