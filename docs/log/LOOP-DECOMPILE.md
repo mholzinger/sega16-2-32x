@@ -1678,3 +1678,59 @@ register or a table never appears, so absence from a value list is not
 evidence the field is unused — $22 has 152 writing functions and would
 look thin here because the animation driver reloads it from a script
 (entry 32).
+
+---------------------------------------------------------------------
+## 41. The three vint-context workers: palette drain, input edges, colour cycling
+
+Entry 39 listed the six functions IRQ4 calls. Three carry the work.
+
+**0x2DBC — the palette upload queue DRAIN.** The consumer of the queue
+entry 3 saw being built at 0x3BEC:
+
+    2dbc:  movea.l $FFF402,a2      ; queue base
+    2dc4:  tst.b   ($FFF406)       ; anything queued?
+    2dc8:  movea.l (a2)+,a1        ; destination
+    2dca:  movea.l (a2)+,a0        ; source
+    2dcc:  seven `move.l (a0)+,(a1)+`   = 28 BYTES = 14 WORDS
+    2dda:  cmpa.l  #$FFFFF800,a2   ; ring wrap
+
+Seven longs is 28 bytes is 14 words — **exactly one sprite palette**
+(entry 3: `0x242A0 + 28*index`). Builder and drain agree on the size from
+opposite ends of the pipeline, which is the cleanest confirmation of the
+palette format yet. Called from IRQ4 at 0x2B4C.
+
+**0x2E74 — input edge detection.**
+
+    2e86:  move.b  $FFF003,d1      ; last frame's bits
+    2e8a:  move.b  d0,$FFF003      ; store this frame's
+    2e8e:  not.b   d0
+    2e90:  and.b   d1,d0           ; the EDGES
+    2e94:  btst    #3,d0 ; bsr 0x2FBA
+
+Standard "newly pressed this frame" computation. 0xFFF000-0xFFF00B is the
+input state block, and 0xFFF000 carries a counter cleared past 10.
+
+**0x30B2 — the colour-cycling streamer, writing palette RAM directly.**
+
+    30b2:  lea     $FFF300,a5      ; a table of cycling slots
+    30b6:  move.b  (a5),d0 ; bpl   ; bit 7 = slot active
+    30bc:  subq.b  #1,1(a5)        ; per-slot countdown
+    30c2:  lea     $840000,a1      ; PALETTE RAM
+    30cc:  lsl.w   #4,d0           ; line * 16
+    30d0:  movea.l 2(a5),a0        ; the cycle script
+    30d4:  move.w  6(a5),d0        ; script index, wraps on (a0)
+
+So slots at 0xFFF300 are 8 bytes each: active/line byte, timer byte, a
+long script pointer, a word index. This is the glow and fade animation,
+and it writes **straight into palette RAM every vint, bypassing the
+upload queue entirely**.
+
+That last point matters for the port: there are TWO palette write paths,
+not one. The queue (0x3BEC build, 0x2DBC drain) handles whole 14-word
+sprite palettes; the cycler pokes individual lines at 0x840000 on its own
+schedule. Anything that models palette delivery has to cover both.
+
+It also confirms a port fact from the other side: `patch_game.py`'s
+DATA_PTR_NORM normalizes "0x30D0 palette-cycle streamer (glow/fade tables
+at low 0x1A78E)" — 0x30D0 is the `movea.l 2(a5),a0` above, so the field
+being normalized is this table's script pointer.
