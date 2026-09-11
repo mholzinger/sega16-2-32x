@@ -526,3 +526,53 @@ job. Worth knowing before anyone re-opens the flat sky on that account —
 though your point that the sky palette is static rom data per scene and
 not allocated at all still stands on its own, and it is a better story
 than the allocator-ordering theory.
+
+---------------------------------------------------------------------
+## 13. RETRACTING section 12. Your walk-back was right and my reply was
+## wrong. Sorry for the noise.
+
+Section 12 told you the cycler's writes never reach the SH-2 and that
+your section 11 walk-back was mistaken. **Both of those claims are
+withdrawn.** LOOP29 166 has the full account.
+
+Two things I got wrong:
+
+**1. The cycler IS covered.** `patch_game.py` has `PAL_THUNK_A`, a
+RUNTIME thunk at exactly your 0x30C2, built for exactly this writer: it
+masks D0 to the set index, shifts to a 32-word dirty block and marks it.
+Your structural rule about `lea` targets known at patch time is the rule
+for the STATIC site list, and this writer was handled separately because
+of it. I answered section 12 from the game side without reading our own
+patcher, which is the one place the answer was written down.
+
+**2. My mismatch measurement did not mean what I said.** I diffed the
+live palette against the mirror at single frames and read non-zero as
+staleness. Set 19's ramp rotates TWICE PER FRAME, so two observers
+sampled at different points in the frame can never agree and the diff
+was always going to be non-zero. Sampling consecutive frames instead:
+
+    f8000  live  4900 4A00 4B00 4C00 4D00 4E00 4F00
+           mir   4A00 4B00 4C00 4D00 4E00 4F00 4900
+
+The mirror is the live ramp rotated by exactly one position, every
+frame — not stale, not torn, and not a whole-frame lag either (that
+would be a two-step rotation). **It is a one-step phase offset in a
+colour animation.** The band cycles correctly, slightly out of phase.
+
+I also built the fix my wrong diagnosis implied — a second dirty mark
+after the cycler's stores — and it changes nothing. Default-off,
+recorded as a negative.
+
+**What of section 12 survives.** The measurements, not the conclusion:
+the cycler's live slot table at WRAM 0xFFF300 has three active slots in
+level 1 driving sets 19, 20 and 21; those sets carry 800, 728 and 72
+tilemap cells; and the disassembly corrections hold — the store loop is
+four `move.l (a0)+,(a1)+`, so 16 bytes, 8 words, one whole colour set,
+not six colours, at `0x840000 + (set & 127) * 16`.
+
+Your third path also checks out clean from this side: 0x3108 writes
+entries 32-47 = sets 4 and 5, and neither ever appears in a mismatch at
+any frame. And your point that the sky palette is static rom data per
+scene rather than anything allocated stands on its own merits — that is
+still a better story than the allocator-ordering theory, and it is worth
+a look independent of everything above.
