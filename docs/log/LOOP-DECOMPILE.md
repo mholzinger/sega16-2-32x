@@ -1314,3 +1314,53 @@ CONSISTENT WITH THE RUNNING FRAME. $22 was the most-changing field across
 frames 2400-2405 at 19%, highest of any offset. Not 100%, because most of
 the 19 live slots are static scenery whose handlers never call this, and
 the game skips work on missed vints (entry 22).
+
+---------------------------------------------------------------------
+## 33. 0x3DD8 — world-to-screen, culling, and the 192 turns up again
+
+34 callers, 298 bytes, the third-largest unnamed piece of infrastructure.
+It converts an object's world position into a hardware sprite position and
+culls it if it lands off screen.
+
+    3de4:  move.w  $10(fp),d0     ; Y (the integer half of the 16.16, entry 29)
+    3de8:  subi.w  #4096,d0       ; world bias
+    3dec:  add.w   $FFF0FA,d0     ; camera Y
+    3df0:  sub.w   $FFF128,d0     ; Y offset
+    3df6:  asr.w #1,d6 ; subx.w d6,d1 ; add.w d6,d0   ; half-height
+    3dfe:  bmi.w   0x3F04         ; OFF TOP -> hide (entry 30)
+
+    3e02:  move.w  $0C(fp),d2     ; X
+    3e06:  subi.w  #4096,d2
+    3e0a:  add.w   $FFF0F8,d2     ; camera X
+    3e0e:  add.w   $FFF120,d2     ; X offset
+    3e12:  addi.w  #192,d2        ; <-- THE VISIBLE-WINDOW ORIGIN
+    3e1c:  cmpi.w  #512,d2
+    3e20:  bcc.w   0x3F04         ; OFF RIGHT -> hide
+    3e26:  cmpi.w  #185,d4
+    3e2a:  bcs.w   0x3F04         ; OFF LEFT -> hide
+
+    3e32:  move.b  $FFF018,d5
+    3e36:  btst    #6,d5          ; CABINET SCREEN FLIP
+    3e3c:  eori.b  #2,d4          ;   inverts the object's X-flip bit
+
+**The 192 is the same 192.** Entry 24 measured the scroll conversion as
+MD = S16 - 192 and argued it was the visible-window origin rather than a
+convention. Here the GAME ITSELF adds 192 when turning a world X into a
+hardware sprite X. Two independent uses of the same constant, one
+measured on a running frame and one read out of the game's own code.
+That closes any doubt about the direction of the scroll conversion.
+
+The cull window, 185 to 512, sits against `s16b.txt`'s stated sprite X
+range of 0x00B6 (182) leftmost to 0x1F5 (501) rightmost — the game's
+margins are a few pixels inside the hardware's.
+
+**Globals named by this routine:**
+
+    0xFFF0F8  camera X        0xFFF120  X offset (shake/scroll trim)
+    0xFFF0FA  camera Y        0xFFF128  Y offset
+    0xFFF018  I/O latch; bit 6 = screen flip (cabinet DIP)
+
+And it explains a large share of 0x3F04's 76 callers: every cull path in
+this routine is one of them, so "sprite hidden" is frequently just "object
+is off screen", which is another reason not to read a blank pool record as
+a transport fault (notes section 7).
