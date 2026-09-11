@@ -813,6 +813,35 @@ if os.environ.get('MDSPRPROBE') == '1':
     hrom[_o:_o+14] = bytes([0x45, 0xEA, 0x00, 0x10]) + b'\x4E\x71' * 5
     print('MDSPRPROBE: sprite record copy blanked at 0x2B30 (renders wrong)')
 
+# SCENESEL (LOOP-DECOMPILE 66) — PROBE. Forces every round to load one
+# scene, so the later scenes can be reached without playing to them. No
+# input script in discover/inputs reaches past scene 0, even at 6000
+# frames, which made the per-scene palette analysis the tile plan needs
+# unreachable.
+#
+# 0x662 does `lea $1CDA(pc),a0` then `move.b (a0,d0.w),$FFF142` at 0x670,
+# where d0 is the round at 0xFFF14E masked to 7. The table is eight bytes:
+#   round  0 1 2 3 4 5 6 7
+#   scene  0 1 2 3 4 0 0 0
+# Writing N to all eight makes every round load scene N. One byte per
+# entry, in place.
+#
+# NOT A GAMEPLAY BUILD. The tilemap and palettes are the target scene's;
+# the ACTORS are whatever the round would have spawned, so this is valid
+# for tile and palette measurement and NOT for a sprite census.
+_scene = os.environ.get('SCENESEL')
+if _scene:
+    if GAME not in ('altbeast', 'altbeastj'):
+        raise SystemExit('SCENESEL: table address is altbeast-only')
+    _n = int(_scene)
+    if not 0 <= _n <= 4:
+        raise SystemExit('SCENESEL must be 0-4 (five scenes, entry 10)')
+    _t = 0x1CDA
+    assert list(hrom[_t:_t+8]) == [0, 1, 2, 3, 4, 0, 0, 0], \
+        f'SCENESEL: round table is {list(hrom[_t:_t+8])}, not the expected map'
+    hrom[_t:_t+8] = bytes([_n] * 8)
+    print(f'SCENESEL: every round now loads scene {_n}')
+
 # TAS REPLACEMENT: the MD bus arbiter drops the write phase of the
 # 68K's locked read-modify-write cycle, so TAS never sets its latch
 # on 32X (works on System 16B). Every tas/bne latch in the game

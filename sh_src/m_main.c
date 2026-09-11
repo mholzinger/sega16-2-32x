@@ -8232,8 +8232,15 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
 #endif
 #ifdef GEN_SKIP
         {
+            /* LOOP29 179: hash the GAME'S staging, not our snapshot.
+             * SPR_SNAP is refreshed by text_capture on OUR schedule, so
+             * hashing it asks "has our copy changed" -- which is not the
+             * question and cost flips in 178. FB_SPR is where the 68K
+             * writes the sprite list, 64 records of 16 bytes = 256 longs,
+             * and a vint the game did not advance leaves it byte-
+             * identical because the no-advance path writes no upload. */
             uint32_t h = 2166136261u;
-            const volatile uint32_t *sp = (const volatile uint32_t *)SPR_SNAP;
+            const volatile uint32_t *sp = (const volatile uint32_t *)FB_SPR;
             for (int i = 0; i < 256; i++)
                 h = (h ^ sp[i]) * 16777619u;
             {

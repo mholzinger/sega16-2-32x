@@ -1489,6 +1489,11 @@ endif
 ifdef MDHSCR
 MDCCFLAGS += -DMD_HSCROLL_DIRECT
 endif
+# `make ... SCENESEL=N` = LOOP-DECOMPILE 66. PROBE: forces every round to
+# load scene N (0-4) by rewriting the round->scene table at 0x1CDA. Lets
+# the later scenes be measured without playing to them — no input script
+# reaches past scene 0. Tile/palette measurement only; the actors are
+# still the round's, so it is NOT valid for a sprite census.
 # `make ... MDSPRPROBE=1` = LOOP-DECOMPILE 27. COST PROBE, RENDERS WRONG.
 # Blanks the sprite-record copy inside the game's own upload loop while
 # keeping the list geometry, to price the copy off the game's missed-frame
@@ -2395,7 +2400,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) python3 tools/patch_game.py
+	@GAME=$(GAME) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

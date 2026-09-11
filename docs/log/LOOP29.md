@@ -3668,3 +3668,59 @@ wrong** and would have needed fixing even without this. `SPR_SNAP` is
 OUR snapshot, refreshed on our schedule by `text_capture`, not the
 game's staging. Hashing it asks "has our copy changed", which is not the
 question. The game's FB staging is the right source.
+
+## 179. THE REDUNDANT GENERATIONS DO NOT EXIST — CLOSED, WITH THE PROTOCOL LOOP BROKEN FIRST (2026-09-11 18:40)
+
+178 said `GENSKIP` could not work because `GAMEGATE` fuses "presented"
+with "released". **Both halves are now settled.**
+
+**The protocol loop IS breakable, and cheaply.** No MD-side change was
+needed -- the gate already has `GAMEGATE_MAXWAIT`, a fallback release
+after N vints without a flip, which is exactly the skip case.
+`GAMEGATEWAIT=1` with GENSKIP on:
+
+    game frames / vints   50.7%   (baseline 49.7%, GENSKIP alone 35.3%)
+
+The feedback loop is gone. The game advances at its normal rate whether
+we present or not. That knob is worth knowing about independently.
+
+**And with the loop broken the lever still cost flips** -- isr-flips
+1,866 against 2,095 -- because the hash source was wrong, which 178
+already flagged: `SPR_SNAP` is OUR snapshot, refreshed by `text_capture`
+on OUR schedule, so hashing it asks "has our copy changed".
+
+**Fixed to hash `FB_SPR`, where the 68K actually writes the sprite list
+(64 records x 16 bytes = 256 longs). The result closes the lever:**
+
+    generations SKIPPED 2     launched 2,110     = 0.1%
+
+    our generations   2,107 / 3,983 vints  =  0.53 / vint
+    game frames                            =  0.50 / vint
+
+**There is nothing to reclaim. Every generation we launch corresponds to
+a real game frame.** The decompile thread's premise -- "at 42%
+single-vint the game is missing roughly 58% of its own vints, and each of
+those is a generation spent recomposing an unchanged frame" -- is true of
+the ARCADE's architecture and false of ours, for the same reason 178
+gave: under GAMEGATE the game does not miss vints, it runs at our rate.
+Generations and game frames are the same number to within 6%.
+
+My own "0.62 against 0.50, so a fifth are waste" in 177 came from a
+different build's ship count and did not survive being measured on the
+line. **Ratio of two numbers from two different builds: the same error
+shape as everything else this log has had to retract.**
+
+`GENSKIP` is CLOSED, default-off, and the entry stands as the reason not
+to rebuild it. `GAMEGATEWAIT` is the part worth keeping in mind.
+
+**What is actually left, both from the decompile thread and untouched:**
+
+  1. **The hole punch** -- cheaper than I costed it. Four scenes of five
+     have no partial cat1 row (one screen-row compare, no bitmap), and a
+     cat1 cell whose tile is blank needs no hole at all: 68% of scene 0's
+     cells and 82% of scene 1's resolve per cell. Two bits per cell, not
+     one. This is what makes vi27's 1.12 wall / 42% single-vint
+     SHIPPABLE instead of a measurement.
+  2. **`build_maps_chunk`** -- the real 0.44 v/gen, worth 0.29 of wall by
+     ablation (168), and nothing has touched it. 177 established I had
+     been optimising a different function for three builds.
