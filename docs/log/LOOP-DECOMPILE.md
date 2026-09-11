@@ -1639,3 +1639,42 @@ handler — which is a normal thing to do — would need a real atomic
 replacement, and the failure would be an occasional double-claim: rare,
 gameplay-only, and invisible to any still-frame comparison. Any title
 adopting this kit needs this reachability check run, not assumed.
+
+---------------------------------------------------------------------
+## 40. The remaining hot fields, characterised by how they are used
+
+Profiling every immediate written to or compared against each hot field,
+restricted to real code. This says what SHAPE each field has; it is not a
+claim about meaning beyond what the shape forces.
+
+    $20   set 0-8; tested 17,18,19; bit 7 (x31), bits 0/1 (x14/x12)
+          BOTH a small value AND flags in the high bit. 78 functions.
+    $21   set 0,1,2,15; tested 1,2,3,4,8; ANIMATION FRAME INDEX (entry 32),
+          and the tests are handlers branching on which frame is showing
+    $23   set 0-7 and 16; tested 0-8. A SMALL ENUM, ~9 states, 44
+          functions. Entry 38 tests it on a TARGET object (`cmpi.b #3` and
+          `#4`) before claiming the lock, so it is the actor's mode —
+          what it is currently doing — and other actors read it to decide
+          whether it can be acted on.
+    $2C   bit 4 in 111 of 121 accesses; bits 5,6,7 rare. A FLAG BYTE whose
+          only busy bit is 4 = depth-sorted (entry 34).
+    $2E   bit 7 in 134 accesses, and `move.b #$80` 36 times. Effectively a
+          ONE-BIT FIELD: horizontal flip (entry 32).
+    $4A   set to 8,16,24,32,48,50,64,72 — ALL MULTIPLES OF 8 except 50 —
+          and tested against 8,16,32,48,64. A size or distance in
+          eight-pixel units. 39 functions.
+    $4B   set -1,1,4,40; bits 0 and 1. A small enum plus two flags.
+    $78   ONLY ever set to -1 and tested against -1, 29 sites. A word
+          sentinel: "none / not set".
+
+Two of these are worth the port knowing. **$23 is the actor mode** and is
+read across object boundaries, so it is the field that decides whether an
+interaction is legal — the same field entry 38's claim path inspects.
+And **$78 is a pure sentinel**, so any tooling that diffs object state
+should treat 0xFFFF there as "absent" rather than as a value.
+
+METHOD NOTE: this profile only sees IMMEDIATES. A field set from a
+register or a table never appears, so absence from a value list is not
+evidence the field is unused — $22 has 152 writing functions and would
+look thin here because the animation driver reloads it from a script
+(entry 32).
