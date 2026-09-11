@@ -3770,3 +3770,54 @@ If vi29 keeps the feel and loses the bleed, the capture is simply being
 outrun and the fix is to make it keep up rather than to slow the game
 down. If vi29 loses the feel too, the trade is real and the fix is in
 `cap_page`'s mid-stream detection, not in the gate.
+
+## 181. CORRECTION TO 180, AND AN OPEN FACT: THE GAME COMPLETES ONE PASS EVERY TWO VINTS NO MATTER HOW OFTEN WE RELEASE IT (2026-09-11 19:05)
+
+**180 claimed `GAMEGATEWAIT=1` decoupled the game from our presentation.
+It did not.** The gate's release lives INSIDE `if (r60_go)` -- the window
+path -- so it can only fire on a vint that runs a window. At wait=1 it
+releases on every WINDOW, not every vint, and the game tracked the
+window cadence exactly as before:
+
+    vi26 (wait=4)   game frames / vints  49.7%
+    vi28 (wait=1)                        50.2%
+
+**So I built the release it was missing.** `GATEFREE=1` grants the
+release on a vint with NO window as well, which is what "the game runs on
+vblank like the arcade" actually requires:
+
+    vi30 (wait=1 + GATEFREE)  game frames / vints  50.2%
+                              game's own missed-frame counter  0.0%
+
+**Unchanged. And zero overruns.** The game is released every vint, never
+reports a missed frame, and still advances once every two vints.
+
+**That is a hard number and it contradicts this project's founding
+premise.** CLAUDE.md: "The 68000 clock is NOT a loss. The game needs 2780
+instructions/vint and our 7.670 MHz budget covers that." The 68K's
+measured handler cost is ~54 lines of 262, so ~80% of every vint is the
+game's. Yet its pass completes at 0.5/vint with its own overrun detector
+silent.
+
+Three readings, and I cannot separate them from this side:
+
+  1. **The release flag is level, not counted.** `0xFFA0F5` is set to 1;
+     if the game's wait loop clears it and runs a pass that spans two
+     vints, setting it twice buys nothing. That would mean the pass
+     genuinely costs ~1.6 vints of available 68K time.
+  2. **The release is not the game's only gate.** Something else in the
+     main loop is also per-frame, and 0xFFA0F5 is not the binding one.
+  3. **`0xFFF02A` is not 1 tick per game frame on this scene.** The
+     arcade measures 0.937 ticks per screen frame (MAME, LOOP29's
+     arcade-rate run), so it is ~1/frame there -- but "per scene" is in
+     its own name and gameplay_speed.py carries a scene-reset guard.
+
+**Question sent to the decompile thread** (NOTES-FROM-DECOMPILE 14): they
+have read the main loop and the six IRQ4 workers, so they can say which
+flag the loop actually waits on and whether one pass can span two vints.
+It is the difference between "the display is the only blocker" -- which
+is what every plan in this log assumes -- and "the 68K side has a second
+gate nobody has found".
+
+`GATEFREE` stays default-off pending that answer: it is a real change to
+the release protocol and it currently buys nothing measurable.

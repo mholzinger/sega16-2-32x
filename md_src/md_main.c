@@ -3008,6 +3008,22 @@ void shim_vblank(void) {
 		 * body's deferred flip (one frame of constant latency). */
 		if (r60_go) { r60_late = 1; r60_late_v = v_entry; }
 #else
+#ifdef GATE_FREE
+		/* LOOP29 181. GAMEGATE's release lives INSIDE `if (r60_go)`, the
+		 * window path, so it can only fire on a window vint -- which is
+		 * why GAMEGATEWAIT=1 still measured the game at 50% of vints
+		 * (entry 180 claimed it decoupled them; it did not). Release on
+		 * a vint with NO window too, and the game's logic and input run
+		 * on vblank as the arcade's do, at 60 Hz, whatever rate the
+		 * display manages underneath. Mike, 2026-09-11: "we get our
+		 * player missing frames, but we dont slow down gameplay to catch
+		 * up. so this is the right progression." */
+		if (!r60_go) {
+			*(volatile uint8_t*)0xFFA0F5 = 1;
+			(*(volatile uint16_t*)0xFFA0F6)++;
+			(*(volatile uint8_t*)0xFFA0F4)++;    /* counted as a fallback */
+		}
+#endif
 		if (r60_go) {
 			{
 #ifdef BOOT_FBX_A

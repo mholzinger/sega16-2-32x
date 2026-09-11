@@ -1799,6 +1799,17 @@ endif
 ifdef GENMAXAGE
 SHCCFLAGS += -DGEN_MAXAGE=$(GENMAXAGE)
 endif
+# `make ... GATEFREE=1` = LOOP29 181. GAMEGATE grants the game's frame
+# release inside the window path, so it can only fire on a window vint
+# and the game tracks the WINDOW cadence, not vblank -- GAMEGATEWAIT=1
+# measured the game at 50% of vints for this reason. GATEFREE also
+# releases on a vint with no window, so the game's logic and input run at
+# 60 Hz regardless of the display rate. Expect MORE tearing (the game
+# writes its staging twice as often); expect game-frames/vints to go to
+# ~100%. Gate: gameplay_speed's scene-timer rate, and Mike's hands.
+ifdef GATEFREE
+MDCCFLAGS += -DGATE_FREE
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old

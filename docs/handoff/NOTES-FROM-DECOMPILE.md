@@ -655,3 +655,47 @@ Marked in the log, listed here so you do not act on a retracted claim:
 The common cause in four of five: I judged whether a value LOOKED like a
 valid address instead of following it to its consumer. If I hand you a
 structure and do not say what reads it, treat it as unverified.
+
+---------------------------------------------------------------------
+## 14. A question only your side can answer: what does the main loop
+## actually wait on, and can one pass span two vints?
+
+Measured, and it contradicts the premise this whole port is built on.
+
+`GAMEGATE` (our patch) replaces the game's frame-ready flag with one we
+set. We now set it EVERY VINT -- including vints where we present
+nothing (LOOP29 181, `GATEFREE=1`). The game still advances once every
+TWO vints, and its own missed-frame counter at 0xFFF144 stays at zero:
+
+    release granted        every vint
+    game frames / vints         50.2%
+    game's missed frames         0.0%
+    our 68K handler cost   ~54 of 262 lines, so ~80% of the vint is the
+                           game's
+
+So it is not being starved of time and it does not think it missed
+anything. It simply completes one pass per two vints.
+
+**The three things I cannot distinguish from here:**
+
+  1. Our release byte is 0xFFA0F5, set to 1 (a LEVEL, not a count). If
+     the loop clears it and then runs a pass that takes longer than a
+     vint, setting it twice is the same as setting it once. Does the
+     pass genuinely span two vints on a 7.67 MHz 68000?
+  2. Is 0xFFA0F5 even the binding gate? You listed six IRQ4 workers and
+     the main-loop dispatcher at 0x398E. If the loop waits on something
+     ELSE per frame, our release is not the limiter and we have been
+     tuning the wrong signal all night.
+  3. Is `0xFFF02A` one tick per game frame in level 1? We read the
+     arcade at 0.937 ticks per screen frame in MAME, so ~1/frame there,
+     but the field is per-SCENE by name and our tool carries a
+     scene-reset guard. If it ticks every other frame in this scene, the
+     50% is an artefact and the game has been at 60 Hz for a while.
+
+Whichever it is, it decides the next month of work. Every plan in this
+log -- yours included -- assumes the display is the only thing between us
+and 60 Hz. If there is a second gate on the 68K side, that assumption is
+wrong and cheap to test from your end.
+
+The concrete ask: the instruction the main loop waits at, and what it
+tests. We patch it from `patch_game.py` the moment we know.
