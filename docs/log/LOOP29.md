@@ -3821,3 +3821,76 @@ gate nobody has found".
 
 `GATEFREE` stays default-off pending that answer: it is a real change to
 the release protocol and it currently buys nothing measurable.
+
+## 182-183. THE RELEASE DISCARD IS WHAT PINNED THIS PORT AT 50%, AND REMOVING IT TAKES THE WALL TO 0.81 AND THE SCREEN TO BLACK (2026-09-11 19:15)
+
+The decompile thread answered 181 (LOOP-DECOMPILE 67). Two findings, and
+I built on both.
+
+**Their point 2, settled: the zero was honest.** The game CLEARS its own
+missed-frame counter at 0x930, on the main loop's countdown arm, so every
+0.0% this repo has read off 0xFFF144 was taken with the instrument being
+reset. `MISSKEEP=1` NOPs that clear (bytes asserted first).
+**Cumulative misses at f1500, f2600, f4100: 0, 0, 0.** The game really
+does never overrun. Their caution was right and the answer was still
+zero.
+
+**Their point 1 is the mechanism, and it is bigger than they framed it.**
+The wait is four instructions:
+
+    397E  clr.b  $FFF01C     <- DISCARDS any pending release
+    3982  tst.b  $FFF01C        spin while zero
+    3986  beq.s  0x3982
+    3988  dbf    d0,0x397E
+
+IRQ4 increments the byte once per vint. The game finishes a pass, clears
+the byte -- throwing away the release that arrived WHILE IT WAS WORKING
+-- and waits for a fresh one. **So a pass taking slightly more than one
+vint costs exactly two.** That is the 50% every build in this log has
+measured, with zero overruns, and it is not our gate, our transport or
+our compose. It is four instructions in the game.
+
+`RELBANK=n` replaces the clear with a consume (decrement if non-zero,
+clamped), patched through the pal-thunk area with the bytes asserted.
+Over the same 4000 vints:
+
+                        vi26      vi31/32 (RELBANK)
+    generation wall     1.46v         0.81v
+    ships              32.8 fps      53.0 fps
+    isr-flips            2,095         3,185
+    68K handler mean      54.2          47.1
+    bad1                     3            10
+    stale                  109           249
+    nopost                  52           225
+
+**0.81 is UNDER THE ONE-VINT QUANTUM** -- the first time anything in this
+log has crossed it without an ablation.
+
+**And on the rig it is a black screen.** Mike: "31 doesnt update the
+screen at all. black attract mode, starting the game only renders
+background grass and text hud." The ares counters already show why:
+`stale` 109 -> 249 and `nopost` 52 -> 225. With the game running its pass
+back to back there is no quiet slot left for our window, so the 68K stops
+posting and almost nothing lands. Same producer/consumer collision as
+NBUILD1 (172), one level up: **we gave the game its full speed and took
+the transport's time to pay for it.**
+
+`cap` turns out not to bind -- RELBANK=1 and RELBANK=2 measure
+byte-identical, because IRQ4 increments once per vint and the game
+consumes one per pass, so the byte never exceeds 1.
+
+**A measurement trap for the next reader.** `gameplay_speed.py` reported
+104.3% game frames for RELBANK, which is impossible. The scene timer is
+per-SCENE and scene-dependent in rate and direction; at f1500 vi26 reads
+536 and vi31 reads 1555, because the faster build is in a DIFFERENT
+SCENE by then. **Comparing the scene timer across builds at the same
+frame number compares two different scenes.** Use isr-flips and the
+generation wall, which are the same quantity in both.
+
+`RELBANK` is default-off. It is the largest single lever found in this
+arc and it is not usable until the transport gets its slot back. The
+next move is a release that lands the game's pass and our window in the
+same vint without either starving -- which is what `GAMEGATE` was
+reaching for and got backwards by discarding instead of scheduling.
+
+probe.32x restored to vi28 so there is something playable on the rig.
