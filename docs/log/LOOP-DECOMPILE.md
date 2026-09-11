@@ -2326,3 +2326,43 @@ OUTPUT, which is worse, because every number downstream inherited it. The
 tell was available the whole time: `fix_bounds2` reporting identical
 counts across six rounds is not a stubborn bug, it is a survey that is not
 looking at what it thinks it is.
+
+---------------------------------------------------------------------
+## 54. Bounding complete: 560 functions, 10 defects, nothing real lost
+
+Entry 53 fixed the metric; this finishes the job with it.
+
+Of entry 53's 63 genuine defects, **58 are entries the REFERENCE
+DISASSEMBLY does not consider code either.** Three independent reasons to
+remove each one: no terminator in the body, no fall-through to another
+entry, and not code in an independently-produced disassembly. None is a
+reference function start. `tools/ghidra/kill_funcs.py` removed them.
+
+                  start    now
+    functions       720    560
+    >1 range         --     36   (normal)
+    fall-through     --     44   (correct)
+    REAL DEFECTS    165*    10
+    ref starts      433    433
+
+    * entry 51's figure, produced by the broken metric; the comparable
+      honest number was never measured on the 720-function project.
+
+**159 of the original 720 "functions" were never functions.** All of them
+came from one defect — `seed_harvest.py` harvesting immediate routine
+pointers from a linear listing without filtering the source site to real
+code (entry 52), where 2156 of 2435 candidate sites are phantoms over
+data. The fix is in the tool; the residue is now out of the project.
+
+**550 of 560 functions (98%) are correctly bounded**, and every one of the
+reference's 433 function starts survived every deletion. That guard is
+what separates this from vandalism — it was checked after each of the four
+removal passes, not once at the end.
+
+The 10 remaining: 5 are entries the reference DOES call code, so they are
+genuinely truncated and worth extending by hand. The other 5 are
+1-to-16-byte stubs that resisted every automated rule and are not worth
+more machinery.
+
+**Disassembly coverage is now finished.** Instructions match the reference,
+bounding is 98%, and what is left is naming: 560 functions, about 45 named.
