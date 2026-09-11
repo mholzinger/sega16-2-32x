@@ -1870,3 +1870,61 @@ this session and then did it anyway.
 To settle it the arcade has to be driven with the same inputs and aligned
 on the game's own timeline, which is what `tools/attract_parity.py`
 already does. Not asserted to the builder thread until then.
+
+---------------------------------------------------------------------
+## 45. The last fan-in tier: Y clamp, a third hitbox, the text stride writer, and the RNG
+
+Fan-in has flattened — after 0x3F72's 26 callers the next unnamed function
+has 8 — so this is the end of the productive ranking.
+
+**0x3F72 (26 callers) — the Y velocity clamp, and it VERIFIES entry 29.**
+
+    3f72:  move.w  $1A(fp),d0      ; Y velocity
+    3f76:  move.w  $1C(fp),d1      ; Y acceleration
+    3f7c:  add.w   d1,d0
+    3f7e:  cmp.w   $1E(fp),d0      ; Y velocity limit
+    3f84:  move.w  d0,$1A(fp)
+
+Entry 29 derived $1C and $1E "by symmetry with 0x3F40's other arm" —
+an inference, flagged as one. Here is the actual routine using exactly
+those three fields. The motion block is now read, not guessed, on both
+axes.
+
+**0xD4F2 (6 callers) — a THIRD hitbox.** Same shape as entry 34's two:
+
+    d4f2:  move.b $5C(fp) -> +$0C -> $60(fp)
+           move.b $5D(fp) -> +$0C -> $62(fp)
+           move.b $5E(fp) -> +$10 -> $64(fp)
+           move.b $5F(fp) -> +$10 -> $66(fp)
+
+    BOX A  $30-$33 -> $34-$3A     (0xD47E)
+    BOX B  $50-$53 -> $54-$5A     (0xD4B8)
+    BOX C  $5C-$5F -> $60-$66     (0xD4F2)
+
+Three boxes per object, all signed byte extents expanded on demand. $68,
+which entry 35 saw read alongside box B in the floor test, sits just past
+box C.
+
+**0x3A9A / 0x3AA4 / 0x3AAE — the text-RAM stride writers.**
+
+    3a9a:  move.b (a0)+,(a1)+ ; addq.l #1,a1     ; write every OTHER byte
+    3aa4:  clr.b  (a1)        ; addq.l #2,a1     ; clear every other byte
+    3aae:  lea $410000,a1 ; adda.w $FFF024,a1    ; text ram + a cursor
+
+The same one-byte-of-each-word idiom as the tilemap unpacker (entry 10),
+here for the text layer, with the write position held at 0xFFF024.
+
+**0x3FBE (5 callers) — the random number generator.**
+
+    3fbe:  move.l  $FFF014,d1      ; the SEED
+    3fc2:  bne.s   0x3FCA
+    3fc4:  move.l  #$2A6D365A,d1   ; default seed if zero
+    3fcc:  asl.l #2,d1 ; add.l d0,d1 ; asl.l #3,d1 ; add.l d0,d1
+    3fd6:  swap d1 ; add.w d1,d0 ; ...
+
+A multiply-and-fold generator seeded from **0xFFF014**, with a fixed
+fallback constant. Worth knowing for two reasons: it explains why our
+runs are byte-reproducible (entry 25's control) — the seed is
+deterministic, not sampled from a timer — and any future attempt to
+compare two runs that diverge should check whether this seed diverged
+first.
