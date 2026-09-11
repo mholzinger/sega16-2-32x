@@ -1364,3 +1364,65 @@ And it explains a large share of 0x3F04's 76 callers: every cull path in
 this routine is one of them, so "sprite hidden" is frequently just "object
 is off screen", which is another reason not to read a blank pool record as
 a transport fault (notes section 7).
+
+---------------------------------------------------------------------
+## 34. Five more by fan-in: two hitboxes, the collision test, fixed player slots, depth banding
+
+**0xD47E (36 callers) and 0xD4B8 (25) — build the two hitboxes.** Both
+are the same shape on different field groups:
+
+    d47e:  move.b $30(fp),d0 ; ext.w d0 ; add.w $0C(fp),d0 ; move.w d0,$34(fp)
+           move.b $31(fp) -> $36      (the other X edge)
+           move.b $32(fp) -> $38      (+ $10, the Y position)
+           move.b $33(fp) -> $3A
+    d4b8:  the identical four steps on $50-$53 -> $54-$5A
+
+So each object carries TWO boxes, each as four SIGNED BYTE extents
+relative to its position, expanded to absolute words on demand:
+
+    BOX A   $30-$33 extents  ->  $34 $36 (X lo/hi)  $38 $3A (Y lo/hi)
+    BOX B   $50-$53 extents  ->  $54 $56 (X lo/hi)  $58 $5A (Y lo/hi)
+
+**0xD8BA (17 callers) — the collision test, and a second object group.**
+
+    d8ba:  tst.w   $FFF130          ; collision enabled at all?
+    d8c0:  lea     $FFD800,a4       ; a group of
+    d8c4:  moveq   #13,d1           ;   14 entries,
+    d8cc:  lea     128(a4),a4       ;   stride 128 — the OBJECT stride
+    d8d6:  move.w  $56(a4),d4 ; sub.w $54(fp),d4 ; bcs -> miss
+    d8e0:  move.w  $56(fp),d5 ; sub.w $54(a4),d5 ; bcs -> miss
+    d8ea:  move.w  $5A(a4),d6 ; sub.w $58(fp),d6 ; bcs -> miss
+
+A textbook axis-aligned overlap test on BOX B. 0xFFD800 is
+0xFFC000 + 0x1800, i.e. object slot 48, so **slots 48-61 are the group
+everything else is tested against.**
+
+**0xD5A6 (34 callers) — fixed player slots.**
+
+    d5a6:  lea $FFC000,a4 ; cmpi.b #1,$FFF028    ; slot 0  = PLAYER 1
+    d5c0:  lea $FFC400,a4 ; cmpi.b #1,$FFF029    ; slot 8  = PLAYER 2
+    d5d8:  lea $FFC080,a4                        ; slot 1
+
+So the object table is not a free pool: **slot 0 is player 1 and slot 8
+is player 2**, with 0xFFF028/0xFFF029 as their active flags.
+
+**0x3D14 (19 callers) — the sprite builder with DEPTH BANDING.** It is
+0x3DD8 (entry 33) with a preamble:
+
+    3d14:  btst    #4,$2C(fp)      ; is this object depth-sorted?
+    3d1e:  move.w  $10(fp),d1      ; Y
+    3d22:  cmpi.w  #4232,d1        ; band 0
+    3d2a:  cmpi.w  #4296,d1        ; band 1, else band 2
+    3d32:  move.b  d0,$2F(fp)      ; store the band
+    3d36:  ...then the normal world-to-screen build
+
+Y is biased by 4096 (entry 33), so the band edges are screen rows 136 and
+200. That is the beat-em-up depth rule — how far up the screen an actor
+stands decides which of three priority bands it draws in — and $2F is
+where the result lands, which makes $2F the sprite priority the port's
+ladder consumes.
+
+Running total on the struct: $00 status, $02 routine, $08 sprite slot,
+$0A/$0B palette, $0C/$10 positions, $14-$1E motion, $21/$22/$24 animation,
+$2C flags, $2F priority band, $30-$3A box A, $40/$44 saved position,
+$50-$5A box B.
