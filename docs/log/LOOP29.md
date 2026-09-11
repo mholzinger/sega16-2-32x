@@ -2137,3 +2137,7 @@ eye can weigh.
 
 Not play-passed. Scene 1 (43.8% cat1) has not been measured on any
 build; level 1 is 11.3%.
+
+    Mike, rig, 20:15: vi10 "YOU FIXED THE BACKGROUNDS!" -- the plane
+    packets carried by their written bytes is the hardware fix. vi10 is
+    the line. vi11 (CAT1MD colour match) goes to the rig next.
