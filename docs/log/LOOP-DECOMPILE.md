@@ -1928,3 +1928,55 @@ runs are byte-reproducible (entry 25's control) — the seed is
 deterministic, not sampled from a timer — and any future attempt to
 compare two runs that diverge should check whether this seed diverged
 first.
+
+---------------------------------------------------------------------
+## 46. Seventeen per-scene tables — the data region starts to open up
+
+The scene index at 0xFFF142 is the key to the data half of this rom.
+55 real-code sites read it; 17 of them index a table. Enumerating those
+enumerates the game's per-scene data.
+
+    table     stride  feeds
+    0x01CE2     6     scene descriptor: palette block + tilemap ptr  [10]
+    0x0326E     4     indexed at 0x2B70
+    0x032AE    32     sky palette, gradient halves                   [43]
+    0x04050    32     sky palette, identical halves                  [44]
+    0x06DC0     2     a word that indexes 0x73E4 and 0x6D70
+    0x073DA     1     -> $0B palette_index   AB AC AD A9 07
+    0x092EA     1     -> $0B palette_index   0C 0E 10 12 14
+    0x092F0     4     PER-SCENE DISPATCH, `jmp (a0)`
+    0x099A2     4     -> $6C
+    0x01858     1     -> sound command       94 95 96 94 95
+    0x0DEC4     4     floor geometry                                 [35]
+    0x1D32A     4     walked with fp = 0xFFD800, the collision group [34]
+    0x1D33E     2     self-relative word offsets                     [35]
+    0x173A0     1     -> $0B palette_index   4B 4C 4D 4E 4A
+    0x17E24     4     PER-SCENE DISPATCH, `jmp (a0)`
+    0x1C622     4     five blocks of 0x288 bytes
+    0x1724C     -     NOT a pointer table — all five decode to
+                      implausible addresses. Word data, my guess was wrong.
+
+**Every pointer table has exactly FIVE valid entries and a sixth that is
+garbage** — 0x92F0, 0x99A2, 0x1D32A, 0xDEC4, 0x1C622 all do it, the same
+signature the scene descriptor showed in entry 10. Five scenes, and the
+tables simply stop. That is now a reliable shape for spotting a per-scene
+table and for knowing where it ends.
+
+Three of them are immediately legible:
+
+  - **0x1858 is the per-scene music**: sound commands 0x94, 0x95, 0x96,
+    0x94, 0x95, handed to the sound queue at 0x3352 (entry 32). Scenes 0
+    and 3 share a track, as do 1 and 4.
+  - **0x73DA, 0x92EA and 0x173A0 are per-scene palette identities**, each
+    a byte written straight to $0B. They run in sequence per scene
+    (AB AC AD A9 07 / 0C 0E 10 12 14 / 4B 4C 4D 4E 4A), which is three
+    different actor classes each getting their own palette per level.
+  - **0x17E24 and 0x92F0 are per-scene DISPATCH tables** — `jmp (a0)`
+    through a pointer chosen by scene. 0x17E24's targets (0x1769E,
+    0x17FE2, 0x1891C, 0x191D0, 0x199F6) are the level scripts.
+
+Combined with entries 31, 35 and 44, the static per-scene data now known
+is: the tilemap and its cat1 priority bits, the floor geometry, two sky
+palettes, three actor palette identities, the music track, the collision
+group setup, and two dispatch tables. All of it is rom, all of it
+decodable before the game runs.
