@@ -203,6 +203,13 @@ TABLES = {
     ],
     # colour-cycle engine (lea 0xFF9000,A1; write at +((D0&0x7F)<<4))
     'PAL_THUNK_A': 0x30C2,
+    # LOOP29 166: the cycler's dirty mark at PAL_THUNK_A fires at 0x30C2,
+    # BEFORE its four stores at 0x30F8-0x30FE. A consume landing between
+    # the two ships the OLD colours and clears the bit, so the mirror sits
+    # one rotation step behind for ever -- measured on sets 19/20/21
+    # (LOOP29 165). This is the mark-AFTER site: `lea 8(a5),a5` at 0x3100,
+    # four bytes, exactly a jsr abs.w, reached after every store path.
+    'PAL_THUNK_APOST': 0x3100,
     # queued-pointer palette writers (moveal (A2)+,A1 ; moveal (A2)+,A0)
     'PAL_THUNK_B': [0x2DC8, 0x3C5A],
     # FM gate entries: (site, displaced length, expected first word, note)

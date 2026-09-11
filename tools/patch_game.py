@@ -22,6 +22,7 @@ K2FREE = K2FREE or R60
 # granularity (64-bit bitmap as 8 BYTES at 0xFFBA00, code after) so the
 # shim can ship dirty 32-word BLOCKS instead of 256-word region pairs.
 PAL32 = bool(os.environ.get('PAL32'))
+PAL_APOST = bool(os.environ.get('PAL_APOST'))
 # LOOP 23: FMGATE=1 gates the game's MAIN-LOOP framebuffer writers on
 # FM at their subsystem entry points, so the 68K never spins for the
 # SH-2 window (the rte trampoline in md_start.s raises FM AFTER the
@@ -1081,6 +1082,32 @@ if PAL32:
                   0x201F,                   # move.l (SP)+,D0
                   0x4E75]                   # rts
     pal_report.append(f"P {PA:06X}: 32-block from D0 -> thunk {pal_a:04X}")
+    # THUNK A-POST (LOOP29 166). Thunk A marks the block BEFORE the
+    # cycler's stores run, so a consume in that gap ships the old colours
+    # and clears the bit: the mirror holds the PREVIOUS rotation step,
+    # permanently, on every set the cycler drives. Measured stale at
+    # sets 19/20/21 in every sampled frame (LOOP29 165).
+    # Mark again AFTER the stores. D0 no longer holds the set index by
+    # then (0x30F2 reloads it), so recover the block from A1, which has
+    # been advanced past the 16 bytes written: block =
+    # ((A1-1) >> 6) & 0x3F, the same arithmetic thunk B uses.
+    if PAL_APOST:
+        apost = PAL_THUNK_BASE + len(pal_words) * 2
+        AP = T('PAL_THUNK_APOST')
+        want_ap = struct.pack('>HH', 0x4BED, 0x0008)   # lea 8(a5),a5
+        assert hrom[AP:AP+4] == want_ap, hrom[AP:AP+4].hex()
+        struct.pack_into('>HH', hrom, AP, 0x4EB8, apost)
+        pal_words += [0x2F00,                 # move.l D0,-(SP)
+                      0x2009,                 # move.l A1,D0
+                      0x5380,                 # subq.l #1,D0
+                      0xEC88,                 # lsr.l #6,D0
+                      0x0240, 0x003F,         # andi.w #0x3F,D0
+                      0x4EB8, pmark,          # jsr (pmark).w
+                      0x201F,                 # move.l (SP)+,D0
+                      0x4BED, 0x0008,         # displaced lea 8(a5),a5
+                      0x4E75]                 # rts
+        pal_report.append(f"P {AP:06X}: 32-block from A1 AFTER the stores"
+                          f" -> thunk {apost:04X}")
     pal_report.append("P " + "/".join(f"{o:06X}" for o in T('PAL_THUNK_B')) + f": 32-block from A1 -> {pal_b:04X}")
     assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, \
         f"pal thunks overrun boot stack: end {PAL_THUNK_BASE + len(pal_words)*2:#x}"

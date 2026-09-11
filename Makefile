@@ -1723,6 +1723,20 @@ endif
 ifdef PENREPAINT
 SHCCFLAGS += -DPEN_REPAINT
 endif
+# `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
+# The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
+# four stores at 0x30F8, so a consume landing in that gap ships the old
+# colours and clears the bit -- the SH-2 mirror then holds the PREVIOUS
+# rotation step for ever. Measured stale on colour sets 19, 20 and 21 at
+# every sampled frame, which is ~8% of level 1's tilemap cells painted
+# one cycle behind (LOOP29 165). This adds a second mark AFTER the
+# stores, at 0x3100, recovering the block from A1.
+# Gate: tools diff of WRAM 0xFF9000 against SDRAM 0x27000 must go to
+# zero mismatches. A cycling palette is invisible in a still, so there
+# is no pixel gate for this -- only the memory diff and Mike's eye.
+ifdef PALAPOST
+export PALAPOST
+endif
 # `make ... DRIFTTOL=n` = LOOP29 160: the squared-colour-distance at which
 # a co-owner set is declared drifted and FREED (default 18, both sites).
 # The free destroys ~46 tile slots, 95% of them on screen (156), so this
@@ -2303,7 +2317,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) python3 tools/patch_game.py
+	@GAME=$(GAME) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

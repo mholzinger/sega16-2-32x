@@ -2824,7 +2824,7 @@ frames the gain is 74% and at 12,000 it is 65%, so it decays slowly with
 scene variety. `DRIFTTOL=27` (160) is an orthogonal 21% that costs
 attract-screen colour nothing and is untested in play.
 
-## 165. THE COLOUR CYCLER'S WRITES NEVER REACH THE SH-2: 8% OF THE BACKGROUND IS ONE CYCLE STEP BEHIND (2026-09-11 03:10)
+## 165. [RETRACTED BY 166 -- the writes DO reach the SH-2; it is a one-step phase offset, not missing data. The measurements below stand, the conclusion does not.] THE COLOUR CYCLER'S WRITES NEVER REACH THE SH-2 (2026-09-11 03:10)
 
 The decompile thread asked whether the game's colour cycler is missing
 from `PAL_DIRTY_SITES` (LOOP-DECOMPILE 42), then walked the question back
@@ -2874,3 +2874,55 @@ runtime with the register loaded, so it can compute the dirty block
 itself. Block = `(a1 - 0x840000) / 64` for 32-word PAL32 blocks. 0x30D0
 (`movea.l (a5,2),a0`) is four bytes, exactly a `jsr abs.w`, and sits
 after a1 is computed and before the stores.
+
+## 166. CORRECTION TO 165: THE CYCLER'S WRITES DO REACH THE SH-2. IT IS A ONE-STEP PHASE OFFSET, NOT MISSING DATA (2026-09-11 03:35)
+
+165 claimed the cycler's palette writes never reach the SH-2 mirror and
+told the decompile thread its walk-back was wrong. **I was wrong, and
+165's headline is retracted.** What is true is smaller and different.
+
+The mechanism 165 blamed already exists: `PAL_THUNK_A` (patch_game.py,
+site 0x30C2) is a RUNTIME thunk built for exactly this writer -- it
+masks D0 to the set index, shifts to a 32-word block and calls `pmark`.
+It is not missing from the dirty machinery at all. I found it after
+writing 165, by reading the patcher instead of the game.
+
+**The fix I then built does not fix anything.** `PALAPOST=1` adds a
+second mark AFTER the cycler's four stores (site 0x3100, `lea 8(a5),a5`,
+recovering the block from A1), on the theory that marking before the
+stores loses a race with the consume. Thunk area 756 -> 780 bytes, so it
+installs. Mismatches at f4000/f8000 go 14/7 -> 7/15. **Noise, not a
+fix.** Flag stays default-off and is a NEGATIVE.
+
+**What the memory actually shows.** Set 19 over five consecutive frames,
+live (WRAM 0xFF9000+19*16) against mirror (SDRAM 0x27000+19*16):
+
+    f8000  live  7FFF 4900 4A00 4B00 4C00 4D00 4E00 4F00
+           mir   7FFF 4A00 4B00 4C00 4D00 4E00 4F00 4900
+    f8001  live  7FFF 4E00 4F00 4900 4A00 4B00 4C00 4D00
+           mir   7FFF 4F00 4900 4A00 4B00 4C00 4D00 4E00
+
+The mirror is the live ramp **rotated by exactly one position**, at every
+frame. It is not stale, not torn, and not equal to the previous frame's
+live either (the live ramp advances TWO steps per frame, so a whole-frame
+lag would show as a two-step rotation). The mirror is one CYCLER STEP
+behind, which is half a frame.
+
+**So the defect is a one-step phase offset in a colour animation** -- the
+cycling band animates correctly, slightly out of phase with the arcade.
+Not missing tile data, not a wrong palette, and nothing to do with what
+Mike reported. It is a fidelity item worth recording and worth nobody's
+night.
+
+**The method error, and it is the one this arc keeps making.** I diffed
+two snapshots of a quantity that changes every frame and read the
+difference as staleness. A ramp that rotates twice per frame CANNOT agree
+between two observers sampled at different points in the frame, so the
+diff was always going to be non-zero and it proves nothing on its own.
+The test that settled it was consecutive frames, which distinguishes a
+lag from an offset from a freeze. **Diffing a moving target needs the
+time axis, and I reached for the fix before I had it.**
+
+Entry 165's measurements all stand -- the sets, the slot table, the cell
+counts, the disassembly corrections (four `move.l`, 8 words, one whole
+colour set). Its conclusion does not.
