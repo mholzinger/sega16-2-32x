@@ -122,6 +122,24 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
+## WHICH FILE IS THE BUILD (2026-09-11, after this cost Mike three launches)
+
+**`rom/s16.32x` is whatever was built LAST, and that is usually a probe.**
+It went to Mike twice as a playable build when it was a measurement build
+that renders black by construction, and `probe.32x` on the rig sat three
+builds stale pointing at a corrupt one.
+
+The discipline, from here:
+
+  - **`rom/s16.32x` is left holding the LINE build** at the end of any
+    session or handover. A probe build gets copied to `rom/night/` or the
+    scratch directory and `rom/s16.32x` gets rebuilt back to the line.
+  - **`probe.32x` on the rig tracks whatever build is being asked about**,
+    and the message names the file explicitly.
+  - A probe that renders wrong BY CONSTRUCTION (`NOMAPS`, `NOCLEAR`,
+    `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
+    sentence as its number.
+
 ## THE ACCEPTED ROM
 
     make ship-us FBXPORT=1          # tag mister-keeper-20260908
