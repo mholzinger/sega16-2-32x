@@ -2958,3 +2958,67 @@ image. Running each rom and reading 0xFFF142 caught it; the build log did
 not. And the run that reported "scene 0" in the batch was that stale rom
 re-measuring scene 0, which reproduced 25 palettes / 43 colours /
 [15,15,11,5] exactly — an accidental but welcome repeat of entry 62.
+
+---------------------------------------------------------------------
+## 67. ANSWER TO THE BUILDER — the wait instruction, and why their zero is not evidence
+
+Their ask: the instruction the main loop waits at, what it tests, and
+which of three readings explains a game released every vint that still
+advances once every two.
+
+**1. The wait, exactly.**
+
+    397e:  clr.b  $FFF01C        the loop DISCARDS any pending release
+    3982:  tst.b  $FFF01C        <- THE WAIT. spins while ZERO
+    3986:  beq.s  0x3982
+    3988:  dbf    d0,0x397E      d0+1 frames; every gameplay caller
+    398c:  rts                   passes moveq #0 = ONE frame
+
+Only four instructions in the whole program touch 0xFFF01C: the two
+above, plus IRQ4's `tst.b` at 0x2AB8 and `addq.b #1` at 0x2AC6.
+
+**2. Their reading 1 is right about the shape but does not bite.** The
+release is an INCREMENT (`addq.b #1`), read by a `tst.b` — a counter
+tested as a level, so setting it to 1 is equivalent. **But the loop
+CLEARS IT BEFORE SPINNING.** A release that arrives while the game is
+still working is thrown away at 0x397E, and the game then waits for the
+NEXT one. The game can never bank a release or catch up; it always waits
+for a fresh edge after it finishes.
+
+**3. Their reading 3 is the one I can settle, and the answer is YES.**
+Three sites touch the missed-frame counter:
+
+    0x2ABE  addq.w #1   IRQ4, on overrun
+    0x00BE2 move.w      read it (the test-mode hex display, entry 22)
+    0x00930 clr.w       CLEARS IT
+
+**0x930 is inside the main loop.** At 0x918 the loop does
+`subq.w #1,$FFF14C ; beq.s 0x92A`, and 0x92A-0x930 is the exit arm that
+clears the counter. So the counter is zeroed every time that countdown
+expires. **A zero reading is not evidence that no frames were missed.**
+It is consistent with misses being counted and wiped.
+
+The cheap test: read 0xFFF144 EVERY VINT and look for it being non-zero
+before the clear, or watch 0x930 execute. Do not sample it at a chosen
+frame.
+
+**4. What I can rule out.** The wait is not a hidden multi-frame request.
+Of the 34 call sites, all but two pass `moveq #0,d0` — one frame. The two
+exceptions pass 120 and 240 and are attract-mode delays, not gameplay.
+And the loop shape is one dispatcher pass per wait:
+
+    91a:  jsr 0x398E    the object dispatcher (entry 28)
+    920:  moveq #0,d0
+    922:  jsr 0x397E    wait exactly one frame
+    928:  bra.s 0x90A
+
+**5. So of their three readings, 3 is live and 1 is real but not
+binding.** I cannot rule out reading 2 from here — a second gate
+elsewhere — but the frame handshake itself has only these four
+instructions and no second condition in it.
+
+**One more thing worth their time.** If the counter IS being cleared, then
+the premise the port has been built on — that the game fits its budget —
+has never actually been tested during gameplay, because the instrument
+was being reset. That is worth knowing before anyone concludes the 68000
+is or is not the loss.
