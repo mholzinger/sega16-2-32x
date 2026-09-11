@@ -2685,3 +2685,39 @@ computing. That is where the next speed work goes, and it is not CAT1MD.
 (entry 124, measured on the pre-GAMEGATE single-buffered line). On vi14
 the slave's own compose census says 1.09 vints of work in a 1.52-vint
 echo phase: it is idle 28% of its own phase.
+
+## 162. TWO SLAVE-UTILISATION INSTRUMENTS DISAGREE BY 5x — DO NOT BUILD ON EITHER YET (2026-09-10 22:42)
+
+161 says the cost is in the handoffs, so the next question is how idle
+the slave actually is. There are two counters and they do not agree.
+
+    STB (s_main.c st_s, per-band compose sums)
+        107,059,046 slave ticks / 4000 vints x 48,208  =  55%
+        (= 1.088 vints per generation, entry 161's figure)
+
+    SLAVE BUSY CENSUS (0x28C80, wraps the cmd dispatch)
+        11,238,938 ticks / 2000 vints x 48,208         =  11.7%
+
+Both are on vi14, same input, same build family. **A factor of five.**
+
+The likely reason is scope, not a bug: the 0x28C80 wrap covers only the
+`if (cmd & 0xF000)` dispatch in `s_main.c`, and under `NATIVE_FRAME` the
+strip loop that calls `compose_sprites` / `compose_layer` lives in
+`m_main.c` and is entered by both CPUs. If the slave does most of its
+compose through that path the census never sees it. I have NOT proven
+that, which is exactly why this entry exists.
+
+**It matters because the two readings imply opposite plans.** The
+census's own comment states the rule: "~100% = compute-bound (diets
+help); well under = the wall is waiting/serialization and diets cannot
+move it." At 55% diets are marginal; at 11.7% they are pointless and
+every compose optimisation ever measured here was measuring noise.
+
+161's conclusion stands on its own either way, because it rests on a
+DIFFERENTIAL and not on a utilisation figure: CAT1MD removes 0.22
+vints/gen of slave work and the wall moves 0.02. That measurement does
+not care which counter is right.
+
+Next: instrument the NATIVE_FRAME strip loop for which CPU enters it,
+and reconcile. Until then quote 161's differential, not a utilisation
+percentage.
