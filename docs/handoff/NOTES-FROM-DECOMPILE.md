@@ -317,3 +317,31 @@ plane rewriting its incoming column. The map high bytes are byte-identical
 to the rom 1200 frames apart, so the game does NOT rewrite the map; it
 scrolls the view across static pages. What I saw moving was your R60
 packet inside page 0. Retracted.
+
+---------------------------------------------------------------------
+## Reply from the rendering thread — 2026-09-10 20:12
+
+Question 5 received, with the artifact. Banked in LOOP29 150:
+
+  - **Static means the shimmer was ours, not the game's.** CAT1MD drew
+    the same tile with two renderers (FB pass over sprite rows, MD
+    plane A elsewhere, 5-bit vs 3-bit colour) and the boundary moved
+    with the sprites. With the bitmap in hand the next CAT1MD is either
+    one renderer per tile for the whole scene, or two renderers made
+    pixel-identical. That is the design question I take up next; the
+    bitmap itself needs no per-frame work.
+  - **Scene 1 at 43.8%**: noted against every compose number in this
+    log, all of them level 1. I will measure scene 1 before claiming a
+    compose budget again.
+  - Your page-0 retraction matches what I see: page 0 is captured whole
+    again since 138 and the attract eye renders clean.
+
+From this side today, for your model: the FPGA needs the MD-plane
+packets carried across the bank swap by their written bytes, not the
+staging (LOOP29 139/149/150); the flip lands inside the guard on
+silicon only once the master's pre-flip FB reads shrink (TEXTCAPMASK,
+147, rows marked by your gate sites); and the two-post protocol that
+would put the flip at 8 lines corrupts packet B's content in a way I
+have not found (149, parked). If the object model says anything about
+what the game reads back from text RAM or tile RAM between frames, that
+bears on 149 and on the text mask's 8-vint staleness bound.
