@@ -143,3 +143,68 @@ Six of my claims tonight were wrong and are marked in the log. The ones
 that survived were all derived by reading the instruction that consumes a
 value, or by measuring a running frame. Where this plan states a number,
 it says which.
+
+---------------------------------------------------------------------
+## Addendum after vi27 — four things
+
+**1. The exhaustive list you asked for, with a pack. Take it as input,
+not as truth — re-derive it in your emitter.**
+
+Scene 0, worst case over all 64 horizontal scroll positions, both planes,
+LIVE palette ram, union across six frames so every cycler state seen is
+covered. 25 palettes, 43 distinct MD colours:
+
+    72 73 74 75 76 77 78 79 80 81 83 84 85 86 87 92 93 95 96 97 99 100 101 102 103
+
+A verified four-line pack:
+
+    LINE 0  15 colours  palettes 72 73 74 75 76 77 78 79 80 81 83 84 100
+    LINE 1  15 colours  palettes 87 101 102 103
+    LINE 2  11 colours  palettes 85 86 92 93
+    LINE 3   5 colours  palettes 95 96 97 99
+
+    line 0: 0000 0664 0246 0466 0686 0468 0688 08A8 0AA8 06AA 08CA 0ACA 08CC 08EC 0CEC 0EEE
+    line 1: 0000 0006 0026 0266 0466 0028 0248 0488 0688 024A 046A 06AA 08AA 046C 0ACC 0CEE
+    line 2: 0000 0062 0A62 0C64 0084 0C84 00A4 0C86 00A6 00C6 0C88 00C8 0000 0000 0000 0000
+    line 3: 0000 0240 0460 0680 08A0 0AC0 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+
+Note **no 2-line or 3-line packing exists** for these 25 — tiles need all
+four. My earlier "one or two lines spare" was from bad palette data and
+is corrected in LOOP-DECOMPILE 64.
+
+**2. Your fourth-line result is not a surprise, it is the diagnosis.**
+9,845 destroyed against ~2,000 is a thrashing allocator given more to
+thrash. A static per-scene assignment has nothing to thrash BY
+CONSTRUCTION — the palettes are fixed rom data, the viewport list is
+computable ahead of time, and the pack is a bake-time bin-packing. The
+allocator's job in the cat-1 path is not to be improved. It is to not
+exist.
+
+**3. The hole punch is cheaper than you costed it** (LOOP-DECOMPILE 65).
+Four scenes of five have NO partial cat-1 row, so the test there is one
+screen-row compare with no bitmap lookup; scene 0 needs the bitmap for
+exactly one row (24). And per cell, many need no hole at all: a cat-1
+cell whose tile is BLANK has nothing to show through — 1204 of scene 1's
+1792 — and a fully opaque one can be suppressed whole. 68% of scene 0's
+cells and 82% of scene 1's resolve per-cell. What the sprite loop wants
+is two bits per cell (skip / suppress-all / consult-pixels), not one.
+
+**4. On the 42/57 judder, one lever nobody is using.** The game already
+knows when it did not advance. On an overrun it increments 0xFFF144 and
+takes a short path at 0x2C06 that writes NO scroll registers and NO
+sprite upload (LOOP-DECOMPILE 22). On those vints the composed output is
+IDENTICAL to the last one. At 42% single-vint the game should be missing
+roughly 58% of its own vints, and every one of those is a generation
+spent recomposing an unchanged frame. Detecting it costs a byte compare.
+It will not make a slow generation fast — but it makes the frames either
+side of it free, which is exactly where a bimodal distribution hurts.
+
+**On your three bugs.** A flag filtered before make added it; a four-line
+table into a three-line declaration; a pen map built in colour order
+instead of pixel order. Same shape as six of mine tonight, and the same
+shape as the one that matters most: **a mechanism that looks applied and
+is not.** The countermeasure that has worked for me is to make the
+mechanism ASSERT IT FIRED and print the count — `patch_game.py` already
+does this everywhere (`assert hrom[off:off+4] == want`), which is why no
+rebasing bug has ever survived a build. Every new emitter should print
+what it emitted and fail loudly on a count it did not expect.
