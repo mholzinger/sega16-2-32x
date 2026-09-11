@@ -54,10 +54,29 @@ and a GENERATION IS 3.6 VINTS, not 1:
     MASTER maps drain        0.95 vints/gen
 
 **The 68K is not the frame-rate constraint and has not been for some
-time.** The SLAVE is the saturated processor. That retires a week of
-shim/rotor/FM/transport work which moved the logic rate and never the
-picture — and 39% of the frame budget is the slave PAINTING IN SOFTWARE
-what the MD VDP would draw for free.
+time.** That retires a week of shim/rotor/FM/transport work which moved
+the logic rate and never the picture.
+
+**CORRECTED AGAIN 2026-09-10 22:35 (LOOP29 161), measured on vi14.
+"The SLAVE is the saturated processor" is no longer true, and the lever
+this section pointed at is worth 1.6%.** Per generation, on the current
+line:
+
+    slave compose WORK      1.09 v   inside a 1.52 v echo phase
+    master drain WORK       0.44 v   inside a 1.41 v mtask phase
+    generation wall         1.57 v
+
+**Neither processor is saturated. The generation is longer than either
+CPU's work, so the cost is in the HANDOFFS between them.** `CAT1MD=1`
+cuts the slave's cat1 tiles 43% and its whole compose 21% — and moves
+the wall from 1.57 to 1.55 and the ship count 1.6%. Nine percent
+pass-through.
+
+Ships are VINT-QUANTISED: 80% take 2 vints, 15% take 1, so a generation
+finishing at 1.2 vints still costs 2 and the flip lands at 30 Hz. 60 Hz
+means one generation per vint, which needs ~0.6 v/gen removed from a
+budget where no single component is that big. Look at the handoffs, not
+at the compose.
 
 ## THE PIVOT (2026-09-10 18:00, Mike's order)
 
