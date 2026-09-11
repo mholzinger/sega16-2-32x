@@ -1780,6 +1780,20 @@ endif
 ifdef MDLINES4
 SHCCFLAGS += -DMDP_LINES4
 endif
+# `make ... GENSKIP=1` = LOOP29 178. Do not launch a generation whose
+# INPUT is byte-identical to the last one launched: the game writes no
+# scroll and no sprite upload on a vint it did not advance, so the frame
+# would be identical to the one on screen. Hash is the staged sprite
+# list plus the latched layer regs plus per-page tilemap generations,
+# 298 longs against a 0.6-vint compose. GENMAXAGE=n (default 8) forces a
+# launch that many windows on regardless, bounding anything the hash does
+# not cover. Read GNS at 0x28FE0: [0] skipped [1] launched.
+ifdef GENSKIP
+SHCCFLAGS += -DGEN_SKIP
+endif
+ifdef GENMAXAGE
+SHCCFLAGS += -DGEN_MAXAGE=$(GENMAXAGE)
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old

@@ -5026,6 +5026,28 @@ static uint16_t tm_gen = 1;                  /* scene-cut invalidate only */
  * 91.4%-skipped figure in 170 was NTS[0] plus band-2 deferrals. Moved. */
 #define NTS ((volatile uint32_t *)0x26028FD8)
 #endif
+#ifdef GEN_SKIP
+/* LOOP29 178. The game does not advance on every vint, and on a vint it
+ * did not advance it writes no scroll and no sprite upload -- so the
+ * frame we would compose is identical to the one already on screen. Our
+ * generations run at 0.62/vint against the game's 0.50, so about a fifth
+ * are pure waste, and a bimodal 42/57 single-vint split is exactly where
+ * a free generation helps most (the decompile thread's advice).
+ * Detect it from the STAGED SPRITE LIST plus the latched layer regs plus
+ * the per-page tilemap generations -- 314 longs, against a 0.6-vint
+ * compose. GEN_MAXAGE forces a launch that many windows on regardless,
+ * which bounds anything the hash does not cover (text, palette) the same
+ * way TEXTCAPMASK's forced-full mask does. [0] skipped [1] launched. */
+#ifndef GEN_MAXAGE
+#define GEN_MAXAGE 8
+#endif
+#define GNS ((volatile uint32_t *)0x26028FE0)   /* see the scratch map */
+static uint32_t gen_hash;
+static uint8_t  gen_win;
+#ifndef NT_SKIP
+static uint8_t  tm_pgen[16];                 /* GEN_SKIP needs it too */
+#endif
+#endif
 #ifdef PG_STICKY
 /* Fixed scrap 0x28F40-4F (region guard: CUT_BLANK+PG_STICKY together
  * pushed .bss 16 bytes over 0x19000). NOT zeroed like .bss — boot
@@ -5132,7 +5154,7 @@ RAMCODE static void cap_page(int pg)
         pg_fresh[1] &= (uint16_t)~(1u << pg);
 #endif
         pg_watch |= (uint16_t)(1u << pg);
-#ifdef NT_SKIP
+#if defined(NT_SKIP) || defined(GEN_SKIP)
         tm_pgen[pg & 15]++;                  /* THIS page's content moved */
 #endif
 #ifdef PG_STICKY
@@ -8208,6 +8230,30 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
                                   * and FB content age and
                                   * refresh together */
 #endif
+#ifdef GEN_SKIP
+        {
+            uint32_t h = 2166136261u;
+            const volatile uint32_t *sp = (const volatile uint32_t *)SPR_SNAP;
+            for (int i = 0; i < 256; i++)
+                h = (h ^ sp[i]) * 16777619u;
+            {
+                const uint32_t *rp = (const uint32_t *)&snap[0];
+                for (int i = 0; i < 42; i++)
+                    h = (h ^ rp[i]) * 16777619u;
+            }
+            for (int i = 0; i < 16; i++)
+                h = (h ^ tm_pgen[i]) * 16777619u;
+            if (h == gen_hash
+                && (uint8_t)((uint8_t)win_no - gen_win) < GEN_MAXAGE) {
+                GNS[0]++;
+                tile_cmd = 0;            /* nothing issued this window */
+                goto gen_skipped;
+            }
+            gen_hash = h;
+            gen_win = (uint8_t)win_no;
+            GNS[1]++;
+        }
+#endif
         slave_wait(pend_wait);   /* echo already seen (launch
                                   * gate) — this just clears
                                   * SYNC[0] so the same cmd
@@ -8249,6 +8295,9 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
 #endif
         nat_gen_open = 1;
     }
+#ifdef GEN_SKIP
+gen_skipped: ;
+#endif
     *tcp = tile_cmd;
     *pwp = pend_wait;
 }

@@ -3613,3 +3613,58 @@ touched it yet.**
     compare over the staged sprite list and the latched regs. It makes
     the frames either side free, which is where a bimodal 42/57 split
     hurts most.
+
+## 178. THE NO-ADVANCE DETECTOR AND GAMEGATE ARE MUTUALLY EXCLUSIVE (2026-09-11 18:30)
+
+Built the decompile thread's judder lever: `GENSKIP=1` refuses to launch
+a generation whose input is identical to the last one launched. Hash is
+the staged sprite list (256 longs), the latched layer regs (42) and the
+per-page tilemap generations (16), with `GEN_MAXAGE=8` forcing a launch
+every 8 windows regardless.
+
+**It fires exactly as predicted and makes everything worse:**
+
+                          vi26-family    + GENSKIP
+    launch attempts skipped      -          58.4%
+    ships                    32.8 fps     18.7 fps
+    isr-flips                   2,095        1,190
+    single-vint                   20%           3%
+    GAME FRAMES / vints         49.7%        35.3%
+
+**The last row is the proof and it is the whole story: the GAME ADVANCED
+LESS.** The detector cannot have skipped only redundant frames, because
+a redundant frame does not change how fast the game runs.
+
+**Why: `GAMEGATE` ties the game's frame release to our flip** (entry
+141 -- IRQ4 releases the main loop once per PRESENTED frame). So a
+skipped generation withholds the game's release, the game does not
+advance, its sprite staging stays identical, and the next window skips
+too. It is a feedback loop: fewer generations -> fewer releases -> fewer
+game frames -> more skips.
+
+**The thread's premise is right and it is the arcade's premise: there,
+the game advances on vblank REGARDLESS of what the display is doing, so
+a vint the game skipped is genuinely free. Under our gate the game only
+advances when we present, so "nothing changed" and "we did not let
+anything change" are indistinguishable from the SH-2 side.**
+
+**The fix is to separate the two things `GAMEGATE` currently fuses.**
+Release the game's frame WITHOUT composing:
+
+    release := (a generation was presented) OR (a generation was skipped
+               because its input was identical)
+
+Then the game runs at 60 Hz logic, its staging moves every vint, and we
+compose only the frames that actually differ. That decouples the loop and
+is strictly better than either half -- but it is a change to the gate
+PROTOCOL on the MD side (the release thunk), not an SH-2 change, and the
+SH-2 has to tell the 68K "skipped, advance anyway".
+
+`GENSKIP` stays default-off and is a NEGATIVE in its current form. The
+hash and the skip mechanics work; the protocol under them does not.
+
+**Also worth stating for the next reader: the hash source was ALSO
+wrong** and would have needed fixing even without this. `SPR_SNAP` is
+OUR snapshot, refreshed on our schedule by `text_capture`, not the
+game's staging. Hashing it asks "has our copy changed", which is not the
+question. The game's FB staging is the right source.
