@@ -2718,6 +2718,31 @@ DIFFERENTIAL and not on a utilisation figure: CAT1MD removes 0.22
 vints/gen of slave work and the wall moves 0.02. That measurement does
 not care which counter is right.
 
-Next: instrument the NATIVE_FRAME strip loop for which CPU enters it,
-and reconcile. Until then quote 161's differential, not a utilisation
-percentage.
+**Chased, and NOT resolved. Recording the dead ends so nobody re-walks
+them.** Measured both counters in ONE run of ONE build (PHASECENSUS on
+the vi14 flags, play2 input, 4000 frames):
+
+    0x28C80 busy census   0.484 vints/gen    24.6% of wall
+    STB sum               1.088 vints/gen    55.5%
+
+  - NOT cross-CPU contamination. `st_s(11)`/`st_s(12)` are in
+    `slave_concurrent_k`, which is called only from `s_main.c`. The
+    master never stamps STB.
+  - NOT the queued-chain pull escaping the census window. Those calls
+    sit after the census closes, but `QUEUED_CHAIN` is not in the build.
+  - NOT the census's 16-bit truncation. It looked like the answer --
+    the slave FRT is phi/8, so 65,536 ticks is 1.36 vints and the wall
+    maxes at 5.3 -- but rewriting the accumulator wrap-safe moved it
+    from 0.475 to 0.484. Commands are not running long enough to wrap.
+    (Change reverted: it costs the shipping slave instructions and buys
+    nothing.)
+
+**What is left is that STB double-counts, and I have not found how.**
+STB's stamps are strictly INSIDE the census window, so STB > census is
+arithmetically impossible and one of them is lying. Treat BOTH as
+suspect.
+
+161's conclusion stands on its own either way, because it rests on a
+DIFFERENTIAL and not on a utilisation figure: CAT1MD removes 0.22
+vints/gen of slave work and the wall moves 0.02. That measurement does
+not care which counter is right.
