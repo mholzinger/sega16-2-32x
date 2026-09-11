@@ -2276,3 +2276,53 @@ a cleanup like this is indistinguishable from damage.
 every pass and re-extending does not change them — so they need a
 different approach, not another iteration. `seed_harvest.py` now takes
 `--code` and warns loudly without it.
+
+---------------------------------------------------------------------
+## 53. CORRECTS entries 51 and 52 — my mis-bounding metric was measuring nothing
+
+Entries 51 and 52 counted a function as mis-bounded when its last
+instruction was not a terminator AND `entry + size` was not another
+function's entry.
+
+**A Ghidra function body is an ADDRESS SET, not a range.** 36 of the 618
+bodies have more than one range, so `entry + numAddresses` is not the end
+of anything. 0x4870 has FOUR ranges spanning 4450 bytes while holding 1222
+addresses; 0x500 has two spanning 6484. Every conclusion I drew from that
+arithmetic was drawn from a number with no meaning.
+
+That is why `fix_bounds2.py` reported "71 re-formed" on six consecutive
+rounds with 71 still remaining. It was not failing to fix them. There was
+nothing there to fix, and my survey kept re-reporting the same non-defect.
+
+**Second error inside the correction.** My first honest re-measure asked
+"does the body contain a terminator at all" and returned 112 defects —
+including 0x3952, which is `set_level_palettes`, which I read by hand in
+entry 3 and know ends in `rts` at 0x397C. Its body stops at 0x3972 because
+0x3972 IS ITS OWN FUNCTION, reached by the `bsr` at 0x395E. 0x3952 falls
+through into it and shares its exit. Correctly bounded; my test was still
+wrong.
+
+**The metric that finally holds.** A function is well-bounded if its body
+contains a terminator, OR its last instruction falls through to another
+function's entry:
+
+    functions                                          618
+      bodies with more than one range (normal)          36
+      no terminator, falls through to an entry (fine)   49
+      NO terminator and no fall-through (real defect)   63
+
+**63, not 165 and not 71 and not 112.** Entries 51 and 52's headline
+numbers are superseded by this one.
+
+**What survives from entry 52 unchanged:** the 101 deleted functions were
+genuinely bogus — zero-bodied, uncalled, sitting in padding — and that
+finding rested on byte content and caller counts, not on the broken
+arithmetic. The root cause it traced (phantom sites in the harvester,
+2156 of 2435) is also unaffected, and the fix to `seed_harvest.py` stands.
+
+**Fifth instance today, and the first one inside a measurement.** The
+other four were claims about the rom. This was a claim about MY OWN TOOL
+OUTPUT, which is worse, because every number downstream inherited it. The
+tell was available the whole time: `fix_bounds2` reporting identical
+counts across six rounds is not a stubborn bug, it is a survey that is not
+looking at what it thinks it is.
