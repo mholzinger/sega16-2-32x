@@ -2118,3 +2118,57 @@ Standing corrections to entry 48: the frame table is 400 entries of
 [offset word][unexplained long]; the frame data is 0x26514-0x26BB0. The
 ZOOM TABLE and BANDED ORDER LIST findings in that entry are unaffected —
 both were read from the instructions that use them, not filtered.
+
+---------------------------------------------------------------------
+## 50. Verification audit: every wrong claim came from the same method
+
+Classified the session's 27 load-bearing claims by HOW each was
+established, not by what it asserts.
+
+    established by reading the CONSUMING instruction, or by a
+    running frame                                              21
+    established by a plausibility filter, a partial read, an
+    absence, or an invalid comparison                            6
+
+**The split is perfect. All six in the second group were wrong or
+misleading. All 21 in the first group still stand.**
+
+    [17]  0x6D70 "20 entries"          filter: read until implausible
+    [30]  0x65CA "save position"       partial read: 2 of 124 bytes
+    [37]  census == TAS_SITES          filter: false positive + false negative
+    [42]  cycler has no dirty site     absence, with no control case
+    [44]  arcade oracle disagrees      frame-number A/B on differently-driven runs
+    [48]  frame table 182 / word = Y   filter, plus a number matching a
+                                       constant I already held
+
+So the verification pass does not need to re-derive anything. It needs to
+ask ONE question per claim: **which instruction consumes this value?** A
+claim that can name it was already verified when it was made. A claim that
+cannot is a hypothesis regardless of how reasonable it reads.
+
+That is a provenance test, not a quality judgement, and anyone can apply
+it without knowing the subject matter.
+
+**The four situations where the bad method gets used:**
+
+  1. **A number matches something already known.** The frame table's words
+     span 0x0F34-0x15C0 and the world bias is 4096. The match was
+     generated before any check. Having just established the bias is what
+     made it salient — the same knowledge that made other entries
+     productive manufactured this one.
+  2. **An unmarked boundary.** Tables do not declare their length, so any
+     stopping rule is a guess wearing a measurement's clothes. It merged
+     two real tables into one false one of 20 valid pointers, which
+     nothing downstream would have flagged.
+  3. **An absence.** Ghidra had not reached it; there was no dirty site.
+     Absence is the weakest evidence available and I twice treated it as
+     strong. The fix both times was a control: is the KNOWN-GOOD case also
+     absent? For the palette question it was, immediately.
+  4. **The first coherent reading.** Two instructions of 124 cohered into
+     "save position", so I stopped. Coherence is not completeness.
+
+**The uncomfortable part, and the reason the rule has to be mechanical:
+the wrong claims did not feel different from the right ones.** Entry 48
+asserted the banded order list (correct, consumer-read) and the Y-coordinate
+frame table (wrong, filtered) in the same breath with the same confidence.
+Confidence does not track provenance, so only provenance can be checked.
