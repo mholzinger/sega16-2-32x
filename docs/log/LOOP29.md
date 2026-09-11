@@ -2116,3 +2116,24 @@ at two frames 1,200 apart. Per scene: 11.3% (level 1), 43.8%, 35.9%,
   - Every compose figure in this log was measured on level 1, the
     cheapest cat1 scene but one; scene 1 is four times the cat1 load.
   - The bitmap can replace the per-frame classification outright.
+
+## 151. CAT1MD RETRY: ONE COLOUR FOR ONE TILE (2026-09-10 20:12)
+
+With category 1 static (150), the shimmer's cause is the C1 step-2
+split: the FB draws a cat-1 cell over sprite rows, MD plane A draws it
+everywhere else, in different colour depths, along a boundary that moves
+with the sprites. Under MDBGALL the FB's only tiles are those cat-1
+cells, so the tile sets' 32X CRAM entries can carry the MD line's own
+quantised colour: `cram_paint_tile` (m_main.c) paints a set from
+`mdp_s_qc` (9-bit, expanded 3->5 bits per channel) whenever the set has
+an MD line, arcade colour otherwise. Both renderers then put identical
+pixels either side of the boundary, on ares by construction; on the
+FPGA the MD and 32X DACs may still differ by a level, which only Mike's
+eye can weigh.
+
+    vi11 = vi10 + CAT1MD, ares 4000 vints: flips 483-532 per 1000,
+    ISR flips 1996, held 1704 (vi10 1728), edge 246, torn 4, CRAM full,
+    logic 50.0%, stills correct incl. the fence cells.
+
+Not play-passed. Scene 1 (43.8% cat1) has not been measured on any
+build; level 1 is 11.3%.

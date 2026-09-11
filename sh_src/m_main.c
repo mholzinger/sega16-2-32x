@@ -3012,6 +3012,34 @@ static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
         cram_set(dst + p, base + p,
                  (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
 }
+#ifdef CAT1_MD
+/* LOOP29 151: ONE COLOUR FOR ONE TILE. Under MDBGALL the framebuffer's
+ * only tiles are cat-1 cells drawn over sprite rows; MD plane A draws the
+ * same cells everywhere else (C1 step 2). Category 1 is a static ROM bit
+ * (LOOP-DECOMPILE, question 5), so the shimmer Mike saw was the two
+ * renderers disagreeing on colour along a boundary that moves with the
+ * sprites: 5-bit arcade colour in the FB, the MD line's 3-bit pen next
+ * to it. Paint the tile set's 32X CRAM entries with the SAME quantised
+ * colour the MD line carries (mdp_s_qc, 9-bit bbb ggg rrr, expanded 3->5
+ * bits) whenever the set has an MD line; the boundary then separates
+ * identical pixels. Sets without a line keep the arcade colour. */
+static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+{
+    volatile uint16_t *src = PAL_SH + c * 8;
+    if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
+    for (int p = 0; p < 8; p++) {
+        uint16_t q = mdp_s_qc[c * 8 + p], v;
+        if (q == 0xFFFF) {
+            v = (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000));
+        } else {
+            unsigned r = q & 7, g = (q >> 3) & 7, b = (q >> 6) & 7;
+            r = (r << 2) | (r >> 1); g = (g << 2) | (g >> 1); b = (b << 2) | (b >> 1);
+            v = (uint16_t)((b << 10) | (g << 5) | r | (src[p] & 0x8000));
+        }
+        cram_set(dst + p, base + p, v);
+    }
+}
+#endif
 
 /* LOOP 6 PER-GROUP MEMO. apply_cram ran its full ~2112-entry convert-and-
  * store every k1, pre-ack, inside the FM-hold. Gating the STORES alone
@@ -3190,7 +3218,11 @@ RAMCODE static void apply_cram(int par)
             DIAG[20]++;                      /* groups skipped */
             continue;
         }
+#ifdef CAT1_MD
+        cram_paint_tile(cram + g * 8, g * 8, (unsigned)c);
+#else
         cram_paint(cram + g * 8, PAL_SH + c * 8, g * 8, 8);
+#endif
 #endif
     }
     for (int c = 0; c < 8; c++) {
@@ -3209,7 +3241,11 @@ RAMCODE static void apply_cram(int par)
             continue;
         }
 #endif
+#ifdef CAT1_MD
+        cram_paint_tile(cram + g * 8, g * 8, (unsigned)c);
+#else
         cram_paint(cram + g * 8, PAL_SH + c * 8, g * 8, 8);
+#endif
     }
     for (int sc = 0; sc < 64; sc++) {
         uint8_t pr = spr_pair[par][sc];
