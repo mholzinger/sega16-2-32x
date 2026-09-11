@@ -1561,3 +1561,43 @@ constant, re-derived per title, does most of the triage.
 
 A scan that silently drops what it cannot confirm produces a clean-looking
 list with the hard cases missing. Report the uncertainty.
+
+---------------------------------------------------------------------
+## 38. $3E is an object CLAIM LOCK, and that is why TAS matters here
+
+Entry 37 left 0x150B6 as a candidate. It is unambiguously real code:
+
+    150a6:  cmpi.b  #3,$23(a0)      ; inspect the TARGET object
+    150ae:  cmpi.b  #4,$23(a0)
+    150b6:  tas     $3E(a0)         ; TRY TO CLAIM IT
+    150ba:  bne.s   0x1511A         ; already claimed -> give up
+    150bc:  move.b  #0,$23(fp)      ; won it: reset OUR state,
+    150c2:  clr.b   $21(fp)         ;   animation frame index,
+    150c6:  move.b  #1,$22(fp)      ;   and timer (entry 32)
+
+So $3E is a per-object **claim lock**: an actor test-and-sets it on
+ANOTHER object, and on success takes it over and restarts its own
+animation. 0xEAC0 does the same thing on the same field. $3C is a second
+lock, claimed at 0x12E84. The five TAS sites are:
+
+    0x02268  tas $FFC020        object slot 0 field $20 — PLAYER 1
+    0x0E098  tas $FFF15A        a global
+    0x0EAC0  tas $3E(a0)        claim another object
+    0x12E84  tas $3C(fp)        claim on the second lock
+    0x150B6  tas $3E(a0)        claim another object
+
+$3E is touched 173 times and $3C 88 times, and both are released with a
+plain `clr.b` (0xEADE, 0xEDCA, 0x150D4, 0x176C8, 0x18000) — claim with
+TAS, release with a store, the standard pattern.
+
+**This is exactly why the TAS dependency is load-bearing rather than
+cosmetic.** If the latch never sets (entry 37: the MD bus arbiter drops
+the write phase), every claim reports the object as free. Two actors then
+both believe they own the same target, and the failure shows up as
+interaction bugs — grabs, hits and transforms landing on something
+already taken — not as a crash. That is the worst kind of dependency:
+silent, gameplay-only, and invisible to any pixel diff on a still frame.
+
+For the kit: a TAS in a System 16 title is very likely an object claim,
+so the class matters for every game with actor-to-actor interaction, and
+the replacement has to preserve the ATOMICITY, not just the value.
