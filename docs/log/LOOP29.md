@@ -2085,3 +2085,34 @@ B's 368 longs in the FB bank the 68K consumes against the master's
 tp_lastB on a vint the 68K consumed (a savestate at 2100 has both);
 (3) the text restore back into flip_span with TWO_POST, to rule the
 move in or out.
+
+## 150. vi10, AND CATEGORY 1 IS A ROM BIT (2026-09-10 20:10)
+
+Mike on vi8 (rig): "sprite art feels solid, backgrounds aren't working
+completely." vi8's plane-packet mirror (139) replayed the master's
+STAGING buffer, which the compose rebuilds after the ack (found in 149),
+so on the FPGA, where the mirror fires on every flip, the planes can
+receive the next packet in place of the pending one: tile batches and
+NT deltas out of order = partial backgrounds. Sprites do not ride that
+path. **vi10** = vi8's flags on the current tree: the mirror replays
+the bytes the window wrote (kept by the window, hs_patch included) and
+the MDSPR palette + SAT the same way. ares: flips 479-520 per 1000,
+edge 242, torn 4, CRAM full, logic 50.0%, stills correct. On the rig at
+20:06 for Mike's eye.
+
+**Question 5 answered by the decompile thread (LOOP-DECOMPILE, tools/
+bake_cat1map.py -> sh_src/cat1map.bin/.h):** category 1 is bit 15 of
+the tile word, written by the unpacker from the ROM stream; static for
+the whole scene; verified 20,480 of 20,480 bytes against live tile RAM
+at two frames 1,200 apart. Per scene: 11.3% (level 1), 43.8%, 35.9%,
+6.2%, 17.2%. Consequences for this thread:
+  - CAT1MD's play-pass failure (2026-09-07: "grass feels shimmery") was
+    not classification. The promotion is applied by TWO renderers -- the
+    FB cat1 pass over sprite rows, MD plane A elsewhere (C1 step 2) --
+    drawing the same static tile in 5-bit and 3-bit colour, with the
+    boundary moving with the sprites. The fix is one renderer per tile
+    for the whole scene, or two renderers that are pixel-identical
+    (the FB cat1 pass painted with the MD line's quantised colours).
+  - Every compose figure in this log was measured on level 1, the
+    cheapest cat1 scene but one; scene 1 is four times the cat1 load.
+  - The bitmap can replace the per-frame classification outright.
