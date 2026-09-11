@@ -2468,3 +2468,47 @@ Point 3 is the test that decides this, and it is cheap: the strip is
 rows 24-31 of the BACKGROUND plane, and entry 24 measured background
 hscroll moving 156 -> 53 across level 1. If the strip's tiles move with
 it, the window is wrong and the answer is per-tile after all.
+
+---------------------------------------------------------------------
+## 57. Two cat1 hypotheses killed, and the one that survives: HALF THE CAT1 TILES ARE INVISIBLE
+
+Entry 56 proposed mapping the cat1 strip to the MD window plane. **Dead.**
+The window cannot scroll, and the strip is not uniform — rows 24-31 of
+scene 0 carry 15 to 23 DISTINCT tile indices each, in sequential runs
+(12E8, 12E9, 12EA...). It is scrolling artwork, not a repeated texture.
+
+Second try: BG cat1 and FG cat0 are BOTH priority level 2
+(ARCHITECTURE.md:541), so they could share one MD plane. **Also dead.**
+They collide constantly, and not just in the weak sense of both having a
+tile assigned — checking the actual art in `sh_src/tiles.bin`, the
+foreground draws opaque pixels over 51% to 97% of cat1 cells depending on
+scene. Two layers that overlap cannot be one plane.
+
+**But that second measurement inverts into the useful result.** If the
+foreground tile over a cat1 cell is FULLY OPAQUE, the cat1 tile beneath
+contributes nothing to the final image and never needs composing:
+
+    scene 0   232 of  500 cat1 cells fully occluded   46%
+    scene 1   366 of 1792                             20%
+    scene 2  1227 of 1472                             83%
+    scene 3   161 of  256                             63%
+    scene 4   387 of  704                             55%
+    overall  2373 of 4724                             50%
+
+**Half of all cat1 tiles in the game are invisible**, and which half is
+decidable at bake time from rom alone — the tilemap (entry 31) and the
+tile art the port already decodes. It is a second bitmap beside
+`cat1map.bin`, 2560 bytes per scene.
+
+If cat1 compose is 0.67 of the 1.44-vint generation, dropping the occluded
+half is about 0.33, landing near 1.11. That does not cross the one-vint
+quantum alone, and I am not going to claim it does.
+
+**THE ASSUMPTION THIS RESTS ON, STATED.** That the foreground layer draws
+over the background layer when both are priority level 2. The level
+governs sprite interleaving; layer-versus-layer order is a separate fixed
+rule. It is near-certain and it is still an assumption, and the whole
+result collapses without it. `jts16_colmix.v` / `jts16_prio.v` settle it
+and I have not read them for this purpose.
+
+Recorded so nobody retries the two dead ones.
