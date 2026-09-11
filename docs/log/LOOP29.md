@@ -2366,10 +2366,23 @@ nothing by the time a round-numbered frame comes round. **Sampling a
 time-varying quantity away from the event says nothing about the event.**
 The same mistake in a different costume as this file's rule 4.
 
-Set 33 is the noisy one (44 of 57 frees) and it is NOT the damaging one:
-it has zero cells in the tilemap at every sampled frame. The damage is
-in the other ~13 frees, which is why the per-cset call count was the
-wrong ranking and tags-wiped-on-screen is the right one.
+Set 33 is the noisy one (44 of 57 frees). ~~It is NOT the damaging one:
+it has zero cells in the tilemap at every sampled frame.~~ **WRONG, and
+corrected within the hour by the per-set version of this very counter --
+I made the SAME sampling mistake AGAIN, two paragraphs after naming it.**
+Ranking colour sets by on-screen tiles destroyed (`mdalloc_onscr`):
+
+    set 33                              1,681   65%
+    sets 43, 42, 41                     128 each
+    set 38                                114
+    sets 46, 45, 44, 40, 39, 37          64-77 each
+    total                               2,576 over 11 sets
+
+**Set 33 is two thirds of the whole defect.** The tilemap census that
+said otherwise read one frame's 13 pages; the set's cells are on screen
+when it is freed and gone by the round-numbered frame I dumped. Third
+time in this arc. The rule is not "sample more frames", it is **count at
+the event or do not count.**
 
 **THE FIX IS THE ONE THE CODE ALREADY HAS, AND IT IS NOT WIRED.**
 `mdp_free_set` returns early for a set the scene's baked table pins

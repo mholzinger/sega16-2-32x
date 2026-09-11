@@ -454,6 +454,11 @@ volatile uint32_t mdalloc_ctr[32];
  * says whether the churn is in sets the baked table names or outside
  * it. mdalloc_pin[s] = mds_pin[s] sampled at the last relocation. */
 volatile uint32_t mdalloc_relo[128];
+/* per colour set: tile slots wiped WHILE ON SCREEN. 156 showed the call
+ * count is the wrong ranking (set 33 takes 44 of 57 frees and owns no
+ * on-screen tile); this is the one that says which sets the scene table
+ * must cover. */
+volatile uint32_t mdalloc_onscr[128];
 volatile uint8_t  mdalloc_pin[128];
 #define MDA(i) (mdalloc_ctr[i]++)
 #define MDA_ADD(i, n) (mdalloc_ctr[i] += (uint32_t)(n))
@@ -1673,7 +1678,11 @@ static void mdp_wipe_set_tags(unsigned s)
              * and not the question: residency is time-varying and the
              * sample was never at a free. Ask at the free. */
             for (int q = 0; q < 2240; q++)
-                if ((md_dbg_nt[q] & 0x7FF) == (unsigned)i) { MDA(24); break; }
+                if ((md_dbg_nt[q] & 0x7FF) == (unsigned)i) {
+                    MDA(24);
+                    mdalloc_onscr[s & 127]++;
+                    break;
+                }
 #endif
         }
 }
