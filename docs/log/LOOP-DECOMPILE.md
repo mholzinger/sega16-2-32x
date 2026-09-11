@@ -1601,3 +1601,41 @@ silent, gameplay-only, and invisible to any pixel diff on a still frame.
 For the kit: a TAS in a System 16 title is very likely an object claim,
 so the class matters for every game with actor-to-actor interaction, and
 the replacement has to preserve the ATOMICITY, not just the value.
+
+---------------------------------------------------------------------
+## 39. The TAS replacement is not atomic, and on this game that is safe
+
+Entry 38 showed $3E is a claim lock, so the TAS replacement's correctness
+matters. `tools/patch_game.py` rewrites each site to a shim thunk that is
+
+    tst.b <ea>      ; TAS's exact N/Z/V/C
+    st    <ea>      ; set the byte, no CC change
+    rts
+
+**That is two bus cycles with a window between them.** A real TAS is one
+indivisible read-modify-write. If an interrupt fires between the `tst.b`
+and the `st`, and the handler claims the same lock, both claimants win —
+precisely the double-claim entry 38 says the dependency exists to prevent.
+
+**Measured: interrupt context cannot reach a claim.** Every call target
+inside the IRQ4 handler body (0x2AAC-0x2C90) is one of six:
+
+    0x2DBC  0x2E50  0x2E74  0x30B2  0x3108  0x3128
+
+Walking those three levels deep reaches 24 functions, and **none of them
+is a TAS site and none is the object dispatcher at 0x398E**. The
+dispatcher is called only from the main loop (0x892, 0x91A, 0xA54, 0x1F66,
+0x2036 and others), so object handlers — the only things that claim locks
+— never run in interrupt context.
+
+So the window exists and nothing can step into it. The replacement is
+correct FOR THIS GAME, for a reason that is a property of the game's
+structure rather than of the technique.
+
+**FOR THE KIT, THIS IS A CONDITION TO RE-CHECK PER TITLE, NOT A SOLVED
+PROBLEM.** The rewrite is safe only while no interrupt-context code
+claims a lock. A System 16 title that runs object logic from its vblank
+handler — which is a normal thing to do — would need a real atomic
+replacement, and the failure would be an occasional double-claim: rare,
+gameplay-only, and invisible to any still-frame comparison. Any title
+adopting this kit needs this reachability check run, not assumed.
