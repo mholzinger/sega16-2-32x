@@ -68,7 +68,7 @@ read ONLY off the game's own dropped-frame counter painted on the rig
 on the MiSTer, vi4 at ~44%; ares says 50% for both and is an upper
 bound. Patch 1 is in: `GAMEGATE=1` (LOOP29 141) makes IRQ4 release the
 main loop once per presented frame; overruns drop to zero and the game's
-speed IS the flip rate. Line: `rom/night/vi10.32x` (LOOP29 150: vi8 flags, plane-packet mirror replays the written bytes; hardware flips 16-23 per 64 vints, vi4 had 1-7). Next lever: the
+speed IS the flip rate. Line: `rom/night/vi10.32x` (LOOP29 150: vi8 flags, plane-packet mirror replays the written bytes; hardware flips 16-23 per 64 vints, vi4 had 1-7; Mike: backgrounds fixed on the rig). Next lever: the
 slave's compose (cat1 tiles = 48%), which sets the flip rate.
 
 ## THE ACCEPTED ROM
