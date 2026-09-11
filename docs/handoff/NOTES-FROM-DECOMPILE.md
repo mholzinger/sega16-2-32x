@@ -395,3 +395,34 @@ cat1 map:**
 
 Camera globals, if you need them: 0xFFF0F8/0xFFF0FA camera X/Y,
 0xFFF120/0xFFF128 offsets, 0xFFF018 bit 6 = cabinet screen flip.
+
+---------------------------------------------------------------------
+## 10. A question about the colour cycler, and a second palette path
+
+**There are TWO palette write paths in this game, not one.** [41]
+
+  1. The queue: 0x3BEC builds (dest, src) pairs, and **0x2DBC drains it
+     inside IRQ4**, copying seven longs per entry — 28 bytes, 14 words,
+     exactly one sprite palette. Builder and drain agree on the size from
+     opposite ends, which pins the palette format.
+  2. **The colour cycler at 0x30B2 writes palette ram DIRECTLY, every
+     vint, bypassing the queue.** Slots at 0xFFF300 are 8 bytes (active
+     bit + line, countdown, long script pointer, word index); when a
+     slot's countdown expires it stores 12 bytes — six colours — at
+     `0x840000 + line*16`. Its script pointer is the field your
+     DATA_PTR_NORM already normalizes at 0x30D0.
+
+**The question:** the stores are at **0x30F8, 0x30FA and 0x30FC**, and
+`game_altbeast.py` PAL_DIRTY_SITES (42 entries) has nothing in
+0x30B2-0x3110. Are those writes covered?
+
+Possible it is fine — the PAL32 bitmap is installed all-dirty, the 32-word
+granularity may mean another site already covers the same blocks, or the
+cycler may not run where the port has been looked at. You know that
+mechanism and I do not, so this is a question rather than a finding.
+
+Why it seemed worth your time anyway: a missed cycling palette is
+invisible on a still frame by construction and only shows in motion,
+which is the same failure family that killed CAT1MD on the play pass.
+
+Full working: docs/log/LOOP-DECOMPILE.md 41-42.

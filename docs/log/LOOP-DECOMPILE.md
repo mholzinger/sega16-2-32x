@@ -1734,3 +1734,40 @@ It also confirms a port fact from the other side: `patch_game.py`'s
 DATA_PTR_NORM normalizes "0x30D0 palette-cycle streamer (glow/fade tables
 at low 0x1A78E)" — 0x30D0 is the `movea.l 2(a5),a0` above, so the field
 being normalized is this table's script pointer.
+
+---------------------------------------------------------------------
+## 42. POSSIBLE GAP — the colour cycler's palette writes have no dirty site
+
+Following entry 41. The cycler's actual stores are at 0x30F8-0x30FC:
+
+    30ee:  ...d0 = index * 18        ; 18 bytes per script entry
+    30f2:  move.w  (a0)+,d0
+    30f4:  move.b  d0,1(a5)          ; reload the slot's countdown
+    30f8:  move.l  (a0)+,(a1)+       ]
+    30fa:  move.l  (a0)+,(a1)+       ] 12 bytes = SIX COLOURS
+    30fc:  move.l  (a0)+,(a1)+       ]   into palette ram via a1
+
+a1 was set at 0x30C2-0x30CE to `0x840000 + (line * 16)`, which
+`patch_game.py` remaps to the 0xFF9000 mirror.
+
+**`tools/game_altbeast.py` PAL_DIRTY_SITES has 42 entries and NONE of them
+is in 0x30B2-0x3110.** So these writes land in the mirror but are never
+flagged in the dirty bitmap that tells the SH-2 which regions to copy.
+
+I am NOT calling this a bug — I do not know the dirty-bit semantics well
+enough. It is a question with a specific shape, and there are at least
+three ways it could be fine:
+
+  - the PAL32 block bitmap is "installed all-dirty" (pal_thunks.h), so if
+    nothing ever re-clears these blocks the writes are carried anyway;
+  - another site in the list may already cover the same blocks, since the
+    granularity is 32 words, not one write;
+  - the cycler may only run in scenes the port does not reach yet.
+
+What makes it worth asking rather than dropping: the symptom of a missed
+palette region is exactly the failure family this project keeps hitting —
+colours that are right on a still frame and wrong in motion, which is also
+what killed CAT1MD on the play pass. A cycler is BY DEFINITION only
+visible in motion, so a still-frame comparison cannot see it either way.
+
+Raised in the builder notes section 10 with the addresses.
