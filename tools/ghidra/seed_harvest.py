@@ -43,6 +43,13 @@ def main():
     ap.add_argument('listing')
     ap.add_argument('rom')
     ap.add_argument('--json')
+    ap.add_argument('--code', help='instruction address list from '
+                    'tools/ghidra/instr_list.py. WITHOUT IT, immediate '
+                    'routine pointers are harvested from PHANTOM sites — a '
+                    '`move.l #imm,d(aN)` that only exists because a linear '
+                    'sweep disassembled data. That produced 101 bogus '
+                    'functions the first time (LOOP-DECOMPILE 52). Pass it '
+                    'on any run after the first.')
     a = ap.parse_args()
 
     with open(a.rom, 'rb') as fh:
@@ -84,9 +91,17 @@ def main():
             from_tables[t] = {'site': '0x%X' % site,
                               'entries': ['0x%X' % v for v in ents]}
 
+    code = None
+    if a.code:
+        code = set(int(x, 16) for x in open(a.code).read().split())
+
     from_imm = {}
+    skipped = 0
     for addr, mn, ops in rows:
         if mn != 'movel':
+            continue
+        if code is not None and addr not in code:
+            skipped += 1
             continue
         m = IMM_LONG.match(mn + ' ' + ops)
         if not m:
@@ -106,6 +121,10 @@ def main():
               % (t, len(info['entries']), info['site']))
     print('immediate routine pointers: %d distinct targets from %d sites'
           % (len(from_imm), sum(len(v) for v in from_imm.values())))
+    if code is not None:
+        print('  (%d phantom sites over data skipped by --code)' % skipped)
+    else:
+        print('  WARNING: no --code, phantom sites INCLUDED')
     print('TOTAL SEEDS: %d' % len(seeds))
 
     if a.json:

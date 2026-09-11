@@ -2230,3 +2230,49 @@ disassembly has, we have. 474 functions are cleanly bounded. 148 are
 fall-through entries that are correct as they stand. Six are unresolved.
 The remaining work is naming, not disassembly — 720 functions profiled,
 about 45 named.
+
+---------------------------------------------------------------------
+## 52. Function bounding repaired: 101 bogus functions removed, 165 mis-bounds down to 71
+
+Entry 51 measured the defect. `tools/ghidra/fix_bounds.py` repairs it,
+run to a fixpoint over three passes.
+
+**Root cause, traced.** `tools/ghidra/seed_harvest.py` read the LINEAR
+objdump listing to harvest immediate routine pointers, without filtering
+the SOURCE SITE to real code. A `move.l #imm,d(aN)` that exists only
+because a linear sweep disassembled data yields a function seed at
+whatever that immediate happens to be. Running the harvester with a code
+filter now shows the scale: **2156 of 2435 candidate sites are phantoms
+over data.** The 279 real ones give 262 targets; the unfiltered run gave
+275, and the extra ones landed in padding.
+
+Those bogus functions were invisible in every earlier metric. 0x0000
+disassembles as `ori.b #0,d0`, so a run of padding looks like a function
+body, and entry 19's "100% of the reference's function starts" was true
+and said nothing about the 101 extra entries that were not functions at
+all.
+
+**The repair.** Delete a function whose body is mostly zero bytes and
+which nothing calls; extend one that ends mid-stream at an address that
+is not another function's entry, by deleting and recreating it so Ghidra
+recomputes the body from flow. Leave alone one that ends exactly where
+the next begins — that is a fall-through and is normal hand-written
+68000. Three passes were needed because the first deletions removed the
+bogus CALLERS that were keeping other bogus functions alive.
+
+                    before   after
+    functions          720     618
+    terminated         474     473
+    fall-through        81      74
+    MIS-BOUNDED        165      71
+    correctly bounded  555     547  (77% -> 89%)
+    reference starts   433     433  <- nothing real was lost
+
+**The guard that made this safe to do:** 433 of 433 reference function
+starts are still present after deleting 101 functions. Without that check
+a cleanup like this is indistinguishable from damage.
+
+71 remain. They stop shrinking — the same 69 are offered for extension
+every pass and re-extending does not change them — so they need a
+different approach, not another iteration. `seed_harvest.py` now takes
+`--code` and warns loudly without it.
