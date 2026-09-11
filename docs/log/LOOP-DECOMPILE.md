@@ -3067,3 +3067,59 @@ checking whether it existed, and my duplicate ran before theirs and
 tripped their assert, breaking the build twice before I found it. They had
 implemented my finding while I was re-implementing it. Second time today
 I have failed to look at what the other thread already did.
+
+---------------------------------------------------------------------
+## 69. WHAT PATCHING THE 68K ROM CAN AND CANNOT BUY — re-measured honestly
+
+Entry 27 concluded that deleting the game's sprite copy does not move the
+frame rate. That was measured on the counter entry 68 has now shown was
+being wiped, so it had to be redone. Rebuilt with both flags:
+
+    1200-frame window, 2400-3600, missed vints
+      shipping                        617   (51%)
+      sprite record copy DELETED      591   (49%)
+
+**The conclusion survives: 2 points.** Deleting the single largest thing
+the game's IRQ4 does — up to 128 records x 12 bytes, ~1536 bytes of
+68000 copying every vint — buys two points of miss rate out of fifty.
+
+That is the answer to "what can we patch in the 68K rom to bridge the
+gap", and the answer is **very little, because the rom's own per-vint
+work is not where the time goes.**
+
+Add up what the game does per vint from the decompile:
+
+    sprite upload      0x2B16   up to 1536 bytes   <- measured at 2 points
+    palette drain      0x2DBC   28 bytes per queued entry
+    colour cycler      0x30B2   12 bytes when a slot expires
+    sky palette        0x3108   32 bytes
+    scroll registers   0x2AD2   4 words
+    input edges        0x2E74   a handful of bytes
+
+The sprite copy dwarfs the rest combined, and the sprite copy is worth two
+points. **The whole of the game's per-vint video work is therefore a few
+points of a fifty-point overrun.** There is no 68K-rom-side patch that
+bridges this, because the rom is not what is overrunning.
+
+The overrun is the shim: CLAUDE.md's own figure is ~2882 instructions per
+vint against the game's ~2780, and the shim is C in `md_src/`, not
+patchable bytes in the arcade binary.
+
+**So the levers are where entry 63 put them, and none of them is a rom
+patch:**
+
+  1. Tiles to the VDP. Deletes 25 TILE_DIRTY_SITES and the tile half of
+     the transport family outright — the shim stops being told about
+     writes nobody needs to hear about.
+  2. The frame-skip signal. On 50% of vints the game takes the 0x2C06
+     short path and writes NO video state, so the shim is composing and
+     shipping an unchanged frame. That is a shim-side skip, gated on a
+     byte the game already maintains.
+  3. Sprites out of MD CRAM entirely, which frees the contention entry 64
+     found.
+
+**One correction to entry 63 while I am here.** It said "what cannot be
+tuned: the game's own compute". That was right but for a reason I stated
+badly — I leaned on entry 27, which was measured on a broken instrument.
+It is right because the game's per-vint work is small, which is now
+measured properly rather than inferred from a wiped counter.
