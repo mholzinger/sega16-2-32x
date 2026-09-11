@@ -2727,3 +2727,46 @@ a spare line is a spare line.
 STILL UNCHECKED, and unchanged from entry 60: the colour cycler (entry
 41) writes palette ram every vint, and if it cycles TILE palettes this
 whole partition has to hold in every cycler state, not just at rom values.
+
+---------------------------------------------------------------------
+## 62. The cycler does not touch the viewport, and a block error of mine corrected
+
+Checked entry 61's open risk. Dumping the live tile palette region across
+six frames of level 1:
+
+    palettes that CHANGE frame to frame:  6, 19, 20, 21    (four of 128)
+    palettes scene 0's worst viewport uses:  72-103        (twenty-five)
+    intersection:  NONE
+
+**The colour cycler cycles four tile palettes and the viewport uses none
+of them.** The risk is closed for level 1.
+
+**AND CHECKING IT EXPOSED A REAL ERROR IN ENTRIES 60 AND 61.** My colour
+figures came from `0x232A0 + block*0x400 + p*16`. That block is 1024
+bytes — sixty-four palettes. **Every palette above 63 was read from the
+wrong block**, and scene 0's viewport uses 72 through 103, so essentially
+all of them. `set_level_palettes` (entry 3) loads only 0-63; palettes
+64-127 are written to 0x840400 by the routine at 0x2B66 from a WORK RAM
+buffer at 0xFFE400, which is not rom at all.
+
+Re-measured against LIVE palette ram, union across six frames so every
+cycler state seen is covered:
+
+    scene 0:  25 palettes ->  43 distinct MD colours -> FITS 4 lines,
+              sizes [15, 15, 11, 5], 46 of 60 slots
+
+**43, not the 24 entry 61 reported. The conclusion holds and the number
+was wrong.** It still fits, with the fourth line nearly empty.
+
+**Scenes 1-4 in entries 60 and 61 are NOT TRUSTWORTHY** — same block
+error, and I have live palette data only for level 1. Their packings have
+to be redone from a dump of each scene, which needs a playthrough that
+reaches them.
+
+`tools/bake_tilecram.py` therefore has a defect: it reads palette colours
+from rom, which is right for 0-63 and wrong above. It should take a live
+CRAM dump instead. Not fixed yet; noted here so nobody bakes from it.
+
+Sixth self-caught error, and the same shape as the rest: I took a base
+address and a stride that were correct in one range and used them outside
+it, without checking what the consumer actually reads.
