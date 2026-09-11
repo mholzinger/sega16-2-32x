@@ -2625,3 +2625,54 @@ is. This result removes the priority objection and does not touch that.
 
 **Checked for level 1 only.** The pp=2 uniformity is measured on scene 0.
 Another scene with pp=3 sprites would have a genuine boundary case.
+
+---------------------------------------------------------------------
+## 60. THE TILE PALETTE CONSTRAINT IS NOT BINDING — 4 of 5 scenes fit in THREE CRAM lines
+
+Entry 59 ended by saying colour was still in the way. Mike pushed back:
+we already knew the arcade does not use all its palettes at once. He was
+right and I had carried the project's sprite-side conclusion (entry 9,
+where sprites genuinely do not fit) across to tiles without measuring.
+
+Measured. Worst case over ALL horizontal scroll positions, a 40x28
+viewport, both displayed pages (FG page 0, BG page 5 — entry 59):
+
+    scene   palettes   distinct colours   greedy lines needed
+      0        25            33                  3      FITS 4
+      1        11            31                  3      FITS 4
+      2        14            33                  3      FITS 4
+      3         8            34                  3      FITS 4
+      4        16            77                  6      does not fit
+
+**Twenty-five distinct tile palettes collapse to 33 distinct colours**,
+because System 16 tile palettes share colours heavily. And the packing is
+not merely a colour count — a tile picks ONE MD line, so every 7-colour
+palette must sit entirely inside one 15-slot line. A naive greedy
+first-fit finds a 3-line partition for four scenes out of five. Greedy is
+an upper bound, so 3 is safe and the true optimum may be lower.
+
+**So the whole tile layer can go to the MD VDP for 4 of 5 scenes, and
+with a line to spare.** Combined with entry 59 — where the MD priority
+chain expresses level 1's tile-versus-sprite layering EXACTLY — there is
+no priority obstacle and no colour obstacle to putting both tile planes on
+hardware.
+
+That is not 0.67 vints of cat1 compose. It is the tile half of the slave's
+compose entirely.
+
+**Scene 4 is the exception and is honest about it**: 77 colours against 60
+usable slots, over by 17, and greedy wants 6 lines. It needs merging of
+near-identical colours or a different treatment. One scene out of five.
+
+**THREE THINGS NOT MEASURED, and the first could sink it:**
+
+  1. **The colour cycler (entry 41) writes palette ram directly every
+     vint.** If it cycles TILE palettes, the colour set is not static and
+     the partition has to hold across every cycler state, not just the
+     rom values I read. This is the check that matters most.
+  2. Vertical scroll. I assumed rows 4-31; entry 24 found vertical scroll
+     pinned at 32 for all of level 1, but that is level 1 only.
+  3. Scene 4, above.
+
+I was wrong to state colour as the binding constraint without measuring
+it for tiles. It binds for sprites and it does not bind for tiles.
