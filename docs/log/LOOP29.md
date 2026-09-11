@@ -3479,3 +3479,68 @@ cat-1 is 11.3% of tiles and sprite area is small, so the overlap is
 rare -- a sprite briefly in front of a fence it should be behind. Mike's
 eye is the right instrument for whether that is visible at all before I
 spend the sprite loop's budget masking it.
+
+## 176. THE ALLOCATOR HAS TO GO, NOT GET MORE ROOM — AND TWO BUGS I MADE PROVING IT (2026-09-11 16:45)
+
+Mike on vi27: **"very erratic. smooth frames, then choppy"**, with rig
+shots showing large red and yellow blocks over the smoke-cloud sprite
+and a full-height dithered yellow band.
+
+**The erratic cadence is not a defect, it is what 42% single-vint LOOKS
+like.** The ship period bins are (1038, 1394, 15, 7): 42% of generations
+land in one vint and 57% in two. That is a 60 Hz frame followed by a
+30 Hz frame, alternating on content — judder by construction. It reads
+worse than a steady 30 even though it is measurably faster. **There is
+no intermediate that feels good; the bins have to go to ~100% single.**
+
+**The corruption is the palette allocator, and the fix is not more
+lines.** I gave the dynamic allocator the fourth CRAM line that MDSPR
+was holding (`MDSPROFF=1 MDLINES4=1` -- entry 133's "3 background + 1
+sprite" stops applying once sprites stay in the framebuffer, which is
+what the plan's four-line pack assumes):
+
+    build                             on-screen tiles destroyed / 12k frames
+    vi16                                     644
+    vi26                                   1,347
+    vi27 (CAT1MD + C1NOFB, 3 lines)        ~2,000
+    + 4th line, dynamic allocator          9,845      <-- WORSE
+    + 4-line STATIC bake                   3,620
+
+**A fourth line made it FIFTEEN TIMES worse.** More room does not calm a
+thrashing allocator; it gives it more to thrash. The static bake helps
+(9,845 -> 3,620) and is still 5x vi16, because the bake's 39 sets come
+from a HARVEST of live 32X CRAM groups and the cat-1 sets are not in it
+-- under CAT1MD they live on the MD and never hold a 32X group. Those
+sets stay dynamic and churn.
+
+**So step 3's remaining work is the emitter, not the runtime.**
+`mds_install` already installs baked per-scene line/map/used tables and
+PINS every set in them against the drift free (LOOP29 156's `mds_pin`).
+It needs tables whose set list is `bake_tilecram.py`'s worst-case
+VIEWPORT -- exhaustive over scroll positions, 25 palettes for scene 0 --
+instead of `mdpen_bake.py`'s sampled harvest. That is a tool change with
+no runtime change at all.
+
+**Two bugs of my own, both found by checking rather than by symptom:**
+
+  1. **`MDSPROFF=1` did nothing at all** for its first two measurements.
+     I put the `filter-out` mid-Makefile, and `-DMD_SPR` is appended
+     LATER, so it filtered an empty list. The two builds I compared with
+     and without it were byte-identical in flags. Moved to after every
+     `SHCCFLAGS` assignment; now `grep -c MD_SPR` reads 0.
+  2. **`mdpen_bake.py` emitted `mds_line_c[N][48]` hardcoded**, so
+     `MDPEN_LINES=4` wrote a four-line table into a three-line
+     declaration and the fourth line was silently truncated. Sized by
+     the line count now.
+  3. **And one in my own patch from 174:** the live-colour path built
+     the pen map from `sorted(live[p])` -- a SET -- so the emitted map
+     was in colour order, not pixel order. Every tile would have indexed
+     the wrong slots. `tilecram.h` is re-emitted from a per-pixel list.
+
+All three are the same shape as this log's recurring failure: a
+mechanism that looks applied and is not. The counter-collision entries
+(152, 167) and the dead-code ablation (169) are the others.
+
+**Where the speed stands.** vi27: wall 1.13, 42% single-vint, isr-flips
+2,418, 68K handler 53.1 -- the best transport of the arc, and NOT
+shippable until the allocator is out of the cat-1 path.

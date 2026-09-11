@@ -1771,6 +1771,15 @@ endif
 ifdef C1NOFB
 SHCCFLAGS += -DC1_NOFB
 endif
+# `make ... MDSPROFF=1` = LOOP29 176. Drop the MD-VDP sprite offload.
+# PLAN-TILES-TO-VDP's palette pack uses ALL FOUR MD CRAM lines for the
+# tile layers, which leaves none for sprites -- and that is consistent,
+# because with tiles on the VDP the sprites stay in the framebuffer and
+# need no MD palette line at all. MDSPR claims ~1 record of 37 anyway
+# (LOOP29 119). Wins back the line the pack needs.
+ifdef MDLINES4
+SHCCFLAGS += -DMDP_LINES4
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old
@@ -2198,6 +2207,13 @@ SHOBJS += sh_src/sprbake_data.o
 # "nothing to be done" and shipped the probe rom back as the baseline —
 # the exact trap .build_flags exists to prevent.
 SHCCFLAGS += -DSPR_BAKE
+endif
+
+# MDSPROFF must run AFTER every SHCCFLAGS assignment above -- filtering
+# mid-file removed nothing because -DMD_SPR is appended later (measured:
+# the flag had no effect at all, LOOP29 176).
+ifdef MDSPROFF
+SHCCFLAGS := $(filter-out -DMD_SPR -DMDSPR_TOP -DMDSPR_WHY,$(SHCCFLAGS))
 endif
 
 # FLAG STAMP — objects must depend on the FLAG SET, not just on sources.

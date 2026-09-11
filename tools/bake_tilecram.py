@@ -121,6 +121,7 @@ def main():
     # "what is NOT verified") flags this for scenes 1-4; it hits scene 0
     # too. Live dumps are the only correct source above 63.
     live = None
+    livepix = {}
     if a.live:
         live = {}
         for fn in a.live:
@@ -128,8 +129,14 @@ def main():
             if len(d) < 0x800:
                 sys.exit('%s: want 0x800 bytes of WRAM 0xFF9000' % fn)
             for p in range(128):
+                # per-PIXEL colours, order preserved (pens 1..7). The
+                # union across dumps is what the PACKER needs; the
+                # per-pixel list is what a pen MAP needs, and collapsing
+                # to a set destroys the pixel->colour correspondence.
                 live.setdefault(p, set()).update(
                     md(w16(d, p * 16 + 2 * k)) for k in range(1, 8))
+                livepix.setdefault(p, [md(w16(d, p * 16 + 2 * k))
+                                       for k in range(1, 8)])
         print('live colours from %d dump(s), applied to scene %d'
               % (len(a.live), a.live_scene))
     rom = load()
@@ -168,8 +175,11 @@ def main():
             for li, g in enumerate(groups):
                 if c <= g:
                     if live is not None and s == a.live_scene:
-                        src = sorted(live[p])
-                        assign[p] = (li, [slot[li][c] for c in src])
+                        # BUG FIXED (LOOP29 176): this read `sorted(live[p])`,
+                        # a SET, so the emitted pen map was in colour order
+                        # and not pixel order -- every tile would have
+                        # indexed the wrong slots. Use the per-pixel list.
+                        assign[p] = (li, [slot[li][c] for c in livepix[p]])
                     else:
                         assign[p] = (li, [slot[li][md(w16(rom, base + p * 16
                                                           + 2 * k))]

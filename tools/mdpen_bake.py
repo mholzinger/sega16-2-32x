@@ -214,7 +214,12 @@ def main():
         # scene change such as normal -> boss_smoke
         owner = [psb.LOADABLE.index('normal') if not masks[n] else i for i, n in enumerate(psb.LOADABLE)]
         f.write('static const uint8_t mds_table_of[MDSTATIC_N] = { ' + ', '.join(str(o) for o in owner) + ' };\n')
-        f.write('static const uint16_t mds_line_c[MDSTATIC_N][48] = {\n')
+        # LOOP29 176: the 48 was hardcoded for three lines. MDPEN_LINES=4
+        # emitted a 4-line table into a 3-line declaration, so the fourth
+        # line was silently truncated -- exactly the kind of quiet wrong
+        # table this file's own comments warn about.
+        f.write('static const uint16_t mds_line_c[MDSTATIC_N][%d] = {\n'
+                % (NLINES * 16))
         for name in psb.LOADABLE:
             lc = tables[name][0]
             f.write('    { ' + ', '.join(f'0x{v:04X}' for row in lc for v in row) + ' },   /* ' + name + ' */\n')

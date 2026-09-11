@@ -314,11 +314,24 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * default-off until a play pass says otherwise. */
 #ifdef BG_PACK2
 #define MDP_LINES  2
+#elif defined(MDP_LINES4)
+/* LOOP29 176. The MD has FOUR CRAM lines and the background has always
+ * had three because MDSPR held the fourth (entry 133). With the tile
+ * layers on the VDP the sprites stay in the framebuffer and need no MD
+ * line at all, so the fourth comes back -- which is what
+ * PLAN-TILES-TO-VDP's pack assumes: scene 0 fits [15,15,11,5] across
+ * FOUR lines. Needs MDSPROFF, asserted below. */
+#define MDP_LINES  4
 #else
 #define MDP_LINES  3
 #endif
-#define mdp_line_c ((uint16_t *)0x0603C400) /* [3][16] 9-bit colour, FFFF free */
-#define mdp_pen_rc ((uint8_t  *)0x0603C460) /* [3][16] pen refcount */
+#if defined(MDP_LINES4) && defined(MD_SPR)
+#error "MDP_LINES4 takes the MD sprite line for tiles - add MDSPROFF=1"
+#endif
+/* the blocks below are sized for FOUR lines either way (64 entries):
+ * mdp_line_c 0x3C400+128B ends 0x3C480, inside mdp_pen_rc's old slack */
+#define mdp_line_c ((uint16_t *)0x0603C400) /* [4][16] 9-bit colour, FFFF free */
+#define mdp_pen_rc ((uint8_t  *)0x0603C460) /* [4][16] pen refcount */
 #define mdp_s_line ((uint8_t  *)0x0603C4A0) /* [128] line+1, 0 = unassigned */
 #define mdp_s_map  ((uint8_t  *)0x0603C520) /* [128][8] pixel -> pen */
 /* mdp_s_qc is [128][8] of uint16 = 0x800 BYTES. The first layout
