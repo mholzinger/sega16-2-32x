@@ -68,8 +68,32 @@ read ONLY off the game's own dropped-frame counter painted on the rig
 on the MiSTer, vi4 at ~44%; ares says 50% for both and is an upper
 bound. Patch 1 is in: `GAMEGATE=1` (LOOP29 141) makes IRQ4 release the
 main loop once per presented frame; overruns drop to zero and the game's
-speed IS the flip rate. Line: `rom/night/vi10.32x` (LOOP29 150: vi8 flags, plane-packet mirror replays the written bytes; hardware flips 16-23 per 64 vints, vi4 had 1-7; Mike: backgrounds fixed on the rig). Next lever: the
-slave's compose (cat1 tiles = 48%), which sets the flip rate.
+speed IS the flip rate. Line: `rom/night/vi10.32x` (LOOP29 150: vi8 flags, plane-packet mirror replays the written bytes; hardware flips 16-23 per 64 vints, vi4 had 1-7; Mike: backgrounds fixed on the rig).
+
+**CANDIDATE, ON THE RIG AS `probe.32x`, AWAITING MIKE'S EYE (2026-09-10
+22:20): `rom/night/vi14.32x`, LOOP29 152-159.** Mike on vi11: "still
+lots of missing tile data." Located, and most of it fixed. The MD tile
+residency map is destroyed by the colour-set drift free: 57 events per
+4000 frames, ~46 tile slots each, and **95% of those slots are named by
+the name table at the moment they are wiped** -- measured AT the event,
+because sampling at round-numbered frames gave the opposite answer three
+times in a row. Colour set 33, a fading terrain mass of eight
+consecutive tile codes with four distinct pens, is 65% of it. vi14 keeps
+a set's pen indices across the free so the re-assign lands where it was
+and the tile patterns stay valid:
+
+    on-screen tiles destroyed   2,500 -> 644     -74%
+    demo scene vs the arcade      133 -> 75      -44%
+    logo screens, flips, logic                   unchanged
+
+**Do not rank this family on `presented_fps`.** It reads 5.9 -> 3.1 on
+one of these builds and 5.9 -> 10.6 on another while `isr-flips` stays
+flat to within 0.3%. With frame DELIVERY pinned, MOTION is measuring how
+big each frame's delta is, and removing background flicker removes
+delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
+
+Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
+which sets the flip rate.
 
 ## THE ACCEPTED ROM
 
