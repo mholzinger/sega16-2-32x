@@ -2172,3 +2172,61 @@ the wrong claims did not feel different from the right ones.** Entry 48
 asserted the banded order list (correct, consumer-read) and the Y-coordinate
 frame table (wrong, filtered) in the same breath with the same confidence.
 Confidence does not track provenance, so only provenance can be checked.
+
+---------------------------------------------------------------------
+## 51. Completion status of the disassembly, measured rather than claimed
+
+`tools/ghidra/func_profile.py` profiles ALL 720 functions mechanically —
+size, callers, callees, the object fields each touches through A6, its
+work-RAM globals, the hardware regions it reaches, and its terminator.
+720 functions, 63895 bytes.
+
+What the terminator column exposes, which the "99.82% of instructions"
+figure hid: **instruction coverage is excellent and FUNCTION BOUNDING is
+not.**
+
+    end in a real terminator (rts/jmp/bra/rte)   474   55128 bytes
+    end mid-stream (ori.b, move.b, ...)          154    3918 bytes
+    other                                         92
+
+The 154 are two different things. Most are legitimate: 0x673E is a
+four-byte entry that falls straight through into 0x6742 and shares its
+`rts`, which is normal hand-written 68000 and not an error. A few are
+mine: functions I SEEDED AT DATA ADDRESSES.
+
+By class, the 720 are:
+
+    pure / register only          277
+    object handlers (A6 fields)   258
+    touch the object table         72
+    touch hardware                 71
+    work RAM only                  42
+
+**AND I ALMOST MADE THE SAME MISTAKE A FOURTH TIME.** Six of the
+badly-terminated entries — 0x6DCA, 0x6E22, 0x6E7A, 0x6ED2, 0x6F2A,
+0x6F82, each exactly 88 bytes and evenly spaced — decode as 22 ascending
+code-range longs apiece. That is a textbook 6x22 jump table and I was
+about to write it up as one.
+
+Two independent checks say no:
+
+    pointers landing on known function entries:  0/22, 0/22, 0/22,
+                                                 1/22, 12/22, 1/22
+    real-code instructions referencing the region:  0
+
+Nothing reads it, and the values mostly do not point at function entries.
+It might be jump tables into mid-function labels, it might be unreached
+code, it might be art. **I do not know, and entry 50's rule says an
+unread structure is a hypothesis.** Left unresolved at 0x6DCA-0x6FDA,
+528 bytes.
+
+This is the fourth time today the "does it look like an address" filter
+produced a confident structure (entries 17, 37, 48, and this). The
+difference is that this time the check ran BEFORE the claim, because
+entry 50 made the check mechanical. That is the only thing that changed.
+
+**So the honest completion status:** every instruction the reference
+disassembly has, we have. 474 functions are cleanly bounded. 148 are
+fall-through entries that are correct as they stand. Six are unresolved.
+The remaining work is naming, not disassembly — 720 functions profiled,
+about 45 named.
