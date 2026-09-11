@@ -1426,3 +1426,58 @@ Running total on the struct: $00 status, $02 routine, $08 sprite slot,
 $0A/$0B palette, $0C/$10 positions, $14-$1E motion, $21/$22/$24 animation,
 $2C flags, $2F priority band, $30-$3A box A, $40/$44 saved position,
 $50-$5A box B.
+
+---------------------------------------------------------------------
+## 35. CORRECTION to entry 30, the animation script format, and per-scene floor geometry
+
+**ENTRY 30 IS WRONG about 0x65CA.** I named it "save position" from its
+first two instructions and did not read the other 122 bytes. It saves the
+position and then continues into a full animation update — script pointer
+at $24, frame index at $21, tick $22, advance and reload — i.e. it is an
+ANIMATION DRIVER VARIANT of 0x669C (entry 32), not a save routine. Entry
+30's naming of 0x65AA (restore position) stands; that one was read to its
+`rts`. My own rule, read to the return before naming, and I broke it.
+
+**The animation script format.** 0x674E (24 callers) indexes it:
+
+    674e:  movea.l $24(fp),a0      ; script
+    6754:  move.w  (a0)+,d0        ; header word
+    675a:  move.b  $21(fp),d0      ; frame index
+    675e:  add.w d0,d0 ; move.w d0,d1 ; add.w d0,d0 ; add.w d1,d0
+                                    ; = index * 6
+    6766:  adda.w  d0,a0           ; SIX BYTES PER FRAME
+    6768:  move.b  (a0)+,$48(fp)
+    676c:  move.b  (a0)+,$49(fp)
+
+So a frame entry is six bytes and $48/$49 receive two of them. 0x6654
+(16 callers) is the same walk with `cmpi.b #1,$22(fp)` instead of a
+decrement — a lookahead that reads the NEXT frame without consuming the
+timer.
+
+**0xD99C (17 callers) — floor collision against per-scene geometry.**
+
+    d99c:  tst.w   $1A(fp)         ; Y velocity; only when falling
+    d9a4:  lea     $DEC4(pc),a0
+    d9aa:  move.b  $FFF142,d0      ; the SCENE index (entry 10)
+    d9b2:  movea.l (a0,d0.w*4),a0  ; per-scene geometry pointer
+    d9b6:  move.w  $5A(fp),d6      ; box B Y max (entry 34)
+    d9be:  cmp.w   (a0),d6
+    d9c6:  move.w  4(a0),d0 ; cmp.w $54(fp),d0
+
+**A new data table: 0xDEC4**, five long pointers, one per scene — and the
+sixth entry is out of range, the same five-and-stop shape as the scene
+descriptor table at 0x1CE2. The scene 0 geometry at 0xDED8 is triples:
+
+    1078 1440 14D8      Y = 0x1078, X from 0x1440 to 0x14D8
+    1078 1508 1580
+    1078 1738 1778
+    1078 17A8 1810
+
+Y is biased by 4096 (entry 33), so 0x1078 is screen row 120 — and the
+depth bands in entry 34 sit at rows 136 and 200. These are walkable floor
+segments: a height and an X span. That is the ground the actors stand on,
+and it is static per-scene rom data like the cat1 map (entry 31).
+
+Struct additions: $48/$49 from the animation frame entry, $68 read
+alongside box B in the floor test, $7C used by 0xE1E8 to decrement
+counters at 0xFFF154/0xFFF156.
