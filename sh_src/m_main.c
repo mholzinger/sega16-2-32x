@@ -4977,7 +4977,13 @@ static uint16_t pg_watch;                    /* see cap_page */
  * [0] rows skipped [1] rows walked. */
 static uint32_t nt_key[56];
 static uint16_t nt_gen[56];
+static uint8_t  nt_win[56];                  /* last window this row was
+                                              * actually WALKED */
 static uint16_t tm_gen = 1;                  /* 0 = "never walked" */
+#ifndef NT_MAXAGE
+#define NT_MAXAGE 16                         /* windows a row may go
+                                              * unwalked; see LOOP29 171 */
+#endif
 #define NTS ((volatile uint32_t *)0x26028FD0)   /* free: SPRBK ends 0x28FC4,
                                                  * band attribution 0x28FC8
                                                  * is 3 longs -> 0x28FD4 */
@@ -5277,6 +5283,17 @@ __attribute__((noinline)) static void disp_gate(void)
             MARS_VDP_DISPMODE = (uint16_t)(base | MARS_VDP_MODE_OFF);
             disp_blank = 1;
             DISP_CENSUS += 0x10000u;     /* blanks entered */
+#ifdef NT_SKIP
+            /* LOOP29 171: a scene cut rewrites the whole tilemap, and if
+             * cap_page's content compare misses any of it the skip keeps
+             * serving the OLD scene's rows. Mike's rig shot of the Zeus
+             * screen under vi20 is that picture: corrupt blocks across
+             * the upper half and dropped glyphs. The display gate is the
+             * one signal that says "everything you know is stale", so
+             * spend it. */
+            tm_gen++;
+            if (!tm_gen) tm_gen = 1;
+#endif
 #ifdef MD_STATIC
             mds_flush();
 #endif
@@ -13213,7 +13230,22 @@ RAMCODE void m_main(void)
                                 | ((uint32_t)(pqb[0] & 0xF) << 19)
                                 | ((uint32_t)(pqb[1] & 0xF) << 23)
                                 | ((uint32_t)(pqb[2] & 0xF) << 27);
-                            if (nt_key[ridx] == nk && nt_gen[ridx] == tm_gen) {
+                            /* BOUNDED STALENESS (LOOP29 171). The skip
+                             * trusts cap_page's content compare to notice
+                             * every tilemap change, and on the FPGA that
+                             * trust is not earned: this repo's own notes
+                             * have FB reads coming back stale on hardware
+                             * where ares reads them true. vi20 measured
+                             * ONE destroyed on-screen tile in 12,000 ares
+                             * frames and Mike's rig pass says tiles are
+                             * missing, which is exactly what a skip that
+                             * never expires looks like when the change
+                             * signal is lost. Force a walk every NT_MAXAGE
+                             * windows regardless, the same backstop
+                             * TEXTCAPMASK uses for its ungated writers. */
+                            if (nt_key[ridx] == nk && nt_gen[ridx] == tm_gen
+                                && (uint8_t)((uint8_t)win_no - nt_win[ridx])
+                                   < NT_MAXAGE) {
                                 /* hazard 1: the walk is the residency
                                  * re-stamp source. Re-stamp from the
                                  * mirror row instead -- 40 byte writes
@@ -13230,6 +13262,7 @@ RAMCODE void m_main(void)
                             }
                             nt_key[ridx] = nk;
                             nt_gen[ridx] = tm_gen;
+                            nt_win[ridx] = (uint8_t)win_no;
                             NTS[1]++;
                         }
 #endif

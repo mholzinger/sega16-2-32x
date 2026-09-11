@@ -3166,3 +3166,76 @@ at f2400 render normally (97 distinct colours, 7.6% black against vi16's
 110 and 4.8%, and the two are at different game moments because vi20 is
 ahead). **Fixing the parity rig's alignment for a faster build is the
 next tooling job.**
+
+## 171. THE SKIP NEEDS TWO BACKSTOPS, AND THE ZEUS TEXT IS NOW THE OPEN BUG (2026-09-11 13:45)
+
+**Mike's rig pass on vi20: corrupt blocks across the upper half of the
+Zeus screen and dropped glyphs** -- against ONE destroyed on-screen tile
+in 12,000 ares frames. The divergence is the bug, not the ares number.
+`NT_SKIP` trusts `cap_page`'s content compare to notice every tilemap
+change, and this repo's own notes have FB reads coming back stale on the
+FPGA where ares reads them true. A skip that never expires, fed by a
+change signal that can be lost, serves the previous scene for ever.
+
+Two backstops, both cheap:
+
+  - `NT_MAXAGE` (default 8): a row is walked regardless once it has gone
+    that many windows unwalked. Same shape as TEXTCAPMASK's forced-full
+    mask every 8th vint.
+  - **bump the tilemap generation on display-blank entry.** A scene cut
+    rewrites the whole tilemap; the display gate is the one signal that
+    says everything is stale, so spend it.
+
+**They did not just fix correctness, they IMPROVED the transport:**
+
+                          vi16    vi20     vi21     vi22
+    isr-flips            1,724   2,001    2,113    2,095
+    68K handler mean      58.3    58.7     54.0     53.1
+    consume mean           5.7     7.7      5.6      5.5
+    nopost                 315     583       63       70
+    fallback               663     732      138      137
+    ships                31.3f   32.5f    33.1f       -
+
+vi20's unbounded skip was flooding the transport in a way `NBUILD1`
+only half-braked; bounding it fixed the rest. **vi22 -- NBUILD1 +
+MDSPRTOP with NO NTSKIP at all -- reads within noise of vi21 on every
+transport number**, which says most of the transport win was NBUILD1 and
+the age bound, not the skip. And vi21's allocator numbers are WORSE than
+vi16's (on-screen destroyed 1,347 against 644), because a forced walk
+makes claims again.
+
+So NTSKIP's 0.18 of wall is not currently worth its risk, and **vi22 is
+the conservative build**: vi16's background behaviour, +21% flips, 68K
+handler BETTER than baseline.
+
+**Mike's pass on the next build: "MUCH better"** -- backgrounds clean on
+the Zeus screen, temple and columns and grass all correct. **The
+remaining defect is the ZEUS TEXT**, and he notes it has not worked
+across the last several builds: the cut-scene lines render as scattered
+single letters (`C A Y` / `A` / `S F R U` where the arcade reads
+"RISE FROM YOUR GRAVE"). Entry 167 logged this and parked it; it is now
+the open bug.
+
+**Suspect, unchanged from 167 and now the thing being tested:**
+`TEXTCAPMASK` ships only the 4-row groups a gated writer marked. A
+cut-scene writer that is not in the FM-gate thunk table writes WRAM and
+never marks, so only the rows caught by the forced-full mask every 8th
+vint arrive -- which is exactly "some letters, most missing, stable
+across builds".
+
+**I could not reproduce it in ares** and that is worth recording: at
+every frame sampled from 200 to 1400 with `play2` input the 68K text
+shadow holds 5-6 live cells, so none of the available inputs reaches the
+Zeus intro. The shadow-vs-capture diff I built for it is also reading
+rows 0-3 and 24-26 as permanently mismatched, which is the HUD and which
+UPDATES -- the same moving-target trap as 166, so those 38 mismatches
+mean nothing on their own.
+
+A/B on the rig instead, one flag apart:
+
+    vi22.32x               TEXTCAPMASK ON   (the mask is suspect)
+    vi23_notextmask.32x    TEXTCAPMASK OFF
+
+If the Zeus lines render on vi23 and not vi22, the mask is dropping an
+ungated writer and the fix is a thunk for it. If both are broken, the
+mask is innocent and the writer never reaches WRAM in the first place.

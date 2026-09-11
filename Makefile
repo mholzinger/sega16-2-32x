@@ -1754,6 +1754,14 @@ endif
 ifdef NBUILD1
 SHCCFLAGS += -DNBUILD1
 endif
+# `make ... NTMAXAGE=n` = LOOP29 171. How many windows a name-table row
+# may go unwalked before NTSKIP forces a walk regardless of its key.
+# The skip trusts cap_page's content compare; on the FPGA that trust is
+# not earned, and an unbounded skip renders missing tiles there while
+# reading clean in ares. Default 16.
+ifdef NTMAXAGE
+SHCCFLAGS += -DNT_MAXAGE=$(NTMAXAGE)
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old
