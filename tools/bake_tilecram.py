@@ -109,7 +109,29 @@ def pack(pal, cols, order):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--live', nargs='*', default=[],
+                    help='live palette dumps (WRAM 0xFF9000, 0x800 bytes). '
+                         'Colours for --live-scene come from their UNION, '
+                         'which covers every colour-cycler state sampled.')
+    ap.add_argument('--live-scene', type=int, default=0)
     a = ap.parse_args()
+    # LOOP29 174. The rom block at 0x232A0+blk*0x400 holds 64 palettes of
+    # 16 bytes, so `base + p*16` is OUT OF RANGE for p >= 64 -- and scene
+    # 0's own viewport uses palettes 72-103. The plan (PLAN-TILES-TO-VDP,
+    # "what is NOT verified") flags this for scenes 1-4; it hits scene 0
+    # too. Live dumps are the only correct source above 63.
+    live = None
+    if a.live:
+        live = {}
+        for fn in a.live:
+            d = open(fn, 'rb').read()
+            if len(d) < 0x800:
+                sys.exit('%s: want 0x800 bytes of WRAM 0xFF9000' % fn)
+            for p in range(128):
+                live.setdefault(p, set()).update(
+                    md(w16(d, p * 16 + 2 * k)) for k in range(1, 8))
+        print('live colours from %d dump(s), applied to scene %d'
+              % (len(a.live), a.live_scene))
     rom = load()
     out_bin, out_h = [], []
     for s in range(SCENES):
@@ -118,7 +140,9 @@ def main():
         base = 0x232A0 + blk * 0x400
         words = unpack(rom, int.from_bytes(rom[o + 2:o + 6], 'big'))
 
-        def cols(p, _b=base):
+        def cols(p, _b=base, _s=s):
+            if live is not None and _s == a.live_scene:
+                return frozenset(live[p])
             return frozenset(md(w16(rom, _b + p * 16 + 2 * k)) for k in range(1, 8))
 
         pal = worst_viewport(words, cols)
@@ -143,8 +167,13 @@ def main():
             c = cols(p)
             for li, g in enumerate(groups):
                 if c <= g:
-                    assign[p] = (li, [slot[li][md(w16(rom, base + p * 16 + 2 * k))]
-                                      for k in range(1, 8)])
+                    if live is not None and s == a.live_scene:
+                        src = sorted(live[p])
+                        assign[p] = (li, [slot[li][c] for c in src])
+                    else:
+                        assign[p] = (li, [slot[li][md(w16(rom, base + p * 16
+                                                          + 2 * k))]
+                                          for k in range(1, 8)])
                     break
         line_words = []
         for li, g in enumerate(groups):

@@ -3361,3 +3361,59 @@ moment the generation wall goes under 1.00 vint and the game runs at 60.
 So it is an argument for the threshold work, not a separate fix — unless
 Mike's eye calls it out first, in which case gating the countdown to the
 presented frame is a two-instruction change.
+
+## 174. PLAN-TILES-TO-VDP STEP 2: THE BAKER'S INPUT IS FIXED AND SCENE 0 PACKS, RE-DERIVED (2026-09-11 16:20)
+
+The decompile thread's `docs/handoff/PLAN-TILES-TO-VDP.md` is the right
+target and **my own numbers agree with its arithmetic independently**:
+slave compose is 1.088 v/gen split 0.589 sprites and 0.509 cat1 tiles
+(LOOP29 161), the generation wall is 1.44, and 1.44 - 0.509 = 0.93 --
+**the wrong side of nothing, the right side of the one-vint quantum
+(168).** Moving the tile half to the VDP is the first change all night
+whose arithmetic reaches the threshold.
+
+**Step 1 is effectively already passed.** The plan's step 1 -- set plane
+A's priority bit on cat1 tiles, background on plane B, sprites low, with
+software compose still running underneath -- is what `CAT1_MD` already
+does (m_main.c: `ent |= 0x8000` for `isfg && (w & 0x8000)`, with the FB
+pass restricted to sprite rows by ROWLIVE). LOOP29 151 made the two
+renderers pixel-identical by painting the FB's cat-1 cells with the MD
+line's quantised colours, and Mike's rig pass on that build (vi11)
+reported no shimmer. **The layering was never the problem.**
+
+**And the plan explains the thing I could not fix all night.** CAT1MD
+"works" and still wrecks the backgrounds every time -- 174 on-screen
+tiles destroyed and 15,196 blanked cells against vi16's 1 and 4,603
+(LOOP29 170), three builds in a row. The reason is now obvious:
+**CAT1MD pushes every cat-1 colour set into the DYNAMIC md_tag
+allocator**, and 153-164 is the story of that allocator churning. A
+BAKED STATIC four-line CRAM assignment has no allocator to churn. The
+palette bake is not a detail of the plan, it is the fix for the defect
+that killed CAT1MD twice.
+
+**Step 2, the baker's input.** `tools/bake_tilecram.py` read colours from
+the rom block at `0x232A0 + blk*0x400`, which holds 64 palettes of 16
+bytes, so `base + p*16` is out of range for p >= 64. The plan flags this
+for scenes 1-4; **it hits scene 0 too, whose viewport uses palettes
+72-103.** Added `--live FILE... --live-scene N`: colours come from the
+UNION of live WRAM 0xFF9000 dumps, which covers every colour-cycler state
+sampled. Six dumps from vi26 at f2000-f3000, 200 apart, in
+`discover/palscenes/live/`.
+
+    scene 0: 25 palettes, lines [15, 15, 11, 5], 46 of 60 slots
+
+**Re-derived, not trusted: exactly the plan's claim.** Step 2's kill
+condition -- "scene 0 stops packing into four lines once the colours are
+read correctly" -- is NOT met. `sh_src/tilecram.bin` (5 x 4 x 16 words)
+and `tilecram.h` (per-palette line + 7-pen slot map) are emitted.
+
+Scenes 1-4 still print, and their numbers are still WRONG -- they use the
+rom source above palette 63. Scene 4 reads 57 of 60 slots even on the
+optimistic input, so it is the one that may not pack at all. They need
+their own live dumps, which needs a playthrough that reaches them, which
+is the plan's step 5.
+
+**Step 3 is the build**: install the four baked lines into MD CRAM,
+rewrite tile pen values through the map so a tile indexes its assigned
+line directly, and stop the FB cat-1 pass. The number to read is
+**percentage of single-vint frames** -- 22% on vi26 -- and not fps.
