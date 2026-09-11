@@ -3123,3 +3123,63 @@ tuned: the game's own compute". That was right but for a reason I stated
 badly — I leaned on entry 27, which was measured on a broken instrument.
 It is right because the game's per-vint work is small, which is now
 measured properly rather than inferred from a wiped counter.
+
+---------------------------------------------------------------------
+## 70. THE ONE SHAPE-CHANGING PATCH: the game knows exactly when its frame is done
+
+Mike's question: what could a rom patch change about the PIPELINE's shape,
+rather than just where an access lands — or is shape work solidly a C
+refactor?
+
+Mostly it is a refactor. Relocating an access is what a patch does well;
+restructuring the transport is `md_src/` work. **There is one exception,
+and it is the thing the builder is currently losing time to.**
+
+They measured "0.42 of the echo phase is the slave not working at all —
+waiting for its launch or stuck in the handoff." The pipeline has to
+INFER when the game's frame is complete, from windows and phases.
+
+**It does not have to infer. The game says so, precisely, four times per
+vint:**
+
+    0x2AFC   move.w d0,$410E92     the last of the four scroll registers
+    0x2B46   move.w #-1,4(a2)      the sprite list's second end marker
+    0x2B4C   bsr 0x2DBC            entering the palette queue drain
+    0x397E   clr.b $FFF01C         THE GAME'S FRAME IS COMPLETE — this is
+                                   the instant the main loop gives up and
+                                   waits for the next vint
+
+The last one is the signal worth having. Everything the game intends to
+put on screen this frame has been written by the time it reaches 0x397E.
+Nothing after it changes until the next release.
+
+**And it is a six-byte in-place patch, the shape the port already uses.**
+The gameplay loop calls it as a clean `jsr`:
+
+    91a:  jsr 0x398E      run every object
+    920:  moveq #0,d0
+    922:  jsr 0x397E      <- 6 bytes, rewritable to `jsr thunk`
+    928:  bra.s 0x90A
+
+The thunk writes a COMM register (or a byte the shim polls) and then jumps
+to 0x397E. 34 call sites exist; the gameplay loop is one of them, so this
+can be scoped to the loop that matters rather than all of them.
+
+**What it buys, stated as a hypothesis and not a measurement.** It
+replaces "guess when the frame is ready" with "be told". If the 0.42 of
+the echo phase is the slave waiting on a launch it could have had earlier,
+this is the signal that shortens it. I have not measured the echo phase
+and cannot; that is their instrument.
+
+**What it does NOT buy.** Nothing about compose cost. The slave still does
+the same work, just possibly sooner. This is a latency patch, not a
+throughput one — which is the right shape for a bimodal 42/57 problem
+where the slow half is waiting rather than computing.
+
+**The honest framing of Mike's question:** shape changes are refactors,
+with this one exception, because the pipeline's missing information
+already exists in the game and just needs exporting. Everything else —
+merging the tilemap's two passes into one word-coherent sweep, replacing
+the sprite upload, reading the order list directly — relocates or deletes
+work the port already understands, and none of them reshapes the
+transport.
