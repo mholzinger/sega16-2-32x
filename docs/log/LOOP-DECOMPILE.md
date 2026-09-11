@@ -2815,3 +2815,54 @@ because nothing has to be told.
 compute. The 68K is not the constraint — their master-idle measurement
 and my MDSPRPROBE ablation [27] agree from opposite directions, and
 deleting the largest 68000 copy in the frame changed nothing.
+
+---------------------------------------------------------------------
+## 64. CORRECTS ENTRY 61 — tiles need ALL FOUR CRAM lines, which is the corruption
+
+Entry 61 said scenes 0-3 leave one or two CRAM lines spare after tiles.
+**That came from the wrong palette data** (entry 62's block error: 24
+colours where the live figure is 43). Repacked against live palette ram:
+
+    scene 0 tiles:  25 palettes, 43 distinct MD colours
+      2 lines: no packing exists
+      3 lines: no packing exists
+      4 lines: FITS [15, 15, 11, 5]
+
+**There are no spare lines. Tiles need all four.**
+
+That is almost certainly what the vi27 screenshots show. In
+`20260911_203242-vi27.png` the scene is correct — blue sky, green trees,
+grey stone — EXCEPT in the region on the right where the smoke sprites
+cluster, where red and yellow blocks appear. In
+`20260911_203136-vi27.png` the whole scene is desaturated grey while the
+player and the fallen enemy keep correct flesh and orange.
+
+**Sprites and tiles are contending for the same four CRAM lines.** Where
+sprite demand is dense the tiles lose their line and show whatever the
+sprite palette put there; in the grey frame the tile lines lost outright.
+Both pictures are consistent with contention and neither is consistent
+with a priority error.
+
+**So the answer to "can you see the sprite-over-cat1 artefact": no.** It
+may well be there, but it is invisible next to this. Fixing the sprite
+loop for cat1 ordering before resolving the line budget would be spending
+sprite-loop budget on the smaller of two problems.
+
+**And the budget problem is real, not a bug.** 43 colours of tiles plus
+any sprite palette does not fit in 64 slots. Entry 9 measured the live
+sprite demand at 123 distinct colours across 12 palettes. Tiles and
+sprites TOGETHER cannot share MD CRAM as things stand. Options, in
+increasing order of cost:
+
+  1. Give tiles 3 lines and sprites 1 by dropping the least-used tile
+     palettes to software. No 3-line packing exists for all 25 palettes,
+     but the viewport rarely shows all 25 at once — the packing was
+     computed over the WORST scroll position.
+  2. Per-scene tile palettes are static (entry 61's artifact), so the
+     split can be chosen per scene rather than globally.
+  3. Accept tiles-on-VDP with sprites entirely in the 32X layer, which
+     is what the builder's own per-pixel suppression idea implies — the
+     32X layer carries sprites and punches holes for cat1.
+
+Option 3 is the one their bit-15 finding already points at, and it needs
+NO sprite palette in MD CRAM at all.
