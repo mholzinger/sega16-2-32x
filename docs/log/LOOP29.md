@@ -3724,3 +3724,49 @@ to rebuild it. `GAMEGATEWAIT` is the part worth keeping in mind.
   2. **`build_maps_chunk`** -- the real 0.44 v/gen, worth 0.29 of wall by
      ablation (168), and nothing has touched it. 177 established I had
      been optimising a different function for three builds.
+
+## 180. GAMEGATEWAIT=1 IS THE FEEL WIN, AND THE BLACK TILE BLEED IS ITS PRICE (2026-09-11 18:50)
+
+Mike ran the 18:37 rom on the MiSTer: **"we have the black background
+tile bleed, we have inconsistent frames, but this is in the right
+direction, this is FAR closer to playable."**
+
+That rom was the GENSKIP experiment with `PHASECENSUS` still in it, so
+the credit does NOT go where it looks. GENSKIP skips 0.1% of generations
+(179) -- it does nothing. **The change he felt is
+`GAMEGATEWAIT=1`.**
+
+`GAMEGATE_MAXWAIT` is how many vints the gate waits for a flip before
+releasing the game anyway. Default 4; at 1 the game is released every
+vint regardless of whether we presented.
+
+    vi28 = the line + GAMEGATEWAIT=1, nothing else
+    isr-flips 2,055   game frames 50.2%   68K handler 54.2
+    nopost 52   fallback 122   skips 0   flip-late 0
+
+**ares cannot see why this feels better**, and that is the point worth
+recording. The flip count is slightly LOWER than vi26's 2,095 and the
+game-frame rate is unchanged at ~50%. What changed is that the game's
+LOGIC and INPUT are no longer waiting on our presentation -- they run on
+vblank as the arcade does, and the display updates at whatever rate it
+can underneath. A player feels input latency and animation cadence
+separately from frame delivery, and no counter in this repo measures the
+first two.
+
+**The black background tile bleed is the price and it is the tearing
+GAMEGATE was installed to prevent.** With the game advancing every vint
+instead of every second one, it writes its tilemap staging twice as
+often, so a larger share of `cap_page`'s captures land mid-stream: half
+the page is the old scene's columns and half the new. `PG_STICKY` /
+`pg_watch` is supposed to catch that by watching a page until two
+consecutive captures agree, and at wait=1 it is being outrun.
+
+Two builds on the rig for the trade, one flag apart:
+
+    vi28.32x   GAMEGATEWAIT=1   most responsive, most bleed
+    vi29.32x   GAMEGATEWAIT=2   half the game-write rate at the capture
+
+If vi29 keeps the feel and loses the bleed, the capture is simply being
+outrun and the fix is to make it keep up rather than to slow the game
+down. If vi29 loses the feel too, the trade is real and the fix is in
+`cap_page`'s mid-stream detection, not in the gate.
