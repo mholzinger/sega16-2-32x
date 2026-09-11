@@ -208,3 +208,71 @@ mechanism ASSERT IT FIRED and print the count — `patch_game.py` already
 does this everywhere (`assert hrom[off:off+4] == want`), which is why no
 rebasing bug has ever survived a build. Every new emitter should print
 what it emitted and fail loudly on a count it did not expect.
+
+---------------------------------------------------------------------
+## Addendum 2 — per-scene tile CRAM, measured (LOOP-DECOMPILE 66)
+
+**A correction first: I told you there are no spare CRAM lines. That is
+true for SCENE 0 AND ONLY SCENE 0** — which happens to be the scene you
+are working on, and the worst case in the game.
+
+    scene   palettes   MD colours   lines needed   SPARE
+      0        25          43            4           0
+      1        11          28            3           1
+      2        14          27            2           2
+      4        15          33            3           1
+      3         -           -            -           not reached
+
+Scene 4 is also far kinder than I first said: 33 colours in 3 lines,
+not the 77-in-6 from my bad rom read. That figure is retired twice now.
+
+**How these were reached.** No input script in `discover/inputs` gets
+past scene 0 — I checked four of them at 6000 frames. `make ship-us
+SCENESEL=N` rewrites the eight-byte round->scene table at 0x1CDA to
+all-N so every round loads scene N. One byte per entry, in place,
+asserted against the expected table first. Tile and palette measurement
+only: the ACTORS are still the round's, so it is NOT valid for a sprite
+priority census.
+
+**Scene 3 does not take.** Its rom carries the all-3 table, verified by
+byte search in the image, and 0xFFF142 still reads 0 at frames 900,
+1500, 2200 and 3000. Patch present, scene does not load. I have no
+explanation and am not offering one; scene 3 stays unmeasured.
+
+**The packs, ready to consume.** Same terms as the scene 0 pack above:
+worst 40x28 viewport over all 64 scroll positions, both planes, live
+palette ram, union across three frames.
+
+    SCENE 1 — 11 palettes, 28 MD colours, 3 lines
+      palettes: [64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 75]
+      LINE 0  14 colours  palettes [64, 65, 66]
+      LINE 1  14 colours  palettes [69, 70, 71, 72, 73, 75]
+      LINE 2   5 colours  palettes [67, 68]
+        line 0: 0000 0006 0066 00A6 0248 0468 0488 00C8 068A 06AA 048C 08AC 06AE 0CCE 0EEE 0000
+        line 1: 0000 0664 0246 0466 0686 0468 0688 08A8 0AA8 06AA 0ACA 08CC 08EC 0CEC 0EEE 0000
+        line 2: 0000 0688 08AA 0ACA 0CCA 0EEC 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+    
+    SCENE 2 — 14 palettes, 27 MD colours, 2 lines
+      palettes: [1, 100, 102, 103, 104, 106, 107, 108, 109, 110, 111, 112, 113, 115]
+      LINE 0  13 colours  palettes [1, 102, 103, 104, 106, 107, 108]
+      LINE 1  15 colours  palettes [100, 109, 110, 111, 112, 113, 115]
+        line 0: 0000 0004 0006 0026 0028 0248 024A 046A 046C 048C 000E 06AE 00CE 0EEE 0000 0000
+        line 1: 0000 0000 0242 0244 0464 0664 0466 0686 0688 08A8 08AA 0AAA 08CA 0ACC 0CEC 0EEE
+    
+    SCENE 4 — 15 palettes, 33 MD colours, 3 lines
+      palettes: [3, 96, 97, 98, 99, 100, 102, 103, 104, 105, 106, 107, 108, 110, 111]
+      LINE 0  14 colours  palettes [3, 102, 103]
+      LINE 1  14 colours  palettes [104, 106, 107, 108, 110, 111]
+      LINE 2  11 colours  palettes [96, 97, 98, 99, 100, 105]
+        line 0: 0000 0004 0206 0046 0A66 0408 040A 026A 060C 028C 048C 068C 086E 0A8E 0ACE 0000
+        line 1: 0000 0000 0026 0028 0448 0468 004A 066A 068A 006C 088C 08AC 008E 00AE 0EEE 0000
+        line 2: 0000 0040 0060 0206 0408 060A 068A 060C 080C 08AC 080E 0EEE 0000 0000 0000 0000
+    
+
+**One more process note, because it is your recurring shape.** One of
+the four probe builds hit a transient link error and the copy step left
+a STALE rom in place — the file named scene3 was scene 2's image.
+Running each rom and reading 0xFFF142 caught it. The build log did not.
+The accidental upside: that stale rom re-measured scene 0 and reproduced
+25 palettes / 43 colours / [15,15,11,5] exactly, which is an unplanned
+independent repeat of the number your whole pack rests on.
