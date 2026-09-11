@@ -2866,3 +2866,49 @@ increasing order of cost:
 
 Option 3 is the one their bit-15 finding already points at, and it needs
 NO sprite palette in MD CRAM at all.
+
+---------------------------------------------------------------------
+## 65. The cat-1 hole punch is mostly a ROW TEST, and a third of cells need no hole at all
+
+The builder's fix for sprites wrongly covering cat-1: suppress the sprite
+pixel where a cat-1 cell covers it and let the MD's cat-1 show through
+the hole, using the 32X layer's per-pixel transparency (bit 15 of the
+palette entry). Correct, and cheaper than budgeted.
+
+**First: the strip has almost no ragged edge.**
+
+    scene 0   7 rows FULL cat1 (25-31), ONE partial row (24), 24 clear
+    scene 1  28 rows FULL (4-31),  zero partial
+    scene 2  23 rows FULL (4-31),  zero partial
+    scene 3   4 rows FULL (28-31), zero partial
+    scene 4  11 rows FULL (21-31), zero partial
+
+**Four scenes of five have NO partial row.** For those the test is a
+single compare — `screen row >= N` — with no bitmap lookup anywhere.
+Scene 0 needs the bitmap for exactly one row.
+
+**Second: a third to two thirds of cat-1 cells need no hole at all.**
+Checking the actual art behind each cat-1 cell:
+
+    scene   cat1 cells   fully opaque   partial   BLANK
+      0        500          332 (66%)      158      10
+      1       1792          263 (15%)      325    1204
+      2       1472          351 (24%)      264     857
+      3        256          163 (64%)       87       6
+      4        704          208 (30%)      494       2
+
+A BLANK cat-1 cell has the priority bit set on a tile with no pixels —
+there is nothing to show through, so no hole is needed. A FULLY OPAQUE
+cell can be suppressed whole. Only PARTIAL cells need per-pixel work.
+
+    scene 0:  342 of 500 cells (68%) resolve per-CELL
+    scene 1: 1467 of 1792     (82%)
+    scene 3:  169 of 256      (66%)
+
+So the map the sprite loop wants is not one bit per tile, it is **two
+bits per cell** — skip / suppress-all / consult-pixels — and it is baked
+from rom exactly like `cat1map.bin`. The per-pixel path survives for a
+fifth to a third of cells.
+
+Worth saying plainly to the builder: their idea is right, and the version
+they costed is the expensive one.
