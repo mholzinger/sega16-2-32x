@@ -1481,3 +1481,34 @@ and it is static per-scene rom data like the cat1 map (entry 31).
 Struct additions: $48/$49 from the animation frame entry, $68 read
 alongside box B in the floor test, $7C used by 0xE1E8 to decrement
 counters at 0xFFF154/0xFFF156.
+
+---------------------------------------------------------------------
+## 36. The floor heights ARE the depth bands — two readings cross-validate
+
+Decoding all five per-scene geometry tables from entry 35:
+
+    scene 0  @0x0DED8   8 segments   rows 120, 178, 216
+    scene 1  @0x0DF0E   1 segment    row 216, spanning the whole X range
+    scene 2  @0x0DF14  22 segments   rows 120, 184, 216
+    scene 3  @0x0DF9E  11 segments   rows 120, 184, 216
+    scene 4  @0x0DFE0   5 segments   row 118
+
+Every scene's floors sit at three heights, and they are the same three:
+~120, ~180, 216. Scene 1 is a single flat floor across the level.
+
+**Entry 34's depth bands are at rows 136 and 200.** Those are exactly the
+dividers between these three floor heights:
+
+    floor 120  <  band edge 136  <  floor 180  <  band edge 200  <  floor 216
+
+So the three walkable depths and the three sprite priority bands are one
+system: an actor standing on the upper walkway draws behind one on the
+middle floor, which draws behind one at the front. The depth rule I read
+out of 0x3D14 and the geometry I read out of 0xDEC4 were derived
+independently, from different routines and different data, and they line
+up. That is a strong check on both.
+
+Practical consequence for the port: an actor's priority band is a pure
+function of its Y, the band edges are two constants, and the floors it can
+stand on are static rom data. Nothing in the depth system needs observing
+at runtime.
