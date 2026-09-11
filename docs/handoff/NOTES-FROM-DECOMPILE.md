@@ -426,3 +426,37 @@ invisible on a still frame by construction and only shows in motion,
 which is the same failure family that killed CAT1MD on the play pass.
 
 Full working: docs/log/LOOP-DECOMPILE.md 41-42.
+
+---------------------------------------------------------------------
+## 11. REFINING my own section 10 question — and a third palette path
+
+Before you spend time on section 10: I checked the other palette writers
+and my question was probably misplaced. [43]
+
+    0x3116  per-scene block writer   IS in PAL_DIRTY_SITES
+    0x30C2  colour cycler            is not
+    0x2DC8  the QUEUE DRAIN itself   is not
+
+**The queue drain is your main sprite palette path and it is not covered
+either.** Sprite palettes obviously work, so something else carries those
+writes, and the cycler is likely carried the same way.
+
+The exclusion is structural rather than an oversight: the dirty thunks
+root at a `lea` whose target is known at patch time, which is the rule
+your TILE_DIRTY_SITES comment states. 0x3116 is `lea $840040,a1`, a
+constant. The cycler computes its line at runtime and the drain loads its
+destination from the queue, so neither exists until the frame runs.
+
+So the real question is smaller: **whatever carries the queue drain's
+writes, does it also carry the cycler's?** You can answer that from your
+side in a minute; I could not from mine.
+
+**Third palette path, which I had not seen when I wrote section 10.**
+0x3108, also called from IRQ4, rewrites colour entries 32-47 every vint —
+sixteen words, two eight-colour tile lines — from a per-scene 32-byte
+table at **0x32AE**. The data is gradient ramps, so this is the sky, and
+it is static per scene like the cat1 map and the floor geometry.
+
+Given your recorded flat-sky-on-random-boot symptom, that table may be
+worth a look: the sky palette is not allocated or discovered, it is eight
+words of rom per scene written unconditionally every frame.

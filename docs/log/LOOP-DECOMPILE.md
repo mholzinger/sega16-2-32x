@@ -1771,3 +1771,48 @@ what killed CAT1MD on the play pass. A cycler is BY DEFINITION only
 visible in motion, so a still-frame comparison cannot see it either way.
 
 Raised in the builder notes section 10 with the addresses.
+
+---------------------------------------------------------------------
+## 43. REFINES entry 42 — the dirty-site exclusion is structural, and a THIRD palette path
+
+Checked the other two palette writers against PAL_DIRTY_SITES before
+letting entry 42's question stand:
+
+    0x3116  per-scene block writer   COVERED
+    0x30C2  colour cycler            not covered
+    0x2DC8  the QUEUE DRAIN itself   not covered
+
+**The queue drain is the main sprite palette path and it is also not
+covered.** Sprite palettes plainly work, so there must be another
+mechanism, and entry 42's alarm was probably misplaced.
+
+The pattern is a design consequence, not an oversight. The dirty-bit
+thunks root at a `lea` whose target is known AT PATCH TIME — the same rule
+TILE_DIRTY_SITES states. 0x3116 is `lea $840040,a1`, a constant, so it
+qualifies. The cycler computes its line at runtime
+(`lsl.w #4,d0 ; adda.w d0,a1`) and the drain loads its destination from
+the queue, so neither destination exists until the frame runs. **The
+mechanism cannot cover dynamically addressed writes by construction.**
+
+So the question narrows from "is the cycler missed?" to "whatever carries
+the queue drain's writes — does it also carry the cycler's?" That is a
+much cheaper question for them to answer, and it may well be yes.
+
+**And there is a THIRD palette path.** 0x3108, also called from IRQ4:
+
+    3108:  lea     $32AE(pc),a0
+    310e:  move.b  $FFF142,d0      ; the scene index
+    3112:  lsl.w   #5,d0           ; 32 bytes per scene
+    3116:  lea     $840040,a1      ; colour entries 32-47
+    3120:  eight `move.l (a0)+,(a1)+`   = 32 bytes = 16 words
+
+A per-scene 32-byte palette block at **0x32AE**, rewritten every vint into
+entries 32-47 — two eight-colour tile lines. The data is plainly gradient
+ramps (scene 0: 068B 057A 0469 0358 ...), which is the sky. Another
+static per-scene table in the same family as the cat1 map (entry 31) and
+the floor geometry (entry 35), and likely relevant to the flat-sky
+symptom the port has recorded.
+
+So the palette write paths are: the QUEUE (built 0x3BEC, drained 0x2DBC,
+14-word sprite palettes), the CYCLER (0x30B2, 6 colours on its own
+countdown), and this PER-SCENE BLOCK (0x3108, 16 words every vint).
