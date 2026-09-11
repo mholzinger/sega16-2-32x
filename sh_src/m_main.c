@@ -2040,8 +2040,24 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
             pen = mdp_pend_map[s * 8 + p];
             if (!pen || pen > 15) { ok = 0; break; }
             if (mdp_line_c[ol * 16 + pen] != 0xFFFF
-                && mdp_line_c[ol * 16 + pen] != qc[p])
+                && mdp_line_c[ol * 16 + pen] != qc[p]) {
+#ifdef PEN_REPAINT
+                /* LOOP29 164: the set that churns is a FADING one, so
+                 * when it comes back its colour no longer matches the
+                 * pen it left behind and the old placement is rejected
+                 * for the wrong reason. A tile's pattern bytes depend on
+                 * the pen INDEX, not the pen COLOUR. If the pen is still
+                 * OURS -- we own it and PENHOLD kept our refcount, so
+                 * nobody else is showing through it -- repaint it to the
+                 * new colour and keep the index. Tags survive, colour is
+                 * current, and this is the case PENHOLD created. */
+                if (mdp_pen_own[(ol * 16 + pen) * 2] == (uint8_t)s
+                    && mdp_pen_own[(ol * 16 + pen) * 2 + 1] == (uint8_t)p
+                    && mdp_pen_rc[ol * 16 + pen] <= 1)
+                    continue;                /* repainted in the apply loop */
+#endif
                 ok = 0;                      /* someone else took it */
+            }
         }
         if (ok) {
             for (int p = 0; p < 8; p++) {
@@ -2049,7 +2065,13 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
                 if (!(mask & (1u << p)))
                     continue;
                 pen = mdp_pend_map[s * 8 + p];
-                if (mdp_line_c[ol * 16 + pen] == 0xFFFF) {
+                if (mdp_line_c[ol * 16 + pen] == 0xFFFF
+#ifdef PEN_REPAINT
+                    || (mdp_line_c[ol * 16 + pen] != qc[p]
+                        && mdp_pen_own[(ol * 16 + pen) * 2] == (uint8_t)s
+                        && mdp_pen_own[(ol * 16 + pen) * 2 + 1] == (uint8_t)p)
+#endif
+                   ) {
                     mdp_line_c[ol * 16 + pen] = qc[p];
                     mdp_pen_own[(ol * 16 + pen) * 2]     = (uint8_t)s;
                     mdp_pen_own[(ol * 16 + pen) * 2 + 1] = (uint8_t)p;

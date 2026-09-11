@@ -1715,6 +1715,14 @@ endif
 ifdef PENHOLD
 SHCCFLAGS += -DPEN_HOLD
 endif
+# `make ... PENREPAINT=1` = LOOP29 164, needs TAGKEEP+PENHOLD. The
+# churning sets FADE, so when one comes back its colour no longer
+# matches the pen it left and the old placement is rejected even though
+# the pen is still exclusively ours. A tile's pattern depends on the pen
+# INDEX, not its colour: repaint the pen and keep the index.
+ifdef PENREPAINT
+SHCCFLAGS += -DPEN_REPAINT
+endif
 # `make ... DRIFTTOL=n` = LOOP29 160: the squared-colour-distance at which
 # a co-owner set is declared drifted and FREED (default 18, both sites).
 # The free destroys ~46 tile slots, 95% of them on screen (156), so this

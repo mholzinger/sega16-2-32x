@@ -2777,3 +2777,49 @@ One thing to watch on the rig: vi14's worst-case slave span is 78.9
 lines against the line's 59.4. It costs no frame in ares (skips and
 flip-late are both zero) but the FPGA has less headroom than ares at
 every other span this arc has measured.
+
+## 164. PENREPAINT, AND THE CANDIDATE IS vi16 (2026-09-10 22:52)
+
+The sets that churn FADE (158), so when one comes back its colour no
+longer matches the pen it left behind and 157's old-placement check
+rejects it -- even when the pen is still exclusively ours and nobody
+else is showing through it. **A tile's pattern bytes depend on the pen
+INDEX, not the pen COLOUR.** `PENREPAINT=1` repaints an
+exclusively-owned pen to the set's current colour and keeps the index.
+
+**vi16 = vi14 + PENREPAINT. Everything below is at 12,000 frames on
+play2 input, against the line (vi11b):**
+
+                            line      vi14      vi16
+    drift frees              151        65        58     -62%
+    tag wipes              6,235     2,499     2,153     -65%
+    cells blanked         16,194     7,011     6,372     -61%
+    old placement reused     n/a   9 of 39  10 of 32
+    isr-flips              5,887     5,875     5,915     +0.5%
+    cadence                1.011     1.011     1.011
+    skips / flip-late        0/0       0/0       0/0
+    game logic              48.7%     48.7%     49.1%
+
+    attract pixels vs the arcade (low-k, the comparable columns, 160)
+    logo rewrite k0/k8     36/31     35/35     34/34
+    logo red k0/k5/k12  72/29/73  74/28/74  74/27/74
+
+**Two thirds of the background tile destruction is gone and nothing is
+paid for it** -- pixels even or better, flips up slightly, logic up
+slightly, no skips or late flips over 12,000 frames.
+
+    rom/night/vi16.32x   ON THE RIG as probe.32x, md5 2f82be3b
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 TEXTCAPEARLY=1 \
+                 TEXTCAPMASK=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1
+
+Not play-passed. The question for Mike's eye is narrow and it is the one
+he raised: **is there less missing tile data in the backgrounds.**
+
+**What is left of the defect.** Old placement is still reused only 10
+times of 32; the other 22 rejects are pens genuinely taken by another
+set while this one was away, and reserving them harder trades CRAM
+pressure for tile stability on a curve nobody has measured. At 6,000
+frames the gain is 74% and at 12,000 it is 65%, so it decays slowly with
+scene variety. `DRIFTTOL=27` (160) is an orthogonal 21% that costs
+attract-screen colour nothing and is untested in play.
