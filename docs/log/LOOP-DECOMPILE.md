@@ -2405,3 +2405,66 @@ name.
 **This completes the coverage task.** Instructions match the reference,
 98% of bounds are correct, every function is classified, and every claim
 in the map declares whether it was read or inferred.
+
+---------------------------------------------------------------------
+## 56. CAT1 IS A BOTTOM-ANCHORED STRIP, AND THE MD WINDOW PLANE IS EXACTLY THAT SHAPE
+
+The builder is at 22% single-vint frames, 1.44 vints per generation, with
+slave compose at 1.40 of it and cat1 tiles 48% of that — 0.67 vints.
+Removing cat1 from compose lands the generation at ~0.77 and under the
+one-vint quantum.
+
+Entry 31 established cat1 is static rom data. This is what its SHAPE is.
+
+    scene 0   2312 cat1   pages 0-4, rows 24-31   ( 8 rows, 7 full)
+    scene 1   8960 cat1   pages 0-4, rows  4-31   (28 rows, 28 full)
+    scene 2   7360 cat1   pages 0-4, rows  4-31   (23 rows, 23 full)
+    scene 3   1280 cat1   pages 0-4, rows 28-31   ( 4 rows, 4 full)
+    scene 4   3520 cat1   pages 0-4, rows 21-31   (11 rows, 11 full)
+
+**Every cat1 tile in the game is in a CONTIGUOUS BOTTOM STRIP, full
+width, identical across all five background pages. The FOREGROUND page
+has ZERO cat1 tiles in any scene.** It is not scattered per-tile
+priority. It is one horizontal band anchored to the bottom of the screen,
+whose height changes per scene and never within one.
+
+**That is precisely the Mega Drive WINDOW PLANE.** The window is a
+rectangle anchored to a screen edge, it draws above plane A, and its
+vertical extent is set in whole tile rows (reg 0x12, 8-pixel units, with
+a bit selecting up or down from the boundary). A bottom-anchored,
+full-width, row-aligned band is the one shape it expresses exactly.
+
+**Why this beats per-tile promotion, which is what CAT1MD tried:**
+
+  - No priority emulation. The window is a hard rectangle, so there is no
+    per-tile decision to get wrong and NOTHING TO SHIMMER. Entry 31 proved
+    the classification is static; this removes the classification from the
+    runtime altogether.
+  - Sprite semantics come out right for free. An MD sprite with its
+    priority bit set draws ABOVE the window, which is exactly System 16's
+    rule that a high-enough-priority sprite beats a cat1 tile.
+  - One register write per scene instead of 20480 per-tile decisions.
+  - It scales the right way: scene 1 is the worst case at 43.8% cat1 and
+    28 rows, and a 28-row window costs the same as a 4-row one.
+
+**Caveats, stated rather than buried:**
+
+  1. The window REPLACES plane A inside its region, so the strip's content
+     must be the window's name table. The rows are almost entirely full,
+     so there is little to lose — but scene 0's row 24 is 52 of 64 cat1,
+     and a rectangle would wrongly promote the other 12. Starting the
+     window one row lower trades those 12 tiles for a 7-row window.
+  2. I have NOT measured what fraction of compose the strip actually is
+     versus what the 48% figure covers — that is the builder's counter,
+     not mine.
+  3. Window and plane A share a horizontal scroll on real hardware in the
+     sense that the window does not scroll at all. **The strip is the
+     FLOOR and the floor DOES scroll horizontally.** This is the one
+     thing that could sink it, and it needs checking before anything is
+     built: if the cat1 strip scrolls with the background, a fixed window
+     cannot carry it.
+
+Point 3 is the test that decides this, and it is cheap: the strip is
+rows 24-31 of the BACKGROUND plane, and entry 24 measured background
+hscroll moving 156 -> 53 across level 1. If the strip's tiles move with
+it, the window is wrong and the answer is per-tile after all.
