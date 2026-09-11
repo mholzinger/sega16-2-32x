@@ -1830,6 +1830,34 @@ static void mdp_extend_set(unsigned s, uint8_t addmask)
                 continue;
             }
         }
+#ifdef TAGKEEP
+        /* LOOP29 157: land where you were, on the extend path too. */
+        if (mdp_pend_tag[s] && mdp_pend_line[s] == mdp_s_line[s]
+            && (mdp_pend_used[s] & (1u << p))) {
+            unsigned op = mdp_pend_map[s * 8 + p];
+            if (op && op < 16
+                && (mdp_line_c[l * 16 + op] == 0xFFFF
+                    || mdp_line_c[l * 16 + op] == q)) {
+                if (mdp_line_c[l * 16 + op] == 0xFFFF) {
+                    mdp_line_c[l * 16 + op] = q;
+                    mdp_pen_own[(l * 16 + op) * 2]     = (uint8_t)s;
+                    mdp_pen_own[(l * 16 + op) * 2 + 1] = (uint8_t)p;
+                }
+                mdp_pen_rc[l * 16 + op]++;
+                mdp_s_map[s * 8 + p] = (uint8_t)op;
+                mdp_s_qc[s * 8 + p]  = q;
+                mdp_s_used[s] |= (uint8_t)(1u << p);
+                MDA(27);                     /* extend kept the old pen */
+                continue;
+            }
+            /* the old pen is gone: the pattern moves, so the tags this
+             * set still holds are now wrong -- wipe them here, late, and
+             * stop pretending. */
+            mdp_pend_tag[s] = 0;
+            mdp_wipe_set_tags(s);
+            MDA(28);
+        }
+#endif
         mdp_s_map[s * 8 + p] = (uint8_t)mdp_claim_pen(l, q, s, (unsigned)p);
         mdp_s_qc[s * 8 + p]  = q;
     }
@@ -1940,6 +1968,70 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
     int bestl = 0, bestneed = 99, bestfit = 0;
     for (int p = 0; p < 8; p++)
         qc[p] = mdp_quant(PAL_SH[s * 8 + p]);
+#ifdef TAGKEEP
+    /* LOOP29 157: LAND WHERE YOU WERE. 155 measured that a drift-freed
+     * set NEVER comes back to the same (line, pen map) -- 0 of 59 -- so
+     * every free costs a full tag wipe, and 156 measured that 95% of
+     * those tags are on screen at that moment. The re-assign moves only
+     * because it re-packs greedily from scratch; the set's OLD pens are
+     * usually still sitting there holding the right colours (the free
+     * released them, so they are free or unchanged). Try the old
+     * placement first and the pattern bytes are identical, so the tags
+     * -- and the picture -- survive. [25] old placement reused,
+     * [26] old placement rejected. */
+    /* SUBSET, not equality: mdp_note_tile derives `mask` from ONE tile's
+     * 64 pixels, so the re-assign always starts with a SUBSET of what the
+     * set had and grows through mdp_extend_set. Requiring equality made
+     * this branch dead (0 entries in 4000 frames) -- which is also the
+     * real reason the greedy path never landed where it was. */
+    if (mdp_pend_tag[s] && mdp_pend_line[s]
+        && (mask & (uint8_t)~mdp_pend_used[s]) == 0) {
+        unsigned ol = (unsigned)(mdp_pend_line[s] - 1);
+        int ok = 1;
+        for (int p = 0; p < 8 && ok; p++) {
+            unsigned pen;
+            if (!(mask & (1u << p)))
+                continue;
+            pen = mdp_pend_map[s * 8 + p];
+            if (!pen || pen > 15) { ok = 0; break; }
+            if (mdp_line_c[ol * 16 + pen] != 0xFFFF
+                && mdp_line_c[ol * 16 + pen] != qc[p])
+                ok = 0;                      /* someone else took it */
+        }
+        if (ok) {
+            for (int p = 0; p < 8; p++) {
+                unsigned pen;
+                if (!(mask & (1u << p)))
+                    continue;
+                pen = mdp_pend_map[s * 8 + p];
+                if (mdp_line_c[ol * 16 + pen] == 0xFFFF) {
+                    mdp_line_c[ol * 16 + pen] = qc[p];
+                    mdp_pen_own[(ol * 16 + pen) * 2]     = (uint8_t)s;
+                    mdp_pen_own[(ol * 16 + pen) * 2 + 1] = (uint8_t)p;
+                }
+                mdp_pen_rc[ol * 16 + pen]++;
+                mdp_s_map[s * 8 + p] = (uint8_t)pen;
+                mdp_s_qc[s * 8 + p]  = qc[p];
+            }
+            mdp_s_line[s] = mdp_pend_line[s];
+#ifdef CAT1_MD
+            MDP_LAST_SET(s, (unsigned)mdp_pend_line[s]);
+#endif
+            mdp_s_used[s] = mask;
+            mdp_s_stmp[s] = stamp;
+            /* pend stays SET: the set is back on its old line with its
+             * old pens for the pixels it has so far, and every later
+             * extend must land on the old map too or the pattern moves
+             * after all. Cleared only on a reject. */
+            MDA(25);                         /* tags kept: same pattern */
+            DIAG[35]++;
+            return 1;
+        }
+        MDA(26);
+        mdp_pend_tag[s] = 0;
+        mdp_wipe_set_tags(s);                /* cannot land where it was */
+    }
+#endif
 
     for (int l = 0; l < MDP_LINES; l++) {
         int need = 0, freep = 0, fits;

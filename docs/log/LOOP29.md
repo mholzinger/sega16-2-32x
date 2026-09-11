@@ -2395,3 +2395,81 @@ Re-harvesting to frame 6000 and re-baking is the change. The bake
 partitions sets across 3 CRAM lines by exhaustive search with a hard
 15-colour-per-line constraint and fails loudly if no partition exists,
 so the risk is a loud failure, not a silent wrong table.
+
+## 157. LAND WHERE YOU WERE: THE WIPES DROP 64% AND THE PIXELS DO NOT MOVE (2026-09-10 21:50)
+
+155 measured that a drift-freed colour set never returns to the same
+(line, pen map) -- 0 of 59 -- and never explained WHY. The reason is one
+line in `mdp_note_tile`: it derives the re-assign's pixel mask from **ONE
+tile's 64 pixels**, a subset of what the set had, so `mdp_assign_set`
+re-packs against a smaller demand and lands somewhere else, then grows
+through `mdp_extend_set`. It was never going to land where it was.
+
+`TAGKEEP=1` now keeps the old placement instead of comparing to it: on
+the re-assign, if the new mask is a SUBSET of the old, put the set back
+on its old line with its old pen indices wherever those pens are free or
+already hold the right colour, and hold the record open so every later
+extend lands on the old map too. Pattern bytes identical -> the tags and
+the picture survive. (My first cut required mask EQUALITY and the branch
+was dead: 0 entries in 4000 frames. That dead branch is what pointed at
+the subset.)
+
+    over 4000 frames              line      TAGKEEP
+    drift frees                    59          16
+    tag wipes                   2,652         976
+    WIPED WHILE ON SCREEN       2,500         897    -64%
+    blkdrt (cells blanked)      7,308       2,509    -66%
+    resident tags at f4000        617         745
+
+**Pixels: NEUTRAL**, which is the point. `attract_parity.py` against the
+arcade, mean |luma| per anchor:
+
+    logo rewrite   line 36/31    TAGKEEP 33/33
+    logo red       line 76/30/73 TAGKEEP 76/30/73
+    demo scene     line 132/133  TAGKEEP 132/133
+
+Unlike DRIFTMEAS (155: 50/52 and 88/41/88, visibly worse), this costs
+nothing on the attract. Game logic identical at 48.7%.
+
+**AND A NUMBER THAT LOOKS LIKE A REGRESSION AND IS NOT, read carefully
+because this file has been fooled by its opposite twice.**
+`presented_fps.py` over eight windows: line MOTION 5.9 fps, TAGKEEP 3.1.
+Halved. But the flip counters over the same 4000 vints:
+
+                     line    TAGKEEP
+    isr-flips        1724       1729
+    cadence          1.026      1.025
+    cycles           3880       3884
+    any-change fps    24.6       23.8
+
+**The same number of frames reach the screen.** Flip delivery is
+identical to within 0.3%, so the MOTION difference is entirely the SIZE
+of each frame's delta, not how many frames arrive. With 64% fewer
+on-screen tiles destroyed and 66% fewer blanked cells, what disappeared
+from the >5%-delta count is large blocks of background flicking between
+real art and blank. START-HERE rule 2 is "anim_rate counts CHANGE, not
+correctness" and presented_fps was built to escape that; with the flip
+count pinned, it does not escape it here.
+
+I am NOT claiming the build is better because a metric went down. I am
+claiming the metric cannot separate these two builds, and the three that
+can -- tiles destroyed, cells blanked, and arcade pixel diff -- all
+favour TAGKEEP or call it even.
+
+    rom/night/vi12.32x = vi10's flags + TAGKEEP=1
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 TEXTCAPEARLY=1 \
+                 TEXTCAPMASK=1 TAGKEEP=1
+
+Not play-passed. Mike's eye decides whether the backgrounds are fuller,
+and that is the only question it is meant to answer.
+
+**Still open, and it is the majority of what remains.** The gain fades
+late: at f6000 frees are back to 62 and on-screen wipes to 2,266. The
+old placement is only reusable 4 times in 16-58 attempts, so most frees
+still wipe. Set 33 alone is 65% of the damage (156) and CANNOT be fixed
+by the per-scene bake: a wider harvest to frame 6000 on real play input
+finds sets 37-46 but **never set 33 at all**, and the ten it does find
+appear in only 4 samples each with the palette mid-fade, which the bake
+rejects by design as a fade witness. **The static table cannot cover a
+transient flash palette.** Whatever set 33 is, it is next.
