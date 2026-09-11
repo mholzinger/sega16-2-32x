@@ -3951,3 +3951,64 @@ and not any further transport or compose work. The decompile thread's
 main-loop reading is the asset that makes that possible.
 
 probe.32x is vi28, which plays.
+
+## 185. A CORRECT GAME-FRAME COUNTER, AND THE ERROR CLASS THAT HAS RUINED FIVE MEASUREMENTS TONIGHT (2026-09-11 19:30)
+
+`PASSCOUNT=1` counts one tick per gameplay frame at 0x922, the main
+loop's OWN wait call, and nothing else. It exists because none of the
+three instruments this repo has used for the game's rate is trustworthy:
+
+    0xFFF02A scene timer   per-SCENE, and scene-dependent in rate AND
+                           direction (183)
+    0xFFF144 miss counter  the game CLEARS it at 0x930 (182)
+    a counter at 0x397E    counts attract's 120- and 240-frame delays
+                           as frames (184)
+
+It works -- it scales with run length and saturates when the playthrough
+leaves gameplay (285 at f1000, 553 at f2000, flat after). **And the
+comparison I built it for is STILL INVALID:**
+
+    over f1000-f2000     line 26.8%   SH-2 ablated 3.7%   RELBANK 0.0%
+
+RELBANK reads ZERO, on the build that measurably made the game FASTER
+(flips 2,095 -> 3,185, wall 1.46 -> 0.81). The reason is not the counter.
+**The builds are at different points in the playthrough at the same
+frame number.** The faster build finished the gameplay section before
+f1000, so a window that is mid-level for one build is post-mortem for
+another.
+
+**THIS IS THE FIFTH TIME TONIGHT, in five costumes:**
+
+  1. the palette mirror, diffed at one frame against a ramp rotating
+     twice per frame (166)
+  2. colour-set residency, sampled at round-numbered frames rather than
+     at the event (156)
+  3. `attract_parity`'s high-k columns, compared across builds with
+     different OFFSETs (160)
+  4. the scene timer, compared at f1500 across builds in different
+     scenes (183)
+  5. this
+
+Every one is the same mistake: **two builds sampled at the same WALL
+time are not at the same point in the GAME, and any per-frame rate
+compared that way measures the divergence, not the change.** The
+project's own handoff already says the rule -- `attract_parity.py` is
+"aligned on the game's own timeline" and `HANDOFF-SESSION6` says why.
+I read that file at the start of this session.
+
+**The only cross-build numbers in this log that are safe** are ones
+counted over the same 4000 vints and independent of where the game is:
+`isr-flips`, the generation wall, the ship period bins, the 68K handler
+mean, and the allocator counters. Every rate with the GAME in its
+numerator needs aligning first.
+
+**What the honest version of this measurement needs:** total gameplay
+frames divided by the vints spent IN gameplay, per build -- the counter
+gives the numerator and its saturation point gives the denominator. Two
+bisects per build. Not done; stated so nobody mistakes the table above
+for a result.
+
+**And the open question from 184 is still open.** Whether the game's
+1.25-vint pass is bus contention from our SH-2 or intrinsic to the
+7.67 MHz clock is exactly what the ablation column was meant to answer,
+and it did not.

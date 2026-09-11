@@ -972,6 +972,25 @@ if os.environ.get('MISSKEEP'):
     struct.pack_into('>HH', hrom, 0x930, 0x4E71, 0x4E71)
     print('MISSKEEP: 0x00930 clr.w $FFF144 -> nop nop (counter is now cumulative)')
 
+# LOOP29 185 — PASSCOUNT. A correct game-frame counter, because none of
+# the three this repo has used is trustworthy across builds: the scene
+# timer at 0xFFF02A is per-scene and scene-dependent in rate AND
+# direction (183), the miss counter is cleared by the game itself (182),
+# and a counter inside the shared wait at 0x397E counts attract's 120-
+# and 240-frame delays as frames (184).
+# 0x922 is the GAMEPLAY loop's own `jsr 0x397E` (LOOP-DECOMPILE 67's
+# listing: 91A dispatcher, 920 moveq #0, 922 wait, 928 bra). Counting
+# there counts one tick per gameplay frame and nothing else.
+# Word at 0xFFA0EC. Bytes asserted before the rewrite.
+if os.environ.get('PASSCOUNT'):
+    # the target is ALREADY REBASED by the passes above (0x0090397E, not
+    # 0x0000397E) -- read it rather than assume it, and assert only the
+    # opcode and the low word, which rebasing does not touch.
+    pc_op, pc_hi, pc_lo = struct.unpack_from('>HHH', hrom, 0x922)
+    assert pc_op == 0x4EB9 and pc_lo == 0x397E, \
+        hrom[0x922:0x928].hex()
+    PASS_WAIT = (pc_hi << 16) | pc_lo
+
 PAL_DIRTY_SITES = T('PAL_DIRTY_SITES')
 pal_words = []
 pal_report = []
@@ -1199,6 +1218,18 @@ if os.environ.get('RELBANK'):
     assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, 'RELBANK overruns'
     print(f"RELBANK: 0x0397E clr.b $FFF01C -> jsr {rb:#06x} "
           f"(decrement, cap {cap})")
+
+if os.environ.get('PASSCOUNT'):
+    pc = PAL_THUNK_BASE + len(pal_words) * 2
+    struct.pack_into('>HHH', hrom, 0x922, 0x4EB8, pc, 0x4E71)
+    pal_words += [
+        0x5278, 0xA0EC,                 # addq.w #1,$FFA0EC
+        0x4EB9, PASS_WAIT >> 16, PASS_WAIT & 0xFFFF,   # jsr the real wait
+        0x4E75,                         # rts
+    ]
+    pal_report.append(f"P 000922: gameplay wait -> pass counter {pc:04X}")
+    assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, 'PASSCOUNT overruns'
+    print(f"PASSCOUNT: 0x00922 -> jsr {pc:#06x}, count at 0xFFA0EC")
 
 # ---------------------------------------------------------------------------
 # LOOP 23 — FMGATE: gate thunks at the MAIN-loop FB subsystems' entry
