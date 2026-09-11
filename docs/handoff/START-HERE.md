@@ -90,7 +90,7 @@ main loop once per presented frame; overruns drop to zero and the game's
 speed IS the flip rate. Line: `rom/night/vi10.32x` (LOOP29 150: vi8 flags, plane-packet mirror replays the written bytes; hardware flips 16-23 per 64 vints, vi4 had 1-7; Mike: backgrounds fixed on the rig).
 
 **CANDIDATE, ON THE RIG AS `probe.32x`, AWAITING MIKE'S EYE (2026-09-10
-22:20): `rom/night/vi14.32x`, LOOP29 152-159.** Mike on vi11: "still
+22:52): `rom/night/vi16.32x` (md5 2f82be3b), LOOP29 152-164.** Mike on vi11: "still
 lots of missing tile data." Located, and most of it fixed. The MD tile
 residency map is destroyed by the colour-set drift free: 57 events per
 4000 frames, ~46 tile slots each, and **95% of those slots are named by
@@ -101,9 +101,17 @@ consecutive tile codes with four distinct pens, is 65% of it. vi14 keeps
 a set's pen indices across the free so the re-assign lands where it was
 and the tile patterns stay valid:
 
-    on-screen tiles destroyed   2,500 -> 644     -74%
-    demo scene vs the arcade      133 -> 75      -44%
-    logo screens, flips, logic                   unchanged
+    over 12,000 frames          line -> vi16
+    drift frees                  151 -> 58       -62%
+    tile slots destroyed       6,235 -> 2,153    -65%
+    cells blanked, art missing 16,194 -> 6,372   -61%
+    isr-flips                  5,887 -> 5,915    +0.5%
+    game logic                  48.7% -> 49.1%
+    attract pixels vs arcade                     even or better
+    skips, late flips                            0 and 0
+
+The question for Mike's eye is the one he raised: **is there less
+missing tile data in the backgrounds.**
 
 **Do not rank this family on `presented_fps`.** It reads 5.9 -> 3.1 on
 one of these builds and 5.9 -> 10.6 on another while `isr-flips` stays
