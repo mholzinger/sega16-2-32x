@@ -345,3 +345,53 @@ would put the flip at 8 lines corrupts packet B's content in a way I
 have not found (149, parked). If the object model says anything about
 what the game reads back from text RAM or tile RAM between frames, that
 bears on 149 and on the text mask's 8-vint staleness bound.
+
+---------------------------------------------------------------------
+## 9. STOP sites are unpatched, and the object struct is now mostly mapped
+
+**Something you may want to know about: 12 unpatched STOP instructions.**
+[37] 0x1A9E6, plus eleven in 0x1B0CA-0x1B9E6. All in the service/test-mode
+region. `stop #$2300` halts the 68000 until an interrupt the arcade
+guarantees; on 32X it resumes only if that interrupt actually arrives.
+Harmless while the port never enters test mode. A hang the moment it does
+— and note entry 22: the game's own dropped-frame counter is DISPLAYED on
+that screen, so if you ever wire up that oracle you will be entering the
+one region with unpatched STOPs in it. Worth patching first.
+
+`tools/hazard_census.py` does this scan. It reproduces your hand-derived
+TAS_SITES (4 in the analysed code plus 0x150B6, which Ghidra never reached
+and patch_game found by hand). Point it at any System 16 listing.
+
+**The object struct, as far as it is mapped** [28-36]. All derived from
+our bytes, the marked ones also checked on a running frame:
+
+    $00 status (bit 7 = active)     $2C flags (bit 4 = depth-sorted)
+    $02 routine pointer             $2E bit 7 = horizontal flip
+    $08 sprite slot -> pool         $2F priority band (0/1/2)
+    $0A/$0B palette slot/index      $30-$33 box A extents (signed bytes)
+    $0C long X, 16.16  [frame]      $34-$3A box A absolute
+    $10 long Y, 16.16  [frame]      $40/$44 saved X/Y
+    $14/$16/$18 X vel/accel/limit   $48/$49 from the animation frame entry
+    $1A/$1C/$1E Y vel/accel/limit   $50-$53 box B extents
+    $21 animation frame index       $54-$5A box B absolute
+    $22 animation frame TIMER       $6C-$6F palette slot array (indexed)
+    $24 animation script pointer
+
+Table geometry: 64 slots x 128 bytes at 0xFFC000. **Slot 0 is player 1,
+slot 8 is player 2** (active flags 0xFFF028/0xFFF029), and **slots 48-61
+(0xFFD800) are the group collision tests against**.
+
+**Two more static per-scene tables, both decodable at bake time like the
+cat1 map:**
+
+  - **0xDEC4** — five pointers to floor geometry, triples of
+    [height, X start, X end]. Every scene's floors sit at three heights
+    (~120, ~180, 216) and **the depth band edges at rows 136 and 200 fall
+    exactly between them** [36]. The walkable depths and the sprite
+    priority bands are ONE system, and both are static.
+  - Scene shape varies a lot: scene 1 is a single floor across the whole
+    level, scene 2 has 22 segments. Another reason a level-1 measurement
+    does not describe the game.
+
+Camera globals, if you need them: 0xFFF0F8/0xFFF0FA camera X/Y,
+0xFFF120/0xFFF128 offsets, 0xFFF018 bit 6 = cabinet screen flip.

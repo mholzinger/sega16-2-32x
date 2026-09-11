@@ -1512,3 +1512,52 @@ Practical consequence for the port: an actor's priority band is a pure
 function of its Y, the band edges are two constants, and the floors it can
 stand on are static rom data. Nothing in the depth system needs observing
 at runtime.
+
+---------------------------------------------------------------------
+## 37. The arcade-dependency census — the generalisable half of the kit
+
+`tools/hazard_census.py`. This is the piece that makes a KIT rather than
+a port: the reason each dependency matters is a property of the HARDWARE,
+so a rule learned on one title holds for every title. TAS is the existence
+proof — nobody found it by diffing two roms, somebody understood one game
+well enough to know it relied on a locked read-modify-write, and that
+became a rule about the class.
+
+    tools/hazard_census.py LISTING.dis --code INSTRS.txt
+
+**TAS — 4 confirmed in code, 1 candidate, and that is patch_game's 5.**
+
+    0x02268  0x0E098  0x0EAC0  0x12E84     in the analysed code
+    0x150B6                                 candidate, below the ceiling
+
+`tools/game_altbeast.py` TAS_SITES lists exactly those five. 0x150B6 is
+REAL code that the seeded project never reached, which patch_game found
+by hand.
+
+**STOP — 12 sites, none of them patched.** 0x1A9E6 and eleven more in
+0x1B0CA-0x1B9E6, which is the service/test-mode region (entry 22 put the
+test screen at 0x005BE, and these are its siblings). The game halts until
+an interrupt the arcade guarantees; on 32X it resumes only if that
+interrupt actually arrives. Not a live risk while the port never enters
+test mode, and a hang the moment it does.
+
+**I CLAIMED THIS REPRODUCED THE HAND KEY EXACTLY BEFORE CHECKING, AND IT
+DID NOT.** Two bugs in opposite directions, both mine:
+
+  1. FALSE POSITIVE. I reported 0xE1DC, which is `tas d2` — a DATA
+     REGISTER. There is no bus cycle, so the dropped write phase cannot
+     touch it. patch_game excludes it correctly and I did not.
+  2. FALSE NEGATIVE, and the dangerous one. I filtered matches through
+     Ghidra's instruction set and silently DISCARDED everything outside
+     it — which would have thrown away 0x150B6, a real TAS that
+     patch_game does patch. **Ghidra not reaching an address does not
+     make it data.** The tool now reports those as CANDIDATES instead of
+     dropping them.
+
+The cheap resolver for candidates is the code ceiling (entry 16): no code
+exists above 0x1EF1E, so three of the four candidates are data with no
+hand check needed, and only 0x150B6 survives to be looked at. One
+constant, re-derived per title, does most of the triage.
+
+A scan that silently drops what it cannot confirm produces a clean-looking
+list with the hard cases missing. Report the uncertainty.
