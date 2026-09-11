@@ -2141,3 +2141,61 @@ build; level 1 is 11.3%.
     Mike, rig, 20:15: vi10 "YOU FIXED THE BACKGROUNDS!" -- the plane
     packets carried by their written bytes is the hardware fix. vi10 is
     the line. vi11 (CAT1MD colour match) goes to the rig next.
+
+## 152. THE MISSING TILES ARE THE MD RESIDENCY MAP, EMPTY FOR TEN SECONDS AFTER A CUT (2026-09-10 20:40)
+
+Mike on vi11 (rig): "maybe backgrounds are 100% fixed... still lots of
+missing tile data."  New instrument, then the number.
+
+**`tools/nt_dump_ares.py`** pulls nt_dump.lua's five evidence regions
+(snap/ntmir/mdtag/sline/tmap) out of ares-headless instead of MAME.
+nt_dump.lua cannot serve this question any more: under R60 no packet
+lands in MAME (CLAUDE.md), so its mirror and tags are not our machine's.
+The ares dump reads `md_dbg_nt` (0x3D200) and `md_tag` (0x3B400)
+directly, so it needs no DIAG slot and no probe build -- it audits the
+SHIPPING rom.
+
+Cell census of the shipped mirror, vi10, per plane (blank = the cell
+ships MD_BLANK_SLOT, i.e. nothing is drawn on the MD):
+
+    frame   md_tag claimed   plane B blank / distinct   plane A blank / distinct
+     600         764            160 / 349                  314 / 156
+    2400         769            160 / 347                  320 /  81
+    3000         809            160 / 354                  319 / 117
+    1800         117            206 /  54                 1120 /   0
+
+**In the demo the name tables are HEALTHY and the blanks are all by
+design.** Plane B's 160 are rows 24-27 exactly -- the bottom-band blank
+this file's own comment installs (visible lines 192-223, always FB
+floor). Plane A's ~320 are rows 20-27, FG cells whose tilemap word is 0.
+Not one cell is a free slot, a never-written entry, or an unclaimed one.
+No slot set is saturated: on-screen demand is 428-505 slots spread over
+127-128 sets, worst set 7 ways of 8.
+
+**The defect is the cut window.** From ~f1650 to ~f2200 `md_tag` holds
+117 of 1024 claims (against 764-809 in the demo) and plane B names 54
+distinct slots against 347-354. It refills to 769 only by f2400: about
+600 frames, TEN SECONDS, of a depopulated residency map. Plane A being
+100% blank across that window is correct -- the game clears the FG
+tilemap at a cut -- but plane B's collapse is not.
+
+**It is not an upload backlog.** `md_dirty` popcount is 0 at f600, 1800,
+2400 and 3000 and 71 at f2100; no on-screen cell names a dirty slot at
+any sample. The shipper is idle. The map is empty because claims are not
+happening or are not surviving, not because art is queued behind them.
+
+**COUNTER TRAP, and it cost me an hour: DIAG[39], [50] and [53] are
+each written by three different subsystems.** [50] is `+= landed` on the
+DREQ path (10413) AND md_tag evictions (13055) AND 5323; [53] is the
+packet count (10414) AND md_tag claims (13008); [39] is three sites.
+Any "evictions per frame" or "claims per frame" figure read out of them
+-- including the ones I built two hypotheses on before checking -- is
+the DREQ counters. The minefield this file has numbered to #16 now has
+a DIAG-index arm. **Do not read [39]/[50]/[53] for allocator questions;
+give the allocator its own block.**
+
+Open: which of the two it is (no claim, or a claim then wiped) needs
+that block. `mds_flush` is edge-only (3-4 blanks in the whole run) and
+`mds_install`'s invalidation is selective and idempotent, so neither is
+an obvious wiper; set relocations are 22 across the window, 176 slots.
+None of the three accounts for the gap.
