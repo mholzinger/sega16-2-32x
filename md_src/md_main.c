@@ -83,6 +83,13 @@ extern uint16_t read_joypad(uint8_t player);
 #define IO_DSW1     (*(volatile uint8_t*)0xFFB023)  // c42003
 #define IO_C43007   (*(volatile uint8_t*)0xFFB037)
 #define BANK_SHADOW (*(volatile uint8_t*)0xFFB043)  // 3F0002 low byte
+#ifdef TWO_POST
+#define TP_ECHO_OK 0xF104   /* LOOP29 149: the ISR flipped, handed the FB back, ate post A */
+#define TP_ECHO_NO 0xF1FE   /* declined, same hand-back */
+#else
+#define TP_ECHO_OK 0xF102
+#define TP_ECHO_NO 0xF1FF
+#endif
 // MCU mailboxes are per-game (game_irq.h: US 0xFFF0C0/C2/C4, JP
 // 0xFFF0D2/D0/D4 — the 68K program reads only its own MCU's addresses)
 #define MCU_COINS   (*(volatile uint8_t*)GAME_MCU_COINS)  // MCU posts inverted SERVICE
@@ -1866,6 +1873,12 @@ static void r60_push(void) {
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
+#elif defined(BOOT_CONSV)
+		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
+		 * V at cons.entry (0xFFB0B0), in lines */
+#define VLINE3(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		uint8_t p0 = VLINE3((uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8));
+		uint8_t p2 = VLINE3((uint8_t)(*(volatile uint16_t*)0xFFB0B6 >> 8));
 #elif defined(BOOT_ENTRYV) || defined(BOOT_POSTV)
 		/* LOOP29 146: the 68K's own timeline on hardware, in lines from
 		 * vblank start: ENTRYV = the vint handler's consume entry stamp
@@ -2968,6 +2981,11 @@ void shim_vblank(void) {
 			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 			*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
 		}
+#if defined(TWO_POST) && !defined(TP_CONSUME_FIRST)
+		if (!r60_go)                         /* posting first: the consumes
+		                                      * run after the flip echo */
+#endif
+		{
 		*(volatile uint16_t*)0xFFA080 = *(volatile uint16_t*)0xC00008;
 		md_consume(0x851A00uL);
 		*(volatile uint16_t*)0xFFA082 = *(volatile uint16_t*)0xC00008;
@@ -2980,6 +2998,7 @@ void shim_vblank(void) {
 		mdspr_consume();                     /* P3: SAT + sprite pal */
 		mdspr_upload_pump();                 /* per-scene art chunks */
 #endif
+		}
 #endif
 #ifdef POST_LATE
 		/* POST LATE (2026-09-06, the 60Hz fix): the post/push move to
@@ -3124,7 +3143,9 @@ void shim_vblank(void) {
 				 * FBXPORT line builds unconditionally today and this
 				 * must not quietly start dropping packets on a vint
 				 * the ISR was slow to echo. */
-				r60_push();
+#ifndef TWO_POST
+				r60_push();                      /* TWO_POST: after post B */
+#endif
 #endif
 				/* (FM_LATE arm: selection overlaps the ISR span; the
 				 * F103 wait + FM drop sit before its ship) */
@@ -3172,13 +3193,15 @@ void shim_vblank(void) {
 				 * FBXPORT line builds unconditionally today and this
 				 * must not quietly start dropping packets on a vint
 				 * the ISR was slow to echo. */
-				r60_push();
+#ifndef TWO_POST
+				r60_push();                      /* TWO_POST: after post B */
+#endif
 #endif
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 #endif
-				while (*mars_comm4 != 0xF102
-				       && *mars_comm4 != 0xF1FF) {   /* flip-hold tail */
+				while (*mars_comm4 != TP_ECHO_OK
+				       && *mars_comm4 != TP_ECHO_NO) {   /* flip-hold tail */
 					uint8_t vv = (uint8_t)
 						(*(volatile uint16_t*)0xC00008 >> 8);
 					if (vv > 0xF8 || vv < 0xDF)
@@ -3191,7 +3214,8 @@ void shim_vblank(void) {
 				{	/* the master captured with this post's mask: start afresh.
 					 * No echo (bailed vint) = keep accumulating. */
 					uint16_t c4m = *mars_comm4;
-					if (c4m == 0xF102 || c4m == 0xF103 || c4m == 0xF1FF) txt_mask = 0;
+					if (c4m == 0xF102 || c4m == 0xF103 || c4m == 0xF1FF
+					    || c4m == 0xF104 || c4m == 0xF1FE) txt_mask = 0;
 				}
 #endif
 #ifdef GAME_GATE
@@ -3203,7 +3227,7 @@ void shim_vblank(void) {
 					static uint8_t gg_wait;
 					uint16_t c4 = *mars_comm4;   /* F102 = flipped; F103 = flipped
 					                              * and restored (the ISR writes both) */
-					uint8_t flipped = (c4 == 0xF102 || c4 == 0xF103);
+					uint8_t flipped = (c4 == 0xF102 || c4 == 0xF103 || c4 == 0xF104);
 					if (flipped || ++gg_wait >= GAMEGATE_MAXWAIT) {
 						if (!flipped) (*(volatile uint8_t*)0xFFA0F4)++;
 						*(volatile uint8_t*)0xFFA0F5 = 1;
@@ -3212,7 +3236,37 @@ void shim_vblank(void) {
 					}
 				}
 #endif
+#ifdef TWO_POST
+				/* TWO-POST (LOOP29 149): the master flipped on post A and
+				 * dropped FM. Consumes and the packet blast here, at FM=0;
+				 * then raise again and post B for the window. If the body
+				 * flipped instead and FM is still up, md_consume skips
+				 * itself and the blast goes pending (late blast / next
+				 * pre-post), exactly the FBXPEND paths. */
+#ifndef TP_CONSUME_FIRST
+				*(volatile uint16_t*)0xFFA080 = *(volatile uint16_t*)0xC00008;
+				md_consume(0x851A00uL);
+				md_consume(0x85E800uL);
+#ifdef MDSPR
+				mdspr_consume();
+				mdspr_upload_pump();
+#endif
+				*(volatile uint16_t*)0xFFA086 = *(volatile uint16_t*)0xC00008;
+#endif
 #ifdef FBX_STAGE
+				fbx_pend = 1;                        /* blast in game context
+				                                      * (the gate spin), not here:
+				                                      * post B must not wait ~12
+				                                      * lines of FB writes */
+#endif
+				*(volatile uint16_t*)0xA15100 |= 0x8000;
+				*mars_comm0 = 0x2020;                /* post B: the window */
+				r60_push();                          /* the build, after post B (WRAM
+				                                      * only; the window runs under
+				                                      * it). Blasted next vint in the
+				                                      * consume window, or late. */
+#endif
+#if defined(FBX_STAGE) && !defined(TWO_POST)
 				/* THE BLAST, AT THE TAIL (LOOP28 89). Same window
 				 * FBX_TAIL uses and for the same reason — the master
 				 * dropped FM at its ack, so the 68K can reach the
@@ -3537,8 +3591,8 @@ void shim_vblank(void) {
 				 * 68.2 it replaces. V-bounded: past 0xF8 (or wrapped
 				 * out of vblank entirely) the ISR declined this vint's
 				 * flip — release and let the body fallback decide. */
-				while (*mars_comm4 != 0xF102
-				       && *mars_comm4 != 0xF1FF) {
+				while (*mars_comm4 != TP_ECHO_OK
+				       && *mars_comm4 != TP_ECHO_NO) {
 					/* 0xF1FF = the ISR DECLINED the flip (edge
 					 * guard: too late in vblank — drop, not tear);
 					 * release the game immediately either way */

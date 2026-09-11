@@ -2046,3 +2046,42 @@ sprite palette go every vint today), or the two-post protocol -- post
 before the consumes so the flip lands at ~15 lines, drop FM for the
 DMAs, post again for the window; the 139 mirror already carries the
 plane packets across the swap that this reorders.
+
+## 149. TWOPOST: THE FLIP AT 8 LINES, AND MD CONTENT THAT GOES WRONG -- PARKED (2026-09-10 20:05)
+
+`TWOPOST=1` (default off; needs FBXPEND): the 68K posts BEFORE its
+consumes (post A at line ~5), the ISR flips and then eats post A, drops
+FM and echoes F104 (flipped) / F1FE (declined) AFTER its mirror; the 68K
+does its consumes at FM=0, raises again and posts B; the window and the
+text restore run on post B. Pieces that had to exist for it: the
+plane-packet mirror replays the bytes the window WROTE (kept by the
+window itself, since `hs_patch` edits the FB copy and the compose
+rebuilds the staging after the ack), and the MDSPR palette + SAT are
+mirrored the same way. An earlier cut echoed F102 before the drop and
+raced post B; another guarded the wrong of the two push sites so the
+build ran twice.
+
+    vi9, ares 4000 vints: FS writes at raw vcounter 232 (= ~8 lines
+    into vblank) on 1140 of 1145; flips 436-497 per 1000 (par); edge
+    declines 229 (par); torn 0; game logic 49.7% (par); IRQ4 ~100
+    (vi8: 72).
+    BUT: fence cells black, player a silhouette, CRAM line 3 at 7 pens
+    of 10-11 -- MD plane content wrong. Same with the consumes moved
+    back BEFORE post A (vi9x), so the after-flip consume path and the
+    mirror are NOT the cause; something in "ISR eats post A / drops FM /
+    post B opens the window / text restore at window start" corrupts
+    what packet B delivers (its pal section and tile batches), on ares.
+    MDSPR art and the SAT differ from vi8 by 32 and 30 bytes; tile art
+    and both name tables differ massively (LRU-dependent, so not by
+    itself proof).
+
+Not found tonight. The protocol is the right shape for silicon (the
+guard is met by 28 lines) and stays in the tree as a probe. vi8 is the
+line: hardware flips 16-23 per 64, game ~35 per 64.
+
+What to try next, in order: (1) build vi9 with MDVERIFY and read the
+stale/gap counters against vi8's, not against nothing; (2) diff packet
+B's 368 longs in the FB bank the 68K consumes against the master's
+tp_lastB on a vint the 68K consumed (a savestate at 2100 has both);
+(3) the text restore back into flip_span with TWO_POST, to rule the
+move in or out.

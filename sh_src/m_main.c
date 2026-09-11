@@ -5823,7 +5823,24 @@ static uint8_t fs_from_isr;              /* LOOP29 143 probe: flip_span called f
 #ifdef TEXTCAP_EARLY
 static volatile uint8_t fs_posted_early; /* LOOP29 145: the ISR posted this vint's capture */
 #endif
+#if defined(TWO_POST) && defined(FB_TEXT_READ)
+/* LOOP29 149: the text restore moved from flip_span to the window start
+ * (post B), off the ISR's FM span. Same contract: before the ack, so the
+ * game never writes text into a bank that lacks the truth. */
+RAMCODE static void tp_text_restore(void)
+{
+    volatile uint32_t *rd = (volatile uint32_t *)(0x04000000u + 0x1F000u);
+    volatile uint32_t *rs = (volatile uint32_t *)TEXT_U;
+    for (int i = 0; i < 1024; i += 4) {
+        rd[i + 0] = rs[i + 0]; rd[i + 1] = rs[i + 1];
+        rd[i + 2] = rs[i + 2]; rd[i + 3] = rs[i + 3];
+    }
+}
+#endif
 #ifdef PG_SKIP_PKT
+static uint32_t tp_lastA[368], tp_lastB[368];   /* the plane packets exactly as
+                                                 * the FB holds them (149) */
+static uint32_t tp_lastPal[8], tp_lastSat[64];  /* MDSPR palette + SAT likewise */
 static uint16_t mir_a, mir_b;            /* packet magic words read pre-flip
                                           * (the mailbox mirror, LOOP29 139) */
 #endif
@@ -6365,14 +6382,25 @@ static int flip_span(void)
         volatile uint32_t *da = (volatile uint32_t *)0x24011A00u;
         volatile uint32_t *db = (volatile uint32_t *)0x2401E800u;
         if (mir_a == 0xB6B6u) {
-            const uint32_t *sa = (const uint32_t *)0x06039A00u;
+            const uint32_t *sa = tp_lastA;   /* NOT the staging: the compose
+                                              * rebuilds that after the ack */
             for (int i2 = 1; i2 < 368; i2++) da[i2] = sa[i2];
             da[0] = sa[0] | (disp_blank ? 0x2000u : 0u);
             DIAG[42]++;                  /* A carried across the swap */
         } else
             da[0] = 0;
+#ifdef MD_SPR
+        {   /* MDSPR palette + SAT: every window rewrites them, every vint
+             * the 68K reads them; after a flip the new bank's copy is
+             * two windows old. Replay the last written. */
+            volatile uint32_t *dp = (volatile uint32_t *)0x2401EDC0u;
+            volatile uint32_t *ds = (volatile uint32_t *)0x2401EE00u;
+            for (int i2 = 0; i2 < 8; i2++) dp[i2] = tp_lastPal[i2];
+            for (int i2 = 0; i2 < 64; i2++) ds[i2] = tp_lastSat[i2];
+        }
+#endif
         if (mir_b == 0xB6B6u) {
-            const uint32_t *sb = (const uint32_t *)0x0603E780u;
+            const uint32_t *sb = tp_lastB;
             for (int i2 = 1; i2 < 368; i2++) db[i2] = sb[i2];
             db[0] = sb[0] | (disp_blank ? 0x2000u : 0u);
             DIAG[39]++;                  /* B carried across the swap */
@@ -6381,7 +6409,7 @@ static int flip_span(void)
     }
 #endif
     VBS(35);                             /* after the restore */
-#ifdef FB_TEXT_READ
+#if defined(FB_TEXT_READ) && !defined(TWO_POST)
     /* text restore: unlike the sprite list (fully rewritten
      * every vint) the game writes text SPARSELY, so the new
      * draw bank is missing every glyph not rewritten since
@@ -6723,6 +6751,31 @@ void visr_vbi(void)
 #endif
 #ifdef VB_SPAN
     vbs_isr = 1;
+#endif
+#ifdef TWO_POST
+    /* TWO-POST PROTOCOL (LOOP29 149): post A came before the 68K's
+     * consumes, so the flip lands at ~5 lines; now hand the FB back for
+     * its DMAs and its packet blast (both need FM=0), and eat post A so
+     * the body does not open a window on it. The 68K posts B after. */
+    {
+        int fsr;
+#ifdef FLIPRATE_MEANSUM
+        fs_from_isr = 1;
+#endif
+        fsr = flip_span();
+#ifdef FLIPRATE_MEANSUM
+        fs_from_isr = 0;
+#endif
+        MARS_SYS_COMM0 = 0;
+        MARS_SYS_INTMSK &= 0x7FFF;
+        MARS_SYS_COMM4 = fsr ? 0xF104 : 0xF1FE;   /* the 68K's cue: FB handed
+                                                    * back, post A eaten. F102
+                                                    * came too early (before
+                                                    * the mirror and the drop)
+                                                    * and raced post B. */
+        if (!fsr) return;
+    }
+    if (0)
 #endif
 #ifdef FLIPRATE_MEANSUM
     fs_from_isr = 1;
@@ -9830,6 +9883,9 @@ RAMCODE void m_main(void)
                 flip_span();
 #endif
             WSTAGE(0x03E0);                      /* GREEN: flip span done */
+#if defined(TWO_POST) && defined(FB_TEXT_READ)
+            tp_text_restore();                   /* post B: FM=1 again, before the ack */
+#endif
             diag_add(6, tp);                 /* slot 6: flip+truth+restore */
 #if (defined(DIRECT_FB) || defined(NATIVE_FRAME)) && defined(R60)
             /* STAGE-2 A/B RESULT (2026-08-27): deleting the landing wait
@@ -11816,6 +11872,12 @@ RAMCODE void m_main(void)
                         k2f_pendA = 0;
                     }
                 }
+#ifdef PG_SKIP_PKT
+                /* LOOP29 149: keep the FB bytes exactly (hs_patch edits
+                 * the FB copy in place, so the staging is not it) for the
+                 * mirror to replay into the other bank after a flip. */
+                for (int i2 = 0; i2 < 368; i2++) tp_lastA[i2] = d[i2];
+#endif
                 WSTAGE(0x7FE0);                      /* CYAN: plane packet A published */
                 d = (volatile uint32_t *)0x2401E800u;
                 ssrc = (const uint32_t *)md_pkt;
@@ -11834,6 +11896,9 @@ RAMCODE void m_main(void)
                         k2f_pendB = 0;
                     }
                 }
+#ifdef PG_SKIP_PKT
+                for (int i2 = 0; i2 < 368; i2++) tp_lastB[i2] = d[i2];
+#endif
                 WSTAGE(0x7C0F);                      /* PURPLE: B copy done */
 #ifdef HS_SHIP
                 if (HS_OFFS[3] && !HS_OFFS[6]) hs_stub();   /* shipped, nothing copied */
@@ -11876,6 +11941,15 @@ RAMCODE void m_main(void)
                 dd = (volatile uint32_t *)0x2401EE00u;
                 for (int i2 = 0; i2 < 64; i2++)
                     dd[i2] = ss2[i2];
+#ifdef PG_SKIP_PKT
+                /* LOOP29 149: the 68K DMAs these after the flip under
+                 * TWO_POST, from the other bank; keep them for the mirror */
+                {
+                    const volatile uint32_t *rp = (const volatile uint32_t *)0x2401EDC0u;
+                    for (int i2 = 0; i2 < 8; i2++) tp_lastPal[i2] = rp[i2];
+                    for (int i2 = 0; i2 < 64; i2++) tp_lastSat[i2] = dd[i2];
+                }
+#endif
             }
 #endif
 #ifdef BOOT_PALTEST

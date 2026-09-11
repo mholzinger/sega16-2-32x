@@ -804,6 +804,9 @@ endif
 # SHIMBURN=N.
 # BOOTENTRYV=1 / BOOTPOSTV=1: LOOP29 146, paint the 68K's vint entry line
 # / post line (lines from vblank start) through the value instrument.
+ifdef BOOTCONSV
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_CONSV
+endif
 ifdef BOOTENTRYV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
 endif
@@ -859,6 +862,19 @@ endif
 ifdef TEXTCAPMASK
 SHCCFLAGS += -DTEXTCAP_MASK
 MDCCFLAGS += -DTXT_MASK
+endif
+# TWOPOST=1 = LOOP29 149, the two-post protocol. The 68K posts BEFORE its
+# consumes (post A, ~5 lines), the master flips and then drops FM and
+# eats the post; the 68K does its VDP DMAs and the packet blast at FM=0
+# and posts again (B) for the window, where the text restore now runs.
+# On the FPGA the consumes are ~13 lines of the 23-27-line post wait
+# (148) and put the FS write past the guard's tail. Needs FBXPEND.
+ifdef TWOPOST
+SHCCFLAGS += -DTWO_POST
+MDCCFLAGS += -DTWO_POST
+endif
+ifdef TPCONSUMEFIRST
+MDCCFLAGS += -DTP_CONSUME_FIRST
 endif
 ifdef FBXLATE
 SHCCFLAGS += -DFBX_LATE
