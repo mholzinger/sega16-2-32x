@@ -448,7 +448,7 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  *  [11] mds_install calls  [12] tags wiped by mds_install's changed[]
  *  [13] mdp_free_set calls [14] tags wiped by mdp_free_set
  * PROBE ONLY. */
-volatile uint32_t mdalloc_ctr[24];
+volatile uint32_t mdalloc_ctr[32];
 /* [15] free_set calls declined because the set is pinned by the scene
  * table. mdalloc_relo[s] = times colour set s was relocated; the pair
  * says whether the churn is in sets the baked table names or outside
@@ -1665,6 +1665,16 @@ static void mdp_wipe_set_tags(unsigned s)
         if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
             md_tag[i] = 0xFFFFFFFFu;
             MDA(14);
+#ifdef MD_ALLOC_WHY
+            /* LOOP29 156: the only number that says whether a wipe costs
+             * VISIBLE tiles -- is the slot named by the name table the
+             * player is looking at right now? Counters said the churning
+             * sets hold no slots at three sampled frames, which is true
+             * and not the question: residency is time-varying and the
+             * sample was never at a free. Ask at the free. */
+            for (int q = 0; q < 2240; q++)
+                if ((md_dbg_nt[q] & 0x7FF) == (unsigned)i) { MDA(24); break; }
+#endif
         }
 }
 #endif

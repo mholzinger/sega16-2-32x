@@ -2339,3 +2339,46 @@ single one of the 11 sets that churn. The per-scene tables are the
 mechanism that was built for exactly this and they are not covering the
 sets that need it. Next: read what `tools/palscene_bake.py` puts in a
 scene's table and why set 33 is not in it.
+
+## 156. THE WIPES DESTROY VISIBLE TILES: 95% OF THEM, MEASURED AT THE WIPE (2026-09-10 21:30)
+
+I twice built a story on these counters that the next measurement
+undercut, so this entry is the direct question asked at the right
+instant. **At each tag wipe, is the slot named by the name table the
+player is looking at right now?** (`MDALLOCWHY` [24], a scan of
+md_dbg_nt inside the wipe loop.)
+
+    over 4000 frames      drift frees            57
+                          tags wiped          2,609
+                          WIPED WHILE ON SCREEN 2,473   = 95%
+
+That is the background defect, stated without inference: **the colour-set
+drift free destroys about 2,500 tiles that are on the screen at the
+moment it destroys them**, in 57 events, and the name-table walk refills
+at ~3 slots a frame.
+
+**A correction to my own reading in 153-155.** I checked residency for
+the 11 churning colour sets at frames 600, 2400 and 3000 and found ZERO
+resident slots for every one of them, and nearly concluded the frees were
+harmless. Residency is time-varying and none of those three frames is at
+a free; the sets hold ~46 slots each at the instant they are freed and
+nothing by the time a round-numbered frame comes round. **Sampling a
+time-varying quantity away from the event says nothing about the event.**
+The same mistake in a different costume as this file's rule 4.
+
+Set 33 is the noisy one (44 of 57 frees) and it is NOT the damaging one:
+it has zero cells in the tilemap at every sampled frame. The damage is
+in the other ~13 frees, which is why the per-cset call count was the
+wrong ranking and tags-wiped-on-screen is the right one.
+
+**THE FIX IS THE ONE THE CODE ALREADY HAS, AND IT IS NOT WIRED.**
+`mdp_free_set` returns early for a set the scene's baked table pins
+(`mds_pin`), pin-declines measure ZERO across the run, and
+`sh_src/pal_scenes_md.h` names 39 sets per scene -- set 33 and sets
+38-46 are not among them. `tools/palharvest_tiles_ares.py` defaults to
+frames 60..1900, which is attract only: the sets that churn are the ones
+that come live AFTER the demo starts, so the bake has never seen them.
+Re-harvesting to frame 6000 and re-baking is the change. The bake
+partitions sets across 3 CRAM lines by exhaustive search with a hard
+15-colour-per-line constraint and fails loudly if no partition exists,
+so the risk is a loud failure, not a silent wrong table.
