@@ -273,3 +273,47 @@ for up to 8 vints.
 
 Question 5 remains the lever after this; the flip is now guard-bound on
 silicon and generation-bound on ares.
+
+---------------------------------------------------------------------
+## 8. QUESTION 5 ANSWERED — and the bitmap is baked and waiting
+
+**Category 1 is a rom bit. The game never decides it at runtime.** It is
+bit 15 of the tile word, the PRIORITY FLAG in `s16b.txt` section 6, which
+is bit 7 of the high byte the unpacker's first pass (0x16BE) writes from
+a run-length stream in the rom. [31]
+
+**Verified exactly, not inferred.** Decoding that stream out of the rom
+and comparing against live tile RAM (game 0x400000 = FB staging 0x852000
+= 32X DRAM 0x12000, even bytes):
+
+    frames 1200 and 2400, scene 0:  20480 / 20480 bytes match (100.0%)
+
+Identical at both frames, 1200 apart.
+
+**I have baked it for you.** `tools/bake_cat1map.py` emits
+`sh_src/cat1map.bin` + `sh_src/cat1map.h`: one bit per tile, MSB first,
+2560 bytes per scene, 12800 bytes for all five.
+
+    scene 0  2312 cat1 (11.3%)     scene 3  1280 cat1  (6.2%)
+    scene 1  8960 cat1 (43.8%)     scene 4  3520 cat1 (17.2%)
+    scene 2  7360 cat1 (35.9%)
+
+Three things follow.
+
+  1. **CAT1MD is reopened.** A static input cannot shimmer. Whatever
+     caused the shimmer on the play pass, it was not the classification
+     being ambiguous frame to frame — every tile's priority is fixed for
+     the whole scene. Look at how the promotion was APPLIED, not at what
+     was promoted.
+  2. **"cat1 is 48% of compose" is scene-specific.** The share swings
+     SEVENFOLD across scenes and level 1 (scene 0) is the cheap end at
+     11.3%. Scene 1 is four times worse. Any cat1 budget measured on
+     level 1 will understate the rest of the game badly.
+  3. Nothing needs classifying per frame ever again.
+
+**And you were right about page 12 — my entry 12 was wrong.** I reported
+page 0 changing by 197 bytes between frames and read it as the scrolling
+plane rewriting its incoming column. The map high bytes are byte-identical
+to the rom 1200 frames apart, so the game does NOT rewrite the map; it
+scrolls the view across static pages. What I saw moving was your R60
+packet inside page 0. Retracted.
