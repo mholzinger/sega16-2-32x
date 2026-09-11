@@ -2912,3 +2912,49 @@ fifth to a third of cells.
 
 Worth saying plainly to the builder: their idea is right, and the version
 they costed is the expensive one.
+
+---------------------------------------------------------------------
+## 66. SCENESEL probe, and the per-scene tile CRAM measured at last
+
+No input script in `discover/inputs` reaches past scene 0 — checked
+play_wolf4, play_wolf10, play_native1 and play_native3 at 6000 frames,
+all still scene 0. So the later scenes' palettes were unmeasurable and
+entries 60-61's figures for them stayed wrong.
+
+**The probe.** 0x662 does `lea $1CDA(pc),a0`, then 0x670 does
+`move.b (a0,d0.w),$FFF142` with d0 the round at 0xFFF14E masked to 7.
+The table is eight bytes, `0 1 2 3 4 0 0 0`. `make ship-us SCENESEL=N`
+rewrites it to all-N so every round loads scene N. One byte per entry,
+in place, asserted against the expected table first.
+
+**Measured, live palette ram, worst 40x28 viewport over all 64 scroll
+positions, both planes, union across three frames:**
+
+    scene   palettes   MD colours   minimum lines   fill
+      0        25          43            4          [15,15,11,5]
+      1        11          28            3          [14,14,5]
+      2        14          27            2          [13,15]
+      4        15          33            3          [14,14,11]
+      3         -           -            -          NOT REACHED
+
+**This reverses entry 64 for three scenes of four.** I said there are no
+spare CRAM lines. True for SCENE 0 and only scene 0: scene 2 needs TWO
+lines and leaves two, scenes 1 and 4 need three and leave one. Scene 0 is
+the worst case in the game, and it is the one the builder is working on,
+which is why the contention showed up there.
+
+Scene 4 is also much kinder than entry 60 claimed — 33 colours in 3
+lines, against the 77-in-6 I got from the bad rom read. That figure is
+now doubly retired.
+
+**Scene 3 did not take.** Its rom carries the all-3 table (verified by
+byte search in the image) and 0xFFF142 reads 0 at frames 900, 1500, 2200
+and 3000. So the patch is present and the scene still does not load. I do
+not know why and am not guessing; scene 3 stays unmeasured.
+
+**Two process notes.** One of the four builds hit a transient link error
+and the copy step left a STALE rom behind — `scene3.32x` was scene 2's
+image. Running each rom and reading 0xFFF142 caught it; the build log did
+not. And the run that reported "scene 0" in the batch was that stale rom
+re-measuring scene 0, which reproduced 25 palettes / 43 colours /
+[15,15,11,5] exactly — an accidental but welcome repeat of entry 62.
