@@ -1677,6 +1677,36 @@ endif
 ifdef MDALLOCWHY
 SHCCFLAGS += -DMD_ALLOC_WHY
 endif
+# `make ... DRIFTMEAS=1` = LOOP29 154: do not free a colour set on the
+# co-owner palette drift, only count it. 153 measured that EVERY md_tag
+# relocation in a 4000-frame run is that one path (LRU frees: zero) and
+# that it destroys resident tiles exactly as fast as the name-table walk
+# claims them. This is the A/B that says whether the background misses
+# are that loop. COLOUR IS WRONG on the drifted cells by construction --
+# it is a measurement, never a ship.
+ifdef DRIFTMEAS
+SHCCFLAGS += -DDRIFT_MEASURE_ONLY
+endif
+# `make ... DRIFTVOL=1` = LOOP29 154, the shippable half of DRIFTMEAS.
+# mdp_claim_pen has always preferred an EXCLUSIVE pen for a set with
+# mdp_s_vol >= 2, and mdp_s_vol was never incremented anywhere -- zeroed
+# at boot and at every scene install, read once, dead. A colour-set drift
+# is the event that means "this set must stop sharing a pen", so count it
+# there. Unlike DRIFTMEAS this does not make colour worse: an exclusive
+# pen shows the set's OWN colour. Gate: mdalloc relocations, tag
+# residency, and a play pass for background colour.
+ifdef DRIFTVOL
+SHCCFLAGS += -DDRIFT_VOL
+endif
+# `make ... TAGKEEP=1` = LOOP29 155. A tile's shipped pattern depends on
+# its colour set's (line, pixel->pen map) and NOT on the pen colours, so
+# mdp_free_set's wipe of every md_tag entry carrying the set is needed
+# only if the re-assign actually moves it. Defer the wipe to the
+# re-assign and compare. mdalloc [22] = resolved identical (wipe
+# skipped), [23] = moved (wiped then).
+ifdef TAGKEEP
+SHCCFLAGS += -DTAGKEEP
+endif
 ifdef PHASECENSUS
 SHCCFLAGS += -DPHASE_CENSUS
 endif

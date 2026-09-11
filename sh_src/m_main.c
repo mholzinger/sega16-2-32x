@@ -448,7 +448,13 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  *  [11] mds_install calls  [12] tags wiped by mds_install's changed[]
  *  [13] mdp_free_set calls [14] tags wiped by mdp_free_set
  * PROBE ONLY. */
-volatile uint32_t mdalloc_ctr[16];
+volatile uint32_t mdalloc_ctr[24];
+/* [15] free_set calls declined because the set is pinned by the scene
+ * table. mdalloc_relo[s] = times colour set s was relocated; the pair
+ * says whether the churn is in sets the baked table names or outside
+ * it. mdalloc_pin[s] = mds_pin[s] sampled at the last relocation. */
+volatile uint32_t mdalloc_relo[128];
+volatile uint8_t  mdalloc_pin[128];
 #define MDA(i) (mdalloc_ctr[i]++)
 #define MDA_ADD(i, n) (mdalloc_ctr[i] += (uint32_t)(n))
 #else
@@ -1640,6 +1646,28 @@ static uint16_t mdp_quant(uint16_t v)
  * VRAM is pen-remapped under the old assignment, and the (code,set)
  * key would keep matching after a re-assign with a different remap —
  * the cells re-claim, re-mark dirty, and the shipper re-converts. */
+#ifdef TAGKEEP
+/* LOOP29 155: a colour set's TILE PATTERN depends only on its (line,
+ * pixel->pen map) -- not on the pen COLOURS. mdp_free_set wipes every
+ * md_tag entry carrying the set because a re-assign may land it
+ * somewhere else, but 154 could not stop the drift free itself (pens
+ * are too scarce to avoid sharing: 363 of 366 claims have no free pen),
+ * so the question becomes whether the wipe is NEEDED. Defer it: keep
+ * the old line and map, and at the re-assign wipe only if they moved.
+ * [22] deferred wipes resolved SAME (wipe skipped), [23] MOVED. */
+static uint8_t mdp_pend_tag[128];
+static uint8_t mdp_pend_line[128];
+static uint8_t mdp_pend_map[128 * 8];
+static uint8_t mdp_pend_used[128];
+static void mdp_wipe_set_tags(unsigned s)
+{
+    for (int i = 0; i < NSETS * NWAYS; i++)
+        if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
+            md_tag[i] = 0xFFFFFFFFu;
+            MDA(14);
+        }
+}
+#endif
 static void mdp_free_set(unsigned s)
 {
     if (!mdp_s_line[s])
@@ -1648,10 +1676,22 @@ static void mdp_free_set(unsigned s)
     if (mds_pin[s]) {                        /* table set: never freed
                                               * inside its scene */
         MDS[3]++;
+        MDA(15);
         return;
     }
 #endif
+#ifdef MD_ALLOC_WHY
+    mdalloc_relo[s & 127]++;
+#ifdef MD_STATIC
+    mdalloc_pin[s & 127] = mds_pin[s & 127];
+#endif
+#endif
     unsigned l = (unsigned)(mdp_s_line[s] - 1);
+#ifdef TAGKEEP
+    uint8_t old_line = mdp_s_line[s], old_used = mdp_s_used[s], old_map[8];
+    for (int p = 0; p < 8; p++)
+        old_map[p] = mdp_s_map[s * 8 + p];
+#endif
     for (int p = 0; p < 8; p++) {
         unsigned pen;
         if (!(mdp_s_used[s] & (1u << p)))
@@ -1663,11 +1703,19 @@ static void mdp_free_set(unsigned s)
     mdp_s_line[s] = 0;
     mdp_s_used[s] = 0;
     MDA(13);
+#ifdef TAGKEEP
+    mdp_pend_tag[s]  = 1;
+    mdp_pend_line[s] = old_line;
+    mdp_pend_used[s] = old_used;
+    for (int p = 0; p < 8; p++)
+        mdp_pend_map[s * 8 + p] = old_map[p];
+#else
     for (int i = 0; i < NSETS * NWAYS; i++)
         if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
             md_tag[i] = 0xFFFFFFFFu;         /* both planes' variants */
             MDA(14);
         }
+#endif
     DIAG[37]++;                              /* set frees/invalidations */
 }
 
@@ -1675,14 +1723,37 @@ static void mdp_free_set(unsigned s)
  * bumps its refcount. Exact match first, then a free pen, then the
  * nearest occupied pen (counted — should be rare once pens are only
  * claimed for used pixels). */
+#ifdef DRIFT_VOL
+/* LOOP29 154: a pen whose OWNER's colour animates. 153 measured that
+ * every md_tag relocation in a 4000-frame run is the co-owner drift
+ * free, and that colour set 33 alone takes 44 of them: it is freed,
+ * re-assigned, SHARES THE SAME ANIMATING PEN AGAIN, and drifts again,
+ * ~45 resident tiles dying each round. mdp_s_vol was meant to stop that
+ * and cannot -- it needs a free pen and 363 of 366 burned claims have
+ * none (2-3 MD CRAM lines, 128 colour sets). Marking the PEN instead
+ * needs no free pen: sharing simply skips it and the nearest-colour
+ * fallback picks something else. Cleared with the scene tables. */
+static uint8_t mdp_pen_vol[MDP_LINES * 16];
+#endif
 static unsigned mdp_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
 {
     unsigned pen16 = 0, freepen = 0;
     for (unsigned pen = 1; pen < 16; pen++) {
-        if (mdp_line_c[l * 16 + pen] == q) { pen16 = pen; break; }
+        if (mdp_line_c[l * 16 + pen] == q
+#ifdef DRIFT_VOL
+            && !mdp_pen_vol[l * 16 + pen]
+#endif
+           ) { pen16 = pen; break; }
         if (!freepen && mdp_line_c[l * 16 + pen] == 0xFFFF)
             freepen = pen;
     }
+#ifdef MD_ALLOC_WHY
+    if (mdp_s_vol[s] >= 2) {
+        MDA(19);                             /* burned set claiming a pen */
+        if (!freepen) MDA(20);               /* ... with no exclusive pen left */
+        if (pen16) MDA(21);                  /* ... and a shareable match */
+    }
+#endif
     if (mdp_s_vol[s] >= 2 && freepen)
         pen16 = 0;                           /* volatile set: prefer an
                                               * EXCLUSIVE pen over sharing */
@@ -1703,6 +1774,9 @@ static unsigned mdp_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
             dg = (int)((c >> 3) & 7) - (int)((q >> 3) & 7);
             db = (int)((c >> 6) & 7) - (int)((q >> 6) & 7);
             d = (unsigned)(dr * dr + dg * dg + db * db);
+#ifdef DRIFT_VOL
+            if (mdp_pen_vol[l * 16 + pen]) d += 64;   /* last resort */
+#endif
             if (d < bd) { bd = d; pen16 = pen; }
         }
         if (!pen16) pen16 = 1;
@@ -1896,6 +1970,7 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
             }
             if (victim == 128)
                 break;
+            MDA(16);
             mdp_free_set(victim);
             {
                 int freep = 0;
@@ -1931,6 +2006,21 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
 #endif
     mdp_s_used[s] = mask;
     mdp_s_stmp[s] = stamp;
+#ifdef TAGKEEP
+    if (mdp_pend_tag[s]) {
+        int same = (mdp_pend_line[s] == mdp_s_line[s])
+                && (mdp_pend_used[s] == mask);
+        if (same)
+            for (int p = 0; p < 8; p++)
+                if ((mask & (1u << p))
+                    && mdp_pend_map[s * 8 + p] != mdp_s_map[s * 8 + p]) {
+                    same = 0; break;
+                }
+        mdp_pend_tag[s] = 0;
+        if (same) MDA(22);                   /* pattern identical: keep */
+        else { MDA(23); mdp_wipe_set_tags(s); }
+    }
+#endif
     DIAG[35]++;                              /* set assigns */
     return 1;
 }
@@ -1966,6 +2056,12 @@ static void mds_install(unsigned sc, uint8_t stamp)
         mdp_s_line[s2] = mds_s_line[sc][s2];
         mdp_s_used[s2] = mds_s_used[sc][s2];
         mdp_s_vol[s2]  = 0;
+#ifdef DRIFT_VOL
+        if (s2 < MDP_LINES * 16) mdp_pen_vol[s2] = 0;   /* scene install:
+                                              * the new tables own the
+                                              * lines, so last scene's
+                                              * animating pens are gone */
+#endif
         mdp_s_stmp[s2] = stamp;
         mds_pin[s2] = mdp_s_line[s2] ? 1 : 0;
         for (int p = 0; p < 8; p++) {
@@ -13007,6 +13103,20 @@ RAMCODE void m_main(void)
                              * RESERVED as the blank (suspect 1: it must
                              * never be allocatable, or an unresolvable
                              * cell is indistinguishable from a real one). */
+#ifdef TAGKEEP
+                            /* LOOP29 155 fix: with the wipe deferred the
+                             * tags SURVIVE a free, so the cell HITS and
+                             * never reaches mdp_note_tile -- the set
+                             * stayed line-less and its cells shipped with
+                             * line 0. Measured: 11 frees, 0 resolutions.
+                             * Re-assign here, before the lookup, so the
+                             * deferred wipe resolves against the new map:
+                             * identical -> the tags were worth keeping,
+                             * moved -> wipe now, exactly as before. */
+                            if (!mdp_s_line[cset])
+                                mdp_note_tile(cset, code, isfg,
+                                              (uint8_t)win_no, C1_SOFT);
+#endif
                             uint32_t key = MD_KEY(code, cset)
                                 | (isfg ? 0x80000000u : 0u);
                             unsigned s4m = MD_SET(code) * NWAYS;
@@ -13391,8 +13501,33 @@ RAMCODE void m_main(void)
                                                     + eg * eg + eb * eb);
                                         if (ed >= 18) {
                                             DRQR[6]++;
+                                            MDA(17);
+#ifdef DRIFT_VOL
+                                            mdp_pen_vol[lb + pen] = 1;
+                                            /* LOOP29 154: mdp_claim_pen
+                                             * already prefers an EXCLUSIVE
+                                             * pen for a set with vol >= 2,
+                                             * and NOTHING EVER INCREMENTED
+                                             * mdp_s_vol -- it was written,
+                                             * read and left at 0 since it
+                                             * was added. A co-owner drift
+                                             * is exactly the event that
+                                             * says "this set must not
+                                             * share": it re-merged onto
+                                             * the same conflicting pen and
+                                             * drifted again 44 times in
+                                             * 4000 frames (153), taking
+                                             * ~45 resident tiles with it
+                                             * each time. */
+                                            if (mdp_s_vol[s2] < 255)
+                                                mdp_s_vol[s2]++;
+#endif
+#ifndef DRIFT_MEASURE_ONLY
                                             mdp_free_set(s2);
                                             break;   /* set gone */
+#else
+                                            break;
+#endif
                                         }
                                         DRQR[5]++;
                                         DIAG[38]++;
@@ -13451,7 +13586,12 @@ RAMCODE void m_main(void)
                                             + ddg * ddg + ddb * ddb);
                                 if (dd >= 18) {
                                     DRQR[6]++;   /* catastrophic drift */
+#ifdef DRIFT_VOL
+                                    if (mdp_s_vol[s2] < 255)
+                                        mdp_s_vol[s2]++;
+#endif
 #ifndef DRIFT_MEASURE_ONLY
+                                    MDA(18);
                                     mdp_free_set(s2);
                                     break;       /* set gone; next set */
 #endif

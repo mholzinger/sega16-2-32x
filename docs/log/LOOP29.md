@@ -2257,3 +2257,85 @@ NEGATIVE, so nobody re-runs them: mds_flush (3 calls) and mds_install
 (1 call, 1 tag) are both innocent. Evictions are zero. Slot capacity is
 not the problem -- 152 measured on-screen demand at 428-505 slots of
 1024 with no set past 7 of 8 ways.
+
+## 154. THE DRIFT FREE IS THE ONLY WIPER, AND TWO WAYS TO STOP IT BOTH FAIL (2026-09-10 21:05)
+
+153 said the wiper is `mdp_free_set`. Splitting its three call sites
+(`MDALLOCWHY` [16]/[17]/[18]) says which one, over 4000 frames:
+
+    LRU eviction from a full line        0
+    co-owner colour drift               64
+    owner-vs-line_c drift                0
+
+**Every single relocation is the co-owner drift**, and colour set 33
+alone takes 44 of them. The path: two sets share a CRAM pen, the pen
+displays the OWNER's live colour, and a co-owner whose own colour is
+d^2 >= 18 away from what the pen shows is painting the wrong colour, so
+the set is freed to force a re-assign. It then RE-MERGES ONTO THE SAME
+ANIMATING PEN and drifts again, ~45 resident tiles dying each round.
+
+**A/B that proves it owns the background misses** -- `DRIFTMEAS=1`
+(count the drift, never free; colour is wrong by construction, it is a
+measurement and not a ship):
+
+    frame          2400   3000   4000
+    tags, line      117    192    653
+    tags, DRIFTMEAS 117    233    800
+    blkdrt, line   3136   6986   7264      (cells blanked, art not shipped)
+    blkdrt, DRIFTMEAS 1476 1604   1953     -- 3.7x fewer
+
+NEGATIVE 1, `DRIFTVOL=1` on the SET. `mdp_claim_pen` has always
+preferred an exclusive pen for a set with `mdp_s_vol >= 2`, and
+**`mdp_s_vol` is never incremented anywhere** -- zeroed at boot and at
+every scene install, read once, dead since it was written. Incrementing
+it on the drift changes NOTHING: 366 burned claims, **363 of them with
+no free pen**. MDP_LINES is 2-3, so 30-45 pens serve 128 colour sets and
+sharing is not optional.
+
+NEGATIVE 2, the same flag on the PEN. Mark the animating pen instead, so
+sharing skips it and the nearest-colour fallback needs no free pen.
+Relocations 64 -> 66. The re-assign finds another shared pen whose owner
+also animates.
+
+## 155. TAGKEEP: THE WIPE IS NEVER AVOIDABLE, BECAUSE THE RE-ASSIGN ALWAYS MOVES (2026-09-10 21:15)
+
+A tile's shipped pattern depends on its set's (line, pixel->pen map) and
+NOT on the pen colours, so `mdp_free_set`'s wipe of every md_tag entry
+carrying the set is needed only if the re-assign actually moves it.
+`TAGKEEP=1` defers the wipe, keeps the old line and map, and compares at
+the re-assign.
+
+**First cut measured 11 frees and 0 resolutions -- my own bug, and worth
+recording because it is a trap in this design.** With the wipe deferred
+the tags SURVIVE, so the cell HITS in md_tag and never reaches
+`mdp_note_tile`, so the set is never re-assigned and its cells ship with
+line 0. It scored like DRIFTMEAS because it WAS DRIFTMEAS. Fixed by
+re-assigning at the top of the claim loop whenever the set has no line.
+
+With that fixed, over 4000 frames:
+
+    deferred wipes resolved IDENTICAL     0
+    deferred wipes resolved MOVED        59
+
+**Zero of 59.** The re-assign never lands on the same (line, map), so the
+wipe is never avoidable and TAGKEEP is worth nothing. Residency returns
+to the line's numbers exactly (tags 207/659/56, blkdrt 6792/7123/7558
+against 192/653/56 and 6986/7264/7699).
+
+Why it always moves: the free releases the set's pens, and the assign
+then picks the line needing the fewest NEW pens. With 45 pens for 128
+sets the packing is unstable, so the set lands somewhere else every time.
+
+**Pixel A/B** (`attract_parity.py`, DRIFTMEAS-equivalent build vs the
+line): logo rewrite 50/52 against 36/31 and logo red 88/41/88 against
+72/29/73 -- WORSE, the litter the drift free exists to prevent. Demo
+scene at k=45: 58 against 133 -- much better. It is a real trade
+between attract-screen colour and gameplay backgrounds, not a win.
+
+**WHERE THIS POINTS.** `mds_pin` already makes `mdp_free_set` a no-op
+for a set the scene's baked table names, and pin-declines measured
+**ZERO across a 4000-frame run** -- the baked table does not name a
+single one of the 11 sets that churn. The per-scene tables are the
+mechanism that was built for exactly this and they are not covering the
+sets that need it. Next: read what `tools/palscene_bake.py` puts in a
+scene's table and why set 33 is not in it.
