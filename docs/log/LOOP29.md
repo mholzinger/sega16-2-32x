@@ -2746,3 +2746,34 @@ suspect.
 DIFFERENTIAL and not on a utilisation figure: CAT1MD removes 0.22
 vints/gen of slave work and the wall moves 0.02. That measurement does
 not care which counter is right.
+
+## 163. vi14 SOAK: THE GAIN HOLDS AT 12,000 FRAMES AND NOTHING DEGRADES (2026-09-10 22:50)
+
+The play pass is a long session and `PENHOLD` touches the palette
+allocator, so the risk is pen starvation or a wedge late in a run.
+12,000 frames on play2 input, line vs vi14:
+
+    transport            line      vi14
+    isr-flips            5,887     5,875
+    cadence              1.011     1.011
+    skips                    0         0
+    flip-late                0         0
+    V-gate rejects        0.3%      0.3%
+    68K handler mean      57.1      57.4 lines
+
+    allocator            line      vi14
+    drift frees            151        65      -57%
+    tag wipes            6,235     2,499      -60%
+    cells blanked       16,194     7,011      -57%
+    pen reclaims           n/a        30
+
+**The background gain holds** -- 60% fewer tiles destroyed at 12,000
+frames against 74% at 6,000, so it decays a little but does not
+disappear. **Nothing in the transport moves**: identical flips, zero
+skips, zero late flips, same handler cost. The pen reclaim (159) fires
+30 times in 12,000 frames and CRAM never starves.
+
+One thing to watch on the rig: vi14's worst-case slave span is 78.9
+lines against the line's 59.4. It costs no frame in ares (skips and
+flip-late are both zero) but the FPGA has less headroom than ares at
+every other span this arc has measured.
