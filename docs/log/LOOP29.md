@@ -2583,3 +2583,44 @@ half the frees still wipe. The other half fail because the old pens are
 genuinely gone -- taken by a set that needed them while this one was
 away. Reserving them longer trades CRAM pressure for tile stability and
 nobody has measured that curve.
+
+## 160. THE DRIFT TOLERANCE SWEEP, AND A CONFOUND IN attract_parity's LADDER (2026-09-10 22:26)
+
+The threshold at which a co-owner set is declared drifted and freed was
+a bare `18` at both sites. It is now `DRIFTTOL=n`, because the free it
+triggers destroys ~46 tile slots, 95% of them on screen (156).
+
+    DRIFTTOL   frees@f6000   on-screen wipes   blkdrt@f6000
+        18          19             644            3,505
+        27          15             508            3,541
+        40          15             522            3,232
+
+27 is the knee: 21% fewer on-screen tiles destroyed than 18, and 40 buys
+nothing further.
+
+**But the pixel comparison is CONFOUNDED, and it touches numbers I
+reported in 157-159.** `attract_parity.py` bisects an OFFSET per build
+(the game's own display-blank event) and then walks a k-ladder of lag
+columns. The OFFSET is NOT the same across these builds:
+
+    line 166    vi12 182    vi13 195    vi14 195    vi15 177
+
+A build that reaches the cut 18 frames earlier is running faster, and by
+k=45 it has accumulated a different lag against the reference. So the
+**high-k columns are not a clean cross-build quality metric** — the
+"demo scene 133 -> 75 -> 60" ladder in 157-159 mixes picture quality
+with speed. The LOW-k columns are the comparable ones, and there
+DRIFTTOL=27 is the better build:
+
+    logo rewrite k0/k8   line 36/31   vi14 35/35   vi15 21/20
+    logo red k0/k5/k12   line 72/29/73  vi14 74/28/74  vi15 74/28/74
+
+**What is unconfounded** — tiles destroyed and cells blanked — has vi15
+ahead on the first and even on the second.
+
+`rom/night/vi15.32x` = vi14 + `DRIFTTOL=27`. I have NOT swapped the rig:
+vi14 is deployed and keeps the shipped drift tolerance, which is the
+conservative choice for a play pass. If Mike's eye likes vi14's
+backgrounds, vi15 is the next one to hand him, and the question it asks
+is narrow: is the attract logo cleaner without anything else getting
+worse.

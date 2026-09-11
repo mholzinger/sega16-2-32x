@@ -1735,6 +1735,13 @@ static void mdp_free_set(unsigned s)
     for (int p = 0; p < 8; p++)
         old_map[p] = mdp_s_map[s * 8 + p];
 #endif
+#ifndef DRIFT_TOL
+#define DRIFT_TOL 18                         /* LOOP29 160: was a bare 18
+                                              * at both drift sites; swept
+                                              * as a parameter because the
+                                              * free it triggers destroys
+                                              * on-screen tiles (156). */
+#endif
 #ifdef PEN_HOLD
     /* LOOP29 158: HOLD THE PENS. 157's land-where-you-were only rescued
      * 4 frees of 16 because this loop releases the set's pens, another
@@ -13674,7 +13681,7 @@ RAMCODE void m_main(void)
                                                - (int)((lq >> 6) & 7);
                                         unsigned ed = (unsigned)(er * er
                                                     + eg * eg + eb * eb);
-                                        if (ed >= 18) {
+                                        if (ed >= DRIFT_TOL) {
                                             DRQR[6]++;
                                             MDA(17);
 #ifdef DRIFT_VOL
@@ -13759,7 +13766,7 @@ RAMCODE void m_main(void)
                                         - (int)((lq >> 6) & 7);
                                 unsigned dd = (unsigned)(ddr * ddr
                                             + ddg * ddg + ddb * ddb);
-                                if (dd >= 18) {
+                                if (dd >= DRIFT_TOL) {
                                     DRQR[6]++;   /* catastrophic drift */
 #ifdef DRIFT_VOL
                                     if (mdp_s_vol[s2] < 255)

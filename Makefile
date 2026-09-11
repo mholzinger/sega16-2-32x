@@ -1715,6 +1715,13 @@ endif
 ifdef PENHOLD
 SHCCFLAGS += -DPEN_HOLD
 endif
+# `make ... DRIFTTOL=n` = LOOP29 160: the squared-colour-distance at which
+# a co-owner set is declared drifted and FREED (default 18, both sites).
+# The free destroys ~46 tile slots, 95% of them on screen (156), so this
+# constant trades attract-screen colour against background stability.
+ifdef DRIFTTOL
+SHCCFLAGS += -DDRIFT_TOL=$(DRIFTTOL)
+endif
 ifdef PHASECENSUS
 SHCCFLAGS += -DPHASE_CENSUS
 endif
