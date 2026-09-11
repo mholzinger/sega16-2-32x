@@ -2537,3 +2537,49 @@ the held pens and a sweep that frees any held longer than N windows --
 the leak to one scene.
 
 Not play-passed. On the rig for Mike.
+
+## 159. PAYING PENHOLD'S DEBT, AND WHAT IT COSTS (2026-09-10 22:16)
+
+158 shipped a known leak: a set freed and never re-assigned holds its
+CRAM pens for ever. Paid in the drift loop's own round-robin, which
+already visits every set: a held set whose last assign is 24+ windows
+old is not coming back, so release its pens and wipe the tags it still
+claims.
+
+    over 6000 frames        vi13 (leak)   vi14 (reclaimed)
+    reclaims                      n/a            7
+    WIPED WHILE ON SCREEN         644          644
+    drift frees @f6000             19           19
+    blkdrt @f6000               3,050        3,505
+    isr-flips / 3983 vints      1,845        1,716
+    demo-scene diff vs arcade      60           75
+
+The leak was real but small -- 7 events in 6000 frames. Correctness is
+worth the 7. It gives back the flip gain (back to the line's 1724) and
+some of the pixel gain, and I am not going to read much into either: the
+two builds differ by ~40 lines of code and START-HERE rule 1 says this
+family of metric swings 18 points on layout alone.
+
+**vi14 against the line, on the measures that separate them:**
+
+    on-screen tiles destroyed   2,500 -> 644     -74%
+    cells blanked, art unshipped 8,037 -> 3,505  -56%
+    demo scene vs arcade          133 -> 75      -44%
+    logo screens vs arcade      36/31 -> 35/35   even
+    isr-flips                   1,724 -> 1,716   even
+    game logic                   48.7% -> 48.9%  even
+
+    rom/night/vi14.32x
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 TEXTCAPEARLY=1 \
+                 TEXTCAPMASK=1 TAGKEEP=1 PENHOLD=1
+
+Not play-passed. This is the candidate: it is the first build in this arc
+that improves the background WITHOUT giving anything back on the attract
+screens or the clock.
+
+**What is still on the table.** Old placement is reused 8 times of 16, so
+half the frees still wipe. The other half fail because the old pens are
+genuinely gone -- taken by a set that needed them while this one was
+away. Reserving them longer trades CRAM pressure for tile stability and
+nobody has measured that curve.

@@ -13613,6 +13613,32 @@ RAMCODE void m_main(void)
                      * post-fade divergence of merged pens. */
                     for (int n = 0; n < 4; n++) {
                         unsigned s2 = mdp_chk = (uint8_t)((mdp_chk + 1) & 127);
+#if defined(PEN_HOLD) && defined(TAGKEEP)
+                        /* LOOP29 159: pay PENHOLD's debt. A set that is
+                         * freed and never re-assigned holds its pens for
+                         * ever. This is the same round-robin that fires
+                         * the drift, so it already visits every set; a
+                         * held set whose last assign is 24+ windows old
+                         * is not coming back, so give the pens up. */
+                        if (!mdp_s_line[s2] && mdp_pend_tag[s2]
+                            && mdp_pend_line[s2]
+                            && (uint8_t)((uint8_t)win_no - mdp_s_stmp[s2]) >= 24) {
+                            unsigned hl = (unsigned)(mdp_pend_line[s2] - 1);
+                            for (int p = 0; p < 8; p++) {
+                                unsigned pen;
+                                if (!(mdp_pend_used[s2] & (1u << p)))
+                                    continue;
+                                pen = mdp_pend_map[s2 * 8 + p];
+                                if (pen && pen < 16
+                                    && mdp_pen_rc[hl * 16 + pen]
+                                    && !--mdp_pen_rc[hl * 16 + pen])
+                                    mdp_line_c[hl * 16 + pen] = 0xFFFF;
+                            }
+                            mdp_pend_tag[s2] = 0;
+                            mdp_wipe_set_tags(s2);
+                            MDA(29);         /* held pens reclaimed */
+                        }
+#endif
                         if (!mdp_s_line[s2])
                             continue;
                         unsigned lb = (unsigned)(mdp_s_line[s2] - 1) * 16;
