@@ -1668,6 +1668,15 @@ endif
 ifdef MDSPR_WHY
 SHCCFLAGS += -DMDSPR_WHY
 endif
+# `make ... MDALLOCWHY=1` = LOOP29 153: the MD residency allocator's own
+# counters, 16 longs at 0x3A680 (see MDALLOC in m_main.c). Entry 152
+# could not tell "the cell never claimed a slot" from "it claimed and
+# something wiped it" because DIAG[39]/[50]/[53] are each written by
+# three subsystems including the DREQ landing path. Read with
+# tools/md_alloc_why.py. PROBE ONLY (collides with SPRLINE).
+ifdef MDALLOCWHY
+SHCCFLAGS += -DMD_ALLOC_WHY
+endif
 ifdef PHASECENSUS
 SHCCFLAGS += -DPHASE_CENSUS
 endif

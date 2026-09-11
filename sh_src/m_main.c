@@ -428,6 +428,34 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
 #define FBCLEAR ((volatile uint16_t *)0x2603A300)      /* [2][224] */
 #endif
 
+#ifdef MD_ALLOC_WHY
+/* LOOP29 153: the MD residency allocator's OWN counters. Entry 152 hit
+ * the DIAG minefield's new arm -- [39], [50] and [53] are each written
+ * by three subsystems (the DREQ landing path among them), so every
+ * claims/evictions figure read out of them was the DREQ counters.
+ * IN .bss, NOT a fixed scratch address: the first cut of this block sat
+ * at 0x3A680, the 384B the FBCLEAR comment calls spare, and read back
+ * 0x01010101 -- that window is NOT free, and fixed blocks are never
+ * boot-zeroed anyway. .bss is zeroed and the region guard has ~19KB.
+ * Read the `mdalloc_ctr` address out of rom/s16.lst (the MTASKWHY
+ * pattern); tools/md_alloc_why.py does it for you.
+ *   [0] cells visited      [1] key already resident (hit)
+ *   [2] free-way claims    [3] evictions (set full)
+ *   [4] cat-1 slot-pressure declines (cell kept on the FB)
+ *   [5] blanked: slot dirty, cut mode   [6] blanked: slot dirty, no cut
+ *   [7] blanked: FG cell empty          [8] blanked: bottom band
+ *   [9] mds_flush calls    [10] tags wiped by mds_flush
+ *  [11] mds_install calls  [12] tags wiped by mds_install's changed[]
+ *  [13] mdp_free_set calls [14] tags wiped by mdp_free_set
+ * PROBE ONLY. */
+volatile uint32_t mdalloc_ctr[16];
+#define MDA(i) (mdalloc_ctr[i]++)
+#define MDA_ADD(i, n) (mdalloc_ctr[i] += (uint32_t)(n))
+#else
+#define MDA(i) ((void)0)
+#define MDA_ADD(i, n) ((void)0)
+#endif
+
 #ifdef DIRTY_ROW
 /* LOOP 18 job 2. "Is sbuf row R entirely zero right now?" — the one
  * fact that lets the blit skip a row WITHOUT READING IT, which is the
@@ -1634,9 +1662,12 @@ static void mdp_free_set(unsigned s)
     }
     mdp_s_line[s] = 0;
     mdp_s_used[s] = 0;
+    MDA(13);
     for (int i = 0; i < NSETS * NWAYS; i++)
-        if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s)
+        if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
             md_tag[i] = 0xFFFFFFFFu;         /* both planes' variants */
+            MDA(14);
+        }
     DIAG[37]++;                              /* set frees/invalidations */
 }
 
@@ -1951,9 +1982,12 @@ static void mds_install(unsigned sc, uint8_t stamp)
             }
         }
     }
+    MDA(11);
     for (int i = 0; i < NSETS * NWAYS; i++)
-        if (md_tag[i] != 0xFFFFFFFFu && changed[(md_tag[i] >> 16) & 0x7F])
+        if (md_tag[i] != 0xFFFFFFFFu && changed[(md_tag[i] >> 16) & 0x7F]) {
             md_tag[i] = 0xFFFFFFFFu;
+            MDA(12);
+        }
     MDS[0]++;
 }
 
@@ -1962,7 +1996,9 @@ static void mds_install(unsigned sc, uint8_t stamp)
  * holds, so nothing visible changes. */
 static void mds_flush(void)
 {
+    MDA(9);
     for (int i = 0; i < NSETS * NWAYS; i++) {
+        if (md_tag[i] != 0xFFFFFFFFu) MDA(10);
         md_tag[i] = 0xFFFFFFFFu;
         md_ref[i] = 0;
     }
@@ -12892,6 +12928,7 @@ RAMCODE void m_main(void)
                                  * tiles' pen claims. Revisit if any
                                  * scene legitimately shows BG through
                                  * FB holes at the bottom band. */
+                                MDA(8);
 #ifdef NT_WRAP
                                 CB(col) = MD_BLANK_SLOT;
 #else
@@ -12925,6 +12962,7 @@ RAMCODE void m_main(void)
                                  * change (routine 0x36b0), so this is what
                                  * a scene change looks like on the BG. */
 #endif
+                                MDA(7);
 #ifdef NT_WRAP
                                 CB(col) = MD_BLANK_SLOT;
 #else
@@ -12950,6 +12988,7 @@ RAMCODE void m_main(void)
                                 code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
                             GAME_TILE_REMAP(code);      /* per-game code fold (no-op US) */
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
+                            MDA(0);                     /* cells reaching the allocator */
 #ifdef CSET_CENSUS
                             cs_note(cset);   /* every ON-SCREEN tile, not
                                               * just the ones being claimed */
@@ -12981,6 +13020,7 @@ RAMCODE void m_main(void)
                                     md_ref[i2] = (uint8_t)win_no;
                                     slot = i2;
                                     done = 1;
+                                    MDA(1);
                                     break;
                                 }
                                 if (t == 0xFFFFFFFFu) {
@@ -13005,7 +13045,8 @@ RAMCODE void m_main(void)
                                           & (1u << (i2 & 31))))
                                         md_pending++;
                                     MD_MARK(i2);
-                                    DIAG[53]++;          /* md_tag claims */
+                                    DIAG[53]++;          /* md_tag claims (COLLIDES: see MDALLOC) */
+                                    MDA(2);
                                     slot = i2;
                                     break;
                                 }
@@ -13029,6 +13070,7 @@ RAMCODE void m_main(void)
                                  * 0.8/gen on Mike's states. */
                                 done = 1;             /* slot stays BLANK */
                                 DIAG[39]++;
+                                MDA(4);
                             }
 #endif
                             if (!done && victim != MD_BLANK_SLOT) {
@@ -13052,7 +13094,8 @@ RAMCODE void m_main(void)
                                       & (1u << (victim & 31))))
                                     md_pending++;
                                 MD_MARK(victim);
-                                DIAG[50]++;              /* evictions */
+                                DIAG[50]++;              /* evictions (COLLIDES: see MDALLOC) */
+                                MDA(3);
                                 slot = victim;
                             }
                             uint16_t ent = (uint16_t)(slot
@@ -13089,6 +13132,7 @@ RAMCODE void m_main(void)
                                 if (md_cut) {
                                     ent = MD_BLANK_SLOT;
                                     ((volatile uint32_t *)0x26028FA0)[0]++;
+                                    MDA(5);
                                 }
                                 else
                                     /* 2026-09-06 (attract parity): outside
@@ -13100,7 +13144,7 @@ RAMCODE void m_main(void)
                                      * a page rewrite comes with a palette
                                      * switch, so the old tiles showed under
                                      * the new colours — the dark logo.) */
-                                    ent = MD_BLANK_SLOT;
+                                    { ent = MD_BLANK_SLOT; MDA(6); }
                             }
 #endif
 #ifdef NT_WRAP

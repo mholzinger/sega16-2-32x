@@ -2199,3 +2199,61 @@ that block. `mds_flush` is edge-only (3-4 blanks in the whole run) and
 `mds_install`'s invalidation is selective and idempotent, so neither is
 an obvious wiper; set relocations are 22 across the window, 176 slots.
 None of the three accounts for the gap.
+
+## 153. THE BACKGROUNDS: A CLAIM-AND-WIPE STALEMATE, AND THE WIPER IS THE COLOUR-SET RELOCATION (2026-09-10 20:50)
+
+152 left one question: does a blank cell never claim a slot, or claim one
+that something wipes? `MDALLOCWHY=1` (`mdalloc_ctr`, m_main.c) gives the
+allocator its own 16 counters and answers it.
+
+**First, where the block goes.** The first cut put it at 0x3A680 -- the
+384 bytes the FBCLEAR comment calls spare between FBCLEAR and SLC. It
+read back 0x01010101 at every slot. **That window is NOT free, and no
+fixed scratch block here is boot-zeroed anyway.** The counters live in
+.bss now and `tools/md_alloc_why.py` takes `mdalloc_ctr` out of
+rom/s16.lst, the pattern MTASKWHY already uses. Anyone adding a counter
+block: .bss, not the scratch map.
+
+Line flags + MDALLOCWHY, per frame during the collapse (f2300-f3000,
+tags pinned at 117-193 of 1024):
+
+    free-way claims          3.2 / frame
+    mdp_free_set tag wipes   3.2 / frame
+    evictions                0.0 / frame   (total frozen since f1700)
+    mds_flush                0.0 / frame   (3 calls in the whole run)
+    mds_install wipes        0.0 / frame   (1 call, 1 tag)
+
+**It is a stalemate, and the books close exactly.** f2300 -> f3000, 700
+frames: claims +1598, free-set wipes +1522, net +76 -- and the resident
+tag count goes 117 -> 193, +76. Not approximately. The allocator claims
+three slots a frame and `mdp_free_set` destroys three a frame, so the MD
+residency map cannot climb out of the hole a cut puts it in.
+
+**The wiper is the COLOUR-SET RELOCATION** (m_main.c, `mdp_free_set`:
+every md_tag entry whose set is being moved is invalidated, because the
+pattern shipped to VRAM is pen-remapped per S16 colour set, so a set
+that changes its MD CRAM line makes its tiles' bytes wrong). Rate: 37
+calls over 2400 frames, mean 45 tags each. One relocation every ~65
+frames, 45 resident tiles dead each time, against a refill of 3.2/frame
+-- 14 frames of refill to undo, except the sets keep moving.
+
+Corollary for 152's census: `blkdrt` (a cell blanked because its slot's
+art has not shipped, outside cut mode) runs 0.4/frame before the cut and
+4.6-9.6/frame after. Those are Mike's missing tiles, and every one of
+them is downstream of the wipe, not of the uploader -- `md_dirty` is
+still ~0 (152).
+
+**THE LEVER, and it is the one the sky-allocator note already named:**
+128 S16 colour sets compete for 4 MD CRAM lines by LRU, so sets churn
+and take their tiles with them. Per-scene STATIC line assignment (the
+`MD_STATIC` / `mds_install` baked tables) exists to stop exactly this,
+and mds_install is firing ONCE in a 3000-frame run while free_set fires
+37 times. Either the static install is not covering the sets that churn,
+or something re-enters the dynamic path after it. That is the next
+probe: log which csets mdp_free_set moves and whether the scene's baked
+table names them.
+
+NEGATIVE, so nobody re-runs them: mds_flush (3 calls) and mds_install
+(1 call, 1 tag) are both innocent. Evictions are zero. Slot capacity is
+not the problem -- 152 measured on-screen demand at 428-505 slots of
+1024 with no set past 7 of 8 ways.
