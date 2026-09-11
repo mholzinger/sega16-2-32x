@@ -2770,3 +2770,48 @@ CRAM dump instead. Not fixed yet; noted here so nobody bakes from it.
 Sixth self-caught error, and the same shape as the rest: I took a base
 address and a stride that were correct in one range and used them outside
 it, without checking what the consumer actually reads.
+
+---------------------------------------------------------------------
+## 63. What the port has actually patched, classified — and what is left
+
+224 declared patch sites in `tools/game_altbeast.py`, by why they exist:
+
+    address rebasing (the map moved)             62
+    transport: tell the SH-2 what changed       103
+    timing: keep the 68K out of the FB window    40
+    format/idiom the port re-implements          11
+    hardware behaves differently                  8
+
+**Not one of them changes what the game COMPUTES.** Every family is the
+same access somewhere else, the same access announced to the SH-2, or the
+same access at a safe moment. That is why "it looks and plays exactly like
+the arcade" is even checkable — the logic has never been touched.
+
+The largest family is TRANSPORT, at 103 sites, and it exists purely
+because the SH-2 cannot see what the 68K wrote. Every dirty-bit thunk is
+a message saying "this region changed". **That family shrinks as work
+moves to the VDP**: a tile plane the VDP draws needs no dirty bits,
+because nothing has to be told.
+
+**What is left to tune, from the decompile, ranked by evidence:**
+
+  1. **Tiles to the VDP** — `docs/handoff/PLAN-TILES-TO-VDP.md`. Priority
+     mapping exact [59], colour fits [61][62]. The larger half of slave
+     compose. Also deletes a chunk of the 103 transport sites.
+  2. **Sprite palette lines** — entry 9 measured three CRAM lines
+     covering 70% of live records with NO colour change, and scenes 0-3
+     leave one or two lines spare after tiles [61]. MDSPRTOP already got
+     +19% claims picking the line by record count.
+  3. **The sprite upload** [13][15] — one writer, both inputs in work ram,
+     so the interception, compare, shadow and packing can all go. It is a
+     SIMPLIFICATION and NOT a speed lever: entry 27 deleted the entire
+     copy and the frame rate did not move.
+  4. **The frame-skip signal** [22] — the game increments 0xFFF144 and
+     takes a short path that writes NO video state when it overruns. On
+     those vints there is nothing new to compose. Nobody reads that
+     signal today.
+
+**What cannot be tuned, and should stop being attacked:** the game's own
+compute. The 68K is not the constraint — their master-idle measurement
+and my MDSPRPROBE ablation [27] agree from opposite directions, and
+deleting the largest 68000 copy in the frame changed nothing.
