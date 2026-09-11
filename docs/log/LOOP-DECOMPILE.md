@@ -2676,3 +2676,54 @@ near-identical colours or a different treatment. One scene out of five.
 
 I was wrong to state colour as the binding constraint without measuring
 it for tiles. It binds for sprites and it does not bind for tiles.
+
+---------------------------------------------------------------------
+## 61. ALL FIVE SCENES FIT IN FOUR CRAM LINES, and scenes 0-3 leave lines SPARE
+
+Entry 60 measured the tile palettes in System 16's 5-bit colour and found
+scene 4 over by 17. That was the wrong space to measure in.
+
+**MD CRAM is 3 bits per channel, not 5** (ARCHITECTURE.md:838). The port
+already quantises to it, already measured the loss at max 2 in 0-31, and
+already rendered both ways side by side and called them
+indistinguishable. Colours that differ by less than one MD step are THE
+SAME COLOUR on this hardware. Re-measuring in the space the pixels
+actually land in:
+
+    scene   palettes   MD colours   lines used      spare
+      0        25          24       [14,13, 0, 0]     2
+      1        11          24       [15,12, 0, 0]     2
+      2        14          31       [14,14, 6, 0]     1
+      3         8          28       [14,12, 4, 0]     1
+      4        16          53       [13,15,14,15]     0
+
+**Every scene fits. Scene 4 uses 57 of 60 slots; scenes 0 and 1 use 27
+and leave TWO LINES FREE.** Scene 4 needed a best-fit with restarts
+rather than first-fit — greedy wanted 5 lines for a set that packs into 4
+— so the packing matters and it is a bake-time problem, solved once.
+
+The constraint is not just a colour count: a tile selects ONE line for
+all its pens, so every 7-colour palette must sit entirely inside one
+15-slot line. That is what the packer enforces.
+
+`tools/bake_tilecram.py` emits the artifact: per scene, four 16-entry MD
+CRAM lines, plus for every System 16 tile palette the line it lives on
+and the slot each of its seven pens maps to. **That pen map is what a
+tile rebake needs** — it rewrites pixel values so a tile indexes its
+assigned line directly.
+
+**So the position on the tile layer is:** the priority mapping is exact
+(entry 59), the colour fits with room (here), and the artifact to bake it
+exists. Nothing in the tile path needs software compositing.
+
+I was wrong twice getting here and both errors were the same shape:
+measuring in the arcade's colour space instead of the one the pixels land
+in, and using a first-fit where the problem needs a packer.
+
+**The spare lines matter.** Scenes 0-3 leave one or two CRAM lines unused
+by tiles. Entry 9 measured sprites needing far more than they can have;
+a spare line is a spare line.
+
+STILL UNCHECKED, and unchanged from entry 60: the colour cycler (entry
+41) writes palette ram every vint, and if it cycles TILE palettes this
+whole partition has to hold in every cycler state, not just at rom values.
