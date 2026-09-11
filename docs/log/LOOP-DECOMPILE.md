@@ -1980,3 +1980,42 @@ is: the tilemap and its cat1 priority bits, the floor geometry, two sky
 palettes, three actor palette identities, the music track, the collision
 group setup, and two dispatch tables. All of it is rom, all of it
 decodable before the game runs.
+
+---------------------------------------------------------------------
+## 47. CORRECTS entry 17 — the patcher's own tables reconcile against mine
+
+`tools/game_altbeast.py` REBASE_TABLES lists the dispatch tables the port
+already rebases: 0x26DC(8), 0x6D70(8), 0x6D90(12), 0x92F0(6), 0xF556(5),
+0x17E24(5), 0x1A076(9). Checking those against entry 17's harvest:
+
+**MY ENTRY 17 IS WRONG about 0x6D70.** I reported "0x06D70, 20 entries"
+because my harvester reads longs until one stops looking like a code
+address. It ran straight through the end of 0x6D70's EIGHT entries and
+into 0x6D90's TWELVE, reporting them as one table of 20. The patcher has
+it right and the boundary is real — all 8 at 0x6D70 and all 12 at 0x6D90
+are plausible code pointers, and they are different tables.
+
+I half-noticed this at the time (entry 17 listed a separate 0x6DA0 table
+whose entries overlap 0x6D70's claimed range) and did not chase it. The
+patcher's comment says why the extents are HARD-BOUNDED: "0x6DC0+ is a
+WORD index table" — which is exactly the per-scene word table entry 46
+found at 0x6DC0. Three sources agree on the boundary.
+
+**Three dispatch tables my scan missed entirely**: 0x6D90(12), 0xF556(5),
+0x1A076(9). All verify — every entry is a plausible code address. They
+were missed because entry 46's sweep keyed on the SCENE index at
+0xFFF142, and these are indexed by something else. A scene-indexed search
+finds per-scene tables and nothing more, which is a limit of the method,
+not of the rom.
+
+**One of mine the patcher does not list**: 0xDE22(6), all six plausible
+and pointing immediately after themselves (0xDE36, 0xDE46, 0xDE56...).
+Either it is genuinely not rebased because its targets need no fixup, or
+it is a gap in REBASE_TABLES. Worth a question to the builder rather than
+an assertion — the consequence of a missed rebase is a jump into
+unrelocated space, which is loud, so it is probably the former.
+
+Lesson for the harvester: "read entries until one looks implausible" MERGES
+ADJACENT TABLES. Bound them by the next known table start instead, or by
+a stated extent. The false table it produced was 20 entries of real code
+pointers, so nothing downstream would have flagged it.
