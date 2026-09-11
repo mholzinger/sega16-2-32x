@@ -2072,3 +2072,49 @@ and the floor heights (36) — are one mechanism.
 
 Block A also holds four TILE UPLOAD BLOCKS at 0x26C20, 0x2726C, 0x278B8
 and 0x28B84, fed to the blitter at 0x258A as [dest][count][count][words].
+
+---------------------------------------------------------------------
+## 49. CORRECTS entry 48 — the frame table's word is an OFFSET, not a Y coordinate
+
+Two errors in entry 48, both from reading four instructions and stopping.
+The fifth and sixth settle it:
+
+    3c9c:  move.w  (a0)+,d1        ; the word
+    3c9e:  movea.l (a0),a1         ; the long
+    3ca0:  add.l   d2,d1           ; d1 = word + $255E0   <-- THE BASE
+    3ca2:  movea.l d1,a0           ; THAT is the frame pointer
+    3ca4:  rts
+
+**ERROR 1: the word is a 16-bit OFFSET from 0x255E0, not a Y coordinate.**
+Entry 48 saw the words spanning 0x0F34-0x15C0, noticed that straddles the
+4096 world bias, and called it a Y coordinate. `add.l d2,d1` says
+otherwise, and d2 is the table base loaded six instructions earlier. The
+offsets resolve to 0x26514-0x26BB0, which sits immediately below the tile
+upload block at 0x26C20 — a clean, bounded region. The coincidence with
+the world bias is exactly that.
+
+**ERROR 2: "182 valid entries" was a bogus filter.** I counted entries
+whose LONG field looked like a plausible rom address. Following those
+pointers shows them spread uniformly across all 64 4KB buckets of the rom
+— the signature of noise — and one of them lands on executable code. Read
+by the correct rule instead, **400 consecutive entries** resolve into the
+bounded frame-data region.
+
+**The long at +2 remains UNEXPLAINED.** It is loaded into a1 and I have
+not traced a consumer. Entry 48 implied more than that. For id 0 it reads
+0x0002000A, which as an address is inside the zoom table region, but id 2
+is zero and id 3 is 0x2C, so a single reading does not cover them. Left
+open rather than guessed.
+
+**THIS IS THE THIRD TIME TODAY** I have asserted structure from a
+plausibility filter without following the values through: entry 17 merged
+two tables by reading until entries "stopped looking valid" (corrected in
+47), entry 37 discarded real code for the same reason, and now this.
+The filter is the same each time — "does this look like an address" — and
+it is never conclusive. The check that works is following the value to
+its consumer, which took two more instructions here.
+
+Standing corrections to entry 48: the frame table is 400 entries of
+[offset word][unexplained long]; the frame data is 0x26514-0x26BB0. The
+ZOOM TABLE and BANDED ORDER LIST findings in that entry are unaffected —
+both were read from the instructions that use them, not filtered.
