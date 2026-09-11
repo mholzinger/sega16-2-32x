@@ -1723,6 +1723,14 @@ endif
 ifdef PENREPAINT
 SHCCFLAGS += -DPEN_REPAINT
 endif
+# `make ... NOMAPS=1` = LOOP29 168 ablation. build_maps_chunk returns
+# "done" instantly, so the master's maps drain costs nothing. RENDERS
+# WRONG BY CONSTRUCTION -- the only meaningful output is the generation
+# wall from tools/nat_score.py. Decomposes a 1.57-vint wall against a
+# 1.09 slave compose and a 0.44 master drain. NEVER SHIP.
+ifdef NOMAPS
+SHCCFLAGS += -DNO_MAPS
+endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
 # four stores at 0x30F8, so a consume landing in that gap ships the old

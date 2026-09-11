@@ -2964,3 +2964,59 @@ drift-free count, not a reject reason. Reverted, unbuilt, and noted
 because this log now has TWO counter-collision entries (152's DIAG arm
 and this one) and the lesson did not take the first time: **a counter
 block needs a written map before the second user, not after.**
+
+## 168. THE WALL DECOMPOSED BY ABLATION: 60 Hz IS REACHABLE, IT IS A THRESHOLD AT 1.00 VINT, AND SPRITE COMPOSE IS THE MASS (2026-09-11 03:35)
+
+Four builds, same flags but for the ablation, 4000 frames, play2 input.
+Ablated builds render WRONG by construction; the only number they
+produce that means anything is the generation wall.
+
+    build                          wall     ships      single-vint
+    vi16 (full)                    1.60v   2042 = 31.3fps    15%
+    - master maps drain            1.31v   2219 = 34.2fps    27%
+    - maps AND sprite compose      0.90v   3808 = 58.3fps    98%
+    - maps, sprites AND cat1       0.45v   3808 = 58.7fps    99%
+
+**58.3 fps with 98% single-vint ships.** The transport, the flip, the
+DREQ, the window, the echo chain, the 68K handler -- all of it -- fits
+inside one vint with room to spare. **The protocol floor is 0.45 to 0.90
+vints. The pipeline is not the constraint and has not been the
+constraint. The COMPUTE is.**
+
+**THIS OVERTURNS MY OWN ENTRY 161**, which concluded "neither processor
+is saturated, the cost is in the HANDOFFS between them, not in the
+computing." That was reasoned from utilisation figures and it is wrong.
+The handoffs cost 0.45-0.90 of a vint; the compute costs the other 0.7
+to 1.15, and it is the compute that puts the wall over the line.
+
+**AND IT EXPLAINS 161's NINE PERCENT PASS-THROUGH, which was the real
+clue.** CAT1MD removes 0.22 v/gen and moves the frame rate 1.6%,
+because the wall goes 1.57 -> 1.55 and **both are in the two-vint
+bucket**. Ships are vint-quantised: a generation that finishes at 1.2
+vints still costs 2 and flips at 30 Hz.
+
+    THE TARGET IS A THRESHOLD, NOT A GRADIENT.
+    Nothing is paid until the wall crosses BELOW 1.00 vint.
+    Then everything is paid at once: 15% -> 98% single-vint.
+
+Every compose diet measured in this log was measured against a gradient
+that does not exist. That is why eight days of work moved numbers and
+never moved the picture.
+
+**The budget, and what has to come out.** Wall 1.60, need under 1.00, so
+0.60+ v/gen must go. What is available, per generation:
+
+    slave  clear + sprites    0.589      <- the mass
+    slave  cat1 tiles         0.509      (CAT1MD takes 0.22 of it)
+    master maps drain         0.44       (worth 0.29 of wall, measured)
+
+Removing the maps drain entirely buys 0.29 of wall and 3 fps, so it
+alone cannot do it. **Removing the sprite compose is what takes 34.2 to
+58.3.** The sprite half is the lever, it is the largest single item, and
+Mike named it himself (entry 124: "hardcoded map, larger baked sprites").
+`SPR_BAKE` already exists and ships -- 389 baked records, 665.5 KB of a
+768 KB blob -- so the question is what fraction of the 0.589 it already
+covers and what the rest is doing.
+
+That is the next measurement, and for the first time in this arc there is
+a number to aim at that is known to pay: **wall < 1.00**.

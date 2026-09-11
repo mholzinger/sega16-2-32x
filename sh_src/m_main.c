@@ -3116,6 +3116,17 @@ static void bm_tail_body(struct bm_state *a, int par)
  * class as the deferral itself; the next build corrects it. */
 RAMCODE static int build_maps_chunk(int par)
 {
+#ifdef NO_MAPS
+    /* LOOP29 168 ABLATION, never a ship: report the drain instantly
+     * complete so the master's maps work costs nothing. The picture is
+     * wrong by construction (no name tables, no tile batches); the only
+     * number this build produces that means anything is the GENERATION
+     * WALL. Slave compose is 1.09 v/gen and master drain 0.44 against a
+     * 1.57 wall, and 1.09+0.44 = 1.53, which SMELLS serial -- this says
+     * whether it is. */
+    (void)par;
+    return 1;
+#endif
     struct bm_state *a = BM;
     if (!BM->active || BM->par != (uint8_t)par) {
         bm_reset(a);
