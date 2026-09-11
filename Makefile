@@ -1489,6 +1489,10 @@ endif
 ifdef MDHSCR
 MDCCFLAGS += -DMD_HSCROLL_DIRECT
 endif
+# `make ... MISSKEEP=1` = LOOP-DECOMPILE 68. PROBE: nops the clr.w at
+# 0x930 so the game stops wiping its own missed-frame counter at
+# 0xFFF144. A zero reading on the shipping build is not evidence of zero
+# misses; this makes the counter mean what it says.
 # `make ... SCENESEL=N` = LOOP-DECOMPILE 66. PROBE: forces every round to
 # load scene N (0-4) by rewriting the round->scene table at 0x1CDA. Lets
 # the later scenes be measured without playing to them — no input script
@@ -1809,6 +1813,24 @@ endif
 # ~100%. Gate: gameplay_speed's scene-timer rate, and Mike's hands.
 ifdef GATEFREE
 MDCCFLAGS += -DGATE_FREE
+endif
+# `make ... MISSKEEP=1` = LOOP29 182. NOP the game's own clear of its
+# missed-frame counter at 0x930 so 0xFFF144 accumulates. Every 0.0%
+# this repo has read off that address was taken with the instrument
+# being reset by the main loop (LOOP-DECOMPILE 67). MEASUREMENT ONLY.
+ifdef MISSKEEP
+export MISSKEEP
+endif
+# `make ... RELBANK=n` = LOOP29 183. The game's frame wait CLEARS its
+# release byte before spinning, so a release that arrived while it was
+# working is discarded and a pass taking slightly over one vint costs
+# exactly two -- the 50.2% every build has measured
+# (LOOP-DECOMPILE 67). Replaces the clear with a decrement, capped at n
+# (default 1), so the game can honour a banked release and run at its own
+# rate. Gate: gameplay_speed's scene-timer rate, and a play pass -- this
+# changes the game's frame pacing, so it is Mike's call.
+ifdef RELBANK
+export RELBANK
 endif
 # `make ... PALAPOST=1` = LOOP29 166, a PATCHER change (no SH-2 flag).
 # The colour cycler's dirty mark (PAL_THUNK_A, 0x30C2) fires BEFORE its
@@ -2411,7 +2433,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) python3 tools/patch_game.py
+	@GAME=$(GAME) MISSKEEP=$(MISSKEEP) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) MISSKEEP=$(MISSKEEP) RELBANK=$(RELBANK) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

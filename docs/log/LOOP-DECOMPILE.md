@@ -3022,3 +3022,48 @@ the premise the port has been built on — that the game fits its budget —
 has never actually been tested during gameplay, because the instrument
 was being reset. That is worth knowing before anyone concludes the 68000
 is or is not the loss.
+
+---------------------------------------------------------------------
+## 68. THE TRUE MISS RATE IS 50%, and every 0.0% ever read off that counter was the clear
+
+The builder built MISSKEEP off entry 67 within the hour — same name, same
+site, `patch_game.py:995`, citing LOOP-DECOMPILE 67. Measured on it:
+
+    frame 1200   0xFFF144 =  228
+    frame 2400   0xFFF144 =  825    +597 over 1200 frames = 50% of vints
+    frame 3600   0xFFF144 = 1442    +617 over 1200 frames = 51% of vints
+
+**Half of all vints are missed.** The 0.0% the port has been reading was
+the clear at 0x930, exactly as entry 67 predicted.
+
+And 50% is not a coincidental number: a miss means the main loop had not
+reached its wait by the next vint, so the loop takes two vints per pass,
+which is precisely the "advances once every two vints" the builder
+measured from the other side. Two independent instruments now agree.
+
+**WHAT THIS PROVES, AND WHAT IT DOES NOT.**
+
+  PROVES: the 68K misses its frame deadline on half of all vints in the
+  shipping build, and every previous reading of that counter was
+  worthless.
+
+  DOES NOT PROVE the game is too slow. **The shim runs on the same
+  68000.** The counter measures game plus shim against one vint, not the
+  game alone. CLAUDE.md's premise is that the game's ~2780 instructions
+  fit; the shim's ~2882 on top of them are what this counter is seeing.
+
+The clean separation already exists in their own data: the ablation build
+reached 98% single-vint with the compute removed, on the same game code.
+So the game fits and the pair does not.
+
+**Consequence for the project's direction.** The premise "the 68000 clock
+is not the loss" survives, but the weaker claim it is often used to
+support — that the 68K side needs no attention — does not. Half the vints
+are being missed on the 68K, and that is where the two-vint cadence comes
+from.
+
+**A process failure of my own.** I wrote MISSKEEP as a probe without
+checking whether it existed, and my duplicate ran before theirs and
+tripped their assert, breaking the build twice before I found it. They had
+implemented my finding while I was re-implementing it. Second time today
+I have failed to look at what the other thread already did.

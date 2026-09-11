@@ -958,6 +958,20 @@ PAL_THUNK_BASE = 0xBA00              # 0xFFBA00: free (tile thunks end at
                                      # OWN stack (0xFFFFFF00), so only boot
                                      # shares this page — and only its top.
 # (site, displaced length, region mask, note)
+# LOOP29 182 — MISSKEEP. The game CLEARS its own missed-frame counter at
+# 0x930, on the main loop's countdown-expiry arm (LOOP-DECOMPILE 67), so
+# every 0.0% this port has ever read off 0xFFF144 was consistent with
+# misses being counted and wiped. NOP the clear and the count is
+# cumulative and honest. MEASUREMENT ONLY -- the game reads that counter
+# in test mode, so a never-cleared value is a lie to the game.
+# Asserts the exact bytes first, the rule that has kept every rebasing
+# patch in this file correct.
+if os.environ.get('MISSKEEP'):
+    want_clr = struct.pack('>HH', 0x4278, 0xF144)     # clr.w $FFF144
+    assert hrom[0x930:0x934] == want_clr, hrom[0x930:0x934].hex()
+    struct.pack_into('>HH', hrom, 0x930, 0x4E71, 0x4E71)
+    print('MISSKEEP: 0x00930 clr.w $FFF144 -> nop nop (counter is now cumulative)')
+
 PAL_DIRTY_SITES = T('PAL_DIRTY_SITES')
 pal_words = []
 pal_report = []
@@ -1140,6 +1154,45 @@ if PAL32:
     pal_report.append("P " + "/".join(f"{o:06X}" for o in T('PAL_THUNK_B')) + f": 32-block from A1 -> {pal_b:04X}")
     assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, \
         f"pal thunks overrun boot stack: end {PAL_THUNK_BASE + len(pal_words)*2:#x}"
+
+# LOOP29 183 — RELBANK. The game's frame wait is four instructions
+# (LOOP-DECOMPILE 67):
+#     397E  clr.b  $FFF01C     <- DISCARDS any pending release
+#     3982  tst.b  $FFF01C        spin while zero
+#     3986  beq.s  0x3982
+#     3988  dbf    d0,0x397E
+# IRQ4 increments 0xFFF01C once per vint. The game finishes a pass,
+# CLEARS the byte -- throwing away the release that arrived while it was
+# working -- and waits for a fresh one. So a pass that takes slightly
+# MORE than one vint costs exactly TWO, which is the 50.2% this port has
+# measured on every build, with the game's own overrun counter honestly
+# at zero (LOOP29 182, with its clear NOPed).
+# Replace the clear with a CONSUME: decrement if non-zero, so a release
+# banked during a long pass is honoured and the game runs at its own rate
+# instead of quantising to the vint. Capped so it can never bank enough
+# to run away.
+if os.environ.get('RELBANK'):
+    rb = PAL_THUNK_BASE + len(pal_words) * 2
+    want_clr = struct.pack('>HH', 0x4238, 0xF01C)      # clr.b $FFF01C
+    assert hrom[0x397E:0x3982] == want_clr, hrom[0x397E:0x3982].hex()
+    struct.pack_into('>HH', hrom, 0x397E, 0x4EB8, rb)  # jsr (rb).w
+    cap = int(os.environ.get('RELBANK', '1') or 1)
+    if cap < 1:
+        cap = 1
+    pal_words += [
+        0x0C38, 0x0000 | cap, 0xF01C,   # cmpi.b #cap,$FFF01C
+        0x6306,                         # bls.s  .consume   (<= cap)
+        0x11FC, 0x0000 | cap, 0xF01C,   # move.b #cap,$FFF01C  (clamp)
+        0x4E75,                         # rts
+        0x4A38, 0xF01C,                 # .consume: tst.b $FFF01C
+        0x6704,                         # beq.s .done
+        0x5338, 0xF01C,                 # subq.b #1,$FFF01C
+        0x4E75,                         # .done: rts
+    ]
+    pal_report.append(f"P 00397E: clr.b -> CONSUME thunk {rb:04X} (cap {cap})")
+    assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, 'RELBANK overruns'
+    print(f"RELBANK: 0x0397E clr.b $FFF01C -> jsr {rb:#06x} "
+          f"(decrement, cap {cap})")
 
 # ---------------------------------------------------------------------------
 # LOOP 23 — FMGATE: gate thunks at the MAIN-loop FB subsystems' entry
