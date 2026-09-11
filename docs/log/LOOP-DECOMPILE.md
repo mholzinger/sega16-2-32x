@@ -2565,3 +2565,63 @@ MDSPRTOP already got +19% claims choosing the line by record count.
 together they clear it with room.** That is the shape of the answer: the
 cat1 work is necessary and not sufficient, and the sprite-palette work is
 the other half.
+
+---------------------------------------------------------------------
+## 59. CORRECTS ENTRY 11 — and the MD can express level 1's layering EXACTLY
+
+**Entry 11 is wrong.** It said the page selects never change: foreground
+page 7, background page 0, from two write sites. Both of those sites are
+in the service-mode region. MEASURED on a running frame instead
+(`--dump wram:0xFF8E80:0x10`, frame 2400, level 1):
+
+    0xE80  scr1 / FOREGROUND  = 0x0000  -> page 0
+    0xE82  scr2 / BACKGROUND  = 0x5555  -> page 5
+
+**The opposite way round from what I logged, and neither value is one I
+found in the code.** The real writer is somewhere I have not located; the
+two sites I did find are service mode. Everything entries 56-58 built on
+"page 0 is the background" is therefore void, including the occlusion
+result — page 5 has ZERO cat1 tiles, so there is no background cat1 in
+this game at all.
+
+**All cat1 is FOREGROUND cat1, at priority level 4.**
+
+Now the useful part. Sprite priority is word 4 bits 7-6 (entry 21). Across
+five sampled frames of level 1, 83 live records:
+
+    pp=2 : 83 (100%)        pp=3 : none
+
+Every sprite in the level is pp=2. The port's verified rule is
+`sprite draws iff 1<<pp > level`, so 4 > 4 is false: **every sprite loses
+to FG cat1, and none of them is a boundary case.** There is nothing for a
+promotion to get wrong.
+
+**And the Mega Drive's own chain matches System 16's, exactly.**
+`srcref/S32X_MiSTer/rtl/GEN/vdp.sv:1772-1782` resolves in this order:
+
+    sprite HIGH > plane A HIGH > plane B HIGH > sprite LOW > plane A LOW > plane B LOW
+
+Map it:
+
+    S16                     level   ->  MD                      rank
+    FG cat1  (the strip)      4         plane A, priority SET     2
+    sprites  (all pp=2)       -         sprite,  priority clear   4
+    FG cat0                   2         plane A, priority clear   5
+    BG       (page 5, cat0)   1         plane B, priority clear   6
+
+FG cat1 beats the sprites (2 before 4) — correct. FG cat0 loses to them
+(5 after 4) — correct. BG is behind everything — correct. **The whole
+tile-versus-sprite layering of level 1 is expressible natively, using the
+per-tile priority bit plane A already has, with no software compositing
+and nothing to shimmer.** `sh_src/cat1map.bin` is exactly the bit to set.
+
+CAT1MD's revert was not evidence that promotion is unsound. The mapping
+is exact.
+
+**WHAT IS STILL IN THE WAY, and it is not priority.** An MD plane tile
+draws 4bpp from one of four CRAM lines; a System 16 tile is 3bpp from one
+of 128 palettes. The binding constraint was always colour, and it still
+is. This result removes the priority objection and does not touch that.
+
+**Checked for level 1 only.** The pp=2 uniformity is measured on scene 0.
+Another scene with pp=3 sprites would have a genuine boundary case.
