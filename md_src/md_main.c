@@ -2674,6 +2674,26 @@ void shim_vblank(void) {
 		*(volatile uint16_t*)0xFFA188 = (uint16_t)(0xF000 | 0x80 | gr_val);
 	}
 #endif
+#ifdef BOOT_FLIPRATE
+	/* PICTURE FRAMES PER 64 VINTS ON HARDWARE (LOOP29 232). GAMERATE
+	 * reads 64 on every build under GAMEGATE (the game never waits), so
+	 * it cannot rank what Mike sees. Count the 32X frame-buffer bank
+	 * (FS, 0xA1510A bit 0) CHANGING between vint tops: one change = one
+	 * presented frame. 64 = 60 Hz, 32 = 30 Hz. Bias bit 7, cap 127. */
+	{
+		static uint16_t fr_vc, fr_n, fr_last;
+		static uint8_t  fr_val;
+		uint16_t fs = *(volatile uint16_t*)0xA1510A & 1u;
+		if (fs != fr_last) fr_n++;
+		fr_last = fs;
+		if (++fr_vc >= 64) {
+			fr_val = (uint8_t)(fr_n > 127 ? 127 : fr_n);
+			fr_n = 0;
+			fr_vc = 0;
+		}
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | 0x80 | fr_val);
+	}
+#endif
 #ifdef BOOT_MOTION
 	/* ARE WE ACTUALLY STREAMING, AND HOW FAST? (2026-09-08, LOOP27 37.)
 	 * Mike, fairly: "nothing ever shows actual moving streaming frames."
