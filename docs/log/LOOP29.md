@@ -5084,3 +5084,36 @@ none is published; classify the claim mix the same way.
 withdrawn.
 
 **217 play path:** vi65 vs vi45 play path: worst black-share difference 0.001 at frame 720. vi65 is the candidate.
+
+## 218. RELEASE THE SLOTS, KEEP THE PENS (2026-09-12 14:05)
+
+Mike on vi65: "missing black tiles after the screen is redrawn from the
+wolf transition, persistent until the end of the first level" -- a band at
+the horizon (rows 6-7: FG set 74, BG set 92, both in the table). The two
+other items in the same shots are pre-existing: the round-clear text
+missing letters (vi44 041722 had it) and the black bar on the crystal-ball
+screen (vi59 080418 had it).
+
+The sky palettes 0-7 are NOT it: the game zeroes them on the rise of
+0xFFF148 and restores them on the fall, and both mirrors (68K 0xFF9000
+and PAL_SH) read the rom words within a frame of the fall (measured on the
+attract's face, f1715).
+
+What the attract never exercises is a SAME-ROUND return: every edge back
+headless lands on a different round or a full level load, where the game
+re-uploads the tilemap and every cell is re-claimed. The transformation
+returns to level 1 with its tilemap intact. 216's edge-out FREED the sets
+-- lines and pixel maps gone -- and something in that re-assignment stayed
+wrong for the rest of the level. A tag wipe is the residency loss the
+drift-free path already recovers from in play (1730), and it is all the
+cutscene needs (the slots). So the edge out now calls mdp_wipe_set_tags
+on every resident set and leaves the pens alone.
+
+    vi66   coined flips/100 32 100 57 100 67 67 96 16 50 46 41 50 49 50 50   (vi45 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50)
+           face: red field from 1570, plane full from 1570 -- the first
+                 field frame, at batch 24: slots free, pens already exact
+           demo after the eye: black 0.037
+           play path: pending
+
+`rom/night/vi66.32x` (md5 a3e3509a) staged, not launched. The transform
+return is Mike's eye only. vi65 withdrawn.

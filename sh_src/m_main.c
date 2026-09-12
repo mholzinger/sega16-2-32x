@@ -5441,9 +5441,17 @@ __attribute__((noinline)) static void disp_gate(void)
              * rows for the whole scene; vi62b's table forced an eviction
              * and worked by luck. Off screen is off screen: free them all,
              * the edge back re-installs the table and re-ships. */
+            /* 218: release the SLOTS, keep the pens. Freeing the sets
+             * (216) drops their lines and pixel maps too, and after a
+             * same-round return (the transformation in play) something in
+             * that re-assignment stayed wrong: Mike's vi65, a black band
+             * at the horizon to the end of level 1. A tag wipe is the
+             * residency loss the drift-free path already recovers from in
+             * play (1730: cells re-claim, the shipper re-converts), and it
+             * is all the cutscene needs. */
             for (unsigned s2 = 0; s2 < 128; s2++)
                 if (mdp_s_line[s2])
-                    mdp_free_set(s2);
+                    mdp_wipe_set_tags(s2);
         }
         mds_onscreen = on;
         mds_cl_t = mds_cl_n = 0;
