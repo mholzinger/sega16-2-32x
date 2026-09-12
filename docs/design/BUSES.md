@@ -127,3 +127,66 @@ The scarce resources, in order: the vblank DMA window into the VDP
 68000's vint. The abundant one is the MD VDP itself, which draws two
 planes and the SAT for nothing once the data is in VRAM -- which is
 why every fold moves work toward it.
+
+---------------------------------------------------------------------
+## 4. The framebuffer as shared memory ("the overdraw"), both directions
+
+A 32X framebuffer bank is 128 KB; the 320x224 image plus its line table
+end at 0x11A00. The remaining ~58 KB of each bank is never displayed,
+and the port uses it as the only memory both the 68000 and the SH-2s
+can write and read. The 68000 reaches it through the 0x840000 window at
+FM=0 only; the SH-2s at any time, uncached, at 0x2400xxxx. Three things
+live there:
+
+    0x11A00-0x11FC0   md_pkt A     SH-2 -> 68000, tile batch / name chunks
+    0x12000-0x1DFFF   the game's tile RAM, pages 0-11, as the patch rebased
+                      it (0x400000 -> 0x852000): the game WRITES its
+                      tilemaps straight into the framebuffer hole
+    0x1E000-0x1E7F8   r60 packet    68000 -> SH-2 (FBXPORT), page 12 first
+                      half, publish word 0xB600|seq at 0x1E7F8 LAST
+    0x1E800-0x1EDC0   md_pkt B     SH-2 -> 68000, page 12 second half
+    0x1EDC0-0x1EE40   MDSPR palette and SAT images the 68000 DMAs
+
+### 68000 -> SH-2: the game's own stores are the message
+
+The patch rebases every tile-RAM store the program makes into the hole,
+and thunks at the write sites set a bit in a 16-region dirty word
+(COMM10 low 13 bits, packet word 80 for the bitmap). The master's
+`cap_page` copies each dirtied page from the hole into an SDRAM truth
+copy (TILEMAP_C / TILEMAP_U at 0x06019000), which is what the compose
+and the maps drain read. So there is no "send tilemap" step: the game
+writes where the SH-2 looks, and the dirty word says which 4 KB to
+re-read. The r60 packet (section 2) carries the rest -- palettes,
+records, rowscroll -- the same way, published by a magic word written
+last.
+
+The price of putting game memory in a double-buffered framebuffer is
+the BANK: the 68000's stores land in whichever bank the window maps
+at FM=0, and the flip swaps banks. `restore_pages` therefore replays
+the truth copy into the NEW bank's staging after every flip, for the
+pages dirtied since the previous flip, before the window acks -- so the
+game's own read-backs (the collision `tst.w` against tile RAM,
+LOOP-DECOMPILE 99; the 1 KB page-1 save/restore at boot) see the same
+bytes in either bank. Getting this wrong is "the bank disease": a
+stale bank captured as truth, name tables from two generations mixed.
+
+### SH-2 -> 68000: md_pkt A/B, consumed by DMA straight from the hole
+
+The master writes a self-describing packet -- [0] magic 0xB6B6 written
+LAST, [1] type|flags (bit 15 palette changed, bit 13 display hold, bits
+8-12 the TILE_VERIFY verdicts), [2] param, [3] hscroll, [4]/[6] the two
+planes' vscroll, [5] count, then 17-word records (VRAM slot, 16 words
+of converted 4bpp tile) or name-table chunks. At vint top, FM=0, inside
+vblank, `md_consume` checks the magic, ZEROES it as the consumed mark
+(so the master can tell consumed from pending and defers instead of
+overwriting), writes VSRAM, then issues one VDP DMA per record with
+the FRAMEBUFFER as the DMA source (0x85xxxx) -- the commercial-title
+idiom; no 68000 copy loop. A and B alternate with the bank; after a
+flip the master replays the last A image into the new bank
+(PG_SKIP_PKT) because the 68000 will read that bank next.
+
+Direction summary: the 68000 talks to the SH-2 by writing into the hole
+at FM=0 and posting COMM0; the SH-2 talks to the 68000 by writing into
+the hole at any time and letting the 68000's next FM=0 vint DMA it out.
+COMM registers carry only signals and small state; the payload never
+crosses through them.
