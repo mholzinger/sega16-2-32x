@@ -8189,7 +8189,16 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
             const volatile uint8_t *z = (const volatile uint8_t *)(dst + sent * 17 + 1);
             int nz = 0;
             for (int k2 = 0; k2 < 32; k2++) if (z[k2]) { nz = 1; break; }
-            if (!nz) tv_zout++;
+            if (!nz) {
+                tv_zout++;
+                int cz = 1, uz = 1, mz = 1;
+                const volatile uint8_t *pu = (const volatile uint8_t *)((uint32_t)px | 0x20000000u);
+                for (int k2 = 0; k2 < 64; k2++) { if (px[k2]) cz = 0; if (pu[k2]) uz = 0; }
+                for (int k2 = 0; k2 < 8; k2++) if (map[k2]) mz = 0;
+                if (cz) tv_cz++;
+                if (uz) tv_uz++;
+                if (mz) tv_mz++;
+            }
         }
 #endif
         if (*pending) (*pending)--;
