@@ -5431,3 +5431,93 @@ Fold 1 buys motion, as the plan priced it: the tiles leave the FB path,
 so the SH-2 drains sprites only. The first window (title slide-in) is
 where it shows most, 19 -> 33. Third window 0 in both = the eye hold.
 vi75 is on the rig; vi70 remains `rom/s16.32x`.
+
+## 231. FOLD 1 ON THE RIG: SPRITES FAST, WHOLE TILE SETS BLACK -- HARDWARE-ONLY, TRANSPORT PROVEN INTACT, CAUSE STILL OPEN (2026-09-12 20:50)
+
+Mike on vi75: "The BIG BIG WIN is player sprites and enemy sprites are
+moving MUCH faster" / "you have NAILED sprite performance" / "The
+background and foreground tiles aren't being updated properly". His
+shots (193545-193850): level 1 with the temple facade, the pedestal and
+the tree line BLACK, sky/pillars/grass drawn; the boss scene all grey
+(that one is the arcade's own: ref_arcade 13640-15180 greys the picture
+when Aggar arrives); round-clear text complete (fold 1 fixed it without
+225's gates); level 2 correct.
+
+**Identification.** Arcade ref_005400 (score 1700) is Mike's 193545. Per
+set, from the rom tilemap (pages 0/5, tools/scene_sets.py unpacker):
+
+    drawn   92 sky (line 3)   75 pillars/wall (2)   85/86 grass (1)   74
+    black   76-79 temple/pedestal (2)   93 95 96 99 trees (3/2)   100/101 (2/3)
+
+Not a line (both classes span lines 1-3) and not a wrong round table (no
+round's table keeps {92,75,85} -- round 1 keeps 72-75, round 4 keeps
+96-101). Per-cell, not per-set either: the leftmost pillar of set 75 is
+black in 193545 while the rest of the row draws.
+
+**Hardware-only, and the rig reproduces it unattended.** ares play run
+(vi70 and vi75, /tmp/play.csv, frames 700-2000): tree band and FG band
+0.00-0.03 black on BOTH. The rig, attract only, no input:
+
+    launch                     curl POST :8182/api/games/launch {"path":...}
+    shot                       ssh root@mister.office.local "echo screenshot > /dev/MiSTer_cmd"
+    fetch                      scp root@mister.office.local:/media/fat/screenshots/S32X/<f>
+    first level-1 demo         launch+14..28 s      second demo   launch+46..55 s
+
+    rig, first demo      vi75  trees 0.20  fg 0.55-0.66   (195726-195737)
+                         vi70  trees 0.00  fg 0.01-0.03   (195908-195920)
+    rig, second demo     vi75  trees 0.02  fg 0.71-0.77
+                         vi70  trees 0.00  fg 0.00
+
+So the bug is fold 1's and the rig's, and every probe below ran on the
+rig without Mike, ~2.5 min a round (build, ares check, push, 4 shots).
+
+**The transport is intact (vi76-vi79, BOOTTILEVER=1, new).** A 68K-side
+instrument (TILE_VERIFY, md_main.c consume) reads every tile record's
+16 VRAM words back after its DMA and compares them with the FB source;
+an SH-2 side (m_main.c TV_BITS) rides packet word 1 bits 8-12/14; the
+value instrument floods the verdict. Read on the rig, vi75's line:
+
+    VRAM != FB source            0        FS changed mid-consume       0
+    slot out of range            0        SH-2 publish read-back != staging   0
+    post-flip replay read-back != tp_lastA  0
+    SH-2 FB writes at FM=0       0 (publish and replay)
+
+The 68K consumes exactly what the SH-2 built. Whatever is black was
+BUILT black on the SH-2 (blank/refused cells, or zero art).
+
+**vi76-vi85 RETRACTED as evidence of the cause.** The same builds
+counted "records whose 16 words are zero" and "emitter records with
+all-zero output": 5-7+ on the rig within 20 s against 2 in ares -- but
+the ares number was from the PLAY recipe. On the ATTRACT, ares emits
+zero records too (4 by f600, 12 by f3000; 23 "non-blank-in-the-bank"
+codes by f1680 whose pen maps map every used pixel to 0), and the 2-3
+bit saturating counters could not tell the rig's count from that. The
+chain (zero records mid-packet, ROM source zero cached and uncached,
+code valid, tags coherent) measured the level's own blank tiles.
+Lesson: match the scene before comparing a saturating counter, and
+size the counter to the expected value.
+
+**vi86 RETRACTED.** 226's masked trampoline post (the raw dirty word in
+COMM10's round field on the vints the assembly path posts) re-applied
+on vi75's line. Rig unchanged (trees 0.20, fg 0.54); ares' aligned
+return went 0.045 -> 0.12-0.15 (the 68K change re-rolled the phase,
+227). md_start.s reverted to 229's raw post.
+
+**What the black is, then.** The SH-2's MD-plane state on the rig
+diverges from ares by timing alone: which cells claim in which window,
+what COMM10 reads at the edge, how often the claim mix flips
+mds_onscreen, how many windows a vint gets (flips/vint 0.62 -> 0.91
+vi70 -> vi75 in ares). None of it is observable on the rig with an
+8-bit-per-capture channel that saturates. The next instrument is the
+channel: four CRAM lines carrying four tagged 6-bit values (24 bits per
+capture), then the allocator's own counters (MDA 30 refused, MDA 4/8
+blanks, MDS[5] edges, md_round) at matched attract seconds against ares.
+
+Fold 1 stands as Mike's speed lever (motion 8.6 -> 11.4 fps, sprites
+"MUCH faster"). Presentation line stays vi70. The fmgate_defer count is
+54 on vi75/vi86 alike in ares.
+
+    rom/night/vi75.32x  fold 1 (md5 f1d8162f)        on the rig
+    rom/night/vi76-85   TILE_VERIFY probes, withdrawn (see above)
+    rom/night/vi86.32x  vi75 + 226 mask (md5 67372a94), withdrawn
+    rom/s16.32x         vi70 (md5 fadafb08), the line
