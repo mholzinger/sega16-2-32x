@@ -12639,6 +12639,8 @@ RAMCODE void m_main(void)
                         k2f_pendA = 0;
 #ifdef TILE_VERIFY
                         tv_pubA = 1;
+                        for (int i2 = 4; i2 < 368; i2++) tv_copy[i2] = ssrc[i2];
+                        tv_have = 1;
 #endif
                     }
                 }
