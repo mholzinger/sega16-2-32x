@@ -6027,3 +6027,9 @@ between the two headers is inside the run-to-run spread of these
 4,000-frame walks (the single-vint share moves with what the demo does
 in the last few hundred frames). Fold 2's number is ~1.05, from 1.16.
 Check mode with the corrected header: below.
+
+**Check mode, corrected header: 0 presence and 0 level disagreements
+over 3,046 planes of steady play** (f1000-4000; the buggy header read
+6.43/1.13). Fold 2 is exact by construction and by measurement. Fold-2
+line = `SETCOLS=1` on vi95's flags (sc95, md5 446055c8): ares wall
+~1.05 v/gen from 1.16, rig frame rate unchanged (frsc95 21 18 19 19 21).

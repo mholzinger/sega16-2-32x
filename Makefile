@@ -1028,6 +1028,7 @@ endif
 # plane A HIGH shows the ground over them. Needs CAT1MD + C1NOFB.
 ifdef C1PUNCH
 SHCCFLAGS += -DC1_PUNCH
+SHOBJS += sh_src/cat1hole_data.o
 endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
@@ -2599,6 +2600,12 @@ sh_src/mars_start.o: sh_src/md_start.bin sh_src/game_body.bin sh_src/boot_copy.b
 sh_src/tiles.bin: tools/gen_tiles.py $(GAMEROMS)/prog68k.bin $(FLAGSTAMP)
 	@GAME=$(GAME) python3 tools/gen_tiles.py
 sh_src/tiles_data.o: sh_src/tiles.bin
+
+# Fold 1's hole map (LOOP29 244): two bits per tilemap cell, from the rom
+# tilemap and the tile art, .incbin'd by cat1hole_data.s under C1PUNCH.
+sh_src/cat1hole.bin: tools/bake_cat1hole.py sh_src/tiles.bin $(GAMEROMS)/prog68k.bin
+	@GAME=$(GAME) python3 tools/bake_cat1hole.py
+sh_src/cat1hole_data.o: sh_src/cat1hole.bin
 
 # Arcade sprite data: 16-bit-BE interleave, .incbin'd by sprites_data.s
 sh_src/sprites.bin: tools/gen_sprites.py $(GAMEROMS)/prog68k.bin $(FLAGSTAMP)

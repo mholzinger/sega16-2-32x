@@ -1825,3 +1825,6 @@ line; bake_cat1map.py's own decoder matched live byte for byte, so it
 already has it right). The header is regenerated and re-verified
 against the LIVE dump; check mode re-run. Your "4,000 random windows,
 0 mismatches" was both sides sharing the bug.
+
+Addendum to 28: with the corrected header, check mode reads 0/0 over
+3,046 planes of steady play (was 6.43/1.13). Fold 2 exact; wall ~1.05.
