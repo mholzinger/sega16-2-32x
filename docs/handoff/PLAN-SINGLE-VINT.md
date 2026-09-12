@@ -429,3 +429,14 @@ question: does it look like c1p95c. Then Build C.
       fold-1 line's attract on the rig reads CLEAN here, where vi95's
       read 0.20 / 0.57 an hour earlier -- the punch changed nothing in
       the allocator, so the rig's black was phase; not re-derived tonight.
+    base wall (pcA = c1p95c + PHASECENSUS, same run):
+      wall 1.29 v/gen   single-vint 31%   ships 34.8/s
+      echo 1.18  mtask 1.10  ship 0.62  flip 0.77   scan 0.291 tail 0.131
+    so on this line:  Build B  1.29 -> 1.18 v/gen, 31% -> 40% single-vint,
+      scan 0.291 -> 0.107, tail unchanged.  (On vi95's line fold 2 read
+      1.16 -> 1.05; the punch itself costs 0.13 v/gen of slave time in
+      ares -- Build A's price, 1.16 -> 1.29 -- and that is where a
+      Build C could look: the 1:1 sprite paths still test per pixel.)
+    legs glance (c1p95c on the rig, 233345, the attract demo): both
+      fighters' legs are drawn down into the grass with the tufts over
+      them -- through, not cut at the grass line.
