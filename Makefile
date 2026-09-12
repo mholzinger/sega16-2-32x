@@ -2321,6 +2321,10 @@ endif
 ifdef EDGENOWIPE
 SHCCFLAGS += -DEDGE_NOWIPE
 endif
+# ASSIGNNOWIPE=1 = LOOP29 223 diagnostic: no stale-tag wipe at assign time.
+ifdef ASSIGNNOWIPE
+SHCCFLAGS += -DASSIGN_NOWIPE
+endif
 # MDSTATIC=1 = STATIC-SCENE arc (docs/design/STATIC-SCENE.md): per-scene
 # static MD pen tables (tools/mdpen_bake.py -> sh_src/pal_scenes_md.h)
 # installed at the PALSTATIC scene load, the table's sets pinned against

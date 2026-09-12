@@ -2132,8 +2132,19 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
      * Its tags may survive from a previous visit with a different pen
      * map (216/220: the chevron plane drew in alternate rows from exactly
      * that), so drop them here, at the moment the set gets its pens. */
-    if (!mds_onscreen)
-        mdp_wipe_set_tags(s);
+#ifndef ASSIGN_NOWIPE
+    /* 223: and NOT a set of the round's own table. In the window before
+     * the flag comes back on, the level's sets are re-assigned while the
+     * round still reads as off screen, and wiping THEIR tags there left
+     * the same-round return 10% black (vi69 vs vi69 minus this wipe:
+     * 0.106 vs 0.037). Only the cutscene's sets need it. */
+    if (!mds_onscreen) {
+        unsigned r9 = MD_ROUND_GET();
+        if (r9 >= MDROUND_N) r9 = md_round;
+        if (!(r9 < MDROUND_N && mds_s_line[r9][s]))
+            mdp_wipe_set_tags(s);
+    }
+#endif
 #endif
     int bestl = 0, bestneed = 99, bestfit = 0;
     for (int p = 0; p < 8; p++)

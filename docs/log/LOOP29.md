@@ -5225,3 +5225,25 @@ set appears and touches nothing of the level.
 
 `rom/night/vi69.32x` (md5 46c2a886) staged, not launched; checks pending.
 vi67/vi68 withdrawn.
+
+## 223. TWO CAUSES ON THE SAME-ROUND RETURN, BOTH ISOLATED; vi70 (2026-09-12 14:40)
+
+vi69 (222): plane full at 1630 -- the assign-time wipe does its job -- but
+the return STILL 10% black. vi69 with `ASSIGNNOWIPE=1`: the return 0.037.
+So the return had two stacked causes: the unmasked mailbox round (222,
+fixed by the mask -- vi66b's 10%) and the assign-time wipe itself: in the
+window before the flag comes back on, the level's own sets are re-assigned
+while the round still reads as off screen, and wiping THEIR tags there
+left the holes.
+
+**223:** the assign-time wipe excludes the published round's table sets.
+Only a cutscene's sets -- the plane's, the eye's -- ever lose tags.
+
+    vi70   coined flips/100  32 100 60 100 67 63 89 21 50 47 41 50 49 50 50   (vi45 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50)
+           face: red field from 1600, plane full from 1615  (15 frames, the best yet)
+           second level-1 demo (same-round return): black 0.037-0.038
+           play path: pending
+
+No edge-out wipe anywhere (218/220/221 all withdrawn), so nothing
+re-ships the level in play: 219's hardware band has no trigger left.
+`rom/night/vi70.32x` (md5 fadafb08) staged, not launched. vi69 withdrawn.
