@@ -259,6 +259,19 @@ word hold the round off in a credited game (vi90/vi94, 238-240). Open
 on it: the hole punch (sprites over cat-1 ground, 175), black drops
 (ship rate, 237), the text gates (fold 5). NEXT BUILD: fold 2.
 
+**FOLD 2 DONE, HOLE PUNCH BUILT (2026-09-13 02:10, LOOP29 242-244).**
+`SETCOLS=1` (sc95 = vi95 + fold 2): the maps scan from the baked
+per-column set extents; check mode 0/0 disagreements over 3,046 planes;
+ares wall 1.16 -> ~1.05 v/gen, single-vint 42 -> 49-55%; rig frame rate
+unchanged (the rig's wall is the windows-per-vint floor). TRAP FIXED ON
+THE WAY: the shared rom unpacker's zero runs are n+1 (243) -- every
+tool that copied LOOP-DECOMPILE 10's line was column-shifted; verify
+any rom-derived table against a live TILEMAP_C dump. `C1PUNCH=1`
+(c1p95b): sprite pixels of pp < 3 punched where the FG cell is cat-1,
+per pixel where the bake says the tile is partial; the zombies mask,
+the legs draw through the grass. Mike's eye is the gate. NEXT: fold 5
+with the copy on the packet side (237), then RELBANK on the rig.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch

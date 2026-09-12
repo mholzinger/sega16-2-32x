@@ -359,3 +359,12 @@ stays `rom/s16.32x` until Mike names a new one.
      never a launch on the rig while Mike is playing (the relaunch of
      vi95 at 22:34), and never a "fix" that has not been A/B'd on the
      instrument that can see it (172: ares cannot rank rig speed).
+
+## STATUS 2026-09-13 02:10 (builder)
+
+fold 2 exact (check 0/0 with the corrected header, LOOP29 243) and
+measured: wall 1.16 -> ~1.05 v/gen ares, single-vint 42 -> 49-55%; the
+rig's frame rate did not move (its wall is windows per vint). Fold 1's
+hole punch is built per pixel (C1PUNCH=1, c1p95b, LOOP29 244b), Mike's
+eye pending. Order stands: fold 5 with the copy on the packet side, then
+fold 3 / RELBANK on the rig with BOOTFLIPRATE + BOOTGATECHK.
