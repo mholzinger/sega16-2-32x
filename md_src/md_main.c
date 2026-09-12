@@ -664,6 +664,34 @@ static void md_consume(uint32_t pkt_base) {
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008;
+#ifdef TILE_VERIFY
+					/* LOOP29 231 rig instrument: the FPGA shows whole
+					 * tile sets black where ares shows art (vi75 attract
+					 * demo, 195726). Read every record's 16 VRAM words
+					 * back right after its DMA and classify:
+					 *   0xFFA1E0 records checked   0xFFA1E2 VRAM all-zero
+					 *   0xFFA1E4 VRAM != FB source 0xFFA1E6 FB source all-zero
+					 * (the source re-read at FM=0 -- if the DMA read a
+					 * different bank than this re-read, E4 counts it). */
+					e = sc + 8;
+					for (uint16_t i = 0; i < cnt; i++, e += 17) {
+						uint32_t va = (uint32_t)e[0] * 32u;
+						if (va + 32u > 0xB000u) continue;
+						uint16_t vz = 1, sz = 1, mm = 0;
+						*vdp_ctrl_wide = ((uint32_t)(va & 0x3FFFu) << 16)
+							| ((va >> 14) & 3u);
+						for (uint16_t k = 0; k < 16; k++) {
+							uint16_t v = *vdp_data_port, s = e[1 + k];
+							if (v) vz = 0;
+							if (s) sz = 0;
+							if (v != s) mm = 1;
+						}
+						(*(volatile uint16_t*)0xFFA1E0)++;
+						if (vz) (*(volatile uint16_t*)0xFFA1E2)++;
+						if (mm) (*(volatile uint16_t*)0xFFA1E4)++;
+						if (sz) (*(volatile uint16_t*)0xFFA1E6)++;
+					}
+#endif
 					{	/* scroll rides the tile chunk too: sc[3]/sc[7] */
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
 						*vdp_data_port = sc[3];
