@@ -4205,3 +4205,61 @@ video bus stall, so these are instruction COUNTS on an unstalled 10 MHz
 68000 and are not comparable with LOOP27's 2780-instructions-per-vint
 figure, which is a different measurement. The comparison ACROSS rounds is
 like for like and that is what the question needed.
+
+---------------------------------------------------------------------
+## 88. THE SCOPE NUMBER IS 2.5x LOW. The arcade is not bus-bound.
+
+Entry 87 measured 8184 work instructions a vint on the arcade at level 1.
+ARCHITECTURE.md and START-HERE say the game needs **2780**. Two
+measurements of the same thing on the same emulator cannot both be right,
+and the difference is load-bearing: the whole scope argument rests on it.
+
+**`tools/arcade_trace.py` counted the lines MAME LISTS.** MAME collapses a
+tight loop into one `(loops for N instructions)` line, so every loop was
+counted once. Same traces, both ways:
+
+    round 0   listed  108661 -> 5719/frame     executed 269973 -> 14209/frame
+    round 3   listed   94510 -> 4974/frame     executed 269862 -> 14203/frame
+
+    under-count factor 2.48x and 2.86x
+
+**And the conclusion does not survive it.** The old chain was: 2780
+instructions a vint, 127,841 cycles at 7.670 MHz, therefore any cost up to
+46 cycles per instruction fits; the arcade itself runs at 45.2, so it is
+stalled on its video bus and we do not pay those stalls. **45.2 cycles per
+instruction was the artefact.** Re-measured:
+
+    arcade executed            14,209 per vint
+      the frame wait            6,025
+      WORK                      8,184
+    arcade cycles/instruction    11.7      a normal 68000 mix
+    our allowance                13.3      127,841 / 8,184
+
+A 14% margin, not a fourfold one. The arcade is not a bus-bound machine
+and there are no stalls for us to avoid paying.
+
+**Our own rom, traced identically** — `rom/night/vi39.32x`, MAME's 32X,
+level 1, 20 frames. The 68K side is the half MAME models honestly, and
+the PC separates the two halves cleanly because the game is rebased to
+0x9xxxxx and the shim lives in MD RAM:
+
+    executed                   12,418 per vint
+      the frame wait            2,781
+      WORK                      9,637
+        game  (0x9xxxxx)        4,904   50.9%
+        shim  (0xFFxxxx)        4,733   49.1%
+
+**LOOP27 79's ratio is exactly right and always was** — "our shim costs as
+much as the game itself", 49.1% against its 47.9%. Only the absolutes
+moved, and they moved by the same factor on both sides, which is why the
+ratio held while the budget claim did not.
+
+**What this does NOT establish, and the temptation is to say it anyway:**
+that the 68000 is now the binding constraint. Our rom still spends 2,781
+instructions a vint in the frame wait, and that wait is the game blocked
+on the port's frame flag, not proof of spare CPU. The honest statement is
+narrower: **the clock has a 14% margin rather than a comfortable one, so
+shim instructions cost something they were assumed not to.**
+
+The parser is fixed, and both entry-point documents carry the correction
+at the top of their scope sections rather than a quiet edit.

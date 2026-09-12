@@ -43,6 +43,18 @@ future document tells you one number is the whole bar, check it against
 The 68000 clock is not the loss. The game needs 2780 instructions per
 vint and the budget covers it.
 
+**BOTH NUMBERS IN THAT SENTENCE ARE WRONG — CORRECTED 2026-09-12
+(LOOP-DECOMPILE 88).** They came from a trace parser that ignored MAME's
+`(loops for N instructions)` lines, so every loop counted once and the
+work was under-reported 2.5x. Level 1, re-measured: the arcade executes
+14,209 instructions a vint, 8,184 of them work, at 11.7 cycles each — a
+normal 68000 mix, not the bus-bound 45 the old number implied. Our budget
+allows 13.3. **That is a 14% margin, not a fourfold one.** Our own rom
+does 9,637 work instructions a vint, 4,904 game and 4,733 shim, so
+LOOP27's "the shim costs as much as the game" is still exactly right and
+everything absolute around it was not. See ARCHITECTURE.md's scope
+section for the full correction.
+
 **CORRECTED 2026-09-10 (HANDOFF-20260910 section 2b, LOOP29 117/123/124).
 This section used to end "our pipeline costs 2882 instructions per vint,
 that is the whole gap". It is not the gap.** Measured per generation —

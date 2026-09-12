@@ -27,6 +27,41 @@ pay those stalls, because the game's video writes land in our RAM and
 packet staging instead of on an S16 video bus. The slower clock is
 therefore offset by cheaper access, and the game's own code fits.
 
+**CORRECTED 2026-09-12 (LOOP-DECOMPILE 88). The figures below are LOW BY
+2.5x AND THE CONCLUSION DOES NOT SURVIVE THEM.** `tools/arcade_trace.py`
+counted the lines MAME lists, and MAME COLLAPSES a tight loop into one
+`(loops for N instructions)` line, so every loop was counted once.
+Re-measured with the loops expanded, same rig, level 1:
+
+    arcade, executed           14,209 instructions per vint
+      of which the frame wait   6,025
+      of which WORK             8,184
+    arcade cycles/instruction    11.7   a normal 68000 mix, NOT bus-bound
+    our budget                 127,841 cycles per vint at 7.670 MHz
+    so our allowance is          13.3 cycles per instruction
+
+**So the arcade is not stalled at 45 cycles per instruction; that number
+was the artefact.** It runs at 11.7, and our 13.3 is a 14% margin over the
+game's own mix, not a fourfold one.
+
+Measured on our side the same way, `rom/night/vi39.32x`, level 1:
+
+    executed                   12,418 per vint
+      the frame wait            2,781
+      WORK                      9,637   game 4,904 + shim 4,733
+
+LOOP27 79's RATIO survives exactly — the shim is 49% of the 68K work, as
+it said. Its absolutes, and everything derived from them, do not.
+
+**What this does NOT establish:** that the 68000 is the binding
+constraint. Our rom still spends 2,781 instructions a vint in the frame
+wait, and that wait is the game blocked on the port's frame flag, not
+proof of spare CPU. The honest statement is that the clock has a 14%
+margin rather than a comfortable one, so shim instructions now cost
+something they were assumed not to.
+
+
+
 **The only thing between this port and parity is the pipeline** — the
 shim that feeds frames and sprites into the 32X at the right frequency
 and in the shape that architecture wants. Measured, it costs 2882
