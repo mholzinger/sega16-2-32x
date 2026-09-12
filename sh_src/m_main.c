@@ -2824,7 +2824,7 @@ static void bm_tail(struct bm_state *a, int par);
  * and the face UPLOAD into the level pages, NOTES 23): the state word
  * says so; otherwise the live scan runs as before. */
 #include "setcols_md.h"
-RAMCODE static int bm_scan_baked_ok(void)
+static int bm_scan_baked_ok(void)          /* ROM: a few calls a generation */
 {
     if (md_round >= SETCOL_SCENES) return 0;
     for (int w = 0; w < 2; w++) {
