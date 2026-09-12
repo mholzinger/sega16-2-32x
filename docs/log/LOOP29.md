@@ -4892,3 +4892,18 @@ the shipper.
 
 `rom/night/vi58.32x` (md5 6e46bc5a) = all of 209, flag-identical to vi45,
 staged on the rig, not launched. vi46-vi57 are withdrawn.
+
+**vi58 measured (headless ares):**
+
+    coin flips/100   vi45 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50
+                     vi58 30 100 58 100 76 84 96 11 51 49 43 49 50 50 50
+    face             red field from 1575; plane 0.13 at 1580, 0.29 at 1595,
+                     0.63 from 1600 to the end of the scene (arcade 0.59);
+                     flames 0.03-0.08 (arcade 0.01-0.06)
+    demo after eye   black share 0.057-0.064 (vi45 0.046-0.059): ~1% more,
+                     the re-install's re-conversion; not measured which cells
+    play path        worst black-share difference vs vi45: 0.001
+
+**vi58 is the candidate.** Not shown by headless: the level after a
+transform in PLAY, and whether the batch-40 span during a cutscene tears
+on hardware.
