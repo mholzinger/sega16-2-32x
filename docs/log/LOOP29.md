@@ -5889,3 +5889,24 @@ back to vi75's rule under C1_NOFB (236's eviction is the `C1EVICT=1`
 knob). `rom/night/vi95.32x` = that line; `fr95` / `fr95e` = the same
 with BOOTFLIPRATE, without / with C1EVICT, for the rig A/B against
 fr75's 21 19 7 22 16.
+
+**240 measured.** vi95 ares: every gate = vi75 (title 0.273, demo
+0.038, eye 0.482, return 0.039-0.040, face plane 0.65 at 1600, late-coin
+play 0.036-0.043); the posted words: credited 0 through the coin and
+the SEGA card, 1 from the START press on, the game's byte with no edge.
+
+Rig frame rate (presented frames per 64 vints):
+
+    fr75    21 19  7 22 16
+    fr95e   19 15 22 21 14      (recovery line + C1EVICT)
+    fr95    invalid: Mike launched vi95 over it at 22:32:36; one valid
+            capture, 21, before that
+
+So the state word from the game's bytes and the cat-1 eviction knob
+together cost the rig nothing in the attract. vi94's slowness is
+therefore not COMM14 and not 236; what vi94 had that vi95 does not is
+the shim's credited edge (NOTES 30's second suspect): a short START
+press left credited 0, the stale step 2 forced the level OFF for the
+whole game -- black AND slow, vi90's shape. Play on vi95 is the test.
+The chain relaunched vi95 at 22:34:25 on top of Mike's own launch; the
+fr95 re-run waits for the rig to be free.
