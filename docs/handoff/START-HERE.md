@@ -305,7 +305,9 @@ section 4 before trusting any LOOP29 entry and section 7 before writing a
 probe.
 
 `docs/log/LOOP29.md` entries 107-135 is that session's log.
-`docs/handoff/HANDOFF-DECOMPILE.md` briefs the parallel Ghidra thread;
+`docs/handoff/HANDOFF-DECOMPILE-3.md` is the CURRENT brief for the
+parallel decompile thread (2026-09-12; -2 and the original are its
+history). `docs/handoff/HANDOFF-DECOMPILE.md` briefs the parallel Ghidra thread;
 `docs/log/LOOP-DECOMPILE.md` is its log.
 
 ## THE WORKING LOG
