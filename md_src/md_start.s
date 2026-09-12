@@ -455,7 +455,7 @@ fmgate_partb:
 		cmp.l	d0,d1
 		blo.s	2f					/* pc < start: next span */
 		cmp.l	(a0),d1
-		bls.s	8f					/* start <= pc <= end: defer */
+		bls.w	8f					/* start <= pc <= end: defer */
 	2:	addq.l	#4,a0
 		bra.s	0b
 	1:	moveq	#0,d0
