@@ -5305,3 +5305,27 @@ FMGATE_THUNK_WORDS 222 -> 236.
 Rig only: neither emulator drops the FB write, so headless cannot show the
 glyphs coming back. Sanity checks (flips, play, face, return) pending.
 The "missing tiles" in the same scene are not yet located.
+
+## 226. THE TRAMPOLINE POSTED THE ROUND FIELD RAW (2026-09-12 14:55)
+
+vi71 (225's two gates, a 68K-only change that never fires in the attract)
+read 10% on the same-round return where vi70 reads 3.7%, reproducibly
+(both re-run: vi70 0.037 x7, vi71 0.101-0.114 x7), with the RIGHT table
+installed (md_round 0, flag on, 30 sets with lines). The only 68K change
+moved the thunk block's tail by 28 bytes.
+
+**The second COMM10 writer.** `md_start.s` fmgate_partb posts
+`move.w (0xFFB9FE),(COMM10)` -- the raw 16-region dirty word, no round,
+no mask -- on the vints where the assembly path raises FM. 222 masked the
+four C sites only. So the round field carried regions 13-15 (the actor
+lines) whenever THIS path posted, and whether the SH-2's read at the
+edge back caught this path or the C path was a matter of phase: the
+28-byte shift flipped it. **Every "flaky same-round return" since 217 is
+this one hazard**, and vi70 was clean by phase.
+
+**226:** the trampoline posts `(dirt & 0x1FFF) | (round << 13)`, the same
+word as the C sites. Three short branches to the block's exit labels
+widened to .w for the extra bytes.
+
+`rom/night/vi72.32x` (md5 6ea6aabb) = vi71 + 226, staged, not launched.
+Checks pending.
