@@ -5421,3 +5421,13 @@ the play-path black share, the coined flips.
 
 Mike's gate for fold 1 per the plan: the hole punch over sprites, where
 the 32X layer wins per pixel. Rig only.
+
+Motion rate (`tools/presented_fps.py`, same recipe as LOOP29 213):
+
+    vi70   MOTION  8.6 fps   any-change 24.8 fps   windows [19, 10, 0, 8, 6]
+    vi75   MOTION 11.4 fps   any-change 33.0 fps   windows [33,  8, 0, 9, 7]
+
+Fold 1 buys motion, as the plan priced it: the tiles leave the FB path,
+so the SH-2 drains sprites only. The first window (title slide-in) is
+where it shows most, 19 -> 33. Third window 0 in both = the eye hold.
+vi75 is on the rig; vi70 remains `rom/s16.32x`.
