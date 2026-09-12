@@ -5115,7 +5115,12 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             const volatile uint8_t *c1row = CAT1SCR_U(y >> 3);
             const volatile uint16_t *c1crow = CAT1CODE_U(y >> 3);
             const unsigned c1py = (unsigned)y & 7u;
+#ifdef C1_PCELL
+            struct c1cache c1s = { 0xFFFFu, 0, 0 };
+#define C1P(sx) (punch && c1_cell(&c1s, c1row, c1crow, (sx), c1py))
+#else
 #define C1P(sx) (punch && c1_hit(c1row, c1crow, (sx), c1py))
+#endif
 #else
 #define C1P(sx) 0
 #endif
