@@ -148,8 +148,13 @@ Probe flags, all `make ship-us FLAG=1`:
      that depends on TIMING rather than an opcode — busy-waits that assume
      the arcade's video bus stall are the obvious next class and they
      cannot be found by pattern alone.
-  5. **515 functions classified by signature, not read.** 150 are leaf
-     helpers and are the least valuable thing left.
+  5. **The classification is honest now, and 50 functions are read**
+     (LOOP-DECOMPILE 78). `tools/func_profile_ref.py` rebuilds the map
+     without Ghidra with the arcade surface separated from work RAM —
+     the old `hardware` class meant "touches memory" and was wrong for 72
+     of its 117 rows. Still unread: ~460, of which 170 are leaf helpers.
+     The ranked list to work down is the `arcade hw` rows in
+     `docs/audit/function_map2.md` sorted by callers.
   6. ~~Redo the framebuffer bank figure against page 12.~~ **PAID**
      (LOOP-DECOMPILE 74): the banks are byte-identical across pages 0-11
      on both vi37 and vi2; every differing byte is the FBX packet in page

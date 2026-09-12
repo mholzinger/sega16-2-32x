@@ -23,7 +23,11 @@ ROM = 'roms/altbeast/prog68k.bin'
 # start, end, what it is, the log entry that established it
 ATTRIBUTED = [
     (0x00000, 0x00400, '68000 vector table', '-'),
+    (0x01834, 0x01844, 'DEMO STREAM pointers, 4 entries indexed by '
+     '(0xFFF031 & 0x18) >> 1', '78'),
     (0x01848, 0x01850, 'DIP start-round -> round', '66'),
+    (0x018D4, 0x01927, 'attract prompt strings, drawn by 0x144A', '78'),
+    (0x04128, 0x0413A, 'credit strings, drawn by 0x3AAE', '78'),
     (0x01858, 0x0185D, 'per-scene music command', '46'),
     (0x01CDA, 0x01CE2, 'round -> scene', '66'),
     (0x01CE2, 0x01D00, 'per-scene descriptor, 6-byte stride', '10/46'),
@@ -51,6 +55,8 @@ ATTRIBUTED = [
     (0x2726C, 0x278B8, 'tile upload block', '48'),
     (0x278B8, 0x28B84, 'tile upload block', '48'),
     (0x28B84, 0x29000, 'tile upload block', '48'),
+    (0x3E4B0, 0x40000, 'DEMO INPUT STREAMS, 3 x 0x900, three bytes per '
+     'frame (P1, P2, service)', '78'),
 ]
 
 TILES_N = 20480          # 10 pages of 64x32 words, as bake_tilecram.py has it

@@ -3614,3 +3614,70 @@ not a mystery:
                            measure.
 
 Output is `docs/audit/rom_map.txt`.
+
+---------------------------------------------------------------------
+## 78. The map's biggest class was wrong, and the attract demo is a RECORDING
+
+Open item 5 was "515 functions classified by signature, not read". Reading
+515 functions is not a session's work, so this does the two things that
+are: it makes the existing classification honest, and it reads the
+functions worth the most.
+
+**`hardware` meant "touches memory".** `classify.py:83` assigns it when
+`func_profile.py` reports any region — and that profiler's region list
+includes `workram` and `objtable` (func_profile.py:32-35). So 117
+functions carry the label and **45 of them touch an arcade hardware
+address**. The other 72 touch work RAM, which is not hardware. It is the
+biggest non-leaf class in the map and it is a plausibility label.
+
+`tools/func_profile_ref.py` recomputes the whole profile from the
+instruction stream, with the arcade surface kept separate from work RAM,
+and needs no Ghidra:
+
+    arcade hw          51      touches a real board address
+    object routine     56      touches object fields through A6
+    work RAM only      ...     what "hardware" mostly meant
+    leaf/helper       170      touches neither
+
+**Then the reading.** Ranked the unread arcade-hardware functions by
+callers. Four read to their return:
+
+  - **0x144A `credit_prompt_select`** — picks one of five strings from the
+    coin count at 0xFFF000 and the coinage DIP at 0xFFF01A/1B, then tail-
+    jumps into the text writer. The strings are at 0x18D4-0x1927: INSERT
+    COIN, INSERT MORE COIN, 1 PLAYER START ONLY, 1 OR 2 PLAYER START,
+    2 CREDITS 1 PLAY.
+  - **0x3AA4 `textram_clear_run`** — `clr.b (a1); addq #2,a1`, d0+1 cells.
+    The stride-2 sibling of 0x3A9A, which was already read and named.
+  - **0x3AAE `draw_credits_line`** — CREDITS plus the digit, or FREE PLAY,
+    from strings at 0x4128.
+  - **0x1366 `read_controls_or_demo`**, and this one is the find.
+
+**THE ATTRACT DEMO IS A RECORDED INPUT STREAM, AND THE RECORDER IS STILL
+IN THE ROM.** 0x1366 snapshots last frame's inputs, reads 0xC41003,
+0xC41007 and 0xC41005, and then branches on 0xFFF026 bit 0:
+
+    13c8:  move.b 0xFFF031,d3      the ATTRACT STEP (entry 75)
+    13cc:  andi.w #24,d3
+    13d0:  lsr.w  #1,d3            -> 0, 4, 8, 12: a LONGWORD index
+    13d2:  lea    (pc,0x1834),a0
+    13d6:  movea.l (a0,d3.w),a0    one of four stream pointers
+    ...
+    13ea:  move.b d0,(a0)+ ; d1 ; d5     RECORD three bytes
+    13f2:  move.b (a0)+,d0 ; d1 ; d5     PLAY BACK three bytes
+
+Same routine, both directions. Three bytes per frame — player 1, player 2,
+service. The table at 0x1834 holds 0x3F6B0, 0x3E4B0, 0x3EDB0, 0x3E4B0, so
+each attract step plays its own stream and two of the four steps share one.
+
+That attributes **0x3E4B0-0x40000 as three demo streams of 0x900 bytes**,
+6992 bytes that nothing in the code pointed at, and it explains why the
+attract is frame-exact: it is not an AI, it is a tape.
+
+**Rom data attribution is now 72.3%**, up from 68.5%, and the remaining
+list is three blocks over 4 kB.
+
+**One cross-check worth recording.** 0x3A9A was already named
+`textram_stride_write` by an earlier hand read. Following 0x144A's tail
+jump into it arrived at the same description independently. That is the
+only kind of confirmation a signature match cannot give you.

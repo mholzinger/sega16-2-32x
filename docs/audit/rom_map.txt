@@ -1,8 +1,8 @@
 rom          262144 bytes
   code        75442  28.8%   (19137 instructions)
   data       186702  71.2%
-    named    127865  68.5% of data  (44 regions)
-    unnamed   58837  31.5% of data  (172 runs)
+    named    134974  72.3% of data  (48 regions)
+    unnamed   51728  27.7% of data  (175 runs)
 
 UNATTRIBUTED RUNS, largest first — with who points into them
   0x21400-0x232A0    7840 bytes  62 references
@@ -11,12 +11,6 @@ UNATTRIBUTED RUNS, largest first — with who points into them
       <- 0x1DD58  data  long at 0x1DD58
       <- 0x1E8AC  data  long at 0x1E8AC
       ... 58 more
-  0x3E4AC-0x40000    6996 bytes  7 references
-      <- 0x01838  data  long at 0x01838
-      <- 0x0183C  data  long at 0x0183C
-      <- 0x14C1C  data  long at 0x14C1C
-      <- 0x198AA  data  long at 0x198AA
-      ... 3 more
   0x25A24-0x26C20    4604 bytes  1 reference
       <- 0x14E06  data  long at 0x14E06
   0x1EF20-0x20000    4320 bytes  7 references
@@ -55,12 +49,6 @@ UNATTRIBUTED RUNS, largest first — with who points into them
       <- 0x06DAC  data  long at 0x06DAC
       ... 23 more
   0x099B6-0x09EEC    1334 bytes  0 references
-  0x0185D-0x01CDA    1149 bytes  24 references
-      <- 0x00DE0  lea   lea %pc@(0x185e),%a0
-      <- 0x011F0  lea   lea %pc@(0x186e),%a0
-      <- 0x009CC  lea   lea %pc@(0x1878),%a0
-      <- 0x01570  lea   lea %pc@(0x1888),%a0
-      ... 20 more
   0x0268A-0x02AAC    1058 bytes  10 references
       <- 0x024CA  lea   lea %pc@(0x26cc),%a0
       <- 0x01ECA  lea   lea %pc@(0x26dc),%a0
@@ -73,6 +61,12 @@ UNATTRIBUTED RUNS, largest first — with who points into them
       <- 0x11130  lea   lea %pc@(0x113e0),%a0
       <- 0x10DB2  lea   lea %pc@(0x113f8),%a0
       ... 67 more
+  0x01927-0x01CDA     947 bytes  10 references
+      <- 0x0151A  lea   lea %pc@(0x1947),%a0
+      <- 0x0152C  lea   lea %pc@(0x194f),%a0
+      <- 0x0121C  lea   lea %pc@(0x1954),%a0
+      <- 0x0126A  lea   lea %pc@(0x1961),%a0
+      ... 6 more
   0x10964-0x10CD6     882 bytes  14 references
       <- 0x10324  lea   lea %pc@(0x10988),%a1
       <- 0x10364  lea   lea %pc@(0x10994),%a1
@@ -137,3 +131,9 @@ UNATTRIBUTED RUNS, largest first — with who points into them
       <- 0x0FDC8  lea   lea %pc@(0x100f6),%a1
       <- 0x07698  data  long at 0x07698
       ... 21 more
+  0x1418E-0x1435C     462 bytes  11 references
+      <- 0x140CE  lea   lea %pc@(0x141b2),%a0
+      <- 0x13CDE  lea   lea %pc@(0x141b8),%a1
+      <- 0x13ABE  lea   lea %pc@(0x141c2),%a1
+      <- 0x13B0A  lea   lea %pc@(0x141ce),%a0
+      ... 7 more
