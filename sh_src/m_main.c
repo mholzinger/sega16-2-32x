@@ -2809,7 +2809,7 @@ RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
         for (int seg = 0; seg < 2; seg++) {
             int lo, hi, qy;
             if (seg == 0) { lo = loA; hi = hiA; qy = qA; }
-            else { if (hiB < 0) break; lo = loB; hi = hiB; qy = qB ^ (qA == qB ? 0 : 0); qy = (qA ^ 2); }
+            else { if (hiB < 0) break; lo = loB; hi = hiB; qy = qB; }
             unsigned pg = pq[qy + half];
             const uint8_t *e = ent + idx[pg][col] * 3, *ee = ent + idx[pg][col + 1] * 3;
             for (; e < ee; e += 3) {
