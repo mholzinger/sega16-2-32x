@@ -4936,6 +4936,14 @@ window_done: ;
 	if (p2 & 0x0080)              svc |= 0x20;
 	IO_SERVICE = (uint8_t)~svc;
 	MCU_COINS = svc;                     // MCU posts XOR-inverted (active high)
+#ifdef MD_STATE
+	/* LOOP29 239: CREDITED, owned by the shim. 0xFFF026 bit 0 reads 1 in
+	 * the attract's demos too (they are the game started with scripted
+	 * input), so the state word's play bit is this instead: set on the
+	 * coin or start input, cleared when the game's running bit falls
+	 * (game over). The demo never presses START. */
+	if (svc & 0x11) shim_credited = 1;
+#endif
 
 	// DISPLAY ENABLE (2026-09-05, Mike's littered boot/transitions): the
 	// arcade hides every tilemap load behind its video-enable bit — port
