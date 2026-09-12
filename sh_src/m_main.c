@@ -12601,14 +12601,20 @@ RAMCODE void m_main(void)
 #ifdef HS_SHIP
                 if (k2f_pendA && 1) hs_patch(md_pktA, 1, d);
 #endif
+#ifdef TILE_VERIFY
+                int tv_pubA = 0;
+#endif
                 if (k2f_pendA) {
                     if ((d[0] >> 16) == 0xB6B6u) {
                         DIAG[42]++;          /* A unconsumed: defer */
                     } else {
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
-                        d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u);   /* bit 13: SH-2 holding blank */
+                        d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendA = 0;
+#ifdef TILE_VERIFY
+                        tv_pubA = 1;
+#endif
                     }
                 }
 #ifdef PG_SKIP_PKT
@@ -12616,6 +12622,13 @@ RAMCODE void m_main(void)
                  * the FB copy in place, so the staging is not it) for the
                  * mirror to replay into the other bank after a flip. */
                 for (int i2 = 0; i2 < 368; i2++) tp_lastA[i2] = d[i2];
+#ifdef TILE_VERIFY
+                /* payload longs 4.. (words 8..) are untouched by hs_patch:
+                 * the FB read-back must equal the staging just copied */
+                if (tv_pubA)
+                    for (int i2 = 4; i2 < 368; i2++)
+                        if (tp_lastA[i2] != ssrc[i2]) { tv_rb++; break; }
+#endif
 #endif
                 WSTAGE(0x7FE0);                      /* CYAN: plane packet A published */
                 d = (volatile uint32_t *)0x2401E800u;
