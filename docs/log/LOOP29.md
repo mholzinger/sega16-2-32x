@@ -6033,3 +6033,13 @@ over 3,046 planes of steady play** (f1000-4000; the buggy header read
 6.43/1.13). Fold 2 is exact by construction and by measurement. Fold-2
 line = `SETCOLS=1` on vi95's flags (sc95, md5 446055c8): ares wall
 ~1.05 v/gen from 1.16, rig frame rate unchanged (frsc95 21 18 19 19 21).
+
+**244b, per pixel (c1p95b, md5 4735c75f):** the master's FG pass writes
+the bake's hole class per screen cell (0 none / 1 whole cell / 2 per
+pixel) plus the tile index for class 2; the slave punches a class-2
+pixel only where the tile's own pixel is opaque (one ROM byte per such
+pixel). ares play f1160: the player's legs and the zombies' feet draw
+through the grass tufts again, the rising zombie stays masked below
+the ground. `sh_src/cat1hole_data.s` links the 25,600-byte map under
+C1PUNCH; the rom has ~100 KB of headroom (sprbake ends ~3.9 MB).
+Rig frame rate and Mike's eye next.
