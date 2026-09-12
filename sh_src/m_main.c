@@ -5264,7 +5264,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                     xacc = (xacc & 0x3F) + hzoom;                           \
                     if (xacc < 0x40) {                                      \
                         unsigned sx = (unsigned)(x - 184);                  \
-                        if (sx < 320 && pix != 0 && pix != 15 && !C1P(sx))  \
+                        if (sx < 320 && pix != 0 && pix != 15 && !C1PZ(sx)) \
                             row[sx] = (uint8_t)(base + pix), PENTAP(d4, pix);                \
                         x++;                                                \
                     }
@@ -5273,7 +5273,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                     xacc = (xacc & 0x3F) + hzoom;                           \
                     if (xacc < 0x40) {                                      \
                         unsigned sx = (unsigned)(x - 184);                  \
-                        if (sx < 320 && pix != 0 && pix != 15 && !C1P(sx)  \
+                        if (sx < 320 && pix != 0 && pix != 15 && !C1PZ(sx) \
                             && thr > pl[urow[sx]])                          \
                             row[sx] = (uint8_t)(base + pix), PENTAP(d4, pix);                \
                         x++;                                                \
