@@ -5048,6 +5048,12 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             }
 
             uint8_t *row = DROW(8 + y);
+#ifdef C1_PUNCH
+            const volatile uint8_t *c1row = CAT1SCR_U(y >> 3);
+#define C1P(sx) (punch && c1row[(sx) >> 3])
+#else
+#define C1P(sx) 0
+#endif
             const uint8_t *urow = DROW_U(8 + y); /* gate reads (rare:
                                               * pp<=1) — DIRECT_FB reads
                                               * dst through the UNCACHED
