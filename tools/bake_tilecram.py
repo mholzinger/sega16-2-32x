@@ -92,16 +92,26 @@ def worst_viewport(words, cols):
     return best[0]
 
 
-def pack(pal, cols, order):
+def pack(pal, cols, order, overflow=None):
     """Best-fit: every palette must sit ENTIRELY inside one line, because a
-    tile selects one line for all its pens."""
+    tile selects one line for all its pens.
+
+    OVERFLOW (LOOP29 189, Mike's option B): a palette that does not fit is
+    no longer a bake failure. It is left UNASSIGNED and the framebuffer
+    draws its cells in software, the way the cat-1 pass already draws a
+    cell whose set has no MD line. Graceful degradation instead of an
+    all-or-nothing bake, which is what makes the scenes that do not pack
+    shippable at all. Pass `overflow` as a list to collect them."""
     groups = [set() for _ in range(LINES)]
     for p in order:
         c = cols(p)
         cand = sorted((len(g | c) - len(g), i) for i, g in enumerate(groups)
                       if len(g | c) <= SLOTS - 1)
         if not cand:
-            return None
+            if overflow is None:
+                return None
+            overflow.append(p)
+            continue
         groups[cand[0][1]] |= c
     return groups
 
@@ -114,6 +124,19 @@ def main():
                          'Colours for --live-scene come from their UNION, '
                          'which covers every colour-cycler state sampled.')
     ap.add_argument('--live-scene', type=int, default=0)
+    ap.add_argument('--also', default='',
+                    help='extra palettes to pack and PIN, comma-separated. '
+                         'The worst-case viewport only sees palettes the '
+                         'STATIC scene tilemap references (72-103 for scene '
+                         '0); the sets that actually churn are 33 and 37-46, '
+                         'measured live off mdp_free_set (LOOP29 189). '
+                         'Neither the viewport nor mdpen_bake\'s harvest '
+                         'contains them, so they have to be named.')
+    ap.add_argument('--emit-mds', metavar='OUT', default=None,
+                    help='also write pal_scenes_md.h in the RUNTIME table '
+                         'format, using --live-scene\'s pack for every '
+                         'PALSTATIC scene slot. This is what pins the sets '
+                         'so mdp_free_set cannot churn them (LOOP29 189).')
     a = ap.parse_args()
     # LOOP29 174. The rom block at 0x232A0+blk*0x400 holds 64 palettes of
     # 16 bytes, so `base + p*16` is OUT OF RANGE for p >= 64 -- and scene
@@ -141,6 +164,7 @@ def main():
               % (len(a.live), a.live_scene))
     rom = load()
     out_bin, out_h = [], []
+    overflow = {}          # scene -> palettes the framebuffer must draw
     for s in range(SCENES):
         o = 0x1CE2 + 6 * s
         blk = w16(rom, o) & 3
@@ -153,15 +177,28 @@ def main():
             return frozenset(md(w16(rom, _b + p * 16 + 2 * k)) for k in range(1, 8))
 
         pal = worst_viewport(words, cols)
+        if a.also and s == a.live_scene:
+            extra = [int(x) for x in a.also.split(',') if x.strip()]
+            pal = sorted(set(pal) | {e for e in extra if len(cols(e)) > 0})
         order = sorted(pal, key=lambda p: -len(cols(p)))
         groups = pack(pal, cols, order)
         if groups is None:
+            # exhaustive-ish retry FIRST: an overflow we could have avoided
+            # by reordering is not an overflow.
             random.seed(7)
+            best = None
             for _ in range(20000):
                 sh = order[:]; random.shuffle(sh)
                 groups = pack(pal, cols, sh)
                 if groups:
                     break
+                ov = []
+                g2 = pack(pal, cols, sh, ov)
+                if best is None or len(ov) < len(best[1]):
+                    best = (g2, ov)
+            if groups is None:
+                groups, over = best
+                overflow[s] = over
         if groups is None:
             sys.exit('scene %d: no %d-line packing found' % (s, LINES))
 
@@ -171,6 +208,8 @@ def main():
             slot.append(m)
         assign = {}
         for p in pal:
+            if p in overflow.get(s, []):
+                continue               # unassigned: the FB draws it
             c = cols(p)
             for li, g in enumerate(groups):
                 if c <= g:
@@ -193,8 +232,13 @@ def main():
             line_words.append(row)
         out_bin.append(line_words)
         out_h.append((s, len(pal), [len(g) for g in groups], assign))
-        print('scene %d: %2d palettes, lines %s, %d slots used'
-              % (s, len(pal), [len(g) for g in groups], sum(len(g) for g in groups)))
+        ov = overflow.get(s, [])
+        print('scene %d: %2d palettes, lines %s, %d slots used%s'
+              % (s, len(pal), [len(g) for g in groups],
+                 sum(len(g) for g in groups),
+                 '' if not ov else
+                 '  OVERFLOW %d to the framebuffer: %s'
+                 % (len(ov), sorted(ov))))
 
     if a.stats:
         return
@@ -217,6 +261,66 @@ def main():
                               for p in range(128)))
             fh.write('};\n')
     print('wrote sh_src/tilecram.bin and sh_src/tilecram.h')
+
+    if a.emit_mds:
+        # LOOP29 189 — THE RUNTIME TABLES. mds_install already installs
+        # per-scene line/map/used tables and PINS every set in them
+        # against mdp_free_set (LOOP29 156's mds_pin), which is the whole
+        # reason CAT1MD churns: its sets are not in any table. This emits
+        # that format from the WORST-CASE VIEWPORT -- exhaustive over all
+        # 64 scroll positions, both planes -- instead of mdpen_bake's
+        # sampled harvest, which never sees the cat-1 sets at all.
+        # The runtime's scene space is PALSTATIC's (normal/boss_smoke),
+        # not the game's five rounds; level 1 is 'normal' and boss_smoke
+        # inherits it, so one pack fills both slots.
+        sc = a.live_scene
+        line_words, (scn, npal, sizes, assign) = out_bin[sc], out_h[sc]
+        s_line = [0] * 128
+        s_used = [0] * 128
+        s_map = [[0] * 8 for _ in range(128)]
+        for p, (li, slots) in assign.items():
+            s_line[p] = li + 1
+            s_used[p] = 0xFE            # pixels 1-7; 0 is transparent
+            s_map[p] = [0] + list(slots)
+        n_assigned = sum(1 for v in s_line if v)
+        print('  emit-mds: scene %d -> %d sets PINNED across %d lines %s'
+              % (sc, n_assigned, LINES, sizes))
+        if n_assigned != npal:
+            print('  emit-mds: %d of %d palettes UNASSIGNED (the framebuffer '
+                  'draws them)' % (npal - n_assigned, npal))
+        names = ['normal', 'boss_smoke']
+        with open(a.emit_mds, 'w') as fh:
+            fh.write('/* GENERATED by tools/bake_tilecram.py --emit-mds.\n'
+                     ' * Per-scene static MD pen tables for the TILE layers,\n'
+                     ' * from the worst-case VIEWPORT (all 64 scroll\n'
+                     ' * positions, both planes) rather than a sampled\n'
+                     ' * harvest -- so the cat-1 sets are in it and\n'
+                     ' * mds_pin can stop mdp_free_set churning them.\n'
+                     ' * Source scene %d: %d palettes, lines %s.\n'
+                     ' * See LOOP29 189 and PLAN-TILES-TO-VDP. */\n'
+                     % (sc, npal, sizes))
+            fh.write('#define MDSTATIC_N %d\n' % len(names))
+            fh.write('static const uint8_t mds_table_of[MDSTATIC_N] = { '
+                     + ', '.join('0' for _ in names) + ' };\n')
+            fh.write('static const uint16_t mds_line_c[MDSTATIC_N][%d] = {\n'
+                     % (LINES * SLOTS))
+            row = ', '.join('0x%04X' % (v if v else 0xFFFF)
+                            for ln in line_words for v in ln)
+            for nm in names:
+                fh.write('    { %s },   /* %s */\n' % (row, nm))
+            fh.write('};\nstatic const uint8_t mds_s_line[MDSTATIC_N][128] = {\n')
+            for nm in names:
+                fh.write('    { %s },\n' % ', '.join(str(v) for v in s_line))
+            fh.write('};\nstatic const uint8_t mds_s_map[MDSTATIC_N][1024] = {\n')
+            flat = ', '.join(str(v) for r in s_map for v in r)
+            for nm in names:
+                fh.write('    { %s },\n' % flat)
+            fh.write('};\nstatic const uint8_t mds_s_used[MDSTATIC_N][128] = {\n')
+            for nm in names:
+                fh.write('    { %s },\n'
+                         % ', '.join('0x%02X' % v for v in s_used))
+            fh.write('};\n')
+        print('  emit-mds: wrote', a.emit_mds)
 
 
 if __name__ == '__main__':

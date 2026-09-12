@@ -4074,3 +4074,71 @@ version so far."**
 at 0.81 -- the only thing all session that did -- and takes the
 transport's only quiet slot, so the screen stops. It becomes viable after
 1 and 2 free 68K time.
+
+## 189. OPTION B BUILT, AND PINNING DOES NOT CONVERGE — THE SETS OUTSIDE THE TABLE MUST BE REFUSED, NOT ASSIGNED (2026-09-11 21:00)
+
+Mike picked option B (overflow to the framebuffer) over per-band CRAM.
+Both halves of the palette work are now measured and the result is a
+clear design constraint rather than a win.
+
+**B's baker half is in.** `pack()` no longer fails when a palette does not
+fit -- it leaves it UNASSIGNED and collects it, so a scene that does not
+pack degrades instead of failing the build. On the five scenes as they
+stand it catches nothing: all five pack into four lines.
+
+**The emitter is in, and it was the actual blocker.**
+`bake_tilecram.py --emit-mds` writes `pal_scenes_md.h` in the RUNTIME
+table format from the worst-case VIEWPORT rather than `mdpen_bake.py`'s
+sampled harvest. That matters because `mds_install` PINS every set in
+its table against `mdp_free_set`, and the whole CAT1MD churn story
+(153-164, 176) is sets that are in no table.
+
+**It works, and the proof is a counter that had always read zero:**
+
+    pin DECLINES (mds_pin blocked a free)   5,718
+    frees that got through                    128
+
+`mds_pin` declined 5,718 frees. LOOP29 156 measured that same counter at
+**ZERO across a 4,000-frame run**, which is what "the baked table does
+not name a single one of the sets that churn" meant.
+
+**And the churn did not go away -- it MOVED.** With the viewport's 25
+sets pinned, the sets still being freed were different ones: 68 (29
+frees), 11 (17), then 122, 115, 35, 126, 125, 124. So I added them:
+
+    pinned sets    lines            on-screen tiles destroyed / 12k
+    25 (viewport)  [15,15,11,5]     6,221
+    35 (+churners) [14,14,13,11]    6,933
+    42 (+the next) [15,15,15,14]    9,671      <-- WORSE
+
+**Pinning more makes it WORSE, and the reason is the same one as the
+fourth CRAM line (176).** At 42 sets the four lines are 59 of 60 slots
+full. Every set NOT in the table still goes to the dynamic allocator,
+and now there is no slack left for it, so it thrashes harder. **The
+iteration diverges.** You cannot pin your way out of this incrementally.
+
+**THE DESIGN CONSTRAINT, which is the result worth keeping:** a tile
+colour set that is not in the scene's baked table must be **REFUSED an
+MD line entirely and drawn by the framebuffer** -- not assigned
+dynamically. `mdp_note_tile` currently calls `mdp_assign_set` for any set
+with no line, which is what puts it in the allocator's hands. Under
+`MD_STATIC` it should return 0 instead, exactly as it already does for a
+`soft` cat-1 claim, and the FB should keep those cells.
+
+That is option B's RUNTIME half, which I deferred as speculative when
+the baker reported no overflow. It is not speculative: it is the only
+thing that makes the static table mean anything, because "in the table"
+has to imply "and nothing else gets a line".
+
+It needs one piece that does not exist: **under MDBGALL the FB does not
+draw BG/FG-cat0 at all** (m_main.c clears those rows to 0 = MD-through,
+7625). The cat-1 path has the fallback already (`CAT1_PEND`); the other
+two layers do not. That is the next build.
+
+**Speed, unchanged by any of this and still the best measured:**
+wall 1.13, 38.4 fps, **45% single-vint** against the line's 20% -- but
+on a build whose backgrounds are worse than vi16's. The speed comes from
+`C1NOFB` (175) and is independent of the palette question.
+
+The line is untouched: `pal_scenes_md.h` restored to the harvest bake,
+`rom/s16.32x` rebuilds to vi37's numbers (wall 1.48, 32.1 fps).
