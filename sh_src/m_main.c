@@ -5132,6 +5132,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #endif
 #else
 #define C1P(sx) 0
+#define C1PZ(sx) 0
 #endif
             const uint8_t *urow = DROW_U(8 + y); /* gate reads (rare:
                                               * pp<=1) — DIRECT_FB reads
