@@ -4144,3 +4144,64 @@ level 4 was not slow before the round tables, the suspect is the install
 path, not the level — LOOP29 194 already found a SECOND install site that
 was keyed wrongly, and a third that re-installs per frame would cost most
 where the table is smallest to detect.
+
+---------------------------------------------------------------------
+## 87. Where the 68000's time goes, per round — and level 4 is lighter there too
+
+Entry 86 counted what each round asks for. A count is not a cost, so this
+profiles the 68000 directly: MAME's own instruction trace over a fixed
+window, histogrammed and attributed to functions.
+`tools/round_profile.lua` drives it, `tools/round_profile.py` reads it.
+
+**Sampling does not work and it is worth knowing why.**
+`emu.register_periodic` fires ONCE PER FRAME, always at the same point in
+the frame, so its "profile" is a single address. The trace is exact and
+20 frames of it is 2.7 MB.
+
+**Two things in the trace format cost a whole wrong answer first.** MAME
+prints trace addresses in UPPERCASE hex, so a `[0-9a-f]` match keeps only
+the addresses that happen to be all digits — 8% of the file. And MAME
+COLLAPSES tight loops into `(loops for N instructions)`, so ignoring those
+lines counts every loop once. Together they under-reported the work by a
+factor of 29, and **the first profile looked entirely plausible** — 449
+instructions a frame, a sensible-looking top four. That is the shape of
+this failure: not an error message, a believable number.
+
+**20 frames from f2000, same input script, per round:**
+
+    round   instructions     idle      work    work/frame
+      0          269973    106283    163690         8184
+      1          266870    141097    125773         6288
+      2          268505    139908    128597         6429
+      3          269862    123720    146142         7307
+      4          261018    222722     38296         1914*
+
+    * round 4 is NOT a comparison: the generic script dies on level 5 and
+      the trace is of the credit screen — its top routines are
+      credit_prompt_select and draw_credits_line.
+
+**Round 3 is level 4, at 7307 instructions of work a frame against level
+1's 8184.** Lighter on the 68000 as well as on objects, sprites, drawn
+scanlines, zoom and background cells.
+
+**Per frame, by routine:**
+
+    routine                      r0    r1    r2    r3
+    irq4_handler               1172  1138  1130  1155
+    despawns                    725   819   826   684
+    sprite_build_and_cull       807   425   365   625
+    object_dispatcher           459   455   430   453
+    arcade hw                   357   363   362   368
+    floor_collide               365    82   404   380
+    collide_box_b               411   244   252   253
+    zoom_scale_lookup           360   227   187   320
+
+**IRQ4 is flat at ~1150 a frame in every round**, which is the useful
+structural fact: the handler's cost does not vary with the level, so
+anything in the port that scales per round is not tracking the game.
+
+**One caveat on the absolute numbers.** MAME does not model the S16B
+video bus stall, so these are instruction COUNTS on an unstalled 10 MHz
+68000 and are not comparable with LOOP27's 2780-instructions-per-vint
+figure, which is a different measurement. The comparison ACROSS rounds is
+like for like and that is what the question needed.

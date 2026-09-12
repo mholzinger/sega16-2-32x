@@ -1100,3 +1100,45 @@ tables went in, the suspect is the install path rather than the level —
 194 already found a second install site keyed on the wrong thing, and a
 third that re-installs every frame would be hardest to spot exactly where
 the table is smallest.
+
+---------------------------------------------------------------------
+## And level 4 is lighter on the 68000 too — 2026-09-12
+
+Following entry 86 with the cost rather than the counts. MAME instruction
+trace, 20 frames from f2000, same script per round, histogrammed onto the
+function map. LOOP-DECOMPILE 87.
+
+    round   work/frame     (round 3 is level 4)
+      0          8184
+      1          6288
+      2          6429
+      3          7307
+      4          1914   NOT a comparison: the script dies on level 5 and
+                        this is the credit screen
+
+**Level 4 costs the 68000 11% LESS than level 1.** With objects, live
+sprites, drawn scanlines, zoom and background cells all below average too,
+there is nothing left on the game side.
+
+Per frame, by routine, if it helps you aim:
+
+    routine                      r0    r1    r2    r3
+    irq4_handler               1172  1138  1130  1155
+    despawns                    725   819   826   684
+    sprite_build_and_cull       807   425   365   625
+    object_dispatcher           459   455   430   453
+    floor_collide               365    82   404   380
+    collide_box_b               411   244   252   253
+    zoom_scale_lookup           360   227   187   320
+
+**IRQ4 is flat at ~1150 a frame in every round.** The handler's cost does
+not vary with the level, so anything on our side that scales per round is
+not tracking the game.
+
+Two traps in case you ever read a MAME trace: the addresses are UPPERCASE
+hex, and MAME collapses tight loops into `(loops for N instructions)`.
+Missing both under-reported the work by 29x and the wrong profile looked
+completely reasonable.
+
+`tools/round_profile.lua` + `tools/round_profile.py`, and `RW_N`/`RP_N`
+start the game at any round by rewriting the table at 0x1848.

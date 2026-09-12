@@ -1,0 +1,19 @@
+round  instructions     idle     work   work/frame
+  0         269973   106283   163690        8184
+  1         266870   141097   125773        6288
+  2         268505   139908   128597        6429
+  3         269862   123720   146142        7307
+  4         261018   222722    38296        1914
+
+per frame, by routine
+routine                      r0 r1 r2 r3 r4
+irq4_handler                  1172  1138  1130  1155  1099
+despawns                       725   819   826   684     0
+sprite_build_and_cull          807   425   365   625    72
+object_dispatcher              459   455   430   453   392
+arcade hw                      357   363   362   368     6
+floor_collide                  365    82   404   380     0
+collide_box_b                  411   244   252   253     0
+zoom_scale_lookup              360   227   187   320    25
+object routine                 339   214   163   338    10
+animate                        265   222   229   244     0
