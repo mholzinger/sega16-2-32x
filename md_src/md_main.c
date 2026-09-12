@@ -2681,14 +2681,20 @@ void shim_vblank(void) {
 	/* PICTURE FRAMES PER 64 VINTS ON HARDWARE (LOOP29 232). GAMERATE
 	 * reads 64 on every build under GAMEGATE (the game never waits), so
 	 * it cannot rank what Mike sees. Count the 32X frame-buffer bank
-	 * (FS, 0xA1510A bit 0) CHANGING between vint tops: one change = one
-	 * presented frame. 64 = 60 Hz, 32 = 30 Hz. Bias bit 7, cap 127. */
+	 * (FS, 0xA1518A bit 0 -- the 68K view of the 32X VDP's FB control
+	 * register, readable at FM=0 only) CHANGING between vint tops: one
+	 * change = one presented frame. 64 = 60 Hz, 32 = 30 Hz. Bias bit 7,
+	 * cap 127. The first cut read 0xA1510A (DREQ destination) and
+	 * counted 0 everywhere; TILE_VERIFY's "FS changed mid-consume"
+	 * (vi77) read the same wrong register and is void. */
 	{
 		static uint16_t fr_vc, fr_n, fr_last;
 		static uint8_t  fr_val;
-		uint16_t fs = *(volatile uint16_t*)0xA1510A & 1u;
-		if (fs != fr_last) fr_n++;
-		fr_last = fs;
+		if (!(*(volatile uint16_t*)0xA15100 & 0x8000u)) {
+			uint16_t fs = *(volatile uint16_t*)0xA1518A & 1u;
+			if (fs != fr_last) fr_n++;
+			fr_last = fs;
+		}
 		if (++fr_vc >= 64) {
 			fr_val = (uint8_t)(fr_n > 127 ? 127 : fr_n);
 			fr_n = 0;
