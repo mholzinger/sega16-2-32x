@@ -5050,3 +5050,35 @@ first rebake put 100/101 (2,012 BG cells) in the framebuffer to fit a
 
 `rom/night/vi63.32x` = vi62b's line + these tables, staged, not launched.
 Headless checks pending. R60TIGHT (their flag, NOTES 18) is not in it.
+
+## 216-217. THE ALL-PAGES TABLE STARVED THE PLANE OF SLOTS; FREE AT THE EDGE OUT, INSTALL THE PUBLISHED ROUND AT THE EDGE BACK (2026-09-12 13:50)
+
+vi63 (215's tables) regressed the face: the plane drew in ALTERNATE ROWS,
+blue-upper 0.13 for the whole scene. Dumps at 1590-1660: flag 0, set 19
+on line 1 with pens 180/1C0/140 -- the RIGHT blues, shared exact-match
+with pens the bigger table already held -- every cell slot-hit, no
+evictions, no frees. Same probe code with vi62b's table: 504 tag wipes
+in 1610-1640, plane full at 1660. **The slot cache never evicts a live
+tag on its own; it only reuses slots released when a set is freed.** With
+30 pinned sets resident and set 19 needing no eviction for pens, nothing
+was freed, no slots came back, and the plane got only the slots that
+happened to be free. vi62b worked by luck of colour sharing.
+
+**216 (vi64):** at the edge out, free every resident set -- off screen is
+off screen -- so the cutscene has slots and exact pens; the edge back
+re-installs. Plane full at 1650 against a field at 1605. Play path vs
+vi45: worst black diff 0.001; ledge band below vi62b's. BUT the demo
+after the eye paid 10.6-11.2% black for 300 frames (vi63: 3.7%).
+
+**217 (vi65):** the edge back installed `md_round`, the REMEMBERED round
+-- level 1's, while the demo after the eye is level 2. Install the
+PUBLISHED round (MD_ROUND_GET), fall back to the remembered one only when
+none is published; classify the claim mix the same way.
+
+    vi65   coined flips/100  32 100 57 100 67 67 96 16 50 47 43 50 50 50 50   (vi45 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50)
+           face: red field from 1570, plane full from 1625
+           demo after the eye: black 0.037-0.038  (vi45 0.046-0.059, vi64 0.106)
+           play path: pending
+
+`rom/night/vi65.32x` (md5 324deb7a) staged, not launched. vi63/vi64
+withdrawn.

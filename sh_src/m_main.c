@@ -5415,7 +5415,12 @@ __attribute__((noinline)) static void disp_gate(void)
         uint8_t on = (mds_cl_t > mds_cl_n) ? 1u : 0u;
         if (mds_cl_t + mds_cl_n < 16) on = mds_onscreen;   /* blank: hold */
         if (on && !mds_onscreen) {
-            unsigned r9 = (md_round < MDROUND_N) ? md_round : MD_ROUND_GET();
+            /* 217: the PUBLISHED round, not the remembered one. The eye
+             * sits between level 1's demo and level 2's; vi64 came back
+             * from it with round 0's table pinned over level 2 and paid
+             * 10% black for the whole demo. */
+            unsigned r9 = MD_ROUND_GET();
+            if (r9 >= MDROUND_N) r9 = md_round;
             if (r9 < MDROUND_N) {
                 mds_install(r9, disp_hold);     /* edge back (or first
                                                  * screen): pins whole,
@@ -5425,7 +5430,21 @@ __attribute__((noinline)) static void disp_gate(void)
                 MDS[5] += 0x10000;
             }
         }
-        if (!on && mds_onscreen) MDS[5] += 1;   /* edge out */
+        if (!on && mds_onscreen) {              /* edge out */
+            MDS[5] += 1;
+            mds_onscreen = 0;                    /* so the pins yield below */
+            /* 216: FREE the round's sets here. The slot cache never evicts
+             * a live tag on its own; it only reuses slots released when a
+             * set is freed. vi63 (30 pinned sets) found exact-colour pens
+             * for the chevron plane's set on a full line, so nothing was
+             * freed, no slots came back, and the plane drew in alternate
+             * rows for the whole scene; vi62b's table forced an eviction
+             * and worked by luck. Off screen is off screen: free them all,
+             * the edge back re-installs the table and re-ships. */
+            for (unsigned s2 = 0; s2 < 128; s2++)
+                if (mdp_s_line[s2])
+                    mdp_free_set(s2);
+        }
         mds_onscreen = on;
         mds_cl_t = mds_cl_n = 0;
     }
@@ -13701,8 +13720,8 @@ RAMCODE void m_main(void)
                                  * Classified against the installed
                                  * round, or the published one before
                                  * the first install. */
-                                unsigned r9 = (md_round < MDROUND_N)
-                                              ? md_round : MD_ROUND_GET();
+                                unsigned r9 = MD_ROUND_GET();     /* 217 */
+                                if (r9 >= MDROUND_N) r9 = md_round;
                                 if (r9 < MDROUND_N && mds_s_line[r9][cset]) mds_cl_t++;
                                 else                                        mds_cl_n++;
                             }
