@@ -12823,6 +12823,9 @@ RAMCODE void m_main(void)
 #endif
 #endif
                 WSTAGE(0x7FE0);                      /* CYAN: plane packet A published */
+#ifdef TILE_VERIFY
+                TV_BLANK_LATCH();
+#endif
                 d = (volatile uint32_t *)0x2401E800u;
                 ssrc = (const uint32_t *)md_pkt;
 #ifdef HS_SHIP
