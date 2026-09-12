@@ -29,7 +29,7 @@ ARC_CYC, MD_CYC = 10000000 / 60.0, 7670453 / 60.0
 lines = []
 executed = 0                      # listed lines PLUS collapsed iterations
 for line in open(sys.argv[1], errors="ignore"):
-    m = re.match(r"^([0-9A-Fa-f]{6}): (.*)$", line.rstrip())
+    m = re.match(r"^([0-9A-Fa-f]{6,8}): (.*)$", line.rstrip())
     if m:
         lines.append((int(m.group(1), 16), m.group(2)))
         executed += 1

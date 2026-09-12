@@ -184,12 +184,13 @@ numbers (LOOP-DECOMPILE 100, 97):
     together                                            0.92-1.05
 
 So the 68000 side of the crossing is within reach: the rotor (~430) and
-r60_blast/md_consume (~860 together) are the margin. What is NOT solved
-is 184's real finding: under RELBANK the 68K stops posting (nopost 52 ->
-225) because the post and blast were scheduled in the idle the game no
-longer has. **Fold 3 needs the transport moved wholly into IRQ4's own
-budget, independent of the game's state**, and the condition that
-suppresses the post when the game is busy named and removed. That is a
+r60_blast/md_consume (~860 together) are the margin. What is NOT solved is 184's real finding, now read (LOOP-DECOMPILE 104): the
+transport already runs in IRQ4 and in the gate spin, not in the idle.
+What RELBANK adds to the game's pass is the FM-gate spins -- five entries
+a vint into three text writers, each a wait on the master's window (8-120
+lines on hardware) -- and a 4.9% post deferral from the span test. **Fold
+5 is therefore the precondition of fold 3**: the three writers go to the
+WRAM mirror first, then RELBANK, measured on the rig with BOOTGATECHK. That is a
 protocol change on the MD side, and it is the fold that pays: 0.81 was
 measured, 53 fps, and everything before it is preparation. Owner:
 rendering for the schedule, this thread for the 68K budget.
