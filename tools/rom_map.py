@@ -53,10 +53,13 @@ ATTRIBUTED = [
     (0x242A0, 0x255E0, 'ACTOR PALETTE RECORDS, 176 x 28 bytes, indexed by '
      'object $0B', '77'),
     (0x255E0, 0x25A24, 'SPRITE FRAME TABLE, 182 x 6 bytes', '48'),
-    (0x26C20, 0x2726C, 'tile upload block', '48'),
-    (0x2726C, 0x278B8, 'tile upload block', '48'),
-    (0x278B8, 0x28B84, 'tile upload block', '48'),
-    (0x28B84, 0x29000, 'tile upload block', '48'),
+    # LOOP-DECOMPILE 85. The loop at 0x258A reads: word dest_low, word
+    # cols-1, word rows-1, then rows*cols words, destination
+    # 0x400000+dest_low with a 128-byte row stride. Four callers each set
+    # a0 and call it a fixed number of times, so the extents are exact.
+    (0x26C20, 0x278B8, 'TILE UPLOAD, 4 blocks (caller 0x2572)', '48/85'),
+    (0x278B8, 0x28B84, 'TILE UPLOAD, 8 blocks (caller 0x2552)', '48/85'),
+    (0x28B84, 0x291D0, 'TILE UPLOAD, 2 blocks (caller 0x2564)', '48/85'),
     (0x3E4B0, 0x40000, 'DEMO INPUT STREAMS, 3 x 0x900, three bytes per '
      'frame (P1, P2, service)', '78'),
 ]

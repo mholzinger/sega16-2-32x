@@ -4034,3 +4034,61 @@ data underneath it. Where they disagree, descent wins.
 `TOOLKIT.md` now carries the whole pipeline as a numbered recipe —
 addresses, stream, dependency census, timing census, bounds and profile,
 rom map — with the trap that bit each step written next to it.
+
+---------------------------------------------------------------------
+## 85. Let the running game name the reader — and a rig that reported nothing
+
+Entry 83 left two blocks that no pointer reaches, because they are read
+from a computed base. Pointer-chasing is finished on those; the way to
+name a consumer is to watch the program read it.
+
+**The first rig reported nothing, and the control is why that is not a
+finding.** `install_read_tap` on the 68K program space fires on nothing at
+all — not on the two blocks, and not on the zoom table, which every sprite
+reads every frame. MAME serves rom reads from the direct access pointer
+and taps never see them. **A control range was in the run before anything
+was concluded from the silence**, which is the only reason this cost ten
+minutes instead of an evening.
+
+Debugger watchpoints do work, because installing one disables the fast
+path for that range: `-debug -debugger none`, `wpset`, and a periodic
+callback that reads the PC on each stop and resumes.
+`tools/rom_reader_wp.lua`. One range per run — the watchpoint does not
+tell lua which address it fired on, and which block was read is the whole
+question.
+
+    0x29000-0x29E00   PC 0x25A0, frame 20
+    0x22000-0x232A0   nothing, in attract or with a game started
+    CONTROL 0x1CE2    PC 0x16AA and 0x16B0, frame 452
+
+**0x25A0 is the tile upload loop, so the block is upload data — and
+reading the loop gives the format exactly:**
+
+    258a:  move.l #0x400000,d0
+    2590:  move.w (a0)+,d0      dest low word: 0x400000 + it
+    2594:  move.w (a0)+,d0      cols - 1
+    2596:  move.w (a0)+,d1      rows - 1
+    259c:  move.w (a0)+,(a2)+   cols words
+    25a2:  lea 128(a1),a1       next row: a 64-column tilemap stride
+    25a6:  dbf d1,0x2598
+
+Four callers each load a0 and call it a fixed number of times, so the
+extents are arithmetic rather than estimates, and the three groups tile
+the region contiguously:
+
+    0x26C20-0x278B8    4 blocks   caller 0x2572
+    0x278B8-0x28B84    8 blocks   caller 0x2552
+    0x28B84-0x291D0    2 blocks   caller 0x2564
+
+Fourteen blocks, every destination inside 0x400000-0x407FFF. **The last
+group ends at 0x291D0, not 0x29000** — entry 48 bounded it by eye and
+entry 83 guessed the tail was upload data. It is, and now it is measured.
+
+    rom data named   73.9% -> 74.2%
+
+**And the block that stays silent.** 0x22000-0x232A0, 4768 bytes of valid
+13-bit tile indices, is read neither during attract nor with a game
+started and played to the middle of level 1 — on a rig whose control
+fires in the same run. That is a real absence with a stated scope, not an
+unexamined one: it says nothing about the later rounds, which this input
+script never reaches.

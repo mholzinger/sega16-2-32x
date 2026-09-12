@@ -1,8 +1,8 @@
 rom          262144 bytes
   code        75442  28.8%   (19137 instructions)
   data       186702  71.2%
-    named    138046  73.9% of data  (47 regions)
-    unnamed   48656  26.1% of data  (175 runs)
+    named    138510  74.2% of data  (46 regions)
+    unnamed   48192  25.8% of data  (175 runs)
 
 UNATTRIBUTED RUNS, largest first — with who points into them
   0x22000-0x232A0    4768 bytes  0 references
@@ -14,7 +14,7 @@ UNATTRIBUTED RUNS, largest first — with who points into them
       <- 0x13112  data  long at 0x13112
       <- 0x130B2  data  long at 0x130B2
       ... 3 more
-  0x29000-0x29E00    3584 bytes  0 references
+  0x291D0-0x29E00    3120 bytes  0 references
   0x1BB28-0x1C622    2810 bytes  36 references
       <- 0x1B3B8  lea   lea %pc@(0x1bb4a),%a2
       <- 0x1B09A  lea   lea %pc@(0x1bb5a),%a0
