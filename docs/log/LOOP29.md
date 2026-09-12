@@ -6043,3 +6043,10 @@ through the grass tufts again, the rising zombie stays masked below
 the ground. `sh_src/cat1hole_data.s` links the 25,600-byte map under
 C1PUNCH; the rom has ~100 KB of headroom (sprbake ends ~3.9 MB).
 Rig frame rate and Mike's eye next.
+
+**244b on the rig: frc1p95b 12 16 8 19 9 presented frames per 64 vints
+against 19-21** -- the per-pixel test on every sprite pixel (a load, a
+class test, a ROM byte for class 2) cost the slave a third of its
+windows. **244c:** the baked-run path tests the class once per CELL;
+class 0 copies the run, class 1 skips it, only class 2 walks the art
+(one ROM row per cell). c1p95c / frc1p95c built; rig number below.
