@@ -2635,11 +2635,15 @@ void shim_vblank(void) {
 		 * boot hold below waits for it); take the channel after that */
 		if (!st_on && ((c14 & 0xFF00) == 0xB100 || c14 == 0xB008)) st_on = 1;
 		if (st_on) {
-			st_seq = (uint8_t)((st_seq + 1) & 0xF);
-			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 8)
+			/* 240 (NOTES 29): [11:9] seq, [8] demo running (f028|f029 & 1:
+			 * 0 with step 1 = the SEGA card), [7] cut, [6:4] round,
+			 * [3] credited = the game's attract bit CLEAR, [2:0] step */
+			st_seq = (uint8_t)((st_seq + 1) & 7);
+			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 9)
+				| ((uint16_t)((*(volatile uint8_t*)0xFFF028 | *(volatile uint8_t*)0xFFF029) & 1) << 8)
 				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
 				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4)
-				| ((uint16_t)(~*(volatile uint8_t*)0xFFF026 & 1) << 3)   /* 240: credited = the game's attract bit clear (NOTES 29/30) */
+				| ((uint16_t)(~*(volatile uint8_t*)0xFFF026 & 1) << 3)
 				| ((uint16_t)(*(volatile uint8_t*)0xFFF031 >> 2) & 7));
 		}
 	}
