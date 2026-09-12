@@ -1779,3 +1779,5 @@ sprite pixel -> CAT1HOLE_GET(map, cell) -> 0 draw, 1 skip, 2 test the
 tile's pixel. `cat1hole.h` has the accessor and the per-scene counts.
 Geometry is cat1map's; the art index convention is bake_cat1vis's
 (tiles.bin by the 13-bit index).
+The .bin is gitignored like cat1map.bin: run `tools/bake_cat1hole.py`
+once (needs sh_src/tiles.bin) and it lands beside the header.
