@@ -238,6 +238,18 @@ bar is three times away on hardware. Next: fold 4 (one state word from
 IRQ4, deleting the claim-mix flag and the COMM10 edge read), then fold
 2/3 per the plan; every build gets its rig fps from the probe.
 
+**FOLD 4 STATE (LOOP29 233-237, 2026-09-12 23:00).** `MDSTATE=1` posts one
+state word per vint on COMM14 (seq, cutscene 0xFFF148, round 0xFFF142,
+play 0xFFF026.0, attract step 0xFFF031>>2). It decides OFF where the
+game is certain (transformation; picture steps 0/2/4) and forces ON in
+demo steps 3/5; the claim mix still decides elsewhere (the play bit is 1
+in the demo, step 1 spans the SEGA screen -- NOTES-FROM-DECOMPILE 24
+asks for the two discriminators). On the rig this halved fold 1's black
+(vi90); per-tile rectangles remain and are being censused (vi92).
+TXTWRAM as written halves the rig frame rate (237): fold 5's copy must
+change transport before RELBANK is measured. Any 68K change re-rolls the
+ares same-round return (227); judge those builds on the rig.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch

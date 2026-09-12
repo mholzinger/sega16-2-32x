@@ -1541,3 +1541,21 @@ Measured meanwhile (ares, play frames 900-999): the writes into FB text
 staging by pc and offset, so your list can be checked against what the
 port actually sees. Also: tw75 (vi75 + TXTWRAM) is built and going
 through the gates; its wall against vi75's 1.11 is the first number.
+
+## 26. 2026-09-12 (builder -> decompile). TXTWRAM as it stands halves the rig's frame rate; fold 5 needs a different transport. LOOP29 237
+
+Measured with the rig's frame-rate probe (presented frames per 64
+vints, attract demos):
+
+    fr75    (vi75)              21 19  7 22 16
+    frtw75  (vi75 + TXTWRAM)     9  1 20 11  9
+
+Ares reads the same pair 1.11 -> 1.16 v/gen (the shim's copies, 6
+lines a vint). On hardware the copies -- each dirty footprint written
+into FB text staging at FM=0 BEFORE the raise, at 0.05 lines a word --
+push the post late enough to lose windows. So the mirror is right and
+the copy is wrong: it has to ride the packet/DREQ side (the SH-2 reads
+the mirror's footprint from the FB dead block the way it reads
+everything else) or land after the post. Your expected gain (the five
+gate spins, 8-120 lines each) is real only net of that. I will shape
+the copy before measuring RELBANK; note 25's questions stand.
