@@ -4212,3 +4212,60 @@ cannot ship against a one-scene table.
 
 `rom/night/vi39.32x` (md5 c93dbeab) is vi37's flags rebuilt: the line,
 with the refuse rule off. On the rig and playing.
+
+## 192. ALL FIVE ROUND TABLES BAKED FROM THE GATED DUMPS, AND THE BLOCKER WAS MINE (2026-09-11 21:40)
+
+The decompile thread's blocker was correct and it was my tool: `--live`
+applied live colours to ONE scene per run and fell back to rom for the
+other four, and rom is wrong above palette 63 (174). Fixed with
+`--live-dir`, which reads each round's OWN gated dumps
+(`discover/cram/wide/s<N>_*.bin`, 136-168 per round) and unions them.
+
+**Their five packs, independently reproduced to the slot:**
+
+    round 0   25 palettes   [15,15,11,5]   46 slots   4 lines
+    round 1   11 palettes   [14,14, 5]     33 slots   3 lines
+    round 2   14 palettes   [13,15]        28 slots   2 lines
+    round 3    8 palettes   [15, 7]        22 slots   2 lines
+    round 4   15 palettes   [14,14,11]     39 slots   3 lines
+
+Nothing overflows. Only round 0 needs four lines. Their gating result
+holds up: the per-round tile palette really is static.
+
+**And the emitter now keys on the GAME'S ROUND, which is the fix for
+191.** `sh_src/pal_rounds_md.h`: `mdr_line_c[5][64]`, `mdr_s_line[5][128]`,
+`mdr_s_map[5][1024]`, `mdr_s_used[5][128]`. The old table space was
+PALSTATIC's palette-DETECTED scenes (`normal`, `boss_smoke`), which is
+orthogonal to rounds -- two slots for a five-round game -- and that is
+exactly why the refuse rule blanked level 2 and the transition.
+
+**What is still missing, and it is one channel.** The SH-2 cannot read
+68K WRAM, so it cannot see the game's round variable. The 68K has to
+publish it, and **COMM10 bits 13-15 are spare** (verified 187: the low 13
+are the tile-dirty mask and the SH-2 masks with 0x1FFF) -- three bits,
+enough for five rounds. The shim writes `(round & 7) << 13`, the master
+selects `mdr_*[round]`, and `MDSREFUSE` becomes safe everywhere instead
+of only on level 1.
+
+**On the transformation, the thread settled it and it is NOT a scene.**
+Two instructions in the program write the scene variable and the table
+holds 0-4, so nothing will ever ask for a transform table by number. The
+transform recolours the PLAYER, and a player's palette is the object's
+own slot and index -- a SPRITE palette. It sits outside everything the
+tile baker measures. **So the chevron blue was never going to be covered
+by a tile table, and its cover has to come from the sprite side.** That
+also means the refuse rule must never be allowed to refuse a sprite set:
+the rule belongs to the tile path only, which is where
+`mdp_note_tile` sits, so the scoping is already right -- what was wrong
+was refusing against a table that could not describe the round.
+
+**Their trap, recorded because it would have poisoned my emitter too:**
+the scene variable says which scene is LOADED, not what is on screen.
+Between attract screens the game reloads 69 of 128 palettes into the same
+work RAM while the variable still reads the forced scene, so a blind dump
+gave rounds 3 and 4 fifty-one and fifty-nine slots with overflow -- the
+eye title's and the score table's colours wearing the round's name.
+Gating on the attract step at 0xFFF031 fixes it. **My own `--live` runs
+for round 0 were ungated**, and they agreed with the gated pack (25
+palettes, [15,15,11,5], 46 slots) only because round 0 is what the
+attract actually shows.
