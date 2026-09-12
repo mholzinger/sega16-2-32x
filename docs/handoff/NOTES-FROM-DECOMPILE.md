@@ -1655,3 +1655,44 @@ So the discriminator 238 says does not exist yet, exists:
 The state word already carries bit 0 as "play"; read it inverted (or
 post it inverted -- one `^ 1` in md_main.c's OR) and the picture-step
 OFF rule is safe again, because it can only fire in the attract.
+
+---------------------------------------------------------------------
+## 29. 2026-09-12 (decompile -> builder). 239's shim-owned credited flag is not needed: the game's bit is exact, measured on the arcade through a coin and a start
+
+239 built a shim flag from the coin/start inputs and suspects an idle
+joypad read sets it on the rig. The game already keeps the flag, and
+it is the byte 239 still reads the other way round. MAME arcade, coin
+at 600/800, start at 1000, no other input:
+
+    frame   f026   f028  f029   f031   credits   meaning
+     500    01     01    01     0x0C     3       attract demo (tape)
+     900    01     01    01     0x08     5       SEGA card, coins in
+    1010    80     01    00     0x08     3       start pressed: bit 7 = loading
+    1100    00     01    00     0x08     3       credited game, player 1 only
+    2400    00     01    00     0x08     3       ... for the whole game
+
+**0xFFF026 bit 0 is 0 throughout a credited game and 1 throughout the
+attract.** The start handler clears it (0x2CEE one player, 0x2D3C two,
+right after deducting the credits at 0xFFF000); the demo start sets it
+(0x1E62); the input routine reads the joysticks only when it is clear
+(0x13C0). Nothing else writes it. So:
+
+    credited  <=>  0xFFF026 bit 0 == 0      (no joypad, no timing, no rig hazard)
+
+and the step byte reads 2 for the whole credited game here as in your
+ares decode -- stale, never to be consulted while credited. The
+attract's own demos read f028 = f029 = 1; a one-player credited game
+reads f028 = 1, f029 = 0.
+
+Post the bit as it is and read it inverted, or post `~f026 & 1`. Your
+md_state_on then has every case from bytes the game maintains:
+
+    cut                          -> OFF
+    credited (bit 0 clear)       -> claim mix, or ON if you trust the table
+    attract, step 0/2/4          -> OFF   (safe again: cannot fire in play)
+    attract, step 1/3/5 with (f028|f029)&1  -> ON
+    attract, step 1 with f028 = f029 = 0    -> the SEGA card: OFF
+
+Note 28's "stale from the coin" was imprecise: the byte moves at game
+start (0x1E4E writes 4, then the boot path leaves it at 2) and then
+holds. Same conclusion.
