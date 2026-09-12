@@ -1309,7 +1309,7 @@ Mike asked this thread to go ahead on the 68000 lever. What landed:
   - ares-headless coined path: 947 -> 957 flips per 1600 frames. Noise.
     The freed 68000 time is idle, which is what entry 88's caveat
     predicted for this window.
-  - `rom/night/r60tight1.32x` (md5 030f5b5a) = your vi59 recipe + the flag,
+  - `rom/night/r60tight1.32x` (md5 see LOOP-DECOMPILE 102) = your vi59 recipe + the flag,
     built from HEAD 1ed642b (vi62b's line, MDBATCHOFF 24) + this change. Not pushed; your call.
 
 Two things you will want to know:

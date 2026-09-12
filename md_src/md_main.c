@@ -1331,23 +1331,24 @@ __attribute__((noinline, section(".text.burn"))) static void shim_burn_rom(void)
  * r60_push -- the 16-long palette pre-scan (502 instructions a vint at
  * its loop head, 23% of the routine) and the 30-long rowscroll compare
  * (170) -- compiled to 7 instructions / 64 cycles a long. cmpm.l + dbne
- * is 2 / 30. Returns nonzero iff any of the n longs differ; what is
- * shipped does not change. always_inline keeps it in .data with its
- * caller (a .text copy would fetch from the cart under FM). */
+ * is 2 / 30. Returns the number of longs REMAINING from the first
+ * mismatch (n - its index), 0 iff all equal -- the same value the C
+ * `while (eq && *qa++ == *qb++) eq--` left in eq, so the mask walk can
+ * start at the first difference (LOOP-DECOMPILE 102). What is shipped
+ * does not change. always_inline keeps it in .data with its caller (a
+ * .text copy would fetch from the cart under FM). */
 static inline __attribute__((always_inline))
 uint16_t r60_ne_longs(const uint32_t *a, const uint32_t *b, uint16_t n)
 {
 	uint16_t cnt = (uint16_t)(n - 1);
-	uint8_t ne;
 	__asm volatile(
 		"1:\n\t"
 		"cmpm.l (%[a])+,(%[b])+\n\t"
 		"dbne %[cnt],1b\n\t"
-		"sne %[ne]\n\t"
-		: [a] "+a" (a), [b] "+a" (b), [cnt] "+d" (cnt), [ne] "=d" (ne)
+		: [a] "+a" (a), [b] "+a" (b), [cnt] "+d" (cnt)
 		:
 		: "cc", "memory");
-	return ne;
+	return (uint16_t)(cnt + 1u);         /* dbne leaves -1 when exhausted */
 }
 #endif
 __attribute__((section(".data"), noinline))
@@ -1600,6 +1601,9 @@ static void r60_push(void) {
 					 * walk entirely. Changed blocks pay the scan
 					 * up to the first difference, then the walk
 					 * resumes from block start. */
+#ifdef R60_TIGHT
+					uint16_t first_ne = 0;       /* longs to skip in the walk */
+#endif
 					{
 #ifdef R60_TIGHT
 						uint16_t eq = r60_ne_longs(mp4, sp4, 16);
@@ -1622,11 +1626,12 @@ static void r60_push(void) {
 							while (eqc && *qa++ == *qb++) eqc--;
 							(*(volatile uint16_t*)0xFFA1B4)++;
 							if (!eqc) (*(volatile uint16_t*)0xFFA1B6)++;
-							if ((eqc != 0) != (eq != 0))
+							if (eqc != eq)   /* exact: same remaining count */
 								(*(volatile uint16_t*)0xFFA1B0)++;
 							eq = eqc;
 						}
 #endif
+						first_ne = (uint16_t)(16u - eq);
 #else
 						const uint32_t *qa = mp4;
 						const uint32_t *qb = sp4;
@@ -1657,7 +1662,15 @@ static void r60_push(void) {
 						}
 					}
 					uint16_t m0 = 0, m1 = 0, cnt = 0;
+#ifdef R60_TIGHT
+					/* the pre-scan proved longs [0, first_ne) equal: they
+					 * contribute no bits and need no shadow store */
+					mp4 += first_ne;
+					sp4 += first_ne;
+					for (uint16_t i2 = (uint16_t)(first_ne * 2u); i2 < 32; i2 += 2) {
+#else
 					for (uint16_t i2 = 0; i2 < 32; i2 += 2) {
+#endif
 						uint32_t a = *mp4++;
 						if (a != *sp4) {
 							uint32_t o = *sp4;

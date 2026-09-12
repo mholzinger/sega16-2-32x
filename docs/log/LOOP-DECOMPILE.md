@@ -4736,7 +4736,7 @@ Rebuilt on HEAD 1ed642b after the builder made vi62b the line (MDBATCHOFF
       vi62b             32 100  59 100  67  67  94  15  51  49  41  46  47  50  50  49   917
       vi62b+R60TIGHT    34 100  57 100  68  67  97  17  50  48  44  50  50  50  50  50   932
 
-`rom/night/r60tight1.32x` (md5 030f5b5a) is vi62b's line + R60TIGHT=1, staged in
+`rom/night/r60tight1.32x` (md5 see LOOP-DECOMPILE 102) is vi62b's line + R60TIGHT=1, staged in
 the tree and NOT pushed to the rig — Mike is on vi59's play pass. Flag
 off by default; nothing in the shipping line changes until it is turned
 on.
@@ -4932,3 +4932,32 @@ What this does NOT cover, so the saving is bounded honestly:
   - The attract intro pages, the cutscene pages 10/11 and the
     round-clear rewrites (99) are not in the table: those screens fall
     back to the walk, keyed on the same bytes the shim can read.
+
+---------------------------------------------------------------------
+## 102. NEGATIVE RESULT — starting the mask walk at the first mismatch buys nothing (2026-09-12)
+
+Step 4's next lever was the changed-block mask walk (~330 a vint, 97).
+The pre-scan's `dbne` counter already names the first differing long,
+so `r60_ne_longs` now returns the remaining count (0 = equal, the same
+value the C loop left in `eq`) and the walk starts there, skipping
+longs the scan proved equal. Exact by construction; the cross-check
+now compares the COUNT, not the truth value:
+
+    MAME, coined level-1 path, 3,000 frames: 18,231 pre-scans,
+      4,376 unequal, 0 disagreements on the remaining count
+
+Measured on HEAD (8c4a708, vi66b's line), same rig as 97:
+
+    MAME per vint         base3    tight4
+      r60_push            2,511     1,672      (97's tight: 1,676)
+      shim                4,556     3,573
+    ares flips /1600        921       936      noise
+
+**-4 instructions a vint.** The changed blocks are 1.6 a vint and their
+first difference sits early, so there is nothing to skip. Kept — it is
+exact and it costs nothing — but it is not a lever, and the walk is not
+worth more asm. What is left of r60_push is the rotor (~430) and it is
+the last 68K item on the plan; at 1-8% over budget by instruction count
+(100) it is worth doing only once step 2 has crossed the wall.
+
+`rom/night/r60tight1.32x` rebuilt on HEAD (md5 c9735c33), staged, not pushed.
