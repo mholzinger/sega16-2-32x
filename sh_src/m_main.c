@@ -3551,7 +3551,16 @@ RAMCODE static int build_maps_chunk(int par)
         }
         return 0;
     }
+#ifdef PHASE_CENSUS
+    {
+        uint16_t tt0 = frt();
+        bm_tail(a, par);
+        CEN[57] += (uint16_t)(frt() - tt0);  /* tail ticks */
+        CEN[59]++;                           /* tails = generations */
+    }
+#else
     bm_tail(a, par);
+#endif
     BM->active = 0;
     return 1;
 }
