@@ -5548,9 +5548,12 @@ __attribute__((noinline)) static void disp_gate(void)
          * and the eye read round 0, cut 0 (LOOP29 233 dump) while their
          * sets sit outside every table; only what is on screen can say
          * the level is. */
+        /* 234: the whole decision from the word (NOTES-FROM-DECOMPILE
+         * 23): play, or attract steps 1/3/5. The claim mix is diagnostic
+         * only from here (MDS counters keep it). */
         {
-            uint16_t sw = MD_STATE_W();
-            if (MD_STATE_OK(sw) && MD_STATE_CUT(sw)) on = 0;
+            unsigned so = md_state_on();
+            if (so != 2) on = (uint8_t)so;
         }
 #endif
         if (on && !mds_onscreen) {
