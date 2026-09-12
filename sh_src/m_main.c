@@ -220,7 +220,16 @@ static uint16_t tv_noline, tv_zout;
  *   tv_uz  ... and also read zero through the uncached mirror
  *   tv_mz  zero-output records whose 8-entry pen map is all zero */
 static uint16_t tv_cz, tv_uz, tv_mz;
-#define TV_BITS ((uint32_t)(((tv_cz > 3 ? 3 : tv_cz) << 8) | ((tv_uz > 3 ? 3 : tv_uz) << 10) | ((tv_mz ? 1 : 0) << 12)))
+/* vi83 on the rig: the ROM source reads zero BOTH cached and uncached
+ * (sat 3 within 16 s; ares 2 = the blank tiles), map-zero later. Either
+ * the ROM read fails or the CODE names a blank/out-of-bank tile. vi84:
+ *   tv_czn  zero-output records with 0 < code < 16384 (a real tile that
+ *           read as zero)
+ *   tv_bad  zero-output records with code >= 16384 (outside the bank)
+ *   tv_tst  zero-output records whose md_tag re-read through the
+ *           uncached mirror differs from the key the emitter used */
+static uint16_t tv_czn, tv_bad, tv_tst;
+#define TV_BITS ((uint32_t)(((tv_czn > 3 ? 3 : tv_czn) << 8) | ((tv_bad > 3 ? 3 : tv_bad) << 10) | ((tv_tst ? 1 : 0) << 12)))
 #else
 #define TV_BITS 0u
 #endif
