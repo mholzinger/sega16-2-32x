@@ -182,6 +182,18 @@ static uint8_t  k2f_spr_ok;      /* the k1 packet validated at its own
                                   * leaves partial garbage in SPR_LAND). */
 static uint16_t k2f_spr_landed;
 #define md_pktA ((uint16_t *)0x06039A00)     /* A-channel packet staging */
+#ifdef TILE_VERIFY
+/* LOOP29 231 rig instrument (BOOTTILEVER). The 68K reads whole tile
+ * records as zero on the FPGA while ares reads art. Two SH-2 checks,
+ * counted here and carried to the 68K in packet word 1 bits 8-12:
+ *   tv_rb  windows where the FB read-back of a just-published packet
+ *          (tp_lastA) differs from the staging it was copied from
+ *   tv_wr  post-flip replays whose FB read-back differs from tp_lastA */
+static uint16_t tv_rb, tv_wr;
+#define TV_BITS ((uint32_t)(((tv_rb > 7 ? 7 : tv_rb) << 8) | ((tv_wr > 3 ? 3 : tv_wr) << 11)))
+#else
+#define TV_BITS 0u
+#endif
 static uint8_t k2f_pendA, k2f_pendB;         /* staging built, unpublished */
 #endif
 #define SPR_LAND    ((volatile uint16_t *)0x26039000)   /* DREQ landing, past
