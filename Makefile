@@ -1030,6 +1030,12 @@ ifdef C1PUNCH
 SHCCFLAGS += -DC1_PUNCH
 SHOBJS += sh_src/cat1hole_data.o
 endif
+# `make ... C1PCELL=1` = Build C (LOOP29 246): the punch's 1:1 and zoomed
+# sprite paths fetch the hole class (and the art row) once per cell
+# crossed instead of per pixel. Needs C1PUNCH.
+ifdef C1PCELL
+SHCCFLAGS += -DC1_PCELL
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif

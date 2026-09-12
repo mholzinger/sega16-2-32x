@@ -489,3 +489,28 @@ clean at the next on the same rom, with nothing in the allocator
 changed between (Build B's card). One capture is a phase, not a
 defect -- the same rule the log already applies to ares samples under
 3,000 cycles.
+
+---------------------------------------------------------------------
+## LANDING PROTOCOL, RULE ADDED (decompile thread via Mike, 2026-09-13 04:15)
+
+A rig black share counts only across THREE launches. The same vi95 rom
+read a fifth black at one launch and clean at the next with nothing
+changed in between (LOOP29 231 vs Build B's card), so a single capture
+is a phase, not a defect.
+
+## BUILD C CARD (builder, 2026-09-13 04:20) -- the punch's own price
+
+    rom        rom/night/bldC.32x            (md5 below)
+    base       bldB (md5 493d4984, the line)
+    change     ONE flag: C1PCELL=1 (-DC1_PCELL): the 1:1 (NIB/NIB_NC) and
+               zoomed (ZNIB/ZNIB_G) sprite paths fetch the hole class and
+               the art row once per cell crossed (a per-row cache) instead
+               of per pixel; the baked-run path already did (244c). No
+               picture change by construction: the same class, the same
+               art byte, tested once per cell instead of once per pixel.
+    expected   ~0.13 v/gen off the ares wall (Build A's price, 1.16 -> 1.29
+               on vi95's line), i.e. the line near 1.05.
+    gates      ares wall (pcC vs pcB 1.18); picture equal to bldB; rig
+               frame rate (frC vs frB 21 19 7 15 18); rig black shares
+               across three launches.
+    numbers    (appended when the runs land)
