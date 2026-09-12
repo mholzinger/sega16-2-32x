@@ -694,6 +694,11 @@ static void md_consume(uint32_t pkt_base) {
 						if (mm) (*(volatile uint16_t*)0xFFA1E4)++;
 						if (sz) (*(volatile uint16_t*)0xFFA1E6)++;
 					}
+					/* 0xFFA1E8: consumes where the 68K's FB bank (FS,
+					 * 0xA1510A bit 0) changed between entry and here --
+					 * a flip landing while the tile DMAs read the FB. */
+					if ((tv_fs0 ^ *(volatile uint16_t*)0xA1510A) & 1u)
+						(*(volatile uint16_t*)0xFFA1E8)++;
 #endif
 					{	/* scroll rides the tile chunk too: sc[3]/sc[7] */
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
