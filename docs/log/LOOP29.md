@@ -5676,3 +5676,43 @@ screen, then the demo) to the claim mix. If the rig's step-3 and step-5
 captures come out clean while step 1's do not, the mechanism is named
 and the rest is the two discriminators asked for in NOTES-FROM-
 DECOMPILE 24 (credited play; step 1's sub-phase).
+
+**vi90 measured.** ares: title 0.273, demo 0.038, eye 0.515, return
+0.038-0.044 (= vi75), play = vi75; face plane partial at 1580-1600 (the
+68K change's phase, 227). Rig: BETTER, not clean -- first demo trees
+0.15-0.19 fg 0.15-0.40 (vi75 0.20/0.57), second demo trees 0.07-0.10 fg
+0.14-0.18 (vi75 0.02-0.06/0.58-0.74). Forcing ON in steps 3/5 removed
+most of the FG black. What is left (214238, 214302): RECTANGLES of FG
+cells in the temple facade and the pedestal, and blocks in the tree
+row -- per-tile, persistent, not whole sets any more.
+
+## 236. THE RECTANGLES ARE THE SLOT-PRESSURE RULE WITH ITS FALLBACK GONE (2026-09-12 22:40)
+
+CAT1_MD's SLOT PRESSURE rule (2026-09-03, "Mike's black cells"): a cat-1
+tile whose cache set is full of hot ways does not evict -- the slot
+stays BLANK and "the FB keeps the cell" (CAT1_PEND). Under C1_NOFB
+there is no FB pass, so that blank is a black cell, for as long as the
+ways stay hot. Hot-way pressure is a function of windows per vint and
+claim order, which is exactly what the rig changes against ares -- and
+the rectangles are FG cells (the temple is FG sets 76-79, the pedestal
+78/79). Not seen on vi70 because vi70 draws cat-1 in the FB.
+
+**236:** `C1_SOFT` is 0 under C1_NOFB: a cat-1 tile evicts like any
+other. SH-2 only, no 68K phase change. `rom/night/vi91.32x` = vi90 +
+236. If the temple rectangles go and the tree-row blocks stay, the
+tree row is the cut-mode blank (md_cut, armed by claim storms) and
+gets the same treatment.
+
+**Fold 5 footprint, measured** (ares, vi75, 68K writes into FB text
+staging, play frames 900-999):
+
+    pc 0x904D96  health bar   0xCB0-0xCCE   99 of 100 vints   (TXTWRAM covers)
+    pc 0x903AC2  credit line  0xD50-0xD60   100 vints         (TXTWRAM covers)
+    pc 0x9037E6  0x369C routine 0x0B4-0x0C2   51 vints        (the score: NOT covered)
+    pc 0x90380A  same          0x0C2         51 vints
+    pc 0xFFBE3C/4C thunk-displaced stores 0x162-0x17A  22-29 vints
+
+So the third writer's per-vint footprint in level 1 is the score line
+(8 words at 0x0B4). NOTES-FROM-DECOMPILE 25 asks for the routine's
+offset/length source; failing that, a bounds mark at its store loop
+(min/max offset per vint) makes the shim copy generic.
