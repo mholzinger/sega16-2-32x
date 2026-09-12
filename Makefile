@@ -993,6 +993,15 @@ endif
 ifdef BOOTFLIPRATE
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FLIPRATE
 endif
+# `make ... MDSTATE=1` = PLAN-SINGLE-VINT fold 4 (LOOP29 233): the 68K
+# posts one state word per vint from IRQ4 on COMM14 (tag E, sequence,
+# cutscene byte 0xFFF148, round 0xFFF142); the SH-2 takes the round from
+# it (never from COMM10's dirty-mask neighbours) and the cutscene bit
+# forces the round off screen with no detector lag. Needs MDROUND.
+ifdef MDSTATE
+SHCCFLAGS += -DMD_STATE
+MDCCFLAGS += -DMD_STATE
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
