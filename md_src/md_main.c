@@ -638,7 +638,7 @@ static void md_consume(uint32_t pkt_base) {
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
 #ifdef TILE_VERIFY
-				uint16_t tv_fs0 = *(volatile uint16_t*)0xA1510A;
+				uint16_t tv_fs0 = *(volatile uint16_t*)0xA1518A;   /* FS: FB control, was 0xA1510A (DREQ dst) -- vi77's 0 is void */
 				*(volatile uint16_t*)0xFFA1EC = sc[1];   /* SH-2 verdict bits 8-12 */
 #endif
 				(*(volatile uint16_t*)0xFFB0B2) =
