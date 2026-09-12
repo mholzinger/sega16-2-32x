@@ -5039,14 +5039,34 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             int m = hi - lo;
 #ifdef C1_PUNCH
                             if (punch) {
+                                /* 244c: per CELL, not per pixel (frc1p95b
+                                 * read 12 16 8 19 9 against 19-21: the
+                                 * per-pixel test on every sprite pixel
+                                 * cost the slave a third of its windows).
+                                 * Class 0 copies the run, class 1 skips
+                                 * it, only class 2 looks at the art. */
                                 const volatile uint8_t *c1 = CAT1SCR_U(y >> 3);
                                 const volatile uint16_t *c1c = CAT1CODE_U(y >> 3);
                                 unsigned py = (unsigned)y & 7u;
                                 unsigned sx = (unsigned)(lo - 184);
-                                do {
-                                    if (!c1_hit(c1, c1c, sx, py)) *d = (uint8_t)(base + *s), PENTAP(e[4], *s);
-                                    d++; s++; sx++;
-                                } while (--m);
+                                while (m > 0) {
+                                    unsigned cx = sx >> 3;
+                                    int k = (int)(8u - (sx & 7u));       /* pixels to the cell edge */
+                                    if (k > m) k = m;
+                                    unsigned v = c1[cx];
+                                    if (v == 0) {
+                                        for (int q = 0; q < k; q++) { *d++ = (uint8_t)(base + *s); PENTAP(e[4], *s); s++; }
+                                    } else if (v == 1) {
+                                        d += k; s += k;
+                                    } else {
+                                        const uint8_t *art = altbeast_tiles + (unsigned)c1c[cx] * 64u + py * 8u + (sx & 7u);
+                                        for (int q = 0; q < k; q++) {
+                                            if (!art[q]) { *d = (uint8_t)(base + *s); PENTAP(e[4], *s); }
+                                            d++; s++;
+                                        }
+                                    }
+                                    sx += (unsigned)k; m -= k;
+                                }
                             } else
 #endif
                             do {
