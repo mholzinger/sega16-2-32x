@@ -12644,7 +12644,7 @@ RAMCODE void m_main(void)
                     } else {
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
-                        d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u);   /* bit 13: SH-2 holding blank */
+                        d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendB = 0;
                     }
                 }
