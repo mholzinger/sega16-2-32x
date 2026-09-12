@@ -445,3 +445,16 @@ question: does it look like c1p95c. Then Build C.
       planes, presence 0, level 0.
     CARD COMPLETE 03:50. bldB is on the rig. Mike's question: does it
       look like c1p95c.
+
+## BUILD B PASSED (Mike, 2026-09-13 ~04:00): "Behind the grass. Stellar
+## lockdown on the progress." THE LINE IS bldB.
+
+`rom/night/bldB.32x` (md5 493d4984) = c1p95c + SETCOLS=1: folds 1, 2 and
+4 on one rom, ares 1.18 v/gen / 40% single-vint on its own base of
+1.29 / 31%, check mode 0/0, rig frame rate at the line's. Build C:
+per the census order, fold 5 with the text copy on the packet side
+(NOTES 25/26 open with the decompile thread), then fold 3 / RELBANK on
+the rig with BOOTFLIPRATE + BOOTGATECHK. A side card, whenever a slave
+lever is wanted: the punch's 1:1 sprite paths per cell (0.13 v/gen of
+ares slave time; the rig's wall is windows per vint, so it is not the
+rig's number).

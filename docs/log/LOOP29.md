@@ -6064,3 +6064,14 @@ fold-1 builds: vi95 (plays), c1p95c (hole punch, on the rig), sc95
 (fold 2, exact, 1.05 v/gen ares). Next: fold 5 with the copy on the
 packet side (NOTES 25/26 with the decompile thread), then RELBANK on
 the rig with BOOTFLIPRATE + BOOTGATECHK.
+
+## 245. BUILD B PASSED; THE LINE IS bldB (2026-09-13 04:00)
+
+Mike on Build B (bldB = c1p95c + SETCOLS=1): "Behind the grass. Stellar
+lockdown on the progress." Card in PLAN-SINGLE-VINT: wall 1.29 -> 1.18
+v/gen on the fold-1 line, single-vint 31 -> 40%, check 0/0 over 3,010
+planes, picture = c1p95c, rig frame rate 21 19 7 15 18. The line is
+bldB: folds 1 (tiles to the VDP + the per-pixel hole punch), 2 (the
+maps scan from the bake) and 4 (the state word) on one rom. vi70 stays
+the presentation reference for the older gates. Next card: fold 5 on
+the packet side, then fold 3.
