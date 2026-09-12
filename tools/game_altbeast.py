@@ -239,10 +239,20 @@ TABLES = {
         (0x3AAE, 6, 0x43F9, "lea text,%a1"),
         (0x4D88, 4, 0x2029, "movel 16(%a1),%d0"),
         (0x56E8, 4, 0x522E, "addqb frame ctr (follower rewrites CCR)"),
+        # LOOP29 225: the ROUND CLEAR typewriter. An object state machine
+        # types one glyph every 5 frames -- movew d1,(a1) at 0x6504 for
+        # "ROUND CLEAR BONUS " and 0x6560 for the points -- into the text
+        # area, once, never rewritten. Outside every span above because the
+        # attract never round-clears, so a glyph written while FM=1 was
+        # dropped for good: Mike's "RO D CL AR BONU". The displaced subq
+        # sets the CCR the bcs at +4 reads; the thunk runs it last.
+        (0x64DA, 4, 0x536E, "round clear text: subqw state ctr (bcs follows)"),
+        (0x6536, 4, 0x536E, "round clear points: subqw state ctr (bcs follows)"),
     ],
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
-                     (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC)],
+                     (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
+                     (0x64DA, 0x6510), (0x6536, 0x656C)],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),

@@ -5270,3 +5270,38 @@ missing tiles and text. Otherwise SOLID presentation." vi70 is the line:
      maps drain and measure the scan-versus-tail split (NOTES 21).
   3. Attract only: the logo slide-in palette and the ranking screen (210-211).
   4. The principled cutscene signal, 0xFFF148 through the mailbox (214).
+
+## 225. THE ROUND-CLEAR TEXT: A TYPEWRITER OUTSIDE EVERY FM GATE (2026-09-12 14:50)
+
+Mike's one open item on the accepted vi70: "the final scene with the
+round clear text missing tiles and text" -- "RO D CL AR BONU", the same
+holes every time.
+
+The text word's low byte is ASCII ("CREDITS 3" in text RAM reads 43 52 45
+44 49 54 53), so the string is in rom as text: "ROUND CLEAR BONUS " at
+0x7076, "CLEAR"/"BONUS" alone at 0x1BB7E/0x1BC0C/0x7082. One reference,
+`lea %pc@(0x7076),%a0` at 0x64C2, inside an OBJECT state machine (slot
+0xFFD400, states chained through fp@(2)):
+
+    0x64DA  every 5 frames: movew d1,a1@ at 0x6504 -- ONE glyph of
+            "ROUND CLEAR BONUS " into text RAM (0x41033C + 2n), 18 of them
+    0x6536  same for the points string at 0x7088 + 14*round, 10 glyphs
+
+Written once, never rewritten. Both are main-loop framebuffer stores
+(text RAM is rebased into FB text staging on this line) OUTSIDE every
+FMGATE span -- the gate derivation was censused on the attract, and the
+attract never round-clears. A glyph whose 5-frame slot lands while FM=1
+is dropped (the FB-write rule of the flip-latch entry) and stays missing.
+The positions vary run to run because the phase does; Mike's two
+readings differ by one letter.
+
+**225:** two FMGATE entries, 0x64DA and 0x6536 (displaced `subqw
+#1,fp@(34)`, 4 bytes; the bcs that follows reads its CCR and the thunk
+runs the displaced instruction last), with spans (0x64DA,0x6510) and
+(0x6536,0x656C). fmgate_derive's lists carry the two store sites.
+FMGATE_THUNK_WORDS 222 -> 236.
+
+`rom/night/vi71.32x` (md5 8d934147) = vi70 + 225, staged, not launched.
+Rig only: neither emulator drops the FB write, so headless cannot show the
+glyphs coming back. Sanity checks (flips, play, face, return) pending.
+The "missing tiles" in the same scene are not yet located.
