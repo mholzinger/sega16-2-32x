@@ -5649,3 +5649,30 @@ transformation byte, and the picture steps 0/2/4 (high-score table,
 intro pictures, eye) -- and leaves ON to the claim mix. Everywhere the
 word is silent this is vi75; where it speaks, the lag and the timing
 dependence of the detector are gone. Gates pending.
+
+**vi89 measured.** ares: title 0.273 (vi75 0.297), demo 0.038, eye
+0.485 (0.474), play 0.036-0.043 -- vi75 everywhere the word is silent;
+face plane LATE (0.00 at 1575/1580, 0.52 at 1600; vi75 full from 1575)
+and the aligned return 0.10-0.12 against vi75's 0.045: the 68K change
+re-rolled the deferred-window phase (227/228; fmgate_defer 66). Rig:
+IDENTICAL to vi75 -- first demo trees 0.20 fg 0.57-0.76, second demo
+0.02-0.06 / 0.58-0.74. The OFF-only word does not touch the rig defect.
+
+## 235. HYPOTHESIS FROM vi88: THE RIG'S BLACK SETS ARE THE CLAIM MIX DECIDING (2026-09-12 22:20)
+
+The one build whose rig demo came out CLEAN on vi75's line was vi88 --
+the build that let the WORD force the round ON (step 3) instead of the
+claim mix: 213211/213216 trees 0.00 fg 0.04, the level-1 demo with the
+logo, temple and trees drawn. Every build where the claim mix decides
+ON (vi75, vi89) shows the black sets on the rig, and vi70 (claim mix
+too, but a different phase) does not. Consistent with 231's finding
+that the transport is intact and the black is built by state: the flag
+flapping ON/OFF at hardware phase yields the pins, wipes/refuses sets,
+and what was shipped off stays off.
+
+**235 (vi90):** the word forces ON for steps 3 and 5 (unambiguous
+demos), OFF for 0/2/4 and the transformation, and leaves step 1 (SEGA
+screen, then the demo) to the claim mix. If the rig's step-3 and step-5
+captures come out clean while step 1's do not, the mechanism is named
+and the rest is the two discriminators asked for in NOTES-FROM-
+DECOMPILE 24 (credited play; step 1's sub-phase).
