@@ -1055,3 +1055,48 @@ tables.
 
 Not built, not played. The table agrees with the hardware now; the picture
 is still unproven.
+
+---------------------------------------------------------------------
+## Level 4 is not heavy — the game side is exonerated too — 2026-09-12
+
+You ruled out the background for level 4 and put the cause on the sprite
+or game-logic side. Measured that half on the arcade, and it comes back
+negative as well. LOOP-DECOMPILE 86.
+
+**You can start at any round now without playing to it.** 0x64E reads the
+starting round from the table at 0x1848 with `(0xFFF031 & 0x18) >> 3`, so
+writing one value across those eight bytes starts the game there.
+`RW_N=<round> tools/round_workload.lua`. 0xFFF14E and 0xFFF142 confirm it
+per run.
+
+**Same input script every round, 601 samples over frames 1500-4500:**
+
+    round  objects      live sprites   drawn scanlines   zoom sum
+      0    7.1 / 18     6.4 / 17       295 / 669          4.7
+      1    7.7 / 26     5.0 / 16       213 / 838         39.6
+      2    8.7 / 24     6.4 / 21       291 / 856         36.0
+      3    6.6 / 18     5.7 / 17       233 / 657          8.7
+      4    4.2 / 10     2.9 /  8       139 / 399         10.0
+
+Round 3 is level 4. It is below average on all four, and round 4 is the
+lightest in the game. **Drawn scanlines** is the column to read — the sum
+of `bottom - top` over live records is what a software renderer pays, and
+level 4 asks for 21% fewer than level 1.
+
+Getting that right took one correction worth passing on: counting non-zero
+bytes in the order list gives 255 of 256 in every round, because nobody
+clears the list. The hardware's test is `jts16_obj_scan.v:83-85` — word 0
+is top in the low byte, bottom in the high byte, and a record draws only
+when top < bottom.
+
+Caveat, because it matters: the script walks right and attacks, so it does
+not fight the level the way Mike does. Same script in all five runs, so
+the comparison is fair for what the level spawns; not a worst case.
+
+**So the cost is something the PORT does differently for that round.** One
+hypothesis, yours to take or drop: the slowdown showed up on vi44 and the
+round-table channel is new. If level 4 was not slow before the round
+tables went in, the suspect is the install path rather than the level —
+194 already found a second install site keyed on the wrong thing, and a
+third that re-installs every frame would be hardest to spot exactly where
+the table is smallest.

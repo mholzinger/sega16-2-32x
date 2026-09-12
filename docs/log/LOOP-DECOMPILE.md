@@ -4092,3 +4092,55 @@ started and played to the middle of level 1 — on a rig whose control
 fires in the same run. That is a real absence with a stated scope, not an
 unexamined one: it says nothing about the later rounds, which this input
 script never reaches.
+
+---------------------------------------------------------------------
+## 86. LEVEL 4 IS NOT HEAVY. The game asks LESS of it than of levels 1 and 3.
+
+LOOP29 198 ruled out the background for level 4's slowdown and put the
+cause "on the sprite or game-logic side". That half is measurable from
+the arcade, and it comes back negative too.
+
+**Reaching a later level without playing to it.** 0x64E reads the starting
+round from the table at 0x1848 with `(0xFFF031 & 0x18) >> 3`, so writing
+one value across that table starts the game at that round —
+`tools/round_workload.lua`, `RW_N=<round>`. Verified per run: 0xFFF14E and
+0xFFF142 both read the round asked for.
+
+**Same input script every round, 601 samples over frames 1500-4500:**
+
+    round  objects      live sprites   drawn scanlines   zoom sum
+      0    7.1 / 18     6.4 / 17       295 / 669          4.7
+      1    7.7 / 26     5.0 / 16       213 / 838         39.6
+      2    8.7 / 24     6.4 / 21       291 / 856         36.0
+      3    6.6 / 18     5.7 / 17       233 / 657          8.7
+      4    4.2 / 10     2.9 /  8       139 / 399         10.0
+
+**Round 3 is level 4, and it is below average on every one.** Fewer
+objects than rounds 0, 1 and 2; fewer drawn scanlines than 0 and 2; a
+fifth of round 1's zoom load. Round 4 is the lightest in the game.
+
+**Getting the sprite count right mattered.** The first pass counted
+non-zero bytes in the order list and got 255 of 256 in every round — the
+stale contents of a list nobody clears. The hardware's own test is in
+`jts16_obj_scan.v:83-85`: word 0 is top in the low byte and bottom in the
+high byte, and `badobj = top >= bottom`. Counting records where top <
+bottom gives 3 to 6, which is what the screen shows. **Drawn scanlines**,
+the sum of `bottom - top`, is the number a software renderer actually
+pays, and it is the one worth having.
+
+**So both halves of LOOP29 198's split are now closed from the game side.**
+The background was ruled out there; objects, sprites, drawn area and zoom
+are ruled out here. Level 4 does not ask the port for more work, so the
+cost is something the PORT does differently for that round.
+
+**One caveat, stated rather than buried:** the script walks right and
+attacks, so it does not fight the level the way Mike does. It is the same
+script in all five runs, which makes the comparison fair for what the
+level itself spawns, and it is not a worst case.
+
+**And one hypothesis for the rendering thread, free.** The slowdown
+appeared on vi44, and the round-table channel is new (LOOP29 193-197). If
+level 4 was not slow before the round tables, the suspect is the install
+path, not the level — LOOP29 194 already found a SECOND install site that
+was keyed wrongly, and a third that re-installs per frame would cost most
+where the table is smallest to detect.
