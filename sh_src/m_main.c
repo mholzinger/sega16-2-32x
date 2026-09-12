@@ -609,8 +609,22 @@ volatile uint8_t  mdalloc_pin[128];
  * writes this 40x28 cell mask (one generation ahead of the slave's
  * compose, which reads it through the uncached alias). Cell granular:
  * a cat-1 tile's own transparent pixels lose the sprite there. */
-static uint8_t cat1scr[28][40];
+static uint8_t cat1scr[28][40];          /* 0 no hole, 1 whole cell, 2 per pixel */
+static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
 #define CAT1SCR_U(r) ((const volatile uint8_t *)(0x20000000u | (uint32_t)cat1scr[(r)]))
+#define CAT1CODE_U(r) ((const volatile uint16_t *)(0x20000000u | (uint32_t)cat1code[(r)]))
+#include "cat1hole.h"
+extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
+/* 244: PER PIXEL where the bake says the cat-1 tile has transparent
+ * pixels (the grass tufts): the sprite pixel is punched only where the
+ * tile's own pixel is opaque. One ROM byte per such pixel. */
+static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
+{
+    unsigned v = m[sx >> 3];
+    if (v == 0) return 0;
+    if (v == 1) return 1;
+    return altbeast_tiles[(unsigned)cd[sx >> 3] * 64u + py * 8u + (sx & 7u)] != 0;
+}
 #endif
 /* 0x3A680 map, all inside FBCLEAR's 384-byte tail below cache_tag:
  *   3A680 ROWLIVE [232]        ends 3A768
