@@ -4777,3 +4777,38 @@ staged on the rig, not launched. vi48 is withdrawn.
 **NOT yet measured:** whether a long fade in play now clears the pins and
 brings back churn mid-level. A vi45-vs-vi49 divergence sweep over the
 level-1 demo (our frames 500-1560) is running.
+
+## 205-206. THE RETURN FROM A FOREIGN SPAN, AND THE FLAMES (2026-09-12 01:50)
+
+Mike on vi47: level 1 with a black band across the wall, "the player and
+wolf are floating", before AND after the transform (054102, 054137). Then
+on vi49: "you fixed the chevron! now the flame color is missing" -- the
+face scene has the plane, the flames are flat red (054444), and the
+opening "rise from your grave" has black blocks across the temple (054317).
+
+**Both are the allocator's state around the foreign transition.**
+
+**205 -- the return.** When the span begins the round's pins drop and its
+sets get evicted by the cutscene's. Coming back, the round's table is
+re-installed only by the detector's CONFIRMED path, three consecutive
+matching landings, and in play the level lands its palette rarely: vi47's
+band was still black 20 s after the transform. The round channel is still
+valid the whole time, so on the FIRST matching landing while
+mds_scene_cur == 0xFF, install md_round's table (detect block, 11170).
+Headless ares does not reproduce the band -- the attract's level start is
+a full palette load, and vi45/vi49 read the same black share (0.046-0.069)
+from frame 2200 on -- so this is the play path, Mike's eye only.
+
+**206 -- the flames.** With the pins dropped the round's sets are still
+RESIDENT, and the LRU rule (>= 12 windows) will not evict them yet, so the
+cutscene's sets 20-21 (the yellow-to-red flame ramp, 6 colours) land on
+nearest-colour pens: the field's red. Earlier builds had coloured flames
+only because the refusal kept them OFF the MD plane and the framebuffer
+drew them. Fix: FREE every resident set at the transition (disp_gate).
+Nothing is lost -- 205 puts the round back whole on return.
+
+    vi50 (md5 b9189cf7) = vi49 + 205
+    vi51 (md5 180f6664) = vi50 + 206     both flag-identical, staged
+
+Measurement of vi51 (plane timing, flame share vs the arcade, black share
+after the cutscenes) pending.

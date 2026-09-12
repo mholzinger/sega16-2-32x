@@ -5403,6 +5403,15 @@ __attribute__((noinline)) static void disp_gate(void)
         for (unsigned s2 = 0; s2 < 128; s2++)
             mds_pin[s2] = 0;
         mds_scene_cur = 0xFF;
+        /* LOOP29 206: and FREE them. Unpinned but resident, the round's
+         * sets hold every pen until the LRU rule (>= 12 windows) lets
+         * them go, so the cutscene's sets land on nearest-colour pens:
+         * Mike's vi49 flames were flat red, the field's own pen. The
+         * round comes back whole on the first matching landing (205),
+         * so nothing here is worth keeping. */
+        for (unsigned s2 = 0; s2 < 128; s2++)
+            if (mdp_s_line[s2])
+                mdp_free_set(s2);
     }
 #endif
 #ifdef BOOT_GATEOFF
@@ -11172,6 +11181,25 @@ RAMCODE void m_main(void)
                         if (hit < PSCENE_N) {
                             pscene_nomatch = 0;
                             mds_miss_age = 0;
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                            /* LOOP29 205: END OF A FOREIGN SPAN. The
+                             * round's table was dropped when the span
+                             * began (pins cleared, mds_scene_cur 0xFF)
+                             * and its sets have been evicted by the
+                             * cutscene's. The re-install below waits for
+                             * THREE confirmed landings, and in play the
+                             * level lands its palette rarely -- Mike's
+                             * vi47 level 1 sat with a black wall band
+                             * 20 s after the transform. The round channel
+                             * is still valid, so ONE matching landing is
+                             * enough to put the round's table back. */
+                            if (mds_scene_cur == 0xFF
+                                && md_round < MDROUND_N) {
+                                mds_install(md_round, (uint8_t)win_no);
+                                mds_scene_cur = (uint8_t)hit;
+                                mds_loadgap = 32;
+                            }
+#endif
                         } else if (pscene_cur != 0xFF
                                  && ++pscene_nomatch >= 16) {
                             /* 16, not 32: nomatch counts K-vints
