@@ -250,6 +250,15 @@ TXTWRAM as written halves the rig frame rate (237): fold 5's copy must
 change transport before RELBANK is measured. Any 68K change re-rolls the
 ares same-round return (227); judge those builds on the rig.
 
+**vi95 (2026-09-13 00:20, LOOP29 240-241)** = vi75's line + `MDSTATE=1`
+with every attract decision from the game's own bytes (NOTES 29:
+credited = 0xFFF026.0 clear; step 0xFFF031>>2; demo bit f028|f029).
+Mike: "we've repaired most defects." It is the fold-1 build to play;
+the rig frame rate matches vi75 (fr95e 19 15 22 21 14). Never let the
+word hold the round off in a credited game (vi90/vi94, 238-240). Open
+on it: the hole punch (sprites over cat-1 ground, 175), black drops
+(ship rate, 237), the text gates (fold 5). NEXT BUILD: fold 2.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch
