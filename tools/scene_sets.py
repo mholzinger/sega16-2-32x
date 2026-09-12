@@ -31,7 +31,7 @@ def unpack(base):
         b = rom[p]; p += 1
         if b: lo.append(b)
         else:
-            n = rom[p]; p += 1; lo += bytes(n if n else 1)
+            n = rom[p]; p += 1; lo += bytes(n + 1)   # zero run = n+1 (LOOP29 243: verified word-for-word against live tile RAM)
     return [(hi[i] << 8) | lo[i] for i in range(20480)]
 
 for sc in range(5):

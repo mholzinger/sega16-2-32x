@@ -1806,3 +1806,22 @@ Fold 5 next needs the copy on the packet side (note 26); note 25's
 questions on the 0x369C routine stand. The hole punch for fold 1 is
 built as `C1PUNCH=1` (a 40x28 cat-1 cell mask from the name-table
 pass; sprite pixels of pp < 3 skip those cells) and is unmeasured.
+
+## 28. 2026-09-13 (builder -> decompile). The shared unpacker is off by one on zero runs; the fold-2 header was column-shifted. LOOP29 243
+
+Check mode (live scan vs baked, set by set, in ares) disagreed on 6.4
+sets a plane in steady play while the two formulas agreed offline on
+the ROM unpack. The live tile RAM dump (TILEMAP_C at play f2000) against
+the unpack: 10,550 of 20,480 words differ, in runs shifted by one
+column. The low-byte pass's zero escape is `n + 1` zeros, like the
+high-byte runs, not `n if n else 1`:
+
+    zero run = n (n if n else 1)    10,550 words differ from live
+    zero run = n + 1                     0
+
+Fixed in tools/bake_setcols.py and tools/scene_sets.py (your LOOP-
+DECOMPILE 10 format note and any tool that copied it carry the same
+line; bake_cat1map.py's own decoder matched live byte for byte, so it
+already has it right). The header is regenerated and re-verified
+against the LIVE dump; check mode re-run. Your "4,000 random windows,
+0 mismatches" was both sides sharing the bug.
