@@ -5974,3 +5974,26 @@ Offline, the same two formulas on the ROM tilemap agree on 2,000 random
 windows exactly once empty cells are ignored, so either the live tile
 RAM is not the ROM's in play or the runtime compare is wrong; the
 TILEMAP_C dump against the ROM unpack decides which.
+
+## 243. THE ROM UNPACKER WAS OFF BY ONE ON ZERO RUNS; THE FOLD-2 HEADER WAS COLUMN-SHIFTED (2026-09-13 01:20)
+
+The check mode's 6.4 disagreeing sets a plane were real. Live TILEMAP_C
+(ares, play f2000) against the ROM unpack every tool shared
+(scene_sets.py, bake_setcols.py, LOOP-DECOMPILE 10's format note):
+10,550 of 20,480 words differ, and they differ as RUNS SHIFTED BY ONE
+COLUMN -- the low-byte pass's zero escape emits `n + 1` zeros, like the
+high-byte runs, not `n if n else 1`:
+
+    zero run = n         10,550 words differ from live tile RAM
+    zero run = n + 1          0
+
+So the baked column extents were shifted by a column per zero run
+(only the presence at the window's edges disagreed, hence 6/plane and
+no visible defect), and the decompile thread's "4,000 windows, 0
+mismatches" had both sides sharing the bug. bake_cat1map.py's own
+decoder was already right (it matched live byte for byte). Fixed in
+both tools, header regenerated and verified against the LIVE dump
+(2,000 random windows, 0 mismatches); the check mode re-run and the
+wall re-measured with the corrected header are below. 231's level-1
+set grid (drawn from the same unpack) was column-shifted too; its
+per-set conclusions were qualitative and stand.
