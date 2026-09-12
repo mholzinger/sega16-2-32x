@@ -4586,23 +4586,65 @@ The five computed sites are the interesting ones, and they are read:
     sound thread's rig.
 
 **A caveat that reshapes OPEN item 1.** Naming the sites to functions
-exposed 33 sites in no function at all. Measured over the whole stream:
+exposed 33 sites in no function at all. Measured over the whole stream,
+as the UNION of every row's range:
 
     code bytes in code_stream.txt        75,442
-    inside a function_map2 row           54,334   72.0%
-    outside every row                    21,108   28.0%   5,201 instructions
-                                                          231 runs
+    inside some function_map2 row        59,182   78.4%
+    outside every row                    16,260   21.6%   4,044 instructions
+                                                          230 runs
 
-Largest runs: 0xF90A-0x1004C (1858 bytes), 0x154E2-0x15B1E (1596),
-0x13B2C-0x14152 (1574), 0x10E20-0x1124E (1070), 0x118E2-0x11CE8 (1030).
+Largest runs: 0xF90A-0x1004C (1858 bytes), 0x13B2C-0x14152 (1574),
+0x10E20-0x1124E (1070), 0x1B500-0x1B7CE (718), 0x19D36-0x19F66 (560).
 `code_stream.py`'s docstring already records the instruction gap (the
-555 bodies hold 15,159 of 19,137) and entry 84 cites it; the byte share
-and the run list were not written down. These are object routines
+555 bodies hold 15,159 of 19,137 = 3,978 outside) and entry 84 cites it;
+4,044 here agrees within 2%. The byte share and the run list were not
+written down.
+
+**First figure retracted before commit of this entry's successor:** my
+first measurement said 28.0%, 21,108 bytes, 5,201 instructions. It took
+each address's nearest preceding row as "its" row, and 36 rows nest
+inside larger ones, so bytes covered only by an enclosing row were
+counted uncovered. The 15,159 figure in the docstring was the check
+that caught it. Same shape as entry 50's rule: a number that agrees
+with a plausible story was not compared against the one already held. These are object routines
 reached through routine POINTERS in the object records (entry 28's
 offset 2, e.g. `move.l #$91CE,2(fp)` in entry 94), which no call
-instruction names, so the caller-ranked list for OPEN item 1 ranks 72%
-of the program. The other 28% has no row to rank.
+instruction names, so the caller-ranked list for OPEN item 1 ranks 78%
+of the program. The other 22% has no row to rank.
 
 **Not established:** any function name for the 33 orphan sites beyond
 "an object routine in run X". `function_map2.md` is unchanged; the
 orphan runs are in `docs/audit/sound_posts.md` as `? ?`.
+
+---------------------------------------------------------------------
+## 96. Sizing the map's missing 22%: what a Ghidra pass would have to bound
+
+Entry 95's orphan code, measured against every seed the pipeline holds
+(`docs/audit/altbeast_seeds.json` plus the stream's own immediates):
+
+    orphan code                          16,260 bytes   230 runs
+    routine pointers landing in it           72 of the 293 in `immediates`
+    calls/jumps from mapped code into it     17
+    code immediates landing in it             3
+    entry points, all sources               90
+    bytes reachable from an entry         5,082
+    left with no seed at all             11,178 bytes   218 run heads
+
+So the object routines the pointers name are a third of the gap and are
+boundable tonight by rule (entry to next entry or run end; 45 of the 90
+end on rts/jmp/bra or the `move.l #next,2(fp)` exit idiom). The other
+two thirds have no seed: 218 run heads, most of them a handful of bytes
+between rows, plus the five big runs of entry 95. The instruction before
+an unseeded head is `orib` 71 times and `btst` 33 — which is to say the
+head follows a gap in the stream, not a fall-through, and those bytes are
+the linear superset's noise as often as they are code.
+
+Not built. A bounding tool that adds the 90 seeded rows is an hour; it
+would lift coverage from 78% to ~85% and leave the same 11 KB to argue
+about, which is exactly the argument a Ghidra pass with the repairs of
+entry 73 is for. Recorded as the size of OPEN item 5, and stopped.
+
+**Also for that pass:** 36 consecutive rows in `function_map2.md` overlap
+their predecessor — nested bodies, the thing that made entry 95's first
+number wrong.

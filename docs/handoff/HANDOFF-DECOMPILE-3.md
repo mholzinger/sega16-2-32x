@@ -1,6 +1,6 @@
 # HANDOFF — the decompile thread, session 3
 
-Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 95
+Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 96
 entries. Session 2 ran 72-91; session 3 starts at 92.
 
 **Read entries 50, 71 and 88 before anything else.** 50 is the provenance
@@ -82,7 +82,7 @@ a rom map** (a false instruction inflates coverage and hides data).
   1. **~460 functions still classified by signature, not read.** The
      ranked list is the `arcade hw` rows of
      `docs/audit/function_map2.md` by callers. 50 are read. **And the map
-     holds 72% of the code bytes (95)**: 21 KB in 231 runs — object
+     holds 78% of the code bytes (95)**: 16 KB in 230 runs — object
      routines reached by record pointers, never by a call — have no row.
      Bounding those is the first step of a Ghidra pass (item 5).
   2. **Sound.** Session 3 added the 68K side (95): `tools/sound_posts.py`
@@ -101,7 +101,10 @@ a rom map** (a false instruction inflates coverage and hides data).
      the rom palette block (93). Dead data or a path the rig does not
      enter; no cheaper method is left.
   5. **The bound repairs are not applied** to the Ghidra project (73).
-     Do it with the rest of a Ghidra pass, not on its own.
+     Do it with the rest of a Ghidra pass, not on its own. **Sized (96):**
+     the pass has 16 KB of unmapped code to bound — 90 seeded entries
+     reach 5 KB of it by rule, 11 KB in 218 fragments has no seed — and
+     36 nested rows to untangle.
 
 ---------------------------------------------------------------------
 ## TRAPS SESSION 2 PAID FOR
