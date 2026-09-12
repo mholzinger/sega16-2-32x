@@ -53,7 +53,9 @@ allows 13.3. **That is a 14% margin, not a fourfold one.** Our own rom
 does 9,637 work instructions a vint, 4,904 game and 4,733 shim, so
 LOOP27's "the shim costs as much as the game" is still exactly right and
 everything absolute around it was not. See ARCHITECTURE.md's scope
-section for the full correction.
+section for the full correction, and **`docs/handoff/PLAN-68K-BUDGET.md`
+for what to do about it: the gap is 1,898 instructions a vint and
+`r60_push` alone is 2,621.**
 
 **CORRECTED 2026-09-10 (HANDOFF-20260910 section 2b, LOOP29 117/123/124).
 This section used to end "our pipeline costs 2882 instructions per vint,

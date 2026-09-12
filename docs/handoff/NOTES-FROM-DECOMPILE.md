@@ -1142,3 +1142,95 @@ completely reasonable.
 
 `tools/round_profile.lua` + `tools/round_profile.py`, and `RW_N`/`RP_N`
 start the game at any round by rewriting the table at 0x1848.
+
+=====================================================================
+## HANDOFF — the 68000 budget was wrong, and r60_push is the gap
+## 2026-09-12. LOOP-DECOMPILE 87-90, plan in docs/handoff/PLAN-68K-BUDGET.md
+=====================================================================
+
+**Cut `r60_push` in half and the 68000 side of 60 Hz is met.** That is the
+whole handoff; the rest is why you should believe it and how to check.
+
+    the shim, per vint          4,813 instructions
+      r60_push                  2,621     54.5%
+      r60_ship_words.isra.0       690
+      r60_blast.constprop.0       512
+      md_consume                  349
+      shim_vblank                 324
+      read_joypad                 115
+      get_input                    80
+      everything else             122
+
+    the 60 Hz gap               1,898 instructions  (19,135 cycles)
+    r60_push                    2,621 instructions  (26,420 cycles)
+
+Its own hottest instruction is `r60_push+0x45C` at 517 a vint. The next
+two are `r60_ship_words+0x2C` at 644 and `r60_blast+0x4A` at 472 — three
+loop heads carrying a third of the shim between them.
+
+## WHY THIS WAS NOT VISIBLE BEFORE
+
+**START-HERE and ARCHITECTURE said the 68000 had fourfold headroom. It has
+15%.** The figures behind that — 2780 game instructions a vint, 2882 shim,
+3691 arcade, and the 45.2 cycles per instruction that made the arcade look
+bus-bound — all came from `tools/arcade_trace.py`, which counted the lines
+MAME LISTS. MAME collapses a tight loop into one `(loops for N
+instructions)` line, so every loop counted once. The under-count is 2.5x
+to 2.9x. The parser is fixed and both documents carry the correction in
+place.
+
+Re-measured, level 1:
+
+    arcade executed   14,209 / vint   work 8,184   11.7 cycles/instruction
+    ours  executed    12,434 / vint   work 9,698   10.08 cycles/instruction
+                                      game 4,884 + shim 4,813
+
+**LOOP27 79's ratio was exactly right and always was** — the shim is 55%
+of our 68K work, it said 47.9%. The factor hit both sides equally. Only
+the absolutes moved, and with them the belief that shim instructions were
+free.
+
+## WHAT IS MEASURED AND WHAT IS NOT
+
+  - Measured: every number above, MAME, 20 frames from f2000, the same
+    input script for the arcade and for us. The 68K side is the half MAME
+    models honestly.
+  - Measured: 10.08 cycles per WORK instruction, derived by pricing the
+    frame wait exactly (`tst.b (xxx).W` 12 + taken `beq.s` 10 = 22 for two
+    instructions). Work is marginally cheaper than the average, so the
+    margin is real rather than optimistic.
+  - NOT established: that the 68000 is the binding constraint. Our rom
+    still spends 2,736 instructions a vint in the frame wait, and that is
+    the game blocked on our frame flag, not spare CPU.
+  - Level 1 only. Level 4 is LIGHTER on the 68K (entry 87), so level 1 is
+    the right case to size against.
+
+## THE MAP PROBLEM, SO YOU DO NOT REPEAT IT
+
+`rom/md_start.lst` does not match vi39 — the embedded `md_start.bin`
+differs by 2453 bytes. I snapshotted the current `rom/s16.32x` WITH its own
+map, verified the embedded image byte-identical, and traced that. Its
+totals are within 2% of vi39's and the hot addresses are the same, so the
+naming above is safe for both. **Do not map a hot address through a map you
+have not verified against the traced image.**
+
+## THE RIG
+
+    tools/round_profile.lua      trace N frames of the arcade at any round
+    tools/round_profile.py       histogram a trace onto the function map
+    tools/arcade_trace.py        fixed: now expands collapsed loops
+    RW_N / RP_N                  start the game at any round by rewriting
+                                 the DIP round table at 0x1848
+
+Two traps if you read a MAME trace yourself: the addresses are UPPERCASE
+hex, and the collapsed-loop lines are most of the work. Missing both
+under-reported by 29x here and the wrong profile looked entirely
+plausible.
+
+## THE SECOND LEVER, WHEN THE FIRST IS DONE
+
+Our game side costs 9,768 instructions a game frame where the arcade's
+costs 8,184 — the same code, 19% more. Given that LOOP29 182-184 found the
+game DISCARDS a release arriving while it works, that reads as a protocol
+cost rather than a code cost. Worth 1,584 instructions, but it is a
+protocol change and will take longer than a loop.
