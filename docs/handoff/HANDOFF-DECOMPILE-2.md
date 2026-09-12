@@ -126,8 +126,12 @@ Probe flags, all `make ship-us FLAG=1`:
      on ours, its pack is 8 palettes in two lines, and the dumps are in
      `discover/cram/scene3_*.bin`. Scene selection no longer needs a
      build: `CD_N=<scene> tools/cram_dump_scene.lua`.
-  2. **Five genuinely truncated functions** (entry 54) need a hand pass.
-     Ten bounding defects remain of 560.
+  2. **The eleven bounding defects are diagnosed, not applied**
+     (LOOP-DECOMPILE 73, `docs/audit/bound_repairs.md`): six functions to
+     extend, five entries to delete because they are pointer tables and
+     anim scripts, not code. Applying it means opening the analysed
+     project — do it with the rest of a Ghidra pass, not on its own.
+     `tools/bound_ref.py` re-runs the audit with no Ghidra at all.
   3. **~29% of rom data unattributed.** The two largest blocks are
      identified (sprite frame table, zoom tables) but not exhausted.
   4. **The dependency census** (entry 37) ran on two instruction classes.

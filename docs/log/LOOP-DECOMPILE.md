@@ -3294,3 +3294,58 @@ The completed table, each row from its own live dumps:
 
 Scene 0 is the only scene that needs all four, which strengthens entry
 66's reversal of 64 rather than changing it.
+
+---------------------------------------------------------------------
+## 73. The ten bounding defects are eleven, and they are 6 code + 5 data
+
+Entry 54 left "10 remaining: 5 genuinely truncated, 5 stubs that resisted
+every automated rule and are not worth more machinery." The second half
+was a shrug, and a shrug is a hypothesis. Both halves are now settled with
+a named consuming instruction each, and the second half was wrong: those
+five are not stubs and not code.
+
+**The audit runs without Ghidra now.** `tools/bound_ref.py` asks
+`bound_audit.py`'s question — does the body hold a terminator, and if not
+does it fall through into another function — of the same 560 entries in
+`function_map.md`, using the reference disassembly as the instruction
+stream. objdump per function from its own entry, so the boundaries are the
+function's and not a linear listing's. This matters beyond convenience:
+the analysed project is the one thing the rebuild rule says to open as
+little as possible, and the bounding question no longer needs it.
+
+**The tool's own bug, and it is worth knowing before writing another.**
+objdump WRAPS an instruction longer than six bytes onto a second line that
+carries an address and bytes but NO mnemonic. Skipping those lines makes
+every `movel #next,%fp@(2)` measure two bytes short — and that instruction
+is the object state machine's exit idiom, the last thing many object
+routines do. Three functions (0x61D6, 0x6396, 0x16BF0) read as defects
+purely from that: each installs the function that physically follows it,
+which is a fall-through and correctly bounded. First run said 14 defects,
+fixed run says 11.
+
+**Six are code and genuinely truncated.** Each walks from its entry to the
+first terminator past its declared end and crosses no other entry:
+
+    0x0040E  240 -> 364    reset, bra.w at 0x400
+    0x05FA8   50 -> 132    bsr.s at 0x5F96
+    0x060E6  124 -> 130    bsr.w at 0x5F08
+    0x063CC   22 -> 130    bsr.w at 0x6356
+    0x06C44   14 -> 116    ten call sites
+    0x18146   60 -> 158    movel #0x18146,fp@(2) at 0x18034
+
+**Five are not functions.** 0x6E7A and 0xDE56 are entries inside runs of
+`0000 xxxx` longwords, and 0x6E7A's body is itself 22 longs that all land
+inside the rom. The other three are installed by
+`movel #addr,fp@(36)` — **object $24, the anim script pointer** in the
+struct map. A field that has never held code is a consuming instruction,
+not a plausibility filter, so these are animation scripts:
+
+    0x08532   24    movel #0x8532,a0@(36)  at 0x82A2
+    0x18F38   24    movel #0x18F38,fp@(36) at 0x18990
+    0x1A0B8  114    movel #0x1A0B8,fp@(36) at 0x19F2E
+
+The list is `docs/audit/bound_repairs.md`; the deletions are already in
+`kill_funcs.py`'s input format at `docs/audit/bound_kill.txt`.
+**Nothing is applied.** Extending six bodies and deleting five entries
+means opening the analysed project, and the next person to open it should
+do the whole pass at once rather than have me open it for eleven rows.
