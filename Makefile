@@ -807,10 +807,15 @@ endif
 ifdef BOOTCONSV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_CONSV
 endif
-# BOOTTILEVER=1: LOOP29 231. The consume reads every tile record's 16
-# VRAM words back after its DMA (TILE_VERIFY) and the value instrument
-# paints bias|checked|VRAM-all-zero(3b)|VRAM!=source(3b). Rig-only
-# question: are the FPGA's black tiles zero art in VRAM?
+# BOOTTILEVER=1: LOOP29 231. TILE_VERIFY on both CPUs: the 68K consume
+# reads every tile record's 16 VRAM words back after its DMA and keeps
+# counters at WRAM 0xFFA1E0-0xFFA1F0 (checked, VRAM-zero, VRAM!=source,
+# source-zero, FS-changed, slot-out-of-range, SH-2 word, zero index/cnt);
+# the SH-2 side (m_main.c TV_BITS) rides packet word 1 bits 8-12/14. The
+# value instrument paints whatever md_main.c's BOOT_TILEVER branch
+# currently encodes (read the comment there: the layout changed per
+# probe, vi76-vi85). Proved the transport intact on the FPGA; the
+# zero-record counts are confounded by the level's blank tiles.
 ifdef BOOTTILEVER
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_TILEVER -DTILE_VERIFY
 SHCCFLAGS += -DTILE_VERIFY

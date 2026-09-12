@@ -210,6 +210,31 @@ vi70's line + `CAT1MD=1 C1NOFB=1`. Headless: plane on the first field
 frame, aligned return 4.5%, play-path black = vi70, coined flips above
 vi45 through the demo. Mike's gate: the hole punch over sprites.
 
+**FOLD 1 ON THE RIG (2026-09-12 20:50, LOOP29 231).** Mike: "you have
+NAILED sprite performance" / "the background and foreground tiles aren't
+being updated properly". Whole tile sets of level 1 (temple, pedestal,
+trees) render black on the FPGA and not in ares; vi70 is clean on the
+same rig. The packet transport is PROVEN intact on the rig (BOOTTILEVER
+probes vi76-79: the 68K consumes exactly what the SH-2 built, no FS/FM
+hazard) -- the black is built on the SH-2, by a timing-only state
+divergence nobody can see yet. Retracted: the zero-record chain
+(vi76-85, confounded by the level's own blank tiles) and re-applying
+226's trampoline mask (vi86: no change on the rig, worse in ares). Next
+instrument: a 24-bit-per-capture value channel (four tagged 6-bit CRAM
+floods), then the allocator's own counters at matched attract seconds.
+Presentation line stays vi70; vi75 is the speed lever.
+
+**THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
+
+    tools/mister_push.sh rom/night/X.32x          # deploy + launch
+    ssh root@mister.office.local "echo screenshot > /dev/MiSTer_cmd"
+    scp root@mister.office.local:/media/fat/screenshots/S32X/<newest>.png .
+    first level-1 demo at launch+14..28 s, face/eye 38-42 s, second demo 46-55 s
+
+A probe round (build, ares check, push, four shots, decode) is ~2.5 min.
+Always md5-guard the build against the previous rom before pushing: a
+broken build leaves rom/s16.32x = vi70 and the rig then "reads" vi70.
+
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
 trees), the tile ship rate as a knob (the black pop-in), and the cutscene
