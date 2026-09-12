@@ -676,7 +676,10 @@ static void md_consume(uint32_t pkt_base) {
 					e = sc + 8;
 					for (uint16_t i = 0; i < cnt; i++, e += 17) {
 						uint32_t va = (uint32_t)e[0] * 32u;
-						if (va + 32u > 0xB000u) continue;
+						if (va + 32u > 0xB000u) {
+							(*(volatile uint16_t*)0xFFA1EA)++;   /* slot out of range */
+							continue;
+						}
 						uint16_t vz = 1, sz = 1, mm = 0;
 						*vdp_ctrl_wide = ((uint32_t)(va & 0x3FFFu) << 16)
 							| ((va >> 14) & 3u);
