@@ -408,3 +408,16 @@ question: does it look like c1p95c. Then Build C.
                steady play; the picture gates equal to c1p95c; rig frame
                rate at c1p95c's; Mike: does it look like c1p95c.
     numbers    (appended below when the runs land)
+
+    ares, play2, 4000 frames (pcB):
+      wall 1.18 v/gen   single-vint 40%   ships 37.0/s
+      echo 1.11  mtask 0.79  ship 0.64  flip 0.76
+      maps drain: scan 0.107, tail 0.113 v/gen   (vi95's line: 0.279 / 0.135)
+    picture gates (bldB vs vi95/c1p95c): title 0.273/0.273, demo 0.038/0.038,
+      eye 0.487/0.480, title2 0.259/0.255, return 0.040/0.040 0.038/0.039,
+      face plane 0.62/0.65, play 0.036-0.042 (=), late-coin play 0.036-0.042 (=)
+    reading: the scan fell as on vi95 (0.28 -> 0.11) but the wall did
+      not follow -- the SLAVE phase (echo) is 1.11 here against 0.95-1.02
+      on vi95's line, i.e. the punch's sprite-loop cost is what this
+      card's base carries. pcA (c1p95c + census) is being read to put
+      the base wall on the card; the check mode and the rig follow.
