@@ -5007,3 +5007,13 @@ hardware tear against the plane's arrival:
 68K shim already publishes the round in COMM10 bits 13-15; carrying that
 byte would make the cutscene edge instant and exact and retire the claim
 mix. Not built tonight.
+
+**214 measured (headless ares):**
+
+    vi62   coined flips/100 32 100 57 100 77 77 98 13 50 50 46 47 50 50 50  (vi45: 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50)
+           play path worst black-share diff vs vi45: 0.002
+           face: red field from 1570, plane full from 1590   (20 frames)
+    vi62b  face: red field from 1600, plane full from 1650   (50 frames)
+
+vi62 reproduces vi59's numbers. The A/B is the hardware tear, which only
+the rig shows, against those 30 frames.
