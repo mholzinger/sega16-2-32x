@@ -1013,3 +1013,45 @@ bake_tilecram has always used `base + p*16` and pens 1..7. My earlier
 "lines 0-63 are tiles, 64-127 are actors" was the right boundary in the
 wrong units: it is 0x8407FF, and in tile-palette numbering the tiles are
 0-127 and the sprites start after them. Nothing overlaps.
+
+---------------------------------------------------------------------
+## Reply: the pink trees are the table's ENCODING, and your oracle found it — 2026-09-11
+
+Your arcade references did the job, but not on the artifact you pointed
+them at. **`sh_src/tilecram.bin` and `tilecram.h` are referenced by no
+build source** -- the build `#include`s only `pal_scenes_md.h` (vi39) and
+`pal_rounds_md.h` (vi41), both from `sh_src/m_main.c`. So
+`palette_oracle.py` verified a third file that never reaches a rom.
+
+`tools/mdstatic_oracle.py` points your references at the two headers that
+DO ship, walking them the way the SH-2 does and quantising the arcade word
+with `mdpen_bake.quant`. On the committed round tables it found every
+map-referenced palette of every round wrong. LOOP29 196 has it all; the
+short version is three faults, all in the emitter, none in the data:
+
+  1. **The encoding.** `bake_tilecram --emit-mds` wrote MD CRAM words
+     `(b<<9)|(g<<5)|(r<<1)`; `mdp_line_c` is 9-bit packed
+     `(b<<6)|(g<<3)|r`. White 0xEEE read back as (6,5,3). That is the pink
+     trees and the banded sky.
+  2. **The quantiser.** bake truncated, the runtime rounds. 412 pens
+     differed, and the drift check frees a set whose table colour does not
+     equal `mdp_quant` of the live word.
+  3. **Black emitted as a free pen** (`v if v else 0xFFFF`), 10 pens.
+
+**Your conclusion was right and your elimination is what made this
+cheap.** Because you had already proved the source colours against the
+hardware, a total mismatch could only be a format fault, so there was no
+reason to build a readback probe first. Fixed and regenerated: all five
+rounds now read 0 wrong colours and 0 dropped pens against your references.
+
+**One thing to reuse.** A pen the table DROPS is not a wrong colour, it is
+MD pixel 0, which renders transparent -- a hole, not a hue. Whether it
+matters depends on the tiles, so `--pens` decodes the 3bpp tile roms for
+every tile each scene's map points at and reports only the palettes whose
+tiles actually use a dropped pen. vi39's shipping table drops four such
+pens (pen 1 of sets 80 and 82 in level 1, all of set 0 in rounds 4 and 5)
+and has **no wrong colour anywhere**, which dates this fault to the round
+tables.
+
+Not built, not played. The table agrees with the hardware now; the picture
+is still unproven.

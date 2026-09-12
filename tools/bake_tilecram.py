@@ -45,15 +45,33 @@ def w16(rom, o):
 
 
 def md(v):
-    """System 16 colour word -> MD 3-bit-per-gun triple."""
-    r = ((v >> 0) & 0xF) << 1 | ((v >> 12) & 1)
-    g = ((v >> 4) & 0xF) << 1 | ((v >> 13) & 1)
-    b = ((v >> 8) & 0xF) << 1 | ((v >> 14) & 1)
-    return (r >> 2, g >> 2, b >> 2)
+    """System 16 colour word -> MD 3-bit-per-gun triple.
+
+    LOOP29 196: this MUST be the runtime's own mdp_quant (m_main.c:1692):
+    +2 then >>2, clamped to 7. It used to truncate, which put every table
+    colour one step dark -- and because the SH-2's drift check compares a
+    table colour against mdp_quant of the live word (m_main.c:1842,
+    2124-2157), a truncated table disagrees with the runtime on 412 of the
+    map-referenced pens and is freed and re-claimed.
+    """
+    r = min(7, ((((v >> 0) & 0xF) << 1 | ((v >> 12) & 1)) + 2) >> 2)
+    g = min(7, ((((v >> 4) & 0xF) << 1 | ((v >> 13) & 1)) + 2) >> 2)
+    b = min(7, ((((v >> 8) & 0xF) << 1 | ((v >> 14) & 1)) + 2) >> 2)
+    return (r, g, b)
 
 
 def md_word(c):
     return (c[2] << 9) | (c[1] << 5) | (c[0] << 1)   # MD CRAM: 0000BBB0GGG0RRR0
+
+
+def md_pack9(c):
+    """The 9-bit form mdp_line_c holds (m_main.c:333, built at 1692).
+
+    LOOP29 196: the emitted round tables used to carry md_word() here, so
+    the SH-2 re-read every colour with the wrong field positions -- white
+    (7,7,7) = 0xEEE came back as (6,5,3). That is the pink trees.
+    """
+    return (c[2] << 6) | (c[1] << 3) | c[0]
 
 
 def unpack(rom, ptr):
@@ -205,7 +223,7 @@ def main():
         print('live colours from %d dump(s), applied to scene %d'
               % (len(a.live), a.live_scene))
     rom = load()
-    out_bin, out_h = [], []
+    out_bin, out_h, out_col = [], [], []
     overflow = {}          # scene -> palettes the framebuffer must draw
     for s in range(SCENES):
         o = 0x1CE2 + 6 * s
@@ -270,13 +288,15 @@ def main():
                                                           + 2 * k))]
                                           for k in range(1, 8)])
                     break
-        line_words = []
+        line_cols, line_words = [], []
         for li, g in enumerate(groups):
-            row = [0] * SLOTS
+            row = [None] * SLOTS          # None = free; (0,0,0) = BLACK
             for c, i in slot[li].items():
-                row[i] = md_word(c)
-            line_words.append(row)
+                row[i] = c
+            line_cols.append(row)
+            line_words.append([0 if c is None else md_word(c) for c in row])
         out_bin.append(line_words)
+        out_col.append(line_cols)
         out_h.append((s, len(pal), [len(g) for g in groups], assign))
         ov = overflow.get(s, [])
         print('scene %d: %2d palettes, lines %s, %d slots used%s'
@@ -330,7 +350,7 @@ def main():
         nsc = SCENES
         sl_all, su_all, sm_all, lc_all = [], [], [], []
         for sc in range(nsc):
-            line_words, (scn, npal, sizes, assign) = out_bin[sc], out_h[sc]
+            line_words, (scn, npal, sizes, assign) = out_col[sc], out_h[sc]
             s_line = [0] * 128
             s_used = [0] * 128
             s_map = [[0] * 8 for _ in range(128)]
@@ -356,8 +376,9 @@ def main():
                      % (LINES * SLOTS))
             for sc in range(nsc):
                 fh.write('    { %s },\n'
-                         % ', '.join('0x%04X' % (v if v else 0xFFFF)
-                                     for ln in lc_all[sc] for v in ln))
+                         % ', '.join('0xFFFF' if c is None
+                                     else '0x%04X' % md_pack9(c)
+                                     for ln in lc_all[sc] for c in ln))
             fh.write('};\nstatic const uint8_t mdr_s_line[MDROUND_N][128] = {\n')
             for sc in range(nsc):
                 fh.write('    { %s },\n'

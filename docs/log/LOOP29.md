@@ -4377,3 +4377,82 @@ flat purple monochrome. **The round tables cover the five playable
 levels and nothing else** -- intro, transformation and the transitions
 all sit outside them, and the refuse rule starves whatever the last
 round's table does not list.
+
+## 196. THE PINK TREES ARE THE TABLE'S ENCODING, NOT ITS COLOURS (2026-09-11 23:50)
+
+195 left the defect somewhere "between the pack and the install" and
+proposed an ares readback to tell them apart. **It does not need one. Both
+faults are in the emitted header and both are provable offline against the
+arcade.**
+
+`tools/mdstatic_oracle.py` walks whichever table the build installs the way
+the SH-2 does -- `line = s_line[p]`, `pen = s_map[p*8+pixel]`,
+`col = line_c[(line-1)*16+pen]` -- and compares that colour against
+`mdpen_bake.quant` of the arcade's own palette RAM word from the decompile
+thread's `discover/cram/arcade/sceneN.bin`. On the committed
+`pal_rounds_md.h` it reported **every map-referenced palette of every round
+wrong**: 25, 11, 14, 8 and 15 of them.
+
+**Fault 1, and this is the pink trees: the table is in the wrong
+encoding.** `bake_tilecram --emit-mds` wrote `md_word()`, the MD CRAM word
+`(b<<9)|(g<<5)|(r<<1)`. `m_main.c:1167` aliases `mdr_line_c` straight onto
+`mds_line_c`, and `mdp_line_c` (m_main.c:333, built at 1692, decoded at
+1875, expanded to a CRAM word at 4408 and 14155) is the **9-bit packed**
+form `(b<<6)|(g<<3)|r`. So the SH-2 re-read every colour with the wrong
+field positions:
+
+    white (7,7,7)  ->  md_word 0xEEE  ->  read as 9-bit (6,5,3)
+
+A dull olive where the trees' white highlight should be. Recognisable
+image, wrecked hues, MORE distinct colours than before -- exactly the
+100-against-89 and 43.7% of pixels that 195 measured.
+
+**Fault 2: the quantiser disagreed with the runtime's.** `md()` truncated
+(`>>2`); `mdp_quant` rounds (`(v5+2)>>2`, clamp 7). On an evenly spaced
+ramp truncation lands one step dark, which is why the re-encoded table
+still read like the arcade's ramp shifted by a pen. **412 of the
+map-referenced pens differed** -- and the SH-2's drift check compares a
+table colour against `mdp_quant` of the live word (1842, 2124-2157), so a
+truncated table is freed and re-claimed on sight. That is churn the pin
+was supposed to stop.
+
+**Fault 3: black was emitted as a free pen.** `'0x%04X' % (v if v else
+0xFFFF)` cannot tell `md_word((0,0,0))` from an unassigned slot. 10 pens
+across the five rounds, all of them a real black.
+
+**Proof of the diagnosis, in the order it was established.** First the
+committed header was reproduced byte-identically from
+`--live-dir discover/cram/wide`, so the tool under test was the one that
+shipped. Then, comparing with `md_word(md(w))` -- bake's own encoding and
+its own truncating quantiser -- the table matched the arcade **exactly, 0
+mismatches over all five rounds, every map-referenced palette, every pen**.
+So the colour DATA was never wrong; only its encoding and its rounding
+were. Fixing both:
+
+    round 0   33 map-referenced palettes   0 wrong colour, 0 dropped pen
+    round 1   16                           0, 0
+    round 2   16                           0, 0
+    round 3   14                           0, 0
+    round 4   19                           0, 0
+
+Set coverage is unchanged (25, 11, 14, 8, 15 pinned); the rounding changes
+which colours collide, so the line loads move and round 3 now packs into
+ONE line instead of two.
+
+**Also measured, and NOT a fault:** a pen the table drops is an MD pixel 0,
+which renders transparent -- a hole, not a hue. `--pens` decodes the 3bpp
+tile roms for every tile the scene's own map points at and reports only
+palettes whose tiles USE a dropped pen. On the old 2-slot `pal_scenes_md.h`
+(what vi39 ships) that was 4 pens in total: pen 1 of sets 80 and 82 in
+level 1, and all of set 0 in rounds 4 and 5. On the fixed round tables it
+is zero. **vi39's own table has no wrong colour anywhere** -- its
+disagreements with the arcade are all dropped pens -- so this fault
+arrived with the round tables and did not exist before them.
+
+**NOT VERIFIED: the picture.** Nothing here has been built or played. The
+claim is that the installed table now agrees with the hardware word for
+word, which is necessary and may not be sufficient.
+
+    python3 tools/mdstatic_oracle.py            # round tables, per round
+    python3 tools/mdstatic_oracle.py --scenes    # vi39's 2-slot table
+    python3 tools/mdstatic_oracle.py --pens      # dropped-pen audit
