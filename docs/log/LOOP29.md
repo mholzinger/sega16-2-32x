@@ -5961,3 +5961,16 @@ sc95's own drain split: scan 0.113 v/gen (7,276 chunks against pc95's
 19,560 -- one chunk per plane where the bake is eligible, the live 8-row
 chunks where it is not: play2 includes attract time), tail 0.113. The
 scan's 0.279 became 0.113, the tail is untouched, as the plan said.
+
+**Fold 2 on the rig:** frsc95 (sc95 + BOOTFLIPRATE) reads 21 18 19 19
+21 presented frames per 64 vints against fr95e's 19 15 22 21 14 and
+fr75's 21 19 7 22 16 -- no cost, no visible gain: the rig's wall is
+elsewhere (the windows-per-vint floor, 232). Ares' 1.03 stands as the
+ranking number.
+
+**Check mode read:** live-vs-baked disagree on 6.4 sets a plane in
+steady play (f1000-4000, 3,080 planes), 4,086/546 during the load.
+Offline, the same two formulas on the ROM tilemap agree on 2,000 random
+windows exactly once empty cells are ignored, so either the live tile
+RAM is not the ROM's in play or the runtime compare is wrong; the
+TILEMAP_C dump against the ROM unpack decides which.
