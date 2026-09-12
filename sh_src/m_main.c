@@ -1265,9 +1265,16 @@ static inline unsigned md_state_on(void)
     uint16_t w = md_state_word();
     if (!MD_STATE_OK(w)) return 2;                 /* no word yet: undecided */
     if (MD_STATE_CUT(w)) return 0;
-    if (MD_STATE_PLAY(w)) return 1;
+    /* vi88 (LOOP29 234): 0xFFF026 bit 0 reads 1 through the attract's
+     * demos too (the demo IS the game started with scripted input), and
+     * step 1 covers the SEGA/wave screen at boot -- "play or step 1/3/5
+     * = on" blacked the title and the demo (0.96). So the word only says
+     * OFF where it is certain (the transformation; the picture steps 0,
+     * 2, 4 = high-score table, intro pictures, eye) and leaves ON to the
+     * claim mix, exactly vi75's behaviour there. */
     unsigned st = MD_STATE_STEP(w);
-    return (st == 1 || st == 3 || st == 5) ? 1u : 0u;
+    if (st == 0 || st == 2 || st == 4) return 0;
+    return 2;
 }
 static inline unsigned md_state_extra(unsigned cset)
 {
