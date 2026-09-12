@@ -229,7 +229,18 @@ static uint16_t tv_cz, tv_uz, tv_mz;
  *   tv_tst  zero-output records whose md_tag re-read through the
  *           uncached mirror differs from the key the emitter used */
 static uint16_t tv_czn, tv_bad, tv_tst;
-#define TV_BITS ((uint32_t)(((tv_czn > 3 ? 3 : tv_czn) << 8) | ((tv_bad > 3 ? 3 : tv_bad) << 10) | ((tv_tst ? 1 : 0) << 12)))
+/* vi84 RETRACTED with vi76-vi83's zero-record readings: ares' ATTRACT
+ * also emits zero records (4 by f600, 12 by f3000 -- the level's own
+ * blank tiles) and the 2-3 bit saturating counters could not tell the
+ * rig's count from that. What those builds DID establish: the packet
+ * the 68K consumes equals what the SH-2 built (no mismatch, no FS
+ * change mid-consume, no FM=0 write, tags coherent).
+ * vi85: count zero-output records whose code is NON-BLANK in the tile
+ * bank (tile_nonblank.h, from tiles.bin). Must read 0 anywhere ROM
+ * reads are sound. 6 bits: 8-12 = min(31, n), bit 14 = n > 31. */
+#include "tile_nonblank.h"
+static uint16_t tv_real;
+#define TV_BITS ((uint32_t)(((tv_real > 31 ? 31 : tv_real) << 8) | ((tv_real > 31 ? 1u : 0u) << 14)))
 #else
 #define TV_BITS 0u
 #endif
