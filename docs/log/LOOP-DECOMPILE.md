@@ -3390,3 +3390,59 @@ now gone, and the game demonstrably scrolls a static map.
 **The method note worth keeping:** a per-page breakdown would have caught
 this the first time. Summing a diff over a region hides which part of the
 region moved, and the part that moved was ours.
+
+---------------------------------------------------------------------
+## 75. All five per-scene packs, and the attract step that would have poisoned them
+
+The rendering thread's refuse rule works — zero tiles destroyed on level 1
+against ~1300 without it — and cannot ship because the baked table covers
+one scene of five. Their ask: the probe plus one dump run per scene. Here
+is the run, and a trap that was one sample away from putting three wrong
+tables in the emitter.
+
+**The trap: 0xFFF142 says which scene is LOADED, not what is on screen.**
+Widening the sample from entry 66's three frames to eighty made scenes 3
+and 4 overflow — 51 and 59 slots against 22 and 39, three and five
+palettes pushed to the framebuffer. It was not colour cycling. Between
+attract screens the game reloads 69 of the 128 palettes into the same
+work RAM while 0xFFF142 keeps reading the forced scene, so a dump taken
+on the wrong screen is another screen's palette wearing the scene's name.
+
+**0xFFF031 is the attract step, and it says what is on screen.** Snapped
+on the arcade with the same table patch, one shot per distinct value:
+
+    0x04  scene backdrop, player standing
+    0x08  boot
+    0x0C  scene backdrop with the logo
+    0x10  the EYE title          <- poison
+    0x14  scene backdrop again
+    0x00  the high score table   <- poison
+
+Only those two poison. Gating on `f031 not in {0x10, 0x00}` and on the
+game's own display bit (0xFFF018 bit 5) gives, from 136-168 dumps per
+scene spanning frames 400-4200 at every 20th frame:
+
+    scene 0   25 palettes   lines [15,15,11,5]   46 slots   4 lines
+    scene 1   11 palettes   lines [14,14, 5, 0]  33 slots   3 lines
+    scene 2   14 palettes   lines [13,15, 0, 0]  28 slots   2 lines
+    scene 3    8 palettes   lines [15, 7, 0, 0]  22 slots   2 lines
+    scene 4   15 palettes   lines [14,14,11, 0]  39 slots   3 lines
+
+**Every row is entry 66's figure to the slot.** A hundred-plus samples
+across 3800 frames find nothing three frames missed, which is the result
+worth having: the per-scene tile palette is static, so a static table can
+hold it, and the packs above are the whole game. Nothing overflows and
+only scene 0 needs four lines.
+
+Gated dumps and their manifests are in `discover/cram/wide/`; the
+three-frame sets in `discover/cram/` reproduce every row exactly and stay
+as they are.
+
+**On the transformation, what the program supports.** Exactly two
+instructions in the whole program write 0xFFF142 — `clr.w` at 0x5DE and
+the table read at 0x670 — and the table holds 0-4. There is no sixth
+scene id, so a transform slot is a runtime concept and not something the
+game will ever ask for by scene number. The transform recolours the
+PLAYER, whose palette is the object's own slot/index at $0A/$0B, not a
+tile palette, so it is outside what `bake_tilecram.py` measures at all.
+Whatever covers it has to come from the sprite side.

@@ -790,3 +790,59 @@ it was the packet, exactly as you said, and now that the packet has moved
 the page does not change at all.
 
 Logged as LOOP-DECOMPILE 74.
+
+---------------------------------------------------------------------
+## Step 5 delivered — 2026-09-11: all five per-scene packs, and a trap
+
+Your chain was: scene-select probe -> scenes 1-4 -> live dumps per scene
+-> emitter for all five -> refuse rule safe. Steps 1 to 3 are done and the
+dumps are in the tree. LOOP-DECOMPILE 72 and 75.
+
+**Two things changed since you last looked at this.**
+
+1. **Scene 3 was never broken.** My "it will not load" was a stale rom.
+   It loads on the arcade and on ours from frame ~450.
+2. **No build is needed to select a scene.** `CD_N=<scene>
+   tools/cram_dump_scene.lua` writes the round->scene table into the cart
+   region at frame 1, so any rom can be dumped as any scene. That is what
+   removed the stale-rom failure mode.
+
+**The five packs, each from 136-168 dumps spanning frames 400-4200:**
+
+    scene 0   25 palettes   lines [15,15,11,5]   46 slots   4 lines
+    scene 1   11 palettes   lines [14,14, 5, 0]  33 slots   3 lines
+    scene 2   14 palettes   lines [13,15, 0, 0]  28 slots   2 lines
+    scene 3    8 palettes   lines [15, 7, 0, 0]  22 slots   2 lines
+    scene 4   15 palettes   lines [14,14,11, 0]  39 slots   3 lines
+
+Nothing overflows. Only scene 0 needs four lines, and the widest sample I
+can take finds nothing that three frames missed — so the per-scene tile
+palette really is static and your table can hold the whole game.
+
+**The trap, because it would have cost you three wrong tables.** 0xFFF142
+says which scene is LOADED, not what is on screen. Between attract screens
+the game reloads 69 of the 128 palettes into the same work RAM while
+0xFFF142 still reads the forced scene. Dumping blind gave scenes 3 and 4
+51 and 59 slots with palettes overflowing to the framebuffer — the eye
+title's and the score table's colours wearing the scene's name.
+
+**0xFFF031 is the attract step and it tells you what is on screen**
+(snapped on the arcade, one shot per value): 0x04, 0x0C, 0x14 are the
+scene backdrop, 0x10 is the eye title, 0x00 is the score table, 0x08 is
+boot. Gate on `f031 not in {0x10, 0x00}` plus the game's display bit
+(0xFFF018 bit 5). Every dump in `discover/cram/wide/` is already gated and
+its manifest carries the frame, scene, display bit and step for each one.
+
+**One shape problem is yours, not the data's.** `bake_tilecram.py`'s
+`--live-scene` is a single int, and live colours are applied only to that
+scene — the other four fall back to rom, which is wrong above palette 63.
+So one run bakes one correct scene. All five packs need either five runs
+merged or a per-scene `--live` map. I have not touched the tool.
+
+**On the transformation.** Exactly two instructions in the program write
+0xFFF142, `clr.w` at 0x5DE and the table read at 0x670, and the table
+holds 0-4. There is no sixth scene id, so nothing in the game will ever
+ask for a transform table by scene number. The transform recolours the
+player, and a player's palette is the object's own slot/index at $0A/$0B
+— a sprite palette, not a tile palette, and outside everything
+`bake_tilecram.py` measures. Its cover has to come from the sprite side.
