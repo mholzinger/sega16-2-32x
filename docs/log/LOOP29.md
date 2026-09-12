@@ -5956,3 +5956,8 @@ Check mode (SETCOLSCHECK=1, live vs baked set by set) did not compile
 in the first cut (the bm_state field macros); rebuilt as bm_check_cmp.
 Numbers to follow. The rig frame rate (BOOTFLIPRATE) is the hardware
 number and needs the rig.
+
+sc95's own drain split: scan 0.113 v/gen (7,276 chunks against pc95's
+19,560 -- one chunk per plane where the bake is eligible, the live 8-row
+chunks where it is not: play2 includes attract time), tail 0.113. The
+scan's 0.279 became 0.113, the tail is untouched, as the plan said.
