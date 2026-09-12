@@ -2031,7 +2031,7 @@ static void r60_push(void) {
 		 * d, so the compare is not a corruption test) -- withdrawn.
 		 * vi81: bit 7 bias | bits 6-5 record count >> 3 of the last
 		 * consume that read a zero record | bits 4-0 that record's
-		 * index (31 = none yet). */
+		 * index (31 = none yet).
 		 * vi81 on the rig: zero records at indices 5, 8, 25 of 24-40.
 		 * vi82: bit 7 bias | bit 6 FS changed | bit 5 VRAM-zero any |
 		 * bits 4-3 emitter records with all-zero output (sat 3) |
