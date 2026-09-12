@@ -227,6 +227,38 @@ time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
   thunk: `tst.b` (TAS's exact N/Z, clears V/C) + `st` (no CC) + `rts`.
   See patch_game.py TAS_SITES + md_main.c TAS thunks.
 
+- **Run the census, do not eyeball it.** `tools/code_stream.py` builds the
+  program's instruction stream from the reference disassembly's own
+  address list (no Ghidra, no listing), and
+  `tools/hazard_census.py --stream` reports every dependency class over
+  it, plus a raw-opcode sweep for the classes whose opcode is distinctive
+  enough to survive one — TAS, STOP, RESET, TRAPV. The loose ones (CHK,
+  MOVEP) are deliberately NOT swept: MOVEP's pattern matches the `0000
+  xxxx` longword every rom pointer table is made of, and a list nobody
+  reads is worse than no list. Altered Beast output is
+  `docs/audit/hazard_census.txt` (LOOP-DECOMPILE 76).
+
+- **STOP is the same shape as TAS and nobody has hit it yet.** 12 sites in
+  Altered Beast, all inside the service/test region. The 68000 halts until
+  an interrupt the arcade guarantees; on 32X it resumes only if that
+  interrupt actually arrives. KIT RULE: census it, and if the port can
+  reach test mode at all, patch every site.
+
+- **A read-modify-write on a write-only latch is a hidden hardware
+  contract.** Altered Beast has one: `bclr #6,0xC40001`. On the board the
+  read returns 0xFF, because jts16b_cabinet.v's A[13:12]==0 arm only
+  latches flip and video_en from cpu_dout and never assigns cab_dout
+  (:199-202, default at :189). So the instruction writes 0xBF — flip off,
+  video ON — and looks harmless. **Any substitute for that address must
+  return 0xFF on read**, or the write half puts an arbitrary byte in the
+  video latch. KIT RULE: for every hardware address the census marks RMW,
+  derive what the board returns on READ before choosing the substitute.
+
+- **Check that the program never writes rom space, and record that you
+  checked.** A rebasing port is only safe if nothing stores below the rom
+  ceiling. Altered Beast: zero sites. The check is one pass over the
+  stream and a clean result is still a kit rule.
+
 ## Hardware truth from jtcores (srcref/jtcores, GPL — derive, never copy)
 
 S16B shares jts16_prio.v/jts16_colmix.v with S16A (jts16_video.v's

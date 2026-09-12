@@ -134,9 +134,15 @@ Probe flags, all `make ship-us FLAG=1`:
      `tools/bound_ref.py` re-runs the audit with no Ghidra at all.
   3. **~29% of rom data unattributed.** The two largest blocks are
      identified (sprite frame table, zoom tables) but not exhausted.
-  4. **The dependency census** (entry 37) ran on two instruction classes.
-     It is the piece that makes the NEXT TITLE cheap and it is the least
-     advanced.
+  4. **The dependency census is done for everything the instruction
+     stream can answer** (LOOP-DECOMPILE 76): TAS, STOP, MOVEP, the
+     interrupt mask, read-modify-write on a write-only latch, stores into
+     rom space, and the full arcade hardware surface with direction and
+     width per address. Output `docs/audit/hazard_census.txt`, rules in
+     TOOLKIT.md, and it needs no Ghidra. What is NOT covered: anything
+     that depends on TIMING rather than an opcode — busy-waits that assume
+     the arcade's video bus stall are the obvious next class and they
+     cannot be found by pattern alone.
   5. **515 functions classified by signature, not read.** 150 are leaf
      helpers and are the least valuable thing left.
   6. ~~Redo the framebuffer bank figure against page 12.~~ **PAID**

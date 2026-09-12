@@ -3446,3 +3446,87 @@ game will ever ask for by scene number. The transform recolours the
 PLAYER, whose palette is the object's own slot/index at $0A/$0B, not a
 tile palette, so it is outside what `bake_tilecram.py` measures at all.
 Whatever covers it has to come from the sprite side.
+
+---------------------------------------------------------------------
+## 76. The dependency census, second half: the hardware SURFACE
+
+Entry 37 built the census and ran it on two instruction classes. It is
+the piece that makes a kit rather than a port, and it was the least
+advanced of the six open items. This finishes the classes that are
+findable from the instruction stream, and adds the half that is not about
+mnemonics at all.
+
+**First, it runs without Ghidra now.** `tools/code_stream.py` decodes the
+19137 addresses in `repair_seeds` — the REFERENCE disassembly's own
+instruction list, already in `altbeast_seeds.json` — one run at a time,
+resyncing whenever objdump and the reference disagree. 19137 of 19137,
+165 runs. That is wider than the function map, whose 555 bodies hold
+15159 of them, and the difference is the whole point: 0x150B6 is a real
+TAS in code the seeded project never reached.
+
+**It reproduces entry 37 exactly**: the same 4 TAS in code with 0x150B6
+as a candidate, and the same 12 STOP sites.
+
+**The raw-opcode sweep is back, and deliberately narrow.** --stream can
+only see where the reference looked, so a sweep over everything else is
+needed for the class that bit us once already. It covers TAS, STOP, RESET
+and TRAPV — exact words or a tight range with a mode filter. It does NOT
+cover CHK or MOVEP: MOVEP's pattern matches the `0000 xxxx` longword that
+every rom pointer table is made of, which is entry 37's 673 false hits,
+and a list nobody reads is worse than no list.
+
+The sweep found two TAS candidates. **0x150B6 is the real one** —
+patch_game's fifth site. **0x03646 is data, checked by hand**: it sits
+inside a smooth numeric ramp (62ec 64ea 67e9 6ae8 6de7 70e5 73e4 75e2,
+high byte ascending, low byte descending), which is a curve table and not
+a routine.
+
+**Now the half that is not mnemonics.** A port has to answer, for every
+arcade address the program touches: which region, which direction, what
+width. That is what needs somewhere to land in the 32X map, and it is the
+generalisable part, because the S16B decode is a property of the board.
+
+    29 addresses accessed directly, 73 more only as an lea base
+
+    tilemap VRAM 0x400000   32 kB, jts16b_main.v:354 (A16=0)
+                            NOTHING addresses it absolutely — which is why
+                            the port intercepts at the RLE loop heads
+    TEXT layer   0x410000   4 kB, jts16b_main.v:329 (A16=1)
+                            the SAME chip select, not a mirror of the
+                            tilemap; my earlier reading of it as a second
+                            window was wrong
+    sprite RAM   0x440000   2 kB, one absolute site
+    palette RAM  0x840000   4 kB, 12 addresses, all word writes
+    I/O          0xC40000   9 addresses, all BYTE and all ODD —
+                            jts16b_main.v:489 returns {8'hff, cab_dout},
+                            so the board wires the low byte only
+
+**Two new classes came out of it.**
+
+**INTERRUPT MASK — 14 writes to the SR, and only two values.** #0x2700
+masks everything, #0x2300 admits level 4 and up, which is the vblank the
+port drives. Worth having as a list because the port's IRQ sources are
+not the arcade's. The first cut of this class had 88 sites and was
+useless: writes to the CCR set X/C for the next instruction and have
+nothing to do with interrupts. Filtering to the SR alone is what made it
+readable.
+
+**READ-MODIFY-WRITE ON A WRITE-ONLY LATCH — one site, and a hardware
+contract nobody had written down.** `bclr #6,0xC40001` at 0x1AFF2. On the
+board the read returns 0xFF: jts16b_cabinet.v's `A[13:12]==0` arm only
+latches flip and video_en from cpu_dout and never assigns cab_dout
+(:199-202), so the read takes the 8'hff default at :189. The instruction
+therefore writes 0xBF — flip off, video ON — and looks harmless.
+**Our port maps 0xC40001 to the mailbox byte 0xFFB001, which returns
+whatever was last written there, not 0xFF.** Latent, not live: 0x1AFF2 is
+in the service region, and so are all 12 STOP sites. Which gives one
+clean rule instead of two loose ones: **the port cannot enter test mode,
+and this is the exact list of why.**
+
+**STORES INTO ROM SPACE — zero.** The program never writes below
+0x40000, so the +0x900000 rebase cannot be undone at runtime and nothing
+is self-modifying. A clean class is still a kit rule; the check is one
+pass and it has to be done per title.
+
+Output is `docs/audit/hazard_census.txt`; the kit rules are in TOOLKIT.md
+under the MD-hardware landmines.
