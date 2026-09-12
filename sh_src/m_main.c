@@ -12613,6 +12613,7 @@ RAMCODE void m_main(void)
 #endif
 #ifdef TILE_VERIFY
                 int tv_pubA = 0;
+                if (k2f_pendA && TV_FM0()) tv_pub0++;
 #endif
                 if (k2f_pendA) {
                     if ((d[0] >> 16) == 0xB6B6u) {
