@@ -967,3 +967,49 @@ of 140 samples for the pen map instead of the first sample changed
 nothing. So the pack and the install disagree, and the next thing I build
 is a readback verifier that diffs live `mdp_line_c` and `mdp_s_map`
 against the baked header.
+
+---------------------------------------------------------------------
+## Two causes eliminated for the pink trees, from the oracle — 2026-09-11
+
+You ruled out the pen map's sample choice and the source colours, the
+latter by comparing my gated dump against your in-game dump. Two more
+eliminations, both needing the arcade rather than another of our own
+dumps. LOOP-DECOMPILE 81.
+
+**1. Nothing the map uses is animated.** Measured on the arcade over 800
+frames at scene 0, the only palette words that move at all are tile
+palettes 19, 20 and 21 (the colour cycler at 0x30B2, descriptors at
+0xFFF300) and 6, plus a handful in 0-7 at level load. **Not one word in
+64-127 moves**, and scene 0's map uses 74-102. A static table is the right
+shape and cycling is not your bug.
+
+**2. The pack's SOURCE is byte-identical to the arcade, all five scenes.**
+`tools/arcade_palram.lua` dumps the arcade's palette RAM at 0x840000 on an
+attract step that shows the scene. The port mirrors palette RAM 1:1 at
+0xFF9000, so they compare word for word:
+
+    scene 0   34 map-referenced tile palettes   0 differ
+    scene 1   16                                0 differ
+    scene 2   18                                0 differ
+    scene 3   14                                0 differ
+    scene 4   19                                0 differ
+
+References are in `discover/cram/arcade/sceneN.bin`;
+`tools/palette_oracle.py <scene> <dump.bin>` diffs any 0x1000-byte palette
+dump against them and reports only the palettes that scene's map uses. Run
+it on whatever your readback produces and it tells you which side is
+wrong without you having to trust our own dumps at all.
+
+**So it is pack-to-install, and your verifier is the right next step.**
+
+**One thing worth fixing in passing, because it makes the numbers above
+readable.** Two formats share the 4 kB:
+
+    tile palettes    128 x 8 colours    0x840000 + p*16    p = 0..127
+    sprite palettes   64 x 16 colours   0x840800 + s*32    s = 0..63
+
+Tiles are 3bpp so a tile palette is EIGHT colours — which is why
+bake_tilecram has always used `base + p*16` and pens 1..7. My earlier
+"lines 0-63 are tiles, 64-127 are actors" was the right boundary in the
+wrong units: it is 0x8407FF, and in tile-palette numbering the tiles are
+0-127 and the sprites start after them. Nothing overlaps.

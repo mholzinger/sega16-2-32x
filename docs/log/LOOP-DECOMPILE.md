@@ -3800,3 +3800,74 @@ A refuse rule that keys on the destination line needs to apply to 0-63
 only. Nothing in lines 64-127 is allocated, computed or contended — it is
 a table lookup — so intro, transformation and transitions cannot be
 starved by a tile-palette policy that stops at line 63.
+
+---------------------------------------------------------------------
+## 81. The pack's SOURCE is confirmed against the arcade, and nothing the map uses moves
+
+The rendering thread has level 1's trees pink and a purple band in the
+sky, and has ruled out the pen map's sample choice and the source colours
+(the latter by comparing our gated attract dumps against their own in-game
+dumps). Their remaining split is pack versus install. Two measurements
+narrow it further, and both need the oracle rather than another of our
+own dumps.
+
+**First, the palette RAM layout, because two formats live in the same
+4 kB and getting it wrong makes every other statement here meaningless:**
+
+    tile palettes    128 x 8 colours    0x840000 + p*16    p = 0..127
+    sprite palettes   64 x 16 colours   0x840800 + s*32    s = 0..63
+
+Tile pixels are 3bpp so a tile palette is EIGHT colours — which is why
+`bake_tilecram.py` has always read `base + p*16` with pens 1..7, and why
+entry 80's "lines 0-63 / 64-127" split was the right boundary described in
+the wrong units. The two halves do not overlap: tiles end at 0x8407FF and
+sprites start at 0x840800. Every tile-palette writer bounded in entry 80
+stays inside the first half, and the actor queue is the only thing in the
+second.
+
+The scene tilemaps confirm it from the other side: they reference 34, 16,
+18, 14 and 19 distinct tile palettes, almost all of them in 64-127, and
+the per-scene upload at 0x2B7E writes exactly that band —
+0x840400 + a per-scene offset, which is tile palette 64 upward.
+
+**Second: nothing the map uses is animated.** Measured on the arcade over
+800 frames at scene 0, every palette word that changes at all:
+
+    tile pal 19    8 words move, 5486 changes    the colour cycler at 0x30B2
+    tile pal 20    6 words move, 1015 changes
+    tile pal 21    6 words move, 1015 changes
+    tile pal  6    7 words move,  214 changes
+    tile pal 0-7   a handful each, at level load
+    ---
+    tile pal 64-127                NOT ONE WORD MOVES
+
+Scene 0's map uses palettes 74-102. **None of them changes, ever.** So a
+static per-scene table is the right shape and colour cycling cannot be
+what makes the trees pink. The cycler's three palettes are not in any
+scene's map.
+
+**Third, and this is the one only this thread could run: the pack's
+SOURCE is byte-identical to the arcade.** `tools/arcade_palram.lua` dumps
+the arcade's own palette RAM at 0x840000 on an attract step that shows the
+scene (entry 75's f031 gate). The port mirrors palette RAM 1:1 at work RAM
+0xFF9000, so the two compare word for word:
+
+    scene 0   34 map-referenced tile palettes,  0 differ
+    scene 1   16                                0 differ
+    scene 2   18                                0 differ
+    scene 3   14                                0 differ
+    scene 4   19                                0 differ
+
+Their own check compared two of OUR dumps against each other on three
+sets. This is all five scenes, every palette the map references, against
+the hardware.
+
+**So the source data is eliminated, and animation is eliminated. What is
+left is pack-to-install, which is exactly what their readback verifier
+tests.** Nothing here does that job for them; it removes the two
+alternatives so a negative result there means something.
+
+References are staged as `discover/cram/arcade/sceneN.bin` and
+`tools/palette_oracle.py <scene> <dump.bin>` diffs any 0x1000-byte palette
+dump against them, reporting only the palettes the scene's map actually
+uses.
