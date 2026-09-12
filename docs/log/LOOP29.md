@@ -5026,3 +5026,27 @@ candidate and the plain build line now produces its behaviour. Cost: the
 chevron plane arrives 50 frames after the field instead of 20. Still open
 on vi62b's shots: a black cell or two in the level-2 floor -- the pop-in
 class, MDBATCH=24 in play.
+
+## 215. THE INVISIBLE PLATFORM: THE BAKE READ ONE PAGE PER PLANE (2026-09-12 04:50)
+
+LOOP-DECOMPILE 98 / NOTES 19: the ledge Mike stands on is FG masonry in
+sets 82, 87-91 -- 1,226 cells of level 1 on pages 1-4 -- and none of them
+was in round 0's table, so the refuse rule drew them as backdrop.
+`bake_tilecram.py`'s viewport sweep read FG page 0 and BG page 5 only;
+the level's planes walk pages 0-4 and 5-9. `tools/scene_sets.py` (theirs)
+prints the gap per round.
+
+**The bake now packs the union of every set on all five pages of each
+plane**, and orders the packer by CELLS so what overflows is small: the
+first rebake put 100/101 (2,012 BG cells) in the framebuffer to fit a
+15-cell set. Result against their tool and the arcade oracle:
+
+    round 0   30 sets pinned, lines [14,14,15]   overflow 2, 102, 103 = 211 cells (was 1,553 missing)
+    round 1   15 sets, [15,14,15]                overflow 3 = 41 cells
+    round 2   16 sets, [14,15,12]                overflow 3, 101 = 7 cells
+    round 3   14 sets, [15,9,11]                 fully covered
+    round 4   19 sets, [14,15,11]                fully covered
+    all five  0 wrong colours, 0 dropped pens vs discover/cram/arcade
+
+`rom/night/vi63.32x` = vi62b's line + these tables, staged, not launched.
+Headless checks pending. R60TIGHT (their flag, NOTES 18) is not in it.

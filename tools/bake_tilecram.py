@@ -99,23 +99,28 @@ def unpack(rom, ptr):
 
 
 def worst_viewport(words, cols):
-    best = None
-    fg = words[FG_PAGE * 2048:(FG_PAGE + 1) * 2048]
-    bg = words[BG_PAGE * 2048:(BG_PAGE + 1) * 2048]
-    for c0 in range(64):
-        pal = set()
-        for r in VIS_ROWS:
-            for dc in range(VIS_COLS):
-                c = (c0 + dc) & 63
-                for t in (fg[r * 64 + c], bg[r * 64 + c]):
-                    if t & 0x1FFF:
-                        pal.add((t >> 6) & 0x7F)
-        u = set()
-        for p in pal:
-            u |= cols(p)
-        if best is None or len(u) > best[1]:
-            best = (sorted(pal), len(u))
-    return best[0]
+    """LOOP29 215 / LOOP-DECOMPILE 98: EVERY set the level can put on
+    screen, not the worst 40-column window of ONE page.
+
+    The old sweep read FG page 0 and BG page 5 only -- as far as the
+    attract demo walks -- and the level's planes walk pages 0-4 and 5-9
+    (the page tables at 0x40F0/0x4100, LOOP-DECOMPILE 96). Round 0's
+    table therefore lacked the ramps and ledges (FG sets 82, 87-91: 1,226
+    cells) and the refuse rule drew them as backdrop: Mike's "player
+    standing on a ledge drawn as background". Demand by set count across
+    all pages is close to page 0's, so the union is what gets packed;
+    anything that will not fit overflows to the framebuffer as before.
+    The name is kept so the callers do not move."""
+    global CELLS
+    CELLS = {}
+    for page in list(range(FG_PAGE, FG_PAGE + 5)) + list(range(BG_PAGE, BG_PAGE + 5)):
+        for t in words[page * 2048:(page + 1) * 2048]:
+            if t & 0x1FFF:
+                CELLS[(t >> 6) & 0x7F] = CELLS.get((t >> 6) & 0x7F, 0) + 1
+    return sorted(p for p in CELLS if len(cols(p)) > 0)
+
+
+CELLS = {}                      # set -> cells on the level, from worst_viewport
 
 
 def pack(pal, cols, order, overflow=None):
@@ -250,7 +255,10 @@ def main():
         if a.also and s == a.live_scene:
             extra = [int(x) for x in a.also.split(',') if x.strip()]
             pal = sorted(set(pal) | {e for e in extra if len(cols(e)) > 0})
-        order = sorted(pal, key=lambda p: -len(cols(p)))
+        # 215: BIG sets first, so that what overflows is small. The old
+        # order (colours desc) put sets 100/101 -- 2,012 BG cells of round
+        # 0 -- in the framebuffer to make room for a 15-cell set.
+        order = sorted(pal, key=lambda p: (-CELLS.get(p, 0), -len(cols(p))))
         groups = pack(pal, cols, order)
         if groups is None:
             # exhaustive-ish retry FIRST: an overflow we could have avoided
@@ -264,10 +272,11 @@ def main():
                     break
                 ov = []
                 g2 = pack(pal, cols, sh, ov)
-                if best is None or len(ov) < len(best[1]):
-                    best = (g2, ov)
+                ovc = sum(CELLS.get(p, 0) for p in ov)
+                if best is None or ovc < best[2]:
+                    best = (g2, ov, ovc)
             if groups is None:
-                groups, over = best
+                groups, over, _ = best
                 overflow[s] = over
         if groups is None:
             sys.exit('scene %d: no %d-line packing found' % (s, LINES))
