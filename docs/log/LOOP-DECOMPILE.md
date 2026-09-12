@@ -3871,3 +3871,62 @@ References are staged as `discover/cram/arcade/sceneN.bin` and
 `tools/palette_oracle.py <scene> <dump.bin>` diffs any 0x1000-byte palette
 dump against them, reporting only the palettes the scene's map actually
 uses.
+
+---------------------------------------------------------------------
+## 82. TIMING HAZARDS — the game paces itself on IRQ4 and nothing else
+
+Entry 76 closed the dependency census for everything an opcode can
+signal, and named what it could not see: a loop calibrated in CPU cycles,
+or one that busy-waits on something the arcade guarantees. Those are the
+classes that should worry a port whose 68000 runs at 7.670 MHz and is NOT
+stalled on a video bus the way the arcade's 10 MHz part is. This is that
+class, and **the answer is a clean negative.**
+
+`tools/timing_hazards.py` asks three questions separately, because the
+three fail differently. Over all 19137 instructions:
+
+    CYCLE DELAY      a dbf branching to ITSELF, empty body      1
+    INTERRUPT DELAY  a counted loop around stop                 1
+    BUSY-WAIT        test and branch back, <= 3 instructions    3
+
+**One cycle delay in the whole program**, at 0x2D8C: `moveq #127,d0` then
+`dbf d0,0x2D8C`. About 1280 cycles — 128 us on the arcade's clock, 167 us
+on ours. **It is in the service-switch path**, after the wait at 0x2D82,
+and never runs in gameplay.
+
+**So nothing in the gameplay path measures the clock.** That is the check
+the scope argument needed and nobody had run: a slower, unstalled 68000
+cannot desynchronise this game through a delay loop, because there are no
+delay loops to desynchronise.
+
+**The three busy-waits, and two of them are the same byte.**
+
+    0x3982  tst.b 0xFFF01C / beq       the frame flag (entry 67), known
+    0x2D82  btst #2,0xFFF0C2 / bne     MCU_COINS bit 2 — SERVICE switch
+    0x2DA8  btst #7,0xFFF0C2 / bne     MCU_COINS bit 7 — TEST switch
+
+0xFFF0C2 is MCU_COINS, the byte the i8751 posts, which `patch_game.py`
+already names and `md_main.c:4670` already writes. Both waits sit inside
+IRQ4 and each ends in an `rte` to a fixed vector — 0x2D82 to test mode at
+0x1AFDE, 0x2DA8 to the reset entry at 0x400. They spin until the operator
+lets go of the switch. **The port never sets bits 2 or 7** (md_main.c:4670
+builds svc from coin, start1 and start2 only), so neither can hang, and
+neither can be entered.
+
+**The interrupt delay is 181 STOPs** at 0x1B5B2, in test mode, and it
+belongs to the twelve STOP sites entry 37 found.
+
+**Every timing-sensitive site in the program is in the service and test
+path.** The cycle delay, the STOP loop, and two of the three busy-waits,
+plus the twelve STOPs from entry 37 and the write-only read-modify-write
+from entry 76. That is now one rule with one list behind it: the port
+cannot enter service or test mode, and nothing else in the program cares
+what clock it runs at.
+
+**The detector's own trap, twice over.** A self-branching `dbf` has a
+target EQUAL to its own address, so a loop finder that requires
+`target < address` drops exactly the shape a cycle delay has — the first
+run of this reported zero. And a conditional branch backwards to an
+`rts` is a shared EXIT with the same three-instruction shape as a spin;
+three of five busy-wait candidates were that, and 0x0F4CE and 0x166F2 were
+checked by hand before the filter was written rather than after.

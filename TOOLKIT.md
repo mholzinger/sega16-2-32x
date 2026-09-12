@@ -254,6 +254,20 @@ time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
   video latch. KIT RULE: for every hardware address the census marks RMW,
   derive what the board returns on READ before choosing the substitute.
 
+- **Census the TIMING classes too; the opcode scan cannot see them.**
+  `tools/timing_hazards.py` asks three questions separately because they
+  fail differently: a `dbf` branching to ITSELF is a pure cycle delay and
+  breaks on a different clock; a counted loop around `stop` measures
+  interrupts and breaks only if the interrupt never arrives; a
+  test-and-branch-back busy-waits on a byte and hangs if nothing writes it.
+  Altered Beast has one, one and three, and every one of them is in the
+  service or test path — so the game paces itself on its frame interrupt
+  and nothing else, and a slower unstalled 68000 cannot desynchronise it.
+  TWO TRAPS IN THE DETECTOR: a self-branching `dbf` has target == address,
+  so `target < address` drops exactly the shape you are hunting; and a
+  conditional branch backwards to an `rts` is a shared exit with the same
+  shape as a spin.
+
 - **Check that the program never writes rom space, and record that you
   checked.** A rebasing port is only safe if nothing stores below the rom
   ceiling. Altered Beast: zero sites. The check is one pass over the
