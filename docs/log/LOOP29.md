@@ -6075,3 +6075,16 @@ bldB: folds 1 (tiles to the VDP + the per-pixel hole punch), 2 (the
 maps scan from the bake) and 4 (the state word) on one rom. vi70 stays
 the presentation reference for the older gates. Next card: fold 5 on
 the packet side, then fold 3.
+
+**Build C, shaped (not built):** fold 5's copy on the packet side. The
+shim already has the FM=0 framebuffer slot that costs the post nothing:
+r60_blast() (the staged FB packet, blasted at the tail when FM is
+already 0, else held in fbx_pend and blasted from the gate spin by
+fbx_late_blast() or in the pre-post slot). The TXT_WRAM footprint copy
+(md_main.c, "TOP-OF-PASS TEXT STAGING", 50 words a dirty vint at 0.05
+lines a word on the rig) sits BEFORE the raise today and that is what
+halved the rig's frame rate (237). Build C = the same copy factored
+into txtw_blast() and called from r60_blast() / fbx_late_blast(): same
+FM=0 guarantee, zero post delay. Its card: TXTWRAM=1 on bldB's flags,
+rig frame rate against frB (21 19 7 15 18), then NOTES 25's third
+writer (0x369C) once the decompile thread names its footprint.
