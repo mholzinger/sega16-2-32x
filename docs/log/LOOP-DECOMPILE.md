@@ -4378,3 +4378,131 @@ That is as far as this method goes. It is either dead data — a title's rom
 carries plenty — or it is reached by a path this rig does not enter: two
 players, a continue, an ending, a boss state the script never survives to.
 Recording it as unread with the scope stated, not as unknown.
+
+---------------------------------------------------------------------
+## 92. TILE PALETTES 19-21 COLOUR THE CUTSCENE PAGES, AND THE GAME HAS A ONE-BYTE CUTSCENE SWITCH (2026-09-12)
+
+HANDOFF-DECOMPILE-3 OPEN item 3. Everything below is read off the
+consuming instruction or the rom bytes; nothing is a filter or an absence.
+
+**The cycler's descriptors are a fixed rom table, loaded on every scene
+load.** 0x1A6BA clears 16 slots (32 longs) at 0xFFF300 and loads the
+table at 0x1A6FA — a count word, then (line word, script long) pairs:
+
+    slot 0   line 19   script 0x1A70E
+    slot 1   line 20   script 0x1A78E
+    slot 2   line 21   script 0x1A78E
+
+One caller, 0x76C, in the scene-load sequence after the tilemap unpack
+(0x1694) and the palette load (0x3952). Slots 1 and 2 share a script and
+start with the same timer and index, and the stream has exactly two
+references to 0xFFF300-0xFFF33F (0x30B2 and 0x1A6BA), so **palettes 20
+and 21 are identical on every vint**.
+
+**Script format, from the cycler's own arithmetic (0x30D4-0x30FE):** a
+count word, then 18-byte entries of a hold word and EIGHT colour words.
+The index advances when the per-slot countdown reaches zero, wraps at
+count, the entry's hold reloads the countdown, and four `move.l` copy 16
+bytes — one whole 8-colour tile palette. **Entry 42 said three longs and
+six colours. It is four longs, eight colours** (0x30F8-0x30FE).
+
+Line 19, 0x1A70E: 7 steps, hold 1 each. Colour 0 is 0x7FFF (white) in
+every step; colours 1-7 are the blue ramp 0x4900..0x4F00 rotated one
+place per vint (blue = {pal[11:8], pal[14]}, `jts16_colmix.v:58`, so
+19/31 up to 31/31 with no red or green). Period 7 vints. Step 4 carries
+0x4C00 where the rotation would put 0x4E00 — a rom fact.
+
+Lines 20/21, 0x1A78E: 6 steps, holds 4,2,2,2,2,4 = 16 vints. Colour 0 is
+0x0A00 (blue 20/31); colours 1-7 begin as pure red 0x100F (red 31/31); a
+yellow head (0x305F 307F 309F 30BF 30DF, green 11 to 27 at red 31) enters
+at colour 1 and walks out to colour 5 across the six steps, then the
+ramp restarts all-red. A flame lick.
+
+**What consumes them.** S16B tiles take their palette from map-word bits
+12:6 (`jts16_scr.v:197`), so palette 19 is tiles 0x4C0-0x4FF, 20 is
+0x500-0x53F, 21 is 0x540-0x57F. The two small writers that follow the
+unpacker on every scene load (entry 10) lay exactly those:
+
+  - 0x174E: 40x20 cells at 0x40A230 = page 10, row 4, column 24. High
+    byte 0xA5 (priority SET, tile 0x5xx), low bytes from 0x199A (800
+    bytes, 0x00-0x7E). 728 cells are palette 20, 72 (bytes >= 0x40) are
+    palette 21. Rows 8-19 are near-solid byte 0x2A; rows 0-7 are mostly
+    0x01 with five 3x4-cell objects (04 05 06 / 09 0A 0B / 0F 10 / 16 17)
+    and two 3x3 ones (11 12 13 / 18 19 1A / 25 26 27).
+  - 0x170A: 40x20 cells at 0x40B230 = page 11, same row and column. High
+    byte 0x04, low bytes from 0x1CBA: four 8-byte rows C0-C7, C8-CF,
+    D0-D7, D8-DF, repeated five across and five down. Tiles 0x4C0-0x4DF,
+    all palette 19, priority clear.
+
+That is LOOP29 202's chevron plane (page 11, set 19) and its red field
+and flames (page 10, sets 20-21). Both pages are resident from the moment
+ANY scene loads; the cutscene uploads nothing. What the rendering thread
+did not have is the timings above and the switch.
+
+**The switch is WRAM byte 0xFFF148.** 0x3A00, called every frame from the
+main loop (0x88C, 0xA38) and from 0x1F32, 0x1FBC, 0x1A462:
+
+    3A00  tst.b  $FFF148 ; beq 3A2A
+    3A0C  clr the four scroll shadows 0xFFF0E2/E4/E8/EA
+    3A1C  move.w #$AAAA,$FFF0F4        scr1 (foreground) = page 10
+    3A22  move.w #$BBBB,$FFF0F6        scr2 (background) = page 11
+    3A2A  otherwise: page words from the tables at 0x40F0 (scr1) and
+          0x4100 (scr2), indexed by hscroll bits 9-11
+
+IRQ4 copies 0xFFF0F4/F6 out through the pointers at 0xFFF0EC/F0
+(0x2B02-0x2B14), set once at 0x51C/0x524 to 0x410E80 and 0x410E82.
+**This is the page-select writer entry 59 could not find**: the immediate
+sits in a WRAM shadow and the text-RAM store is pointer-indirect. 0x3A1C
+is the program's only writer of 0xAAAA/0xBBBB, so pages 10/11 are on
+screen iff 0xFFF148 was non-zero when 0x3A00 last ran.
+
+The level tables, for the record:
+
+    0x40F0 scr1  0000 0000 0000 4040 3434 2323 1212 0101
+    0x4100 scr2  5555 5555 5555 9595 8989 7878 6767 5656
+
+A level's foreground is pages 4..0 and its background pages 9..5, walked
+by the horizontal scroll; entry 59's measured 0x0000/0x5555 is index 0-2.
+Pages 12-15 are never selected.
+
+**What 0xFFF148 means.** NOTES-FROM-DECOMPILE section 7 called it the
+"solo filter": the dispatcher at 0x3992-0x39A6 runs only the object slot
+whose index+1 equals it and diverts every other slot to 0x3F04 (hide). It
+is set at 0x9104 (`move.b $FFF109,$FFF148 ; addq.b #1,$FFF148`) by an
+object routine that takes the machine over, and cleared at 0x91DC, 0xB12,
+0x5D6 and 0x1E68. IRQ4 acts on its EDGE (0x2BA8-0x2BE2; the previous
+value is kept at 0xFFF149): on the rise it zeroes 32 longs at 0x840000,
+tile palettes 0-7; on the fall it restores those 64 words from rom
+0x232A0 and calls 0x3108 (the per-scene sky block) and 0x3128.
+
+So one byte says "cutscene": pages 10/11, a single live object, scroll
+zeroed, palettes 0-7 blanked. LOOP29 208-209 retired the palette
+detectors and key the cutscene on the claim mix, with a lag they measured
+(plane at 1590-1660 against the red field at 1575). The shim already
+reads 0xFFF142 at `md_src/md_main.c:2384` and carries it in COMM10 bits
+13-15; 0xFFF148 != 0 is one more bit from the same place, exact on the
+edge and a frame ahead of the page shadows. Handed over in
+NOTES-FROM-DECOMPILE.
+
+**Not read:** the object routine containing 0x9104 (map: function 0x90F4,
+"animation + claim/lock + state change + palette + sound"). That the
+face, the eye and the intro all pass through it rests on 0x3A1C being the
+sole 0xAAAA writer plus LOOP29 208's measurement that all three switch
+pages — two consumer-read facts, but the routine itself is unread.
+
+**Map defect, not repaired:** `function_map2.md` names the 1830-byte
+function at 0x5BE `test_mode_screen`. It holds the boot path, the attract
+loop (entry 71) and the scene-load sequence at 0x740-0x7A0. It is the
+main loop.
+
+---------------------------------------------------------------------
+## 93. OPEN item 4, one step further: the silent block is level-class content
+
+The 2384 words at 0x22000-0x232A0 by field: palette 47-54 and 81-121,
+priority never set, tile index 0xBC0-0x1E44. That is the shape of a
+scene page (entry 62 has scene 0's viewport at 72-103), not of the
+cutscene pages (19-21, priority on the picture). It ends exactly where
+the rom tile-palette block at 0x232A0 begins — the block IRQ4's
+cutscene-exit restore reads (entry 92). Still unread on all five rounds
+(entry 91). Reads as a page fragment shipped in the rom and never
+selected; not proven, and no cheaper method is left than the read tap.

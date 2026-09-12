@@ -1,7 +1,7 @@
 # HANDOFF — the decompile thread, session 3
 
-Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 91
-entries. Session 2 ran 72-91.
+Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 93
+entries. Session 2 ran 72-91; session 3 starts at 92.
 
 **Read entries 50, 71 and 88 before anything else.** 50 is the provenance
 rule, 71 is the duplication trap, and 88 is the night this thread found a
@@ -85,13 +85,16 @@ a rom map** (a false instruction inflates coverage and hides data).
   2. **Sound. This thread has never touched it** and it is a stated
      deliverable — `docs/sound/`, and the goal is decoding music from the
      Z80 rom rather than tapping playback.
-  3. **Three tile palettes — 19, 20 and 21 — are the most heavily
-     animated thing in the game** (the cycler at 0x30B2, descriptors at
-     0xFFF300) and belong to no scene's map. Nobody knows what they
-     colour. Flagged three times, never done.
+  3. ~~Tile palettes 19, 20, 21~~ DONE, session 3 (92): they colour the
+     cutscene pages 10/11 (the chevron plane and its flames), laid on
+     every scene load by 0x170A/0x174E. The cutscene switch is WRAM byte
+     0xFFF148, and 0x3A00 is the page-select writer entry 59 could not
+     find. Handed to the rendering thread in NOTES-FROM-DECOMPILE 17.
   4. **0x22000-0x232A0**, 4768 bytes of valid tile indices: no reference,
-     and unread on all five rounds with the control firing (91). Dead data
-     or a path the rig does not enter.
+     and unread on all five rounds with the control firing (91). Its
+     fields are level-class (palettes 47-121, no priority) and it abuts
+     the rom palette block (93). Dead data or a path the rig does not
+     enter; no cheaper method is left.
   5. **The bound repairs are not applied** to the Ghidra project (73).
      Do it with the rest of a Ghidra pass, not on its own.
 

@@ -1234,3 +1234,63 @@ costs 8,184 — the same code, 19% more. Given that LOOP29 182-184 found the
 game DISCARDS a release arriving while it works, that reads as a protocol
 cost rather than a code cost. Worth 1,584 instructions, but it is a
 protocol change and will take longer than a loop.
+
+---------------------------------------------------------------------
+## 17. 2026-09-12. The cutscene has a one-byte switch in the game: 0xFFF148. LOOP-DECOMPILE 92
+
+Your 208-209 retired the palette detectors and key the cutscene on the
+claim mix, and you measured the lag: the plane at 1590-1660 against the
+red field at 1575. The game keeps an exact signal you can read directly.
+
+**WRAM byte 0xFFF148 is non-zero for the whole cutscene and zero
+otherwise.** It is the dispatcher's solo filter (section 7): the object
+that runs the face/eye/intro sets it at 0x9104 to its own slot index+1,
+and while it is set the dispatcher (0x3992-0x39A6) runs that slot alone.
+Everything you see the cutscene do hangs off the same byte:
+
+  - 0x3A00, every frame from the main loop: if 0xFFF148 != 0, write
+    0xAAAA to the scr1 shadow 0xFFF0F4 and 0xBBBB to the scr2 shadow
+    0xFFF0F6 and zero the four scroll shadows; else derive the page words
+    from the level tables at 0x40F0/0x4100 by hscroll. IRQ4 copies the
+    shadows to 0x410E80/82 through the pointers at 0xFFF0EC/F0
+    (0x2B02-0x2B14). 0x3A1C is the ONLY writer of 0xAAAA/0xBBBB in the
+    program, so pages 10/11 on screen <=> this byte was set.
+  - IRQ4 acts on its EDGE at 0x2BA8-0x2BE2 (last value kept at 0xFFF149):
+    rise = zero tile palettes 0-7 at 0x840000; fall = restore them from
+    rom 0x232A0, then 0x3108 (the per-scene sky block) and 0x3128.
+
+Cleared at 0x91DC (the cutscene object's own exit), 0xB12, 0x5D6, 0x1E68.
+
+**How to carry it:** you already read 0xFFF142 at `md_src/md_main.c:2384`
+and put it in COMM10 bits 13-15 for MD_ROUND. `*(volatile uint8_t*)
+0xFFF148 != 0` is one more bit from the same read, and it moves before
+0x3A00 rewrites the page shadows, so it is a frame ahead of the page
+words and has no detector latency at all. Round values 5-7 in those three
+bits are unused if you would rather encode "cutscene" as a round than
+spend another bit. Your call; the byte is the fact.
+
+**What the cutscene pages contain, so the ship batch can be sized rather
+than tuned:** both pages are laid on EVERY scene load by the two writers
+after the unpacker (0x174E page 10, 0x170A page 11 — LOOP-DECOMPILE 10),
+so they are resident long before the byte rises; the cutscene uploads no
+tiles. Page 10 (foreground, priority set) is 800 cells of tiles
+0x500-0x57E: 728 in palette 20, 72 in palette 21. Page 11 (background) is
+800 cells of tiles 0x4C0-0x4DF, a 8x4 pattern repeated, all palette 19.
+Palettes 20 and 21 are always identical — one script, two slots in
+lockstep.
+
+**The animation, exact (the cycler 0x30B2 ticks once per vint):**
+
+    palette 19     7 steps, hold 1 -> period 7 vints. Colour 0 white
+                   (0x7FFF), colours 1-7 the blue ramp 0x4900..0x4F00
+                   rotating one place per vint.
+    palettes 20/21 6 steps, holds 4,2,2,2,2,4 -> period 16 vints.
+                   Colours 1-7 red (0x100F); a yellow head (0x305F ..
+                   0x30DF) enters at colour 1 and walks to colour 5, then
+                   the ramp restarts all-red.
+
+So the plane cycles seven colours at 60 Hz and the flames re-tint five
+colours on a 16-vint cycle. The cycler writes the whole 8-colour line
+(four longs, 0x30F8-0x30FE; LOOP-DECOMPILE 42's "six colours" was wrong).
+The scripts are rom: 0x1A70E (line 19) and 0x1A78E (lines 20/21), 18-byte
+entries of a hold word and eight colours, count word first.
