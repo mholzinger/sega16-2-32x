@@ -272,6 +272,11 @@ per pixel where the bake says the tile is partial; the zombies mask,
 the legs draw through the grass. Mike's eye is the gate. NEXT: fold 5
 with the copy on the packet side (237), then RELBANK on the rig.
 
+**THE FOLD-1 LINE IS c1p95c (Mike, 2026-09-13, PLAN 0b1ff57):** vi95's
+flags + `C1PUNCH=1`, md5 85116f58. Builds are lettered from here with a
+card in PLAN-SINGLE-VINT (Build A = c1p95c, passed). Build B = fold 2
+(`SETCOLS=1`) on c1p95c's flags, measured on that line before it counts.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch
