@@ -5119,3 +5119,29 @@ on every resident set and leaves the pens alone.
 return is Mike's eye only. vi65 withdrawn.
 
 **218 play path:** vi66 vs vi45 play path: worst black-share difference 0.001 at frame 2720; ledge band mean black: vi62b 0.0124  vi66 0.0105. vi66 is the candidate; the transform return is Mike's eye.
+
+## 219. THE HORIZON BAND IS HARDWARE-ONLY, AND IT PREDATES THE TRANSFORM (2026-09-12 14:15)
+
+Mike on vi66: "no change". His five shots all carry the band, INCLUDING
+the one before any transformation (180545, score 5800, human form). So
+216-218's same-round-return theory is wrong: the band is there from the
+start of level 1 on vi66 and absent on vi62b.
+
+Headless at the same rows: vi62b 0.00 black on rows 40-76, vi66 0.00; the
+rig's 180545 reads 0.42-0.70 on rows 48-76. **ares does not show it.**
+That leaves what hardware does differently -- a VRAM transfer cut short
+when it overruns vblank leaves tiles our residency map believes shipped,
+black until something re-ships them, which nothing does. Two things
+changed vi62b -> vi66 that bear on that: the all-pages table (215: 30
+pinned sets, more resident tiles) and the edge-out tag wipe (218: every
+tile re-ships at the level load).
+
+Staged for the rig, not launched, both otherwise vi66:
+
+    vi66a  (md5 c93d0373)  vi62b's page-0 table + the tag wipe
+    vi66b  (md5 62ed2abb)  the all-pages table, EDGENOWIPE=1 (no wipe; the
+                           chevron plane will draw in alternate rows, 216)
+
+If vi66a is clean, the table's size is the trigger; if vi66b is clean, the
+wipe is. If both band, the trigger is elsewhere in 215-218 and vi62b is
+the line again.

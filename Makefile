@@ -2314,6 +2314,13 @@ endif
 ifdef MDBATCHOFF
 SHCCFLAGS += -DMD_BATCH_OFF=$(MDBATCHOFF)
 endif
+# `make ... EDGENOWIPE=1` = LOOP29 219 DIAGNOSTIC. Do not wipe the resident
+# sets' tile tags when the round leaves the screen (218). Isolates the
+# hardware-only horizon band of vi66: A/B against vi66a (218 with the old
+# page-0 table). Expect the chevron plane to draw in alternate rows (216).
+ifdef EDGENOWIPE
+SHCCFLAGS += -DEDGE_NOWIPE
+endif
 # MDSTATIC=1 = STATIC-SCENE arc (docs/design/STATIC-SCENE.md): per-scene
 # static MD pen tables (tools/mdpen_bake.py -> sh_src/pal_scenes_md.h)
 # installed at the PALSTATIC scene load, the table's sets pinned against

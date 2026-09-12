@@ -5449,9 +5449,11 @@ __attribute__((noinline)) static void disp_gate(void)
              * residency loss the drift-free path already recovers from in
              * play (1730: cells re-claim, the shipper re-converts), and it
              * is all the cutscene needs. */
+#ifndef EDGE_NOWIPE
             for (unsigned s2 = 0; s2 < 128; s2++)
                 if (mdp_s_line[s2])
                     mdp_wipe_set_tags(s2);
+#endif
         }
         mds_onscreen = on;
         mds_cl_t = mds_cl_n = 0;
