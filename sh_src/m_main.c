@@ -1237,7 +1237,23 @@ static const uint8_t mdr_table_of[MDROUND_N] = { 0, 1, 2, 3, 4 };
  * 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF, so the top
  * three are free -- three bits for five rounds) */
 static uint8_t md_round = 0xFF;
+#ifdef MD_STATE
+/* FOLD 4 (LOOP29 233): the round comes from the 68K's per-vint state
+ * word on COMM14 (md_main.c shim_vblank: tag E, seq, cutscene, round),
+ * never from COMM10's dirty-mask neighbours. Invalid tag -> 0xFF, which
+ * every caller already treats as "keep md_round". */
+#define MD_STATE_W()   (MARS_SYS_COMM14)
+#define MD_STATE_OK(w) (((w) & 0xF000u) == 0xE000u)
+#define MD_STATE_CUT(w) (((w) >> 7) & 1u)
+static inline uint8_t md_state_round(void)
+{
+    uint16_t w = MD_STATE_W();
+    return MD_STATE_OK(w) ? (uint8_t)((w >> 4) & 7) : 0xFFu;
+}
+#define MD_ROUND_GET() md_state_round()
+#else
 #define MD_ROUND_GET() ((uint8_t)((MARS_SYS_COMM10 >> 13) & 7))
+#endif
 #endif
 static uint8_t mds_pin[128];
 /* LOOP29 209: IS THE ROUND ON SCREEN? Counted in the claim path every
