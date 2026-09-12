@@ -348,15 +348,14 @@ static uint16_t cache_tag[CSETS * NWAYS];   /* folded tile code; 0xFFFF empty */
  * without evicting — the lines are the scarce resource (3 x 15 pens,
  * measured 1 free pen per line in Mike's states) and cat-1 cells have
  * the FB fallback (CAT1_PEND); cat-0 cells have nothing. */
-#if defined(CAT1_MD) && !defined(C1_NOFB)
+#if defined(CAT1_MD) && (!defined(C1_NOFB) || !defined(C1_EVICT))
 #define C1_SOFT (isfg && (w & 0x8000))
 #else
-/* LOOP29 236: under C1_NOFB there is no FB fallback, so the SLOT
- * PRESSURE rule ("a cat-1 tile whose cache set is full of hot ways does
- * not evict -- the FB keeps the cell") leaves a BLACK cell instead. The
- * rig's remaining black on vi90 is rectangles of FG cells in the temple
- * and the pedestal, exactly that rule's output where hot-way pressure
- * differs from ares. A cat-1 tile evicts like any other now. */
+/* LOOP29 236 (vi91, C1EVICT=1): under C1_NOFB there is no FB fallback,
+ * so the SLOT PRESSURE rule leaves a BLACK cell; letting cat-1 evict
+ * changed nothing on the rig's picture (vi91 = vi90) and NOTES 30 ranks
+ * it first for vi94's slowness (more re-ships on the machine that ships
+ * 7 tiles a vint). Off the line; a knob for the A/B. */
 #define C1_SOFT 0
 #endif
 /* Last-referenced window stamp per slot (low byte of win_no). "First-
