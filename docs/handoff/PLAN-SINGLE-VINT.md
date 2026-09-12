@@ -133,3 +133,86 @@ number here is an upper bound on hardware (LOOP29 140).
     decompile thread   step 2's census (runtime tile writers, exact),
                        step 4's two levers, the page-keyed table if
                        step 1's kill fires
+
+---------------------------------------------------------------------
+## THE FOLDS, EVALUATED AFTER LOOP29 215-227 (decompile thread, 2026-09-12 15:30)
+
+The line is vi70 (accepted 14:50): the whole-level tables, MDSREFUSE,
+no edge-out wipe, batch 24 everywhere. vi72 adds the typewriter gate and
+the trampoline's COMM10 mask and is on the rig. What the builder's
+entries since 215 say about the machine, read as IPC facts:
+
+  1. **COMM10 is a shared word with three writers and no field
+     discipline.** The dirty mask's regions 13-15 leaked into the round
+     field (222); the assembly trampoline posted the word raw (226); and
+     after both masks the same-round return STILL moves with any 68K
+     layout change (227: two gate entries that never run shift the
+     plane's arrival by 50 frames). That is a read-side race: the SH-2
+     samples COMM10 at an edge and gets whichever writer posted last.
+     Every "flaky return" since 217 is this one hazard.
+  2. **Text RAM writers are gated one at a time.** The round-clear
+     typewriter (225) is the latest of 61 text writers (LOOP-DECOMPILE
+     14) found outside an FM gate; TEXTCAPMASK was withdrawn for dropping
+     a cutscene writer (171). The class is not closed by any gate.
+  3. **The transport lives in the game's enforced idle.** RELBANK (183)
+     crossed the quantum -- wall 0.81 -- and the screen stopped because
+     the discarded vint was where the post and blast ran (184).
+
+### The folds, in order, with what each needs
+
+**Fold 1 — tiles to the VDP on the accepted line.** vi70's line still
+runs the FB cat-1 pass: CAT1MD/C1NOFB are not in its build line. The
+whole-level tables were the blocker (route 1's "pack and install
+disagree" is what 215-223 fixed), so `CAT1MD=1 DIRTYROW=1 C1NOFB=1` on
+vi70's line is the next build. Expected wall 1.47 -> ~1.12, single-vint
+20 -> 40-45% (175, 189). Owner: rendering. Gate: Mike, for the hole
+punch over sprites.
+
+**Fold 2 — the maps scan from the bake.** `sh_src/setcols_md.h` (101),
+exact, unwired. Expected: the scan's share of 0.29. Measure the
+scan/tail split first (PHASECENSUS); if the tail is most of it, this
+fold is small and the sprite scan in the tail is the next thing to look
+at. Owner: rendering.
+
+**Fold 3 — consume the release (RELBANK), the crossing.** 184 concluded
+"removing our handler entirely still leaves ~1.05" from the 2,780 x 46
+arithmetic that entry 88 retracted. Re-derived with the measured
+numbers (LOOP-DECOMPILE 100, 97):
+
+    the game's pass     8,184-9,800 instr x 10.08 cyc   0.64-0.77 vint
+    our shim, R60TIGHT  3,573 x 10.08                   0.28
+    together                                            0.92-1.05
+
+So the 68000 side of the crossing is within reach: the rotor (~430) and
+r60_blast/md_consume (~860 together) are the margin. What is NOT solved
+is 184's real finding: under RELBANK the 68K stops posting (nopost 52 ->
+225) because the post and blast were scheduled in the idle the game no
+longer has. **Fold 3 needs the transport moved wholly into IRQ4's own
+budget, independent of the game's state**, and the condition that
+suppresses the post when the game is busy named and removed. That is a
+protocol change on the MD side, and it is the fold that pays: 0.81 was
+measured, 53 fps, and everything before it is preparation. Owner:
+rendering for the schedule, this thread for the 68K budget.
+
+**Fold 4 — one state word, one writer.** Replace the COMM10 round field
+and the claim-mix detector with a state word the 68K posts once per vint
+from IRQ4, no field shared with the dirty mask: round (0xFFF142),
+cutscene (0xFFF148), the page nibbles (0xFFF0F4/F6), and a sequence
+number so the SH-2 can tell a fresh post from a stale one. Retires the
+same-round-return race (227) by construction and the claim mix with it.
+Cheap; the bytes are all read already. Owner: rendering, from
+NOTES-FROM-DECOMPILE 17.
+
+**Fold 5 — the text path.** Route text writers through the WRAM mirror
+(TXTWRAM) and ship from there, instead of FM-gating writers as they are
+found. 61 writers (LOOP-DECOMPILE 14); the census names every one.
+Closes the class the typewriter belongs to. Owner: rendering; the
+writer list is this thread's.
+
+### What this thread does while the builder wraps up
+
+  - the transport-scheduling census for fold 3: which 68K work runs in
+    the game's wait path versus IRQ4, from the shim source and the
+    patch table, so the move is a list and not a search;
+  - the rotor, when fold 3 is scheduled and not before;
+  - the text-writer list for fold 5, with each writer's gate state.
