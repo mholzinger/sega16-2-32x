@@ -5827,3 +5827,17 @@ edge re-install is the actual medicine, so a periodic re-install while
 ON (say every 64 windows, selective as it already is) would give the
 rig what ares gets from its edges without depending on any detector.
 Both are small. vi93 (no regression against vi75) stays on the rig.
+
+## 239. CREDITED, OWNED BY THE SHIM (2026-09-12 23:30)
+
+The play bit in the state word is now the shim's own flag: set when
+the shim sees the coin or start1 input (the same `svc` it posts to the
+MCU mailbox), cleared when the game's running bit 0xFFF026.0 falls
+(game over). The demo never presses START, so the flag separates a
+credited game from the attract without any byte the game reuses.
+md_state_on: transformation -> OFF; credited -> the claim mix; picture
+steps 0/2/4 -> OFF; demo steps 3/5 -> ON. That is vi90's attract
+behaviour with 238's play regression excluded by construction.
+
+`rom/night/vi94.32x` = vi93 + 239. Gates: ares attract/play/late-coin
+with the posted words decoded through the credited game; rig attract.
