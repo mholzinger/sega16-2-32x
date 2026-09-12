@@ -169,6 +169,16 @@ The discipline, from here:
     scratch directory and `rom/s16.32x` gets rebuilt back to the line.
   - **`probe.32x` on the rig tracks whatever build is being asked about**,
     and the message names the file explicitly.
+  - **A build is not handed over until it is ON the rig.** One command
+    copies it and launches it, and it is the last step of any build worth
+    Mike's time:
+
+        tools/mister_push.sh rom/night/vi43.32x     # copy + launch
+        tools/mister_push.sh -n rom/s16.32x         # copy only
+
+    Details and overrides in `docs/handoff/HANDOFF-DREQ.md` "THE RIG".
+    Naming a path and stopping is not a handover; Mike had to run this
+    himself on 2026-09-12.
   - A probe that renders wrong BY CONSTRUCTION (`NOMAPS`, `NOCLEAR`,
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
