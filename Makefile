@@ -987,6 +987,12 @@ ifdef BOOTGAMERATE
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_GAMERATE
 MDASFLAGS += -Wa,--defsym,BOOT_GAMERATE=1
 endif
+# `make ... BOOTFLIPRATE=1` = LOOP29 232: presented frames per 64 vints on
+# hardware (FS bank changes between vint tops), flooded as bias|count.
+# GAMERATE reads 64 on every GAMEGATE build; this is the picture rate.
+ifdef BOOTFLIPRATE
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_FLIPRATE
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
