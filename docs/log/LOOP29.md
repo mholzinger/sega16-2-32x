@@ -5910,3 +5910,21 @@ press left credited 0, the stale step 2 forced the level OFF for the
 whole game -- black AND slow, vi90's shape. Play on vi95 is the test.
 The chain relaunched vi95 at 22:34:25 on top of Mike's own launch; the
 fr95 re-run waits for the rig to be free.
+
+## 241. vi95 ON THE RIG: "WE'VE REPAIRED MOST DEFECTS"; WHAT'S NEXT (2026-09-13 00:20)
+
+Mike on vi95: "We've repaired most defects from the previous attempts.
+What's next?" vi95 = vi75's line + MDSTATE (the state word from the
+game's own bytes, NOTES 29) is the fold-1 build that plays; vi70 stays
+the presentation line until Mike names a new one. Open on vi95, in
+Mike's words tonight: the unmasked sprites over cat-1 ground (fold 1's
+hole punch, 175's bitmap suppress), residual black tile drops on the
+rig (the ship rate, 237), the parked text gates (fold 5).
+
+Next, per PLAN-SINGLE-VINT as re-ordered by the decompile census
+(NOTES 24/30): fold 2 first -- the maps scan from `setcols_md.h`, the
+next build that moves a vint number; measure the scan/tail split of
+the 0.44 v/gen maps drain before counting it. Then fold 5 with the copy
+on the packet side (237), then RELBANK on the rig. The hole punch is a
+sprite-loop bit test against the baked cat-1 bitmap (175) and goes in
+as its own build for Mike's eye.
