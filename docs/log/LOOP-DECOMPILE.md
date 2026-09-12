@@ -4304,3 +4304,55 @@ our mix INCLUDING the frame wait, and at 60 Hz there is no wait. If work
 instructions average 12 cycles the gap is 3,700, not 2,121. **Measure
 cycles before trusting the margin** — the last number that went unchecked
 was off by 2.5x.
+
+---------------------------------------------------------------------
+## 90. r60_push IS the 60 Hz gap on the 68000
+
+Entry 89 left two things: map the three hot PCs, and price the wait loop
+so the margin is real. Both done, and they point at one routine.
+
+**The map had to be earned.** `rom/md_start.lst` is the current build's
+and the trace was vi39's; the embedded `md_start.bin` differs by 2453
+bytes, so that map does not apply. Snapshotted the current rom WITH its
+own map, verified the embedded image byte-identical to `md_start.bin`,
+and traced that instead. Its totals land within 2% of vi39's and the hot
+addresses are identical, so the layout is stable across both.
+
+**The shim, per vint, by routine:**
+
+    r60_push                    2,621     54.5%
+    r60_ship_words.isra.0         690
+    r60_blast.constprop.0         512
+    md_consume                    349
+    shim_vblank                   324
+    read_joypad                   115
+    get_input                      80
+    everything else               122
+                                -------
+                                  4,813
+
+**`r60_push` alone is more than the whole 60 Hz gap.**
+
+**And the assumption that could have moved the answer does not.** The
+frame wait is `tst.b (xxx).W` at 12 cycles plus a taken `beq.s` at 10 —
+22 cycles for two instructions. 2,736 idle instructions a vint is 1,368
+iterations = 30,096 cycles, leaving 97,745 for 9,698 work instructions:
+**10.08 cycles per work instruction**, marginally cheaper than the 10.29
+average rather than dearer. In cycles:
+
+    needed at 60 Hz    14,581 instructions x 10.08 = 146,976 cycles
+    available                                        127,841
+    the gap                                           19,135 cycles
+                                                       1,898 instructions
+
+    r60_push                                          26,420 cycles
+
+So the plan reduces to one line: **halve `r60_push` and the 68000 side of
+60 Hz is met.** Its own hottest instruction is +0x45C at 517 a vint, and
+the two next-largest routines, `r60_ship_words` and `r60_blast`, are the
+other two loop heads from entry 89.
+
+Which is a pleasing place to land, because `r60_push` is the packet
+transport — the thing ARCHITECTURE.md's first line already calls the whole
+project. The correction did not change what to work on. It changed the
+belief that the 68000 could afford it.

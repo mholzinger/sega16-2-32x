@@ -31,33 +31,44 @@ The game advances once per two vints today, so **per GAME FRAME** it costs
       ------------------------------------------------
       THE GAP                                    2,121 instructions
 
-**Two thousand one hundred instructions a vint is the whole 60 Hz gap on
-the 68000.** Not a factor, a percentage: 17%.
+Priced in cycles rather than instructions (assumption 1 below, now
+resolved) the gap is **19,135 cycles, or 1,898 instructions.**
+
+**Under two thousand instructions a vint is the whole 60 Hz gap on the
+68000.** Not a factor, a percentage: 15%.
 
 ---------------------------------------------------------------------
-## LEVER 1 — three instructions are a third of the shim
+## LEVER 1 — r60_push IS the gap
 
-Shim cost per vint by 256-byte block, from the same trace:
+**NAMED, 2026-09-12.** `rom/md_start.lst` does not match vi39 — the
+embedded `md_start.bin` differs by 2453 bytes — so the current build was
+snapshotted WITH its own map, verified byte-identical, and traced. Its
+numbers are within 2% of vi39's and the hot addresses are the same, so the
+layout is stable across both for these routines.
 
-    0xFF0D00   876      0xFF0E00   230
-    0xFF0900   781      0xFF0F00   222
-    0xFF0A00   658      0xFF0B00   157
-    0xFF1200   505      0xFF1100   150
-    0xFF0100   268      others     886
-                                  -----
-                                  4,733
+Shim cost per vint, by routine:
 
-and three single PCs carry 1,607 of that:
+    r60_push                    2,621     54.5%
+    r60_ship_words.isra.0         690
+    r60_blast.constprop.0         512
+    md_consume                    349
+    shim_vblank                   324
+    read_joypad                   115
+    get_input                      80
+    _vblank                        46
+    md_to_arcade                   37
+    everything else                39
+                                -------
+                                  4,813
 
-    0xFF0964   644 / vint
-    0xFF0DD0   493 / vint
-    0xFF1224   470 / vint
+**`r60_push` alone is 2,621 instructions a vint — 55% of the shim and MORE
+THAN THE WHOLE 60 Hz GAP.** Halving it closes the budget by itself.
 
-Three tight loops, 34% of the shim, **76% of the whole 60 Hz gap.** Map
-them with your own build's `rom/md_start.lst` — I did not attribute them
-to symbols because I could not prove that map matches vi39, and guessing
-which routine a hot address belongs to is how a session gets spent on the
-wrong loop.
+The three hottest instructions in the program, all loop heads:
+
+    0xFF0964   644 / vint   r60_ship_words.isra.0+0x2C
+    0xFF0DD0   517 / vint   r60_push+0x45C
+    0xFF1224   472 / vint   r60_blast.constprop.0+0x4A
 
 ## LEVER 2 — our game side costs 20% more than the arcade's
 
@@ -76,11 +87,15 @@ game DISCARDS a release that arrives while it works.
 ---------------------------------------------------------------------
 ## WHAT THIS PLAN ASSUMES, SO IT CAN BE CHECKED
 
-  1. **10.29 cycles per instruction** is our current mix INCLUDING the
-     frame wait. At 60 Hz there is no wait, and work instructions may be
-     dearer than wait instructions. If the true work mix is 12 cycles, the
-     gap widens to about 3,700. **Measure cycles, not just instructions,
-     before trusting the margin.**
+  1. ~~10.29 cycles per instruction includes the frame wait~~ **RESOLVED
+     2026-09-12, and the margin holds.** The wait is `tst.b (xxx).W` +
+     `beq.s` taken = 12 + 10 = 22 cycles for two instructions. At 2,736
+     idle instructions a vint that is 1,368 iterations = 30,096 cycles, so
+     WORK gets 97,745 cycles for 9,698 instructions = **10.08 cycles per
+     work instruction** — marginally CHEAPER than the average, not dearer.
+     In cycles the 60 Hz requirement is 14,581 instructions x 10.08 =
+     146,976 against a 127,841 budget: **over by 19,135 cycles, which is
+     1,898 instructions.** `r60_push` is 26,420 cycles.
   2. **MAME's 32X models the 68K honestly** (CLAUDE.md) but not the SH-2.
      Nothing here depends on the SH-2 side.
   3. **Level 1 only.** Level 4 is lighter on the 68K (LOOP-DECOMPILE 87),
@@ -91,10 +106,14 @@ game DISCARDS a release that arrives while it works.
 
 ## THE ORDER I WOULD DO IT IN
 
-  1. Map the three PCs to routines with your build's own `md_start.lst`.
-  2. Measure CYCLES per vint, not instructions, so the margin is real.
-  3. Cut the largest of the three and re-trace. The rig is
-     `tools/round_profile.lua` plus the fixed `tools/arcade_trace.py`;
-     both now expand collapsed loops.
-  4. Only then look at lever 2, because it is a protocol question and
-     will take longer than a loop.
+  1. ~~Map the three PCs~~ done: `r60_push`, `r60_ship_words`,
+     `r60_blast`, in that order of cost.
+  2. ~~Measure cycles~~ done: 10.08 per work instruction, margin holds.
+  3. **Cut `r60_push`.** It is 2,621 instructions a vint against a gap of
+     1,898, so it is not one contributor among several — it is the item.
+     Its own hottest instruction is at +0x45C.
+  4. Re-trace with the same rig and check the number moved.
+     `tools/round_profile.lua` plus the fixed `tools/arcade_trace.py`,
+     both of which now expand collapsed loops.
+  5. Only then lever 2, because it is a protocol question and will take
+     longer than a loop.
