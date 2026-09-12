@@ -1467,7 +1467,12 @@ static uint8_t flick_bay[16];               /* 4x4 Bayer, boot-built,
 #define MD_BATCH     12
 #endif
 #ifndef MD_BATCH_OFF
-#define MD_BATCH_OFF 40            /* 214: ship rate with the round OFF screen */
+#define MD_BATCH_OFF 24            /* 214: ship rate with the round OFF screen.
+                                    * Mike's rig, vi62b (2026-09-12 04:27): 24
+                                    * clears level 2's top-band tear that 40
+                                    * (vi59/vi62) showed; the chevron plane
+                                    * arrives 50 frames after the field
+                                    * instead of 20. */
 #endif
 #else
 #define MD_BATCH     40

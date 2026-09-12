@@ -2073,6 +2073,18 @@ endif
 ifdef PALROTOROFF
 MDCCFLAGS += -DPALROTOR_OFF
 endif
+# R60TIGHT=1: r60_push's two equality scans (palette pre-scan, rowscroll
+# compare) as cmpm.l/dbne and the lost-push belt copy as longs. Same
+# packet, fewer 68K instructions (LOOP-DECOMPILE 97). R60TIGHTCHECK=1 is
+# the probe: runs the C scans as well, ships on the C result, and counts
+# disagreements at WRAM 0xFFA1B0 (pal) / 0xFFA1B2 (rowscroll); 0xFFA1B4
+# counts pre-scans.
+ifdef R60TIGHT
+MDCCFLAGS += -DR60_TIGHT
+endif
+ifdef R60TIGHTCHECK
+MDCCFLAGS += -DR60_TIGHT -DR60_TIGHT_CHECK
+endif
 # LAYOUTPROBE=1 = LOOP28 88 CONTROL. Adds 64 bytes of unreferenced .data
 # inside r60_push and changes nothing else. Any speed difference it
 # produces is the level-1 ladder's sensitivity to code layout, not to a
@@ -2294,11 +2306,11 @@ ifdef MDBATCH
 SHCCFLAGS += -DMD_BATCH_N=$(MDBATCH)
 endif
 # `make ... MDBATCHOFF=N` = LOOP29 214. Tiles shipped per vint while the
-# ROUND IS OFF SCREEN (a cutscene: face, eye, intro, ranking). Default 40:
-# the chevron plane is up on the first frame of the field. 40 is also the
-# documented vblank overrun on real hardware, and Mike saw a top-band tear
-# at level-2 entry on vi59 that headless ares does not show. Rank 40 vs 24
-# on the rig; the play batch stays MDBATCH.
+# ROUND IS OFF SCREEN (a cutscene: face, eye, intro, ranking). Default 24,
+# ranked on the rig 2026-09-12: 40 put the chevron plane up on the first
+# frame of the field but tore level 2's top band on hardware (the documented
+# vblank overrun; headless ares does not show it); 24 clears the band and
+# the plane arrives 50 frames after the field. The play batch stays MDBATCH.
 ifdef MDBATCHOFF
 SHCCFLAGS += -DMD_BATCH_OFF=$(MDBATCHOFF)
 endif

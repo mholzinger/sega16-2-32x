@@ -5017,3 +5017,12 @@ mix. Not built tonight.
 
 vi62 reproduces vi59's numbers. The A/B is the hardware tear, which only
 the rig shows, against those 30 frames.
+
+**214 RANKED ON THE RIG (Mike, 04:27).** vi62b: two level-2 shots, top band
+clean where vi59 (batch 40 off-screen) had the streaks. So the tear was
+the 40-tile transfer during the off-screen span and 24 is the setting.
+`MD_BATCH_OFF` defaults to 24 from here; vi62b (md5 3882eb1c) is the
+candidate and the plain build line now produces its behaviour. Cost: the
+chevron plane arrives 50 frames after the field instead of 20. Still open
+on vi62b's shots: a black cell or two in the level-2 floor -- the pop-in
+class, MDBATCH=24 in play.
