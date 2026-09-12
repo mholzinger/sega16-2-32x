@@ -2040,7 +2040,11 @@ static void r60_push(void) {
 		 * vi82 on the rig: zout saturated, noline 6. vi83: bit 7 bias |
 		 * bit 6 VRAM-zero any | bit 5 pen map all zero (any) | bits 4-3
 		 * zero-output records whose ROM source reads zero UNCACHED (sat
-		 * 3) | bits 1-0 ... reads zero CACHED (sat 3). */
+		 * 3) | bits 1-0 ... reads zero CACHED (sat 3).
+		 * vi83 on the rig: both saturate, map-zero later. vi84 (same
+		 * layout): bit 5 md_tag re-read differs (any) | bits 4-3 code
+		 * outside the bank (sat 3) | bits 1-0 real nonzero code that
+		 * read zero (sat 3). */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
