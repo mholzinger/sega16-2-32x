@@ -197,13 +197,17 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## CANDIDATE, ON THE RIG AS `rom/night/vi58.32x` (md5 6e46bc5a), AWAITING MIKE'S EYE (2026-09-12 02:40)
+## CANDIDATE, ON THE RIG AS `rom/night/vi59.32x` (md5 1514f850), AWAITING MIKE'S EYE (2026-09-12 04:10)
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
 trees), the tile ship rate as a knob (the black pop-in), and the cutscene
 mechanism keyed on the allocator's claim mix rather than the palette (the
-chevron plane, the flat flames, the black wall band, vi51's stutter).
+chevron plane, the flat flames, the black wall band, vi51's stutter), plus
+210's guard on the scene-image load (harmless, measured identical; it did
+NOT fix the title logo -- LOOP29 210's retraction). OPEN, attract only:
+the logo's slide-in palette and the ranking screen (211), both need a
+capture keyed on the game's own palette phase, not a frame offset.
 Headless ares: coined-path flip rate identical to vi45, play path
 identical to vi45, the transformation's blue plane up within 25 frames of
 the cut at the arcade's share with coloured flames. NOT shown by headless:

@@ -4949,3 +4949,26 @@ at all. Left open; the counters to read are [19]-[21] (burned claims),
 [25]-[28] (tagkeep), and mdp_pen_rc for line 1 across 3100-3300.
 
 `rom/night/vi59.32x` (md5 1514f850) = vi58 + 210, flag-identical, staged.
+
+**210 RETRACTED (04:10).** Set 37's words across the slide-in, MAME, arcade
+vs ours, sampled every 20 frames:
+
+    arcade  180-200 0FB0 6D90 0C80 | 220 0C80x3 | 240 6EA0 0D90 6C80 | 260-280 0FB0 0D90 0C80 | 300 100Fx3 | 320+ 000F 000D 000D
+    ours    180-200 same            | 220 0B70x3 | 240 6D90 0D90 0C80 | 260-300 0FB0 0D90 0C80 | 320 100Fx3 | 340+ 000F 000D 000D
+
+Identical sequence, ours ~20 frames behind. The writer census over sets
+37-46 shows the same two writers on both (0x2628 and 0x3976), ours firing
+MORE. And in ares the 68K's own palette RAM at 0xFF9000 equals the SH-2
+mirror at every sampled frame. So the "level-1 blues" I read in the mirror
+at f340 are the game's own pre-flash logo colours, reached later in ares
+because the game paces on presented frames. **The image load was not the
+cause and vi59's guard fixed nothing** -- it is kept only because it is the
+same guard the install already has and measured identical on flips, play
+and the face. What "swapped palette" on the rig actually is needs a
+capture at the SAME GAME PHASE, keyed on set 37's words (blue / 100F /
+000F), not on a frame offset. Not done tonight.
+
+The ranking text (211) is likewise NOT explained by the load; its text
+palette needs the same phase-keyed look. 211's texture finding (the
+dangling set-11 assignment) stands: it was read from the allocator's own
+tables, not from a frame offset.
