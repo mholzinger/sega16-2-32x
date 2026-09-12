@@ -2010,13 +2010,19 @@ static void r60_push(void) {
 		 * bit 7 bias | bit 6 any slot out of range | bits 5-3 VRAM
 		 * all-zero records (sat 7) | bits 2-0 consumes where FS changed
 		 * mid-consume (sat 7) */
+		 * vi77 read on the rig: no slot out of range, VRAM-zero 7, FS
+		 * never changed mid-consume. vi78 carries the SH-2's own
+		 * read-backs (m_main.c TV_BITS, packet word 1 bits 8-12):
+		 * bit 7 bias | bit 6 FS changed (any) | bit 5 VRAM-zero (any)
+		 * | bits 4-3 replay read-back != tp_lastA (sat 3)
+		 * | bits 2-0 publish read-back != staging (sat 7) */
 		uint8_t p0 = 0;
-		uint16_t tz = *(volatile uint16_t*)0xFFA1E2;
-		uint16_t tf = *(volatile uint16_t*)0xFFA1E8;
+		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
-			| (*(volatile uint16_t*)0xFFA1EA ? 0x40 : 0)
-			| ((tz > 7 ? 7 : tz) << 3)
-			| (tf > 7 ? 7 : tf));
+			| (*(volatile uint16_t*)0xFFA1E8 ? 0x40 : 0)
+			| (*(volatile uint16_t*)0xFFA1E2 ? 0x20 : 0)
+			| (((tw >> 11) & 3) << 3)
+			| ((tw >> 8) & 7));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
