@@ -2749,6 +2749,82 @@ RAMCODE static int bm_scan_rows(struct bm_state *a, int which, int aset, int r0,
 
 static void bm_tail(struct bm_state *a, int par);
 
+#ifdef SET_COLS
+/* FOLD 2 (PLAN-SINGLE-VINT, LOOP29 242): the maps scan from the bake.
+ * Tile RAM has no in-play writer (LOOP-DECOMPILE 99), so which colour
+ * sets a viewport holds, at which cat bit, is a function of the rom
+ * tilemap and the scroll: tools/bake_setcols.py emits per scene, page,
+ * column the (set|cat<<7, first row, last row) extents. One pass over
+ * the 44 columns x (up to 2 quadrant row ranges) replaces 2,464 cell
+ * reads per plane. Exact against bm_scan_rows on 4,000 random windows
+ * (NOTES 21). Eligible only when the loaded round is known and the
+ * level's tilemap is what is on screen (the attract's picture steps
+ * and the face UPLOAD into the level pages, NOTES 23): the state word
+ * says so; otherwise the live scan runs as before. */
+#include "setcols_md.h"
+RAMCODE static int bm_scan_baked_ok(void)
+{
+    if (md_round >= SETCOL_SCENES) return 0;
+    for (int w = 0; w < 2; w++) {
+        const layer_regs *lr = &snap[w];
+        for (int i = 0; i < 4; i++)
+            if (lr->pq[i] >= 10 || (lr->any_special && lr->pq_a[i] >= 10)) return 0;
+    }
+#ifdef MD_STATE
+    {
+        uint16_t sw = md_state_word();
+        if (!MD_STATE_OK(sw) || MD_STATE_CUT(sw)) return 0;
+        if (!MD_STATE_PLAY(sw)) {
+            unsigned st = MD_STATE_STEP(sw);
+            if (!((st == 1 || st == 3 || st == 5) && ((sw >> 8) & 1u))) return 0;
+        }
+    }
+#else
+    return 0;
+#endif
+    return 1;
+}
+/* the whole plane (which, aset) in one call: presence + level per set */
+RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
+{
+    const layer_regs *lr = &snap[which];
+    const uint8_t *pq = aset ? lr->pq_a : lr->pq;
+    int vy0 = aset ? lr->vy0_a : lr->vy0;
+    int vx00 = aset ? lr->vx0_a : lr->vx0;
+    int yf = vy0 & 7;
+    int nrows = yf ? 29 : 28;
+    const uint8_t lvl_lo = which ? 1 : 2, lvl_hi = which ? 2 : 4;
+    const uint16_t (*idx)[65] = setcol_idx[md_round];
+    const uint8_t *ent = setcol_ent[md_round];
+    /* row extent per quadrant: rows r=0..nrows-1 map to vy = vy0-yf+8r;
+     * trow = (vy>>3)&31, qy = (vy>>7)&2 -- at most two segments */
+    int vyA = (vy0 - yf) & 0x1FF, trA = (vyA >> 3) & 31, qA = (vyA >> 7) & 2;
+    int lastvy = (vy0 - yf + (nrows - 1) * 8) & 0x1FF, qB = (lastvy >> 7) & 2;
+    int loA = trA, hiA, loB = 0, hiB = -1;
+    if (qB == qA && lastvy >= vyA) { hiA = (lastvy >> 3) & 31; }
+    else { hiA = 31; loB = 0; hiB = (lastvy >> 3) & 31; }
+    unsigned tx = ((unsigned)(vx00 >> 3) - 1u) & 0x7F;
+    for (int n = 0; n < 44; n++, tx = (tx + 1) & 0x7F) {
+        unsigned half = (tx >> 6) & 1, col = tx & 63;
+        for (int seg = 0; seg < 2; seg++) {
+            int lo, hi, qy;
+            if (seg == 0) { lo = loA; hi = hiA; qy = qA; }
+            else { if (hiB < 0) break; lo = loB; hi = hiB; qy = qB ^ (qA == qB ? 0 : 0); qy = (qA ^ 2); }
+            unsigned pg = pq[qy + half];
+            const uint8_t *e = ent + idx[pg][col] * 3, *ee = ent + idx[pg][col + 1] * 3;
+            for (; e < ee; e += 3) {
+                if (e[1] > hi || e[2] < lo) continue;
+                unsigned cc = e[0] & 0x7F;
+                tcount[cc]++;
+                uint8_t lvl = (e[0] & 0x80) ? lvl_hi : lvl_lo;
+                if (col_lvl[cc] && col_lvl[cc] != lvl) amb_col[cc] = 1;
+                if (lvl > col_lvl[cc]) col_lvl[cc] = lvl;
+            }
+        }
+    }
+}
+#endif
+
 RAMCODE static void build_maps(int par, uint16_t bank1)
 {
     struct bm_state st;                     /* STACK: hot path stays fast */
