@@ -445,9 +445,9 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 fmgate_partb:
 		movem.l	d0-d1/a0,-(sp)
 		move.w	(fmgate_wcmd),d0
-		beq.s	9f					/* no window wanted this vint */
+		beq.w	9f					/* no window wanted this vint */
 		tst.w	(0xA15120).l		/* COMM0: previous window running? */
-		bne.s	8f
+		bne.w	8f
 		move.l	(0xFFB0F8),d1		/* interrupted game PC */
 		lea		(fmgate_spans),a0	/* u32 pairs, 0-terminated */
 	0:	move.l	(a0)+,d0
