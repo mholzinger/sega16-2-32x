@@ -2032,10 +2032,18 @@ static void r60_push(void) {
 		 * vi81: bit 7 bias | bits 6-5 record count >> 3 of the last
 		 * consume that read a zero record | bits 4-0 that record's
 		 * index (31 = none yet). */
+		 * vi81 on the rig: zero records at indices 5, 8, 25 of 24-40.
+		 * vi82: bit 7 bias | bit 6 FS changed | bit 5 VRAM-zero any |
+		 * bits 4-3 emitter records with all-zero output (sat 3) |
+		 * bits 2-0 emitter records for a set with no MD line (sat 7),
+		 * both from m_main.c md_emit_art via packet word 1. */
 		uint8_t p0 = 0;
-		uint16_t zi = *(volatile uint16_t*)0xFFA1E2 ? *(volatile uint16_t*)0xFFA1EE : 31;
-		uint16_t zc = *(volatile uint16_t*)0xFFA1F0 >> 3;
-		uint8_t p2 = (uint8_t)(0x80 | ((zc > 3 ? 3 : zc) << 5) | (zi & 0x1F));
+		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
+		uint8_t p2 = (uint8_t)(0x80
+			| (*(volatile uint16_t*)0xFFA1E8 ? 0x40 : 0)
+			| (*(volatile uint16_t*)0xFFA1E2 ? 0x20 : 0)
+			| (((tw >> 11) & 3) << 3)
+			| ((tw >> 8) & 7));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
