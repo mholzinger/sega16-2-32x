@@ -4263,3 +4263,44 @@ shim instructions cost something they were assumed not to.**
 
 The parser is fixed, and both entry-point documents carry the correction
 at the top of their scope sections rather than a quiet edit.
+
+---------------------------------------------------------------------
+## 89. The corrected number turns into a 2121-instruction target
+
+Entry 88 killed the "fourfold headroom" claim. What replaces it is better
+than a warning, because the same traces give the size of the problem.
+
+    one vint at 7.670 MHz            127,841 cycles
+    our measured mix                    10.29 cycles/instruction
+    one vint therefore holds           12,420 instructions
+
+    at 60 Hz, one game frame in one vint:
+      game, per game frame              9,808
+      shim, once instead of twice       4,733
+      needed                           14,541
+      available                        12,420
+      THE GAP                           2,121
+
+**The 60 Hz gap on the 68000 is 17%, not a factor.** And three
+instructions carry most of it: 0xFF0964, 0xFF0DD0 and 0xFF1224 are 644,
+493 and 470 instructions a vint — 1,607 together, 34% of the shim and 76%
+of the gap. Three tight loops.
+
+The second lever is the same size. **Our game side costs 9,808
+instructions a game frame where the arcade's costs 8,184** — the same code,
+20% more work. LOOP29 182-184 already found that the game discards a
+release arriving while it works, which is the shape of a protocol cost
+rather than a code cost.
+
+I did NOT map the three PCs to symbols. `rom/md_start.lst` is the current
+build's and vi39 is not the current build; attributing a hot address
+through a map I cannot prove matches is how a session gets spent
+optimising the wrong loop. The rendering thread has the right map.
+
+The plan, its arithmetic and — more importantly — the four assumptions it
+rests on are in `docs/handoff/PLAN-68K-BUDGET.md`. The first assumption is
+the one that could still move the answer: 10.29 cycles per instruction is
+our mix INCLUDING the frame wait, and at 60 Hz there is no wait. If work
+instructions average 12 cycles the gap is 3,700, not 2,121. **Measure
+cycles before trusting the margin** — the last number that went unchecked
+was off by 2.5x.
