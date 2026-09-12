@@ -2018,7 +2018,10 @@ static void r60_push(void) {
 		 * | bits 2-0 publish read-back != staging (sat 7)
 		 * vi78 on the rig: both read-backs 0. vi79 re-uses the same
 		 * five bits for m_main.c's tv_rep0 (2-0) and tv_pub0 (4-3):
-		 * SH-2 FB writes made while the SH-2 sees FM=0. */
+		 * SH-2 FB writes made while the SH-2 sees FM=0.
+		 * vi79 on the rig: both 0. vi80: bits 2-0 tv_alt (packet A
+		 * payload changed between publish and the next window, sat 7),
+		 * bits 4-3 first differing long index >> 7. */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
