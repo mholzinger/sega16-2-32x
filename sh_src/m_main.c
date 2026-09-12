@@ -2078,8 +2078,19 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
          * genuinely absent from it. */
 #ifdef MD_ROUND
         /* the ROUND is the table index: the 68K publishes it, so this
-         * cannot go out of bounds the way indexing by pscene did (191) */
-        unsigned ti = (md_round < MDROUND_N) ? md_round : 0xFFu;
+         * cannot go out of bounds the way indexing by pscene did (191).
+         * LOOP29 202: AND the scene must still be recognised. The game's
+         * round variable (0xFFF142) is 0-4 and nothing else -- measured
+         * across the whole attract -- so the face, eye and intro
+         * cutscenes carry the LAST ROUND's number and md_round is never
+         * cleared. The pscene detector does go unknown on a foreign span
+         * (11146: pins cleared, mds_scene_cur = 0xFF, "dynamic rules"),
+         * but this branch never consulted it, so the transformation's
+         * chevron plane (page 11, set 19, a blue ramp in no round table)
+         * was refused and rendered as backdrop. Mike's "no chevron",
+         * vi38 through vi46. Refuse only while the scene is known. */
+        unsigned ti = (mds_scene_cur != 0xFF && md_round < MDROUND_N)
+                      ? md_round : 0xFFu;
 #else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;

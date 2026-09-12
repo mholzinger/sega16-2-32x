@@ -4657,3 +4657,48 @@ what guessing produced.**
 **vi46 is still worth Mike's eye for one thing only** -- it is vi45 with the
 MD sprite offload off, so it answers "is any sprite defect MDSPR's fault"
 regardless of what the chevron is. It is NOT the chevron A/B I called it.
+
+## 202. THE CHEVRON IS TILE SET 19 ON PAGE 11, AND THE ROUND BRANCH NEVER LIFTS THE REFUSAL (2026-09-12 01:35)
+
+Mike: "no chevron is present." Found in the arcade corpus rather than
+recalled: the transformation cutscene (ref_arcade 10741-10801, and the
+same scene in the attract intro at MAME frames 4460-4540) is the face on a
+red field with a BLUE CHEVRON-PATTERNED TILE PLANE across the upper half
+and red flames over it. Ours (vi44 041521, vi46 051450) has the face, the
+red field and the flames, and the upper half BLACK. The chevron is that
+plane.
+
+**What it is made of, from the arcade at frame 4520:** text RAM 0x410E80
+reads 0xAAAA 0xBBBB, so the cutscene draws from tilemap pages 10 and 11,
+not the level's 0 and 5. Page 11 is 800 cells of colour set 19, a pure
+blue ramp (006 006 007 007 007 005 005); page 10 is sets 20-21, the
+yellow-to-red ramp. **Set 19 is in no round table.**
+
+**Why it is black:** MDSREFUSE refuses a set absent from the installed
+table and refused cells render as backdrop (Makefile, LOOP29 190). The
+detector already has the escape -- on a foreign palette span it clears the
+pins and sets mds_scene_cur = 0xFF, "dynamic rules" (m_main.c 11146) --
+but the MD_ROUND branch of the refuse test (2079) indexed by md_round
+alone, and md_round is only ever assigned at the two install sites. The
+game's own scene variable 0xFFF142 is the round number and nothing else:
+logged every frame across 6000 frames of attract it reads 0, then 1 for
+the level-2 demo, then 0; the face, eye and intro carry the last round's
+number. So the cutscene inherited round 0's table and refused its own
+plane. 191 said the chevron went missing in vi38, the build that
+introduced the rule; 193's round keying kept it missing by a different
+path.
+
+**Fix:** refuse only while `mds_scene_cur != 0xFF`. When the detector
+declares the span foreign the refusal lifts and set 19 goes to the dynamic
+allocator, which is what drew it before vi38.
+
+**Known latency, NOT measured:** the detector needs 16 no-match K-vints
+before it declares unknown, so the plane may appear late in the cutscene.
+If Mike sees it pop in, that number is the next knob.
+
+**Also retracted, for the record:** LOOP-DECOMPILE 79's "the chevron is
+records 132-137" (those are the eye's iris, sprite palettes) and my own
+200. The chevron is a TILE plane and never touched the actor lines.
+
+`rom/night/vi47.32x` (md5 32a2beed) = vi45 + this fix, flag-identical,
+staged on the rig, not launched.
