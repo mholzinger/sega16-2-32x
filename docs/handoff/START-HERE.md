@@ -199,11 +199,16 @@ The discipline, from here:
 
 ## THE LINE: `rom/night/vi70.32x` (md5 fadafb08) = `rom/s16.32x`, ACCEPTED BY MIKE 2026-09-12 14:50 ("otherwise SOLID presentation"; LOOP29 224)
 
-**A 68K-side change is accepted only if `fmgate_defer` reads 0 at frame
-2500 of the attract (LOOP29 228-229).** The window handshake has a
-phase-dependent collision; vi70 sits clear of it, and the round-clear
-text fix (225, correct, vi74) trips it. Root cause is in the window
-timing, i.e. the pipeline work, not the tables.
+`fmgate_defer` (68K WRAM, frame 2500 of the attract) is the handshake's
+instrument, NOT a gate (LOOP29 229 set it as one, 230 retracted that:
+vi71 0 deferrals with a black return, vi75 54 with a clean one). The
+window handshake collides by phase (fold 3's subject); the round-clear
+text fix (225, correct, vi74) is parked on it.
+
+**FOLD 1 CANDIDATE, ON THE RIG AS `rom/night/vi75.32x` (md5 f1d8162f):**
+vi70's line + `CAT1MD=1 C1NOFB=1`. Headless: plane on the first field
+frame, aligned return 4.5%, play-path black = vi70, coined flips above
+vi45 through the demo. Mike's gate: the hole punch over sprites.
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink

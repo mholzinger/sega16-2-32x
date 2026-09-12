@@ -5398,3 +5398,26 @@ timing -- the pipeline work -- not in the tables or the gates.
 
 vi70 stays the line. vi74 (md5 29e476db) is the text-fix candidate that
 trips the race, staged for whenever the race is closed.
+
+## 230. FOLD 1 BUILT: CAT1MD + C1NOFB ON vi70's LINE (2026-09-12 15:35)
+
+PLAN-SINGLE-VINT fold 1 (8cb6de6): `CAT1MD=1 C1NOFB=1` on vi70's line
+(DIRTYROW is in the ship set). vi75, md5 f1d8162f, staged.
+
+    coined flips/100   vi45 29 100 57 100 67 69 97 18 50 49 43 50 50 50 50
+                       vi75 31 100 59 100 67 63 89 17 61 56 50 50 51 57 69
+    face               red field 1580, plane full 1575 (first frame)
+    aligned return     0.044 0.048 0.050 0.045 0.042   (vi70 0.037)
+    play path          black share = vi70 within 0.006; luma diverges
+                       14-33 through the level because vi75 runs faster
+    fmgate_defer       54 at f2500   (vi70 0)
+
+**229's acceptance gate is RETRACTED as a gate.** vi71 read 0 deferrals
+with a 10% return; vi75 reads 54 with a 4.5% return. The count is the
+handshake's instrument (fold 3's subject), not a predictor of black
+tiles, and it moves with SH-2-side changes too -- vi75 changes nothing
+on the 68K. The picture gates stand: the face plane, the aligned return,
+the play-path black share, the coined flips.
+
+Mike's gate for fold 1 per the plan: the hole punch over sprites, where
+the 32X layer wins per pixel. Rig only.
