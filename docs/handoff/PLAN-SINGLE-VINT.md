@@ -329,3 +329,33 @@ Rig frame rate (BOOTFLIPRATE, presented frames per 64 vints, attract):
 fr75 21 19 7 22 16; fr95e 19 15 22 21 14; sc95 pending. Open on the
 fold-1 line: the hole punch (C1PUNCH=1 built, unmeasured), the rig's
 black drops (ship rate, 237).
+
+---------------------------------------------------------------------
+## HOW A BUILD LANDS (2026-09-13)
+
+One build, one change against the line, one name, one md5. The line
+stays `rom/s16.32x` until Mike names a new one.
+
+  1. **The builder ships with a card:** name, md5, the exact make line,
+     the ONE change against the line in a sentence, and the gates run
+     (ares wall / single-vint, the aligned attract return, the play
+     path, the rig frame-rate probe where the change touches the 68K or
+     the ship rate). A change that decides anything from a game byte
+     cites the instruction that consumes that byte.
+  2. **The decompile thread reads the diff before Mike plays:** the
+     code compiled into the rom against the previous build (not the
+     log's description of it), any game byte the build reads, and
+     whether anything retracted in the logs re-entered. Reply in one
+     paragraph: matches the card / does not, and what to look for.
+  3. **Mike plays with the card's one question** -- for Build A: do the
+     zombies rise behind the ground; for B: does it look like vi95 and
+     what does the wall read; for C: is the round-clear text complete
+     and the rig frame rate at or above fr75.
+  4. **Decision:** pass on Mike's eye plus the card's numbers -> the
+     line moves. Anything else -> withdrawn with the number that failed,
+     in the log, and the next build is built on the line, not on the
+     withdrawn build.
+  5. **Never** two changes in one build, never a probe as a play build,
+     never a launch on the rig while Mike is playing (the relaunch of
+     vi95 at 22:34), and never a "fix" that has not been A/B'd on the
+     instrument that can see it (172: ares cannot rank rig speed).
