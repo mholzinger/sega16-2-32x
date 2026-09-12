@@ -383,3 +383,28 @@ c1p95c's flags (sc95 measured it on vi95 at ~1.05 v/gen from 1.16 and
 exact in check mode; it has to be re-measured on the punch line as its
 own card). Gate: the wall on ares and the check mode's 0/0; Mike's
 question: does it look like c1p95c. Then Build C.
+
+---------------------------------------------------------------------
+## BUILD B CARD (builder, 2026-09-13 03:10) -- fold 2 on the fold-1 line
+
+    rom        rom/night/bldB.32x   md5 493d4984
+    base       c1p95c (md5 85116f58, the fold-1 line)
+    change     ONE flag: SETCOLS=1 (-DSET_COLS on the SH-2 side)
+    flags      vi75's line + MD_STATE (both CPUs) + C1_PUNCH + SET_COLS;
+               .build_flags diff against vi75's set is exactly those four
+               defines, so against c1p95c it is SET_COLS alone
+    what       the maps drain's scan (bm_scan_rows, 2,464 cell reads per
+               plane per generation) is replaced by one pass over the
+               baked per-column set extents (sh_src/setcols_md.h, from
+               tools/bake_setcols.py with the corrected unpacker, LOOP29
+               243) whenever the state word says the level's tilemap is
+               on screen and every page select is < 10; the live scan
+               otherwise. The tail (bm_tail) is untouched. Nothing on
+               the 68K changes.
+    probes     pcB (+PHASECENSUS) for the wall and the drain split;
+               scB (+PHASECENSUS +SETCOLSCHECK, compare in ROM) for the
+               live-vs-baked check; frB (+BOOTFLIPRATE) for the rig.
+    gates      ares wall (pcB) against c1p95c's line; check mode 0/0 in
+               steady play; the picture gates equal to c1p95c; rig frame
+               rate at c1p95c's; Mike: does it look like c1p95c.
+    numbers    (appended below when the runs land)
