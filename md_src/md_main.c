@@ -2647,7 +2647,7 @@ void shim_vblank(void) {
 			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 8)
 				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
 				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4)
-				| ((uint16_t)(shim_credited & 1) << 3)
+				| ((uint16_t)(~*(volatile uint8_t*)0xFFF026 & 1) << 3)   /* 240: credited = the game's attract bit clear (NOTES 29/30) */
 				| ((uint16_t)(*(volatile uint8_t*)0xFFF031 >> 2) & 7));
 		}
 	}
