@@ -4142,3 +4142,73 @@ on a build whose backgrounds are worse than vi16's. The speed comes from
 
 The line is untouched: `pal_scenes_md.h` restored to the harvest bake,
 `rom/s16.32x` rebuilds to vi37's numbers (wall 1.48, 32.1 fps).
+
+## 190-191. THE REFUSE RULE GIVES ZERO CHURN AND ONLY WORKS ON LEVEL 1 (2026-09-11 21:20)
+
+`MDSREFUSE=1`: a tile colour set absent from the scene's baked table is
+REFUSED an MD palette line instead of being handed to the dynamic
+allocator. 189 established this was necessary -- pinning MORE sets makes
+the churn worse, so "in the table" has to imply "and nothing else gets a
+line".
+
+**It works completely, on the line's own flags, with no CAT1MD:**
+
+    over 12,000 frames          vi16     vi37      vi38 (refuse)
+    on-screen tiles destroyed    644     ~1,300        0
+    frees that got through        57    128-779        4
+    cells blanked, art missing  6,372    ~6,056    3,818
+    refusals                     n/a       n/a   169,348
+
+**Zero destroyed tiles.** The allocator stops working, which is the point,
+and the level-1 frame renders complete (temple, statues, trees, wolf,
+lettered gravestones, grass, player, enemy).
+
+**And it blanks every other scene, which kills it as it stands.**
+Mike, in order: "distinctly what's missing is the chevron blue from the
+altered beast transformation", then "level 2 and the transition scene
+have many missing tiles" with a shot of the cave level black except the
+stalactites and a few floor cells.
+
+**The cause is not subtle and I should have seen it before building:
+`pal_scenes_md.h` has MDSTATIC_N = 2, slots for `normal` and
+`boss_smoke`. There is no table for the transform and none for any round
+but the first.** Refusing everything outside a table that only covers
+level 1 blanks level 2, the transition and the transformation, exactly as
+observed. The rule is correct; its input covers one fifth of the game.
+
+**Two bugs of my own in the rule, found by chasing the transform:**
+
+  1. `mds_scene_cur` is the PSCENE index; the TABLE index is
+     `mds_table_of[pscene]`, which is how the runtime maps them
+     everywhere else (m_main.c 5354, 5369). I indexed
+     `mds_s_line[mds_scene_cur]` directly, so a pscene past MDSTATIC_N-1
+     -- the transform is exactly that -- read PAST THE END of the array
+     and refused on garbage.
+  2. `mds_scene_cur` is 0xFF for "no tables installed", and
+     `mds_s_line[0xFF]` is far out of bounds.
+
+Both fixed (bounded through `mds_table_of`), and fixing them did not fix
+the symptom, because the symptom is the missing tables.
+
+**A middle ground that does NOT work, measured:** asking for the line
+SOFTLY for out-of-table sets -- `mdp_assign_set(..., soft=1)`, which
+returns 0 rather than evict -- brings the churn straight back (670
+destroyed, 30 frees) while only 29 out-of-table sets ever fit. The churn
+comes from the eviction, and out-of-table sets essentially always need
+one.
+
+**SO THE DEPENDENCY CHAIN IS NOW EXPLICIT, and it is the decompile
+thread's own step 5:**
+
+    SCENESEL probe (LOOP-DECOMPILE 66, already built)
+      -> a playthrough that reaches scenes 1-4
+      -> live palette dumps per scene
+      -> bake_tilecram --emit-mds for all five scenes
+      -> MDSREFUSE becomes safe, and the allocator is gone for good
+
+Until then `MDSREFUSE` is default-off. It is not a dead end -- it is the
+first thing all session that took the background churn to ZERO -- it just
+cannot ship against a one-scene table.
+
+`rom/night/vi39.32x` (md5 c93dbeab) is vi37's flags rebuilt: the line,
+with the refuse rule off. On the rig and playing.

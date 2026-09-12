@@ -2011,8 +2011,48 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
                                               * FB row); slots are the
                                               * scarce resource, see the
                                               * claim loop */
+#if defined(MD_STATIC) && defined(MDS_REFUSE)
+    /* LOOP29 190. A set that is NOT in the scene's baked table must be
+     * REFUSED an MD line, not handed to the dynamic allocator. 189
+     * measured that pinning more sets makes the churn WORSE, because
+     * every set outside the table still goes dynamic and the four lines
+     * fill up, so the iteration diverges. "In the table" has to imply
+     * "and nothing else gets a line".
+     * mds_s_line is the scene's own table; a zero there means the FB
+     * owns those cells. This build does not YET draw them (MDBGALL
+     * clears BG/FG-cat0 rows to MD-through, m_main.c ~7625), so a
+     * refused set renders as backdrop -- which is the point of the
+     * measurement: how much churn was it costing, and is the hole even
+     * visible? */
+    if (!mdp_s_line[cset]) {
+        /* LOOP29 191 -- TWO BUGS IN MY OWN REFUSE RULE, both found by
+         * Mike's report that "the chevron blue from the altered beast
+         * transformation" went missing in vi38.
+         *  1. `mds_scene_cur` is the PSCENE index and the TABLE index is
+         *     `mds_table_of[pscene]` -- the runtime maps them through
+         *     that array everywhere else (m_main.c 5354, 5369). I indexed
+         *     `mds_s_line[mds_scene_cur]` directly, so any pscene past
+         *     MDSTATIC_N-1 -- and the TRANSFORM scene is exactly that,
+         *     the table has slots for `normal` and `boss_smoke` only --
+         *     read PAST THE END of the array and refused on garbage.
+         *  2. `mds_scene_cur` is 0xFF for "no tables installed", and
+         *     `mds_s_line[0xFF]` is far out of bounds. With nothing
+         *     pinned there is nothing to protect, so refusing there is
+         *     meaningless anyway.
+         * Refuse ONLY with a table actually installed and the set
+         * genuinely absent from it. */
+        unsigned ti = (mds_scene_cur < PSCENE_N)
+                      ? mds_table_of[mds_scene_cur] : 0xFFu;
+        if (ti < MDSTATIC_N && !mds_s_line[ti][cset]) {
+            MDA(30);                 /* refused: not in the scene's table */
+            return;
+        }
+        mdp_assign_set(cset, stamp, mask, 0);
+    }
+#else
     if (!mdp_s_line[cset])
         mdp_assign_set(cset, stamp, mask, 0);
+#endif
     else if (mask & (uint8_t)~mdp_s_used[cset])
         mdp_extend_set(cset, mask & (uint8_t)~mdp_s_used[cset]);
 }

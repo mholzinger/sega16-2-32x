@@ -1789,6 +1789,17 @@ endif
 ifdef MDLINES4
 SHCCFLAGS += -DMDP_LINES4
 endif
+# `make ... MDSREFUSE=1` = LOOP29 190. A tile colour set that is not in
+# the scene's baked table is REFUSED an MD line instead of being handed
+# to the dynamic allocator. 189 measured that pinning MORE sets makes the
+# churn worse, because everything outside the table still goes dynamic
+# and the lines fill up. Needs MDSTATIC. Refused cells currently render
+# as backdrop -- the framebuffer fallback for BG/FG-cat0 does not exist
+# yet -- so this is a measurement first: read mdalloc [30] (refusals)
+# against the churn, and look at a frame.
+ifdef MDSREFUSE
+SHCCFLAGS += -DMDS_REFUSE
+endif
 # `make ... GENSKIP=1` = LOOP29 178. Do not launch a generation whose
 # INPUT is byte-identical to the last one launched: the game writes no
 # scroll and no sprite upload on a vint it did not advance, so the frame
