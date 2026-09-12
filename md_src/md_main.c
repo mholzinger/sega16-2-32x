@@ -2052,7 +2052,7 @@ static void r60_push(void) {
 		 * the level's blank tiles too; the saturating counters hid it).
 		 * vi85: bit 7 bias | bit 6 more than 31 | bits 4-0 zero-output
 		 * records whose tile is NON-BLANK in the bank (m_main.c tv_real),
-		 * expected 0 wherever SH-2 ROM reads are sound. */
+		 * expected 0 wherever SH-2 ROM reads are sound.
 		 * vi85 confounded too. vi92 (LOOP29 237): bits 5-0 = m_main.c's
 		 * blank-cell census, cells emitted as the blank slot because
 		 * their slot was DIRTY outside cut mode, summed over 64 windows,
