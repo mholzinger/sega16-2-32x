@@ -4,5 +4,5 @@
  * Apply on FOREGROUND pages only (0-4). */
 #define CAT1HOLE_BYTES_PER_SCENE 5120
 #define CAT1HOLE_GET(map, n) (((map)[(n) >> 2] >> ((3 - ((n) & 3)) * 2)) & 3)
-static const unsigned short cat1hole_fg_all[5] = { 1439, 1303, 1923, 800, 1148 };  /* suppress-all cells, FG pages */
-static const unsigned short cat1hole_fg_pix[5] = { 710, 1549, 1309, 448, 2363 };  /* per-pixel cells, FG pages */
+static const unsigned short cat1hole_fg_all[5] = { 1599, 1317, 1656, 800, 1210 };  /* suppress-all cells, FG pages */
+static const unsigned short cat1hole_fg_pix[5] = { 543, 1659, 1432, 448, 2294 };  /* per-pixel cells, FG pages */

@@ -6019,3 +6019,11 @@ That is exactly the 2-bit hole map `tools/bake_cat1hole.py` (decompile
 thread, in the tree) describes: 0 no hole, 1 suppress the whole cell,
 2 consult the art per pixel. The per-pixel form is the ship; the cell
 form is the measurement. Its unpacker line carried 243's bug; fixed.
+
+**With the corrected header (pcsc95):** wall 1.05 v/gen, 49% single-vint,
+ships 39.3/s, mtask 0.75, echo 0.97 (buggy header: 1.03 / 55%; census
+alone 1.16 / 42%). The corrected extents are the true ones; the 0.02
+between the two headers is inside the run-to-run spread of these
+4,000-frame walks (the single-vint share moves with what the demo does
+in the last few hundred frames). Fold 2's number is ~1.05, from 1.16.
+Check mode with the corrected header: below.
