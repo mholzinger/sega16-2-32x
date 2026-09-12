@@ -4907,3 +4907,45 @@ staged on the rig, not launched. vi46-vi57 are withdrawn.
 **vi58 is the candidate.** Not shown by headless: the level after a
 transform in PLAY, and whether the batch-40 span during a cutscene tears
 on hardware.
+
+## 210-211. THE ATTRACT'S WRONG PALETTES: THE IMAGE LOAD AT THE TITLE, AND A DANGLING SET (2026-09-12 03:55)
+
+Mike on vi58: "the titles sliding in are swapped to wrong palette, the
+logo in better shape but not perfect", and "the arcade score has honestly
+never displayed". The arcade at those frames (MAME, tile+text+palette
+dumps at 294 and 2114): page regs 0x1212/0x6767; the logo is page 2, sets
+37-46 (a white-with-blue-outline ramp: 7FFF 7FFF 7FFF 0730 0730 0730
+0400); the texture under both scenes is page 7, set 11, 800 cells; the
+ranking text is the TEXT layer, 25 cells. Colour demand: 5 quantised
+colours at the logo, 3 at the ranking. Capacity is not in play.
+
+**210 -- the logo, and the ranking text: the detector's image load.** In
+the SH-2's palette mirror at vi58 f340 and f3300, sets 37 and 40 hold the
+level-1 image's blue ramp word for word (0FB0 6D90 0C80 0B70 0950 0730
+0400) where the arcade title has white. The 8-pair probes match at the
+title (the game preloads the level words they sit on -- the code says so
+at the install guard), and on the third confirming landing the window-side
+code copies the whole scene image, tile half AND text half, over PAL_SH
+BEFORE the `mds_dist <= MDS_TOL` guard that protects the MD install. So
+the logo's ten sets were drawn in level 1's set-37 colours, and the
+ranking's text in level 1's text colours. vi59 puts the copy under the
+same guard. Not yet measured: whether real scene cuts still get their
+load (they should: the new palette lands before its third confirming
+landing, so the distance is small there).
+
+**211 -- the ranking texture: a dangling assignment, OPEN.** Set 11's
+mirror words are correct (0C80 FFFF 0B70 ...), so the green comes from the
+pens. At f3150-3350: set 11 on line 1, which has 14 FREE pens, with pixel
+map [3,0,3,0,2,0,2] -- pixels 1 and 3 on pen 3 whose line_c is 0xFFFF
+(free), pixels 2/4/6 (the white words) on pen 0 (transparent, so black),
+pixels 5/7 on pen 2 = 0x0E0 = (0,4,3) where the word wants (0,4,6). Three
+things wrong at once: a mapped pen that is free (a shared pen released
+under set 11 -- refcount), unclaimed pixels (the mask never grew), and a
+nearest-colour pen on a line with 14 free. All three point at the dynamic
+assign/extend/free path when a set claims during the off-screen span
+while pinned co-owners are being evicted. The ranking rendered BLACK on
+every build before 209 (refused), so this is the first time it has drawn
+at all. Left open; the counters to read are [19]-[21] (burned claims),
+[25]-[28] (tagkeep), and mdp_pen_rc for line 1 across 3100-3300.
+
+`rom/night/vi59.32x` (md5 1514f850) = vi58 + 210, flag-identical, staged.

@@ -11240,6 +11240,22 @@ RAMCODE void m_main(void)
                                     for (unsigned i = 0; i < 1024; i++)
                                         mds_dist += (PAL_SH[i] != sp3[i]);
 #endif
+#ifdef MD_STATIC
+                                    /* LOOP29 210: the image load gets the
+                                     * SAME guard as the install below. The
+                                     * probes match at the TITLE (the game
+                                     * preloads the level words they sit
+                                     * on), and this copy then put level
+                                     * 1's tile AND text palettes over the
+                                     * title's: the logo's white sets 37-46
+                                     * drawn in level 1's set-37 blues, the
+                                     * ranking text in level 1's text
+                                     * colours. Measured in the mirror,
+                                     * vi58 f340/f3300. A real cut lands
+                                     * the new palette before its third
+                                     * confirming landing, so it passes. */
+                                    if (mds_dist <= MDS_TOL) {
+#endif
                                     for (unsigned i = 0; i < 1024; i += 4) {
                                         PAL_SH[i + 0] = sp3[i + 0];
                                         PAL_SH[i + 1] = sp3[i + 1];
@@ -11249,6 +11265,7 @@ RAMCODE void m_main(void)
                                     for (unsigned g2 = 0; g2 < 128; g2++)
                                         PAL_SETGEN[g2]++;
 #ifdef MD_STATIC
+                                    }
                                     if (s < MDSTATIC_N && mds_dist <= MDS_TOL) {
 #ifdef MD_ROUND
                                         /* LOOP29 194: the SECOND install
