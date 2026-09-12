@@ -46,14 +46,18 @@ curl -sS -X POST "http://$MISTER_HOST:8182/api/games/launch" \
      -d "{\"path\":\"$dest\"}" >/dev/null
 
 # /tmp/remote.log is the real signal; /tmp/ACTIVEGAME is written by mrext
-# itself and proves nothing.
+# itself and proves nothing. The launch appends "core stopped/started" lines
+# right after "game started", so scan the recent tail, not just the last line.
 i=0
 while [ $i -lt 10 ]; do
     sleep 1
-    line=$(ssh -o ConnectTimeout=5 "$MISTER" 'tail -1 /tmp/remote.log' 2>/dev/null || true)
-    case "$line" in
-        *"game started"*"$name"*) echo "ok      $line"; exit 0 ;;
-    esac
+    line=$(ssh -o ConnectTimeout=5 "$MISTER" \
+        "tail -10 /tmp/remote.log | grep 'game started' | grep '$name' | tail -1" \
+        2>/dev/null || true)
+    if [ -n "$line" ]; then
+        echo "ok      $line"
+        exit 0
+    fi
     i=$((i + 1))
 done
 
