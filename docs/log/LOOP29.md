@@ -5170,3 +5170,28 @@ level never re-ships; the plane's stale patterns re-convert.
 `rom/night/vi67.32x` (md5 2857e844) staged, not launched. Headless checks
 pending. vi66/vi66a/vi66b withdrawn (vi66b's behaviour is what 220 keeps
 for the level, plus the plane).
+
+## 221. THE SAME-ROUND RETURN EXISTS HEADLESS, THE FULL WIPE IS RIGHT, AND THE HARDWARE HAZARD IS THE BATCH (2026-09-12 14:30)
+
+vi67 (220's narrowed wipe): plane striped again (max 0.13), AND the window
+at 2150-2450 read 10% black -- and that window is the attract's SECOND
+LEVEL-1 DEMO (frame 2300 viewed: the graveyard with black rectangles in
+the tree row), i.e. a same-round return after the face and the eye. So
+headless does reach the class Mike sees after a transformation:
+
+    second level-1 demo, black share    vi65/vi66 (full wipe)  0.037
+                                        vi67 (narrowed wipe)   0.106-0.111
+                                        vi64 (stale round)     0.106-0.112
+
+The full wipe at the edge out is what keeps that return clean, and 220's
+"wipe only the cutscene's sets" cannot work for the plane either: set 19
+is assigned AFTER the edge, so it is never resident when the wipe runs.
+
+Mike's rig says the full wipe bands (219, vi66 vs vi66b). Both are
+measured, so the change has to keep the wipe and remove the hardware
+hazard from the re-ship: with the wipe, the load ships the whole level and
+the blanked path sends 40 tiles a vint, the documented vblank overrun.
+**221: the blanked load ships at MD_BATCH_OFF (24) too; 40 is gone from
+every path.** vi68 = vi66 + that. Cost: a slower load-in (1120 tiles at 24
+= 47 vints against 28). `rom/night/vi68.32x` (md5 07f8075b) staged, not
+launched; headless checks pending. vi67 withdrawn.

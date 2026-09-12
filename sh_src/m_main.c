@@ -5458,14 +5458,15 @@ __attribute__((noinline)) static void disp_gate(void)
              * sets, converted under a previous pen map and hit again --
              * the cache does evict LRU ways, 216's reading was wrong --
              * so wiping just those sets is what the plane needed. */
-            {
-                unsigned r9 = MD_ROUND_GET();
-                if (r9 >= MDROUND_N) r9 = md_round;
-                for (unsigned s2 = 0; s2 < 128; s2++)
-                    if (mdp_s_line[s2]
-                        && !(r9 < MDROUND_N && mds_s_line[r9][s2]))
-                        mdp_wipe_set_tags(s2);
-            }
+            /* 221: the FULL wipe again. 220's narrowed wipe left the
+             * same-round return (the attract's second level-1 demo, and
+             * the transformation in play) 10% black, and never touched
+             * the plane's set, which is assigned after the edge. The
+             * hardware band the full wipe caused (219) is a cut transfer
+             * at the load; 221 removes the overrun instead (bmax). */
+            for (unsigned s2 = 0; s2 < 128; s2++)
+                if (mdp_s_line[s2])
+                    mdp_wipe_set_tags(s2);
 #endif
         }
         mds_onscreen = on;
@@ -13396,21 +13397,17 @@ RAMCODE void m_main(void)
                      * mirrors our hold too now), so the consume DMA runs
                      * at the blank rate and the full 40-record staging
                      * lands in ~8 lines. */
-                    int bmax = (disp_blank || !r60_disp_on
 #if defined(MD_STATIC) && defined(MD_ROUND)
-#endif
-                               ) ? 40 :
-#if defined(MD_STATIC) && defined(MD_ROUND)
-                               /* 209/214: a cutscene does not scroll; at 24
-                                * the flames starved the chevron plane 60
-                                * frames, at 40 it is up on the first field
-                                * frame. But 40 is the documented vblank
-                                * overrun on hardware (the top-band tear),
-                                * so `make ... MDBATCHOFF=N` ranks it on the
-                                * rig. */
-                               (!mds_onscreen ? MD_BATCH_OFF : MD_BATCH);
+                    /* 221: a 40-tile transfer is the documented vblank
+                     * overrun on hardware; with 218's wipe the load has
+                     * the whole level to ship and Mike's rig showed a
+                     * horizon band of tiles that never landed (219,
+                     * vi66 vs vi66b). Ship the blanked load at the
+                     * off-screen batch (MDBATCHOFF, 214) too. */
+                    int bmax = (disp_blank || !r60_disp_on || !mds_onscreen)
+                               ? MD_BATCH_OFF : MD_BATCH;
 #else
-                               MD_BATCH;
+                    int bmax = (disp_blank || !r60_disp_on) ? 40 : MD_BATCH;
 #endif
                     /* (md_cut || display-on tried 2026-09-06: consume max 90
                      * lines — the active-display DMA rate, the batch-40 grave) */
