@@ -2372,14 +2372,7 @@ void r60_late_post(void)
 	*(volatile uint16_t*)0xA15100 |= 0x8000;
 	*mars_comm2 = BANK_SHADOW;
 	*mars_comm12 = (uint16_t)(0xD000 | r60_late_v);
-	/* FRAME_DONE (LOOP29 187): a plain store here wipes a frame-done
-		 * signal raised since the last post, so preserve bit 15. */
-#ifdef FRAME_DONE
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
-		                          | (*mars_comm10 & 0x8000));
-#else
-		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
-#endif
+	*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 	*mars_comm4 = 0;
 	*mars_comm0 = 0x2020;
 	*(volatile uint16_t*)0xFFA0A0 = *(volatile uint16_t*)0xC00008;   /* V at post */
@@ -3095,14 +3088,7 @@ void shim_vblank(void) {
 				*mars_comm2 = BANK_SHADOW;
 #endif
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
-				/* FRAME_DONE (LOOP29 187): a plain store here wipes a frame-done
-		 * signal raised since the last post, so preserve bit 15. */
-#ifdef FRAME_DONE
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
-		                          | (*mars_comm10 & 0x8000));
-#else
-		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
-#endif
+				*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #ifdef ARM_GATE
 				/* COMM4 was cleared at the announce, so a 0xA001 here is
 				 * THIS vint's arm (the ISR usually arms during our
@@ -3591,14 +3577,7 @@ void shim_vblank(void) {
 			*mars_comm12 = (uint16_t)(0xD000
 				| (*(volatile uint16_t*)0xC00008 >> 8));
 #endif
-			/* FRAME_DONE (LOOP29 187): a plain store here wipes a frame-done
-		 * signal raised since the last post, so preserve bit 15. */
-#ifdef FRAME_DONE
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
-		                          | (*mars_comm10 & 0x8000));
-#else
-		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
-#endif
+			*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #ifdef K2_FREE
 			if ((wcmd & 0x00F0) == 0x0020)
 				*mars_comm4 = 0;     /* k2 ONLY: a stale 0xF102 from
@@ -3686,14 +3665,7 @@ void shim_vblank(void) {
 		// master reads a value complete through this vint (the game is
 		// stalled until the ack). NOT cleared here — the DREQ push
 		// below still owns harvest-and-clear.
-		/* FRAME_DONE (LOOP29 187): a plain store here wipes a frame-done
-		 * signal raised since the last post, so preserve bit 15. */
-#ifdef FRAME_DONE
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
-		                          | (*mars_comm10 & 0x8000));
-#else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
-#endif
 #if defined(CMD_PROBE) || defined(CMD_INT)
 		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
 		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the

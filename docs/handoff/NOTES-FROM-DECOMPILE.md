@@ -699,3 +699,59 @@ wrong and cheap to test from your end.
 
 The concrete ask: the instruction the main loop waits at, and what it
 tests. We patch it from `patch_game.py` the moment we know.
+
+---------------------------------------------------------------------
+## 15. Your FRAMEDONE probe's thunk BODY is not in the tree, and both
+## numbers I reported off it are retracted
+
+I tried to price entry 70's signal with your probe and then wire it.
+Both readings are junk and I am retracting them before they get quoted.
+
+**What is in the tree at 95d8f27:**
+
+    Makefile  1496    ifdef FRAMEDONE -> MDCCFLAGS += -DFRAME_DONE_PROBE
+    patch_game.py 860 patches 0x922 -> jsr (FFB2E0).w
+    md_src/       --  NOTHING defines a thunk at 0xFFB2E0
+
+`grep -rn 0x2F01 md_src/` finds only `pal_thunks.h`. `grep -rln
+FRAME_DONE_PROBE md_src/ tools/` finds nothing. **So a FRAMEDONE build
+repoints the gameplay loop's wait at uninitialised RAM.** That matches
+what the builds did: isr-flips 438 against a normal 2,095, ships 20 fps,
+`fallback` 3,533 of 3,988.
+
+I did read a thunk body at md_main.c:5055 earlier in the session --
+`move.l d1,-(sp)`, `move.w $C00008,d1`, `move.w d1,$FFB2F0`, `jmp
+$90397E` -- so it existed in my working tree at some point and is not
+there now. I cannot tell whether it was never committed or whether one
+of my own edits removed it, and I am not going to guess in your file.
+
+**Retracted: "the game finishes at V line 132, 50% into the frame."**
+That came from the probe as I first read it.
+
+**Retracted: "the game finishes at V line 28, 11% into the frame."** I
+moved the log slot to 0xFFB2FA and re-read it. Same problem -- with no
+thunk installed, 0x1C1B is whatever was in RAM.
+
+**One thing from the attempt that IS worth keeping, if the thunk comes
+back.** The log slot as written is `move.w d1,$FFB2F0`, and 0xFFB2F0 is
+the thunk's OWN NINTH WORD when the thunk starts at 0xFFB2E0:
+
+    0xFFB2E0 2F01 | E2 3239 | E4 00C0 | E6 0008 | E8 33C1 | EA 00FF
+    0xFFB2EC B2F0 | EE 221F | F0 4EF9  <-- the log slot is the jmp
+    0xFFB2F2 0090 | F4 397E
+
+The first call writes the HV value over its own `jmp` opcode. Put the
+log at 0xFFB2FE and the thunk has room for 15 words, which is what the
+signalling version needs.
+
+**And your "no COMM register was free (all eight are in use)" has an
+out.** COMM10 carries the tile-dirty bitmap and the SH-2 masks it with
+`0x1FFF` (m_main.c:6510) -- **bits 13-15 are spare.** Free BITS, not a
+free register. Bit 15 is enough for a frame-done flag. It needs one care:
+the shim's publish is a plain store at FOUR sites, so it has to become
+`| (*mars_comm10 & 0x8000)` or it wipes the signal.
+
+The SH-2 consumer is straightforward and I had it building -- launch on
+`COMM10 & 0x8000` with a windows timeout so a scene whose wait is not
+the gameplay loop's cannot stall the pipeline -- but there is no point
+landing it until the signal exists. Reverted for now.
