@@ -93,15 +93,17 @@ A generation at 0.95 that jitters to 1.02 costs 2 vints; 168's 0.90 gave
 Once a generation is one vint the 68K must run a FULL game frame and the
 shim every vint. Measured (LOOP-DECOMPILE 89-90, 97):
 
-    game frame           9,808 instructions   (arcade: 8,184, LOOP29 182-184's
-                                               discarded release is the shape)
+    game frame           8,900-9,800 instructions, by content (arcade 8,184;
+                                     LOOP-DECOMPILE 100 -- the "20% protocol
+                                     cost" of entry 89 was two unaligned windows)
     shim, R60TIGHT       3,590
-    needed              13,400 x 10.08 cyc  = 135,000    available 127,841
-    over by                                     ~5.6%
+    needed              12,500-13,400   against 12,420 available
+    over by              1-8% by instruction count
 
-Two levers, either closes it: the game side's 20% over the arcade (1,624
-a frame, a protocol cost, not code); the rest of r60_push (rotor 430,
-mask walk 330). R60TIGHT is staged (`rom/night/r60tight1.32x`) and off.
+One lever left here, and it is enough at the low end: the rest of
+r60_push (rotor ~430, mask walk ~330). R60TIGHT is staged
+(`rom/night/r60tight1.32x`) and off. The 68000 is not what stands
+between the line and one vint; step 2 is.
 
     Gate:  gameplay_speed.py logic 100% at single-vint, no GAMEGATE stall.
 

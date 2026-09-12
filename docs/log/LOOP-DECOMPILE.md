@@ -4839,3 +4839,50 @@ cannot precompute.
 Not verified: that the port's own tile-RAM mirror sees no other writer
 (the shim's thunks are the port's, not the game's). Scope: the arcade
 program.
+
+---------------------------------------------------------------------
+## 100. Lever 2 re-measured: the game side is 8-19% over the arcade, and it is content, not protocol (2026-09-12)
+
+Entry 89's second lever — "our game side costs 9,808 instructions a
+game frame where the arcade's costs 8,184, a protocol cost" — was a
+ratio of two windows driven by different input scripts. Re-measured
+with the arcade profile script's exact input timeline on both machines
+(coin 600/800, start 1000, then walk 120-of-240 and punch 8-of-40 from
+1200), 20 vints from f2000, level 1, MAME:
+
+                          IRQ4    wait calls   game work    per game frame
+    arcade                 20        20         163,690        8,184
+    ours (play_32x inputs) 20        10          88,826        8,882
+    ours (arcade inputs)   20        10          97,788        9,778
+
+Two corrections to entry 89 fall out:
+
+  1. **Frames are counted by calls to the wait, 0x397E, not by exits of
+     its loop** — the arcade exits the loop twice a frame, which is how
+     entry 88's parser and my first pass here both double-counted. In
+     MAME our game runs ONE game frame per TWO vints (10 calls in 20),
+     so "per vint" figures for the game side are half a frame.
+  2. **The excess is 8.5% on one input script and 19% on the other, and
+     it lands in the object routines** — animate_variant +232 a frame,
+     floor_collide +172, sprite_build_and_cull +146, depth banding +127,
+     zoom lookup +90 — all of which scale with live objects. At 30 Hz
+     logic the game receives the same inputs on different game frames,
+     so the two windows hold different object populations; the diff is
+     content. The structural extras are small and known: IRQ4 runs
+     twice a game frame at about half the arcade's per-call cost (620
+     against 1,172 — the sprite upload is patched out), and the colour
+     cycler runs per vint (+62).
+
+**So lever 2 is not a lever.** There is no discarded-release cost to
+recover in the game code; what LOOP29 182-184 saw is the game pacing at
+our frame rate. For PLAN-SINGLE-VINT step 4 the arithmetic at true
+60 Hz is
+
+    game frame        8,900-9,800   (content)
+    shim, R60TIGHT    3,590
+    needed           12,500-13,400  against 12,420 available
+                     1-8% over, by instruction count
+
+which the rest of r60_push (rotor ~430, mask walk ~330) covers at the
+low end and nearly at the high. The 68000 is not what stands between
+the line and one vint; step 2 is.
