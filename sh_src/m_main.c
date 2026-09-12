@@ -4805,6 +4805,13 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
          * pp=3 approximated as pp=2, occurrences counted. */
         uint8_t pp = (uint8_t)((d4 >> 6) & 3);
         uint8_t thr = (uint8_t)(1u << pp);
+#ifdef C1_PUNCH
+        /* FG cat-1 is level 4: a sprite shows over it iff (1 << pp) > 4,
+         * i.e. pp == 3 only (segas16b_v). Everything else is punched. */
+        const int punch = (pp < 3);
+#else
+        enum { punch = 0 };
+#endif
 #ifdef DIRECT_FB
         /* READ-FREE COMPOSE (2026-08-26): FM_TEST convicted FM=0 FB
          * reads — 1507 mismatch vs 176 match — and the 68K owns FM=0
