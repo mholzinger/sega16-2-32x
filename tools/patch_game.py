@@ -1219,6 +1219,14 @@ if os.environ.get('RELBANK'):
     print(f"RELBANK: 0x0397E clr.b $FFF01C -> jsr {rb:#06x} "
           f"(decrement, cap {cap})")
 
+# (LOOP29 186: I wrote a SECOND FRAMEDONE here that patched the same
+# site as the probe at line ~845 and asserted on its own predecessor's
+# bytes. Removed. The decompile thread's version measures first, on
+# purpose, and its note "no COMM register was free (all eight are in
+# use)" is the thing to check before wiring any channel -- COMM10's low
+# 13 bits are the dirty-page mask and bits 13-15 look spare, which is
+# free BITS rather than a free register. Price it, then wire it.)
+
 if os.environ.get('PASSCOUNT'):
     pc = PAL_THUNK_BASE + len(pal_words) * 2
     struct.pack_into('>HHH', hrom, 0x922, 0x4EB8, pc, 0x4E71)

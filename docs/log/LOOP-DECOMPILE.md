@@ -3183,3 +3183,48 @@ merging the tilemap's two passes into one word-coherent sweep, replacing
 the sprite upload, reading the order list directly — relocates or deletes
 work the port already understands, and none of them reshapes the
 transport.
+
+---------------------------------------------------------------------
+## 71. I BUILT THE SAME PROBE THE BUILDER HAD ALREADY BUILT. Three times tonight.
+
+Entry 70 proposed signalling the slave at the game's frame-completion
+point instead of inferring it. I then spent an hour building a probe to
+price it. **The builder had already implemented the whole thing** —
+`Makefile:1849`, LOOP29 186, citing LOOP-DECOMPILE 70: a thunk at the
+wait that raises COMM10 bit 15, the SH-2 side to consume it, and a
+FRAMEDONEWAIT timeout for scenes whose wait is not the gameplay loop's.
+They are far past a probe.
+
+My duplicate used the same flag name and a different scratch address, so
+it silently fought theirs. Removed: the patch_game block, the md_main
+thunk, the Makefile flag. `make ship-us FRAMEDONE=1` builds clean on
+theirs.
+
+**Third time tonight.** MISSKEEP (entry 68), now this, and earlier I
+re-derived the overdraw-as-message-queue idea that is already the port's
+architecture. Every time the sequence was the same: I produce a finding,
+the builder acts on it within the hour, and I then build the thing they
+built. A `git log` would have shown me each time.
+
+**What the wasted hour did produce, and it is worth keeping:**
+
+  1. **My first hook measured nothing and looked convincing.** Hooking
+     the wait's CALLER at 0x922 gave V=131, H=62, identical across twelve
+     frames. That was uninitialised WRAM. The hit counter I added on
+     suspicion read ZERO — the thunk never fired, because 0x922 is the
+     ATTRACT loop and does not run during play. **A suspiciously stable
+     number is the tell**, and the counter is what proved it.
+  2. **The gameplay loop is therefore NOT the one at 0x90A-0x928.** That
+     loop is attract. Entry 67 cited 0x922 as "the gameplay loop"; it is
+     not, and that correction matters to anyone reading entry 67.
+  3. **0x397E can be hooked in place.** Its first instruction is
+     `clr.b $FFF01C`, four bytes, and `jsr abs.w` is also four — so the
+     entry takes a thunk that runs the displaced clear and returns,
+     catching EVERY caller rather than one. That is the right hook and
+     it is what the builder's timeout note is working around.
+  4. **The address rebase runs BEFORE the patch blocks.** My assert
+     caught `jsr $90397E` where I expected `jsr $397E`. Anything patched
+     late must use rebased targets.
+
+**The rule I keep breaking**: check what the other thread did with my last
+finding BEFORE acting on it myself. Not after the build fails.
