@@ -2693,6 +2693,18 @@ struct bm_state {
     uint8_t active, par, which, aset, row;
 };
 #define BM ((struct bm_state *)0x06028100)  /* 768B free after DIAG */
+#ifdef SET_COLS_CHECK
+/* fold 2 check mode: live scan vs baked scan, set by set (defined before
+ * the field macros below so the struct fields are named directly) */
+RAMCODE static void bm_check_cmp(const struct bm_state *x, const struct bm_state *y)
+{
+    for (int s = 0; s < 128; s++) {
+        if ((x->tcount[s] != 0) != (y->tcount[s] != 0)) CEN[60]++;
+        if (x->tcount[s] && (x->col_lvl[s] != y->col_lvl[s] || x->amb_col[s] != y->amb_col[s])) CEN[61]++;
+    }
+    CEN[62]++;
+}
+#endif
 /* All bm_* helpers take the state by pointer: the inline (phase-6)
  * build uses a STACK instance so the hot path optimizes exactly as the
  * original stack-local code did; only the chunked path pays for the
