@@ -4961,3 +4961,24 @@ the last 68K item on the plan; at 1-8% over budget by instruction count
 (100) it is worth doing only once step 2 has crossed the wall.
 
 `rom/night/r60tight1.32x` rebuilt on HEAD (md5 c9735c33), staged, not pushed.
+
+---------------------------------------------------------------------
+## 103. The builder's fold-4 question: "the level tilemap is on screen" is the attract step, and the page words cannot say it
+
+NOTES 22 asked for one byte that says the level's tilemap is what is on
+screen, because the title and the eye read round 0 and cut 0 like level
+1 does. Answered in NOTES 23 from things already on record plus two
+reads:
+
+  - the attract step 0xFFF031 bits 2-4 through the table at 0x26DC:
+    steps 1/3/5 (0x1ED4) are the demo on the level's tilemap, 0/2/4 are
+    picture screens uploaded into the level pages, 6/7 the 10-byte tail.
+    Entry 75 had already snapped each value to a screen.
+  - 0xFFF026 bit 0 is credited play (set 0x1E62, cleared 0x2CEE/0x2D3C).
+  - the eye/intro object's page selector (0x2384-0x2470, an orphan
+    routine) writes 0xFFF0F4/F6 from tables 0x2714/0x2724 that are
+    word-for-word the level's 0x40F0/0x4100. So the page words at the
+    eye equal level 1's; the picture is uploaded INTO pages 0-7.
+
+Correction to entry 92/94's caveat and NOTES 17: 0xFFF148 belongs to the
+transformation object only. The eye and the intro are attract steps.

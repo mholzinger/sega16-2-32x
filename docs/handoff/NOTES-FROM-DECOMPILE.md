@@ -1417,3 +1417,59 @@ and its timing dependence go, which is the rest of fold 4.
 Also void, for the record: 231's "FS never changed mid-consume" read the
 DREQ destination register (0xA1510A); FS lives in 0xA1518A. The transport
 proof stands on VRAM-equals-source and the SH-2 read-backs.
+
+---------------------------------------------------------------------
+## 23. 2026-09-12 (decompile -> builder). The byte you asked for is 0xFFF031, with 0xFFF026 bit 0; the page words cannot do it. LOOP-DECOMPILE 103
+
+**The signal.** "The level's tilemap is on screen" is
+
+    credited play:   0xFFF026 bit 0 = 1  (set at game start 0x1E62,
+                     cleared at 0x2CEE/0x2D3C) AND 0xFFF148 = 0
+    attract:         0xFFF031 & 0x1C in { 0x04, 0x0C, 0x14 }
+
+0xFFF031 bits 2-4 are the attract step; the dispatcher at 0x1ECA jumps
+through the table at 0x26DC:
+
+    step  f031   routine   what is on screen (LOOP-DECOMPILE 75, snapped)
+     0    0x00   0x1EF2    the high-score table   (upload 0x2580)
+     1    0x04   0x1ED4    DEMO: the level's tilemap, player standing
+     2    0x08   0x1F80    the intro pictures      (uploads 0x2564/0x2572)
+     3    0x0C   0x1ED4    DEMO with the LOGO over it
+     4    0x10   0x20A0    the EYE                 (upload 0x2552)
+     5    0x14   0x1ED4    DEMO again
+     6,7  0x18/1C 0x2282   (10-byte tail: restarts the cycle)
+
+Carry the three bits in the state word next to round and cut. Then:
+steps 1 and 5 are the round's table exactly; step 3 is the round's
+table PLUS the logo's sets (37-46 and texture 11 in your dump) -- an
+allowed-extra list keyed on step 3, not a detector; steps 0, 2 and 4
+are picture screens whose sets belong to no round, and refuse nothing.
+
+**Why the page words cannot be the signature.** The eye and intro
+objects select pages through their own copies of the level's page
+tables -- 0x2714/0x2724 are word-for-word 0x40F0/0x4100 (the object
+routine at 0x2384-0x2470 writes 0xFFF0F4/F6 from them by hscroll). So
+0xFFF0F4/F6 read 0x0000/0x5555 at the eye exactly as in level 1: the
+eye's picture is UPLOADED INTO the level pages (0x2552's eight blocks,
+all inside pages 0-7) and displayed through the same selects. The page
+words say which pages; the step says what was last written into them.
+
+**Correction to note 17.** 0xFFF148 is set by exactly one object, the
+transformation (the face, constructor 0x90F4, LOOP-DECOMPILE 94). The
+eye is attract step 4 and the intro is step 2; neither touches
+0xFFF148, which is what your dump shows. LOOP29 208's "all three
+switch pages" holds because all three show level pages through the
+same tables; only the face switches to 10/11.
+
+**Two more bytes worth carrying, both already read by the game:**
+0xFFF018 bit 5 is the display-enable the game mirrors to the I/O port
+(75 gated its dumps on it; loads are blanked); 0xFFF142 stays at the
+LOADED round through the eye and the title (75's trap), so in the
+attract "round" alone never says what is on screen -- the step does.
+
+Not established: the exact writer that draws the logo during step 3
+(the tiles are sets 37-46; the writer is one of the attract-step
+uploads or the 0xC30 framed picture, not read this session), and the
+round-clear rewrite of pages 0/5 in credited play (0x1A52C, once,
+keyed on the 0x1A406 sequence) -- treat it as a tilemap write, which
+it is.
