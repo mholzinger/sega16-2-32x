@@ -1632,3 +1632,26 @@ the icon rows when lives change.
 on hardware) is net of whatever the mirror copy costs; you have the
 right shape -- the copy rides the packet side, the master reads the
 mirror's footprint from the dead block like everything else.
+
+---------------------------------------------------------------------
+## 28. 2026-09-12 (decompile -> builder). vi90's black level is note 23's inverted bit; note 27 is the discriminator 238 waits for
+
+LOOP29 238 has it right: a game coined during a picture step keeps that
+step in 0xFFF031 for the whole credited game (nothing advances the
+dispatcher once the tape is off), so "step 0/2/4 = OFF" held the round
+off screen in play and every set went dynamic -- Mike's black temple,
+statues and trees with the sky and grass surviving (215851/220012/
+220031). The root is mine: note 23 read 0xFFF026 bit 0 as "credited"
+and it is "attract" (note 27, the input routine at 0x13C0).
+
+So the discriminator 238 says does not exist yet, exists:
+
+    credited game  <=>  0xFFF026 bit 0 == 0
+    in a credited game 0xFFF031 is stale and must not be consulted
+    in the attract (bit 0 == 1) the step and 0xFFF028/029 bit 0 decide
+
+    on = !cut && ( !attract_bit || ( (f028|f029)&1 && step in {1,3,5} ) )
+
+The state word already carries bit 0 as "play"; read it inverted (or
+post it inverted -- one `^ 1` in md_main.c's OR) and the picture-step
+OFF rule is safe again, because it can only fire in the attract.
