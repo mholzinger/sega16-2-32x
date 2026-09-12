@@ -13984,6 +13984,10 @@ RAMCODE void m_main(void)
 #endif
                             unsigned vx = (unsigned)(vx00 + col * 8) & 0x3FF;
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
+#ifdef C1_PUNCH
+                            if (isfg && (unsigned)col < 40u && row < 28)
+                                cat1scr[row][col] = (uint8_t)((w && (w & 0x8000)) ? 1 : 0);
+#endif
                             /* 2026-09-02 (Mike's crystal ball, s16_fix2.bs1):
                              * the backstop blanked the BG's bottom band
                              * UNCONDITIONALLY; the round-clear screen has
