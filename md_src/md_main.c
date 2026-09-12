@@ -2622,7 +2622,9 @@ void shim_vblank(void) {
 	{
 		static uint8_t st_seq, st_on;
 		uint16_t c14 = *mars_comm14;
-		if (!st_on && c14 == 0xB008) st_on = 1;
+		/* the master answers the beacon with 0xB1xx every window (the
+		 * boot hold below waits for it); take the channel after that */
+		if (!st_on && ((c14 & 0xFF00) == 0xB100 || c14 == 0xB008)) st_on = 1;
 		if (st_on) {
 			st_seq = (uint8_t)((st_seq + 1) & 0xF);
 			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 8)
