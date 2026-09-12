@@ -368,3 +368,18 @@ rig's frame rate did not move (its wall is windows per vint). Fold 1's
 hole punch is built per pixel (C1PUNCH=1, c1p95b, LOOP29 244b), Mike's
 eye pending. Order stands: fold 5 with the copy on the packet side, then
 fold 3 / RELBANK on the rig with BOOTFLIPRATE + BOOTGATECHK.
+
+---------------------------------------------------------------------
+## BUILD A PASSED (Mike, 2026-09-13): the zombies rise behind the ground
+
+`rom/night/c1p95c.32x` (md5 85116f58) = vi95's flags + `C1PUNCH=1`.
+Card matched the rom (LOOP-DECOMPILE 107), rig frame rate at fr95e's,
+Mike's eye: behind. **The fold-1 line is c1p95c.** Still to glance at
+on the same rom, not a blocker: the player's legs through the grass
+tufts (the per-pixel half of the split).
+
+**Build B next: fold 2 on this line.** One change: `SETCOLS=1` on
+c1p95c's flags (sc95 measured it on vi95 at ~1.05 v/gen from 1.16 and
+exact in check mode; it has to be re-measured on the punch line as its
+own card). Gate: the wall on ares and the check mode's 0/0; Mike's
+question: does it look like c1p95c. Then Build C.
