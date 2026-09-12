@@ -2607,6 +2607,30 @@ void fbx_late_blast(void)
  * moved. 2.4KB of .data. */
 __attribute__((section(".data"), noinline))
 void shim_vblank(void) {
+#ifdef MD_STATE
+	/* FOLD 4 (PLAN-SINGLE-VINT, LOOP29 233): ONE STATE WORD, ONE WRITER.
+	 * Posted here, once per vint, from IRQ4's own top, on COMM14 -- a
+	 * channel free after the boot handshake (68K B007 -> master B008):
+	 *   [15:12] tag 0xE      [11:8] sequence (wraps)
+	 *   [7]     cutscene     0xFFF148 != 0 (NOTES-FROM-DECOMPILE 17)
+	 *   [6:4]   round        0xFFF142 & 7
+	 * Nothing here is shared with the tile-dirty mask, so the round can
+	 * no longer read as dirt by phase (217/226) and the SH-2 gets the
+	 * cutscene a frame ahead of the page words instead of detecting it
+	 * from the claim mix (209). Starts only once the master has answered
+	 * the beacon, so the boot wait on B007 is untouched. */
+	{
+		static uint8_t st_seq, st_on;
+		uint16_t c14 = *mars_comm14;
+		if (!st_on && c14 == 0xB008) st_on = 1;
+		if (st_on) {
+			st_seq = (uint8_t)((st_seq + 1) & 0xF);
+			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 8)
+				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4));
+		}
+	}
+#endif
 #ifdef BOOT_PRECONSUME
 	/* WHERE DOES THE TIME GO BEFORE THE CONSUME? (2026-09-08, LOOP27 53)
 	 * s16_span2 on hardware: the consume itself takes 8-24 lines (YELLOW,
