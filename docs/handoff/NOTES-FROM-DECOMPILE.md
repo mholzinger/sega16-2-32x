@@ -1828,3 +1828,29 @@ against the LIVE dump; check mode re-run. Your "4,000 random windows,
 
 Addendum to 28: with the corrected header, check mode reads 0/0 over
 3,046 planes of steady play (was 6.43/1.13). Fold 2 exact; wall ~1.05.
+
+---------------------------------------------------------------------
+## 32. 2026-09-13. Why the baked scan may still read 0.107: its table lives in the cartridge. For the look after the punch card, not a card
+
+Build B's census: scan 0.291 -> 0.107 v/gen. The lookup is ~600
+extent entries per plane, which should be well under that. Two things
+in the tree say where the rest goes:
+
+  1. `sh_src/mars.ld` puts `.rodata` inside `.text` at 0x02000000 -- the
+     cart window. `setcol_idx`/`setcol_ent` are `static const`, so
+     every entry the scan reads is a cart access, three byte loads an
+     entry, on the bus the 68000 fetches the game from (the game runs
+     from the cart, rebased; the shim moved its own hot code to WRAM for
+     exactly this contention, md_main.c "RAMCODE"). The old cell walk
+     read TILEMAP_C from SDRAM.
+  2. The scan runs once per plane and alt set (checked: `nrows = 0`,
+     `BM->row = 0xFF` after one call), so it is not redundant work.
+
+So the number to test is placement, not the algorithm: copy the
+current scene's table (9-17 KB, NOTES 21) into SDRAM at `mds_install`
+and point the scan at the copy, and pack an entry as one u32 (set|cat,
+first, last) so it is one load. Expected: the scan toward the
+arithmetic (tens of microseconds), and one less SH-2 reader on the cart
+bus during the 68000's pass. If SDRAM is too tight for 17 KB, the
+scene's FG pages alone (the level's five) are what the scan touches in
+play; the BG pages could stay in the cart at half the cost.
