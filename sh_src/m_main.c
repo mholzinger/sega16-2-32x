@@ -5511,6 +5511,18 @@ __attribute__((noinline)) static void disp_gate(void)
          * The one-window rule below is the measured best (vi58/59). */
         uint8_t on = (mds_cl_t > mds_cl_n) ? 1u : 0u;
         if (mds_cl_t + mds_cl_n < 16) on = mds_onscreen;   /* blank: hold */
+#ifdef MD_STATE
+        /* FOLD 4: the game's own cutscene byte (0xFFF148, via the state
+         * word) forces OFF with no detector lag -- the face plane in the
+         * first frame. The claim mix still decides ON, because the title
+         * and the eye read round 0, cut 0 (LOOP29 233 dump) while their
+         * sets sit outside every table; only what is on screen can say
+         * the level is. */
+        {
+            uint16_t sw = MD_STATE_W();
+            if (MD_STATE_OK(sw) && MD_STATE_CUT(sw)) on = 0;
+        }
+#endif
         if (on && !mds_onscreen) {
             /* 217: the PUBLISHED round, not the remembered one. The eye
              * sits between level 1's demo and level 2's; vi64 came back
