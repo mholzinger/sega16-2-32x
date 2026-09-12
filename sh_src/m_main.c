@@ -5040,9 +5040,11 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #ifdef C1_PUNCH
                             if (punch) {
                                 const volatile uint8_t *c1 = CAT1SCR_U(y >> 3);
+                                const volatile uint16_t *c1c = CAT1CODE_U(y >> 3);
+                                unsigned py = (unsigned)y & 7u;
                                 unsigned sx = (unsigned)(lo - 184);
                                 do {
-                                    if (!c1[sx >> 3]) *d = (uint8_t)(base + *s), PENTAP(e[4], *s);
+                                    if (!c1_hit(c1, c1c, sx, py)) *d = (uint8_t)(base + *s), PENTAP(e[4], *s);
                                     d++; s++; sx++;
                                 } while (--m);
                             } else
