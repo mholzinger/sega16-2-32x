@@ -2629,8 +2629,13 @@ void shim_vblank(void) {
 	 * from the claim mix (209). Starts only once the master has answered
 	 * the beacon, so the boot wait on B007 is untouched. */
 	{
-		static uint8_t st_seq, st_on;
+		static uint8_t st_seq, st_on, st_run;
 		uint16_t c14 = *mars_comm14;
+		{	/* credited falls with the game's running bit (game over) */
+			uint8_t run = *(volatile uint8_t*)0xFFF026 & 1;
+			if (st_run && !run) shim_credited = 0;
+			st_run = run;
+		}
 		/* the master answers the beacon with 0xB1xx every window (the
 		 * boot hold below waits for it); take the channel after that */
 		if (!st_on && ((c14 & 0xFF00) == 0xB100 || c14 == 0xB008)) st_on = 1;
