@@ -1295,7 +1295,12 @@ static inline unsigned md_state_on(void)
      * -- every set to the dynamic allocator, the level black. Until the
      * credited-play discriminator exists (NOTES 24), the picture steps
      * are left to the claim mix like everything else. */
-    if (st == 0 || st == 2 || st == 4) return 2;
+    /* 239: with the play bit now the shim's CREDITED flag (coin/start
+     * seen, until game over), a credited game is left to the claim mix
+     * and the picture steps force OFF only in the attract -- vi90's
+     * demo gain without its play regression. */
+    if (MD_STATE_PLAY(w)) return 2;
+    if (st == 0 || st == 2 || st == 4) return 0;
     /* vi90 (LOOP29 235): vi88's only CLEAN rig demos were the ones the
      * word forced ON (step 3); vi75/vi89, where the claim mix decides,
      * show the black sets. Force ON where the step is unambiguous --
