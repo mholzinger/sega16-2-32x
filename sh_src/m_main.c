@@ -1289,7 +1289,13 @@ static inline unsigned md_state_on(void)
      * 2, 4 = high-score table, intro pictures, eye) and leaves ON to the
      * claim mix, exactly vi75's behaviour there. */
     unsigned st = MD_STATE_STEP(w);
-    if (st == 0 || st == 2 || st == 4) return 0;
+    /* vi90 REGRESSION (Mike, 22:00, LOOP29 238): a game coined during a
+     * picture step keeps that step in 0xFFF031 for the whole credited
+     * game, so "0/2/4 = OFF" held the level's round off screen in PLAY
+     * -- every set to the dynamic allocator, the level black. Until the
+     * credited-play discriminator exists (NOTES 24), the picture steps
+     * are left to the claim mix like everything else. */
+    if (st == 0 || st == 2 || st == 4) return 2;
     /* vi90 (LOOP29 235): vi88's only CLEAN rig demos were the ones the
      * word forced ON (step 3); vi75/vi89, where the claim mix decides,
      * show the black sets. Force ON where the step is unambiguous --
