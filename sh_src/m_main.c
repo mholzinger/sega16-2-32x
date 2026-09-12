@@ -5132,8 +5132,8 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
              * expansions); the zoomed paths keep the per-pixel form --
              * .ramtext has ~200 bytes to spare on the line (28,472 of
              * 28,672) and the cache in all 28 expansions overflowed it. */
-            struct c1cache c1s = { 0xFFFFu, 0, 0 };
-#define C1P(sx) (punch && c1_cell(&c1s, c1row, c1crow, (sx), c1py))
+            struct c1cache c1s = { 0xFFFFu, 0, 0, c1row, c1crow, c1py };
+#define C1P(sx) (punch && c1_cell(&c1s, (sx)))
 #define C1PZ(sx) (punch && c1_hit(c1row, c1crow, (sx), c1py))
 #else
 #define C1P(sx) (punch && c1_hit(c1row, c1crow, (sx), c1py))
