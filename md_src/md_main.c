@@ -2037,13 +2037,17 @@ static void r60_push(void) {
 		 * bits 4-3 emitter records with all-zero output (sat 3) |
 		 * bits 2-0 emitter records for a set with no MD line (sat 7),
 		 * both from m_main.c md_emit_art via packet word 1. */
+		 * vi82 on the rig: zout saturated, noline 6. vi83: bit 7 bias |
+		 * bit 6 VRAM-zero any | bit 5 pen map all zero (any) | bits 4-3
+		 * zero-output records whose ROM source reads zero UNCACHED (sat
+		 * 3) | bits 1-0 ... reads zero CACHED (sat 3). */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
-			| (*(volatile uint16_t*)0xFFA1E8 ? 0x40 : 0)
-			| (*(volatile uint16_t*)0xFFA1E2 ? 0x20 : 0)
-			| (((tw >> 11) & 3) << 3)
-			| ((tw >> 8) & 7));
+			| (*(volatile uint16_t*)0xFFA1E2 ? 0x40 : 0)
+			| (((tw >> 12) & 1) << 5)
+			| (((tw >> 10) & 3) << 3)
+			| ((tw >> 8) & 3));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
