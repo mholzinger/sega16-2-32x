@@ -1696,3 +1696,61 @@ md_state_on then has every case from bytes the game maintains:
 Note 28's "stale from the coin" was imprecise: the byte moves at game
 start (0x1E4E writes 4, then the boot path leaves it at 2) and then
 holds. Same conclusion.
+
+---------------------------------------------------------------------
+## 30. 2026-09-12 (decompile -> builder). vi94 is "incredibly slow" on the rig: the three changes since vi75, and the A/B that names the one
+
+Mike on vi94: incredibly slow. Between vi75 (43ef418) and vi94 (2851244)
+exactly three things are compiled into the rom (the TILE_VERIFY,
+BOOTTILEVER and BOOTFLIPRATE code is flag-only and absent from vi94 --
+checked in the binaries). Speed on the rig has NOT been measured on any
+build since vi75: vi91-vi94's rig numbers are black shares. So the
+slowness is unattributed, and the way back is one probe run per change:
+
+    knob                    what it is                        how to A/B
+    MDSTATE=1               the state word on COMM14, round   build vi94's
+                            from it, cut -> OFF, steps 0/2/4  line without
+                            -> OFF, 3/5 -> ON, logo exempt    MDSTATE
+    236 C1_SOFT = 0         under C1_NOFB a cat-1 tile now    needs a source
+    (unconditional under    EVICTS instead of leaving the     guard: restore
+     C1_NOFB)               slot blank                        the vi75 define
+    239 shim_credited       coin/start sets, the falling edge  covered by the
+                            of 0xFFF026 bit 0 clears           MDSTATE A/B
+
+Measure each with `BOOTFLIPRATE=1` on the rig (presented frames per 64
+vints, unattended in the attract: fr75 read 21 19 7 22 16). Mike's
+"slow" is in credited play, so one run of each with a start press is
+the number that matters; the attract run is the free first cut.
+
+Where I would look first, from the code alone (no measurement, so a
+ranking only):
+
+  1. **236 on a rig that ships 7 tiles a vint.** Cat-1 tiles evicting
+     hot ways is more tile traffic per window on exactly the machine
+     whose ship rate is a third of ares' (your 231/237). Every eviction
+     is a re-ship, every re-ship is a window's worth of conversion, and
+     fewer windows per vint IS the rig's frame rate. Ares cannot show
+     it: its consumer is two orders faster (172).
+  2. **The credited flag's falling edge.** The game clears 0xFFF026
+     bit 0 at the start press; your clear fires on that edge one vint
+     after the set. A held button re-sets it; a short one does not, and
+     then credited play reads step 2 -> OFF -> the level refused: vi90's
+     shape, and vi90 was also "slow everything". Note 29's byte has no
+     edge: credited <=> 0xFFF026 bit 0 == 0.
+  3. **COMM14 traffic** is a word per vint and one suppressed answer;
+     no reader of the 0xB1xx answer is left on the 68K side but the boot
+     hold, which now accepts E. Least likely.
+
+The recovery line, if the A/B says what I expect: vi75's flags + MDSTATE
+with (a) the credited bit posted as `~0xFFF026 & 1` (note 29) and
+(b) C1_SOFT restored to vi75's rule under C1_NOFB, the slot-pressure
+blanks handled by the re-ship knob you already named (237's rate) rather
+than by eviction. That keeps the two parts of fold 4 that were free --
+the round out of the dirty mask, the transformation forced off -- and
+drops the two that cost.
+
+And the plan: fold 2 (the maps scan from `setcols_md.h`, NOTES 21) is
+the wall lever and has not been touched since it was handed over. The
+rig's black tiles are a rate knob by your own measurement (237); they
+do not move the wall. When vi94's slowness is attributed, fold 2 is the
+next build that changes a vint number.
