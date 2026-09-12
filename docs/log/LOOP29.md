@@ -4972,3 +4972,38 @@ The ranking text (211) is likewise NOT explained by the load; its text
 palette needs the same phase-keyed look. 211's texture finding (the
 dangling set-11 assignment) stands: it was read from the allocator's own
 tables, not from a frame offset.
+
+## 212-214. HYSTERESIS FAILED TWICE; THE OFF-SCREEN BATCH IS A KNOB (2026-09-12 04:15)
+
+Mike on vi59, "mostly just missing tile issues": level 2's top band has
+vertical streaks -- the documented 40-tile vblank overrun on hardware --
+plus a black block; the round-clear text garble is pre-existing (vi44
+041722 had it) and the crystal-ball scene is purple on the arcade too.
+
+**Headless does not show the band.** The level-2 attract demo on vi59/60
+renders clean at 3800-4700 (frame 4200 viewed: ceiling, stalactites,
+dragon, no streaks). What that sweep DID show: vi45's level-2 demo is
+more than half black (black share 0.53-0.61, luma 49-65) where vi59
+renders it (0.042, luma 103-113) -- the old refuse rule with round 0's
+table pinned through the second demo. 209 fixed level 2's demo outright.
+
+**212, vi60 -- off needs n >= 4t for 3 vints:** plane partial (0.19) from
+1595 to 1630, full at 1635 (vi58: 1600). Flips and play identical.
+**213, vi61 -- and on needs t >= 64:** plane partial (0.12-0.19) from
+1620 to 1665, full at 1670; play path worst black diff 0.011 at 1360
+(vi58/59: 0.001). Both WITHDRAWN: any damping makes the flag sluggish in
+the face, the one scene it exists for, and 213 leaked into play.
+
+**214:** vi59's one-window flag logic restored; the off-screen ship rate
+is `MDBATCHOFF=N` (default 40). Two builds staged for Mike to rank the
+hardware tear against the plane's arrival:
+
+    vi62   (md5 34810ad3)  MDBATCHOFF=40   plane on the first field frame
+    vi62b  (md5 3882eb1c)  MDBATCHOFF=24   plane ~60 frames later, no
+                                           40-tile DMA in a cutscene
+
+**The principled signal, for daylight:** LOOP-DECOMPILE's WRAM byte
+0xFFF148 is non-zero exactly when 0x3A00 puts pages 10/11 on screen. The
+68K shim already publishes the round in COMM10 bits 13-15; carrying that
+byte would make the cutscene edge instant and exact and retire the claim
+mix. Not built tonight.

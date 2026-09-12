@@ -1466,6 +1466,9 @@ static uint8_t flick_bay[16];               /* 4x4 Bayer, boot-built,
 #else
 #define MD_BATCH     12
 #endif
+#ifndef MD_BATCH_OFF
+#define MD_BATCH_OFF 40            /* 214: ship rate with the round OFF screen */
+#endif
 #else
 #define MD_BATCH     40
 #endif
@@ -5393,7 +5396,17 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
 __attribute__((noinline)) static void disp_gate(void)
 {
 #if defined(MD_STATIC) && defined(MD_ROUND)
-    {   /* 209: the claim mix of the window just closed */
+    {   /* 209: the claim mix of the window just closed.
+         * 212: HYSTERESIS. Going OFF needs the non-table cells to outnumber
+         * the table's 4:1 for 3 consecutive vints; coming ON needs one
+         * window with the table ahead. Level 2 carries 248 cells of set 1
+         * outside its table, and a scroll burst of them tipped a single
+         * window to "off": batch 40 in play (the top-band tear Mike saw)
+         * and the pins yielding mid-level (the black block). */
+        /* 214: vi60 (3-vint off hysteresis) and vi61 (+ volume to come
+         * on) both made the flag SLUGGISH in the face -- plane partial
+         * for 40-50 frames, and vi61 cost 1.1% black on the play path.
+         * The one-window rule below is the measured best (vi58/59). */
         uint8_t on = (mds_cl_t > mds_cl_n) ? 1u : 0u;
         if (mds_cl_t + mds_cl_n < 16) on = mds_onscreen;   /* blank: hold */
         if (on && !mds_onscreen) {
@@ -13338,14 +13351,20 @@ RAMCODE void m_main(void)
                      * lands in ~8 lines. */
                     int bmax = (disp_blank || !r60_disp_on
 #if defined(MD_STATIC) && defined(MD_ROUND)
-                                || !mds_onscreen   /* 209: a cutscene does
-                                                    * not scroll; at 24 the
-                                                    * flames starved the
-                                                    * chevron plane 60 frames,
-                                                    * at 40 it is up on the
-                                                    * first field frame */
 #endif
-                               ) ? 40 : MD_BATCH;
+                               ) ? 40 :
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                               /* 209/214: a cutscene does not scroll; at 24
+                                * the flames starved the chevron plane 60
+                                * frames, at 40 it is up on the first field
+                                * frame. But 40 is the documented vblank
+                                * overrun on hardware (the top-band tear),
+                                * so `make ... MDBATCHOFF=N` ranks it on the
+                                * rig. */
+                               (!mds_onscreen ? MD_BATCH_OFF : MD_BATCH);
+#else
+                               MD_BATCH;
+#endif
                     /* (md_cut || display-on tried 2026-09-06: consume max 90
                      * lines — the active-display DMA rate, the batch-40 grave) */
                     sc[2] = 0xFFFF;

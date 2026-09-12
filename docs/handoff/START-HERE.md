@@ -197,7 +197,7 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## CANDIDATE, ON THE RIG AS `rom/night/vi59.32x` (md5 1514f850), AWAITING MIKE'S EYE (2026-09-12 04:10)
+## CANDIDATE, ON THE RIG AS `rom/night/vi62.32x` (md5 34810ad3) WITH `vi62b.32x` (md5 3882eb1c) AS ITS A/B, AWAITING MIKE'S EYE (2026-09-12 04:20)
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
@@ -208,6 +208,10 @@ chevron plane, the flat flames, the black wall band, vi51's stutter), plus
 NOT fix the title logo -- LOOP29 210's retraction). OPEN, attract only:
 the logo's slide-in palette and the ranking screen (211), both need a
 capture keyed on the game's own palette phase, not a frame offset.
+vi62 = vi59's logic + `MDBATCHOFF` (LOOP29 214): 40 in vi62, 24 in vi62b
+-- Mike ranks level 2's top-band tear (hardware only) against the chevron
+plane's arrival. vi60/vi61 (hysteresis) withdrawn. Next signal:
+0xFFF148 via the mailbox (LOOP-DECOMPILE, LOOP29 214).
 Headless ares: coined-path flip rate identical to vi45, play path
 identical to vi45, the transformation's blue plane up within 25 frames of
 the cut at the arcade's share with coloured flames. NOT shown by headless:

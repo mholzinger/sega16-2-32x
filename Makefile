@@ -2293,6 +2293,15 @@ endif
 ifdef MDBATCH
 SHCCFLAGS += -DMD_BATCH_N=$(MDBATCH)
 endif
+# `make ... MDBATCHOFF=N` = LOOP29 214. Tiles shipped per vint while the
+# ROUND IS OFF SCREEN (a cutscene: face, eye, intro, ranking). Default 40:
+# the chevron plane is up on the first frame of the field. 40 is also the
+# documented vblank overrun on real hardware, and Mike saw a top-band tear
+# at level-2 entry on vi59 that headless ares does not show. Rank 40 vs 24
+# on the rig; the play batch stays MDBATCH.
+ifdef MDBATCHOFF
+SHCCFLAGS += -DMD_BATCH_OFF=$(MDBATCHOFF)
+endif
 # MDSTATIC=1 = STATIC-SCENE arc (docs/design/STATIC-SCENE.md): per-scene
 # static MD pen tables (tools/mdpen_bake.py -> sh_src/pal_scenes_md.h)
 # installed at the PALSTATIC scene load, the table's sets pinned against
