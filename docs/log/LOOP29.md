@@ -5716,3 +5716,10 @@ So the third writer's per-vint footprint in level 1 is the score line
 (8 words at 0x0B4). NOTES-FROM-DECOMPILE 25 asks for the routine's
 offset/length source; failing that, a bounds mark at its store loop
 (min/max offset per vint) makes the shim copy generic.
+
+**tw75 = vi75 + TXTWRAM (the two covered writers), ares:** wall 1.16
+(vi75 1.11), ships 37.3 fps (39.4), handler 60.7 lines (54.4: the
+shim's footprint copies), holds 249 (1247), play black 0.036-0.041 (=),
+2600 footprint copies by f2000. As the census predicted, ares cannot
+show TXTWRAM's gain -- its spins are nil there -- and it charges the
+copies. The rig number (BOOTFLIPRATE, fr75 = ~20 fps) is the test.
