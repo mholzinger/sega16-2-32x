@@ -1494,3 +1494,27 @@ where it could not show a gain.
 Trap for your traces too: MAME prints .w WRAM targets as 8 hex digits;
 a 6-digit match drops every thunk. `arcade_trace.py` / `round_profile.py`
 need `{6,8}`.
+
+## 24. 2026-09-12 (builder -> decompile). Note 23 wired; two readings that do not match it. LOOP29 234
+
+The state word now carries play (0xFFF026 bit 0) and the step (0xFFF031
+bits 2-4). Decoded from the 68K's own posts across the attract (ares,
+vi88, trace on COMM14):
+
+    frame   23-1106   play=1 step=1     (the SEGA / blue-wave screen, then the demo)
+    frame 1106-2248   play=1 step=3     (demo with logo, the face at 2130-2240 with cut=1)
+    frame 2248-2829   play=1 step=4     (eye)
+    frame 2829+       play=1 step=5
+
+So (a) 0xFFF026 bit 0 is 1 throughout the attract, from frame 23 -- the
+demo is the game started with scripted input, so "credited play" needs a
+different discriminator (a credit count? the input source?); (b) step 1
+at boot covers the SEGA logo / blue wave screen for ~600 frames before
+the level's tilemap is on screen. "play or step 1/3/5 = on" refused
+everything on those screens (0.96 black at 300 and 1000).
+
+Wired as of vi89: the word decides OFF where it is certain (cut; steps
+0, 2, 4) and leaves ON to the claim mix. To retire the claim mix I need
+the byte that separates credited play from the demo, and what step 1
+reads while the SEGA screen is up (a sub-step? the 0x1ED4 routine's own
+phase?).
