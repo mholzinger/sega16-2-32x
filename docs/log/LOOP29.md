@@ -5736,3 +5736,26 @@ cells emitted as MD_BLANK_SLOT by reason (no slot / cut-mode / dirty
 under cut), carried in the six packet bits, rig against ares in the
 same demo. C1_SOFT stays 0 under C1_NOFB (it is correct by
 construction: there is no fallback), it just is not this.
+
+## 237. TXTWRAM ON THE RIG COSTS HALF THE FRAME RATE; THE BLANK-CELL CENSUS (2026-09-12 22:55)
+
+**frtw75 (vi75 + TXTWRAM + BOOTFLIPRATE) on the rig: 9, 1, 20, 11, 9
+presented frames per 64 vints against fr75's 21, 19, 7, 22, 16.** The
+mirror copies as written (the shim copies each dirty footprint into FB
+text staging at FM=0 BEFORE the raise) push the post later on hardware,
+where a 68K FB write costs 0.05 lines a word, and the windows per vint
+fall. Ares charged it 0.05 v/gen and could not see the rest. So fold 5
+cannot ship the mirror this way: the copy has to ride the packet/DREQ
+side or land after the post, and the decompile thread's expected gain
+(the gate spins) has to be measured against this cost on the rig, not
+assumed. Noted for NOTES-FROM-DECOMPILE.
+
+**The census.** A name-table cell is emitted as the blank slot for
+three reasons (m_main.c, the NT payload): no way was claimed
+(slot == MD_BLANK_SLOT), a dirty slot under cut mode (MDA 5), a dirty
+slot outside cut mode (MDA 6, "a pending cell would show foreign art").
+The third is the suspect for persistent per-tile black: a slot whose
+art never ships stays dirty, and every chunk visit re-blanks its cells.
+vi92 = vi91 + BOOTTILEVER carrying, per 64 windows, that count >> 2
+(sat 63) in the six packet bits; ares reads the raw statics from SDRAM
+at the matching attract frames.
