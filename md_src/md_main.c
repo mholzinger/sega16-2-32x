@@ -68,9 +68,6 @@ static volatile uint16_t* const mars_comm8  = (uint16_t*) MARS_COMM8;
 static volatile uint16_t* const mars_comm10 = (uint16_t*) MARS_COMM10;
 static volatile uint16_t* const mars_comm12 = (uint16_t*) MARS_COMM12;
 static volatile uint16_t* const mars_comm14 = (uint16_t*) MARS_COMM14;
-#ifdef MD_STATE
-static uint8_t shim_credited;            /* LOOP29 239: coin/start seen, until game over */
-#endif
 
 // Palette lives in FB staging now (game 0x840000 -> MD 0x85F000), read
 // in-window by the SH-2 — the 0xFFA000 shadow and its stream are gone.
