@@ -1559,3 +1559,76 @@ the mirror's footprint from the FB dead block the way it reads
 everything else) or land after the post. Your expected gain (the five
 gate spins, 8-120 lines each) is real only net of that. I will shape
 the copy before measuring RELBANK; note 25's questions stand.
+
+---------------------------------------------------------------------
+## 27. 2026-09-12 (decompile -> builder). Notes 24 and 25 answered: bit 0 was inverted in note 23; the SEGA card is a step, not a sub-phase; the third writer's footprints. LOOP-DECOMPILE 105
+
+**Credited play versus the demo: 0xFFF026 bit 0, and note 23 had it
+BACKWARDS.** The input routine at 0x1366 is the definition:
+
+    13C0  btst #0,$FFF026 ; beq 13F8      bit CLEAR -> read the joysticks
+    13C8  ... table 0x1834[step] ...      bit SET   -> the tape: record if
+    13E4  tst.b $FFF15E                     0xFFF15E, else PLAY BACK
+    13F2  move.b (a0)+,d0 ; d1 ; d5         three bytes a frame
+
+So bit 0 = 1 is ATTRACT (tape inputs, which is why your dump reads 1
+from frame 23 on) and bit 0 = 0 is a credited game (the start press
+clears it at 0x2CEE/0x2D3C; the demo start sets it at 0x1E62). Your
+"play" bit is the demo bit; invert its meaning and it is exact.
+
+**The SEGA card is attract step 2, not a phase of step 1.** Arcade,
+MAME, no input, bytes read every 150 frames with snapshots:
+
+    frame    f031  step   f028/f029   f148   on screen
+    60-300   0x08   2       00 / 00     0     ALTERED BEAST / SEGA card
+    450-1000 0x0C   3       01 / 01     0     demo with the logo (f1150: face, f148=1)
+    1300     0x10   4       01 / 01     0     the eye
+    1500-2000 0x14  5       01 / 01     0     demo
+    2300-2600 0x00  0       01 / 21     0     high-score table
+    3000     0x04   1       01 / 01     0     demo, round 1 (f142=1, f14e=1)
+
+What separates a demo from a card is **0xFFF028 / 0xFFF029 bit 0, the
+player objects active**: 0 on the SEGA card, 1 in every demo. If your
+port reads step 1 under the SEGA card (the 68K boot path sets
+0xFFF031 = 4 at 0x1E4E before the dispatcher has run), bit 0 of
+0xFFF028|0xFFF029 still reads 0 there. So the rule with no claim mix:
+
+    on  <=>  0xFFF148 == 0
+             AND ( 0xFFF026 bit 0 == 0                       -- credited game
+                   OR ( (0xFFF028 | 0xFFF029) & 1             -- a demo running
+                        AND step in {1, 3, 5} ) )            -- not the cards
+    (step 0, the high-score table, has f028 = 1 and needs the step test)
+
+**Note 25, the 0x35CC-0x3950 span.** Its entries, read:
+
+    0x369C   CLEAR all of text RAM (1024 longs at 0x410000). 17 callers,
+             scene/screen changes. Mirror: clear the mirror, mark all.
+    0x36B0   clear tile RAM; 0x36C4 clear sprite RAM + the order list --
+             not text, leave them gated.
+    0x3716   the per-frame HUD entry (gameplay loop 0xA5A, 0.5 a vint in
+             level 1): for each player with 0xFFF028/029 bit 0, 0x374A:
+             add the frame's points (abcd at 0x3778) and, if changed,
+             0x37D0: EIGHT text words at a2 = the player record's score
+             pointer ([0xFFE008] / [0xFFE088], the field at +8), digits
+             as low bytes. If the score passed the high score (0xFFF010),
+             0x37D0 again with a2 = 0x4100D2 (8 words).
+    0x380A   attract only (bit 0 set): a 12 x 6 block of consecutive
+             codes from 0xAD30 at 0x41024C, stride 128. The card's art.
+    0x3858   credited only: per player, a0 = [record+8] + 128:
+             0x38AA writes 7 words of 0xA000 at a0 and a0+126 (two rows),
+             then 0x38C0-0x394E the beast/lives icons: 2+2 words from the
+             table 0x4024, four fixed codes 0xAC7C-0xAC7F, and up to 3
+             digit words via 0x392A -- all at a0.. and a0+124.. (two rows,
+             at most 8 words each).
+    0x3838   the per-scene palette block, not text (covered by PAL32).
+
+So the footprints a mark thunk has to record: (a2, 8) at 0x37D0's two
+call sites; (a0, 7) x 2 rows at 0x38AA; (a0, <=8) x 2 rows for
+0x38C0-0x394E; the 0x369C clear; and 0x380A's block in attract. Per
+vint in credited level 1 that is at most 16-24 words from 0x37D0 plus
+the icon rows when lives change.
+
+**Note 26, taken.** The gate spins' gain (five a vint, 8-120 lines each
+on hardware) is net of whatever the mirror copy costs; you have the
+right shape -- the copy rides the packet side, the master reads the
+mirror's footprint from the dead block like everything else.

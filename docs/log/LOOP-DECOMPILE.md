@@ -5052,3 +5052,26 @@ instructions a vint here) were dropped from every count; the r60
 figures are A/B on the same rig and unaffected, entry 90's totals are
 low by ~0.4%. `tools/arcade_trace.py` and `round_profile.py` share the
 regex; fixed to `{6,8}` in the scripts I ran, not yet in the tools.
+
+---------------------------------------------------------------------
+## 105. CORRECTION to 103/NOTES 23: 0xFFF026 bit 0 is the ATTRACT bit; the SEGA card is step 2; the HUD writers read
+
+The builder's fold-4 dump (NOTES 24) read 0xFFF026 bit 0 = 1 through
+the whole attract. It does, because I had the bit inverted: the input
+routine at 0x13C0 reads the joysticks when the bit is CLEAR and the
+tape when it is SET (0x13C8-0x13F6, entry 78's recorder). Credited
+play is bit 0 == 0. Entry 103 and note 23 said the opposite; note 27
+carries the correction and the rule that needs no claim mix, with the
+arcade's own bytes per step from a no-input MAME run (0x08 SEGA card,
+players 0; 0x0C/0x14/0x04 demos, players 1; 0x10 eye; 0x00 table).
+
+Also read for NOTES 25: the 0x35CC-0x3950 span is a text-RAM clear
+(0x369C), two clears that are not text (0x36B0/0x36C4), the score
+writer (0x37D0: 8 words at the record's score pointer, or 0x4100D2 for
+the high score), the attract card block (0x380A: 12x6 at 0x41024C),
+and the lives/beast icons (0x38AA-0x394E: two rows of up to 8 words at
+[record+8]+128). Footprints and call sites in note 27.
+
+Provenance note: 103's "bit 0 = credited play" came from the SET site
+(0x1E62, "game start") without reading the consumer. The consumer is
+the input routine, and it says attract. Entry 50's rule, again.
