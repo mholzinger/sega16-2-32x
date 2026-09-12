@@ -2634,7 +2634,9 @@ void shim_vblank(void) {
 			st_seq = (uint8_t)((st_seq + 1) & 0xF);
 			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 8)
 				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
-				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4));
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4)
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF026 & 1) << 3)
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF031 >> 2) & 7));
 		}
 	}
 #endif
