@@ -755,3 +755,38 @@ The SH-2 consumer is straightforward and I had it building -- launch on
 `COMM10 & 0x8000` with a windows timeout so a scene whose wait is not
 the gameplay loop's cannot stall the pipeline -- but there is no point
 landing it until the signal exists. Reverted for now.
+
+---------------------------------------------------------------------
+## Owed measurement, paid — 2026-09-11: the bank divergence was your packet
+
+Your point 2 asked me to re-check the 266-of-40960 bank figure against
+page 12 rather than page 0. Done, on `rom/night/vi37.32x` (the current
+line) and on `rom/night/vi2.32x` (the rom you named), both attract, no
+input, `ares-headless --dump dram:0:0x80000` at frames 700 and 1000.
+
+**Retract entry 12's "the game writes tiles into whichever bank is
+current and nothing carries them to the other".** Compared bank0 against
+bank1 over all thirteen tilemap pages at frame 1000:
+
+    vi37   311 differing bytes, every one of them in page 12
+    vi2    385 differing bytes, every one of them in page 12
+    both     0 differing bytes across pages 0-11
+
+The banks are byte-identical everywhere the game's map lives. What
+diverges is the FBX packet, which is per-bank by construction — the 68K
+writes it into the current framebuffer — so it is not a defect and there
+is nothing to carry across.
+
+**And the map is completely static after load, which corroborates your
+retraction from the other side.** Between frames 700 and 1000, in BOTH
+banks, on BOTH roms, the only page that changed at all was page 12:
+
+    vi37  bank0 [(12, 313)]   bank1 [(12, 370)]
+    vi2   bank0 [(12, 402)]   bank1 [(12, 349)]
+
+Pages 0-11 are frozen for 300 frames. My entry 12 read page 0's 197
+changing bytes as "the scrolling plane rewriting its incoming column";
+it was the packet, exactly as you said, and now that the packet has moved
+the page does not change at all.
+
+Logged as LOOP-DECOMPILE 74.

@@ -3349,3 +3349,44 @@ The list is `docs/audit/bound_repairs.md`; the deletions are already in
 **Nothing is applied.** Extending six bodies and deleting five entries
 means opening the analysed project, and the next person to open it should
 do the whole pass at once rather than have me open it for eleven rows.
+
+---------------------------------------------------------------------
+## 74. RETRACTION — the framebuffer banks do not diverge. It was our packet.
+
+Entry 12 carried a spare finding: "the two framebuffer banks diverge in
+the staged tile region ... 266 of 40960 bytes differ. The game writes
+tiles into whichever bank is current and nothing carries them to the
+other." The rendering thread flagged that it was measured on page 0 of a
+build whose FBX packet lived in page 0, and asked for the redo against
+page 12 (LOOP29 138 moved it). This is the redo, and the finding is void.
+
+`ares-headless --frames N --dump dram:0:0x80000`, attract, no input, at
+N = 700 and 1000, on `rom/night/vi37.32x` and `rom/night/vi2.32x`.
+Tilemap page N is DRAM 0x12000 + N*0x1000; the second bank is +0x20000.
+
+**bank0 vs bank1 at frame 1000, all thirteen pages:**
+
+    vi37   311 differing bytes — all of them page 12
+    vi2    385 differing bytes — all of them page 12
+    both     0 differing bytes in pages 0-11
+
+Page 12 is where the FBX packet now lives, and the packet is per-bank by
+construction: the 68K writes it into the framebuffer that is current. So
+the divergence is the transport, not the game, and there is nothing to
+carry between banks. The 266 was the same thing seen through page 0.
+
+**Second result from the same dumps, free.** Between frames 700 and 1000
+the ONLY page that changed, in either bank on either rom, was page 12:
+
+    vi37  bank0 [(12, 313)]   bank1 [(12, 370)]
+    vi2   bank0 [(12, 402)]   bank1 [(12, 349)]
+
+The map is frozen for 300 frames. Entry 12 also read page 0's "197 bytes
+between 700 and 1000" as the scrolling plane rewriting its incoming
+column — that was the packet too, and the rendering thread had already
+retracted it from their side. Both halves of entry 12's spare finding are
+now gone, and the game demonstrably scrolls a static map.
+
+**The method note worth keeping:** a per-page breakdown would have caught
+this the first time. Summing a diff over a region hides which part of the
+region moved, and the part that moved was ours.

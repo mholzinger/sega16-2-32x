@@ -139,8 +139,12 @@ Probe flags, all `make ship-us FLAG=1`:
      advanced.
   5. **515 functions classified by signature, not read.** 150 are leaf
      helpers and are the least valuable thing left.
-  6. I owe the builder a redo of my framebuffer bank figure against
-     page 12.
+  6. ~~Redo the framebuffer bank figure against page 12.~~ **PAID**
+     (LOOP-DECOMPILE 74): the banks are byte-identical across pages 0-11
+     on both vi37 and vi2; every differing byte is the FBX packet in page
+     12, which is per-bank by construction. Entry 12's divergence finding
+     and its "scrolling plane rewrites its column" reading are both
+     retracted.
 
 ---------------------------------------------------------------------
 ## THE TRAP THAT COST THE MOST TONIGHT
