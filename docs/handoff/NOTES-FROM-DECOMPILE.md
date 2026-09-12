@@ -1294,3 +1294,36 @@ colours on a 16-vint cycle. The cycler writes the whole 8-colour line
 (four longs, 0x30F8-0x30FE; LOOP-DECOMPILE 42's "six colours" was wrong).
 The scripts are rom: 0x1A70E (line 19) and 0x1A78E (lines 20/21), 18-byte
 entries of a hold word and eight colours, count word first.
+
+---------------------------------------------------------------------
+## 18. 2026-09-12. R60TIGHT=1: r60_push 2,512 -> 1,676 a vint, packet unchanged. LOOP-DECOMPILE 97
+
+Mike asked this thread to go ahead on the 68000 lever. What landed:
+
+  - `R60TIGHT=1` (Makefile; md_main.c `r60_ne_longs`): the palette
+    pre-scan and the rowscroll compare as cmpm.l/dbne, the 17-byte belt
+    copy as longs. Off by default. Same packet by construction and by
+    `R60TIGHTCHECK=1`: 55,000 cross-checked scans, 0 disagreements.
+  - MAME, level 1, per vint: r60_push 2,512 -> 1,676; shim 4,559 ->
+    3,590; the 68K's frame wait 3,366 -> 4,055.
+  - ares-headless coined path: 947 -> 957 flips per 1600 frames. Noise.
+    The freed 68000 time is idle, which is what entry 88's caveat
+    predicted for this window.
+  - `rom/night/r60tight1.32x` (md5 030f5b5a) = your vi59 recipe + the flag,
+    built from HEAD 1ed642b (vi62b's line, MDBATCHOFF 24) + this change. Not pushed; your call.
+
+Two things you will want to know:
+
+  1. **`make ship-us` alone is not the night rom.** It leaves GAMEGATE
+     off and regenerates fmgate_tab.h without the gate thunks; that rom
+     read 603 flips where vi59 reads 947. The recipe that reproduces
+     vi59 token-for-token is in LOOP-DECOMPILE 97. If it lives in a
+     Makefile target nobody has to reconstruct it from .build_flags.
+  2. **The rowscroll compare found no change in 9,000+ vints** of attract
+     (through the level-2 demo) and level 1. Either the effect is rarer
+     than the every-vint compare assumes, or the mirror the compare reads
+     is not where the game's writes land. 180 instructions a vint either
+     way; not chased.
+
+The rest of r60_push is the rotor (~430) and the changed-block mask
+walk (~330). Both change the packet if done wrong; neither is a copy.

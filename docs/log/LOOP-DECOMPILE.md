@@ -4648,3 +4648,95 @@ entry 73 is for. Recorded as the size of OPEN item 5, and stopped.
 **Also for that pass:** 36 consecutive rows in `function_map2.md` overlap
 their predecessor — nested bodies, the thing that made entry 95's first
 number wrong.
+
+---------------------------------------------------------------------
+## 97. r60_push accounted for, and a third of it removed without changing the packet (2026-09-12)
+
+Mike: go ahead on the 68000 lever (entries 88-90). Rule 3 first: the
+routine was re-traced on the rom Mike is playing, then on the tree.
+
+**vi59, MAME, level 1, 20 frames from f2000, symbol map verified byte-
+identical to the embedded md_start.bin: r60_push 2,512 instructions a
+vint** (entry 90 read 2,621 on the previous build). By loop, with MAME's
+collapsed iterations attributed to the loop branch:
+
+    palette pre-scan  (16 longs, C while)         ~570   23%
+    rotor over 64 blocks (27 instr per visit)     ~430   17%
+    changed-block mask walk (1.6 blocks/vint)     ~330   13%
+    straight-line                                 ~250   10%
+    rowscroll compare (30 longs, C while)         ~180    7%
+    staging pack of dmask words                   ~160    6%
+    ids pack                                      ~150    6%
+    per-dirty-block setup                         ~125    5%
+    record terminator scan (up to 24)              ~86    3%
+    lost-push belt copy (17 bytes)                 ~85    3%
+    ndirty popcount                                ~82    3%
+
+Two of those are pure equality scans and one is a byte copy: the C
+compiles each long to seven instructions (move/cmp/bne/addq/addq/subq/
+bne, 64 cycles); cmpm.l + dbne is two (30 cycles). **R60TIGHT=1**
+(Makefile, md_main.c r60_ne_longs) replaces the two scans and copies the
+belt as four longs. What is shipped is unchanged by construction; proven
+by construction is not proven, so **R60TIGHTCHECK=1** runs both scans
+and counts disagreements in WRAM:
+
+    MAME, coined level-1 path, 3,000 frames:   18,038 pre-scans,
+      13,700 equal / 4,338 not, 0 disagreements; 2,906 rowscroll
+      compares, 0 disagreements
+    MAME, no-coin attract through the level-2 demo, 6,400 frames:
+      36,645 pre-scans, 26,805 equal, 0 disagreements
+
+The rowscroll table never changed in either run (rs_changed 0 of
+9,000+), so the helper's "changed" outcome is exercised only on the
+palette path — same asm, same constraints, n=30 instead of 16.
+
+**The measurement, on the night-rom recipe** (the tree's `make ship-us`
+alone leaves GAMEGATE off and regenerates fmgate_tab.h without the gate;
+that rom ran 603 flips against vi59's 947 and would have been a false
+baseline. The recipe is the -D set of vi59's .build_flags mapped back to
+Makefile variables, verified token-for-token):
+
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+        TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+        TEXTCAPEARLY=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 NBUILD1=1 \
+        MDSPRTOP=1 MDROUND=1 MDSREFUSE=1 GLOWMASK=1 MDBATCH=24 [R60TIGHT=1]
+
+    MAME 68K per vint, level 1       base       R60TIGHT
+      r60_push                       2,512       1,676     -33%
+      shim total                     4,559       3,590     -21%
+      frame wait                     3,366       4,055
+      executed                      12,369      12,097
+
+    ares-headless, coined path, flips per 100 frames, 1600 frames
+      vi59    32 100 57 100 77 77 98 13 50 50 46 47 50 50 50 50   947
+      base    32 100 57 100 77 77 98 13 50 50 46 47 50 50 50 50   947
+      tight   34 100 60 100 77 77 97 19 50 47 46 50 50 50 50 50   957
+
+Base reproduces vi59 exactly, so the recipe is right. The tight rom is
++10 flips, inside LOOP28 87's noise. **That is the expected shape**: the
+68000's freed time went to its frame wait, not to the display, because
+on this window the 68000 is not what paces the flip. Entry 88 said so:
+the 14% margin is a margin, not the binding constraint.
+
+**What it is worth in the 60 Hz arithmetic** (PLAN-68K-BUDGET): the
+shim runs once a vint at 60 Hz, so -969 instructions a vint against a
+gap of 1,898 leaves ~930. Cycles are better than instructions here (the
+asm is 15 cycles an instruction against the C loop's 9): about 4,000 of
+the 19,135-cycle gap by the 68000 timing tables, not measured.
+
+**Not done, and where the rest is:** the rotor (430, a 27-instruction
+body per visited block) and the mask walk (330) are the next two, and
+neither is a copy — both change what the packet carries if written
+wrong. The record scan and popcount are 170 together. Halving r60_push
+from here needs one of the two big ones.
+
+Rebuilt on HEAD 1ed642b after the builder made vi62b the line (MDBATCHOFF
+24), same coined path:
+
+      vi62b             32 100  59 100  67  67  94  15  51  49  41  46  47  50  50  49   917
+      vi62b+R60TIGHT    34 100  57 100  68  67  97  17  50  48  44  50  50  50  50  50   932
+
+`rom/night/r60tight1.32x` (md5 030f5b5a) is vi62b's line + R60TIGHT=1, staged in
+the tree and NOT pushed to the rig — Mike is on vi59's play pass. Flag
+off by default; nothing in the shipping line changes until it is turned
+on.

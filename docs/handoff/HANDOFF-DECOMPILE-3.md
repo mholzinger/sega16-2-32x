@@ -1,6 +1,6 @@
 # HANDOFF — the decompile thread, session 3
 
-Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 96
+Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 97
 entries. Session 2 ran 72-91; session 3 starts at 92.
 
 **Read entries 50, 71 and 88 before anything else.** 50 is the provenance
@@ -78,6 +78,11 @@ a rom map** (a false instruction inflates coverage and hides data).
 
 ---------------------------------------------------------------------
 ## OPEN
+
+  0. **The 68000 lever is open work now** (97): R60TIGHT=1 took a third
+     off r60_push with the packet unchanged; the rotor and the mask walk
+     are the next two, and both change the packet if written wrong.
+     Build on the night-rom recipe in 97, never bare `make ship-us`.
 
   1. **~460 functions still classified by signature, not read.** The
      ranked list is the `arcade hw` rows of

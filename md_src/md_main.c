@@ -1326,6 +1326,30 @@ __attribute__((noinline, section(".text.burn"))) static void shim_burn_rom(void)
 	for (bi = 0; bi < (uint16_t)(SHIM_BURN * 40u); bi++) ;
 }
 #endif
+#ifdef R60_TIGHT
+/* R60_TIGHT (2026-09-12, LOOP-DECOMPILE 97): the two equality scans in
+ * r60_push -- the 16-long palette pre-scan (502 instructions a vint at
+ * its loop head, 23% of the routine) and the 30-long rowscroll compare
+ * (170) -- compiled to 7 instructions / 64 cycles a long. cmpm.l + dbne
+ * is 2 / 30. Returns nonzero iff any of the n longs differ; what is
+ * shipped does not change. always_inline keeps it in .data with its
+ * caller (a .text copy would fetch from the cart under FM). */
+static inline __attribute__((always_inline))
+uint16_t r60_ne_longs(const uint32_t *a, const uint32_t *b, uint16_t n)
+{
+	uint16_t cnt = (uint16_t)(n - 1);
+	uint8_t ne;
+	__asm volatile(
+		"1:\n\t"
+		"cmpm.l (%[a])+,(%[b])+\n\t"
+		"dbne %[cnt],1b\n\t"
+		"sne %[ne]\n\t"
+		: [a] "+a" (a), [b] "+a" (b), [cnt] "+d" (cnt), [ne] "=d" (ne)
+		:
+		: "cc", "memory");
+	return ne;
+}
+#endif
 __attribute__((section(".data"), noinline))
 static void r60_push(void) {
 	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
@@ -1577,10 +1601,38 @@ static void r60_push(void) {
 					 * up to the first difference, then the walk
 					 * resumes from block start. */
 					{
+#ifdef R60_TIGHT
+						uint16_t eq = r60_ne_longs(mp4, sp4, 16);
+#ifdef R60_TIGHT_CHECK
+						/* probe: run the C scan too, count disagreements
+						 * at 0xFFA1B0, and let the C result decide */
+						{
+							static uint8_t chk_init;
+							const uint32_t *qa = mp4;
+							const uint32_t *qb = sp4;
+							uint16_t eqc = 16;
+							if (!chk_init) {
+								chk_init = 1;
+								*(volatile uint16_t*)0xFFA1B0 = 0;
+								*(volatile uint16_t*)0xFFA1B2 = 0;
+								*(volatile uint16_t*)0xFFA1B4 = 0;
+								*(volatile uint16_t*)0xFFA1B6 = 0;
+								*(volatile uint16_t*)0xFFA1B8 = 0;
+							}
+							while (eqc && *qa++ == *qb++) eqc--;
+							(*(volatile uint16_t*)0xFFA1B4)++;
+							if (!eqc) (*(volatile uint16_t*)0xFFA1B6)++;
+							if ((eqc != 0) != (eq != 0))
+								(*(volatile uint16_t*)0xFFA1B0)++;
+							eq = eqc;
+						}
+#endif
+#else
 						const uint32_t *qa = mp4;
 						const uint32_t *qb = sp4;
 						uint16_t eq = 16;
 						while (eq && *qa++ == *qb++) eq--;
+#endif
 						if (!eq) {
 							/* THE STREAK COUNTER (2026-09-08).
 							 * It was declared and READ at the
@@ -1690,8 +1742,24 @@ static void r60_push(void) {
 		 * loop measured 8 lines/vint; 30 longs is ~1.5) */
 		const uint32_t *ra = (const uint32_t*)((const uint16_t*)0xFF8000 + 0x7C0);
 		const uint32_t *rb = (const uint32_t*)0xFFA400;
+#ifdef R60_TIGHT
+		uint16_t k = r60_ne_longs(ra, rb, 30);
+#ifdef R60_TIGHT_CHECK
+		{
+			const uint32_t *xa = ra;
+			const uint32_t *xb = rb;
+			uint16_t kc = 30;
+			while (kc && *xa++ == *xb++) kc--;
+			if (kc) (*(volatile uint16_t*)0xFFA1B8)++;
+			if ((kc != 0) != (k != 0))
+				(*(volatile uint16_t*)0xFFA1B2)++;
+			k = kc;
+		}
+#endif
+#else
 		uint16_t k = 30;
 		while (k && *ra++ == *rb++) k--;
+#endif
 		if (k) {
 			rs_ship = 1;
 			ra = (const uint32_t*)((const uint16_t*)0xFF8000 + 0x7C0);
@@ -1720,9 +1788,18 @@ static void r60_push(void) {
 		 * costs at most one redundant raw re-ship. 0xFFA044..0xFFA054
 		 * (17 bytes; 0xFFA040 is the window-span word). */
 		{
+#ifdef R60_TIGHT
+			/* 17 bytes = 4 longs + 1: 85 instructions a vint -> 6 */
+			volatile uint32_t *lq4 = (volatile uint32_t*)0xFFA044;
+			const volatile uint32_t *lp4 = (const volatile uint32_t*)0xFFA0C0;
+			lq4[0] = lp4[0]; lq4[1] = lp4[1];
+			lq4[2] = lp4[2]; lq4[3] = lp4[3];
+			((volatile uint8_t*)0xFFA044)[16] = lp[16];
+#else
 			volatile uint8_t *lq = (volatile uint8_t*)0xFFA044;
 			for (uint16_t j7 = 0; j7 < 17; j7++)
 				lq[j7] = lp[j7];
+#endif
 		}
 		lp[0] = (uint8_t)K;
 		for (uint16_t j4 = 0; j4 < K; j4++)
