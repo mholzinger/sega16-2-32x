@@ -4570,3 +4570,50 @@ cannot reach it). `tools/patch_game.py` 1043 does thunk the queued-pointer
 writers at 0x2DC8 and 0x3C5A, and 945 records that the enqueue at 0x3C20
 forms an already-rebased 0xFF9800 -- so the hypothesis needs the OTHER
 enqueue sites checked, not those two. Left with them.
+
+## 200. THE CHEVRON RECORDS DO ARRIVE. THE 68K IS EXONERATED (2026-09-12 01:05)
+
+The decompile thread's reply (commit c0985e8) concluded "the records never
+arrive" in 68K palette RAM and hypothesised that the queue drain's
+destination, being loaded from the queue rather than an immediate, escapes
+the 0x840000 -> 0xFF9000 rebase. **Measured on vi45: both halves are
+wrong.**
+
+`tools/chevron_probe.lua` reads all 64 actor lines every frame and reports
+any line whose 14 words equal one of records 132-137 -- the blue ramp of
+LOOP-DECOMPILE 79 -- so arrival is observed, not inferred from a colour
+census. 4000 frames of attract, MAME, where the 68K side reads true:
+
+    arcade   6022 frame-line hits   records 132-137 all 929-1078
+    vi45     6616 frame-line hits   records 132-137 all 1028-1181
+
+**Ours writes them MORE often than the arcade, not less.** And the rebase
+is in: `tools/patch_game.py` 945 already records that 0x3C20 forms an
+already-rebased 0xFF9800, and a writer census over the same lines finds the
+game's own drain at 0x2DCC firing 64 times against the arcade's 28. The
+only other writers into those lines are three one-shot RAM clears at boot
+(0x8806C8, _start at 0x8C0446, and a RAMCODE clear at 0xFF1ECA).
+
+**So the loss is downstream of 68K palette RAM, and the mechanism is the
+MD sprite offload's SINGLE LINE.** LOOP-DECOMPILE 79's own trace is the
+key: the transform's palette SLOT walks with its record, (0,132) through
+(5,137), i.e. actor lines 64 to 69, changing every SECOND frame. The MD
+sprite path carries ONE set per frame -- `m_main.c:4415`, the anchor's 14
+pens into MDSPR_PAL -- and a record whose set is not the anchor and is not
+pen-identical to it is refused at 4317 and left to the framebuffer. The
+anchor is elected by a margin held over passes (4346-4370), which cannot
+track a set that moves every two frames. **So the player is dropped from
+the MD path for the whole transformation**, and what draws it then is the
+FB sprite path.
+
+**THE A/B, ON THE RIG AS `rom/night/vi46.32x` (md5 354093fa), NOT
+LAUNCHED:** vi45 plus `MDSPROFF=1` (LOOP29 176), which removes the MD sprite
+offload entirely and sends every sprite through the framebuffer. If the
+chevron appears, the anchor mechanism is the cause and the fix is to let
+the transform's six sets ride the line the way the beam does. If it is
+still missing, the defect is in the FB sprite path and MDSPR is innocent --
+and `SPR_TRUNC` is the next thing to pull, since the master skips a packet
+it reads as landed==0.
+
+**Cost:** MDSPROFF puts every sprite back on the SH-2, so vi46 will be
+SLOWER. It is a diagnostic, not a candidate.
