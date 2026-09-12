@@ -5329,3 +5329,30 @@ widened to .w for the extra bytes.
 
 `rom/night/vi72.32x` (md5 6ea6aabb) = vi71 + 226, staged, not launched.
 Checks pending.
+
+## 227. vi72 STATUS: THE TYPEWRITER GATE IS IN; THE ATTRACT'S SAME-ROUND RETURN MOVES WITH ANY 68K CHANGE (2026-09-12 15:00)
+
+    build   68K change                          plane full   second L1 demo black
+    vi70    --                                  1615         0.037 (x7 rerun)
+    vi71    +2 FMGATE entries (never run here)  1635         0.101-0.114 (x7 rerun)
+    vi72    +226 trampoline mask                1685         0.104-0.125
+    coined flips: vi71 and vi72 both match vi45; vi72 vs vi70 play path: worst black-share difference 0.002 at frame 1600
+
+226 did not move the return, so the trampoline post was not its cause
+either -- though the fix is right by construction and stays. Two gate
+entries that never execute in the attract change the return
+deterministically, and the plane's arrival moves 50 frames with a mask
+in the vint path. **The attract's same-round return is PHASE-SENSITIVE
+to 68K-side layout and timing**, and vi70's clean 3.7% is a phase it
+happens to sit in. What the black rectangles ARE on that return (tags,
+slots, text cells?) is not established; every mechanism I named for them
+since 216 has been retracted by a measurement.
+
+**What only the rig decides for vi72:** the round-clear text complete
+(225; neither emulator drops the FB write), and level 1 after a
+transformation (the same-round return in play). If both are clean, vi72
+is the line and the attract figure is noise. If the horizon bands, vi70
+stays the line and the typewriter needs a different vehicle (route it
+to the WRAM text mirror, TXTWRAM, instead of gating it).
+
+`rom/night/vi72.32x` (md5 6ea6aabb) staged, not launched.
