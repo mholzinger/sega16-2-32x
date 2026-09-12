@@ -2215,7 +2215,11 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
 #endif
-        if (ti < MDSTATIC_N && !mds_s_line[ti][cset]) {
+        if (ti < MDSTATIC_N && !mds_s_line[ti][cset]
+#ifdef MD_STATE
+            && !md_state_extra(cset)     /* 234: attract step 3's logo sets */
+#endif
+            ) {
             MDA(30);                 /* refused: not in the scene's table */
             return;
         }
