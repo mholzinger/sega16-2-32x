@@ -5603,3 +5603,31 @@ posts; nothing reads its round field now.
 
 `rom/night/vi87.32x` = vi75's line + MDSTATE=1. Gates pending (ares:
 face plane, aligned return, play black; rig: attract demos).
+
+## 234. FOLD 4 COMPLETE: THE ATTRACT STEP RETIRES THE CLAIM MIX (2026-09-12 22:05)
+
+**vi87 (233) never booted, twice.** Cut 1 dropped the master's per-window
+0xB1xx answer on COMM14; cut 2 kept it but the 68K's boot hold
+(md_main.c "HOLD THE GAME until the master's V-ISR is armed", COMM14 =
+B008 or B1xx) started polling AFTER the vint handler had already taken
+the channel for the state word: 582,330 reads of tag E at one pc in
+400 frames (trace-access on 0xA1512E), the game never released, screen
+black on ares and rig alike. The hold now accepts E (the handler only
+posts E after it has itself seen B1xx/B008).
+
+**The decompile thread's answer (NOTES-FROM-DECOMPILE 23, f694701):**
+"the level's tilemap is on screen" is 0xFFF026 bit 0 (credited play,
+with 0xFFF148 clear) or attract step 0xFFF031 bits 2-4 in {1, 3, 5}
+(the demo; 3 with the logo over it). Steps 0/2/4 are the high-score
+table, the intro pictures and the eye -- uploaded INTO the level pages
+through the level's own page tables, which is why 233's page-word idea
+could not work. 0xFFF148 belongs to the transformation object alone
+(note 17 corrected).
+
+**234:** the state word carries play (bit 3) and the step (bits 2-0).
+`md_state_on()`: cut -> off; play -> on; else on iff step in {1,3,5}.
+The claim mix no longer decides anything (its counters stay as MDS
+diagnostics). Step 3 admits the logo's sets 37-46 and texture 11 past
+the refuse rule (`md_state_extra`), keyed on the step, not detected.
+`rom/night/vi88.32x` = vi75's line + MDSTATE=1. Gates pending: ares
+title/demo/eye/face/return/play, rig attract demos.
