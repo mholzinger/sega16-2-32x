@@ -1,0 +1,139 @@
+rom          262144 bytes
+  code        75442  28.8%   (19137 instructions)
+  data       186702  71.2%
+    named    127865  68.5% of data  (44 regions)
+    unnamed   58837  31.5% of data  (172 runs)
+
+UNATTRIBUTED RUNS, largest first — with who points into them
+  0x21400-0x232A0    7840 bytes  62 references
+      <- 0x1DD28  data  long at 0x1DD28
+      <- 0x1E85C  data  long at 0x1E85C
+      <- 0x1DD58  data  long at 0x1DD58
+      <- 0x1E8AC  data  long at 0x1E8AC
+      ... 58 more
+  0x3E4AC-0x40000    6996 bytes  7 references
+      <- 0x01838  data  long at 0x01838
+      <- 0x0183C  data  long at 0x0183C
+      <- 0x14C1C  data  long at 0x14C1C
+      <- 0x198AA  data  long at 0x198AA
+      ... 3 more
+  0x25A24-0x26C20    4604 bytes  1 reference
+      <- 0x14E06  data  long at 0x14E06
+  0x1EF20-0x20000    4320 bytes  7 references
+      <- 0x198A2  data  long at 0x198A2
+      <- 0x0F640  data  long at 0x0F640
+      <- 0x13112  data  long at 0x13112
+      <- 0x130B2  data  long at 0x130B2
+      ... 3 more
+  0x29000-0x29E00    3584 bytes  0 references
+  0x1BB28-0x1C622    2810 bytes  36 references
+      <- 0x1B3B8  lea   lea %pc@(0x1bb4a),%a2
+      <- 0x1B09A  lea   lea %pc@(0x1bb5a),%a0
+      <- 0x1B5A2  lea   lea %pc@(0x1bb6a),%a1
+      <- 0x1B516  lea   lea %pc@(0x1bb73),%a1
+      ... 32 more
+  0x14BB8-0x152E2    1834 bytes  8 references
+      <- 0x15166  data  long at 0x15166
+      <- 0x15172  data  long at 0x15172
+      <- 0x14AD2  lea   lea %pc@(0x15164),%a1
+      <- 0x14B20  lea   lea %pc@(0x15170),%a1
+      ... 4 more
+  0x143DC-0x14A78    1692 bytes  3 references
+      <- 0x148BA  data  long at 0x148BA
+      <- 0x14374  lea   lea %pc@(0x148b8),%a1
+      <- 0x143BA  lea   lea %pc@(0x148c4),%a0
+  0x15E5C-0x16484    1576 bytes  21 references
+      <- 0x15672  lea   lea %pc@(0x15e60),%a1
+      <- 0x15DE8  lea   lea %pc@(0x15e6c),%a0
+      <- 0x15DDC  lea   lea %pc@(0x15e76),%a0
+      <- 0x1535C  lea   lea %pc@(0x15e80),%a1
+      ... 17 more
+  0x06DCA-0x073DA    1552 bytes  27 references
+      <- 0x06DA0  data  long at 0x06DA0
+      <- 0x06DA4  data  long at 0x06DA4
+      <- 0x06DA8  data  long at 0x06DA8
+      <- 0x06DAC  data  long at 0x06DAC
+      ... 23 more
+  0x099B6-0x09EEC    1334 bytes  0 references
+  0x0185D-0x01CDA    1149 bytes  24 references
+      <- 0x00DE0  lea   lea %pc@(0x185e),%a0
+      <- 0x011F0  lea   lea %pc@(0x186e),%a0
+      <- 0x009CC  lea   lea %pc@(0x1878),%a0
+      <- 0x01570  lea   lea %pc@(0x1888),%a0
+      ... 20 more
+  0x0268A-0x02AAC    1058 bytes  10 references
+      <- 0x024CA  lea   lea %pc@(0x26cc),%a0
+      <- 0x01ECA  lea   lea %pc@(0x26dc),%a0
+      <- 0x00412  imm?  movew #9984,%sr
+      <- 0x1ABAC  imm?  movel #10000,%d3
+      ... 6 more
+  0x113B0-0x1176A     954 bytes  71 references
+      <- 0x1E222  data  long at 0x1E222
+      <- 0x10D52  lea   lea %pc@(0x113d4),%a1
+      <- 0x11130  lea   lea %pc@(0x113e0),%a0
+      <- 0x10DB2  lea   lea %pc@(0x113f8),%a0
+      ... 67 more
+  0x10964-0x10CD6     882 bytes  14 references
+      <- 0x10324  lea   lea %pc@(0x10988),%a1
+      <- 0x10364  lea   lea %pc@(0x10994),%a1
+      <- 0x10718  lea   lea %pc@(0x109a2),%a0
+      <- 0x10328  lea   lea %pc@(0x109d2),%a2
+      ... 10 more
+  0x173A5-0x1768A     741 bytes  5 references
+      <- 0x16E04  lea   lea %pc@(0x173a6),%a0
+      <- 0x16E12  lea   lea %pc@(0x17508),%a0
+      <- 0x16D60  lea   lea %pc@(0x175ba),%a0
+      <- 0x16CCC  lea   lea %pc@(0x175d2),%a0
+      ... 1 more
+  0x12FCE-0x13294     710 bytes  22 references
+      <- 0x12E46  lea   lea %pc@(0x12ff2),%a0
+      <- 0x12F58  lea   lea %pc@(0x12ffc),%a1
+      <- 0x12BA2  lea   lea %pc@(0x13006),%a1
+      <- 0x12BF6  lea   lea %pc@(0x13012),%a1
+      ... 18 more
+  0x1ACEC-0x1AF4C     608 bytes  3 references
+      <- 0x1A81E  abs   lea 0x1ad10,%a0
+      <- 0x1A9AC  abs   lea 0x1ad34,%a1
+      <- 0x1A9CA  abs   lea 0x1ae34,%a1
+  0x16914-0x16B6A     598 bytes  12 references
+      <- 0x166B6  lea   lea %pc@(0x16938),%a1
+      <- 0x1649C  lea   lea %pc@(0x16948),%a1
+      <- 0x164E8  lea   lea %pc@(0x16954),%a0
+      <- 0x167B2  lea   lea %pc@(0x169ae),%a0
+      ... 8 more
+  0x186CC-0x1891C     592 bytes  10 references
+      <- 0x184DE  lea   lea %pc@(0x186ea),%a0
+      <- 0x17FEA  lea   lea %pc@(0x186fa),%a5
+      <- 0x1830A  lea   lea %pc@(0x1872c),%a0
+      <- 0x18200  lea   lea %pc@(0x18750),%a0
+      ... 6 more
+  0x0EB66-0x0EDB0     586 bytes  18 references
+      <- 0x0EA0A  lea   lea %pc@(0xeb98),%a0
+      <- 0x0E36A  lea   lea %pc@(0xeba2),%a1
+      <- 0x0E3CE  lea   lea %pc@(0xebae),%a1
+      <- 0x0E3F8  lea   lea %pc@(0xebba),%a1
+      ... 14 more
+  0x128B6-0x12AF6     576 bytes  10 references
+      <- 0x12674  lea   lea %pc@(0x128da),%a0
+      <- 0x12442  lea   lea %pc@(0x128e4),%a1
+      <- 0x1249A  lea   lea %pc@(0x128f0),%a0
+      <- 0x127BC  lea   lea %pc@(0x1294a),%a0
+      ... 6 more
+  0x11E5E-0x12088     554 bytes  9 references
+      <- 0x117B4  lea   lea %pc@(0x11e5e),%a2
+      <- 0x11812  lea   lea %pc@(0x11e76),%a2
+      <- 0x11B54  lea   lea %pc@(0x11e94),%a0
+      <- 0x117CC  lea   lea %pc@(0x11ef4),%a2
+      ... 5 more
+  0x0DCB6-0x0DEC4     526 bytes  17 references
+      <- 0x0DB5E  lea   lea %pc@(0xdcda),%a0
+      <- 0x0DA40  lea   lea %pc@(0xdcea),%a0
+      <- 0x0DCF6  data  long at 0x0DCF6
+      <- 0x0DA2C  lea   lea %pc@(0xdd38),%a0
+      ... 13 more
+  0x100D6-0x102CC     502 bytes  25 references
+      <- 0x09A6E  data  long at 0x09A6E
+      <- 0x09BB4  data  long at 0x09BB4
+      <- 0x0FDC8  lea   lea %pc@(0x100f6),%a1
+      <- 0x07698  data  long at 0x07698
+      ... 21 more

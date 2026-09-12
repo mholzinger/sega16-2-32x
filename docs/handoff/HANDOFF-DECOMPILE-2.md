@@ -132,8 +132,13 @@ Probe flags, all `make ship-us FLAG=1`:
      anim scripts, not code. Applying it means opening the analysed
      project — do it with the rest of a Ghidra pass, not on its own.
      `tools/bound_ref.py` re-runs the audit with no Ghidra at all.
-  3. **~29% of rom data unattributed.** The two largest blocks are
-     identified (sprite frame table, zoom tables) but not exhausted.
+  3. **Rom data: 68.5% named, and `tools/rom_map.py` computes it**
+     (LOOP-DECOMPILE 77) instead of it being an estimate. The five scene
+     tilemaps (83628 bytes) and the actor palette table at 0x242A0 (176 x
+     28) are new. What is left is a ranked work list in
+     `docs/audit/rom_map.txt`, each run with the instruction or the
+     pointer table that reaches it; the largest with no reader at all is
+     0x29000-0x29E00.
   4. **The dependency census is done for everything the instruction
      stream can answer** (LOOP-DECOMPILE 76): TAS, STOP, MOVEP, the
      interrupt mask, read-modify-write on a write-only latch, stores into

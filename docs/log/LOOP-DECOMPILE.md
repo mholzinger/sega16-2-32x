@@ -3530,3 +3530,87 @@ pass and it has to be done per title.
 
 Output is `docs/audit/hazard_census.txt`; the kit rules are in TOOLKIT.md
 under the MD-hardware landmines.
+
+---------------------------------------------------------------------
+## 77. The rom map: 68.5% of the data named, and an instrument for the rest
+
+Open item 3 was "~29% of rom data unattributed", a figure nobody could
+re-derive because there was no tool. `tools/rom_map.py` is that tool. It
+marks code from the instruction stream, marks every data region the log
+has established with its entry number, and for each remaining run prints
+**who points into it** — which is the method that cracked the two big
+blocks in entry 48. A block nothing points at is a different kind of
+answer from a block with a named reader, and both are useful.
+
+    rom          262144 bytes
+      code        75442  28.8%   19137 instructions
+      data       186702  71.2%
+        named    127865  68.5% of data   44 regions
+        unnamed   58837  31.5% of data  172 runs
+
+**The five scene tilemaps are 83628 bytes, a third of the whole rom, and
+the extents are COMPUTED.** The scene descriptor at 0x1CE2 carries a
+tilemap pointer per scene; running the game's own two-pass RLE to
+completion from each one gives the end, and **each end lands within ten
+bytes of the next scene's pointer**. That last part is the check. An
+extent that merely looks right is a guess; five extents that chain into
+each other are not.
+
+    scene 0  0x29E00-0x2EF06   20742
+    scene 1  0x2EF10-0x324CB   13755
+    scene 2  0x324D0-0x369C1   17649
+    scene 3  0x369C0-0x3B0DD   18205
+    scene 4  0x3B0E0-0x3E4AC   13260
+
+**The animation scripts name themselves.** 155 longwords are written into
+object field $24, which the struct map already calls the anim script
+pointer, and entry 73 found three blocks that had been mistaken for
+functions because nothing else reads them. Every run containing a $24
+target is an animation script by its CONSUMING FIELD, not by shape. Twelve
+clusters. The tool derives them rather than listing them, so the same rule
+runs on the next title.
+
+**0x242A0 is the ACTOR PALETTE TABLE — 176 records of 28 bytes.** New this
+session, and the derivation is worth keeping because every step names an
+instruction. `build_palette_upload_queue` at 0x3BEC pushes a (dest, src)
+pair per call:
+
+    3c20:  lea 0x840800,a1 ; lea (2,a1,d0.w),a1   dest = palette RAM,
+                                                  slot*32 + 2
+    3c3a:  lea 0x242a0,a1  ; lea (0,a1,d0.w),a1   src, d0 = index*7 << 2
+                                                       = index * 28
+    3c5a:  the drain copies exactly 7 longwords = 28 bytes
+
+So the record is 28 bytes and the index is object $0B — the same field the
+three per-scene palette-id tables at 0x73DA, 0x92EA and 0x173A0 write
+(entry 46). The region runs to the sprite frame table at 0x255E0, which is
+**4928 bytes = 176.00 records exactly**, and the largest id those tables
+carry is 0xAD = 173. The count and the largest index agree, and neither
+was assumed.
+
+**Two corrections.** The palette blocks end at 0x242A0, not 0x24000 — four
+blocks of 0x400, which is what `bake_tilecram.py` has always indexed. And
+the sixth entry of the scene descriptor is garbage, like every other
+per-scene table (entry 46's five-and-a-garbage-sixth signature), so the
+tilemap walk must stop at five.
+
+**What is left, largest first, with its reader.** These are the work list,
+not a mystery:
+
+    0x21400-0x232A0  7840  62 longwords point at it from records at
+                           0x1DD28 and 0x1E85C; content is ascending tile
+                           indices
+    0x3E4AC-0x40000  6996  a 4-entry pointer table at 0x1834 (0x3F6B0,
+                           0x3E4B0, 0x3EDB0, 0x3E4B0), read by the
+                           function at 0x1366, which inverts the bytes and
+                           masks them to 3 bits
+    0x25A24-0x26C20  4604  one pointer, from 0x14E06
+    0x1EF20-0x20000  4320  7 pointers, all from data
+    0x29000-0x29E00  3584  NOTHING points at it. Between the last tile
+                           upload block and scene 0's tilemap, and its
+                           content is an ascending tile-index ramp ending
+                           in 0xFFFF padding — most likely the real tail of
+                           the 0x28B84 block, whose end entry 48 did not
+                           measure.
+
+Output is `docs/audit/rom_map.txt`.
