@@ -2004,15 +2004,18 @@ static void r60_push(void) {
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
 #elif defined(BOOT_TILEVER)
 		/* LOOP29 231: the consume's VRAM readback (TILE_VERIFY).
-		 * bit 7 bias | bit 6 any record checked | bits 5-3 VRAM
-		 * all-zero records (sat 7) | bits 2-0 VRAM != source (sat 7) */
+		 * vi76 read on the rig: checked, VRAM-zero 7 (sat), mismatch 0
+		 * -> the SOURCE words read zero. vi77 encodes the next question:
+		 * bit 7 bias | bit 6 any slot out of range | bits 5-3 VRAM
+		 * all-zero records (sat 7) | bits 2-0 consumes where FS changed
+		 * mid-consume (sat 7) */
 		uint8_t p0 = 0;
 		uint16_t tz = *(volatile uint16_t*)0xFFA1E2;
-		uint16_t tm = *(volatile uint16_t*)0xFFA1E4;
+		uint16_t tf = *(volatile uint16_t*)0xFFA1E8;
 		uint8_t p2 = (uint8_t)(0x80
-			| (*(volatile uint16_t*)0xFFA1E0 ? 0x40 : 0)
+			| (*(volatile uint16_t*)0xFFA1EA ? 0x40 : 0)
 			| ((tz > 7 ? 7 : tz) << 3)
-			| (tm > 7 ? 7 : tm));
+			| (tf > 7 ? 7 : tf));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
