@@ -246,13 +246,19 @@ TABLES = {
         # attract never round-clears, so a glyph written while FM=1 was
         # dropped for good: Mike's "RO D CL AR BONU". The displaced subq
         # sets the CCR the bcs at +4 reads; the thunk runs it last.
-        (0x64DA, 4, 0x536E, "round clear text: subqw state ctr (bcs follows)"),
-        (0x6536, 4, 0x536E, "round clear points: subqw state ctr (bcs follows)"),
+        # 228: gate the STORE, not the state routine. The state spans
+        # deferred 57 windows across the attract (vi72; vi70: 0) -- the
+        # glyph loop is reached there by a path the immediates do not show
+        # -- and every deferred window is a frame the SH-2 never gets:
+        # black tiles on the same-round return. A three-instruction span
+        # around each movew d1,(a1) is hit by a vint almost never.
+        (0x64FC, 4, 0x323C, "round clear text: movew #512,d1 before the glyph store"),
+        (0x6558, 4, 0x323C, "round clear points: movew #512,d1 before the glyph store"),
     ],
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
                      (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
-                     (0x64DA, 0x6510), (0x6536, 0x656C)],
+                     (0x64FC, 0x6506), (0x6558, 0x6562)],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),

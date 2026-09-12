@@ -199,6 +199,12 @@ The discipline, from here:
 
 ## THE LINE: `rom/night/vi70.32x` (md5 fadafb08) = `rom/s16.32x`, ACCEPTED BY MIKE 2026-09-12 14:50 ("otherwise SOLID presentation"; LOOP29 224)
 
+**A 68K-side change is accepted only if `fmgate_defer` reads 0 at frame
+2500 of the attract (LOOP29 228-229).** The window handshake has a
+phase-dependent collision; vi70 sits clear of it, and the round-clear
+text fix (225, correct, vi74) trips it. Root cause is in the window
+timing, i.e. the pipeline work, not the tables.
+
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
 trees), the tile ship rate as a knob (the black pop-in), and the cutscene

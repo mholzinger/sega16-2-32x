@@ -445,9 +445,9 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 fmgate_partb:
 		movem.l	d0-d1/a0,-(sp)
 		move.w	(fmgate_wcmd),d0
-		beq.w	9f					/* no window wanted this vint */
+		beq.s	9f					/* no window wanted this vint */
 		tst.w	(0xA15120).l		/* COMM0: previous window running? */
-		bne.w	8f
+		bne.s	8f
 		move.l	(0xFFB0F8),d1		/* interrupted game PC */
 		lea		(fmgate_spans),a0	/* u32 pairs, 0-terminated */
 	0:	move.l	(a0)+,d0
@@ -455,7 +455,7 @@ fmgate_partb:
 		cmp.l	d0,d1
 		blo.s	2f					/* pc < start: next span */
 		cmp.l	(a0),d1
-		bls.w	8f					/* start <= pc <= end: defer */
+		bls.s	8f					/* start <= pc <= end: defer */
 	2:	addq.l	#4,a0
 		bra.s	0b
 	1:	moveq	#0,d0
@@ -466,21 +466,15 @@ fmgate_partb:
 		lsr.w	#8,d0
 		ori.w	#0xD000,d0
 		move.w	d0,(0xA1512C).l		/* comm12 — BEFORE the post */
-		/* LOOP29 226: comm10 = live tile dirt MASKED to 13 bits, with
-		 * the game's round in bits 13-15 -- the same word md_main.c
-		 * posts (193, 222). This site posted the raw 16-region dirty
-		 * word, so regions 13-15 (the actor lines) landed in the round
-		 * field whenever THIS path posted; the SH-2 then installed a
-		 * wrong table on a same-round return, by phase. */
-		move.w	(0xFFB9FE),d0
-		andi.w	#0x1FFF,d0
-		moveq	#0,d1
-		move.b	(0xFFF142),d1
-		andi.w	#7,d1
-		lsl.w	#8,d1
-		lsl.w	#5,d1
-		or.w	d1,d0
-		move.w	d0,(0xA1512A).l		/* comm10 */
+		/* LOOP29 229: this post stays RAW. 226 masked it and carried the
+		 * round here; that build deferred 57 windows across the attract
+		 * (vi70/vi71: 0) and the round field's dirt was never the cause
+		 * of the same-round return anyway (226 measured). The SH-2 masks
+		 * the low 13 bits it uses; the round it reads here can carry
+		 * regions 13-15 by phase and md_round's guarded installs are the
+		 * belt. Revisit with the C-side posts if the round channel is
+		 * ever made authoritative (214: 0xFFF148 through the mailbox). */
+		move.w	(0xFFB9FE),(0xA1512A).l	/* comm10 = live tile dirt */
 		ori.w	#0x8000,(0xA15100).l	/* FM=1: SH-2 owns the FB */
 		move.w	(fmgate_wcmd),(0xA15120).l	/* post the window */
 		move.w	#1,(fmgate_posted)

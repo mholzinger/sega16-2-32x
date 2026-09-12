@@ -5356,3 +5356,45 @@ stays the line and the typewriter needs a different vehicle (route it
 to the WRAM text mirror, TXTWRAM, instead of gating it).
 
 `rom/night/vi72.32x` (md5 6ea6aabb) staged, not launched.
+
+## 228-229. THE RETURN'S BLACK TILES ARE A DEFERRED-WINDOW RACE, PHASE-SENSITIVE TO ANY 68K CHANGE (2026-09-12 15:20)
+
+Mike on vi72: "screen text issue resolved. missing black tiles
+reintroduced." Then: "I don't think it's a regression, just another
+timing issue overlooked" -- and the measurements agree.
+
+`fmgate_defer` (68K WRAM, md_start.lst) counts windows the shim did not
+post: COMM0 still busy from the previous window, or the game interrupted
+inside a gated span. Across 2500 attract frames, with the same-round
+return (second level-1 demo, aligned on its first bright frame, 2120 in
+every build) beside it:
+
+    build   68K change vs vi70                 fmgate_defer   return black
+    vi70    --                                 0              0.037
+    vi71    +2 gates, wide spans               0              0.101-0.114
+    vi72    +226 trampoline mask               57             0.104-0.125
+    vi73    narrow spans + 226                 57             --
+    vi74    narrow spans, trampoline restored  53             0.093-0.107
+
+No single change explains the deferral count (vi71 0 with wide spans,
+vi74 53 with narrower ones and nothing else), and vi71 lost the return
+with zero deferrals. **Both numbers move with the 68K's layout, not with
+any one edit.** The window handshake has a phase-dependent collision --
+the SH-2's window still open when the 68K wants to post, or the post
+landing inside a guard -- and a deferred window is a frame whose marks
+the SH-2 never sees: on a scene return that is cells never re-walked,
+black to the end of the level. vi70 sits in a phase with 0 collisions.
+
+**What stands:** 225's typewriter gate is CORRECT (Mike: the text is
+complete on vi72) and lands in any of vi71-vi74; 226 is reverted (the
+raw trampoline post was never the return's cause -- 222's C-side mask
+stays). **What is parked:** shipping the text fix, until the collision
+is fixed at its root, because any 68K change re-rolls the phase.
+
+**The instrument:** `fmgate_defer` at frame 2500 of the attract must read
+0 for any 68K-side change to be accepted; the same-round return
+(2120-2520, black share 0.037) is its picture. The root is in the window
+timing -- the pipeline work -- not in the tables or the gates.
+
+vi70 stays the line. vi74 (md5 29e476db) is the text-fix candidate that
+trips the race, staged for whenever the race is closed.
