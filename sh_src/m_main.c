@@ -2710,7 +2710,7 @@ struct bm_state {
 #ifdef SET_COLS_CHECK
 /* fold 2 check mode: live scan vs baked scan, set by set (defined before
  * the field macros below so the struct fields are named directly) */
-RAMCODE static void bm_check_cmp(const struct bm_state *x, const struct bm_state *y)
+static void bm_check_cmp(const struct bm_state *x, const struct bm_state *y)   /* ROM: a probe, .ramtext is full on the punch line */
 {
     for (int s = 0; s < 128; s++) {
         if ((x->tcount[s] != 0) != (y->tcount[s] != 0)) CEN[60]++;
