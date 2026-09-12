@@ -196,7 +196,15 @@ static uint16_t tv_rb, tv_wr;
  *   tv_pub0  publishes run with FM=0 */
 static uint16_t tv_rep0, tv_pub0;
 #define TV_FM0() (!(MARS_SYS_INTMSK & 0x8000u))
-#define TV_BITS ((uint32_t)(((tv_rep0 > 7 ? 7 : tv_rep0) << 8) | ((tv_pub0 > 3 ? 3 : tv_pub0) << 11)))
+/* vi79 on the rig: tv_rep0 0, tv_pub0 0. vi80 asks whether the payload
+ * is still what was published when the NEXT window opens (the 68K has
+ * consumed by then; only the magic should have changed):
+ *   tv_alt  windows where packet A's payload longs 4..367 differ from
+ *           the staging copied at the last publish
+ *   tv_idx  first differing long index of the latest such window */
+static uint32_t tv_copy[368];
+static uint16_t tv_alt, tv_idx, tv_have;
+#define TV_BITS ((uint32_t)(((tv_alt > 7 ? 7 : tv_alt) << 8) | (((tv_idx >> 7) & 3) << 11)))
 #else
 #define TV_BITS 0u
 #endif
