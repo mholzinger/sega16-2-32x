@@ -5805,3 +5805,25 @@ his step was whichever picture step the attract had reached.
 OFF; steps 3/5 still force ON. Nothing in the word can now hold the
 round off screen in play. The eye/intro lose their lag-free OFF again
 until NOTES 24's discriminator exists. vi90 withdrawn.
+
+**vi93 measured.** ares = vi75 everywhere (play 0.036-0.043 for both
+coin paths, return 0.038-0.042, face plane 0.43 at 1580). Rig: BACK TO
+vi75 -- first demo trees 0.11-0.20 fg 0.59-0.79, second 0.03-0.04 /
+0.58-0.72. So vi90's halving of the black came from the picture-step
+OFF, not the step-3/5 ON. What an OFF phase gives the level when it
+comes back: the ON edge re-installs the round's table (mds_install:
+pins whole, changed sets re-converted). On the rig the claim mix
+evidently does NOT go off through the eye the way it does in ares (its
+t/n mix is a per-window count and the rig has a third of the windows),
+so there is no edge, no re-install, and the stale state stays black.
+vi90 forced the edge and the demo came back clean; the same forced OFF
+with a stale step in play is 238's regression.
+
+**The fix has two halves:** (1) the OFF must come from the word only
+while the attract runs -- a credited flag the shim owns (set on the
+coin input it already handles, cleared when the step byte moves again
+after game over), posted as the play bit instead of 0xFFF026.0; (2) the
+edge re-install is the actual medicine, so a periodic re-install while
+ON (say every 64 windows, selective as it already is) would give the
+rig what ares gets from its edges without depending on any detector.
+Both are small. vi93 (no regression against vi75) stays on the rig.
