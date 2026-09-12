@@ -4524,3 +4524,49 @@ flagged. The cause is on the sprite or game-logic side.
 **The instrument is the rig, not these tools:** `BOOTGAMERATE=1` paints the
 game's own dropped-frame rate (LOOP29 140, START-HERE "THE PIVOT"), and
 hardware speed is read only off that.
+
+## 199. THE BLACK TILES AND THE DEAD TRANSITIONS ARE ONE KNOB (2026-09-12 00:40)
+
+Mike on vi44, after 13 rig shots: "lots of black tiles popping in,
+transitions scenes really not working, chevron missing from animations
+transforms." Two of those three are the same mechanism, and it is not a
+bug -- it is a calibration.
+
+**The shipper moves 12 tiles per vint while the display is on.**
+`m_main.c:1444` sets `MD_BATCH 12` under R60, and 13268 applies it:
+`bmax = (disp_blank || !r60_disp_on) ? 40 : MD_BATCH`. A cell whose
+pattern has not reached MD VRAM renders as backdrop, i.e. BLACK. So:
+
+    scrolling in a fresh column   ~50-80 new patterns   4-7 vints of black
+    a scene change               the whole working set  1120 / 12 = 93 vints
+
+**93 vints is 1.5 seconds.** That is not "popping in", that is the
+transition, which is exactly the shot where Mike sees near-total black
+(`20260912_043204-vi44.png`: the transformation orb alone on black;
+`043215`: the player on black with only the floor strip). The blanked path
+already ships 40, so a transition that blanks gets 28 vints -- still half a
+second.
+
+The 12 was deliberate (the comment above it): 40 was calibrated for 30Hz
+windows and at 60Hz the 40-tile DMA overruns vblank into the active-display
+rate, which is the load-in tear and the purple band from Mike's second
+pass. **So this is a two-sided knob with a visible failure at each end, and
+the only instrument that ranks it is Mike's eye.**
+
+`make ... MDBATCH=N` now sets it. **`rom/night/vi45.32x` (md5 e4544fd9) is
+MDBATCH=24, staged on the rig, NOT launched** -- flag-identical to vi44
+apart from `-DMD_BATCH_N=24`. If 24 kills the pop-in without bringing the
+tear back, the knob is the answer and the next question is whether a
+blank-aware schedule beats a constant.
+
+**NOT MEASURED:** whether 24 overruns vblank. The comment's 92-line consume
+spike was measured at 40; nothing has been measured between.
+
+**The third defect is not mine and not this.** The transform chevron is the
+decompile thread's open item with a hypothesis already on the record
+(commit c0985e8: the records never reach 68K palette RAM; the queue drain's
+destination is loaded from the queue, so the 0x840000 -> 0xFF9000 rebase
+cannot reach it). `tools/patch_game.py` 1043 does thunk the queued-pointer
+writers at 0x2DC8 and 0x3C5A, and 945 records that the enqueue at 0x3C20
+forms an already-rebased 0xFF9800 -- so the hypothesis needs the OTHER
+enqueue sites checked, not those two. Left with them.

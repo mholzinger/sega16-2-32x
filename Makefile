@@ -2284,6 +2284,15 @@ endif
 MDCCFLAGS += -DGLOW_MASK
 SHCCFLAGS += -DGLOW_ANIM
 endif
+# `make ... MDBATCH=N` = LOOP29 199. Tiles shipped to MD VRAM per vint
+# while the display is ON. 12 is the R60 default: 40 was calibrated for
+# 30Hz windows and overruns vblank at 60, which is the load-in tear and
+# the purple band. But 12 is also why cells pop in black -- a scene change
+# needs the whole 1120-tile working set, which is 93 vints at 12. The
+# blanked path already ships 40 (m_main.c:13268). Mike's eye ranks this.
+ifdef MDBATCH
+SHCCFLAGS += -DMD_BATCH_N=$(MDBATCH)
+endif
 # MDSTATIC=1 = STATIC-SCENE arc (docs/design/STATIC-SCENE.md): per-scene
 # static MD pen tables (tools/mdpen_bake.py -> sh_src/pal_scenes_md.h)
 # installed at the PALSTATIC scene load, the table's sets pinned against

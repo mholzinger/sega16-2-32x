@@ -1440,8 +1440,20 @@ static uint8_t flick_bay[16];               /* 4x4 Bayer, boot-built,
  * active-display rate and the post slips past the flip guard — the
  * load-in tear/purple-band cluster in Mike's second pass. 12 tiles
  * always fits the vint-top window; the backlog rides more frames
- * (invisible behind the transitions that generate it). */
+ * (invisible behind the transitions that generate it).
+ *
+ * LOOP29 199: that backlog is NOT invisible. It is Mike's "lots of black
+ * tiles popping in" and "transition scenes really not working" -- a cell
+ * whose pattern has not shipped yet renders as backdrop, and a scene
+ * change needs the whole 1120-tile working set. At 12/vint that is 93
+ * vints, 1.5s. `make ... MDBATCH=N` moves the knob; the failure mode at
+ * the top end is the tear/purple band described above, so it is Mike's
+ * eye that ranks it, not a counter. */
+#ifdef MD_BATCH_N
+#define MD_BATCH     MD_BATCH_N
+#else
 #define MD_BATCH     12
+#endif
 #else
 #define MD_BATCH     40
 #endif
