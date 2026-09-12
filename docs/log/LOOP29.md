@@ -5997,3 +5997,25 @@ both tools, header regenerated and verified against the LIVE dump
 wall re-measured with the corrected header are below. 231's level-1
 set grid (drawn from the same unpack) was column-shifted too; its
 per-set conclusions were qualitative and stand.
+
+## 244. THE HOLE PUNCH, FIRST CUT: CELL-GRANULAR WORKS ON THE ZOMBIES, OVER-CUTS AT THE GRASS (2026-09-13 01:35)
+
+`C1PUNCH=1` (c1p95 = vi95 + the punch): the master's FG name-table
+pass writes a 40x28 cell mask of cat-1 cells; the slave's sprite
+compose skips pixels of pp < 3 in those cells (all four plot paths:
+baked runs, 1:1 NIB/NIB_NC, zoomed ZNIB/ZNIB_G). The mask read from
+ares at play f540 is exactly the ground rows 20-27 (the temple facade
+is NOT cat-1 in the rom: FG page 0 rows 4-23 read cat-0 throughout,
+row 24 cat-1). Zeus's apparent absence at one frame was his own
+flicker phase (both builds show him on 26 sweep frames alike).
+
+ares, play f1160, vi95 vs c1p95: the zombie rising at the right edge
+shows its whole body over the ground on vi95 and only what is above
+the ground on c1p95 -- the masking Mike asked for. BUT the player's
+lower legs are cut at the grass line on c1p95: the grass cells are
+cat-1 tiles with transparent tufts, and a cell-granular punch removes
+the sprite where the arcade shows it through the transparent pixels.
+That is exactly the 2-bit hole map `tools/bake_cat1hole.py` (decompile
+thread, in the tree) describes: 0 no hole, 1 suppress the whole cell,
+2 consult the art per pixel. The per-pixel form is the ship; the cell
+form is the measurement. Its unpacker line carried 243's bug; fixed.
