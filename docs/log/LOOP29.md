@@ -4825,3 +4825,70 @@ Plane up ~30 frames after the cut, flames coloured, no residue in the
 demo that follows. **vi51 is the candidate for Mike's eye.** What headless
 cannot show: the black wall band in PLAY after a transform (205) -- the
 attract never takes that path.
+
+## 207-209. vi51's STUTTER MEASURED, THE PALETTE DETECTORS RETIRED, AND THE CUTSCENE KEYED ON THE SCREEN (2026-09-12 02:35)
+
+Mike on vi51: "LOST and lots of inconsistent frame stutter", then "background
+palette also off, and leftover zeus letters in gameplay". Every number here
+is headless ares; the coined path is `tools/inputs/coin_start_a.csv`, the
+play path a coin+start+walk recipe, flips from `--trace-flip`.
+
+**207 -- the stutter, measured.** Flips per 100 frames on the coined path:
+
+    vi45   29 100 57 100 67 69 97 18 50 49 43 50 50 50 50
+    vi49   33 100 47 53 48 26 11 11 12 11 11  8 21 50 46
+    vi51   33 100 47 53 48 25 10 11 11 10 11 12 11 11 10
+    vi52   33 100 48 50 46 28 11 11 11 11 11 10 12 12 10
+
+A 5x collapse from frame 500, in every build since vi47. The allocator's
+own counters (MDALLOCWHY probes) on the same card: vi45 refuses 2.4k cells
+in 600-1200, vi49-52 refuse 129k -- EVERY cell on screen, every frame,
+drawn as backdrop and re-claimed. Side by side at 300-440: vi45 has
+md_round=255, no table; vi49-52 have round 0 INSTALLED AT THE TITLE
+(MDS[5]=1, the retry path). The retry install needs the pscene detector to
+have confirmed 'normal' -- which it does AT THE TITLE in vi45 too
+(pscene_cur=0 at 300, the 8-pair probes match there, the code says so) --
+and then the 1024-word distance to pass, which is timing luck: PAL_SH on
+ares is fed by a FIFO that drops pushes, and a build-layout shift changed
+which way it fell. **The title install is a latent hazard my builds
+exposed, not one they created. 205's landing install made it certain.**
+
+**208 -- the palette is the wrong signal for a cutscene.** The face, eye
+and intro switch tilemap PAGES (0xAAAA/0xBBBB at 0x410E80) and leave the
+level's palette words alone. So the 8-pair probes match at the title, the
+1024-word distance fails inside the cutscene, and 202-206's aged miss and
+pen-match test either fired at the title or re-installed five times in
+fifty frames during the face. All of it is retracted. **The signal is what
+the allocator already sees: the claim mix.** Per window, cells whose set
+is in the installed round's table (t) against cells whose set is not (n).
+A round's screen is nearly all t; every cutscene is nearly all n.
+
+**209 -- the mechanism, from vi45's source.** `mds_onscreen = (t > n)`,
+evaluated once per vint in disp_gate from a per-CELL count (vi54 counted
+claims only and read stale mid-level; a steady screen claims nothing).
+Keyed on it: the refuse rule (refuse only while on), the pins (a pinned
+set may be freed/evicted only while on), the retry install (never while
+off -- never at the title), the eviction age (an off-screen pinned set has
+no age to wait out), the cut hold (arms only while on), the ship batch
+(40 while off: the animating flames starved the plane's 32 patterns for
+60 frames at 24; at 40 it is up on the FIRST red-field frame). The edge
+back re-installs the round's table, selective, pins whole; before the
+first install the published round classifies, which broke vi53's
+chicken-and-egg (nothing installed by 1200).
+
+    build   coin flips (vs vi45)      play path black share   plane
+    vi53    identical                 worst diff 0.001        none (no table ever)
+    vi54    identical                 worst diff 0.001        1660
+    vi55    identical                 worst diff 0.001        1640
+    vi56    identical                 worst diff 0.001        1640  (age gate: not it)
+    vi57    identical                 worst diff 0.001        1640  (cut hold: not it)
+    vi57@40 --                        --                      1590  (shipper: IT)
+    vi58    pending                   pending                 pending
+
+Counters on vi55/57 across the face: on-screen drops by 1580 and holds,
+no install until the demo returns, no drift frees, no evictions after the
+edge; the cut hold stops blanking by 1600 and the plane still waited on
+the shipper.
+
+`rom/night/vi58.32x` (md5 6e46bc5a) = all of 209, flag-identical to vi45,
+staged on the rig, not launched. vi46-vi57 are withdrawn.

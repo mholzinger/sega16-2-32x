@@ -1178,6 +1178,18 @@ static uint8_t md_round = 0xFF;
 #define MD_ROUND_GET() ((uint8_t)((MARS_SYS_COMM10 >> 13) & 7))
 #endif
 static uint8_t mds_pin[128];
+/* LOOP29 209: IS THE ROUND ON SCREEN? Counted in the claim path every
+ * window: cells whose colour set is in the installed round's table (t)
+ * against cells whose set is not (n). A round's screen is nearly all t;
+ * the title, the face, the eye and the intro are nearly all n, because
+ * the game switches tilemap PAGES for them and never touches the level's
+ * palette words -- which is why every palette-side detector (the 8-pair
+ * probes, the 1024-word distance, 202-208's aged miss and pen match)
+ * either fired at the title or never fired in the cutscene. The refuse
+ * rule, the pins and the retry install all key on this, and the table is
+ * re-installed on the edge back. */
+static uint16_t mds_cl_t, mds_cl_n;
+static uint8_t  mds_onscreen;
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
                                           * PAL_SH is the IMAGE, not the game (heal ~9 vints):
@@ -1749,8 +1761,9 @@ static void mdp_free_set(unsigned s)
     if (!mdp_s_line[s])
         return;
 #ifdef MD_STATIC
-    if (mds_pin[s]) {                        /* table set: never freed
-                                              * inside its scene */
+    if (mds_pin[s] && mds_onscreen) {        /* table set: never freed
+                                              * inside its scene (209: a
+                                              * cutscene may evict it) */
         MDS[3]++;
         MDA(15);
         return;
@@ -2079,7 +2092,9 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
 #ifdef MD_ROUND
         /* the ROUND is the table index: the 68K publishes it, so this
          * cannot go out of bounds the way indexing by pscene did (191) */
-        unsigned ti = (md_round < MDROUND_N) ? md_round : 0xFFu;
+        unsigned ti = (mds_onscreen && md_round < MDROUND_N)
+                      ? md_round : 0xFFu;   /* 209: refuse only while the
+                                             * round is on screen */
 #else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
@@ -2232,12 +2247,18 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
                 if (s2 == s || mdp_s_line[s2] != (uint8_t)(bestl + 1))
                     continue;
 #ifdef MD_STATIC
-                if (mds_pin[s2]) { MDS[1]++; continue; }
+                if (mds_pin[s2] && mds_onscreen) { MDS[1]++; continue; }
 #endif
                 age = (uint8_t)(stamp - mdp_s_stmp[s2]);
                 /* >= 12: a set's cells re-stamp every <= 9 windows now
                  * (1 tile + 4 B + 4 A rotation) — the old >= 8 gate
                  * evicted LIVE sets and churned frees/reassigns */
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                /* 209: a pinned set with the round OFF screen is off
+                 * screen by definition -- no age to wait out. vi55's
+                 * chevron plane waited ~70 frames for this gate. */
+                if (mds_pin[s2] && !mds_onscreen) age = 255;
+#endif
                 if (age >= 12 && age >= vage) { vage = age; victim = s2; }
             }
             if (victim == 128)
@@ -5371,6 +5392,26 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
 __attribute__((noinline)) static void disp_gate(void)
 {
+#if defined(MD_STATIC) && defined(MD_ROUND)
+    {   /* 209: the claim mix of the window just closed */
+        uint8_t on = (mds_cl_t > mds_cl_n) ? 1u : 0u;
+        if (mds_cl_t + mds_cl_n < 16) on = mds_onscreen;   /* blank: hold */
+        if (on && !mds_onscreen) {
+            unsigned r9 = (md_round < MDROUND_N) ? md_round : MD_ROUND_GET();
+            if (r9 < MDROUND_N) {
+                mds_install(r9, disp_hold);     /* edge back (or first
+                                                 * screen): pins whole,
+                                                 * selective re-convert */
+                md_round = (uint8_t)r9;
+                mds_scene_cur = (pscene_cur < PSCENE_N) ? pscene_cur : 0;
+                MDS[5] += 0x10000;
+            }
+        }
+        if (!on && mds_onscreen) MDS[5] += 1;   /* edge out */
+        mds_onscreen = on;
+        mds_cl_t = mds_cl_n = 0;
+    }
+#endif
 #ifdef BOOT_GATEOFF
     /* HARDWARE PROBE: never blank; the SH-2 forces the display on every
      * call. If the screen shows the game, the gate's blank/release logic
@@ -5408,7 +5449,8 @@ __attribute__((noinline)) static void disp_gate(void)
                 unsigned dist = 0;
                 for (unsigned i = 0; i < 1024; i++)
                     dist += (PAL_SH[i] != ap[i]);
-                if (dist <= MDS_TOL) {
+                if (dist <= MDS_TOL && mds_onscreen) {   /* 209: never at
+                                             * the title (vi49-52 did) */
 #ifdef MD_ROUND
                     /* LOOP29 193: the ROUND selects the table, not the
                      * detected scene. Install when the 68K's published
@@ -13277,7 +13319,16 @@ RAMCODE void m_main(void)
                      * mirrors our hold too now), so the consume DMA runs
                      * at the blank rate and the full 40-record staging
                      * lands in ~8 lines. */
-                    int bmax = (disp_blank || !r60_disp_on) ? 40 : MD_BATCH;
+                    int bmax = (disp_blank || !r60_disp_on
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                                || !mds_onscreen   /* 209: a cutscene does
+                                                    * not scroll; at 24 the
+                                                    * flames starved the
+                                                    * chevron plane 60 frames,
+                                                    * at 40 it is up on the
+                                                    * first field frame */
+#endif
+                               ) ? 40 : MD_BATCH;
                     /* (md_cut || display-on tried 2026-09-06: consume max 90
                      * lines — the active-display DMA rate, the batch-40 grave) */
                     sc[2] = 0xFFFF;
@@ -13601,6 +13652,20 @@ RAMCODE void m_main(void)
                             GAME_TILE_REMAP(code);      /* per-game code fold (no-op US) */
                             unsigned cset = ((unsigned)w >> 6) & 0x7F;
                             MDA(0);                     /* cells reaching the allocator */
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                            {   /* 209: EVERY cell, every window -- a
+                                 * steady screen claims nothing, so the
+                                 * claim path read stale (vi54: flag 0
+                                 * mid-level, plane 80 frames late).
+                                 * Classified against the installed
+                                 * round, or the published one before
+                                 * the first install. */
+                                unsigned r9 = (md_round < MDROUND_N)
+                                              ? md_round : MD_ROUND_GET();
+                                if (r9 < MDROUND_N && mds_s_line[r9][cset]) mds_cl_t++;
+                                else                                        mds_cl_n++;
+                            }
+#endif
 #ifdef CSET_CENSUS
                             cs_note(cset);   /* every ON-SCREEN tile, not
                                               * just the ones being claimed */
@@ -13944,7 +14009,18 @@ RAMCODE void m_main(void)
                     {
                         uint16_t cd = (uint16_t)(md_pending - cb_pend0);
                         if (DIAG[48] < cd) DIAG[48] = cd;
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                        /* 209: the cut hold is for LEVEL scene changes.
+                         * With the round off screen the BG page is a
+                         * cutscene's static art -- and set 19's palette
+                         * cycles every frame, so its chunks stay dirty
+                         * and the hold re-armed itself for ~60 frames
+                         * (vi55/56: plane at 1640 against a field at
+                         * 1570, black share oscillating 0.29-0.52). */
+                        if (cd >= 24 && mds_onscreen) md_cut = 12;
+#else
                         if (cd >= 24) md_cut = 12;
+#endif
                     }
 #ifdef CAT1_MD
                     /* 2026-09-03: dirtiness EXTENDS a cut (its art is still
@@ -13960,7 +14036,11 @@ RAMCODE void m_main(void)
                         if (!md_cut) md_cut_ext = 0;
                     }
 #else
-                    if (cb_dirty >= 24) {
+                    if (cb_dirty >= 24
+#if defined(MD_STATIC) && defined(MD_ROUND)
+                        && mds_onscreen                 /* 209 */
+#endif
+                       ) {
                         if (!md_cut)
                             ((volatile uint32_t *)0x26028FA0)[1]++;
                         md_cut = 12;
