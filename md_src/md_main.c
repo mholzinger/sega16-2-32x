@@ -2036,7 +2036,7 @@ static void r60_push(void) {
 		 * vi82: bit 7 bias | bit 6 FS changed | bit 5 VRAM-zero any |
 		 * bits 4-3 emitter records with all-zero output (sat 3) |
 		 * bits 2-0 emitter records for a set with no MD line (sat 7),
-		 * both from m_main.c md_emit_art via packet word 1. */
+		 * both from m_main.c md_emit_art via packet word 1.
 		 * vi82 on the rig: zout saturated, noline 6. vi83: bit 7 bias |
 		 * bit 6 VRAM-zero any | bit 5 pen map all zero (any) | bits 4-3
 		 * zero-output records whose ROM source reads zero UNCACHED (sat
