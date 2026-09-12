@@ -5119,10 +5119,16 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             const volatile uint16_t *c1crow = CAT1CODE_U(y >> 3);
             const unsigned c1py = (unsigned)y & 7u;
 #ifdef C1_PCELL
+            /* Build C: the per-cell cache on the 1:1 paths (NIB/NIB_NC, 16
+             * expansions); the zoomed paths keep the per-pixel form --
+             * .ramtext has ~200 bytes to spare on the line (28,472 of
+             * 28,672) and the cache in all 28 expansions overflowed it. */
             struct c1cache c1s = { 0xFFFFu, 0, 0 };
 #define C1P(sx) (punch && c1_cell(&c1s, c1row, c1crow, (sx), c1py))
+#define C1PZ(sx) (punch && c1_hit(c1row, c1crow, (sx), c1py))
 #else
 #define C1P(sx) (punch && c1_hit(c1row, c1crow, (sx), c1py))
+#define C1PZ(sx) C1P(sx)
 #endif
 #else
 #define C1P(sx) 0
