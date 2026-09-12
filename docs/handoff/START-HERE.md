@@ -122,6 +122,25 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
+## THE LINE (2026-09-11 20:15, Mike's verdict)
+
+**`rom/night/vi37.32x`, md5 c0c0a0ce, also `rom/s16.32x`. Mike:
+"PLAYABLE! Still dropping frames but we expect that. but most playable
+version so far."**
+
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+                 TEXTCAPEARLY=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 \
+                 NBUILD1=1 MDSPRTOP=1
+
+    wall 1.48v   32.1 fps   isr-flips 2,095   20% single-vint
+
+Three of those flags are load-bearing in ways ares cannot show you:
+**`NBUILD1` is MANDATORY** (without it the rig is 0.33 fps and ares sees
+a 10% difference), **`TEXTCAPMASK` must stay OFF** (it drops the Zeus
+cut-scene text), and **`GAMEGATEWAIT=1`** feels better while measuring
+slightly worse. See LOOP29 188 for the full ranking of what is left.
+
 ## WHICH FILE IS THE BUILD (2026-09-11, after this cost Mike three launches)
 
 **`rom/s16.32x` is whatever was built LAST, and that is usually a probe.**

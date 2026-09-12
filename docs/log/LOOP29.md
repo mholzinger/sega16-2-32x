@@ -4012,3 +4012,65 @@ for a result.
 1.25-vint pass is bus contention from our SH-2 or intrinsic to the
 7.67 MHz clock is exactly what the ablation column was meant to answer,
 and it did not.
+
+## 188. MIKE'S VERDICT: vi37 IS THE MOST PLAYABLE BUILD SO FAR (2026-09-11 20:15)
+
+**"PLAYABLE! Still dropping frames but we expect that. but most playable
+version so far."**
+
+    rom/night/vi37.32x   md5 c0c0a0ce   ALSO rom/s16.32x
+    make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+                 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+                 TEXTCAPEARLY=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 \
+                 NBUILD1=1 MDSPRTOP=1
+
+    generation wall     1.48v      ships 32.1 fps
+    isr-flips           2,095      (the accepted rom's line was 1,724)
+    68K handler          54.2 lines
+    single-vint frames     20%
+    skips / flip-late     0 / 0
+
+**What got it here, in the order it mattered on the rig:**
+
+  1. **The background fix** (152-164). The colour-set drift free was
+     destroying ~2,500 on-screen tile slots per 4,000 frames; holding a
+     set's pen indices across the free and repainting its own pens took
+     that to 644. Mike: "backgrounds render."
+  2. **`NBUILD1`** (172). One MD packet build per gap instead of two.
+     **MANDATORY on silicon** -- without it the rig is 0.33 fps while
+     ares shows a 10% difference.
+  3. **`TEXTCAPMASK` OFF** (171). The mask drops an ungated cut-scene
+     writer, so the Zeus text rendered as scattered letters across
+     several builds. One flag, confirmed by Mike's A/B.
+  4. **`GAMEGATEWAIT=1`** (180). Feels better and no counter here can
+     see why; the flip count is slightly LOWER. Input and animation
+     cadence are felt separately from frame delivery.
+
+**What is still between this and parity, ranked by measured evidence:**
+
+  1. **The tile layers to the VDP** (PLAN-TILES-TO-VDP, steps 1-2 done,
+     174). Removing the FB cat-1 pass measured wall 1.46 -> 1.12 and
+     single-vint 20% -> 40%. Blocked on the palette: the cat-1 sets must
+     be in a STATIC baked table or the allocator churns (a fourth CRAM
+     line made it 15x worse, 176). The decompile thread has packs for
+     scenes 0, 1, 2 and 4; the emitter needs to build the runtime tables
+     from their exhaustive viewport list instead of my sampled harvest.
+     **This is the only item with a shippable build at the end of it.**
+  2. **`build_maps_chunk`** -- the real 0.44 v/gen, 0.29 of wall by
+     ablation (168), never touched. 177 established I spent three builds
+     optimising a different function.
+  3. **The game's own pass.** 1.25 vints including our handler, and
+     CLAUDE.md's own arithmetic covers its 2,780 instructions with zero
+     margin -- so our 20% handler is what pushes it over. Whether that is
+     bus contention from our SH-2 (fixable) or the 7.67 MHz clock (not)
+     is the question that decides the rest, and the ablation meant to
+     answer it was invalidated by the alignment error (185).
+  4. **The frame-done signal** (LOOP-DECOMPILE 70) -- the game knows
+     exactly when its frame is complete and the pipeline infers it. Both
+     my readings are retracted (the probe's thunk body is missing from
+     the tree) but the channel exists: COMM10 bits 13-15 are spare.
+
+**Parked with a measured reason:** `RELBANK` crosses the one-vint quantum
+at 0.81 -- the only thing all session that did -- and takes the
+transport's only quiet slot, so the screen stops. It becomes viable after
+1 and 2 free 68K time.
