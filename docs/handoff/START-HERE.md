@@ -283,6 +283,10 @@ vi75's flags + MDSTATE=1 C1PUNCH=1 SETCOLS=1 (see Build B's card in
 PLAN-SINGLE-VINT for the flag set and the numbers). Next card = fold 5
 with the text copy on the packet side, then fold 3 / RELBANK on the rig.
 
+**LANDING RULE (2026-09-13):** a rig black share counts only across THREE
+launches -- the same rom read a fifth black at one launch and clean at
+the next with nothing changed; one capture is a phase, not a defect.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch
