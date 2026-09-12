@@ -1300,12 +1300,10 @@ static inline unsigned md_state_on(void)
      * demo gain without its play regression. */
     if (MD_STATE_PLAY(w)) return 2;
     if (st == 0 || st == 2 || st == 4) return 0;
-    /* vi90 (LOOP29 235): vi88's only CLEAN rig demos were the ones the
-     * word forced ON (step 3); vi75/vi89, where the claim mix decides,
-     * show the black sets. Force ON where the step is unambiguous --
-     * 3 (demo with logo) and 5 (demo) -- and leave step 1 (the SEGA
-     * screen precedes its demo at boot) to the claim mix. */
-    if (st == 3 || st == 5) return 1;
+    /* 240 (NOTES 29): steps 1/3/5 are the demo on the level's tilemap
+     * when the game's demo bit (f028|f029) is set; step 1 without it is
+     * the SEGA card at boot -> OFF. */
+    if (st == 1 || st == 3 || st == 5) return ((w >> 8) & 1u) ? 1u : (st == 1 ? 0u : 1u);
     return 2;
 }
 static inline unsigned md_state_extra(unsigned cset)
