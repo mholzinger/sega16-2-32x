@@ -637,6 +637,9 @@ static void md_consume(uint32_t pkt_base) {
 				 * delay: measured +3..+40 beam lines (f703 blew the
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
+#ifdef TILE_VERIFY
+				uint16_t tv_fs0 = *(volatile uint16_t*)0xA1510A;
+#endif
 				(*(volatile uint16_t*)0xFFB0B2) =
 					*(volatile uint16_t*)0xC00008;
 				*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
