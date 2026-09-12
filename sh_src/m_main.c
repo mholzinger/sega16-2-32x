@@ -3505,8 +3505,41 @@ RAMCODE static int build_maps_chunk(int par)
         return 0;
     }
     if (BM->which < 2) {
-        int nrows = bm_scan_rows(a, BM->which, BM->aset, BM->row, 8);
-        BM->row = (uint8_t)(BM->row + 8);
+#ifdef PHASE_CENSUS
+        uint16_t bt0 = frt();
+#endif
+        int nrows;
+#ifdef SET_COLS
+        if (bm_scan_baked_ok()) {
+#ifdef SET_COLS_CHECK
+            /* check mode: the live scan of the whole plane into a
+             * scratch state, compared set by set with the baked answer */
+            static struct bm_state chk;
+            bm_reset(&chk);
+            for (int r = 0; r < 32; r += 8) {
+                int nr2 = bm_scan_rows(&chk, BM->which, BM->aset, r, 8);
+                if (r + 8 >= nr2) break;
+            }
+            struct bm_state bk;
+            bm_reset(&bk);
+            bm_scan_baked(&bk, BM->which, BM->aset);
+            for (int s = 0; s < 128; s++) {
+                if ((chk.tcount[s] != 0) != (bk.tcount[s] != 0)) CEN[60]++;
+                if (chk.tcount[s] && (chk.col_lvl[s] != bk.col_lvl[s] || chk.amb_col[s] != bk.amb_col[s])) CEN[61]++;
+            }
+            CEN[62]++;                       /* planes checked */
+#endif
+            bm_scan_baked(a, BM->which, BM->aset);
+            nrows = 0;                       /* whole plane done */
+            BM->row = 0xFF;
+        } else
+#endif
+        nrows = bm_scan_rows(a, BM->which, BM->aset, BM->row, 8);
+#ifdef PHASE_CENSUS
+        CEN[56] += (uint16_t)(frt() - bt0);  /* scan ticks */
+        CEN[58]++;                           /* scan chunks */
+#endif
+        if (BM->row != 0xFF) BM->row = (uint8_t)(BM->row + 8);
         if (BM->row >= nrows) {
             BM->row = 0;
             if (BM->aset == 0 && snap[BM->which].any_special)
