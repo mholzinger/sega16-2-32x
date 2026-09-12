@@ -1129,7 +1129,14 @@ static uint8_t pscene_conf;     /* consecutive-landing streak (>=3
                                  * resets — a fade transient cannot
                                  * hold a full 8-probe match across 3
                                  * consecutive palette landings) */
-static uint8_t pscene_nomatch;  /* consecutive no-match landings; at
+static uint8_t pscene_nomatch;
+static uint8_t mds_miss_age;    /* LOOP29 203: vints since the last NO-MATCH
+                                 * landing with no match since; 0 = the last
+                                 * landing matched. pscene_nomatch counts
+                                 * LANDINGS and a cutscene lands few, so the
+                                 * refuse rule lifted ~100 frames late (vi47,
+                                 * headless ares: red field at 1575, plane at
+                                 * 1675). This ages per VINT in disp_gate. */  /* consecutive no-match landings; at
                                  * 32 the live image is provably
                                  * foreign (fades resolve in ~10) ->
                                  * cur = unknown, so the RETURN cut
@@ -2089,8 +2096,10 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
          * chevron plane (page 11, set 19, a blue ramp in no round table)
          * was refused and rendered as backdrop. Mike's "no chevron",
          * vi38 through vi46. Refuse only while the scene is known. */
-        unsigned ti = (mds_scene_cur != 0xFF && md_round < MDROUND_N)
-                      ? md_round : 0xFFu;
+        unsigned ti = (mds_scene_cur != 0xFF && mds_miss_age < 16
+                       && md_round < MDROUND_N)
+                      ? md_round : 0xFFu;   /* 203: or 16 vints past a
+                                             * no-match landing */
 #else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
@@ -5382,6 +5391,10 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
 __attribute__((noinline)) static void disp_gate(void)
 {
+#ifdef PAL_STATIC
+    if (mds_miss_age && mds_miss_age < 255)
+        mds_miss_age++;                       /* LOOP29 203 */
+#endif
 #ifdef BOOT_GATEOFF
     /* HARDWARE PROBE: never blank; the SH-2 forces the display on every
      * call. If the screen shows the game, the gate's blank/release logic
@@ -11144,9 +11157,12 @@ RAMCODE void m_main(void)
                                 break;
                             }
                         }
-                        if (hit < PSCENE_N)
+                        if (hit >= PSCENE_N && !mds_miss_age)
+                            mds_miss_age = 1;             /* LOOP29 203 */
+                        if (hit < PSCENE_N) {
                             pscene_nomatch = 0;
-                        else if (pscene_cur != 0xFF
+                            mds_miss_age = 0;
+                        } else if (pscene_cur != 0xFF
                                  && ++pscene_nomatch >= 16) {
                             /* 16, not 32: nomatch counts K-vints
                              * only, and the glow mask idles most

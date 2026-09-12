@@ -4702,3 +4702,43 @@ records 132-137" (those are the eye's iris, sprite palettes) and my own
 
 `rom/night/vi47.32x` (md5 32a2beed) = vi45 + this fix, flag-identical,
 staged on the rig, not launched.
+
+## 203. THE CHEVRON PLANE IS BACK IN HEADLESS ARES, AND THE LIFT IS AGED PER VINT (2026-09-12 01:40)
+
+**202's fix proven, Mike's rule: a long headless run and a read-back.**
+ares-headless screenshots every 25 frames, 1100-2600, cropped to the
+active 320x224, with a pixel test: red-lower = share of rows 120-200 that
+are pure red (the field), blue-upper = share of rows 10-90 that are blue
+(the chevron plane; the arcade's own frame reads 0.59).
+
+    frame     vi45 (control)          vi47 (202)
+    1575      red .69  blue .00       red .65  blue .00
+    1600      red .64  blue .00       red .67  blue .00
+    1625      red .65  blue .00       red .67  blue .00
+    1650      red .69  blue .00       red .64  blue .03
+    1675      red .64  blue .00       red .66  blue .60
+
+The control never shows the plane. vi47 shows it -- at 0.60, the arcade's
+figure -- but a hundred frames after the red field appears, which is the
+latency 202 flagged: `pscene_nomatch` counts palette LANDINGS (the detect
+runs only on K-vints) and a cutscene lands few.
+
+**203: age the miss per vint, for the refuse decision only.**
+`mds_miss_age` starts at the first no-match landing, is bumped once per
+vint in disp_gate, and is cleared by any matching landing. The refuse rule
+now also lifts when it passes 16. The scene LOADER keeps its 16-landing
+rule untouched -- that one drives a full palette image load and its
+threshold was set against fades (LOOP29 v1.1).
+
+**Risk, stated:** a fade longer than 16 vints now lifts the refusal for its
+duration, so sets outside the table can take dynamic lines during a fade.
+They are few, the pins come back at the next matching landing, and it is
+the pre-vi38 behaviour for that span.
+
+`rom/night/vi48.32x` (md5 6cfbba99) = vi47 + this, flag-identical, staged
+on the rig, not launched. Latency measurement at 5-frame steps pending.
+
+**Seen in vi47's 1675 frame and not explained:** black rectangles inside
+the blue plane where the arcade has dark-blue chevron tips (pens 6-7 of
+set 19 are 005 005). Either those pens were not claimed or their tiles had
+not shipped; not measured.
