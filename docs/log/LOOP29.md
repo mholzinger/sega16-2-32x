@@ -5723,3 +5723,16 @@ shim's footprint copies), holds 249 (1247), play black 0.036-0.041 (=),
 2600 footprint copies by f2000. As the census predicted, ares cannot
 show TXTWRAM's gain -- its spins are nil there -- and it charges the
 copies. The rig number (BOOTFLIPRATE, fr75 = ~20 fps) is the test.
+
+**236 RETRACTED as the mechanism.** vi91 (C1_SOFT off) on the rig =
+vi90: first demo trees 0.17-0.19 fg 0.22-0.43, second 0.12-0.16 /
+0.15-0.18; ares unchanged (return 0.038-0.049, play = vi90). The
+rectangles (214736: a block over the temple facade at x 90-180,
+y 30-110; blocks in the tree row) are not the slot-pressure rule. They
+are per-cell and persistent, i.e. cells the name-table build emits as
+the blank slot (or whose art shipped blank) and never revisits. The
+probe that ranks the reasons is the next build: count, per window, the
+cells emitted as MD_BLANK_SLOT by reason (no slot / cut-mode / dirty
+under cut), carried in the six packet bits, rig against ares in the
+same demo. C1_SOFT stays 0 under C1_NOFB (it is correct by
+construction: there is no fallback), it just is not this.
