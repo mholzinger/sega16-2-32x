@@ -5573,3 +5573,33 @@ ares reads 1.48 and 1.11. The 3x SH-2 gap CLAUDE.md warns about is the
 whole difference; ares ranks, the rig measures. The bar (60 = 64/64) is
 three times away on hardware, not 11%. Every fold from here gets ranked
 in ares and MEASURED with this probe on the rig, ~3 minutes a build.
+
+## 233. FOLD 4 BUILT: ONE STATE WORD FROM IRQ4 (2026-09-12 21:40)
+
+**The fact first** (ares, vi75, WRAM 0xFFF142/0xFFF148 across the
+attract, screenshot per point):
+
+    title 100-300, 3000-3300       round 0   cut 0
+    first level-1 demo 700-1300    round 0   cut 0
+    FACE 1500-1580                 round 0   cut 1
+    EYE 1700-1900                  round 0   cut 0     <- not the face's byte
+    second level-1 demo 2100-2800  round 0   cut 0
+    level-2 demo 3600-4400         round 1   cut 0
+
+So the game's cutscene byte covers the face only; the title and the eye
+read exactly like the level (round 0, cut 0) while their sets sit
+outside round 0's table. The state word therefore cannot DELETE the
+claim mix: "on" still has to come from what is on screen. What it can
+do: (a) carry the round in a word that shares nothing with the dirty
+mask -- the 217/226 hazard gone by construction, (b) force OFF the
+instant the face begins (no detector lag on the plane).
+
+**233:** `MDSTATE=1`. md_main.c shim_vblank posts COMM14 =
+E<seq><cut><round> once per vint at IRQ4's top, starting once the
+master has answered the boot beacon (B008); m_main.c reads the round
+from it (MD_ROUND_GET), forces `on = 0` while the cutscene bit is set,
+and stops the per-window COMM14 diag write. COMM10 keeps its C-side
+posts; nothing reads its round field now.
+
+`rom/night/vi87.32x` = vi75's line + MDSTATE=1. Gates pending (ares:
+face plane, aligned return, play black; rig: attract demos).
