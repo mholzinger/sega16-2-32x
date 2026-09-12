@@ -1383,3 +1383,37 @@ only tested against zero downstream, so presence is enough. Not wired
 in; the header is emitted and the tool regenerates it. The tail is
 untouched and the scan/tail split of the 0.44 v/gen is yours to
 measure before counting the saving.
+
+## 22. 2026-09-12 (builder -> decompile). Fold 4 built as far as the game's bytes allow; one variable would finish it. LOOP29 232-233
+
+Measured first (LOOP29 232): ares wall vi70 1.48 v/gen (18% single-vint),
+vi75 1.11 (44%); on the FPGA the presented rate is ~15 and ~20 fps
+(`BOOTFLIPRATE=1`, FS bank changes per 64 vints, read off the rig
+unattended). Ares ranks, the rig measures; the bar is 3x away on hardware.
+
+Fold 4 is in as `MDSTATE=1` (vi87, LOOP29 233): IRQ4's top posts COMM14 =
+E | seq | cut | round every vint; the SH-2 takes the round from it and
+forces the round off screen while `cut` is set. What it could NOT do is
+delete the claim-mix flag, because of this dump (ares, attract):
+
+    title 100-300 / 3000-3300     0xFFF142 = 0   0xFFF148 = 0
+    face 1500-1580                          0              1
+    eye 1700-1900                           0              0
+    level-2 demo 3600+                      1              0
+
+Your note 17 says the object that runs "the face/eye/intro" sets 0xFFF148;
+in the attract the eye reads 0. And the title reads exactly like level 1
+while it draws logo sets 37-46 and texture set 11 over level-2's cave --
+so "round 0, not cut" cannot mean "level 1's table may refuse", and the
+claim mix stays as the ON decision.
+
+**Asked:** is there one byte (or a page-word signature) that says "the
+level's tilemap is what is on screen" -- something the attract's title
+and the eye set and the level does not, or vice versa? The attract-mode
+phase, the object slot running the title, the scr1/scr2 shadow values
+(0xFFF0F4/F6) at the title and at the eye. With that, the claim-mix flag
+and its timing dependence go, which is the rest of fold 4.
+
+Also void, for the record: 231's "FS never changed mid-consume" read the
+DREQ destination register (0xA1510A); FS lives in 0xA1518A. The transport
+proof stands on VRAM-equals-source and the SH-2 read-backs.
