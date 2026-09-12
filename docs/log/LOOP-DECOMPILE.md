@@ -4356,3 +4356,25 @@ Which is a pleasing place to land, because `r60_push` is the packet
 transport — the thing ARCHITECTURE.md's first line already calls the whole
 project. The correction did not change what to work on. It changed the
 belief that the 68000 could afford it.
+
+---------------------------------------------------------------------
+## 91. The silent block is silent on all five rounds
+
+Entry 85 found 0x22000-0x232A0 unread in attract and in level 1, with the
+rig's control firing in the same run. The round mechanism from entry 86
+extends that properly: `RT_ROUND` rewrites the DIP round table at 0x1848,
+so the block gets its chance on every level rather than only the first.
+
+    round 0   no read      round 3   no read
+    round 1   no read      round 4   no read
+    round 2   no read
+    CONTROL (scene descriptor, round 3, same rig)   PC 0x16AA and 0x16B0
+
+Five rounds, ~5400 frames each, a game started and played in every one,
+and the control fires. **4768 bytes of valid 13-bit tile indices that
+nothing in the rom points at and nothing reads on any level.**
+
+That is as far as this method goes. It is either dead data — a title's rom
+carries plenty — or it is reached by a path this rig does not enter: two
+players, a continue, an ending, a boss state the script never survives to.
+Recording it as unread with the scope stated, not as unknown.

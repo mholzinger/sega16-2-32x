@@ -1129,14 +1129,7 @@ static uint8_t pscene_conf;     /* consecutive-landing streak (>=3
                                  * resets — a fade transient cannot
                                  * hold a full 8-probe match across 3
                                  * consecutive palette landings) */
-static uint8_t pscene_nomatch;
-static uint8_t mds_miss_age;    /* LOOP29 203: vints since the last NO-MATCH
-                                 * landing with no match since; 0 = the last
-                                 * landing matched. pscene_nomatch counts
-                                 * LANDINGS and a cutscene lands few, so the
-                                 * refuse rule lifted ~100 frames late (vi47,
-                                 * headless ares: red field at 1575, plane at
-                                 * 1675). This ages per VINT in disp_gate. */  /* consecutive no-match landings; at
+static uint8_t pscene_nomatch;  /* consecutive no-match landings; at
                                  * 32 the live image is provably
                                  * foreign (fades resolve in ~10) ->
                                  * cur = unknown, so the RETURN cut
@@ -2085,21 +2078,8 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
          * genuinely absent from it. */
 #ifdef MD_ROUND
         /* the ROUND is the table index: the 68K publishes it, so this
-         * cannot go out of bounds the way indexing by pscene did (191).
-         * LOOP29 202: AND the scene must still be recognised. The game's
-         * round variable (0xFFF142) is 0-4 and nothing else -- measured
-         * across the whole attract -- so the face, eye and intro
-         * cutscenes carry the LAST ROUND's number and md_round is never
-         * cleared. The pscene detector does go unknown on a foreign span
-         * (11146: pins cleared, mds_scene_cur = 0xFF, "dynamic rules"),
-         * but this branch never consulted it, so the transformation's
-         * chevron plane (page 11, set 19, a blue ramp in no round table)
-         * was refused and rendered as backdrop. Mike's "no chevron",
-         * vi38 through vi46. Refuse only while the scene is known. */
-        unsigned ti = (mds_scene_cur != 0xFF && md_round < MDROUND_N)
-                      ? md_round : 0xFFu;   /* 204: disp_gate clears
-                                             * mds_scene_cur 16 vints
-                                             * past a no-match landing */
+         * cannot go out of bounds the way indexing by pscene did (191) */
+        unsigned ti = (md_round < MDROUND_N) ? md_round : 0xFFu;
 #else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
@@ -5391,29 +5371,6 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
 __attribute__((noinline)) static void disp_gate(void)
 {
-#if defined(PAL_STATIC) && defined(MD_STATIC)
-    /* LOOP29 203/204: a no-match landing that no match has followed for
-     * 16 VINTS is a foreign span. Do what the detector does after 16
-     * LANDINGS (11176): drop the pins and the installed-scene marker, so
-     * the refuse rule lifts AND the lines become evictable. vi48 lifted
-     * the refusal alone and the plane never came: every round set was
-     * still pinned (1759 never frees one, 2255 never evicts one), so the
-     * dynamic allocator had nowhere to put set 19. */
-    if (mds_miss_age && mds_miss_age < 255 && ++mds_miss_age == 16) {
-        for (unsigned s2 = 0; s2 < 128; s2++)
-            mds_pin[s2] = 0;
-        mds_scene_cur = 0xFF;
-        /* LOOP29 206: and FREE them. Unpinned but resident, the round's
-         * sets hold every pen until the LRU rule (>= 12 windows) lets
-         * them go, so the cutscene's sets land on nearest-colour pens:
-         * Mike's vi49 flames were flat red, the field's own pen. The
-         * round comes back whole on the first matching landing (205),
-         * so nothing here is worth keeping. */
-        for (unsigned s2 = 0; s2 < 128; s2++)
-            if (mdp_s_line[s2])
-                mdp_free_set(s2);
-    }
-#endif
 #ifdef BOOT_GATEOFF
     /* HARDWARE PROBE: never blank; the SH-2 forces the display on every
      * call. If the screen shows the game, the gate's blank/release logic
@@ -11176,31 +11133,9 @@ RAMCODE void m_main(void)
                                 break;
                             }
                         }
-                        if (hit >= PSCENE_N && !mds_miss_age)
-                            mds_miss_age = 1;             /* LOOP29 203 */
-                        if (hit < PSCENE_N) {
+                        if (hit < PSCENE_N)
                             pscene_nomatch = 0;
-                            mds_miss_age = 0;
-#if defined(MD_STATIC) && defined(MD_ROUND)
-                            /* LOOP29 205: END OF A FOREIGN SPAN. The
-                             * round's table was dropped when the span
-                             * began (pins cleared, mds_scene_cur 0xFF)
-                             * and its sets have been evicted by the
-                             * cutscene's. The re-install below waits for
-                             * THREE confirmed landings, and in play the
-                             * level lands its palette rarely -- Mike's
-                             * vi47 level 1 sat with a black wall band
-                             * 20 s after the transform. The round channel
-                             * is still valid, so ONE matching landing is
-                             * enough to put the round's table back. */
-                            if (mds_scene_cur == 0xFF
-                                && md_round < MDROUND_N) {
-                                mds_install(md_round, (uint8_t)win_no);
-                                mds_scene_cur = (uint8_t)hit;
-                                mds_loadgap = 32;
-                            }
-#endif
-                        } else if (pscene_cur != 0xFF
+                        else if (pscene_cur != 0xFF
                                  && ++pscene_nomatch >= 16) {
                             /* 16, not 32: nomatch counts K-vints
                              * only, and the glow mask idles most

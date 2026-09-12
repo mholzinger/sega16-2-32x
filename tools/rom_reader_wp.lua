@@ -50,6 +50,15 @@ emu.register_periodic(function()
     local d = manager.machine.devices[':maincpu']
     dbg, st = d.debug, d.state
     local sp = d.spaces['program']
+    -- RT_ROUND starts the game at that round by rewriting the DIP round
+    -- table at 0x1848 (LOOP-DECOMPILE 86), so a block that level 1 never
+    -- touches still gets its chance on the levels that might.
+    local rnd = os.getenv('RT_ROUND')
+    if rnd then
+      local rg = manager.machine.memory.regions[':maincpu']
+      for i = 0, 7 do rg:write_u8(0x1848 + i, tonumber(rnd)) end
+      out:write('starting round forced to ' .. rnd .. '\n')
+    end
     -- ONE range per run. The watchpoint does not tell lua which address
     -- it fired on, so running them together cannot say which block was
     -- read -- and that is the whole question.
