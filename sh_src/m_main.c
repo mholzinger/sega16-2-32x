@@ -5015,6 +5015,16 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             const uint8_t *s = sp + (lo - x);
                             uint8_t *d = row + (lo - 184);
                             int m = hi - lo;
+#ifdef C1_PUNCH
+                            if (punch) {
+                                const volatile uint8_t *c1 = CAT1SCR_U(y >> 3);
+                                unsigned sx = (unsigned)(lo - 184);
+                                do {
+                                    if (!c1[sx >> 3]) *d = (uint8_t)(base + *s), PENTAP(e[4], *s);
+                                    d++; s++; sx++;
+                                } while (--m);
+                            } else
+#endif
                             do {
                                 *d++ = (uint8_t)(base + *s), PENTAP(e[4], *s), s++;
                             } while (--m);
