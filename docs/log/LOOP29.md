@@ -5928,3 +5928,31 @@ the 0.44 v/gen maps drain before counting it. Then fold 5 with the copy
 on the packet side (237), then RELBANK on the rig. The hole punch is a
 sprite-loop bit test against the baked cat-1 bitmap (175) and goes in
 as its own build for Mike's eye.
+
+## 242. FOLD 2 BUILT AND MEASURED: THE MAPS SCAN FROM THE BAKE (2026-09-13 00:45)
+
+`SETCOLS=1` (sh_src/setcols_md.h, NOTES 21): one pass over the 44
+columns x 2 quadrant row ranges per plane replaces bm_scan_rows'
+2,464 cell reads, when the state word says the level's tilemap is on
+screen (credited, or a demo step with the demo bit; never the face or
+the picture steps, which upload into the level pages -- NOTES 23) and
+every page select is < 10. Otherwise the live scan runs as before.
+PHASECENSUS now splits the maps drain (CEN[56..59]).
+
+    ares, play2, 4000 frames      pc95 (census)   sc95 (+SETCOLS)
+    wall v/gen                       1.16            1.03
+    single-vint                      42%             55%
+    ships/s                          37.5            41.1
+    mtask v/gen                      1.04            0.78
+    echo v/gen                       1.02            0.95
+    maps drain: scan / tail          0.279 / 0.135   (per gen, of 0.44)
+
+The plan priced fold 2 at "up to 0.29" (the scan's share): measured
+0.279 and the wall moved 0.13 -- the rest of the scan was overlapped by
+the slave. mtask fell 0.26. Play picture 0.036-0.043 black, unchanged.
+`rom/night/sc95.32x` (md5 31fc920f) = vi95 + SETCOLS.
+
+Check mode (SETCOLSCHECK=1, live vs baked set by set) did not compile
+in the first cut (the bm_state field macros); rebuilt as bm_check_cmp.
+Numbers to follow. The rig frame rate (BOOTFLIPRATE) is the hardware
+number and needs the rig.

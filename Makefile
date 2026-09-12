@@ -1008,6 +1008,27 @@ endif
 ifdef C1EVICT
 SHCCFLAGS += -DC1_EVICT
 endif
+# `make ... SETCOLS=1` = PLAN-SINGLE-VINT fold 2 (LOOP29 242): the maps
+# scan from the baked per-column set extents (sh_src/setcols_md.h,
+# tools/bake_setcols.py, NOTES 21), one pass per plane instead of 2,464
+# cell reads, when the state word says the level's tilemap is on screen
+# (needs MDSTATE). SETCOLSCHECK=1 runs the live scan too and counts
+# disagreements in CEN[60] (presence) / CEN[61] (level), CEN[62] planes.
+# PHASECENSUS=1 now also splits the maps drain: CEN[56] scan ticks,
+# CEN[57] tail ticks, CEN[58] scan chunks, CEN[59] tails.
+ifdef SETCOLS
+SHCCFLAGS += -DSET_COLS
+endif
+ifdef SETCOLSCHECK
+SHCCFLAGS += -DSET_COLS_CHECK
+endif
+# `make ... C1PUNCH=1` = fold 1's hole punch (LOOP29 175/243): sprite
+# pixels of priority < 3 are not written into cells the FG holds as
+# cat-1 (a 40x28 mask from the master's name-table pass), so the MD's
+# plane A HIGH shows the ground over them. Needs CAT1MD + C1NOFB.
+ifdef C1PUNCH
+SHCCFLAGS += -DC1_PUNCH
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
