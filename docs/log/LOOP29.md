@@ -5631,3 +5631,21 @@ diagnostics). Step 3 admits the logo's sets 37-46 and texture 11 past
 the refuse rule (`md_state_extra`), keyed on the step, not detected.
 `rom/night/vi88.32x` = vi75's line + MDSTATE=1. Gates pending: ares
 title/demo/eye/face/return/play, rig attract demos.
+
+**vi88 measured (ares): title 0.96 black (vi75 0.30), demo 0.96, eye
+0.71 (0.47), face plane 0.00, return 0.58-0.95, play 0.90; rig: four of
+six attract shots ~0.97 black, two CLEAN (213211/213216: level-1 demo
+with the logo, trees 0.00 fg 0.04 -- the first clean vi75-line demo the
+rig has shown).** The 68K's own posts, decoded: play=1 from frame 23
+through the whole attract (the demo is the game started with scripted
+input), and step 1 covers the SEGA/blue-wave screen for ~600 frames
+before the level's tilemap. "play or step 1/3/5 = on" therefore
+installed round 0 and refused every set on those screens. NOTES-FROM-
+DECOMPILE 24 asks for the credited-play discriminator and step 1's
+sub-phase.
+
+**234b (vi89):** the word decides OFF only where it is certain -- the
+transformation byte, and the picture steps 0/2/4 (high-score table,
+intro pictures, eye) -- and leaves ON to the claim mix. Everywhere the
+word is silent this is vi75; where it speaks, the lag and the timing
+dependence of the detector are gone. Gates pending.
