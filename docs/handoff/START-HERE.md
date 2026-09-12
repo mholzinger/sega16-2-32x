@@ -197,7 +197,7 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## CANDIDATE, ON THE RIG AS `rom/night/vi66.32x` (md5 a3e3509a), AWAITING MIKE'S EYE ON THE TRANSFORM RETURN (2026-09-12 14:10)
+## CANDIDATE, ON THE RIG AS `rom/night/vi70.32x` (md5 fadafb08), AWAITING MIKE'S EYE (2026-09-12 14:45)
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
@@ -208,10 +208,14 @@ chevron plane, the flat flames, the black wall band, vi51's stutter), plus
 NOT fix the title logo -- LOOP29 210's retraction). OPEN, attract only:
 the logo's slide-in palette and the ranking screen (211), both need a
 capture keyed on the game's own palette phase, not a frame offset.
-vi66 = vi62b + the all-pages bake (LOOP29 215: the invisible ledge, sets
-82/87-91 were never in round 0's table) + tag wipe at the edge out and the
-published round at the edge back (216-218; vi65's FREE at the edge out
-left a black horizon band after the transformation in play). Headless: flips = vi45, play
+vi70 = vi62b + the all-pages bake (LOOP29 215: the invisible ledge) + the
+published round at the edge back with the MAILBOX MASKED on the 68K (217,
+222: the dirty word's regions 13-15 corrupted the round) + stale-tag wipe
+only for a cutscene's own sets at assign time (223). No edge-out wipe:
+216-221's wipes/frees all withdrawn (219: the full wipe bands hardware;
+223: wiping the level's sets on the return leaves holes). Headless: flips
+= vi45, play = vi45, ledge band below vi62b, plane 15 frames after the
+field, same-round return 3.7%. Headless: flips = vi45, play
 path = vi45, ledge band below vi62b, plane 55 frames after the field,
 3.7% black after the eye (vi45 4.6%). vi62b = vi59's logic + `MDBATCHOFF=24` (LOOP29 214), now the default:
 Mike's rig ranked it -- 40 tore level 2's top band on hardware, 24 does

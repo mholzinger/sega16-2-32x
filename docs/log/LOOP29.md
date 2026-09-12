@@ -5247,3 +5247,5 @@ Only a cutscene's sets -- the plane's, the eye's -- ever lose tags.
 No edge-out wipe anywhere (218/220/221 all withdrawn), so nothing
 re-ships the level in play: 219's hardware band has no trigger left.
 `rom/night/vi70.32x` (md5 fadafb08) staged, not launched. vi69 withdrawn.
+
+**223 play path:** vi70 vs vi45 play path: worst black-share difference 0.002 at frame 1600; ledge band mean black: vi62b 0.0124  vi70 0.0106. vi70 is the candidate.
