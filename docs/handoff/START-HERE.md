@@ -122,18 +122,32 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
-## THE LINE (2026-09-11 20:15, Mike's verdict)
+## THE LINE (2026-09-12, validated twice on the rig)
 
-**`rom/night/vi37.32x`, md5 c0c0a0ce, also `rom/s16.32x`. Mike:
-"PLAYABLE! Still dropping frames but we expect that. but most playable
-version so far."**
+**`rom/night/vi39.32x`, md5 c93dbeab, also `rom/s16.32x`. Mike:
+playable, no obvious regressions.** (vi37 was the same code; vi39 is it
+rebuilt on a clean tree.)
+
+**Read `docs/handoff/HANDOFF-20260912.md` before touching anything** --
+it carries the three routes with their measured state, six flags that
+render wrong BY CONSTRUCTION, five traps this session paid for, and what
+is closed so it is not rebuilt.
 
     make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
                  TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
                  TEXTCAPEARLY=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 \
                  NBUILD1=1 MDSPRTOP=1
 
-    wall 1.48v   32.1 fps   isr-flips 2,095   20% single-vint
+    wall 1.47v   32.1 fps   isr-flips 2,067   20% single-vint
+
+**THE BAR IS A THRESHOLD, NOT A GRADIENT (LOOP29 168).** 60 Hz is 100%
+single-vint. Ships are vint-quantised, so a generation at 1.2 vints
+still costs 2 and flips at 30 Hz: nothing is paid until the wall crosses
+below 1.00, then it all arrives (15% -> 98% in the ablation). Every diet
+before this session was ranked against a gradient that does not exist.
+**60 IS reachable** -- ablating the maps drain and the sprite compose
+gives 58.3 fps at 98% single-vint, so the pipeline was never the
+constraint.
 
 Three of those flags are load-bearing in ways ares cannot show you:
 **`NBUILD1` is MANDATORY** (without it the rig is 0.33 fps and ares sees
