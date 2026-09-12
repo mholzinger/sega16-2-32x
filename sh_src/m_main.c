@@ -631,17 +631,20 @@ static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd,
  * art row are fetched once per cell crossed, and the per-pixel test is
  * a register compare (plus one art byte in class 2). */
 struct c1cache { unsigned cx; unsigned v; const uint8_t *art; };
+/* the refetch is out of line (once per cell crossed); the per-pixel test
+ * stays small enough to inline into every plot macro without spilling
+ * .ramtext (the first cut inlined the whole thing and overflowed) */
+RAMCODE static void c1_refetch(struct c1cache *s, const volatile uint8_t *m, const volatile uint16_t *cd, unsigned cx, unsigned py)
+{
+    s->cx = cx;
+    s->v = m[cx];
+    if (s->v == 2) s->art = altbeast_tiles + (unsigned)cd[cx] * 64u + py * 8u;
+}
 static inline int c1_cell(struct c1cache *s, const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
 {
     unsigned cx = sx >> 3;
-    if (cx != s->cx) {
-        s->cx = cx;
-        s->v = m[cx];
-        if (s->v == 2) s->art = altbeast_tiles + (unsigned)cd[cx] * 64u + py * 8u;
-    }
-    if (s->v == 0) return 0;
-    if (s->v == 1) return 1;
-    return s->art[sx & 7u] != 0;
+    if (cx != s->cx) c1_refetch(s, m, cd, cx, py);
+    return s->v && (s->v == 1 || s->art[sx & 7u]);
 }
 #endif
 #endif
