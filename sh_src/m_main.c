@@ -3546,14 +3546,10 @@ RAMCODE static int build_maps_chunk(int par)
                 int nr2 = bm_scan_rows(&chk, BM->which, BM->aset, r, 8);
                 if (r + 8 >= nr2) break;
             }
-            struct bm_state bk;
+            static struct bm_state bk;
             bm_reset(&bk);
             bm_scan_baked(&bk, BM->which, BM->aset);
-            for (int s = 0; s < 128; s++) {
-                if ((chk.tcount[s] != 0) != (bk.tcount[s] != 0)) CEN[60]++;
-                if (chk.tcount[s] && (chk.col_lvl[s] != bk.col_lvl[s] || chk.amb_col[s] != bk.amb_col[s])) CEN[61]++;
-            }
-            CEN[62]++;                       /* planes checked */
+            bm_check_cmp(&chk, &bk);         /* CEN[60] presence, [61] level, [62] planes */
 #endif
             bm_scan_baked(a, BM->which, BM->aset);
             nrows = 0;                       /* whole plane done */
