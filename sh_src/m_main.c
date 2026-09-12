@@ -212,7 +212,15 @@ static uint16_t tv_alt, tv_idx, tv_have;
  *              map is whatever the last install left, zero if never)
  *   tv_zout    records whose 32 output bytes are all zero */
 static uint16_t tv_noline, tv_zout;
-#define TV_BITS ((uint32_t)(((tv_noline > 7 ? 7 : tv_noline) << 8) | ((tv_zout > 3 ? 3 : tv_zout) << 11)))
+/* vi82 on the rig: tv_zout saturated within 16 s (ares: 2, the blank
+ * tiles), tv_noline 6 by 28 s (ares 0). The emitter itself produces the
+ * zero records. vi83 asks what it read for them:
+ *   tv_cz  zero-output records whose 64 ROM source bytes read zero
+ *          through the cached ROM window (the read the emitter made)
+ *   tv_uz  ... and also read zero through the uncached mirror
+ *   tv_mz  zero-output records whose 8-entry pen map is all zero */
+static uint16_t tv_cz, tv_uz, tv_mz;
+#define TV_BITS ((uint32_t)(((tv_cz > 3 ? 3 : tv_cz) << 8) | ((tv_uz > 3 ? 3 : tv_uz) << 10) | ((tv_mz ? 1 : 0) << 12)))
 #else
 #define TV_BITS 0u
 #endif
