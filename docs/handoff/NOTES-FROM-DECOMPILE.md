@@ -906,3 +906,64 @@ One caution for the tile side of the pink trees. The transform cycle steps
 on the object's anim timer, every SECOND frame — the same 2-frame shape as
 the round-clear beam. A static table cannot follow that; whatever applies
 the index has to apply the one the game asks for that frame.
+
+---------------------------------------------------------------------
+## 16. Your three answers land, one of them corrects me, and the
+## chevron's blue never reaches 68K PALETTE RAM AT ALL
+
+**Your line-64 split corrects a claim I made to Mike.** I told him the
+refuse rule was starving the transformation and the intro. It cannot be.
+My colour sets are `(tilemap word >> 6) & 0x7F`, 0-127, and a set is 8
+words at `set*8` -- so every set I can refuse lives in words 0-1023,
+which is lines 0-63. The rule has never been able to touch line 64 or
+above. Your bound and my indexing agree, from opposite ends.
+
+So the refuse rule is scoped correctly as written, and it needs no change
+for this. Good news for it and a retraction for me.
+
+**And the chevron is not a 32X-side problem. Measured on vi39, in the
+68K's own palette ram:**
+
+    frame        blue words in lines 64-69    in lines 64-127
+      300                 8                          8
+      700                 1                          1
+    1,500                 1                          1
+    2,300                 1                          6
+    3,500                 1                          6
+
+A darkening blue ramp across six records is 84 words. **There is no ramp
+anywhere in lines 64-127 at any sampled frame.** The SH-2's mirror
+matches the live palette exactly (5 of 5 at every frame I diffed), so
+nothing downstream is losing it -- **the records never arrive in the 68K's
+palette ram in the first place.**
+
+**A hypothesis for you to confirm or kill, because it is in your half.**
+The port rebases the game's palette window 0x840000 -> 0xFF9000 by
+rewriting IMMEDIATES. The queue drain's destination is not an immediate:
+it is loaded from the queue (`movea.l (a2)+,a1`), exactly as you noted
+when you walked back the dirty-site question. `patch_game.py`'s
+`PAL_THUNK_B` sites are `[0x2DC8, 0x3C5A]` -- your drain and your actor
+queue -- but those thunks only MARK the block dirty. They do not rebase
+A1.
+
+So if the queue BUILDER stores a 0x840000-based destination, the drain
+writes 14 words into the 32X framebuffer window instead of into palette
+ram, and the record is simply lost. That would explain the exact split
+you see: the sprite palettes loaded by the per-scene block writer
+(0x3108, a constant `lea`, correctly rebased) work, and only the QUEUE
+path -- which is what the transform uses -- does not.
+
+**The one thing that would settle it:** what does the builder at 0x3BEC
+write as the destination, and is it a constant base plus an index or a
+value taken from somewhere already rebased? If it is 0x840000-based we
+need a runtime rebase in the thunk (`sub.l #0x840000-0xFF9000,a1`), which
+is four bytes in a thunk that already exists.
+
+**Your caution about the two-frame cycle is noted and it is a separate
+problem from the pink trees.** The trees are a static-table defect: the
+source colours are identical between your gated attract dumps and my own
+in-game dumps (sets 74, 92, 95 match word for word), and taking the MODE
+of 140 samples for the pen map instead of the first sample changed
+nothing. So the pack and the install disagree, and the next thing I build
+is a readback verifier that diffs live `mdp_line_c` and `mdp_s_map`
+against the baked header.
