@@ -4742,3 +4742,38 @@ on the rig, not launched. Latency measurement at 5-frame steps pending.
 the blue plane where the arcade has dark-blue chevron tips (pens 6-7 of
 set 19 are 005 005). Either those pens were not claimed or their tiles had
 not shipped; not measured.
+
+## 204. vi48 FAILED, vi49 PASSES: THE LIFT HAS TO DROP THE PINS TOO (2026-09-12 01:50)
+
+**vi48 never showed the plane.** 5-frame sweep 1540-1700 and 10-frame
+sweep 1700-1900: blue-upper 0.00 on every red-field frame, then the scene
+ends. Lifting the refusal alone gives set 19 nowhere to go: a pinned set is
+never freed (m_main.c 1759) and never evicted (2255), and round 0's table
+leaves two free slots across three lines. vi47 only worked because its
+lift came through the detector's unknown path, which ALSO clears the pins.
+
+**vi49 does the whole foreign transition on the aged miss** -- the same
+three lines the detector runs after 16 landings (11176): pins cleared,
+mds_scene_cur = 0xFF -- 16 vints after a no-match landing. The refuse
+condition goes back to `mds_scene_cur != 0xFF`.
+
+    our frame   vi49 blue-upper      (arcade reads 0.59 on this test)
+    1585-1600   0.00
+    1605-1610   0.03                 first cells shipping
+    1615-1680   0.59-0.60            the plane, at the arcade's share
+    1685        scene over
+
+The red field is on screen from 1585 at the latest, so the plane is up
+within ~30 frames of the cut: 16 vints of ageing plus the 800-cell page
+shipping at MDBATCH=24.
+
+**The black inside the plane is the arcade's.** Same test on ref_arcade
+1104-1160: black-upper 0.28; ours 0.22. The chevron plane has black tips by
+design (set 19's pattern), and 203's "not explained" is closed.
+
+`rom/night/vi49.32x` (md5 6eca15cb) = vi47 + 204, flag-identical to vi45,
+staged on the rig, not launched. vi48 is withdrawn.
+
+**NOT yet measured:** whether a long fade in play now clears the pins and
+brings back churn mid-level. A vi45-vs-vi49 divergence sweep over the
+level-1 demo (our frames 500-1560) is running.

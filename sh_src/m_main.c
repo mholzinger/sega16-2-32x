@@ -2096,10 +2096,10 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
          * chevron plane (page 11, set 19, a blue ramp in no round table)
          * was refused and rendered as backdrop. Mike's "no chevron",
          * vi38 through vi46. Refuse only while the scene is known. */
-        unsigned ti = (mds_scene_cur != 0xFF && mds_miss_age < 16
-                       && md_round < MDROUND_N)
-                      ? md_round : 0xFFu;   /* 203: or 16 vints past a
-                                             * no-match landing */
+        unsigned ti = (mds_scene_cur != 0xFF && md_round < MDROUND_N)
+                      ? md_round : 0xFFu;   /* 204: disp_gate clears
+                                             * mds_scene_cur 16 vints
+                                             * past a no-match landing */
 #else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
@@ -5391,9 +5391,19 @@ static uint8_t disp_rot_on;              /* md_rot when the game said display-on
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
 __attribute__((noinline)) static void disp_gate(void)
 {
-#ifdef PAL_STATIC
-    if (mds_miss_age && mds_miss_age < 255)
-        mds_miss_age++;                       /* LOOP29 203 */
+#if defined(PAL_STATIC) && defined(MD_STATIC)
+    /* LOOP29 203/204: a no-match landing that no match has followed for
+     * 16 VINTS is a foreign span. Do what the detector does after 16
+     * LANDINGS (11176): drop the pins and the installed-scene marker, so
+     * the refuse rule lifts AND the lines become evictable. vi48 lifted
+     * the refusal alone and the plane never came: every round set was
+     * still pinned (1759 never frees one, 2255 never evicts one), so the
+     * dynamic allocator had nowhere to put set 19. */
+    if (mds_miss_age && mds_miss_age < 255 && ++mds_miss_age == 16) {
+        for (unsigned s2 = 0; s2 < 128; s2++)
+            mds_pin[s2] = 0;
+        mds_scene_cur = 0xFF;
+    }
 #endif
 #ifdef BOOT_GATEOFF
     /* HARDWARE PROBE: never blank; the SH-2 forces the display on every
