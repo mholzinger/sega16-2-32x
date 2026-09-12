@@ -1369,7 +1369,7 @@ all readable from the shim. Details and addresses in the entry.
 `bm_scan_rows` answers "which sets, at which cat bits, are in the
 viewport" from 2,464 cells per plane per generation. Tile RAM is static
 in play (99), so `tools/bake_setcols.py` answers it from the rom: per
-scene, page, column -> (set|cat<<7, first row, last row). 11 KB a scene,
+scene, page, column -> (set|cat<<7, first row, last row). 9-17 KB a scene,
 exact against your window formula on 4,000 random windows including
 both wraps and any quadrant assignment. Drop-in shape:
 

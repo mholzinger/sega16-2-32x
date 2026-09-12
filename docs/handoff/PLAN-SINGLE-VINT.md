@@ -63,7 +63,7 @@ per generation to learn which sets the viewport holds and at which cat
 bits; its tail scans text and sprites and allocates groups. Tile RAM is
 static in play (99), so the scan is a function of rom + scroll:
 `tools/bake_setcols.py` / `sh_src/setcols_md.h` hold it as per-column
-set extents, 11 KB a scene, proven exact on 4,000 windows. The tail
+set extents, 9-17 KB a scene, proven exact on 4,000 windows. The tail
 stays.
 
     Expected: wall 1.12 minus the SCAN's share of 0.29 (scan/tail split

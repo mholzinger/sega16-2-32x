@@ -4907,8 +4907,11 @@ page, per column, every (set, cat, first row, last row) the column
 holds:
 
     scene   entries   bytes   max/column   mean/column
-      0      4,458   13,374       14          7.0
-      1-4    ~3,500  ~10,600     ~12         ~5.5
+      0      5,578   16,734       17          8.7
+      1      3,422   10,266       11          5.3
+      2      2,953    8,859        9          4.6
+      3      3,085    9,255        7          4.8
+      4      3,605   10,815       10          5.6
     all five 18,643   55,929
 
 A viewport is then, per plane: 44 columns x (one or two quadrant row
