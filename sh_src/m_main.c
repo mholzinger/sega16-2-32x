@@ -2847,7 +2847,15 @@ static int bm_scan_baked_ok(void)          /* ROM: a few calls a generation */
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
+#ifdef C1_PCELL
+/* Build C needs ~300 bytes of .ramtext for the per-cell cache in the
+ * sixteen 1:1 plot expansions; this runs twice a generation and is
+ * bound by its ROM table reads anyway (LOOP29 246: 573 ticks a plane),
+ * so under C1_PCELL it fetches from ROM. */
+static void bm_scan_baked(struct bm_state *a, int which, int aset)
+#else
 RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
+#endif
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
