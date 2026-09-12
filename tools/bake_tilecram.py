@@ -169,8 +169,20 @@ def main():
                 for pp in range(128):
                     u.setdefault(pp, set()).update(
                         md(w16(d, pp * 16 + 2 * k)) for k in range(1, 8))
-                    px.setdefault(pp, [md(w16(d, pp * 16 + 2 * k))
-                                       for k in range(1, 8)])
+                    # LOOP29 195: the pen MAP must be the palette's
+                    # RESTING state, not whichever dump sorted first.
+                    # setdefault took file[0], and if that sample is
+                    # mid-fade every set's pixel->slot mapping is built
+                    # from fade colours -- which is what turned level 1's
+                    # trees pink and banded its sky. Tally the per-pixel
+                    # vectors and take the MODE below.
+                    px.setdefault(pp, {})
+                    key = tuple(md(w16(d, pp * 16 + 2 * k))
+                                for k in range(1, 8))
+                    px[pp][key] = px[pp].get(key, 0) + 1
+            # collapse each palette's tally to its most common vector
+            px = {pp: list(max(v.items(), key=lambda kv: kv[1])[0])
+                  for pp, v in px.items()}
             slive[sc], slivepix[sc] = u, px
             print('live scene %d: %d gated dumps' % (sc, len(fs)))
     live = None

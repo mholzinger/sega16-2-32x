@@ -11196,7 +11196,29 @@ RAMCODE void m_main(void)
                                         PAL_SETGEN[g2]++;
 #ifdef MD_STATIC
                                     if (s < MDSTATIC_N && mds_dist <= MDS_TOL) {
+#ifdef MD_ROUND
+                                        /* LOOP29 194: the SECOND install
+                                         * site. 193 patched only the one
+                                         * at 5414, so this one kept
+                                         * indexing a ROUND-keyed table
+                                         * with the palette-DETECTED
+                                         * scene -- installing round 0's
+                                         * or 1's palette for whatever
+                                         * round was actually running.
+                                         * That is Mike's level 2 black
+                                         * in play while SCENESEL=2
+                                         * rendered it fully: the probe
+                                         * never took this path. */
+                                        {
+                                            uint8_t r2 = MD_ROUND_GET();
+                                            if (r2 < MDROUND_N) {
+                                                mds_install(r2, (uint8_t)win_no);
+                                                md_round = r2;
+                                            }
+                                        }
+#else
                                         mds_install(mds_table_of[s], (uint8_t)win_no);
+#endif
                                         mds_scene_cur = (uint8_t)s;
                                     } else
                                         MDS[4]++;        /* refused: foreign palette

@@ -4318,3 +4318,62 @@ blue. The thread settled that the transform is not a scene -- it
 recolours the PLAYER, and a player's palette is a sprite palette, outside
 every table the tile baker measures. So it needs the sprite side, and no
 round table will ever cover it.
+
+## 194-195. THE ROUND TABLES INSTALL, LEVEL 2 IS FIXED, AND LEVEL 1's TREES GO PINK (2026-09-11 22:05)
+
+**194 -- the level-2 black was a SECOND install site.** 193 patched the
+one at m_main.c 5414 and missed the one at 11199, which kept indexing a
+ROUND-keyed table with the palette-DETECTED scene -- installing round 0's
+or 1's palette while another round ran. **My SCENESEL verification could
+not have caught it: the probe never takes that path.** Fixed; forcing
+each round now gives healthy frames:
+
+    round 1   57 colours   5.1% black
+    round 2   65 colours  20.3% black    (was black but for the stalactites)
+    round 3   73 colours   3.7% black
+    round 4   75 colours   6.4% black
+
+**195 -- and level 1 regressed: pink trees and a purple band in the
+sky.** Everything else in the frame is right (temple, wolf, lettered
+gravestones, grass, player, enemy) and it carries MORE colours than the
+good build, 100 against vi39's 89, differing on 43.7% of pixels.
+
+**What I ruled out, in order:**
+
+  - **NOT the pen map's sample choice.** `px.setdefault` took whichever
+    gated dump sorted first, so a mid-fade sample would have built every
+    map from fade colours. Changed to the MODE of the per-pixel vectors
+    across all 140 dumps. **Byte-identical result** -- 100 colours, same
+    43.7%. The first sample was already the resting state.
+  - **NOT the source colours.** Sets 74, 92 and 95 -- the big background
+    palettes -- read IDENTICALLY in the decompile thread's gated attract
+    dump and in my own in-game play2 dump: `777 676 565 455`,
+    `446 346 346 246`, `065 054 043 043`. The data is right.
+
+**So the defect is in the LINE/SLOT assignment or its application, not
+the colour data.** The runtime remaps tile pixels through `mdp_s_map` at
+emit time (`md_emit_art`: `map[r[kk*2]]`) and paints CRAM from
+`mdp_line_c`, and both now come from the baked table -- so a set drawn in
+another set's hues means those two disagree somewhere between the pack
+and the install.
+
+**The next step is a READBACK VERIFIER, which is Mike's own standing
+rule:** dump `mdp_line_c` (0x3C400) and `mdp_s_map` (0x3C500-ish) from a
+running frame and diff them against `pal_rounds_md.h`. If they match, the
+pack is wrong; if they differ, the install is. That is one ares dump and
+one python diff, and it is the only way to tell those two apart --
+exactly the kind of thing I should have built before shipping vi41.
+
+`rom/night/vi39.32x` (md5 c93dbeab) is back on the rig: the line, round
+tables OFF. It is the build Mike called playable with no obvious
+regressions.
+
+**Not covered by any of this, and now clearly its own problem:** the
+transformation. Mike's vi41 shot shows the chevron rendering YELLOW and
+ORANGE on RED where it should be blue. The thread established the
+transform recolours the PLAYER, so it is a sprite palette and no tile
+table touches it. Same for the intro cutscene, which vi40 rendered in
+flat purple monochrome. **The round tables cover the five playable
+levels and nothing else** -- intro, transformation and the transitions
+all sit outside them, and the refuse rule starves whatever the last
+round's table does not list.
