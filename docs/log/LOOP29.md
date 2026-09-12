@@ -5521,3 +5521,41 @@ Fold 1 stands as Mike's speed lever (motion 8.6 -> 11.4 fps, sprites
     rom/night/vi76-85   TILE_VERIFY probes, withdrawn (see above)
     rom/night/vi86.32x  vi75 + 226 mask (md5 67372a94), withdrawn
     rom/s16.32x         vi70 (md5 fadafb08), the line
+
+## 232. WHERE WE ARE, IN VINTS (2026-09-12 21:20)
+
+Mike: "the metric I understand most from you is: vint. where are we and
+what's next?" Measured, not recalled. `tools/nat_score.py`, ares, play2,
+4000 frames, PHASECENSUS=1 on each line (pc70/pc75 = the same flags plus
+the census; wall and ships agree with the census-free roms to 0.01):
+
+    build   wall v/gen   single-vint   ships/s   echo   mtask   ship   flip
+    vi70      1.48          18%         32.2     1.42   1.14    0.64   0.69
+    vi75      1.11          44%         39.4     1.01   1.01    0.64   0.73
+    bar       1.00         ~98%         60
+
+Period bins (1/2/3/4+ vints): vi70 384/1661/51/9, vi75 1092/1366/9/12.
+Fold 1 moved the wall by the 0.37 the plan priced (175: 1.12) and the
+single-vint share from a fifth to nearly half; the echo phase (slave)
+fell 1.42 -> 1.01 with the FB cat-1 pass gone, and mtask (master) 1.14
+-> 1.01. The ship phase did not move (0.64): that is the 24-tile batch
+inside the window, the "sprites slow while the tiles update" Mike feels.
+
+**On hardware.** BOOTGAMERATE reads 63-64 game frames per 64 vints on
+BOTH builds: under GAMEGATE the game never waits, so that probe cannot
+rank what Mike sees. New probe `BOOTFLIPRATE=1` (LOOP29 232): presented
+frames per 64 vints, from the FS bank changing between vint tops. The
+first cut read the wrong register (0xA1510A is the DREQ destination;
+the FB control word with FS is 0xA1518A) -- which also voids vi77's
+"FS never changed mid-consume" reading in 231; the transport verdict
+there stands on the VRAM-equals-source and read-back checks alone.
+Rig numbers below when the corrected probe lands.
+
+**Next**, per the plan and the decompile thread's assessment (69045ac):
+fold 4 before the measurement channel -- one state word from IRQ4
+(round, cutscene byte 0xFFF148, sequence), deleting the two SH-2
+mechanisms that depend on timing alone (the claim-mix flag and the
+COMM10 edge read). The title screen is the design constraint: it draws
+the level-2 cave under logo sets outside every table, and today the
+claim mix is what keeps the refuse rule off there. The attract dump of
+0xFFF142/0xFFF148 per scene decides how the word is used.
