@@ -183,6 +183,18 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
+## CANDIDATE, ON THE RIG AS `rom/night/vi51.32x` (md5 180f6664), AWAITING MIKE'S EYE (2026-09-12 01:55)
+
+vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-206 on top: the
+round tables re-encoded and packed into THREE lines (the pink trees), the
+tile ship rate as a knob (the black pop-in and dead transitions), and the
+cutscene path -- refuse lifts on a foreign span, all sets freed at the
+transition, the round re-installed on the first matching landing (the
+chevron plane, the flat flames, the black wall band). Headless ares: the
+transformation's blue plane is up ~30 frames after the cut at the
+arcade's share, flames coloured, no residue afterwards. NOT shown by
+headless: level 1 after a transform in PLAY. Build line in LOOP29 197.
+
 ## THE ACCEPTED ROM
 
     make ship-us FBXPORT=1          # tag mister-keeper-20260908

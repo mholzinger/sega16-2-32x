@@ -4812,3 +4812,16 @@ Nothing is lost -- 205 puts the round back whole on return.
 
 Measurement of vi51 (plane timing, flame share vs the arcade, black share
 after the cutscenes) pending.
+
+**206 measured (headless ares, vi51):**
+
+    face window     red field from 1590; plane 0.12 at 1610, 0.60-0.64
+                    from 1620 to the end of the scene (arcade 0.59)
+    flame share     0.03-0.08 during the scene (arcade 0.01-0.06 on the
+                    same test; vi49's flat-red flames would read ~0)
+    after the eye   black share 0.048-0.058 at 2200-2400 (vi45: 0.046-0.059)
+
+Plane up ~30 frames after the cut, flames coloured, no residue in the
+demo that follows. **vi51 is the candidate for Mike's eye.** What headless
+cannot show: the black wall band in PLAY after a transform (205) -- the
+attract never takes that path.
