@@ -224,6 +224,20 @@ instrument: a 24-bit-per-capture value channel (four tagged 6-bit CRAM
 floods), then the allocator's own counters at matched attract seconds.
 Presentation line stays vi70; vi75 is the speed lever.
 
+**WHERE WE ARE, IN VINTS (LOOP29 232, 2026-09-12 21:20).** ares ranks;
+the rig measures (`BOOTFLIPRATE=1`, presented frames per 64 vints off
+the FS bank, decode = flood value & 0x7F):
+
+    build      ares wall   single-vint   ares fps   RIG fps (attract demo)
+    vi70         1.48         18%          43           ~15
+    vi75         1.11         44%          60           ~20
+    bar          1.00        ~98%          60            60
+
+The FPGA is ~3x behind ares on the SH-2 side, as CLAUDE.md warns. The
+bar is three times away on hardware. Next: fold 4 (one state word from
+IRQ4, deleting the claim-mix flag and the COMM10 edge read), then fold
+2/3 per the plan; every build gets its rig fps from the probe.
+
 **THE RIG IS SELF-SERVICE.** No Mike needed for attract-mode probes:
 
     tools/mister_push.sh rom/night/X.32x          # deploy + launch
