@@ -5145,3 +5145,28 @@ Staged for the rig, not launched, both otherwise vi66:
 If vi66a is clean, the table's size is the trigger; if vi66b is clean, the
 wipe is. If both band, the trigger is elsewhere in 215-218 and vi62b is
 the line again.
+
+## 220. vi66b HOLDS THE FIX; THE WIPE IS NARROWED TO THE CUTSCENE'S OWN SETS (2026-09-12 14:30)
+
+Mike: "rom/night/vi66b.32x holds the fix" -- the horizon band is gone with
+the tag wipe off (219's A/B). His three remaining items: the round-clear
+text (pre-existing), "missing tiles after defeating Neff" (not visible in
+the three shots; needs a frame), and the orb's black bar (pre-existing).
+
+**216's reading was wrong.** The slot cache DOES evict: on a tag miss with
+a full cache set it takes the LRU way (`md_ref` age, the block after "set
+full: evict the LRU way"). The counters from the striped face (vi63)
+already said so: [1] slot-hit ~= [0] cells, 2-3 evictions in 30 frames.
+The plane's cells were HITTING tags -- tags for those exact tiles from the
+previous attract loop, patterns converted under whatever pen map set 19
+had then. The mass wipes in vi64-66 fixed the plane by taking those stale
+tags with everything else, and the everything-else is what bands on
+hardware (a cut transfer at the load leaves tiles our map calls shipped).
+
+**220:** at the edge out, wipe the tags of resident sets that are NOT in
+the published round's table -- the cutscene's own -- and nothing else. The
+level never re-ships; the plane's stale patterns re-convert.
+
+`rom/night/vi67.32x` (md5 2857e844) staged, not launched. Headless checks
+pending. vi66/vi66a/vi66b withdrawn (vi66b's behaviour is what 220 keeps
+for the level, plus the plane).

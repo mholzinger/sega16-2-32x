@@ -5450,9 +5450,22 @@ __attribute__((noinline)) static void disp_gate(void)
              * play (1730: cells re-claim, the shipper re-converts), and it
              * is all the cutscene needs. */
 #ifndef EDGE_NOWIPE
-            for (unsigned s2 = 0; s2 < 128; s2++)
-                if (mdp_s_line[s2])
-                    mdp_wipe_set_tags(s2);
+            /* 220: ONLY the sets outside the round's table. vi66b on the
+             * rig proved the whole-table wipe is the hardware horizon
+             * band (219: everything re-ships at the load and a cut
+             * transfer leaves tiles our map believes shipped). The
+             * striped plane (216) was stale TAGS of the cutscene's own
+             * sets, converted under a previous pen map and hit again --
+             * the cache does evict LRU ways, 216's reading was wrong --
+             * so wiping just those sets is what the plane needed. */
+            {
+                unsigned r9 = MD_ROUND_GET();
+                if (r9 >= MDROUND_N) r9 = md_round;
+                for (unsigned s2 = 0; s2 < 128; s2++)
+                    if (mdp_s_line[s2]
+                        && !(r9 < MDROUND_N && mds_s_line[r9][s2]))
+                        mdp_wipe_set_tags(s2);
+            }
 #endif
         }
         mds_onscreen = on;
