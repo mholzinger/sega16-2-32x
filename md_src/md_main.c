@@ -5580,7 +5580,16 @@ void main(void) {
 	{
 		uint32_t hold = 6000000UL;
 		__asm__ __volatile__("move.w #0x2300,%%sr" ::: "memory");
+#ifdef MD_STATE
+		/* fold 4: the vint handler may already have taken COMM14 for
+		 * the state word (tag E) -- it only does so after seeing the
+		 * master's B1xx/B008, so E means armed too (vi87 cuts 1-2: this
+		 * loop spun on E for the whole run, screen black) */
+		while ((*mars_comm14 & 0xFE00) != 0xB000
+		       && (*mars_comm14 & 0xF000) != 0xE000 && --hold) ;
+#else
 		while ((*mars_comm14 & 0xFE00) != 0xB000 && --hold) ;   /* B008 or B1xx */
+#endif
 		__asm__ __volatile__("move.w #0x2700,%%sr" ::: "memory");
 	}
 	MDSTAGE(0x3000);                    /* DARK BLUE: hold over, entering the game */
