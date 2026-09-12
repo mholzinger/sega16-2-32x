@@ -421,3 +421,11 @@ question: does it look like c1p95c. Then Build C.
       on vi95's line, i.e. the punch's sprite-loop cost is what this
       card's base carries. pcA (c1p95c + census) is being read to put
       the base wall on the card; the check mode and the rig follow.
+    rig (unattended attract):
+      frB   21 19 7 15 18 presented frames per 64 vints (c1p95c 16 16 6 21 18)
+      attract black shares, first and second demo: bldB trees 0.00 fg
+      0.00-0.01; c1p95c the same run: 0.00 / 0.00-0.02. (The 0.30-0.45
+      frames are the face/eye transitions.) Note for the record: the
+      fold-1 line's attract on the rig reads CLEAN here, where vi95's
+      read 0.20 / 0.57 an hour earlier -- the punch changed nothing in
+      the allocator, so the rig's black was phase; not re-derived tonight.
