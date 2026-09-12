@@ -3228,3 +3228,69 @@ built. A `git log` would have shown me each time.
 
 **The rule I keep breaking**: check what the other thread did with my last
 finding BEFORE acting on it myself. Not after the build fails.
+
+---------------------------------------------------------------------
+## 72. SCENE 3 LOADS FINE. Entry 66's "it will not take" was a stale rom.
+
+Entry 66 left scene 3 unmeasured: "its rom carries the all-3 table
+(verified by byte search in the image) and 0xFFF142 reads 0 at frames
+900, 1500, 2200 and 3000." That is an ABSENCE established by four
+samples, which is exactly the class entry 50 says produces a wrong
+claim. It was wrong.
+
+**The arcade first, because the port is a variable the question does not
+need.** `tools/scenesel_arc.lua` runs `mame altbeast` — the oracle —
+writes N to the eight bytes at 0x1CDA in the 68K rom REGION at frame 1,
+and samples 0xFFF142 EVERY frame:
+
+    SS_N=3 mame altbeast ... -autoboot_script tools/scenesel_arc.lua
+
+    N=2   f142=2 from frame 448
+    N=3   f142=3 from frame 448
+
+Identical shape. Scene 3 is not special to the game.
+
+**Then our rom.** `make ship-us SCENESEL=3`, copied out and the artefact
+verified by inspection (rom[0x301CDA..0x301CE1] == 03 x8; the 68K image
+sits at cart 0x300000, bank 3 -> 0x900000), then sampled every frame:
+
+    f1     f142=0
+    f463   f142=3      <- and 3 at every frame after, bar one reload blip
+    f1926  f142=0      (one frame)
+    f1927  f142=3
+
+Entry 66 sampled 900, 1500, 2200 and 3000. All four read 3 here. So the
+read was not the problem and the rom was: entry 66 records that a
+transient link error left `scene3.32x` holding scene 2's image, caught
+that one, and did not consider that the scene-3 build had the same fault.
+**A build that fails leaves the previous rom in place** — the trap is
+already written down in HANDOFF-DECOMPILE-2 and it still cost this.
+
+**No build is needed for this at all.** The table lives in the cart
+region, which MAME lua can write at frame 1, so
+`CD_N=<scene> tools/cram_dump_scene.lua` selects a scene in ANY rom
+without touching the tree. Proven by using it to re-derive scene 2 from
+a scene-3 rom: 14 palettes, lines [13,15], 28 slots — entry 66's scene 2
+figure exactly.
+
+**Scene 3, measured.** `tools/cram_dump_scene.lua` dumps WRAM 0xFF9000
+(0x1000 bytes) at three frames four apart, the input format
+`bake_tilecram.py --live` takes. Dumps are in the tree as
+`discover/cram/scene3_a.bin` b c (frames 1500 / 1504 / 1508).
+
+    scene 3    8 palettes    lines [15, 7]    22 slots    2 lines
+
+Stable: an independent window at 2400 / 2404 / 2408 gives the same three
+numbers, and so does the union of all six frames.
+
+**Scene 3 is the kindest scene in the game.** Two lines, two left over.
+The completed table, each row from its own live dumps:
+
+    scene 0   25 palettes   lines [15,15,11,5]   4 lines
+    scene 1   11 palettes   lines [14,14,5]      3 lines
+    scene 2   14 palettes   lines [13,15]        2 lines
+    scene 3    8 palettes   lines [15,7]         2 lines
+    scene 4   15 palettes   lines [14,14,11]     3 lines
+
+Scene 0 is the only scene that needs all four, which strengthens entry
+66's reversal of 64 rather than changing it.

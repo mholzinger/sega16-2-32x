@@ -113,15 +113,19 @@ Probe flags, all `make ship-us FLAG=1`:
 
     MISSKEEP    stop the game wiping its own miss counter  (BUILDER'S)
     SCENESEL=N  force every round to load scene N          (mine)
+    CD_N=N      the same thing with no build at all: the lua writes the
+                round->scene table into the cart region  (tools/cram_dump_scene.lua)
     MDSPRPROBE  blank the sprite copy to price it          (mine)
     FRAMEDONE   frame-complete signal                      (BUILDER'S)
 
 ---------------------------------------------------------------------
 ## OPEN
 
-  1. **Scene 3 will not load under SCENESEL.** The patched table is
-     verifiably in the rom image and 0xFFF142 still reads 0 at four
-     sampled frames. No explanation. Blocks the last per-scene pack.
+  1. ~~Scene 3 will not load under SCENESEL.~~ **CLOSED** (LOOP-DECOMPILE
+     72): a stale rom, not a game fact. Scene 3 loads on the arcade and
+     on ours, its pack is 8 palettes in two lines, and the dumps are in
+     `discover/cram/scene3_*.bin`. Scene selection no longer needs a
+     build: `CD_N=<scene> tools/cram_dump_scene.lua`.
   2. **Five genuinely truncated functions** (entry 54) need a hand pass.
      Ten bounding defects remain of 560.
   3. **~29% of rom data unattributed.** The two largest blocks are

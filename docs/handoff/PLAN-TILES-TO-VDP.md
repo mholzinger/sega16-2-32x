@@ -234,10 +234,13 @@ asserted against the expected table first. Tile and palette measurement
 only: the ACTORS are still the round's, so it is NOT valid for a sprite
 priority census.
 
-**Scene 3 does not take.** Its rom carries the all-3 table, verified by
-byte search in the image, and 0xFFF142 still reads 0 at frames 900,
-1500, 2200 and 3000. Patch present, scene does not load. I have no
-explanation and am not offering one; scene 3 stays unmeasured.
+**RETRACTED: "scene 3 does not take" was a stale rom** (LOOP-DECOMPILE
+72). Re-measured every frame instead of at four, on the arcade and on our
+rom: both hold 3 in 0xFFF142 from frame ~450 onward, including all four
+frames I had sampled. Scene 3 is measured and its pack is below. And
+selecting a scene no longer needs a build — `CD_N=<scene>
+tools/cram_dump_scene.lua` writes the table into the cart region at
+frame 1, which removes the failure mode that caused this.
 
 **The packs, ready to consume.** Same terms as the scene 0 pack above:
 worst 40x28 viewport over all 64 scroll positions, both planes, live
@@ -293,6 +296,7 @@ now in the tree so you do not have to rerun it:
     discover/cram/scene0_a.bin  b  c      frames 2400 / 2404 / 2408
     discover/cram/scene1_a.bin  b  c      frames 1500 / 1504 / 1508
     discover/cram/scene2_a.bin  b  c
+    discover/cram/scene3_a.bin  b  c      frames 1500 / 1504 / 1508
     discover/cram/scene4_a.bin  b  c
 
 Each is WRAM 0xFF9000, 0x1000 bytes. Three frames apiece so the colour
@@ -307,17 +311,20 @@ cycler's states are covered by the union.
     scene 0   25 palettes   lines [15,15,11,5]   46 slots
     scene 1   11 palettes   lines [14,14, 5,0]   33 slots
     scene 2   14 palettes   lines [13,15, 0,0]   28 slots
+    scene 3    8 palettes   lines [15, 7, 0,0]   22 slots
     scene 4   15 palettes   lines [14,14,11,0]   39 slots
-    scene 3   NOT AVAILABLE
 
-**Only scene 0 needs all four lines.** Scene 2 needs two. That matters for
+**Only scene 0 needs all four lines.** Scenes 2 and 3 need two. That matters for
 LOOP29 176: the fourth line made the thrash 15x worse, and on three of
 four scenes the fourth line does not need to exist at all.
 
-**Scene 3 is missing and I could not get it.** Its SCENESEL rom carries
-the all-3 table — verified by byte search in the image — and 0xFFF142
-still reads 0 at frames 900, 1500, 2200 and 3000. Patch present, scene
-does not load, no explanation offered.
+**Scene 3 is now in, and it is the kindest scene in the game** — 8
+palettes in two lines, two lines left over (LOOP-DECOMPILE 72). My
+earlier "scene 3 will not load" was a STALE ROM, not a game fact: the
+arcade and our rom both put 3 in 0xFFF142 from frame ~450, and the four
+frames I sampled all read 3 when re-measured. No build is needed to
+select a scene any more — `CD_N=<scene> tools/cram_dump_scene.lua`
+rewrites the round->scene table in the cart region at frame 1.
 
 **One correction to my addendum 2.** Those numbers came from my own packer
 on the same dumps and differ slightly from your tool's (scene 2: I said
