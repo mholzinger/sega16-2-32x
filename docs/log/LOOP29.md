@@ -6050,3 +6050,17 @@ class test, a ROM byte for class 2) cost the slave a third of its
 windows. **244c:** the baked-run path tests the class once per CELL;
 class 0 copies the run, class 1 skips it, only class 2 walks the art
 (one ROM row per cell). c1p95c / frc1p95c built; rig number below.
+
+**244c measured: frc1p95c 16 16 6 21 18** against fr95e 19 15 22 21 14
+-- the per-cell form costs the rig nothing measurable; ares f1160 shows
+the legs through the grass and the zombies masked below the ground.
+`rom/night/c1p95c.32x` (md5 85116f58) = vi95 + C1PUNCH is on the rig
+for Mike's eye. If it passes, the fold-1 line is vi95's flags +
+C1PUNCH=1, and fold 2 adds SETCOLS=1 on top (sc95 measured separately;
+the two do not interact).
+
+NIGHT'S END (02:30). Line: vi70 (presentation) until Mike names one;
+fold-1 builds: vi95 (plays), c1p95c (hole punch, on the rig), sc95
+(fold 2, exact, 1.05 v/gen ares). Next: fold 5 with the copy on the
+packet side (NOTES 25/26 with the decompile thread), then RELBANK on
+the rig with BOOTFLIPRATE + BOOTGATECHK.
