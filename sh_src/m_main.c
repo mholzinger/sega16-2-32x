@@ -1274,6 +1274,12 @@ static inline unsigned md_state_on(void)
      * claim mix, exactly vi75's behaviour there. */
     unsigned st = MD_STATE_STEP(w);
     if (st == 0 || st == 2 || st == 4) return 0;
+    /* vi90 (LOOP29 235): vi88's only CLEAN rig demos were the ones the
+     * word forced ON (step 3); vi75/vi89, where the claim mix decides,
+     * show the black sets. Force ON where the step is unambiguous --
+     * 3 (demo with logo) and 5 (demo) -- and leave step 1 (the SEGA
+     * screen precedes its demo at boot) to the claim mix. */
+    if (st == 3 || st == 5) return 1;
     return 2;
 }
 static inline unsigned md_state_extra(unsigned cset)
