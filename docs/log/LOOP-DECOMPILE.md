@@ -3987,3 +3987,50 @@ words, every one a valid 13-bit tile index and ascending in runs
 it** — no code reference and no credible data pointer — so it is reached
 from a computed base, like 0x29000-0x29E00. Two blocks now sit in that
 category and they are the honest end of what pointer-chasing can do.
+
+---------------------------------------------------------------------
+## 84. The pipeline has a bootstrap now, and the two address sets are measured
+
+Everything from entry 73 onward runs without Ghidra, but it all stood on
+`repair_seeds` — an instruction address list that exists because someone
+once had a reference disassembly of THIS title. A new title has neither,
+so the kit had a hole exactly where it claims to be general.
+
+`tools/code_walk.py` closes it, and the measurement is the useful part.
+
+**Recursive descent from the vector table gets 4.4%.** All 64 vectors
+point into a four-instruction stub, and System 16 dispatches nearly
+everything through `jmp (a0)`.
+
+**Running it to a FIXPOINT gets 29.3%.** Each pass harvests, out of the
+code it has just decoded, every longword installed as an object routine
+pointer (`move.l #addr,$02(a6)`) and every address pushed for an `rte`
+dispatch, seeds those and goes again. Five passes, 449 objdump runs, three
+seconds. **Zero wrong**: every address it finds, the reference also calls
+an instruction — except two, 0xBD6 and 0x4832, and 0xBD6 is a function
+entry in our own map, so the reference's list is the one that is short.
+
+**Pointer-table discovery adds nothing here, and the reason is worth
+keeping.** A run of longwords that mostly point at decoded code is a jump
+table — but the per-scene dispatch tables at 0x92F0 and 0x17E24 have NO
+entry reachable any other way. Not one of their targets is in the descent
+set, so there is nothing to validate them against. **A table whose every
+target is only reachable through the table cannot be bootstrapped.**
+
+**And a plain linear sweep gets 99.8%.** From the reset entry to the code
+ceiling: 34748 boundaries, of which 19107 of the reference's 19137, 30
+missed and 15641 invented over data.
+
+    descent   5601 addresses   29.3% recall   0 wrong
+    linear   34748 addresses   99.8% recall   15641 wrong
+
+**The descent set is a strict SUBSET of the linear one — on 5601
+addresses the two never disagree.** So the recipe is not to pick one:
+take the linear superset for a hazard census, where missing a TAS is the
+failure and a false positive costs one hand check, and the verified set
+for a rom map, where a false instruction inflates code coverage and hides
+data underneath it. Where they disagree, descent wins.
+
+`TOOLKIT.md` now carries the whole pipeline as a numbered recipe —
+addresses, stream, dependency census, timing census, bounds and profile,
+rom map — with the trap that bit each step written next to it.

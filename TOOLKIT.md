@@ -283,6 +283,85 @@ time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
   ceiling. Altered Beast: zero sites. The check is one pass over the
   stream and a clean result is still a kit rule.
 
+## Reading a NEW title's program rom, with no Ghidra — KIT-CORE
+
+Everything below runs from the rom and a binutils `objdump`. It was built
+while finishing Altered Beast (LOOP-DECOMPILE 73-84) after the analysed
+Ghidra project turned out to be the one artefact you must open least: its
+own rebuild rule is import once, seed once, never re-analyse, because
+re-running analysis over seeded code destroyed 84 functions the one time
+it happened.
+
+**Step 1 — get the instruction addresses, and know which set you have.**
+There are two, they answer different questions, and using the wrong one
+is the mistake that costs a session.
+
+    tools/code_walk.py           recursive descent from the vector table,
+                                 to a fixpoint: each pass harvests the
+                                 object routine pointers and rte dispatch
+                                 targets out of the code it just decoded
+                                 and seeds them
+    tools/code_walk.py --linear  a plain linear sweep to the code ceiling
+
+Measured on Altered Beast against a reference disassembly's own 19137
+addresses:
+
+    descent   5601 addresses    29.3% recall    0 wrong
+    linear   34748 addresses    99.8% recall    15641 wrong
+
+and the descent set is a strict SUBSET of the linear one — on 5601
+addresses they never disagree. **Take the linear superset for a hazard
+census**, where missing a TAS is the failure and a false positive costs
+one hand check. **Take the verified set for a rom map**, where a false
+instruction inflates code coverage and hides data underneath it.
+
+Descent stops at 29% for a reason worth knowing rather than working
+around: System 16 dispatches through `jmp (a0)`, and the per-scene tables
+have no entry reachable any other way, so there is nothing to validate
+them against. A table whose every target is only reachable through the
+table cannot be bootstrapped. Seed those by hand once you find them.
+
+**Step 2 — decode the stream.** `tools/code_stream.py` turns an address
+list into `addr, length, mnemonic, operands`. ONE TRAP, and it produced
+eight false findings before it was found: objdump WRAPS an instruction
+longer than six bytes onto a second line carrying an address and bytes but
+no mnemonic. Drop those lines and every long instruction measures short —
+including `move.l #next,$02(a6)`, which is the object state machine's exit
+idiom and the last instruction of many routines.
+
+**Step 3 — the dependency census.** `tools/hazard_census.py --stream`
+reports TAS, STOP, MOVEP and friends, plus the arcade hardware surface:
+every board address the program touches, with direction and width, because
+each one needs somewhere to land in the new machine's map. Its raw-opcode
+sweep covers only TAS/STOP/RESET/TRAPV — exact words or a tight range —
+because MOVEP's pattern matches the `0000 xxxx` longword every pointer
+table is made of, and a list nobody reads is worse than no list.
+
+**Step 4 — the timing census.** `tools/timing_hazards.py`, three separate
+questions: a `dbf` branching to ITSELF is a pure cycle delay; a counted
+loop around `stop` measures interrupts; a short test-and-branch-back is a
+busy-wait. See the landmines section above for the two detector traps.
+
+**Step 5 — bounds and profile.** `tools/bound_ref.py` audits function
+bounding against the stream; `tools/func_profile_ref.py` rebuilds the
+per-function profile with the arcade surface kept SEPARATE from work RAM.
+Conflating them is how 117 functions came to be labelled `hardware` when
+45 touched the board.
+
+**Step 6 — the rom map.** `tools/rom_map.py` marks code, marks the regions
+you have established, and for every remaining run prints who points into
+it. Chasing those pointers is what cracks data regions. Two rules keep it
+honest: a 4-byte scan over 2-byte fields INVENTS pointers, so count the
+distinct high words (see the landmines section); and prefer a bound that
+comes from the ADDRESSING over one that comes from the eye — the zoom
+table's index is read as a byte and shifted left five, so the table is
+exactly 256 rows and nothing about that is a guess.
+
+**What none of it replaces.** Every claim still has to name the
+instruction that consumes the value. The tools narrow where to look; they
+do not establish anything on their own, and one of them invented 62
+pointers into a block that has none.
+
 ## Hardware truth from jtcores (srcref/jtcores, GPL — derive, never copy)
 
 S16B shares jts16_prio.v/jts16_colmix.v with S16A (jts16_video.v's
