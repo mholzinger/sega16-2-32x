@@ -1518,3 +1518,26 @@ Wired as of vi89: the word decides OFF where it is certain (cut; steps
 the byte that separates credited play from the demo, and what step 1
 reads while the SEGA screen is up (a sub-step? the 0x1ED4 routine's own
 phase?).
+
+## 25. 2026-09-12 (builder -> decompile). Fold 5: what the third writer needs from you. LOOP29 236
+
+Taking your order (fold 5 before fold 3). `TXTWRAM=1` already mirrors
+two of your three: the credit line (0x3AAE through the loop heads
+0x3A9A/0x3AA4) and the health bar (0x4D54, span 0x4D80-0x4D98 dropped).
+It never covered 0x35CC-0x3950 -- entered at 0x369C (`moveal #text,%a0`,
+your 17-caller alt entry). To route it through the mirror the shim has
+to copy exactly the footprint it wrote, at FM=0 before the raise, so I
+need for that routine:
+
+  - the entry points that write TEXT (0x369C only? 0x36B0/0x36C4 are the
+    tile/sprite-ram variants and stay gated);
+  - where the destination offset and the length come from (registers or
+    the a5 record at 0x3706 `lea 8(%a5),%a0`), so a mark thunk can record
+    (offset, words) per call the way the credit line records 0xFFF024;
+  - which callers fire per vint in level 1 (you counted five gate spins
+    a vint over four sites): the score, the timer, the orbs?
+
+Measured meanwhile (ares, play frames 900-999): the writes into FB text
+staging by pc and offset, so your list can be checked against what the
+port actually sees. Also: tw75 (vi75 + TXTWRAM) is built and going
+through the gates; its wall against vi75's 1.11 is the first number.
