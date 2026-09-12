@@ -5841,3 +5841,17 @@ behaviour with 238's play regression excluded by construction.
 
 `rom/night/vi94.32x` = vi93 + 239. Gates: ares attract/play/late-coin
 with the posted words decoded through the credited game; rig attract.
+
+**vi94 measured.** ares: attract/play/late-coin all vi75; the posted
+words decoded through the late-coin game: credited 0 -> 1 at the coin
+(f2500), the step byte MOVES at game start (5 -> 1 -> 2 by f2539) and
+stays 2 -- so 238's regression was exactly a picture step reading 2 in
+credited play, and the credited flag now routes play to the claim mix.
+Rig attract: = vi75 (fg 0.56-0.74), i.e. vi90's demo gain did not
+survive. Either the flag is set on the rig with no one pressing
+anything (a floating joypad read: svc & 0x11 from an idle port) or the
+picture-step OFF is not what produced vi90's gain. One probe decides
+it (paint `shim_credited` and the step through the value instrument in
+the attract); not run tonight. vi94 is on the rig as the safe fold-1
+build: no regression against vi75 in either mode, the transformation
+OFF lag-free.
