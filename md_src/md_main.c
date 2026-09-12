@@ -2009,7 +2009,7 @@ static void r60_push(void) {
 		 * -> the SOURCE words read zero. vi77 encodes the next question:
 		 * bit 7 bias | bit 6 any slot out of range | bits 5-3 VRAM
 		 * all-zero records (sat 7) | bits 2-0 consumes where FS changed
-		 * mid-consume (sat 7) */
+		 * mid-consume (sat 7).
 		 * vi77 read on the rig: no slot out of range, VRAM-zero 7, FS
 		 * never changed mid-consume. vi78 carries the SH-2's own
 		 * read-backs (m_main.c TV_BITS, packet word 1 bits 8-12):
