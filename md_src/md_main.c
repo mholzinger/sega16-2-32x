@@ -2026,7 +2026,7 @@ static void r60_push(void) {
 		 * SH-2 FB writes made while the SH-2 sees FM=0.
 		 * vi79 on the rig: both 0. vi80: bits 2-0 tv_alt (packet A
 		 * payload changed between publish and the next window, sat 7),
-		 * bits 4-3 first differing long index >> 7. */
+		 * bits 4-3 first differing long index >> 7.
 		 * vi80: tv_alt saturates on ares too (the bank alternates under
 		 * d, so the compare is not a corruption test) -- withdrawn.
 		 * vi81: bit 7 bias | bits 6-5 record count >> 3 of the last
