@@ -276,3 +276,58 @@ Running each rom and reading 0xFFF142 caught it. The build log did not.
 The accidental upside: that stale rom re-measured scene 0 and reproduced
 25 palettes / 43 colours / [15,15,11,5] exactly, which is an unplanned
 independent repeat of the number your whole pack rests on.
+
+---------------------------------------------------------------------
+## Addendum 3 — the live palette dumps, staged in the repo
+
+LOOP29 188 item 1 says the emitter needs my exhaustive viewport list
+rather than a sampled harvest. The blocker was never the list — it was
+that **no input script reaches past scene 0**, so there were no live
+palette dumps for the other scenes, and `bake_tilecram.py` falls back to
+rom for any scene it has no dump for. Rom is wrong above palette 63, and
+every viewport uses 64-127.
+
+`make ship-us SCENESEL=N` (LOOP-DECOMPILE 66) solves that. The dumps are
+now in the tree so you do not have to rerun it:
+
+    discover/cram/scene0_a.bin  b  c      frames 2400 / 2404 / 2408
+    discover/cram/scene1_a.bin  b  c      frames 1500 / 1504 / 1508
+    discover/cram/scene2_a.bin  b  c
+    discover/cram/scene4_a.bin  b  c
+
+Each is WRAM 0xFF9000, 0x1000 bytes. Three frames apiece so the colour
+cycler's states are covered by the union.
+
+**Your own tool, run per scene:**
+
+    python3 tools/bake_tilecram.py --live-scene 1 \
+        --live discover/cram/scene1_a.bin discover/cram/scene1_b.bin \
+               discover/cram/scene1_c.bin
+
+    scene 0   25 palettes   lines [15,15,11,5]   46 slots
+    scene 1   11 palettes   lines [14,14, 5,0]   33 slots
+    scene 2   14 palettes   lines [13,15, 0,0]   28 slots
+    scene 4   15 palettes   lines [14,14,11,0]   39 slots
+    scene 3   NOT AVAILABLE
+
+**Only scene 0 needs all four lines.** Scene 2 needs two. That matters for
+LOOP29 176: the fourth line made the thrash 15x worse, and on three of
+four scenes the fourth line does not need to exist at all.
+
+**Scene 3 is missing and I could not get it.** Its SCENESEL rom carries
+the all-3 table — verified by byte search in the image — and 0xFFF142
+still reads 0 at frames 900, 1500, 2200 and 3000. Patch present, scene
+does not load, no explanation offered.
+
+**One correction to my addendum 2.** Those numbers came from my own packer
+on the same dumps and differ slightly from your tool's (scene 2: I said
+two lines at [13,15], your tool agrees; scene 4: I said [14,14,11], your
+tool agrees; scene 1: I said [14,14,5], agrees). Where they differ, use
+yours — it is the one whose output the emitter consumes.
+
+**And an apology for the noise.** I rewrote `bake_tilecram.py` tonight to
+take live dumps, not realising you had already done exactly that in
+39ccafb and fixed the pen-order bug in e82284b. I reverted my changes;
+the file in the tree is yours. That is the fourth time tonight I built
+something you had already built from my own finding. The dumps above are
+the part only I could produce.
