@@ -14030,8 +14030,24 @@ RAMCODE void m_main(void)
                             unsigned vx = (unsigned)(vx00 + col * 8) & 0x3FF;
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
 #ifdef C1_PUNCH
-                            if (isfg && (unsigned)col < 40u && row < 28)
-                                cat1scr[row][col] = (uint8_t)((w && (w & 0x8000)) ? 1 : 0);
+                            if (isfg && (unsigned)col < 40u && row < 28) {
+                                unsigned hv = 0;
+                                if (w && (w & 0x8000)) {
+                                    unsigned pgn = pqb[(((unsigned)vy >> 7) & 2) + ((vx >> 9) & 1)] & 15u;
+                                    if (md_round < 5 && pgn < 5) {
+                                        unsigned n = pgn * 2048u + (((unsigned)vy >> 3) & 31u) * 64u + ((vx >> 3) & 63u);
+                                        hv = CAT1HOLE_GET(cat1hole + (unsigned)md_round * CAT1HOLE_BYTES_PER_SCENE, n);
+                                        if (hv == 2) {
+                                            unsigned c2 = w & 0x1FFF;
+                                            if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
+                                            GAME_TILE_REMAP(c2);
+                                            cat1code[row][col] = (uint16_t)c2;
+                                        }
+                                    } else
+                                        hv = 1;         /* no bake for this page: whole cell */
+                                }
+                                cat1scr[row][col] = (uint8_t)hv;
+                            }
 #endif
                             /* 2026-09-02 (Mike's crystal ball, s16_fix2.bs1):
                              * the backstop blanked the BG's bottom band
