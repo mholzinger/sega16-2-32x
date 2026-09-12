@@ -7037,6 +7037,10 @@ static int flip_span(void)
                                               * rebuilds that after the ack */
             for (int i2 = 1; i2 < 368; i2++) da[i2] = sa[i2];
             da[0] = sa[0] | (disp_blank ? 0x2000u : 0u);
+#ifdef TILE_VERIFY
+            for (int i2 = 4; i2 < 368; i2++)
+                if (da[i2] != sa[i2]) { tv_wr++; break; }
+#endif
             DIAG[42]++;                  /* A carried across the swap */
         } else
             da[0] = 0;
