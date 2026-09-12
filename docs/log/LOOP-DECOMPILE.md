@@ -5075,3 +5075,13 @@ and the lives/beast icons (0x38AA-0x394E: two rows of up to 8 words at
 Provenance note: 103's "bit 0 = credited play" came from the SET site
 (0x1E62, "game start") without reading the consumer. The consumer is
 the input routine, and it says attract. Entry 50's rule, again.
+
+---------------------------------------------------------------------
+## 106. The cat-1 hole map baked (entry 65's two bits), and all cat-1 is foreground in every round
+
+`tools/bake_cat1hole.py` -> `sh_src/cat1hole.bin` / `.h`: per scene per
+cell, 0 / 1 / 2 as entry 65 specified. Counts in NOTES 31. One fact
+beyond 65: not one cat-1 cell exists on pages 5-9 in any round, so the
+suppress never has to ask which plane a cell is on -- only whether the
+FG page cell under the pixel is 1 or 2. Entry 65's counts were one page
+(the stale page-7 FG); these are all five FG pages per round.

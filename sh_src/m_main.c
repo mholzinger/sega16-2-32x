@@ -598,6 +598,20 @@ volatile uint8_t  mdalloc_pin[128];
  * draws that row in the FB as before. 0x28F60-0x28F7B: the audited-
  * free 32B span (docs/design/INTEGRATION.md). Boot-zeroed. */
 #define CAT1_PEND ((volatile uint8_t *)0x26028F60)      /* [28] */
+#ifdef C1_PUNCH
+/* FOLD 1's HOLE PUNCH (LOOP29 175 / 243): under C1_NOFB the FB never
+ * draws cat-1, so a sprite pixel wins over the cat-1 ground it should
+ * be behind (Mike: "zombies rising from the ground are not masked").
+ * The MD's plane A HIGH already carries cat-1 above MD sprites; the 32X
+ * layer wins per pixel wherever the FB wrote one, so the fix is to NOT
+ * write sprite pixels of priority < 3 into cells the FG holds as cat-1.
+ * The master's name-table pass knows every FG cell's cat bit and
+ * writes this 40x28 cell mask (one generation ahead of the slave's
+ * compose, which reads it through the uncached alias). Cell granular:
+ * a cat-1 tile's own transparent pixels lose the sprite there. */
+static uint8_t cat1scr[28][40];
+#define CAT1SCR_U(r) ((const volatile uint8_t *)(0x20000000u | (uint32_t)cat1scr[(r)]))
+#endif
 /* 0x3A680 map, all inside FBCLEAR's 384-byte tail below cache_tag:
  *   3A680 ROWLIVE [232]        ends 3A768
  *   3A768 DRVC    [3] u32      ends 3A774   (DIRTY_ROW_VERIFY)

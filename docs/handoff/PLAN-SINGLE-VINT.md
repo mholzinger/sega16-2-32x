@@ -254,3 +254,58 @@ The Zeus text and the round-clear bonus text on vi75 are the parked
 text gates (225/229), not fold 1: vi75 is vi70's line without them.
 Fold 5 is the fix that does not re-roll the 68K phase every time a
 writer is found.
+
+---------------------------------------------------------------------
+## STATE 2026-09-13 00:30, AND THE NEXT THREE BUILDS
+
+    line (presentation)   vi70    wall 1.48   18% single-vint   (ares, 232)
+    fold-1 build          vi95    wall ~1.11  44%               vi75's line +
+                                                                 the state word from
+                                                                 the game's bytes
+    rig, presented frames per 64 vints   fr75 21 19 7 22 16   fr95e 19 15 22 21 14
+
+What is measured and closed since the plan was written: fold 1 lands
+the speed it was priced at (vi75, 230); fold 4's two free halves are in
+(the round outside the dirty mask, the transformation forced off; 233,
+240); the credited/demo decision is the game's own bytes (NOTES 29);
+the transport is proven intact on the FPGA (231); fold 3's blocker is
+the FM-gate spins, not the idle (104); fold 5's copy must ride the
+packet side (237). Open on vi95: sprites over cat-1 ground (fold 1's
+hole punch), residual black tile drops on the rig (a ship-rate knob,
+237), the parked text gates (fold 5).
+
+**Build A -- the hole punch (fold 1's gate).** Sprite loop: for a pixel
+over a FOREGROUND cell, `CAT1HOLE_GET` from `sh_src/cat1hole.bin`
+(NOTES 31): 0 draw, 1 skip the cell, 2 test the tile pixel. 31% of
+scene 0's cat-1 cells take the per-pixel path; the rest are one
+compare. Owner: rendering. Gate: Mike sees the zombies rise behind the
+ground; the wall does not move (this is correctness, priced at ~0).
+Kill: none -- the data is rom and the rule is the RTL's (jts16_prio.v).
+
+**Build B -- fold 2, the maps scan from the bake.** Replace
+`bm_scan_rows`'s cell walk with the per-column extent lookup in
+`sh_src/setcols_md.h` (NOTES 21), keyed on the scene from the state
+word. Before building, one PHASECENSUS run on vi95 splitting
+`build_maps_chunk` into scan and tail: the scan's share of the 0.44
+v/gen is the ceiling of this build. Owner: rendering. Gate: wall on
+ares, single-vint share; the name tables byte-identical to vi95's on
+the same input script (a VRAM dump diff, no eyes). Kill: the scan is
+under 0.1 v/gen -- then the tail (text and sprite scan, group
+allocation) is the mass and this bake is a small win.
+
+**Build C -- fold 5 with the copy on the packet side.** The three
+credited-play text writers (NOTES 27: score at [record+8], high score
+at 0x4100D2, the lives icons at [record+8]+128; plus the credit line
+and health bar TXTWRAM already mirrors) marked with (offset, words) and
+shipped in the r60 packet from WRAM, never a 68K framebuffer write
+before the post. Owner: rendering. Gate: fr on the rig >= fr75 (237's
+cost gone), text complete on the round-clear screen. Then fold 3
+(RELBANK) on the rig with BOOTGATECHK, which this fold unblocks (104).
+
+**This thread, in parallel:** the rotor in r60_push once B has crossed
+or C is scheduled; the fold-3 rig probe's reading when it runs; any
+byte the builder asks for, answered from the consuming instruction
+first (entries 50, 105).
+
+The bar is unchanged: one generation per vint, wall under 1.00. B is the
+build that moves it; A and C are the builds that make B shippable.

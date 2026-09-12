@@ -1754,3 +1754,28 @@ the wall lever and has not been touched since it was handed over. The
 rig's black tiles are a rate knob by your own measurement (237); they
 do not move the wall. When vi94's slowness is attributed, fold 2 is the
 next build that changes a vint number.
+
+---------------------------------------------------------------------
+## 31. 2026-09-13. Fold 1's hole punch as a lookup: `sh_src/cat1hole.bin`, two bits a cell. LOOP-DECOMPILE 106
+
+Entry 65 said the suppress wants two bits per cell, not one; here they
+are, baked from the rom like cat1map (`tools/bake_cat1hole.py`):
+
+    0 no hole (not cat-1, or cat-1 on a blank tile)
+    1 suppress the whole cell (the cat-1 tile is fully opaque)
+    2 consult the art (transparent pixels in the tile)
+
+    scene   cat-1 cells   blank   suppress-all   per-pixel
+      0        2,312       163       1,439          710   (31%)
+      1        8,960     6,108       1,303        1,549
+      2        7,360     4,128       1,923        1,309
+      3        1,280        32         800          448
+      4        3,520         9       1,148        2,363
+
+Every cat-1 cell in all five rounds sits on a FOREGROUND page (0-4);
+the background pages carry none, so entry 59's "all cat-1 is FG cat-1"
+holds for the whole game and the sprite test is: FG cell under this
+sprite pixel -> CAT1HOLE_GET(map, cell) -> 0 draw, 1 skip, 2 test the
+tile's pixel. `cat1hole.h` has the accessor and the per-scene counts.
+Geometry is cat1map's; the art index convention is bake_cat1vis's
+(tiles.bin by the 13-bit index).
