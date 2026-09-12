@@ -630,20 +630,21 @@ static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd,
  * at a time, so the per-cell form is a per-row cache: the class and the
  * art row are fetched once per cell crossed, and the per-pixel test is
  * a register compare (plus one art byte in class 2). */
-struct c1cache { unsigned cx; unsigned v; const uint8_t *art; };
-/* the refetch is out of line (once per cell crossed); the per-pixel test
- * stays small enough to inline into every plot macro without spilling
- * .ramtext (the first cut inlined the whole thing and overflowed) */
-RAMCODE static void c1_refetch(struct c1cache *s, const volatile uint8_t *m, const volatile uint16_t *cd, unsigned cx, unsigned py)
-{
-    s->cx = cx;
-    s->v = m[cx];
-    if (s->v == 2) s->art = altbeast_tiles + (unsigned)cd[cx] * 64u + py * 8u;
-}
-static inline int c1_cell(struct c1cache *s, const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
+struct c1cache { unsigned cx; unsigned v; const uint8_t *art;
+                 const volatile uint8_t *m; const volatile uint16_t *cd; unsigned py; };
+/* ONE out-of-line function, two arguments: the per-pixel call site is
+ * a few bytes in each of the sixteen 1:1 plot expansions. Three inline
+ * cuts overflowed .ramtext (28,472 of 28,672 bytes on the line, LOOP29
+ * 246). The class and the art row are fetched once per cell crossed;
+ * the per-pixel work is a compare, a call and a register test. */
+RAMCODE static int c1_cell(struct c1cache *s, unsigned sx)
 {
     unsigned cx = sx >> 3;
-    if (cx != s->cx) c1_refetch(s, m, cd, cx, py);
+    if (cx != s->cx) {
+        s->cx = cx;
+        s->v = s->m[cx];
+        if (s->v == 2) s->art = altbeast_tiles + (unsigned)s->cd[cx] * 64u + s->py * 8u;
+    }
     return s->v && (s->v == 1 || s->art[sx & 7u]);
 }
 #endif
