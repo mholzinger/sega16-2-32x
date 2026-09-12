@@ -440,3 +440,8 @@ question: does it look like c1p95c. Then Build C.
     legs glance (c1p95c on the rig, 233345, the attract demo): both
       fighters' legs are drawn down into the grass with the tufts over
       them -- through, not cut at the grass line.
+    check mode on this line (scB = bldB + SETCOLSCHECK, compare in ROM;
+      the census could not fit .ramtext beside it): f1000-4000, 3,010
+      planes, presence 0, level 0.
+    CARD COMPLETE 03:50. bldB is on the rig. Mike's question: does it
+      look like c1p95c.
