@@ -6088,3 +6088,22 @@ into txtw_blast() and called from r60_blast() / fbx_late_blast(): same
 FM=0 guarantee, zero post delay. Its card: TXTWRAM=1 on bldB's flags,
 rig frame rate against frB (21 19 7 15 18), then NOTES 25's third
 writer (0x369C) once the decompile thread names its footprint.
+
+## 246. BUILD C: THE PUNCH'S OWN PRICE, AND THE RAM-CODE BUDGET (2026-09-13 04:40)
+
+The decompile thread's next card (via Mike): the punch's 1:1 and zoomed
+sprite paths still test the hole class per pixel; the baked-run path
+tests per cell (244c) and cost the rig nothing. Same change, one flag,
+~0.13 v/gen by Build A's own price. New landing rule alongside it: a
+rig black share counts only across THREE launches.
+
+`C1PCELL=1`: a per-row cache (cell index, class, art row) so the
+per-pixel test is a register compare and the class/art fetch happens
+once per cell crossed. Two cuts overflowed the SH-2's RAM-code slot:
+the line's .ramtext is 28,472 of 28,672 bytes (m_main 18,160 after
+LTO, slave_concurrent_k 8,604, s_main 704, blit_half 532, cap_drain
+336, fbx_lift 128), so ~200 bytes are all a change may add to the hot
+paths. Third cut: the cache on the 1:1 paths (NIB/NIB_NC, 16
+expansions) with the refetch out of line; the zoomed paths keep the
+per-pixel form; bm_scan_baked_ok moved to ROM. The card (PLAN) carries
+the numbers.
