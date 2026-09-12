@@ -458,3 +458,34 @@ the rig with BOOTFLIPRATE + BOOTGATECHK. A side card, whenever a slave
 lever is wanted: the punch's 1:1 sprite paths per cell (0.13 v/gen of
 ares slave time; the rig's wall is windows per vint, so it is not the
 rig's number).
+
+---------------------------------------------------------------------
+## BUILD B PASSED (Mike, 2026-09-13): "behind the grass, stellar"
+
+`rom/night/bldB.32x` (md5 493d4984) = c1p95c + `SETCOLS=1`. Verified in
+the roms: the set-extent table present in bldB and absent in c1p95c,
+the 68000 side identical but for the build stamp. Ares wall 1.29 ->
+1.18, single-vint 31 -> 40%, check mode 0/0 on 3,010 planes, rig frame
+rate inside c1p95c's spread, Mike's eye: passes. **The line is bldB.**
+
+    wall on the line   1.18 v/gen     the threshold   1.00
+
+**Next card, before fold 5: the punch's own price.** The base moved
+from vi95's 1.16 to c1p95c's 1.29 because the 1:1 and zoomed sprite
+plot paths still test the hole class per PIXEL; the baked-run path
+already tests per CELL (244c) and cost the rig nothing. Same change on
+the other paths: one flag, one card, expected ~0.13 off the wall, which
+puts the line at ~1.05 by the card's own arithmetic. Gate: wall on
+ares, picture = bldB, rig frame rate. Then fold 5 on the packet side,
+then RELBANK.
+
+**Also worth one look after that:** the remaining scan reads 0.107
+v/gen for 44 columns of extent compares; that is a third of the cell
+walk it replaced and should be nearer zero.
+
+**Landing protocol, one rule added:** a rig black share is a fact only
+across three launches. vi95's demo read a fifth black at one launch and
+clean at the next on the same rom, with nothing in the allocator
+changed between (Build B's card). One capture is a phase, not a
+defect -- the same rule the log already applies to ares samples under
+3,000 cycles.
