@@ -197,7 +197,7 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## CANDIDATE, ON THE RIG AS `rom/night/vi62b.32x` (md5 3882eb1c), MIKE'S LEVEL-2 SHOTS CLEAN (2026-09-12 04:27)
+## CANDIDATE, ON THE RIG AS `rom/night/vi65.32x` (md5 324deb7a), AWAITING MIKE'S EYE (2026-09-12 13:55)
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
@@ -208,7 +208,11 @@ chevron plane, the flat flames, the black wall band, vi51's stutter), plus
 NOT fix the title logo -- LOOP29 210's retraction). OPEN, attract only:
 the logo's slide-in palette and the ranking screen (211), both need a
 capture keyed on the game's own palette phase, not a frame offset.
-vi62b = vi59's logic + `MDBATCHOFF=24` (LOOP29 214), now the default:
+vi65 = vi62b + the all-pages bake (LOOP29 215: the invisible ledge, sets
+82/87-91 were never in round 0's table) + free at the edge out and the
+published round at the edge back (216-217). Headless: flips = vi45, play
+path = vi45, ledge band below vi62b, plane 55 frames after the field,
+3.7% black after the eye (vi45 4.6%). vi62b = vi59's logic + `MDBATCHOFF=24` (LOOP29 214), now the default:
 Mike's rig ranked it -- 40 tore level 2's top band on hardware, 24 does
 not, at the cost of the chevron plane arriving 50 frames after the field. vi60/vi61 (hysteresis) withdrawn. Next signal:
 0xFFF148 via the mailbox (LOOP-DECOMPILE, LOOP29 214).

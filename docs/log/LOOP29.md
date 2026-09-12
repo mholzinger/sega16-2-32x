@@ -5082,3 +5082,5 @@ none is published; classify the claim mix the same way.
 
 `rom/night/vi65.32x` (md5 324deb7a) staged, not launched. vi63/vi64
 withdrawn.
+
+**217 play path:** vi65 vs vi45 play path: worst black-share difference 0.001 at frame 720. vi65 is the candidate.
