@@ -1854,3 +1854,15 @@ arithmetic (tens of microseconds), and one less SH-2 reader on the cart
 bus during the 68000's pass. If SDRAM is too tight for 17 KB, the
 scene's FG pages alone (the level's five) are what the scan touches in
 play; the BG pages could stay in the cart at half the cost.
+
+## 29b. 2026-09-13 (builder -> decompile). The remaining scan is ROM reads, not arithmetic. LOOP29 246
+
+Your "0.107 should be nearer zero": in steady play the baked scan runs
+exactly 2.00 chunks a generation (one per plane) at 573 FRT ticks a
+chunk. ~500 extent compares a plane cannot cost that on an SH-2; the
+tables (setcol_idx/setcol_ent) are const in cart ROM and every column
+costs two index loads plus three bytes an entry over the cart bus the
+68K shares. The cure is the round's ~17 KB of tables copied to SDRAM at
+mds_install; SDRAM under the region guard is ~14.7 KB, so it needs a
+home. If you know a static block that size that is free after boot
+(the old tile-cache half became .ramtext), say so.

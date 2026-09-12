@@ -6107,3 +6107,22 @@ paths. Third cut: the cache on the 1:1 paths (NIB/NIB_NC, 16
 expansions) with the refetch out of line; the zoomed paths keep the
 per-pixel form; bm_scan_baked_ok moved to ROM. The card (PLAN) carries
 the numbers.
+
+**246b, fourth cut links:** one out-of-line RAMCODE function taking the
+cache and the pixel x (the call site is a few bytes per expansion), the
+zoomed paths per pixel as before, bm_scan_baked fetched from ROM under
+the flag. .ramtext 0x6CEC = 27,884 bytes (the line 28,472). Card
+measurements running.
+
+**The remaining scan (the decompile's question):** pcB in steady play
+reads 2.00 chunks a generation (one baked pass per plane, as designed)
+at 573 FRT ticks a chunk = 0.095 v/gen. Forty-four columns x two
+segments x ~6 extent compares is ~500 iterations a plane; 573 ticks
+for that is ~1.1 ticks an iteration, which is not arithmetic on an
+SH-2 -- it is the table READS: setcol_idx and setcol_ent are const in
+cart ROM, read through the 32X cart bus that the 68K also owns, and
+every entry is three byte loads plus two index loads per column. The
+fix is the round's tables in SDRAM at install (mds_install copies
+~17 KB for the largest scene); the free SDRAM under the region guard is
+~14.7 KB with _end at 0x15548, so it needs a home first (the old
+tile-cache half at 0x31000+ is .ramtext now). Not built tonight.
