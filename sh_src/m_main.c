@@ -1245,6 +1245,36 @@ static uint8_t md_round = 0xFF;
 #define MD_STATE_W()   (MARS_SYS_COMM14)
 #define MD_STATE_OK(w) (((w) & 0xF000u) == 0xE000u)
 #define MD_STATE_CUT(w) (((w) >> 7) & 1u)
+#define MD_STATE_PLAY(w) (((w) >> 3) & 1u)
+#define MD_STATE_STEP(w) ((w) & 7u)
+/* NOTES-FROM-DECOMPILE 23: the level's tilemap is on screen in credited
+ * play (bit 3, and not the transformation) and in attract steps 1, 3, 5;
+ * step 3 draws the logo over it (sets 37-46 and texture set 11), steps
+ * 0/2/4 are picture screens that belong to no round. Last valid word is
+ * kept so a transient non-E value (the 68K's own sound log on COMM14)
+ * does not flap the decision. */
+static uint16_t md_state_last;
+static inline uint16_t md_state_word(void)
+{
+    uint16_t w = MD_STATE_W();
+    if (MD_STATE_OK(w)) md_state_last = w;
+    return md_state_last;
+}
+static inline unsigned md_state_on(void)
+{
+    uint16_t w = md_state_word();
+    if (!MD_STATE_OK(w)) return 2;                 /* no word yet: undecided */
+    if (MD_STATE_CUT(w)) return 0;
+    if (MD_STATE_PLAY(w)) return 1;
+    unsigned st = MD_STATE_STEP(w);
+    return (st == 1 || st == 3 || st == 5) ? 1u : 0u;
+}
+static inline unsigned md_state_extra(unsigned cset)
+{
+    uint16_t w = md_state_word();
+    return MD_STATE_OK(w) && !MD_STATE_PLAY(w) && MD_STATE_STEP(w) == 3
+        && (cset == 11u || (cset >= 37u && cset <= 46u));
+}
 static inline uint8_t md_state_round(void)
 {
     uint16_t w = MD_STATE_W();
