@@ -8175,6 +8175,15 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
             for (int kk = 0; kk < 4; kk++)
                 *o++ = (uint8_t)((map[r[kk * 2]] << 4) | map[r[kk * 2 + 1]]);
         }
+#ifdef TILE_VERIFY
+        if (!mdp_s_line[(mkey >> 16) & 0x7F]) tv_noline++;
+        {
+            const volatile uint8_t *z = (const volatile uint8_t *)(dst + sent * 17 + 1);
+            int nz = 0;
+            for (int k2 = 0; k2 < 32; k2++) if (z[k2]) { nz = 1; break; }
+            if (!nz) tv_zout++;
+        }
+#endif
         if (*pending) (*pending)--;
         sent++;
     }
