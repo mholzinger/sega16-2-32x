@@ -8207,6 +8207,13 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                 if (cz) tv_cz++;
                 if (uz) tv_uz++;
                 if (mz) tv_mz++;
+                {
+                    unsigned code2 = mkey & 0xFFFFu;
+                    if (code2 >= 16384u) tv_bad++;
+                    else if (code2) tv_czn++;
+                    const volatile uint32_t *tu = (const volatile uint32_t *)((uint32_t)&md_tag[sl] | 0x20000000u);
+                    if (*tu != mkey) tv_tst++;
+                }
             }
         }
 #endif
