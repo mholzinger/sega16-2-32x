@@ -2015,7 +2015,10 @@ static void r60_push(void) {
 		 * read-backs (m_main.c TV_BITS, packet word 1 bits 8-12):
 		 * bit 7 bias | bit 6 FS changed (any) | bit 5 VRAM-zero (any)
 		 * | bits 4-3 replay read-back != tp_lastA (sat 3)
-		 * | bits 2-0 publish read-back != staging (sat 7) */
+		 * | bits 2-0 publish read-back != staging (sat 7)
+		 * vi78 on the rig: both read-backs 0. vi79 re-uses the same
+		 * five bits for m_main.c's tv_rep0 (2-0) and tv_pub0 (4-3):
+		 * SH-2 FB writes made while the SH-2 sees FM=0. */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
