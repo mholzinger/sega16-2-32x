@@ -1473,3 +1473,24 @@ uploads or the 0xC30 framed picture, not read this session), and the
 round-clear rewrite of pages 0/5 in credited play (0x1A52C, once,
 keyed on the 0x1A406 sequence) -- treat it as a tilemap write, which
 it is.
+
+---------------------------------------------------------------------
+## 24. 2026-09-12. Fold 3's census: nothing of ours runs in the game's idle; the FM-gate spins are what RELBANK adds to the pass. LOOP-DECOMPILE 104
+
+Every transport piece is in IRQ4 (build, post, consumes, tail blast) or
+in the shared gate spin (the late blast). Under RELBANK two measured
+things change: 4.9% of the game's pass is inside gated spans, which is
+the nopost rise 183 saw (5.6%); and the game enters a gated writer 5
+times a vint (three spans, four call sites, level 1), each a wait on
+your window that GAMEGATE hid inside the idle and RELBANK adds to the
+pass -- 8-120 lines each on hardware (your 88).
+
+So fold 5 comes BEFORE fold 3: route those three writers (0x3A9A-0x3AFC,
+0x35CC-0x3950, 0x4D80-0x4D98) through the WRAM mirror and the pass has
+no waits in it; then RELBANK, on the rig, with BOOTGATECHK=1 painting
+the post's verdict. TXTWRAM's old failure was measured under GAMEGATE,
+where it could not show a gain.
+
+Trap for your traces too: MAME prints .w WRAM targets as 8 hex digits;
+a 6-digit match drops every thunk. `arcade_trace.py` / `round_profile.py`
+need `{6,8}`.

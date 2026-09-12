@@ -20,7 +20,7 @@ import re, sys, collections, bisect
 EXT = {0x40E: 0x57A, 0x5FA8: 0x602C, 0x60E6: 0x6168,
        0x63CC: 0x644E, 0x6C44: 0x6CB8, 0x18146: 0x181E4}
 DROP = {0x6E7A, 0x8532, 0xDE56, 0x18F38, 0x1A0B8}
-PAT = re.compile(r'^([0-9A-Fa-f]{6}):')
+PAT = re.compile(r"^([0-9A-Fa-f]{6,8}):")
 LOOP = re.compile(r'^\s+\(loops for (\d+) instructions\)')
 SPIN = {0x3982, 0x3986, 0x3988}          # the frame wait: idle, not work
 

@@ -4982,3 +4982,73 @@ reads:
 
 Correction to entry 92/94's caveat and NOTES 17: 0xFFF148 belongs to the
 transformation object only. The eye and the intro are attract steps.
+
+---------------------------------------------------------------------
+## 104. Fold 3's scheduling census: the transport does not live in the game's idle; the FM-gate spins do (2026-09-12)
+
+PLAN-SINGLE-VINT fold 3: RELBANK crossed the quantum (wall 0.81, LOOP29
+183) and the screen stopped; 184 read it as "the discarded vint was the
+slot our transport runs in". Read the shim (md_start.s _vblank /
+fmgate_ret / fmgate_partb, md_main.c shim_vblank, fbx_late_blast,
+patch_game.py's GAMEGATE and FBXPEND thunks) and measured the game's
+side in the level-1 traces. Where every 68000 transport piece runs:
+
+    IRQ4 top (interrupt, every vint)   state word; input; r60_go decision
+                                       = V entry in 0xDF-0xE8 AND COMM0
+                                       clear AND interrupted PC outside
+                                       every gated span; announce; the
+                                       consumes at FM=0; the pended blast
+                                       (pre-post slot); raise FM, post;
+                                       r60_push (WRAM only); the release
+                                       token for GAMEGATE's thunk at 0x2AB8
+    the game's IRQ4 handler            via the rte trampoline, SR 2700
+    fmgate_ret / partb (still IRQ)     the FMGATE-path post with the same
+                                       COMM0 and span deferral; then the
+                                       tail: r60_blast if FM=0, else
+                                       fbx_pend = 1
+    game context, gated writers only   the shared spin at 0xFFBE8E: spin
+                                       while FM=1; if a packet is pending
+                                       and V < 0xC0, fbx_late_blast
+    the wait at 0x397E                 nothing of ours (PASSCOUNT/FRAMEDONE
+                                       are counters; RELBANK is the consume)
+
+**So no transport work runs in the game's idle.** The idle is the game's
+own spin on 0xFFF01C. What RELBANK changes is two things, both measured:
+
+  1. **The post's span test.** The gated spans are 4.9% of the game's
+     executed pass in level 1 (base3: 4,326 of 88,690 instructions;
+     4.5% on the arcade input script), in three spans: 0x3A9A-0x3AFC
+     (the text stride writer, 136 a vint), 0x35CC-0x3950 (50), 0x4D80-
+     0x4D98 (30). With the game busy at IRQ4 time that is the share of
+     vints whose post defers -- and 183's nopost rose 52 -> 225 per
+     4,000 vints = 5.6%. Same number.
+  2. **The gate spins.** The game enters a gated writer 5.0 times a vint
+     in level 1 (4 call sites: 0x98A, 0xA56, 0x127C, 0x4D7E). In MAME the
+     spin never iterates (the SH-2 is ~3x fast, FM is down by then); on
+     hardware LOOP29 88 measured the same spin at 8-120 lines. Under
+     GAMEGATE those spins sit inside time the game was idling anyway.
+     Under RELBANK they are ADDED to the game's pass: five waits on the
+     master's window per frame, up to the window's length each. A pass
+     of 0.64-0.77 vints (100) plus that is over one vint on the tail --
+     which is 2 vints again, and stale packets with it.
+
+**The consequence for the plan:** fold 5 (text writers to the WRAM
+mirror, never gated) is the PRECONDITION of fold 3, not a cosmetic
+sibling. Only the three spans above fire in level 1; TXTWRAM's earlier
+failure (LOOP29 5, sprite pairs, "does not move the numbers") was
+measured under GAMEGATE, where the spins cost nothing visible. Its
+value exists only under RELBANK, and the two have to be measured
+together, on the rig, with BOOTGATECHK=1 (exists: paints why the 68K is
+not posting, every vint).
+
+**Not explained by any of this:** 184's rig screen went BLACK where the
+ares counters moved 5%. That is the hardware-only divergence class of
+231, not a schedule fact, and the rig probe above is the instrument.
+
+**A measurement trap, mine, since entry 87.** MAME prints a
+sign-extended .w target as EIGHT hex digits (FFFFBE4C), and every
+profile in this log matched six. The gate thunks and the spin (46-61
+instructions a vint here) were dropped from every count; the r60
+figures are A/B on the same rig and unaffected, entry 90's totals are
+low by ~0.4%. `tools/arcade_trace.py` and `round_profile.py` share the
+regex; fixed to `{6,8}` in the scripts I ran, not yet in the tools.
