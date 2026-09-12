@@ -531,3 +531,24 @@ hex value is the ground truth this whole argument needs.**
   soundmap_build.py, z80_pack.py, mus_testgen.py.
 - Sweep/tap logs were scratchpad-transient; regenerate via the tools
   (~40 min for a full command sweep).
+
+## FROM THE DECOMPILE THREAD (2026-09-12): who posts what — `docs/audit/sound_posts.md`
+
+`tools/sound_posts.py` walks every call to the game's sound entry point
+0x3352 and names the command byte, the site, its function and your
+sweep class. LOOP-DECOMPILE 95 has the reading. The parts your sweep
+cannot see:
+
+  - level music is a byte table at rom 0x1858: rounds 0-4 post
+    0x94 0x95 0x96 0x94 0x95 (main loop 0x8C8-0x8DE, reset 0 first);
+    0x92 is the title/attract track (0xB96); 0x93 is the round-clear
+    jingle (0x1A474, not on round 4); 0x91 is posted at the cutscene's
+    exit (0x91CE), 0x90 by five object routines, 0x97 by 0x5D62.
+  - the between-round cutscene posts SPEECH per round: 0x46 0x56 0x54
+    0x55 0x46 (records at rom 0x99A2).
+  - the fade is the game's: the object at 0x16D7E posts master-volume
+    bytes (your fade law) as its countdown halves, 0x28 down to 0x24,
+    then 0x00, then 0x40 (full), then 0xC5. So a faithful port needs the
+    0x01-0x40 volume law live, not just at command start.
+  - 0xB6 (37 sites, animation/motion) and 0xB4 (12 sites, collision)
+    are the two commonest effects.

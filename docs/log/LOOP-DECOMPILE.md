@@ -4506,3 +4506,103 @@ the rom tile-palette block at 0x232A0 begins — the block IRQ4's
 cutscene-exit restore reads (entry 92). Still unread on all five rounds
 (entry 91). Reads as a page fragment shipped in the rom and never
 selected; not proven, and no cheaper method is left than the read tap.
+
+---------------------------------------------------------------------
+## 94. Entry 92's unread routine, read: 0x90F4 is the cutscene object's constructor
+
+0x90F4 (218 bytes) builds the object that owns the cutscene, and 0x91CE
+(162 bytes) is the routine it installs. Read in full.
+
+Constructor: posts sound 0 (0x3352), hides itself (0x397E), then
+`move.b $FFF109,$FFF148 ; addq.b #1` — the solo filter is its OWN slot
+index plus one. It then loads a per-round record from the table at
+0x99A2 (five longs, indexed by 0xFFF142*4): four sprite-palette ids to
+$6C-$6F, a sound command word to $3E, and the animation script after
+them to $24. Slots >= 8 add one to each palette id (0x9162-0x9176). The
+four ids are claimed with 0x3B2E (entry 2's allocator), the results kept
+in $6C-$6F, and the record's sound command is posted on the way out
+(0x91C2-0x91C8).
+
+    round 0   rec 0x99B6   pal ids  22 153 155 157   sound 0x46
+    round 1   rec 0x9A66   pal ids  22  26  22  26   sound 0x56
+    round 2   rec 0x9BAC   pal ids  22  28  22  28   sound 0x54
+    round 3   rec 0x9CF2   pal ids  22  30  22  30   sound 0x55
+    round 4   rec 0x9E38   pal ids  22 159 161 163   sound 0x46
+
+Per frame (0x91CE): while the script runs, the object sits at
+(0xFFF132+160, 0xFFF136+168) — screen centre relative to the camera —
+and calls 0x9270 then 0x3D36. When $21 is clear and $22 reads 2 (the
+script's end state) it exits: **clears 0xFFF148** (0x91DC), frees the
+four palettes with 0x3BCE, hides its sprite (0x3F04), sets byte $1B of
+the object at $-44, and posts sound 0x91 twice around a 0x397E.
+
+So entry 92's remaining caveat closes: the only setter of 0xFFF148 is
+this constructor and the only in-play clearer is this object's exit. The
+byte rises when the cutscene object is spawned and falls when its script
+ends, and every cutscene that shows pages 10/11 is this object with one
+of the five records. The four per-round palette ids are the face's
+actor lines — 22 is common to every round; 153-163 (rounds 0 and 4) and
+26/28/30 (rounds 1-3) differ, which is the "transform palette" Mike's
+play pass named (CAT1MD memo) seen from the rom side.
+
+---------------------------------------------------------------------
+## 95. OPEN item 2, the decompile side: who posts which sound command, and the map covers 72% of the code
+
+The sound thread built its command map by injecting every byte into the
+latch in isolation (`tools/soundmap_build.py`, `sndtest/md/sndmap_data.h`:
+10 music, 63 ymsfx, 22 speech). What that cannot say is which game event
+posts each byte. The program has one sound entry point, 0x3352 (entry
+32), so that is a census:
+
+    tools/sound_posts.py --md docs/audit/sound_posts.md
+
+    149 call/jump sites, 144 with an immediate command byte, 46 distinct
+    commands; each site named to its function and joined to the sweep's
+    class.
+
+The five computed sites are the interesting ones, and they are read:
+
+  - **Level music is a per-round byte table at 0x1858**, posted by the
+    main loop at 0x8C8-0x8DE: 0x94 0x95 0x96 0x94 0x95 for rounds 0-4
+    (three tracks for five rounds; rounds 3 and 4 reuse 0 and 1). Posted
+    as reset (0), then the track, with a 0x397E between — so the sweep's
+    "0x94-0x96 music" are the level themes and 0x92 (0xB96, main loop) is
+    the attract/title one; 0x90 (five object sites), 0x91 (the cutscene's
+    exit, entry 94) and 0x97 (0x5D62) are the rest of the eight.
+  - **The round-clear sequence posts 0x93** (0x1A474, unless the round is
+    4) and arms the 480-frame timer at 0xFFF02A. The sweep classes 0x93
+    as ymsfx because it ends; it is the round-clear jingle.
+  - **The cutscene's per-round sound is speech**: 0x46 0x56 0x54 0x55
+    0x46 from the 0x99A2 records (entry 94), all `+speech` in the sweep.
+  - **The fade is the game's, not the driver's.** The object at 0x16D7E
+    posts master-volume commands (SOUND_DRIVER's fade law: 0x01-0x40) as
+    its own countdown halves: `d0 = $20 >> 1 ; addi.b #32 ; post` while
+    d0 >= 8, so 0x28 down to 0x24; then at step 88 a reset (0), at 89
+    full volume (0x40), at 90 command 0xC5 with 0xFFE800 set. Those are
+    the census's three "not in sndmap" bytes: 0x00, 0x20 (+d0), 0x40.
+  - 0xB6 is posted from 37 sites in the animation/motion routines and
+    0xB4 from 12 collision routines: the two commonest effects are a
+    footstep-class and a hit-class sound. Not listened to; that is the
+    sound thread's rig.
+
+**A caveat that reshapes OPEN item 1.** Naming the sites to functions
+exposed 33 sites in no function at all. Measured over the whole stream:
+
+    code bytes in code_stream.txt        75,442
+    inside a function_map2 row           54,334   72.0%
+    outside every row                    21,108   28.0%   5,201 instructions
+                                                          231 runs
+
+Largest runs: 0xF90A-0x1004C (1858 bytes), 0x154E2-0x15B1E (1596),
+0x13B2C-0x14152 (1574), 0x10E20-0x1124E (1070), 0x118E2-0x11CE8 (1030).
+`code_stream.py`'s docstring already records the instruction gap (the
+555 bodies hold 15,159 of 19,137) and entry 84 cites it; the byte share
+and the run list were not written down. These are object routines
+reached through routine POINTERS in the object records (entry 28's
+offset 2, e.g. `move.l #$91CE,2(fp)` in entry 94), which no call
+instruction names, so the caller-ranked list for OPEN item 1 ranks 72%
+of the program. The other 28% has no row to rank.
+
+**Not established:** any function name for the 33 orphan sites beyond
+"an object routine in run X". `function_map2.md` is unchanged; the
+orphan runs are in `docs/audit/sound_posts.md` as `? ?`.

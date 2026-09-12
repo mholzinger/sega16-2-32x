@@ -1,6 +1,6 @@
 # HANDOFF — the decompile thread, session 3
 
-Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 93
+Written 2026-09-12. Working log `docs/log/LOOP-DECOMPILE.md`, now 95
 entries. Session 2 ran 72-91; session 3 starts at 92.
 
 **Read entries 50, 71 and 88 before anything else.** 50 is the provenance
@@ -81,10 +81,15 @@ a rom map** (a false instruction inflates coverage and hides data).
 
   1. **~460 functions still classified by signature, not read.** The
      ranked list is the `arcade hw` rows of
-     `docs/audit/function_map2.md` by callers. 50 are read.
-  2. **Sound. This thread has never touched it** and it is a stated
-     deliverable — `docs/sound/`, and the goal is decoding music from the
-     Z80 rom rather than tapping playback.
+     `docs/audit/function_map2.md` by callers. 50 are read. **And the map
+     holds 72% of the code bytes (95)**: 21 KB in 231 runs — object
+     routines reached by record pointers, never by a call — have no row.
+     Bounding those is the first step of a Ghidra pass (item 5).
+  2. **Sound.** Session 3 added the 68K side (95): `tools/sound_posts.py`
+     names every sound-post site, the per-round music table at 0x1858,
+     the round-clear jingle, the cutscene speech and the game-driven
+     fade; handed over at the end of `docs/sound/HANDOFF-SOUND.md`. The
+     Z80 driver decode itself is the sound thread's.
   3. ~~Tile palettes 19, 20, 21~~ DONE, session 3 (92): they colour the
      cutscene pages 10/11 (the chevron plane and its flames), laid on
      every scene load by 0x170A/0x174E. The cutscene switch is WRAM byte
