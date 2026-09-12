@@ -5118,12 +5118,12 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #define NIB(PIX_EXPR)                                                       \
                     pix = (PIX_EXPR);                                       \
                     { unsigned sx = (unsigned)(x - 184);                    \
-                      if ((unsigned)(pix - 1) < 14u && sx < 320)            \
+                      if ((unsigned)(pix - 1) < 14u && sx < 320 && !C1P(sx)) \
                           row[sx] = (uint8_t)(base + pix), PENTAP(d4, pix); }                 \
                     x++;
 #define NIB_NC(PIX_EXPR)                                                    \
                     pix = (PIX_EXPR);                                       \
-                    if ((unsigned)(pix - 1) < 14u)                          \
+                    if ((unsigned)(pix - 1) < 14u && !C1P((unsigned)(x - 184))) \
                         row[x - 184] = (uint8_t)(base + pix);               \
                     x++;
                 if (!flip && xpos >= 184) {
