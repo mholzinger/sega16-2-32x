@@ -2053,10 +2053,14 @@ static void r60_push(void) {
 		 * vi85: bit 7 bias | bit 6 more than 31 | bits 4-0 zero-output
 		 * records whose tile is NON-BLANK in the bank (m_main.c tv_real),
 		 * expected 0 wherever SH-2 ROM reads are sound. */
+		 * vi85 confounded too. vi92 (LOOP29 237): bits 5-0 = m_main.c's
+		 * blank-cell census, cells emitted as the blank slot because
+		 * their slot was DIRTY outside cut mode, summed over 64 windows,
+		 * >> 2, sat 63. */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
-			| (((tw >> 14) & 1) << 6)
+			| (((tw >> 14) & 1) << 5)
 			| ((tw >> 8) & 0x1F));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
