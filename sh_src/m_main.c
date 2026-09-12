@@ -7235,7 +7235,13 @@ void visr_vbi(void)
      * (68K B007 -> master B008); the 68K stamps it at vint entry and at
      * the game's rte so a handler span is read unambiguously in frames.
      * 0xB1xx: the 68K's boot hold accepts any 0xB1xx as "armed". */
-#ifndef MD_STATE                             /* fold 4 owns COMM14 */
+#ifdef MD_STATE
+    /* fold 4: the 68K's boot hold still needs the 0xB1xx "armed" answer
+     * (vi87 first cut dropped it and never booted); once the 68K's state
+     * word (tag E) is on COMM14 the channel is its. */
+    if (MARS_SYS_COMM14 != 0xB007 && !MD_STATE_OK(MARS_SYS_COMM14))
+        MARS_SYS_COMM14 = (uint16_t)(0xB100 | (DIAG[49] & 0xFF));
+#else
     if (MARS_SYS_COMM14 != 0xB007)
         MARS_SYS_COMM14 = (uint16_t)(0xB100 | (DIAG[49] & 0xFF));
 #endif
