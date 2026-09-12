@@ -5759,3 +5759,27 @@ art never ships stays dirty, and every chunk visit re-blanks its cells.
 vi92 = vi91 + BOOTTILEVER carrying, per 64 windows, that count >> 2
 (sat 63) in the six packet bits; ares reads the raw statics from SDRAM
 at the matching attract frames.
+
+**vi92 read (six-bit channel, dirty-blank cells per 64 WINDOWS >> 2,
+sat 63; the SDRAM symbol dump failed, so the raw three-way split is
+not in):**
+
+    ares  f960 0   f1320 1   f1680 63   f3000 63   f3300 0
+    rig   16s  0   22s   0   28s   63   50s   1    55s   28
+
+Per window the rig blanks no more cells than ares (28 -> ~1.8 a window
+in the second demo against ares' saturated >=3.9 around the face). What
+differs is windows per vint (~0.3 on the rig against ~1 in ares), so a
+blanked cell waits 3x longer for the chunk rotation to revisit it --
+and a slot whose art is still dirty at the revisit is blanked again.
+Persistent black therefore needs the art to stay dirty across visits:
+the ship batch (24 a window at 0.3 windows a vint = 7 tiles a vint on
+the rig, against 24 in ares) is the suspect, not the blanking. That is
+a rate question the flip-rate probe already frames: the level's tile
+demand per vint against 7 shipped. Not measured tonight.
+
+STATE AT 23:05. vi90 (fold 4 OFF-decisions + forced ON in steps 3/5) is
+the best fold-1 build on the rig (black halved) and is on the rig; the
+line stays vi70. Open, in order: the ship rate on hardware (batch per
+window vs windows per vint), fold 5's copy transport (237), the two
+discriminators (NOTES 24), fold 3 after fold 5 (decompile census).
