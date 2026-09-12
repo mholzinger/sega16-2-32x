@@ -625,6 +625,25 @@ static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd,
     if (v == 1) return 1;
     return altbeast_tiles[(unsigned)cd[sx >> 3] * 64u + py * 8u + (sx & 7u)] != 0;
 }
+#ifdef C1_PCELL
+/* Build C (LOOP29 246): the 1:1 and zoomed sprite paths plot one pixel
+ * at a time, so the per-cell form is a per-row cache: the class and the
+ * art row are fetched once per cell crossed, and the per-pixel test is
+ * a register compare (plus one art byte in class 2). */
+struct c1cache { unsigned cx; unsigned v; const uint8_t *art; };
+static inline int c1_cell(struct c1cache *s, const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
+{
+    unsigned cx = sx >> 3;
+    if (cx != s->cx) {
+        s->cx = cx;
+        s->v = m[cx];
+        if (s->v == 2) s->art = altbeast_tiles + (unsigned)cd[cx] * 64u + py * 8u;
+    }
+    if (s->v == 0) return 0;
+    if (s->v == 1) return 1;
+    return s->art[sx & 7u] != 0;
+}
+#endif
 #endif
 /* 0x3A680 map, all inside FBCLEAR's 384-byte tail below cache_tag:
  *   3A680 ROWLIVE [232]        ends 3A768
