@@ -4617,3 +4617,43 @@ it reads as landed==0.
 
 **Cost:** MDSPROFF puts every sprite back on the SH-2, so vi46 will be
 SLOWER. It is a diagnostic, not a candidate.
+
+## 201. RETRACTION: RECORDS 132-137 ARE THE EYE, AND 200's STORY IS WITHDRAWN (2026-09-12 01:25)
+
+Entry 200 measured that records 132-137 reach 68K palette RAM more often in
+our port than on the arcade, then built a mechanism on top of that:
+transform -> palette slot walks lines 64-69 -> the MD sprite anchor cannot
+track it -> chevron dropped. **Mike, on vi46: "no chevron is present. Quit
+making shit up." He is right, and here is what the check should have been.**
+
+`/tmp/chv_snap.lua` snapshots the arcade AT the frames where each record
+first goes live. Records 132-137 go live at frames 1169, 1176, 1178, 1180,
+1182 and 1184, and every one of those frames shows **the EYE** -- the
+attract's eyehold scene, blue iris. Not a transformation. So "records
+132-137 are the transform chevron" is not established by anything I
+measured, and **every inference 200 drew from it is withdrawn**: the MDSPR
+anchor story, the claim that the player drops off the MD sprite path during
+the transform, and the reading of vi46 as an A/B for it.
+
+**What survives, because it was measured directly:**
+
+  - `tools/chevron_probe.lua`'s counts. Over 4000 attract frames the arcade
+    lands 6022 frame-line hits on those six records and vi45 lands 6616.
+    Whatever those records drive, our port writes them MORE, not less.
+  - The writer census over lines 64-127: the game's own drain at 0x2DCC
+    fires 64 times in our port against the arcade's 28, and the only other
+    writers are three one-shot boot clears. The rebase is in.
+
+**What I could not get, and why this stalled.** There is no arcade
+reference for the chevron in anything this repo can drive headless. The
+no-coin attract never transforms -- swept 2400-6000 at 30-frame steps and
+5280-5700 at 3-frame steps, contact sheets in /tmp/sheet*.png. And
+`tools/auto_beast.lua`'s playthrough dies before collecting three spirit
+balls: 13500 frames, GAME OVER, no transformation (/tmp/ab_a.png,
+/tmp/ab_b.png). **Until an arcade capture of the transformation exists, any
+statement about what the chevron should look like is a guess, and 200 is
+what guessing produced.**
+
+**vi46 is still worth Mike's eye for one thing only** -- it is vi45 with the
+MD sprite offload off, so it answers "is any sprite defect MDSPR's fault"
+regardless of what the chevron is. It is NOT the chevron A/B I called it.
