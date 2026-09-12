@@ -5783,3 +5783,25 @@ the best fold-1 build on the rig (black halved) and is on the rig; the
 line stays vi70. Open, in order: the ship rate on hardware (batch per
 window vs windows per vint), fold 5's copy transport (237), the two
 discriminators (NOTES 24), fold 3 after fold 5 (decompile census).
+
+## 238. vi90 IN CREDITED PLAY ON THE RIG: THE LEVEL BLACK EXCEPT SKY AND GRASS (2026-09-12 23:15)
+
+Mike: "v90 massive regression" -- 220012/220031: the level-1 start with
+the temple, the pillars and the wall black, sky patches and grass
+drawn, the Zeus text intact. Whole-set black, worse than vi75's first
+run, in PLAY.
+
+Ares does not reproduce it: a coin during the eye (attract step 4,
+latecoin.csv) starts a credited game that reads 0.036-0.043 black at
+3400-4200 -- vi75's number -- with the step byte stale at 4 for the
+whole game, i.e. the word forcing OFF throughout play. So in ares the
+dynamic allocator carries the level fine when the round is held off
+screen; on the rig it does not (219's class: pins yield, sets churn,
+what ships black stays black). Mike coined from the credit screen, so
+his step was whichever picture step the attract had reached.
+
+**238 (vi93):** the picture steps no longer force OFF (they return
+"undecided" to the claim mix); only the transformation byte forces
+OFF; steps 3/5 still force ON. Nothing in the word can now hold the
+round off screen in play. The eye/intro lose their lag-free OFF again
+until NOTES 24's discriminator exists. vi90 withdrawn.
