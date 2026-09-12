@@ -2127,6 +2127,14 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
 static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
 {
     uint16_t qc[8];
+#if defined(MD_STATIC) && defined(MD_ROUND)
+    /* 222: a set assigned while the round is OFF screen is a cutscene's.
+     * Its tags may survive from a previous visit with a different pen
+     * map (216/220: the chevron plane drew in alternate rows from exactly
+     * that), so drop them here, at the moment the set gets its pens. */
+    if (!mds_onscreen)
+        mdp_wipe_set_tags(s);
+#endif
     int bestl = 0, bestneed = 99, bestfit = 0;
     for (int p = 0; p < 8; p++)
         qc[p] = mdp_quant(PAL_SH[s * 8 + p]);
@@ -5432,42 +5440,11 @@ __attribute__((noinline)) static void disp_gate(void)
         }
         if (!on && mds_onscreen) {              /* edge out */
             MDS[5] += 1;
-            mds_onscreen = 0;                    /* so the pins yield below */
-            /* 216: FREE the round's sets here. The slot cache never evicts
-             * a live tag on its own; it only reuses slots released when a
-             * set is freed. vi63 (30 pinned sets) found exact-colour pens
-             * for the chevron plane's set on a full line, so nothing was
-             * freed, no slots came back, and the plane drew in alternate
-             * rows for the whole scene; vi62b's table forced an eviction
-             * and worked by luck. Off screen is off screen: free them all,
-             * the edge back re-installs the table and re-ships. */
-            /* 218: release the SLOTS, keep the pens. Freeing the sets
-             * (216) drops their lines and pixel maps too, and after a
-             * same-round return (the transformation in play) something in
-             * that re-assignment stayed wrong: Mike's vi65, a black band
-             * at the horizon to the end of level 1. A tag wipe is the
-             * residency loss the drift-free path already recovers from in
-             * play (1730: cells re-claim, the shipper re-converts), and it
-             * is all the cutscene needs. */
-#ifndef EDGE_NOWIPE
-            /* 220: ONLY the sets outside the round's table. vi66b on the
-             * rig proved the whole-table wipe is the hardware horizon
-             * band (219: everything re-ships at the load and a cut
-             * transfer leaves tiles our map believes shipped). The
-             * striped plane (216) was stale TAGS of the cutscene's own
-             * sets, converted under a previous pen map and hit again --
-             * the cache does evict LRU ways, 216's reading was wrong --
-             * so wiping just those sets is what the plane needed. */
-            /* 221: the FULL wipe again. 220's narrowed wipe left the
-             * same-round return (the attract's second level-1 demo, and
-             * the transformation in play) 10% black, and never touched
-             * the plane's set, which is assigned after the edge. The
-             * hardware band the full wipe caused (219) is a cut transfer
-             * at the load; 221 removes the overrun instead (bmax). */
-            for (unsigned s2 = 0; s2 < 128; s2++)
-                if (mdp_s_line[s2])
-                    mdp_wipe_set_tags(s2);
-#endif
+            /* 222: no wipe here at all. 218's full wipe re-ships the level
+             * on every return and bands real hardware (219); 220's narrow
+             * wipe never reaches the plane's set, which is assigned after
+             * the edge. The stale-tag wipe happens where a set is
+             * ASSIGNED while the round is off screen (mdp_assign_set). */
         }
         mds_onscreen = on;
         mds_cl_t = mds_cl_n = 0;
@@ -13404,8 +13381,11 @@ RAMCODE void m_main(void)
                      * horizon band of tiles that never landed (219,
                      * vi66 vs vi66b). Ship the blanked load at the
                      * off-screen batch (MDBATCHOFF, 214) too. */
-                    int bmax = (disp_blank || !r60_disp_on || !mds_onscreen)
-                               ? MD_BATCH_OFF : MD_BATCH;
+                    int bmax = (disp_blank || !r60_disp_on) ? 40
+                               : (!mds_onscreen ? MD_BATCH_OFF : MD_BATCH);
+                    /* 222: vi68 shipped the blanked load at 24 and the
+                     * load STALLED (10% black 300 frames on, flips down
+                     * early) -- the batch accounting assumes 40 there. */
 #else
                     int bmax = (disp_blank || !r60_disp_on) ? 40 : MD_BATCH;
 #endif

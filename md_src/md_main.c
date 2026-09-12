@@ -2470,7 +2470,12 @@ void r60_late_post(void)
 		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
 		 * The SH-2 cannot read 68K wram, so this is the only way it can
 		 * know which round's palette table to install. */
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
 			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
@@ -3198,7 +3203,12 @@ void shim_vblank(void) {
 		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
 		 * The SH-2 cannot read 68K wram, so this is the only way it can
 		 * know which round's palette table to install. */
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
 			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
@@ -3699,7 +3709,12 @@ void shim_vblank(void) {
 		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
 		 * The SH-2 cannot read 68K wram, so this is the only way it can
 		 * know which round's palette table to install. */
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
 			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
@@ -3799,7 +3814,12 @@ void shim_vblank(void) {
 		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
 		 * The SH-2 cannot read 68K wram, so this is the only way it can
 		 * know which round's palette table to install. */
-		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
 			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;

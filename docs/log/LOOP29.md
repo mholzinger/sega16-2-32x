@@ -5195,3 +5195,33 @@ the blanked path sends 40 tiles a vint, the documented vblank overrun.
 every path.** vi68 = vi66 + that. Cost: a slower load-in (1120 tiles at 24
 = 47 vints against 28). `rom/night/vi68.32x` (md5 07f8075b) staged, not
 launched; headless checks pending. vi67 withdrawn.
+
+## 222. THE MAILBOX ROUND WAS DIRTY, AND THE STALE-TAG WIPE BELONGS AT ASSIGN TIME (2026-09-12 14:35)
+
+vi68 (full wipe + blanked load at 24): the same-round return 10% black
+AND the coined flips down early (20 vs 29, 45 vs 57 in the first
+windows) -- the load STALLED at 24, the batch accounting assumes 40 there.
+Withdrawn; the blanked load is back at 40.
+
+vi66b measured headless on the same scene: 10% black, plane striped. And
+the pair that isolates it: vi63 and vi66b at frame 2300 are the SAME
+scene (the attract's second level-1 demo, viewed), vi63 clean (0.037),
+vi66b black rectangles in the tree row. Their only difference is 217.
+
+**217 read the round straight from the mailbox, and the mailbox is
+dirty.** The 68K builds COMM10 as `word@0xFFB9FE | (round << 13)`, and
+that word is the 16-region palette-dirty mask: regions 13-15 are the
+actor lines, dirty whenever a sprite palette moves. So the round arrived
+as round|dirt -- a wrong table installed on the return, the level's sets
+refused, black rectangles. The old code trusted the REMEMBERED round, set
+only at guarded installs, and was immune by accident.
+
+**222:** (a) the 68K masks the dirty word to 0x1FFF before OR-ing the
+round, at all four post sites in md_main.c; (b) no wipe at the edge out at
+all -- 218's full wipe bands hardware (219) and 220's narrow one never
+reaches the plane's set; (c) a set ASSIGNED while the round is off screen
+gets its tags wiped in mdp_assign_set, which is exactly when the plane's
+set appears and touches nothing of the level.
+
+`rom/night/vi69.32x` (md5 46c2a886) staged, not launched; checks pending.
+vi67/vi68 withdrawn.
