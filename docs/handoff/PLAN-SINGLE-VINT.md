@@ -309,3 +309,23 @@ first (entries 50, 105).
 
 The bar is unchanged: one generation per vint, wall under 1.00. B is the
 build that moves it; A and C are the builds that make B shippable.
+
+---------------------------------------------------------------------
+## STATUS 2026-09-13 00:50 (builder, LOOP29 240-242)
+
+    fold   state                                   ares wall     single-vint
+    1      vi75 line, plays (vi95 = + fold 4)       1.11          44%
+    4      MDSTATE=1: round + transformation from   free          --
+           the word; attract decisions from the
+           game's bytes (NOTES 29); claim mix kept
+    2      SETCOLS=1 (sc95): scan 0.279 -> 0.113,    1.03          55%
+           tail 0.113 unchanged; picture unchanged
+    5      TXTWRAM as written halves the rig's       --            --
+           frame rate (237): copy must move to the
+           packet side before RELBANK
+    3      after fold 5 (census, NOTES 24)
+
+Rig frame rate (BOOTFLIPRATE, presented frames per 64 vints, attract):
+fr75 21 19 7 22 16; fr95e 19 15 22 21 14; sc95 pending. Open on the
+fold-1 line: the hole punch (C1PUNCH=1 built, unmeasured), the rig's
+black drops (ship rate, 237).

@@ -1781,3 +1781,28 @@ Geometry is cat1map's; the art index convention is bake_cat1vis's
 (tiles.bin by the 13-bit index).
 The .bin is gitignored like cat1map.bin: run `tools/bake_cat1hole.py`
 once (needs sh_src/tiles.bin) and it lands beside the header.
+
+## 27. 2026-09-13 (builder -> decompile). Fold 2 wired and measured; fold 4 settled on your bytes. LOOP29 240-242
+
+Your setcols_md.h is in as `SETCOLS=1`, eligible when the state word
+says the level's tilemap is on screen (credited, or a demo step with
+f028|f029) and every page select is < 10; the live scan otherwise.
+Ares, play2, 4,000 frames:
+
+    pc95 (census only)   wall 1.16  single-vint 42%   scan 0.279  tail 0.135
+    sc95 (+SETCOLS)      wall 1.03  single-vint 55%   scan 0.113  tail 0.113
+
+The scan's 0.279 is what you priced ("up to 0.29"); the wall moved
+0.13 of it, the rest was overlapped by the slave. mtask 1.04 -> 0.78.
+Check mode (live vs baked, set by set) is being read now. The rig's
+frame rate for sc95 needs the rig.
+
+Fold 4, final shape (vi95): credited = f026.0 clear, step from f031,
+demo bit f028|f029 -- exactly note 29; vi94's slowness was the shim's
+own credited edge (note 30's second suspect), vi95 measures fr75's
+frame rate with the state word in (fr95e 19 15 22 21 14).
+
+Fold 5 next needs the copy on the packet side (note 26); note 25's
+questions on the 0x369C routine stand. The hole punch for fold 1 is
+built as `C1PUNCH=1` (a 40x28 cat-1 cell mask from the name-table
+pass; sprite pixels of pp < 3 skip those cells) and is unmeasured.
