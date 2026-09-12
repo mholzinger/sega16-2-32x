@@ -1800,6 +1800,17 @@ endif
 ifdef MDSREFUSE
 SHCCFLAGS += -DMDS_REFUSE
 endif
+# `make ... MDROUND=1` = LOOP29 193. Drive the static MD pen tables from
+# the GAME'S ROUND (its own scene variable, published by the 68K in
+# COMM10 bits 13-15) instead of PALSTATIC's palette-DETECTED scene. The
+# detected space has two slots for a five-round game, which is why
+# MDSREFUSE blanked level 2 and the transition (191). Tables come from
+# sh_src/pal_rounds_md.h, baked from each round's own gated dumps (192).
+# Needs MDSTATIC. Pair with MDSREFUSE=1 for the zero-churn result.
+ifdef MDROUND
+SHCCFLAGS += -DMD_ROUND
+MDCCFLAGS += -DMD_ROUND
+endif
 # `make ... GENSKIP=1` = LOOP29 178. Do not launch a generation whose
 # INPUT is byte-identical to the last one launched: the game writes no
 # scroll and no sprite upload on a vint it did not advance, so the frame

@@ -4269,3 +4269,52 @@ Gating on the attract step at 0xFFF031 fixes it. **My own `--live` runs
 for round 0 were ungated**, and they agreed with the gated pack (25
 palettes, [15,15,11,5], 46 slots) only because round 0 is what the
 attract actually shows.
+
+## 193. THE ROUND CHANNEL IS IN: ZERO CHURN, AND LEVEL 2 RENDERS (2026-09-11 21:45)
+
+Three pieces, all small, all measured:
+
+  1. **The 68K publishes the round.** `COMM10` bits 13-15 carry
+     `*(uint8_t*)0xFFF142 & 7` -- the game's own scene variable
+     (LOOP-DECOMPILE 66) -- at all four COMM10 publish sites. The low 13
+     bits stay the tile-dirty mask the SH-2 masks with 0x1FFF (187). The
+     SH-2 cannot read 68K wram, so this is the only way it can know which
+     round's table to install.
+  2. **The static tables are per-ROUND.** `sh_src/pal_rounds_md.h` (192),
+     five slots, pointed at through macros so `mds_install`'s body is
+     untouched. The old space was PALSTATIC's palette-DETECTED scenes --
+     two slots for a five-round game -- which is why 191 blanked level 2.
+  3. **The refuse rule keys on the round**, which cannot go out of bounds
+     the way indexing by pscene did.
+
+**`MDROUND=1 MDSREFUSE=1`, over 12,000 frames:**
+
+    on-screen tiles destroyed        0      (vi16 644, vi37 ~1,300)
+    frees that got through          11
+    pin declines                 1,224
+    cells blanked, art unshipped 2,572      (vi16 6,372 -- best of the arc)
+    refusals                   414,993
+
+**And the thing 191 broke is fixed, verified with their SCENESEL probe.**
+Forcing rounds 1 and 2, same frame, refuse against the line:
+
+    round 1   line 56 colours / 5.1% black    refuse 57 / 5.1%
+    round 2   line 60 colours / 23.0% black   refuse 65 / 20.3%
+
+**Refuse has MORE colours and LESS black on both.** The round-2 frame is
+complete -- cave walls, stalactites, rock platforms, the boulders with
+their green and pink detail, ground rocks, HUD -- against Mike's earlier
+shot of that level black but for the stalactites.
+
+Transport unchanged: wall 1.47, 32.3 fps, isr-flips 2,067, handler 54.0,
+skips 0, flip-late 0. **This is a pure background-quality change and it
+takes the dynamic palette allocator out of the tile path entirely** --
+the thing entries 153 to 191 have been circling.
+
+    rom/night/vi40.32x   md5 as deployed, on the rig
+
+**Still open and NOT covered by this:** the transformation's chevron
+blue. The thread settled that the transform is not a scene -- it
+recolours the PLAYER, and a player's palette is a sprite palette, outside
+every table the tile baker measures. So it needs the sprite side, and no
+round table will ever cover it.

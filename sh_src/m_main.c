@@ -1154,6 +1154,29 @@ static uint8_t pscene_nomatch;  /* consecutive no-match landings; at
  * scene's (title), [5] installs done from the display-on hold.
  * tools/mdstatic_gate.py finds them by _mds_ctr. */
 #include "pal_scenes_md.h"
+#ifdef MD_ROUND
+/* LOOP29 193. The tile tables are now per-ROUND (LOOP29 192), keyed by
+ * the game's own scene variable rather than by PALSTATIC's palette-
+ * DETECTED scene -- which is a two-slot space for a five-round game and
+ * is exactly why the refuse rule blanked level 2 (191).
+ * The arrays have the same shape, so mds_install's body is unchanged:
+ * these macros just point it at the round tables. */
+#include "pal_rounds_md.h"
+#undef MDSTATIC_N
+#define MDSTATIC_N MDROUND_N
+#define mds_line_c mdr_line_c
+#define mds_s_line mdr_s_line
+#define mds_s_map  mdr_s_map
+#define mds_s_used mdr_s_used
+#undef mds_table_of
+#define mds_table_of mdr_table_of
+static const uint8_t mdr_table_of[MDROUND_N] = { 0, 1, 2, 3, 4 };
+/* the round the 68K last published, in COMM10 bits 13-15 (187: the low
+ * 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF, so the top
+ * three are free -- three bits for five rounds) */
+static uint8_t md_round = 0xFF;
+#define MD_ROUND_GET() ((uint8_t)((MARS_SYS_COMM10 >> 13) & 7))
+#endif
 static uint8_t mds_pin[128];
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
@@ -2041,8 +2064,14 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
          *     meaningless anyway.
          * Refuse ONLY with a table actually installed and the set
          * genuinely absent from it. */
+#ifdef MD_ROUND
+        /* the ROUND is the table index: the 68K publishes it, so this
+         * cannot go out of bounds the way indexing by pscene did (191) */
+        unsigned ti = (md_round < MDROUND_N) ? md_round : 0xFFu;
+#else
         unsigned ti = (mds_scene_cur < PSCENE_N)
                       ? mds_table_of[mds_scene_cur] : 0xFFu;
+#endif
         if (ti < MDSTATIC_N && !mds_s_line[ti][cset]) {
             MDA(30);                 /* refused: not in the scene's table */
             return;
@@ -5368,7 +5397,22 @@ __attribute__((noinline)) static void disp_gate(void)
                 for (unsigned i = 0; i < 1024; i++)
                     dist += (PAL_SH[i] != ap[i]);
                 if (dist <= MDS_TOL) {
+#ifdef MD_ROUND
+                    /* LOOP29 193: the ROUND selects the table, not the
+                     * detected scene. Install when the 68K's published
+                     * round changes; PALSTATIC still owns the palette
+                     * IMAGE and its own scene detection, which is a
+                     * different question from which tile table to pin. */
+                    {
+                        uint8_t r = MD_ROUND_GET();
+                        if (r < MDROUND_N && r != md_round) {
+                            mds_install(r, disp_hold);
+                            md_round = r;
+                        }
+                    }
+#else
                     mds_install(mds_table_of[pscene_cur], disp_hold);
+#endif
                     mds_scene_cur = pscene_cur;
                     MDS[5]++;                     /* late installs (retry path) */
                 }

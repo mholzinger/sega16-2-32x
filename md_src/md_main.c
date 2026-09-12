@@ -2372,7 +2372,19 @@ void r60_late_post(void)
 	*(volatile uint16_t*)0xA15100 |= 0x8000;
 	*mars_comm2 = BANK_SHADOW;
 	*mars_comm12 = (uint16_t)(0xD000 | r60_late_v);
-	*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+	#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 	*mars_comm4 = 0;
 	*mars_comm0 = 0x2020;
 	*(volatile uint16_t*)0xFFA0A0 = *(volatile uint16_t*)0xC00008;   /* V at post */
@@ -3088,7 +3100,19 @@ void shim_vblank(void) {
 				*mars_comm2 = BANK_SHADOW;
 #endif
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
-				*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+				#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #ifdef ARM_GATE
 				/* COMM4 was cleared at the announce, so a 0xA001 here is
 				 * THIS vint's arm (the ISR usually arms during our
@@ -3577,7 +3601,19 @@ void shim_vblank(void) {
 			*mars_comm12 = (uint16_t)(0xD000
 				| (*(volatile uint16_t*)0xC00008 >> 8));
 #endif
-			*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+			#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #ifdef K2_FREE
 			if ((wcmd & 0x00F0) == 0x0020)
 				*mars_comm4 = 0;     /* k2 ONLY: a stale 0xF102 from
@@ -3665,7 +3701,19 @@ void shim_vblank(void) {
 		// master reads a value complete through this vint (the game is
 		// stalled until the ack). NOT cleared here — the DREQ push
 		// below still owns harvest-and-clear.
+		#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		*mars_comm10 = (uint16_t)(*(volatile uint16_t*)0xFFB9FE
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #if defined(CMD_PROBE) || defined(CMD_INT)
 		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
 		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the
