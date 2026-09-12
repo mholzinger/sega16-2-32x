@@ -5559,3 +5559,17 @@ COMM10 edge read). The title screen is the design constraint: it draws
 the level-2 cave under logo sets outside every table, and today the
 claim mix is what keeps the refuse rule off there. The attract dump of
 0xFFF142/0xFFF148 per scene decides how the word is used.
+
+**The hardware number (BOOTFLIPRATE, corrected register, fr70/fr75 =
+the two lines plus the probe; attract, unattended):**
+
+    presented frames per 64 vints        ares (play)      RIG first demo   RIG second demo
+    vi70                                  46, 32           17 16 (6 face)   15 10
+    vi75                                  62, 64           21 19 (7 face)   22 16
+
+So on the FPGA the picture runs at ~15 fps on the line and ~20 fps on
+fold 1 -- a hardware wall of ~4 and ~3.2 vints per generation, where
+ares reads 1.48 and 1.11. The 3x SH-2 gap CLAUDE.md warns about is the
+whole difference; ares ranks, the rig measures. The bar (60 = 64/64) is
+three times away on hardware, not 11%. Every fold from here gets ranked
+in ares and MEASURED with this probe on the rig, ~3 minutes a build.
