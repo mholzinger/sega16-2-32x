@@ -3749,3 +3749,54 @@ baked once and indexed by $0B.
 steps on the object's anim timer, every SECOND frame — the same 2-frame
 shape as the round-clear beam. A static table cannot follow it; the
 runtime has to apply the index the game asks for that frame.
+
+---------------------------------------------------------------------
+## 80. The palette split is ENFORCED: lines 0-63 tiles, 64-127 actors
+
+Entry 79 needs one more thing to be usable as a rule, because "the actor
+queue is the only writer above line 63" was true only of ABSOLUTE
+addressing. Six palette writers use a computed base, and any of them could
+in principle reach line 64. Bounded all of them:
+
+    0x01EF2 0x01F80 0x020A0  clr.w 0x840000, one word
+    0x02BB8  0x840000 + 32 longs                      -> 0x840080
+    0x02B7E  0x840400 + per-scene table at 0x326E     -> 0x840720 worst
+    0x02B94  0x84006C
+    0x025BA  0x840720 + 13 longs                      -> 0x840754
+    0x025E8  0x025F0  0x0263C  0x840250 / 0x8400B0
+    0x030C2  0x840000 + (idx & 127) * 16              -> 0x8407F0
+    0x03116 0x03846  0x840040 + 8 longs               -> 0x840060
+    0x04544  0x840010 + 20 longs                      -> 0x840060
+    0x1A4F0  0x840490 + 19 longs                      -> 0x8404DC
+    0x1A934 0x1B0E6  absolute, all below 0x840030
+    0x1BAB6  0x840080
+    ----
+    0x03C20  0x840800 + $0A*32 + 2      THE ACTOR QUEUE
+
+**The closest any of them gets is 0x8407F0 — the colour cycler, one word
+short of line 64.** Its index is masked to 127 and scaled by 16, so it
+cannot pass 0x8407F0 whatever the descriptor says.
+
+**0x2B7E was the one worth bounding properly**, because its base and its
+length both come from the per-scene table at 0x326E that entry 46 listed
+without decoding. It is (word offset, word count) per scene:
+
+    scene 0  offset 0x00A0  count 111  -> ends 0x840660
+    scene 1  offset 0x0000  count  39  -> ends 0x8404A0
+    scene 2  offset 0x0260  count  47  -> ends 0x840720
+    scene 3  offset 0x0000  count  35  -> ends 0x840490
+    scene 4  offset 0x0200  count  63  -> ends 0x840700
+    scene 5  offset 0x0102  count 772  -> would end 0x841116
+
+The sixth entry would cross, and the sixth entry is the garbage one every
+per-scene table has (entry 46). Five scenes, five bounded uploads.
+
+**So the split is a property of the program, not a convention:**
+
+    palette lines 0-63    tile and text, ten writers, all bounded
+    palette lines 64-127  actors, ONE writer, verbatim from rom 0x242A0
+
+A refuse rule that keys on the destination line needs to apply to 0-63
+only. Nothing in lines 64-127 is allocated, computed or contended — it is
+a table lookup — so intro, transformation and transitions cannot be
+starved by a tile-palette policy that stops at line 63.

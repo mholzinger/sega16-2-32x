@@ -846,3 +846,63 @@ ask for a transform table by scene number. The transform recolours the
 player, and a player's palette is the object's own slot/index at $0A/$0B
 — a sprite palette, not a tile palette, and outside everything
 `bake_tilecram.py` measures. Its cover has to come from the sprite side.
+
+---------------------------------------------------------------------
+## The chevron, and why no policy should ever starve it — 2026-09-11
+
+Your two out-of-table problems have one answer. LOOP-DECOMPILE 79 and 80.
+
+**Sprite palettes are a rom table. Nothing about them is dynamic.**
+`build_palette_upload_queue` at 0x3BEC pushes a (dest, src) pair and the
+drain copies exactly 28 bytes:
+
+    3c20:  lea 0x840800,a1 ; lea (2,a1,d0.w),a1    dest, d0 = $0A * 32
+    3c3a:  lea 0x242a0,a1  ; lea (0,a1,d0.w),a1    src,  d0 = $0B * 28
+
+176 records of 14 words at rom 0x242A0, copied verbatim into colours 1-14
+of a palette line. No allocation, no computation. 88 of the 176 can be
+requested: every `$0B` immediate plus the five tables the six indexed
+sites read.
+
+**`docs/audit/actor_pal.h` is generated and ready to bake** —
+`tools/actor_palettes.py`, all 176 records as MD colour words plus the
+88-entry used list. 4928 bytes of rom.
+
+**The chevron is records 132-137, cycled by the table at 0x26CC.**
+
+    24c4:  andi.w #31,$22(fp)     the object's own ANIM FRAME TIMER
+    24d2:  lsr.w  #1,d0           -> 0..15: it steps every SECOND frame
+    24d4:  move.b (a0,d0.w),$0B(fp)
+
+    0x26CC = 132 132 132 132 133 134 135 136 137 0 0 137 136 135 134 133
+
+Records 132-137 are a darkening blue ramp (057 046 046 035 024 013 002
+down to 034 012 001 001 001 001 000). Measured, not inferred: tracing
+object slot 0 through the arcade attract, the player's palette slot and
+index walk together from (0,132) to (5,137) and back, frames 2103-2130.
+**So the chevron wants lines 64 to 69 in sequence, changing every second
+frame.** Yellow and orange on red is those six records never reaching
+their lines, not a missing colour.
+
+**And the split you want is enforced by the program.** I bounded every
+palette writer in the rom, including the six with a computed base:
+
+    lines 0-63     tile and text — ten writers, every one bounded below
+                   0x840800. The closest is the colour cycler at 0x30C2,
+                   whose index is masked to 127 and scaled by 16, so it
+                   stops at 0x8407F0 — one word short.
+    lines 64-127   actors — ONE writer, the queue above.
+
+The one that needed real work was 0x2B7E, whose base AND length both come
+from the per-scene table at 0x326E: (word offset, word count) per scene,
+worst case scene 2 ending at 0x840720. The sixth entry would cross line 64
+and the sixth entry is the garbage one every per-scene table has.
+
+**So: make the refuse rule stop at line 63.** Lines 64-127 are a table
+lookup with no contention, and once `actor_pal.h` is baked, intro,
+transformation and transitions cannot be starved by a tile policy.
+
+One caution for the tile side of the pink trees. The transform cycle steps
+on the object's anim timer, every SECOND frame — the same 2-frame shape as
+the round-clear beam. A static table cannot follow that; whatever applies
+the index has to apply the one the game asks for that frame.
