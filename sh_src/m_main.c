@@ -240,7 +240,17 @@ static uint16_t tv_czn, tv_bad, tv_tst;
  * reads are sound. 6 bits: 8-12 = min(31, n), bit 14 = n > 31. */
 #include "tile_nonblank.h"
 static uint16_t tv_real;
-#define TV_BITS ((uint32_t)(((tv_real > 31 ? 31 : tv_real) << 8) | ((tv_real > 31 ? 1u : 0u) << 14)))
+/* vi85: tv_real confounded too (pen maps zero real tiles). LOOP29 237,
+ * the BLANK-CELL CENSUS: the name-table build emits MD_BLANK_SLOT for
+ * three reasons -- no way claimed (tv_b_noslot), a dirty slot under cut
+ * mode (tv_b_cut, MDA 5), a dirty slot outside cut mode (tv_b_dirty,
+ * MDA 6). Rolling 64-window sums; the word carries the last latched
+ * tv_b_dirty sum >> 2 (sat 63) in bits 8-12 and 14. Rig against ares. */
+static uint16_t tv_b_noslot, tv_b_cut, tv_b_dirty, tv_b_win;
+static uint16_t tv_b_l_noslot, tv_b_l_cut, tv_b_l_dirty;
+#define TV_BLANK_LATCH() do { if (++tv_b_win >= 64) { tv_b_l_noslot = tv_b_noslot; tv_b_l_cut = tv_b_cut; tv_b_l_dirty = tv_b_dirty; tv_b_noslot = tv_b_cut = tv_b_dirty = 0; tv_b_win = 0; } } while (0)
+#define TV_BITS_V ((tv_b_l_dirty >> 2) > 63u ? 63u : (tv_b_l_dirty >> 2))
+#define TV_BITS ((uint32_t)(((TV_BITS_V & 31u) << 8) | (((TV_BITS_V >> 5) & 1u) << 14)))
 #else
 #define TV_BITS 0u
 #endif
