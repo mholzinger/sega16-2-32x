@@ -190,7 +190,13 @@ static uint16_t k2f_spr_landed;
  *          (tp_lastA) differs from the staging it was copied from
  *   tv_wr  post-flip replays whose FB read-back differs from tp_lastA */
 static uint16_t tv_rb, tv_wr;
-#define TV_BITS ((uint32_t)(((tv_rb > 7 ? 7 : tv_rb) << 8) | ((tv_wr > 3 ? 3 : tv_wr) << 11)))
+/* vi78 on the rig: tv_rb 0, tv_wr 0 -- the SH-2 reads back what it
+ * wrote, the 68K still reads zeros. vi79 asks WHEN the SH-2 writes:
+ *   tv_rep0  post-flip replays run with FM=0 (SH-2 view, INTMSK bit 15)
+ *   tv_pub0  publishes run with FM=0 */
+static uint16_t tv_rep0, tv_pub0;
+#define TV_FM0() (!(MARS_SYS_INTMSK & 0x8000u))
+#define TV_BITS ((uint32_t)(((tv_rep0 > 7 ? 7 : tv_rep0) << 8) | ((tv_pub0 > 3 ? 3 : tv_pub0) << 11)))
 #else
 #define TV_BITS 0u
 #endif
