@@ -2008,6 +2008,9 @@ static void r60_push(void) {
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
+#elif defined(BOOT_FLIPRATE)
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA18A & 0xFF);
 #elif defined(BOOT_TILEVER)
 		/* LOOP29 231: the consume's VRAM readback (TILE_VERIFY).
 		 * vi76 read on the rig: checked, VRAM-zero 7 (sat), mismatch 0
