@@ -14112,6 +14112,9 @@ RAMCODE void m_main(void)
                                     ent = MD_BLANK_SLOT;
                                     ((volatile uint32_t *)0x26028FA0)[0]++;
                                     MDA(5);
+#ifdef TILE_VERIFY
+                                    tv_b_cut++;
+#endif
                                 }
                                 else
                                     /* 2026-09-06 (attract parity): outside
@@ -14123,8 +14126,15 @@ RAMCODE void m_main(void)
                                      * a page rewrite comes with a palette
                                      * switch, so the old tiles showed under
                                      * the new colours — the dark logo.) */
-                                    { ent = MD_BLANK_SLOT; MDA(6); }
+                                    { ent = MD_BLANK_SLOT; MDA(6);
+#ifdef TILE_VERIFY
+                                      tv_b_dirty++;
+#endif
+                                    }
                             }
+#ifdef TILE_VERIFY
+                            else if (slot == MD_BLANK_SLOT) tv_b_noslot++;
+#endif
 #endif
 #ifdef NT_WRAP
                             CB(col) = ent;
