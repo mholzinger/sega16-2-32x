@@ -5117,3 +5117,5 @@ on every resident set and leaves the pens alone.
 
 `rom/night/vi66.32x` (md5 a3e3509a) staged, not launched. The transform
 return is Mike's eye only. vi65 withdrawn.
+
+**218 play path:** vi66 vs vi45 play path: worst black-share difference 0.001 at frame 2720; ledge band mean black: vi62b 0.0124  vi66 0.0105. vi66 is the candidate; the transform return is Mike's eye.
