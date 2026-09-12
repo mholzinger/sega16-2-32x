@@ -53,21 +53,23 @@ five pages per plane (`tools/scene_sets.py` lists what is missing).
            0x40F0/0x4100), and the shim already carries the round in
            COMM10 bits 13-15. Two nibbles more.
 
-### Step 2 — the master maps drain: bake the name tables. UNMEASURED.
+### Step 2 — the master maps drain: bake its tilemap scan. STATIC HALF BAKED (LOOP-DECOMPILE 101).
 
 At 1.12 the remaining mass is slave sprites+text 0.60 and the master's
 `build_maps_chunk` at 0.44 v/gen, 0.29 of wall by ablation (LOOP29 168),
-never optimised (177). It derives MD name-table words from the tilemap
-and the set->line assignment. After step 1 BOTH inputs are static rom
-data: the tilemap is unpacked from the rom once per scene (LOOP-DECOMPILE
-10) and the line table is baked. The name-table image for every page is
-therefore computable at bake time; the drain becomes a copy of the
-visible slice on scroll change, plus the runtime residue (the tile-RAM
-writers the census names: LOOP-DECOMPILE 20, 85 — the 14 upload blocks
-and the two cutscene writers).
+never optimised (177). Read (101): it is the compositor's colour-group
+and priority-LUT builder. Its scan walks 2,464 tilemap cells per plane
+per generation to learn which sets the viewport holds and at which cat
+bits; its tail scans text and sprites and allocates groups. Tile RAM is
+static in play (99), so the scan is a function of rom + scroll:
+`tools/bake_setcols.py` / `sh_src/setcols_md.h` hold it as per-column
+set extents, 11 KB a scene, proven exact on 4,000 windows. The tail
+stays.
 
-    Expected: wall 1.12 - up to 0.29 = 0.83-0.95. On paper this is the
-              step that crosses the threshold.
+    Expected: wall 1.12 minus the SCAN's share of 0.29 (scan/tail split
+              unmeasured; the scan is the cell walk, the tail is text +
+              sprites + groups). On paper this is the step that crosses
+              the threshold if the scan is most of the 0.29.
     Gate:     wall < 1.00 and single-vint > 90% on the 168 rig; pixel
               parity of the name tables against the live build (a diff of
               VRAM, exact, no eyes needed).

@@ -1362,3 +1362,24 @@ and an MD name-table image per page per scene is bakeable from the rom
 plus your set->line table. The events that change pages are each rom
 data indexed by one WRAM byte (0xFFF142, 0xFFF031, 0xFFF14A, 0xFFF148),
 all readable from the shim. Details and addresses in the entry.
+
+---------------------------------------------------------------------
+## 21. 2026-09-12. The maps scan's static half, baked: `sh_src/setcols_md.h`. LOOP-DECOMPILE 101
+
+`bm_scan_rows` answers "which sets, at which cat bits, are in the
+viewport" from 2,464 cells per plane per generation. Tile RAM is static
+in play (99), so `tools/bake_setcols.py` answers it from the rom: per
+scene, page, column -> (set|cat<<7, first row, last row). 11 KB a scene,
+exact against your window formula on 4,000 random windows including
+both wraps and any quadrant assignment. Drop-in shape:
+
+    for each of the 44 columns: pg = pq[qy + (cx>>6 & 1)]
+      for e in setcol_ent[scene][setcol_idx[scene][pg][cx&63] ..
+                                 setcol_idx[scene][pg][(cx&63)+1]):
+        if e.first <= hi_row(qy) && e.last >= lo_row(qy): present(e)
+
+col_lvl/amb_col follow from the cat bit as in your loop. `tcount` is
+only tested against zero downstream, so presence is enough. Not wired
+in; the header is emitted and the tool regenerates it. The tail is
+untouched and the scan/tail split of the 0.44 v/gen is yours to
+measure before counting the saving.

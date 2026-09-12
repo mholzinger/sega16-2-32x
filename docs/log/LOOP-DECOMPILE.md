@@ -4886,3 +4886,46 @@ our frame rate. For PLAN-SINGLE-VINT step 4 the arithmetic at true
 which the rest of r60_push (rotor ~430, mask walk ~330) covers at the
 low end and nearly at the high. The 68000 is not what stands between
 the line and one vint; step 2 is.
+
+---------------------------------------------------------------------
+## 101. Step 2 is the maps SCAN, not the name tables, and its static half is baked and proven (2026-09-12)
+
+Read `build_maps` / `build_maps_chunk` (sh_src/m_main.c 2534-2660,
+3240) before proposing anything. It is not a name-table builder. Per
+generation it walks 44x28 cells of BOTH planes (plus the alternate page
+set when a rowscroll band selects it) to learn which colour sets the
+viewport holds (`tcount`), at which priority (`col_lvl`: FG cat0 2 /
+cat1 4, BG 1 / 2) and whether a set sits at two levels (`amb_col`); then
+`bm_tail_body` scans text and sprites, does the sticky colour-group
+allocation and builds the priority LUT. `tcount` is consumed only as
+`!= 0` (2694). So the scan's whole output is: for each set, present or
+not, and at which cat bits.
+
+With tile RAM static in play (99), that is a function of the rom
+tilemap and the scroll. `tools/bake_setcols.py` bakes, per scene, per
+page, per column, every (set, cat, first row, last row) the column
+holds:
+
+    scene   entries   bytes   max/column   mean/column
+      0      4,458   13,374       14          7.0
+      1-4    ~3,500  ~10,600     ~12         ~5.5
+    all five 18,643   55,929
+
+A viewport is then, per plane: 44 columns x (one or two quadrant row
+ranges) of extent compares — about 300-500 — against 2,464 cell reads
+with three table updates each. **Proven exact against bm_scan_rows's
+own window formula** (pq quadrant pages, vx0, vy0, the yf/29-row case,
+the 128-column and 512-row wraps): 4,000 random windows over all five
+scenes, 0 mismatches. `sh_src/setcols_md.h` is emitted (not wired to
+any build).
+
+What this does NOT cover, so the saving is bounded honestly:
+
+  - `bm_tail_body` (text scan, sprite scan, sticky groups, LUT) stays.
+    The 0.44 v/gen ablation (LOOP29 168) removed scan AND tail; the
+    split between them is unmeasured. PHASECENSUS can split it.
+  - The alternate page set for rowscroll bands: same bake, the pages
+    are the same rom pages; the caller passes `pq_a` instead of `pq`.
+  - The attract intro pages, the cutscene pages 10/11 and the
+    round-clear rewrites (99) are not in the table: those screens fall
+    back to the walk, keyed on the same bytes the shim can read.
