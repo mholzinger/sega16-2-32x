@@ -2045,13 +2045,16 @@ static void r60_push(void) {
 		 * layout): bit 5 md_tag re-read differs (any) | bits 4-3 code
 		 * outside the bank (sat 3) | bits 1-0 real nonzero code that
 		 * read zero (sat 3). */
+		 * vi76-vi84's zero-record readings RETRACTED (ares' attract emits
+		 * the level's blank tiles too; the saturating counters hid it).
+		 * vi85: bit 7 bias | bit 6 more than 31 | bits 4-0 zero-output
+		 * records whose tile is NON-BLANK in the bank (m_main.c tv_real),
+		 * expected 0 wherever SH-2 ROM reads are sound. */
 		uint8_t p0 = 0;
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
 		uint8_t p2 = (uint8_t)(0x80
-			| (*(volatile uint16_t*)0xFFA1E2 ? 0x40 : 0)
-			| (((tw >> 12) & 1) << 5)
-			| (((tw >> 10) & 3) << 3)
-			| ((tw >> 8) & 3));
+			| (((tw >> 14) & 1) << 6)
+			| ((tw >> 8) & 0x1F));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
