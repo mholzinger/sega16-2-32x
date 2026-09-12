@@ -72,8 +72,11 @@ and the two cutscene writers).
               parity of the name tables against the live build (a diff of
               VRAM, exact, no eyes needed).
     Kill:     the residue of runtime tile writes is large enough that the
-              copy is not cheaper than the build. The census bounds it
-              before anything is written.
+              copy is not cheaper than the build. MEASURED (LOOP-DECOMPILE
+              99): the residue in play is ZERO. Tile RAM is written at
+              scene load, round clear, attract steps and boot only, each
+              from rom data indexed by one WRAM byte. The kill does not
+              fire.
 
 ### Step 3 — margin under the threshold. Only if step 2 lands at 0.9-1.0.
 

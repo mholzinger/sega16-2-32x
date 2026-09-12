@@ -4787,3 +4787,55 @@ the worst 40x28 window anywhere in the level holds 19 FG sets on round 0
 (page 0: 15), 25 BG (24), and 5-13 on the other rounds against 4-14. So
 feed the bake all five pages of each plane instead of one, and let its
 packer say whether the lines still close.
+
+---------------------------------------------------------------------
+## 99. Tile RAM has NO in-play writer: the residue for baked name tables is zero (2026-09-12)
+
+PLAN-SINGLE-VINT step 2 asked what rewrites tile RAM (0x400000-0x40FFFF)
+after a scene has loaded, because a baked MD name table has to carry
+that residue. Census over the whole stream, both operand forms (entry
+20's lesson): 26 `lea 0x40xxxx` and 2 immediates, 28 sites, every one
+read to its caller.
+
+    SCENE LOAD (once per scene, from the 0x740 sequence)
+      0x16BE/0x16DE  unpacker, 40,960 bytes, pages 0-9        [entry 10]
+      0x174E         page 10 picture (cutscene)                [92]
+      0x170A         page 11 texture (cutscene)                [92]
+      0x36B0         clear (16K longs) on the scene/boot paths
+                     0x562 0x6A6 0xC48 0xCDA 0x1E90 0x1A41A 0x1B0C4
+    ROUND CLEAR (0x1A406, from the main loop at 0xBBC)
+      0x1A52C        20x20 block at page 0 row 9 col 74 from 0x1C302;
+                     page 5 filled with word 0x0200; a per-round block
+                     at page 5 (0x405516) from the table at 0x1C622
+    ATTRACT STEPS (0xFFF031 step dispatcher, table 0x26DC)
+      0x2580 0x2564 0x2572 0x2552  the 14 upload blocks [85], one group
+                     per intro step at 0x1F28, 0x2004, 0x2064, 0x21FA
+      0xD12/0xD8E    a framed picture on pages 0/5 (bank 3, table
+                     0x21320 indexed by 0xFFF14A), main loop 0xC30 path
+    BOOT / SERVICE MODE (0x1A924 <- 0x1B500 test path; 0x1B9xx no caller)
+      0x1ACD8 clear; 0x1B76A/0x1B7A4 save/restore 1 KB of page 1 to
+      WRAM 0xFFFC00 around an MCU handshake; 0x1B9F6, 0x1BA34 screens
+    IN PLAY
+      none. The one in-play accessor is the routine at 0x683C, which
+      READS tile words at computed offsets (`tst.w (a0,dN.w)` through
+      0x6936-0x6A84) -- the ground and wall test, which is why a ledge
+      the port does not draw still holds the player up.
+
+The IRQ4 handler writes text RAM (page selects through the pointers at
+0xFFF0EC/F0, scroll registers by absolute address) and sprite RAM
+[13], never tile RAM. No WRAM-held pointer into tile RAM exists: the
+only immediates in the range are 0x258A's base and 0x36B0's.
+
+**So for step 2:** between a scene load and the next event above, the
+ten tilemap pages are constant. An MD name-table image per page per
+scene is a pure function of rom data (the unpacked map, the tile bank
+in 0xFFF095, and the baked set->line table), and the residue the master
+would still have to build at runtime is the four event classes, each
+of which is itself rom data indexed by a WRAM byte the shim can read
+(0xFFF142 round, 0xFFF031 attract step, 0xFFF14A picture, 0xFFF148
+cutscene). Nothing is computed by the game at play time that a bake
+cannot precompute.
+
+Not verified: that the port's own tile-RAM mirror sees no other writer
+(the shim's thunks are the port's, not the game's). Scope: the arcade
+program.

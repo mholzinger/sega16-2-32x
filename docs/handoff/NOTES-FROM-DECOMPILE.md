@@ -1350,3 +1350,15 @@ background. The arcade draws a grey masonry ledge on the FG plane there.
 
 Not touched: the bake, the header, the refuse rule. Rom facts and a
 reader only.
+
+---------------------------------------------------------------------
+## 20. 2026-09-12. Step 2's residue is zero: tile RAM is static in play. LOOP-DECOMPILE 99
+
+Every tile-RAM writer in the program, read to its caller: scene load,
+round clear, the attract intro steps, boot/service. **Nothing writes
+tile RAM during play**; the only in-play accessor is the ground test,
+which reads. So `build_maps_chunk`'s input is constant between events,
+and an MD name-table image per page per scene is bakeable from the rom
+plus your set->line table. The events that change pages are each rom
+data indexed by one WRAM byte (0xFFF142, 0xFFF031, 0xFFF14A, 0xFFF148),
+all readable from the shim. Details and addresses in the entry.
