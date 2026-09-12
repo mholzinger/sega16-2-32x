@@ -1,17 +1,12 @@
 rom          262144 bytes
   code        75442  28.8%   (19137 instructions)
   data       186702  71.2%
-    named    134974  72.3% of data  (48 regions)
-    unnamed   51728  27.7% of data  (175 runs)
+    named    138046  73.9% of data  (47 regions)
+    unnamed   48656  26.1% of data  (175 runs)
 
 UNATTRIBUTED RUNS, largest first — with who points into them
-  0x21400-0x232A0    7840 bytes  62 references
-      <- 0x1DD28  data  long at 0x1DD28
-      <- 0x1E85C  data  long at 0x1E85C
-      <- 0x1DD58  data  long at 0x1DD58
-      <- 0x1E8AC  data  long at 0x1E8AC
-      ... 58 more
-  0x25A24-0x26C20    4604 bytes  1 reference
+  0x22000-0x232A0    4768 bytes  0 references
+  0x25A24-0x26C20    4604 bytes  1 reference  SUSPECT: every reference has the same high word 0x0002, which is what a 4-byte window over 2-byte fields produces
       <- 0x14E06  data  long at 0x14E06
   0x1EF20-0x20000    4320 bytes  7 references
       <- 0x198A2  data  long at 0x198A2

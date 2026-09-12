@@ -3930,3 +3930,60 @@ run of this reported zero. And a conditional branch backwards to an
 `rts` is a shared EXIT with the same three-instruction shape as a spin;
 three of five busy-wait candidates were that, and 0x0F4CE and 0x166F2 were
 checked by hand before the filter was written rather than after.
+
+---------------------------------------------------------------------
+## 83. MY OWN TOOL INVENTED A BLOCK'S 62 REFERENCES. And the zoom table's real end.
+
+Entry 77's rom map prints, for each unattributed run, who points into it.
+The largest run — 0x21400-0x232A0, 7840 bytes — showed **62 pointers**
+from records at 0x1DD28 and 0x1E85C. Chasing them was the next job. They
+do not exist.
+
+**The records at 0x1DD28 are four WORDS, not two longs:**
+
+    0x1DD28:  0002 1400 0190 1301
+    0x1DD30:  0120 1410 0044 0007
+    0x1DD38:  0060 1410 00EC 0007
+    0x1DD40:  0102 1414 0190 1300
+
+The second word runs 0x1400, 0x1410, 0x1410, 0x1414 — ascending, an index
+of some kind. **Whenever the first word happens to be 0x0002, a 4-byte
+window over the pair reads 0x00021400 and my scan calls it a tidy pointer
+into 0x21400.** Every one of the 62 is that. The block has no references
+at all.
+
+**The tell is cheap and it is now in the tool.** A straddle can only ever
+produce ONE high word, because that word is a different field holding the
+same small value; real pointers into a block come from several. `rom_map.py`
+now prints the count of distinct high words and marks a block reached by
+exactly one as SUSPECT. It flags 0x21400 and 0x25A24 and leaves
+0x1EF20-0x20000 alone, which has seven references across several high
+words and is therefore credible. **No candidate is dropped** — the number
+that decides it is printed and the reader judges.
+
+This is the same failure entry 50 catalogued as "a number matching a
+constant you already hold", committed by a tool rather than by a person,
+which is worse: it produced sixty-two of them and they all looked alike.
+
+**And chasing it settled the zoom table's real end.** Entry 48 read the
+zoom lookup at 0x3CD4 but bounded the table by eye:
+
+    3ce0:  move.b (a0)+,d0        the size class -- a BYTE
+    3ce2:  lsl.w  #5,d0           32-byte rows
+    3cea:  andi.w #31,d0          the zoom level, 0-31
+    3cee:  move.b (a2,d0.w),d6
+
+A byte shifted left five reaches 8160, plus 31 is 8191. **So the table is
+exactly 256 rows of 32 bytes, 0x20000-0x22000**, and the bound is the
+addressing rather than a guess. Entry 46's "monotonic decay curve at
+0x210C4" and entry 48's "more of the same table" are both inside it. That
+attributes 4096 bytes that were sitting in the largest unattributed run.
+
+    rom data named   72.3% -> 73.9%
+
+**What is actually left in that area**: 0x22000-0x232A0, 4768 bytes, 2384
+words, every one a valid 13-bit tile index and ascending in runs
+(0x1472 0x1473 0x1474 0x152D 0x152E ...). **Nothing in the rom points at
+it** — no code reference and no credible data pointer — so it is reached
+from a computed base, like 0x29000-0x29E00. Two blocks now sit in that
+category and they are the honest end of what pointer-chasing can do.

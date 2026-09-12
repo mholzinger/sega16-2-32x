@@ -44,8 +44,10 @@ ATTRIBUTED = [
     (0x17E24, 0x17E38, 'per-scene DISPATCH, the level scripts', '46'),
     (0x1C622, 0x1D58E, 'five per-scene blocks of 0x288', '46'),
     (0x1D32A, 0x1D33E, 'per-scene, walked with fp=0xFFD800', '34/46'),
-    (0x20000, 0x210C4, 'ZOOM SCALE TABLE, 32-byte rows, 0-31', '48'),
-    (0x210C4, 0x21400, 'more of the zoom ladder', '46/48'),
+    (0x20000, 0x22000, 'ZOOM SCALE TABLE, 256 rows x 32 bytes. 0x3CE0 reads '
+     'the size class as a BYTE and shifts it left 5, so the table is '
+     'exactly 256*32 and ends at 0x22000 -- the bound is the addressing, '
+     'not a guess', '48/83'),
     (0x232A0, 0x242A0, 'palette blocks, 4 x 0x400 (64 palettes of 16 bytes)',
      'LOOP29 174; bake_tilecram.py indexes base+blk*0x400, blk 0-3'),
     (0x242A0, 0x255E0, 'ACTOR PALETTE RECORDS, 176 x 28 bytes, indexed by '
@@ -167,8 +169,21 @@ def main():
         for v, kind in tgts:
             refs[v].append((a, kind, mn, ops))
 
-    # a pointer inside DATA is still a reference: the scene descriptor
+    # A pointer inside DATA is still a reference: the scene descriptor
     # reaches the tilemaps that way and nothing in the code does.
+    #
+    # BUT A 4-BYTE WINDOW OVER 2-BYTE FIELDS INVENTS POINTERS, and it
+    # invented a whole block once (LOOP-DECOMPILE 83). The records at
+    # 0x1DD28 are four words each; whenever the first is 0x0002 and the
+    # second is 0x1400-0x1FFF, the window reads a tidy pointer into
+    # 0x21400. Sixty-two of them, every one fictional.
+    #
+    # The tell is cheap: a straddle can only ever produce ONE high word,
+    # because that word is a different field holding the same small value.
+    # Real pointers into a block come from more than one. So the report
+    # prints how many distinct high words produced a block's references and
+    # marks a block reached by exactly one as SUSPECT. No guessing, no
+    # dropping — the reader gets the number that decides it.
     for i in range(0, len(rom) - 3, 2):
         if cov[i]:
             continue
@@ -218,8 +233,15 @@ def main():
     print('UNATTRIBUTED RUNS, largest first — with who points into them')
     for L, lo, hi in show:
         inside = [(v, refs[v]) for v in sorted(refs) if lo <= v < hi]
-        print('  0x%05X-0x%05X  %6d bytes  %d reference%s'
-              % (lo, hi, L, len(inside), '' if len(inside) == 1 else 's'))
+        codeside = [x for x in inside if any(k != 'data' for _, k, _, _ in x[1])]
+        his = {v >> 16 for v, _ in inside}
+        flag = ''
+        if inside and not codeside and len(his) == 1:
+            flag = ('  SUSPECT: every reference has the same high word '
+                    '0x%04X, which is what a 4-byte window over 2-byte '
+                    'fields produces' % list(his)[0])
+        print('  0x%05X-0x%05X  %6d bytes  %d reference%s%s'
+              % (lo, hi, L, len(inside), '' if len(inside) == 1 else 's', flag))
         for v, rs in inside[:4]:
             a, kind, mn, ops = rs[0]
             print('      <- 0x%05X  %-5s %s %s' % (a, kind, mn, ops))

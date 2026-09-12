@@ -254,6 +254,16 @@ time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
   video latch. KIT RULE: for every hardware address the census marks RMW,
   derive what the board returns on READ before choosing the substitute.
 
+- **A 4-byte scan over 2-byte fields INVENTS pointers.** Chasing "who
+  points at this data block" is the method that cracks most rom regions,
+  and scanning the rom for longwords in range is how you do it — but a
+  window over a record of words reads two unrelated fields as one address.
+  On Altered Beast that produced 62 fictional pointers into one 7840-byte
+  block (LOOP-DECOMPILE 83). KIT RULE: count the DISTINCT HIGH WORDS of a
+  block's candidate pointers. A straddle can only ever produce one,
+  because that word is a different field holding the same small value.
+  Print the count, mark one-high-word blocks suspect, drop nothing.
+
 - **Census the TIMING classes too; the opcode scan cannot see them.**
   `tools/timing_hazards.py` asks three questions separately because they
   fail differently: a `dbf` branching to ITSELF is a pure cycle delay and
