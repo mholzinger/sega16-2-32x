@@ -62,7 +62,8 @@ while [ $i -lt 10 ]; do
 done
 
 echo "WARN    no 'game started: ...$name' in /tmp/remote.log after 10s" >&2
-echo "        last line: ${line:-<none>}" >&2
+echo "        recent log:" >&2
+ssh -o ConnectTimeout=5 "$MISTER" 'tail -5 /tmp/remote.log' 2>/dev/null | sed 's/^/        /' >&2 || true
 echo "        if MiSTer main is not running the cmd FIFO has no reader:" >&2
 echo "        ssh $MISTER 'ps aux | grep -c [M]iSTer'   then reboot" >&2
 exit 1
