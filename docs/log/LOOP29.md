@@ -5139,7 +5139,7 @@ tile re-ships at the level load).
 Staged for the rig, not launched, both otherwise vi66:
 
     vi66a  (md5 c93d0373)  vi62b's page-0 table + the tag wipe
-    vi66b  (md5 62ed2abb)  the all-pages table, EDGENOWIPE=1 (no wipe; the
+    vi66b  (md5 3a72ffcb)  the all-pages table, EDGENOWIPE=1 (no wipe; the
                            chevron plane will draw in alternate rows, 216)
 
 If vi66a is clean, the table's size is the trigger; if vi66b is clean, the
