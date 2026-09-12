@@ -7046,6 +7046,7 @@ static int flip_span(void)
 #ifdef TILE_VERIFY
             for (int i2 = 4; i2 < 368; i2++)
                 if (da[i2] != sa[i2]) { tv_wr++; break; }
+            if (TV_FM0()) tv_rep0++;
 #endif
             DIAG[42]++;                  /* A carried across the swap */
         } else
