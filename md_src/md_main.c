@@ -2044,7 +2044,7 @@ static void r60_push(void) {
 		 * vi83 on the rig: both saturate, map-zero later. vi84 (same
 		 * layout): bit 5 md_tag re-read differs (any) | bits 4-3 code
 		 * outside the bank (sat 3) | bits 1-0 real nonzero code that
-		 * read zero (sat 3). */
+		 * read zero (sat 3).
 		 * vi76-vi84's zero-record readings RETRACTED (ares' attract emits
 		 * the level's blank tiles too; the saturating counters hid it).
 		 * vi85: bit 7 bias | bit 6 more than 31 | bits 4-0 zero-output
