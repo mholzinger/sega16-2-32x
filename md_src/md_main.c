@@ -2612,8 +2612,13 @@ void shim_vblank(void) {
 	 * Posted here, once per vint, from IRQ4's own top, on COMM14 -- a
 	 * channel free after the boot handshake (68K B007 -> master B008):
 	 *   [15:12] tag 0xE      [11:8] sequence (wraps)
-	 *   [7]     cutscene     0xFFF148 != 0 (NOTES-FROM-DECOMPILE 17)
+	 *   [7]     cutscene     0xFFF148 != 0 (NOTES-FROM-DECOMPILE 17/23:
+	 *                        the transformation object only)
 	 *   [6:4]   round        0xFFF142 & 7
+	 *   [3]     play         0xFFF026 bit 0 (credited game running)
+	 *   [2:0]   attract step 0xFFF031 bits 2-4 (NOTES-FROM-DECOMPILE 23:
+	 *                        1/3/5 = the level's tilemap on screen, 3
+	 *                        with the logo over it; 0/2/4 = pictures)
 	 * Nothing here is shared with the tile-dirty mask, so the round can
 	 * no longer read as dirt by phase (217/226) and the SH-2 gets the
 	 * cutscene a frame ahead of the page words instead of detecting it
