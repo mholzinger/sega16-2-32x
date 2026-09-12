@@ -30,7 +30,15 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
-SCENES, TILES_N, LINES, SLOTS = 5, 20480, 4, 16
+SCENES, TILES_N, SLOTS = 5, 20480, 16
+# LOOP29 197: THREE, not four. m_main.c:326 sets MDP_LINES 3 by default and
+# the fourth line is MDP_LINES4, which carries `#error "MDP_LINES4 takes the
+# MD sprite line for tiles"` against MD_SPR -- and every shipping build has
+# MD_SPR. mdpen_bake has always used NLINES=3, which is why vi39's table
+# leaves the fourth block 0xFFFF. Packing into four lines silently assigns
+# sets to a line the background allocator does not own: in round 0 that was
+# the SKY (92, 93) and EVERY TREE (95-99).
+LINES = int(os.environ.get('TILECRAM_LINES', '3'))
 FG_PAGE, BG_PAGE = 0, 5          # measured live, entry 59
 VIS_ROWS, VIS_COLS = range(4, 32), 40
 

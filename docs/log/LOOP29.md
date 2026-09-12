@@ -4456,3 +4456,71 @@ word, which is necessary and may not be sufficient.
     python3 tools/mdstatic_oracle.py            # round tables, per round
     python3 tools/mdstatic_oracle.py --scenes    # vi39's 2-slot table
     python3 tools/mdstatic_oracle.py --pens      # dropped-pen audit
+
+## 197. THE PINK TREES WERE THE LINE COUNT, NOT THE ENCODING (2026-09-12 00:15)
+
+196 fixed two real faults in the emitted round table and **made the
+picture worse**, which is the whole lesson. vi43 on the rig still had pink
+trees and gained a purple sky.
+
+**`bake_tilecram.py` packed into FOUR MD CRAM lines. The background
+allocator owns THREE.** `m_main.c:326` sets `MDP_LINES 3`; the fourth is
+`MDP_LINES4`, and 328 carries `#error "MDP_LINES4 takes the MD sprite line
+for tiles"` against `MD_SPR`, which every shipping build defines. So every
+set the baker put on line 4 was painted out of the sprite line. In round 0
+those sets were:
+
+    92, 93          the SKY
+    95, 96, 97, 99  every TREE
+
+`mdpen_bake.py` has always used `NLINES = 3` (tools/mdpen_bake.py:46),
+which is why vi39's `pal_scenes_md.h` leaves its fourth block 0xFFFF and
+why vi39 looked right. The round-table path was the only one that ever
+emitted a line 4.
+
+**And 196 made it worse by exactly the mechanism it fixed.** Correcting the
+quantiser changes which colours collide, so round 0's line loads went from
+[15, 15, 11, 5] to [14, 14, 15, 10] -- the line-4 casualty list doubled.
+Both faults were real; only together do they fix anything.
+
+    LINES = 3, round 0: [14, 15, 14], 24 of 25 sets pinned
+                        set 87 OVERFLOWS to the framebuffer (11 cells)
+    rounds 1-4 fit entirely, no overflow
+
+**vi44** (`rom/night/vi44.32x`, md5 22adf27c), flag-identical to vi42, on
+the rig at 04:11. **Mike's shots: the sky is blue and the trees are
+green.** Measured against `ref_arcade/ref_008000` in the same crop:
+
+    sky     vi44 92AECE 7792CE     arcade 7394CE 638CC5
+    trees   vi44 007755            arcade 006342
+    grass   vi44 73CE00            arcade 73CE00   (exact)
+
+**NOT fixed, and now the visible defect:** black cells along the tree line
+and the wall top, a few per frame. They are NOT the overflow sets -- those
+are 14 cells in round 0, all at map rows 16-27, and the blacks sit on the
+skyline. Un-shipped patterns rendering as backdrop is the standing
+explanation (the drift-free residency wipe, LOOP29 152-164).
+
+## 198. LEVEL 4'S SLOWDOWN IS NOT THE BACKGROUND (2026-09-12 00:35)
+
+Mike, on vi44: "level 4 is barely playable ... a frame budget that
+overloads in level 4." Two background-side causes ruled out offline, both
+against the round-4 table as built:
+
+    level   cells drawn in SOFTWARE      worst 40-col window,
+            (set not in the table)       distinct (code,set) pairs
+      1        14   0.4%                        685
+      2       256   6.7%   (set 1: 248)         482
+      3        16   0.5%                        527
+      4         6   0.2%                        400
+      5        42   1.8%                        528
+
+**Level 4 is the LIGHTEST level on both counts** -- fewest software cells
+and fewest distinct patterns to keep resident, and its table needs only
+ONE line. So neither the software fallback nor tile residency explains it,
+and level 2, which has 18x more software cells, is not the one Mike
+flagged. The cause is on the sprite or game-logic side.
+
+**The instrument is the rig, not these tools:** `BOOTGAMERATE=1` paints the
+game's own dropped-frame rate (LOOP29 140, START-HERE "THE PIVOT"), and
+hardware speed is read only off that.
