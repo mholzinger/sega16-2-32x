@@ -694,7 +694,12 @@ static void md_consume(uint32_t pkt_base) {
 							if (v != s) mm = 1;
 						}
 						(*(volatile uint16_t*)0xFFA1E0)++;
-						if (vz) (*(volatile uint16_t*)0xFFA1E2)++;
+						if (vz) {
+							(*(volatile uint16_t*)0xFFA1E2)++;
+							/* vi81: where in the packet the zeros sit */
+							*(volatile uint16_t*)0xFFA1EE = i;
+							*(volatile uint16_t*)0xFFA1F0 = cnt;
+						}
 						if (mm) (*(volatile uint16_t*)0xFFA1E4)++;
 						if (sz) (*(volatile uint16_t*)0xFFA1E6)++;
 					}
