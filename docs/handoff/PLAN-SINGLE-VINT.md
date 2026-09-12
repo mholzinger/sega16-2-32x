@@ -216,3 +216,40 @@ writer list is this thread's.
     patch table, so the move is a list and not a search;
   - the rotor, when fold 3 is scheduled and not before;
   - the text-writer list for fold 5, with each writer's gate state.
+
+---------------------------------------------------------------------
+## AFTER FOLD 1 ON THE RIG (decompile thread, 2026-09-12 21:30, LOOP29 230-231)
+
+Two checks from the rom on vi75's black sets (76-79, 93-101 black;
+74, 75, 85, 86, 92 drawn), so nobody re-runs them: no round's table
+matches the split (round 0 keeps all fifteen; every other round drops
+drawn sets), and it is not the cat-1 category either (93-101 are BG
+sets with 0% priority cells; drawn 85/86 are 94%). Per cell, timing
+only, as 231 says.
+
+Two thoughts, both about ORDER:
+
+  1. **Fold 4 before the 24-bit channel.** The two SH-2 mechanisms that
+     depend on timing alone are the claim-mix flag (mds_onscreen, per
+     window, from t > n) and the COMM10 edge read. When the flag reads
+     OFF in play, the level's sets go to the dynamic allocator and churn;
+     when the edge read lands on a stale or torn word, a wrong table is
+     installed. Both produce per-cell black that persists, and both
+     change with windows-per-vint, which is what the rig changes. Fold 4
+     (round + 0xFFF148 + page nibbles + a sequence number, one writer,
+     posted from IRQ4, nothing shared with the dirty mask) deletes both
+     mechanisms rather than observing them. It is one COMM field and
+     bytes the shim already reads. If the black survives fold 4, the
+     channel is the right next instrument and it will have two fewer
+     suspects.
+  2. **Measure the wall on vi75.** Nothing since 175 has read the
+     generation wall on any build; 230 has motion and flips. One
+     PHASECENSUS run on vi75 and on vi70 puts "where are we" in vints
+     instead of proxies. By 175's measurement of the same flags, vi75
+     should sit near 1.12; if it does not, fold 1 did not land the way
+     the plan priced it.
+
+The Zeus text and the round-clear bonus text on vi75 are the parked
+text gates (225/229), not fold 1: vi75 is vi70's line without them.
+Fold 5 is the fix that does not re-roll the 68K phase every time a
+writer is found.
