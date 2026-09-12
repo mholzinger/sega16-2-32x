@@ -5085,3 +5085,42 @@ beyond 65: not one cat-1 cell exists on pages 5-9 in any round, so the
 suppress never has to ask which plane a cell is on -- only whether the
 FG page cell under the pixel is 1 or 2. Entry 65's counts were one page
 (the stale page-7 FG); these are all five FG pages per round.
+
+---------------------------------------------------------------------
+## 107. CORRECTION: the unpacker's zero run is n+1 (LOOP29 243); entries 10 and 101 carried the bug, and the c1p95c review
+
+Entry 10 wrote the low-byte pass's zero escape as "a zero length means
+a single zero literal", and every unpacker this thread wrote followed
+it: n zeros, or one when n is 0. LOOP29 243 checked against live tile
+RAM: it is n+1 zeros, always. 10,550 of 20,480 words were shifted by
+a column per zero run. Consequences here:
+
+  - entry 101's "exact on 4,000 windows, 0 mismatches" compared the bake
+    against a window scan of the SAME unpack -- self-consistent, not
+    truth-checked. The builder's check with the corrected unpacker
+    against live SDRAM (2,000 windows, 0) is the proof; mine was not.
+  - entry 98's set lists per page are qualitative and stand; 231's
+    set grid was shifted the same way (243 says so).
+  - the builder fixed scene_sets.py, bake_setcols.py and
+    bake_cat1hole.py in the tree; the maps in c1p95c and sc95 are from
+    the corrected tools.
+
+Entry 50's rule was broken the same way again: an unmarked format
+detail taken from one reading and carried into three tools without
+ever being compared to the running machine.
+
+**Review of c1p95c (Build A) against its card, for the landing
+protocol.** One change compiled: `C1PUNCH=1` -- the master's FG
+name-table pass writes the hole class per screen cell (and the tile
+index for class 2) from `cat1hole.bin` selected by the state word's
+round; the slave's sprite compose, for sprites with pp < 3, skips a
+run in a class-1 cell and tests the tile's own pixel in a class-2 cell.
+SETCOLS code is in the tree but flag-gated and not in this rom. The
+linked map is byte-identical to a fresh bake with the corrected
+unpacker (0 of 25,600 bytes differ; the pre-fix map would differ in
+3,077). The pp < 3 rule is entry 59's (sprites at pp=2 lose to FG
+cat-1, pp=3 win). The cutscene pages 10/11 carry the same rom picture
+in every scene, so md_round choosing the map is right there too.
+Matches the card. What to look for: the zombies rising behind the
+ground, and the player's legs through the grass tufts -- the two
+opposite cases the per-cell/per-pixel split has to get right at once.
