@@ -5855,3 +5855,37 @@ it (paint `shim_credited` and the step through the value instrument in
 the attract); not run tonight. vi94 is on the rig as the safe fold-1
 build: no regression against vi75 in either mode, the transformation
 OFF lag-free.
+
+## 240. vi94 "SLOW, BLACK SILHOUETTES, ZOMBIES NOT MASKED": ATTRIBUTION BY A/B, THE RECOVERY LINE (2026-09-12 23:50)
+
+Mike on vi94 (222156: the Zeus intro over a black level): "slow, black
+silhouettes, zombies rising from the ground are not masked."
+
+  - The unmasked zombies are fold 1's known artefact: C1_NOFB deletes
+    the FB cat-1 pass, so a sprite pixel wins over the cat-1 ground it
+    should be behind (175: "sprites wrongly cover cat-1 tiles where
+    they overlap"). It is the hole punch the plan named as Mike's gate
+    for fold 1, unchanged since vi75; the suppress-by-bitmap fix (175)
+    is not built.
+  - The slowness is unattributed: no rig speed number exists for any
+    build after vi75 (231-239 are black shares). NOTES 30 names the
+    three compiled differences and ranks them: 236's cat-1 eviction
+    (more re-ships on the 7-tiles-a-vint machine), 239's credited edge
+    (the shim's clear fires one vint after the game clears its bit at
+    the start press; a short press leaves credited 0, the stale step 2
+    forces the level OFF = vi90's shape), COMM14 traffic last.
+  - NOTES 29 measured the game's byte on the arcade: 0xFFF026 bit 0 is
+    1 through the attract and 0 through a credited game, with no edge
+    (cleared by the start handler, set by the demo start). credited <=>
+    bit 0 clear. f028|f029 says a demo is running (step 1 without it =
+    the SEGA card).
+
+**240:** the recovery line. MDSTATE keeps the two free halves of fold
+4 (round outside the dirty mask; transformation OFF) and the attract
+decisions from bytes the game maintains: credited = ~f026.0 (no shim
+flag), demo bit in word bit 8, seq shrunk to 3 bits; steps 0/2/4 OFF,
+1/3/5 ON when the demo bit is set, step 1 without it OFF. C1_SOFT is
+back to vi75's rule under C1_NOFB (236's eviction is the `C1EVICT=1`
+knob). `rom/night/vi95.32x` = that line; `fr95` / `fr95e` = the same
+with BOOTFLIPRATE, without / with C1EVICT, for the rig A/B against
+fr75's 21 19 7 22 16.

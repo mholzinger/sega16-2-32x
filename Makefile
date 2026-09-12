@@ -1002,6 +1002,12 @@ ifdef MDSTATE
 SHCCFLAGS += -DMD_STATE
 MDCCFLAGS += -DMD_STATE
 endif
+# `make ... C1EVICT=1` = LOOP29 236 probe: under C1_NOFB let cat-1 tiles
+# evict hot ways instead of leaving the slot blank. Measured no picture
+# change on the rig (vi91) and suspected of costing windows (NOTES 30).
+ifdef C1EVICT
+SHCCFLAGS += -DC1_EVICT
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
