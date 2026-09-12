@@ -4740,3 +4740,50 @@ Rebuilt on HEAD 1ed642b after the builder made vi62b the line (MDBATCHOFF
 the tree and NOT pushed to the rig — Mike is on vi59's play pass. Flag
 off by default; nothing in the shipping line changes until it is turned
 on.
+
+---------------------------------------------------------------------
+## 98. The invisible platform: the round tables were baked from page 0, the level is five pages (2026-09-12)
+
+Mike (r60tight1 shots 083715/083735, level 1, score 6800): the player
+stands on a ledge that is not drawn; the background shows through it.
+Identified before theorised: the arcade corpus at the same scroll
+(ref_009808) draws a raised grey masonry ledge on the FOREGROUND plane
+there. Ours draws the trees through it, so the FG cells are refused.
+
+**What the cells are.** Level 1's tilemap unpacked from the rom (entry
+10 format) and every cell's set checked against round 0's baked table
+(`sh_src/pal_rounds_md.h`, `mdr_s_line[0]`, 24 sets):
+
+    FG pages 0-4 use 21 sets; NOT in the table:
+        82: 339 cells   87: 302   88: 32   89: 255   90: 176   91: 122
+    BG pages 5-9 use 26 sets; NOT in the table:  94: 138   98: 134
+
+Mapped, those FG cells are the diagonal ramps (rows 10-16 on pages 1, 3
+and 4) and the masonry blocks under them (rows 15-25 on pages 2-4) —
+the stairs and ledges the player climbs. Page 0 has one such cell.
+
+**Why the table lacks them.** `tools/bake_tilecram.py:105` sweeps the
+worst-case viewport as `for c0 in range(64)` over one page's words: it
+saw page 0 and page 5 of each round and nothing past them. Under
+MDS_REFUSE (m_main.c 2070) a set absent from the round's table is
+refused a line and its cells draw as backdrop, which is exactly the
+BG-through-the-ledge Mike sees, and it will happen at every ledge from
+page 1 on in every round the table under-covers.
+
+**All five rounds, same test** (`tools/scene_sets.py`):
+
+    round 0  FG missing 82 87 88 89 90 91 (1,226 cells)   BG 94 98 (272)
+    round 1  FG complete                                   BG 1 (1,111) 2 3 74
+    round 2  FG 2 (16)                                     BG 2 (100) 3 101 105
+    round 3  FG 2 3 72 74 75 (89)                          BG complete
+    round 4  FG 109 (112)                                  BG 1 (155) 101 (170)
+
+Set 2 in small counts is probably the page's decorative fringe; set 1
+on round 1's BG at 1,111 cells is not.
+
+**Whether a whole-level table can fit** is a colour question the bake
+answers; the set counts say it is close to what page 0 already needed:
+the worst 40x28 window anywhere in the level holds 19 FG sets on round 0
+(page 0: 15), 25 BG (24), and 5-13 on the other rounds against 4-14. So
+feed the bake all five pages of each plane instead of one, and let its
+packer say whether the lines still close.

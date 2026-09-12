@@ -1327,3 +1327,26 @@ Two things you will want to know:
 
 The rest of r60_push is the rotor (~430) and the changed-block mask
 walk (~330). Both change the packet if done wrong; neither is a copy.
+
+---------------------------------------------------------------------
+## 19. 2026-09-12. The invisible platform: your round tables were baked from page 0 only. LOOP-DECOMPILE 98
+
+Mike's r60tight1 shots (083715): the player stands on a ledge drawn as
+background. The arcade draws a grey masonry ledge on the FG plane there.
+
+  - The cells are FG sets 82, 87, 88, 89, 90, 91 — 1,226 cells of level
+    1's tilemap, the ramps and ledges on pages 1-4. None of the six is
+    in `mdr_s_line[0]`, so MDS_REFUSE draws them as backdrop.
+  - Cause: `bake_tilecram.py:105` `for c0 in range(64)` — the viewport
+    sweep covers one page. Each round's table only knows page 0/5.
+  - Every round is under-covered somewhere; the per-round lists are in
+    LOOP-DECOMPILE 98 and `tools/scene_sets.py` prints them from the rom
+    against the current header in one run. Round 1's BG misses set 1 on
+    1,111 cells; round 4's FG misses 109 on 112.
+  - Whole-level demand by set count is close to page 0's (19 vs 15 FG
+    sets in the worst window of round 0). Whether the COLOURS still pack
+    into the lines is for your bake to say once it is fed all five
+    pages per plane.
+
+Not touched: the bake, the header, the refuse rule. Rom facts and a
+reader only.
