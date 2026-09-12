@@ -5249,3 +5249,24 @@ re-ships the level in play: 219's hardware band has no trigger left.
 `rom/night/vi70.32x` (md5 fadafb08) staged, not launched. vi69 withdrawn.
 
 **223 play path:** vi70 vs vi45 play path: worst black-share difference 0.002 at frame 1600; ledge band mean black: vi62b 0.0124  vi70 0.0106. vi70 is the candidate.
+
+## 224. vi70 ACCEPTED ON THE RIG (Mike, 2026-09-12 14:50)
+
+"Presentation is solid until the final scene with the round clear text
+missing tiles and text. Otherwise SOLID presentation." vi70 is the line:
+`rom/s16.32x` = `rom/night/vi70.32x` (md5 fadafb08). Build line:
+
+    make ship-us MDSTATIC=1 MDROUND=1 MDSREFUSE=1 FBXPORT=1 FBXSTAGE=1 \
+        FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+        TEXTCAPMASTER=1 TEXTCAPEARLY=1 TEXTCAPFULL=1 PENHOLD=1 PENREPAINT=1 \
+        TAGKEEP=1 MDSPRTOP=1 NBUILD1=1 MDBATCH=24
+
+(MDBATCHOFF defaults to 24, 214.) Open, in order:
+
+  1. The round-clear scene: text-layer glyphs missing ("RO D CL AR BONU",
+     pre-existing since at least vi44) and missing tiles in the same
+     scene. The text path (TEXTCAP*) has not been touched by 196-223.
+  2. The decompile thread's step 2: wire `sh_src/setcols_md.h` into the
+     maps drain and measure the scan-versus-tail split (NOTES 21).
+  3. Attract only: the logo slide-in palette and the ranking screen (210-211).
+  4. The principled cutscene signal, 0xFFF148 through the mailbox (214).

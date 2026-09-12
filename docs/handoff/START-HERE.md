@@ -197,7 +197,7 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## CANDIDATE, ON THE RIG AS `rom/night/vi70.32x` (md5 fadafb08), AWAITING MIKE'S EYE (2026-09-12 14:45)
+## THE LINE: `rom/night/vi70.32x` (md5 fadafb08) = `rom/s16.32x`, ACCEPTED BY MIKE 2026-09-12 14:50 ("otherwise SOLID presentation"; LOOP29 224)
 
 vi42's exact flag line plus `MDBATCH=24`, with LOOP29 196-199 and 209 on
 top: the round tables re-encoded and packed into THREE lines (the pink
