@@ -204,7 +204,15 @@ static uint16_t tv_rep0, tv_pub0;
  *   tv_idx  first differing long index of the latest such window */
 static uint32_t tv_copy[368];
 static uint16_t tv_alt, tv_idx, tv_have;
-#define TV_BITS ((uint32_t)(((tv_alt > 7 ? 7 : tv_alt) << 8) | (((tv_idx >> 7) & 3) << 11)))
+/* vi80: tv_alt saturates on ares too (d alternates banks) -- withdrawn.
+ * vi81 on the rig: the zero records sit MID-packet (indices 5, 8, 25 of
+ * 24-40), so the staging itself carries zero records. vi82 asks the
+ * emitter:
+ *   tv_noline  records emitted for a set that has no MD line (its pen
+ *              map is whatever the last install left, zero if never)
+ *   tv_zout    records whose 32 output bytes are all zero */
+static uint16_t tv_noline, tv_zout;
+#define TV_BITS ((uint32_t)(((tv_noline > 7 ? 7 : tv_noline) << 8) | ((tv_zout > 3 ? 3 : tv_zout) << 11)))
 #else
 #define TV_BITS 0u
 #endif
