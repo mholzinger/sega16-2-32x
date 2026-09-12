@@ -807,6 +807,13 @@ endif
 ifdef BOOTCONSV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_CONSV
 endif
+# BOOTTILEVER=1: LOOP29 231. The consume reads every tile record's 16
+# VRAM words back after its DMA (TILE_VERIFY) and the value instrument
+# paints bias|checked|VRAM-all-zero(3b)|VRAM!=source(3b). Rig-only
+# question: are the FPGA's black tiles zero art in VRAM?
+ifdef BOOTTILEVER
+MDCCFLAGS += -DBOOT_VALUE -DBOOT_TILEVER -DTILE_VERIFY
+endif
 ifdef BOOTENTRYV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
 endif
