@@ -652,3 +652,10 @@ is a phase, not a defect.
                run); picture equal to bldB incl. late-coin; rig frame
                rate; three launches; Mike: does it look like bldB.
     numbers    (appended when the runs land)
+    Build G numbers (ares, census-free, same run): wall 1.16 (bldB 1.18),
+      ships 36.6/s (37.0); picture equal to B (title 0.273, demo 0.038,
+      eye 0.494/0.487, return 0.040/0.038, face 0.58/0.62, play
+      0.036-0.041, late-coin 0.036-0.042).
+    VERDICT so far: 0.02, inside the noise. Whether the fast path even
+      fires is the next number (250: runs walking cells vs runs taking
+      the tight copy, in the census rom).
