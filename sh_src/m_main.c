@@ -4978,6 +4978,42 @@ __attribute__((noinline)) static void mdspr_claim(void)
 
 /* Sprites: IN-WINDOW (reads cart ROM + FB staging list in place).
  * Faithful to sega16sp.cpp; see NOTES. Row clip [ymin,ymax). */
+#if defined(SPR_LIST) && defined(FLICK_FUSE)
+#error "SPRLIST re-indexes the record loop; flick_lvl[i] would read the wrong record"
+#endif
+#ifdef SPR_LIST
+/* Card J (a), NOTES 41 / LOOP29 256: every 12-row strip used to read all
+ * 64 snapshot headers through the uncached alias before clipping (19
+ * strips x 64 x 6 halfwords a generation, ~0.2 v). The snapshot is
+ * latched for the chain (SYNC[13]), so the slave reads it ONCE per chain
+ * into a compact, cached copy of the live records in list order, with
+ * the loop's own early skips applied; the strips walk that. The master
+ * (no rows on this line, but the path exists) keeps reading the
+ * snapshot. Keyed by spr_chain_id, bumped at every chain start. */
+static uint16_t spr_list[64 * 8];
+static uint8_t spr_list_n;
+volatile uint8_t spr_chain_id;
+static uint8_t spr_list_chain = 0xFF;
+RAMCODE static void spr_list_build(void)
+{
+    unsigned n = 0;
+    for (unsigned i = 0; i < 64; i++) {
+        volatile uint16_t *e = SPR_SNAP + i * 8;
+        uint16_t d2 = e[2];
+        if (d2 & 0x8000) break;
+        uint16_t d0 = e[0];
+#ifdef MD_SPR
+        if (d2 & 0x2000) continue;
+#endif
+        if ((d2 & 0x4000) || (d0 & 0xFF) >= (d0 >> 8)) continue;
+        uint16_t *o = &spr_list[n * 8];
+        o[0] = d0; o[1] = e[1]; o[2] = d2; o[3] = e[3]; o[4] = e[4]; o[5] = e[5]; o[6] = e[6]; o[7] = e[7];
+        n++;
+    }
+    spr_list_n = (uint8_t)n;
+    spr_list_chain = spr_chain_id;
+}
+#endif
 #ifdef C1_STAMP
 /* Card H (NOTES 36, LOOP29 252): the hole punch as a STAMP. The sprite
  * loops run exactly as before the punch (no class test per run or per
@@ -5120,6 +5156,25 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
      * fill per miss just to check one byte. */
     const uint8_t *pl = pri_lut[par];       /* tile level per pixel value */
     uint8_t pmax = pri_max[par];
+#ifdef SPR_LIST
+    uint32_t sp_l; __asm__ __volatile__("mov r15,%0" : "=r"(sp_l));
+    const int use_list = (sp_l & 0x000FFFFFu) >= 0x0003F800u;    /* the slave's stack */
+    if (use_list && spr_list_chain != spr_chain_id) spr_list_build();
+    const unsigned nrec = use_list ? spr_list_n : 64u;
+    for (unsigned i = 0; i < nrec; i++) {
+        const uint16_t *e = use_list ? &spr_list[i * 8] : (const uint16_t *)(SPR_SNAP + i * 8);
+        uint16_t d2 = e[2];
+        if (!use_list && (d2 & 0x8000))
+            break;
+        uint16_t d0 = e[0];
+        int top = d0 & 0xFF, bottom = d0 >> 8;
+        if (!use_list) {
+#ifdef MD_SPR
+            if (d2 & 0x2000) continue;       /* claimed: the MD VDP renders it */
+#endif
+            if ((d2 & 0x4000) || top >= bottom) continue;
+        }
+#else
     for (int i = 0; i < 64; i++) {
         volatile uint16_t *e = SPR_SNAP + i * 8;
         uint16_t d2 = e[2];
@@ -5134,6 +5189,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #endif
         if ((d2 & 0x4000) || top >= bottom)
             continue;
+#endif
         int xpos = e[1] & 0x1FF;
         int flip = d2 & 0x100;
         int pitch = (int8_t)(d2 & 0xFF);
@@ -5446,9 +5502,37 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                                 }
                             } else
 #endif
+#if defined(SPR_RUN32) && !defined(SPR_LATE_DIAG)
+                            {
+                                /* Card J (b), NOTES 41 / LOOP29 256: base is
+                                 * (pair << 4) and every baked pen is 1..14
+                                 * (bake_sprites.py encode_row), so a longword
+                                 * plus base*0x01010101 carries nowhere; the
+                                 * store count drops to ~0.37 of the byte loop's
+                                 * (92% of opaque pixels sit in runs of 8+). Head
+                                 * bytes to a 4-aligned destination, longwords,
+                                 * tail bytes. The source is byte-packed in the
+                                 * bake, so its longword is assembled unless it
+                                 * happens to be aligned. */
+                                while (m > 0 && ((uint32_t)d & 3u)) { *d++ = (uint8_t)(base + *s); s++; m--; }
+                                if (m >= 4) {
+                                    const uint32_t b4 = (uint32_t)base * 0x01010101u;
+                                    if (((uint32_t)s & 3u) == 0) {
+                                        do { *(uint32_t *)d = *(const uint32_t *)s + b4; d += 4; s += 4; m -= 4; } while (m >= 4);
+                                    } else {
+                                        do {
+                                            uint32_t w = ((uint32_t)s[0] << 24) | ((uint32_t)s[1] << 16) | ((uint32_t)s[2] << 8) | s[3];
+                                            *(uint32_t *)d = w + b4; d += 4; s += 4; m -= 4;
+                                        } while (m >= 4);
+                                    }
+                                }
+                                while (m > 0) { *d++ = (uint8_t)(base + *s); s++; m--; }
+                            }
+#else
                             do {
                                 *d++ = (uint8_t)(base + *s), PENTAP(e[4], *s), s++;
                             } while (--m);
+#endif
                         }
                         sp += n;
                         x += (int)n;

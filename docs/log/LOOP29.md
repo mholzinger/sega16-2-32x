@@ -6511,3 +6511,35 @@ command/chain/window census in s_main.c.
 
     rom/night/pcHI2  phase split      pcHI3  pixels/runs/visits
     rom/night/pcHI4  bake/draw ticks  pcHI5-8 calls, rows, chains
+
+## 256. CARD J: THE HEAVY SCENE'S SPRITE PHASE -- (b) LONGWORD RUN COPIES, (a) THE CHAIN'S RECORD LIST, MEASURED ALONE THEN TOGETHER (2026-09-13 04:30)
+
+NOTES 41 (decompile, f3e266d) picked both of note 40's cards as one,
+two flags, each measured alone, (b) first because its saving is the
+less certain. Base bldHI (0b43332a).
+
+**(b) `SPRRUN32=1`, the baked run copy four pixels a store.** The bake's
+runs hold pens 1..14 only (bake_sprites.py encode_row, line 174) and
+base is (pair << 4), so (longword + base * 0x01010101) has no carry
+between bytes: bit-exact with the byte loop. Head bytes to a 4-aligned
+sbuf address, longwords (the source is byte-packed, so its longword is
+assembled from four byte loads unless it happens to be aligned), tail
+bytes. The decompile's count at the heavy window: 18,573 opaque pixels
+in 1,107 runs of mean 16.8 px, 92% of pixels in runs of 8+, store
+count 0.37 of today's (0.30 if the bake pre-aligns runs -- not done
+here). MAME's row rule, noted by the decompile: a pen 15 inside a word
+is a transparent pixel, only a 15 in the last-walked nibble ends the
+row; the baker already breaks runs on both 0 and 15 (decode_row keeps
+the marker, encode_row admits 1..14 into runs).
+
+**(a) `SPRLIST=1`, the chain's live records read once.** s_main.c bumps
+spr_chain_id at both SNAP-latch sites (a chain reads one snapshot,
+SYNC[13]); the first strip of a chain on the slave copies the live
+records -- the loop's own early skips applied: end marker, MD-claimed,
+bit 14, empty -- into a cached list in list order; every strip walks
+the list instead of 64 uncached headers. The master (no rows on this
+line) keeps the snapshot path; FLICK_FUSE is refused at compile time
+with the list (it indexes flick_lvl by the original record number).
+
+Roms: bldJb / pcJb (b), bldJa / pcJa (a), bldJ / pcJ (both); the
+measurements follow.

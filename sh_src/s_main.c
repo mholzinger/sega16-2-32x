@@ -262,6 +262,9 @@ __attribute__((section(".ramtext"))) void s_main(void)
                 slave_window_k(cmd);         /* slice blit + row-region compose */
 #endif
             } else if (cmd & 0x0040) {
+#ifdef SPR_LIST
+                { extern volatile uint8_t spr_chain_id; spr_chain_id++; }   /* card J (a): a new chain, a new list */
+#endif
                 SYNC[13] = 1;            /* SNAP LATCH (2026-08-26): a
                                           * compose chain is reading
                                           * SPR_SNAP — text_capture must
@@ -309,7 +312,10 @@ __attribute__((section(".ramtext"))) void s_main(void)
                  * WHOLE chain, not one link — the k2 refresh lands in
                  * the gap BETWEEN links. Open at R0, close after R2. */
                 if (((cmd >> 4) & 3) == 0)
-                    SYNC[13] = 1;
+    #ifdef SPR_LIST
+                { extern volatile uint8_t spr_chain_id; spr_chain_id++; }   /* card J (a): a new chain, a new list */
+#endif
+                SYNC[13] = 1;
 #ifdef CHAIN_METER
                 {
                     uint16_t bt0 = frt_s();

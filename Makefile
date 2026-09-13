@@ -1070,6 +1070,15 @@ endif
 ifdef SCANMEMO
 SHCCFLAGS += -DSET_COLS_MEMO
 endif
+# Card J (NOTES 41, LOOP29 256), two flags measured alone then together:
+#   SPRRUN32=1  (b) baked runs copied four pixels a longword store
+#   SPRLIST=1   (a) the chain's live records read once into a cached list
+ifdef SPRRUN32
+SHCCFLAGS += -DSPR_RUN32
+endif
+ifdef SPRLIST
+SHCCFLAGS += -DSPR_LIST
+endif
 ifdef C1STAMPNW
 SHCCFLAGS += -DC1_STAMP_NW
 endif
