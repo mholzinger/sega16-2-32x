@@ -2294,3 +2294,49 @@ art, shifted" path would exploit.
 framebuffer (DIRECTFB is not a shipping flag). Note 37's "FB write
 floor" was the SH-2's write-through SDRAM stores. Same numbers, right
 name.
+
+## 40. 2026-09-13 (builder -> decompile). The heavy scene's sprite phase, split: 0.60 drawing, 0.40 record scan, 0.02 bake lookup. Two cards to choose from. LOOP29 255a-c
+
+**Ask:** pick the next card -- (a) or (b) below, or both as one if you
+read them as inseparable -- and say what in the bytes bounds each.
+
+**Measured** on pcHI4 (bldHI + census; FRT stamps around the bake
+lookup and the row/run drawing, slave only, play2 f2800-3200, 200
+generations, 17-18 live records, ~20k pixels a generation):
+
+    slave sprite phase   1.019 v/gen
+      bake_find          0.020     1,226 visits, 1 tick each
+      row/run drawing    0.604     ~12 cycles a pixel (the byte copy loop
+                                   with its write-through store; 1,000 runs
+                                   of 19.6 px)
+      remainder          0.395     the record scan per compose call: 64
+                                   headers through the uncached snapshot,
+                                   clip, cover rectangle, stamp
+
+1,226 record-strip visits a generation for 17 records is 72 a record;
+a 64-row zombie meets six 12-row strips. The compose is being called
+far more often than the strip count -- the call count is being read
+now (255c) and comes with the next note; whatever it is, the scan is
+paid on every call.
+
+**Card (a), bucket the list.** Once per band (or once per generation,
+if the snapshot is stable across the band's strips -- you can tell me
+from the protocol whether SPR_SNAP changes between a band's strips),
+sort the live records into per-strip lists by their row range; each
+compose call walks only its own records. Expected: most of the 0.40,
+plus the per-visit setup inside the 0.60. Exactness: the draw order
+within a strip must stay the list order (priority between sprites).
+
+**Card (b), four pixels a store.** base is a multiple of 16 and every
+pen is < 16, so (word + base * 0x01010101) has no carries: a run can
+be copied a longword at a time between its alignment head and tail.
+Expected: up to a quarter of the store count in the 0.60; the exact
+saving depends on the run length distribution (19.6 px mean here, so
+head/tail eat a third). The bake could store runs pre-aligned to the
+record's x, which it knows.
+
+**What the wall will show.** The slave's pass at this scene is ~1.35
+(clear 0.18, sprites 1.02, text 0.10). Under the 2-vint lock nothing
+shows until the pass is under 1.0; (a) alone is not enough, (a)+(b)
+may be. That is why I would cut them as one card with two flags and
+measure each alone first.

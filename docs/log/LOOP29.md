@@ -6465,3 +6465,28 @@ scan run more often than the geometry says. 255b splits the slave's
 sprite phase with FRT stamps: bake_find, the row/run drawing, and
 the remainder (record scan, clip, cover, stamp), slave only (the
 CPU told by its stack, as SPRLATE does).
+
+**255b, the slave's sprite phase split (pcHI4, FRT stamps, slave only):**
+
+    window       gens  sprites | bake_find | row+run drawing | remainder      | slave baked visits/gen
+    f1000-1200   193   0.225   |  0.010    |  0.095          |  0.121         |   190
+    f2800-3200   200   1.019   |  0.020    |  0.604          |  0.395         | 1,226
+
+At the heavy window the drawing is 0.60 v/gen for ~20k pixels (1.5
+ticks = ~12 cycles a pixel, the byte loop `*d++ = base + *s++` with
+its write-through store), the bake lookup is nothing (1 tick a visit),
+and 0.40 -- forty percent of the phase -- is the REMAINDER: the record
+scan per compose call (64 headers through the uncached snapshot, the
+clip, the cover rectangle, the stamp). 1,226 baked visits a generation
+on the slave for 17 live records is 72 a record; a 64-row zombie meets
+six 12-row strips, so the compose is being called many more times than
+the strip count suggests (255c counts the calls).
+
+Two cards fall out, both slave-side and both in the sprite phase:
+  (a) bucket the list once per band (or generation) by row range so a
+      strip visits only its own records: removes most of the 0.40 and
+      the per-visit setup inside the 0.60;
+  (b) draw runs four pixels at a time: `base` is a multiple of 16 and
+      pens are < 16, so word + base*0x01010101 has no carries; head and
+      tail bytes to alignment, longwords between. Cuts the store count
+      of the 0.60 by up to four; the bake could carry the aligned form.
