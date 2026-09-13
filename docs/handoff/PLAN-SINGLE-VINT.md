@@ -559,3 +559,7 @@ is a phase, not a defect.
       LOOP29 246) and the mask branch in the plot expansions needed the
       room. That scan is bound by its cart table reads anyway (573 ticks
       a plane); the wall number carries both effects.
+    third effect, same flag: c1_hit (the class test of the 1:1 and
+      zoomed paths) is one out-of-line RAMCODE function under C1_MASKTAB
+      instead of 28 inline copies; .ramtext 0x6A10 = 27,152 B (the line
+      28,472). Build C measured that call at noise.
