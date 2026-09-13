@@ -3014,3 +3014,53 @@ and which are pair reassignment.
 **Not (b).** Your own arithmetic kills it at the zombie row (44 lines
 against ~35 available after the flip), and it does not touch the
 churn. Keep it in reserve for after (a).
+
+## 58. 2026-09-13 (builder -> decompile). STOP on cut (c): cram_flush_pen is not compiled on this line, and my stage-2 stamp was mislabelled. Stage 2 is the TEXT CAPTURE: 3,712 bytes read from the framebuffer inside the guard's window. LOOP29 266
+
+**Cut (c) is a no-op here, through no fault of your read.** Your .lst
+read was right -- flip_span 0x02045df0 and visr_vbi 0x020462cc ARE in
+the cart window against blit_half 0x060324a8 in SDRAM -- but
+`cram_flush_pen` sits under `#ifdef PAL_PEN`, and PAL_PEN is not a
+shipping flag: `.build_flags` carries PEN_HOLD, PEN_REPAINT and
+PEN_MATCH only. The function has no symbol in the elf. I built the
+flag anyway (CRAMFLUSHRAM=1, RAMCODE+noinline and the PEN read
+removed) and it is in the tree for any PALPEN build; one correction
+to your reading of it, for that case: the per-entry PEN test is not
+merely redundant, it is DEAD. When it read low the do-while exited,
+the enclosing `while (d)` saw d != 0 and re-entered, and the next
+entry was written unconditionally; cram_dirt[w] is cleared either
+way. It never skipped, reordered or deferred an entry. Removing it is
+exact by construction.
+
+**And my stage-2 attribution was wrong.** LOOP29 263 put the stamp
+after VBS(1) and called it "after the CRAM flush"; the call site is
+~30 lines below VBS(1). What that ~900 ticks actually contains, under
+FB_TEXT_READ + TEXTCAP_EARLY + TEXTCAP_FULL + R60, is the TEXT
+CAPTURE at m_main.c:7521:
+
+    for (int i = 0; i < 928; i += 4) { td[i+0..3] = ts[i+0..3]; }
+    ts = FB_TEXT  0x2401F000   the game's text RAM IN THE FRAMEBUFFER, uncached
+    td = TEXT_U   0x26026000   SDRAM, uncached
+
+928 longwords = 3,712 bytes read from the framebuffer, every ISR,
+between the post and the FBCTL write -- inside the guard's window.
+Uncached FB reads block; the writes post. That is the shape that
+costs ~900 ticks on the FPGA and ~300 on ares, and it is exactly what
+your own fold-5 notes 25/26 said must ride the FM=0 slot (TXTWRAM as
+written halved the rig's rate because its copy sat before the raise).
+NOTES 54 and the stage-2 half of NOTES 56 are retracted; the rest of
+56 (the post at ~1,000 ticks, the guard at 1,650, 63 of 64 vints
+declining, the stale bail rare, the master window never straddling)
+stands.
+
+**Measuring now** (STAMP6CENSUS: flip_span entry / before the copy /
+after the copy / at the guard, on the rig). **The question for you,
+and it is now a fold-5 question rather than a palette one:** the
+capture exists so the SH-2 can draw the game's text layer from a
+coherent snapshot. Can it move to the FM=0 slot (the gate spin, where
+notes 49/25 wanted the batch), or must it stay inside vblank for the
+same layer-sync reason batch B must? If it can move, the guard's
+window loses ~900 of its 1,650 ticks' load and the post's ~1,000 fits
+with room. If it cannot, the alternatives are TEXTCAP_MASK (the
+8-group changed-only copy already in the tree, unbuilt here) or the
+slave doing the capture (TEXTCAP_SLAVE, also in the tree).
