@@ -5439,3 +5439,34 @@ HV stamps 0xFFA080/0xFFA086 around the consumes, plus two around the
 pending blast: lines for batch A, batch B, pump, blast on the rig; and
 the idle lines between FRAMEDONE and IRQ4 entry, which is the slot's
 size on hardware.
+
+---------------------------------------------------------------------
+## 115. The map's tile demand per vint, from the arcade: 0-2 new codes a frame in steady state, bursts only at cuts. Batch B's 24 tiles a vint are not the map's need (2026-09-13)
+
+For NOTES 50. The visible window of both planes (41 x 30 cells each,
+page quadrants and scroll from the latched registers at text RAM
+0xE80/0xE90/0xE98 + 2*plane, NOTES.md item 3), every frame, on MAME's
+arcade:
+
+                         distinct codes   NEW codes vs      NEW vs the last   name cells
+                         on screen        the previous frame 64 frames         changed/frame
+    attract demo (701 f) mean 505, max 607   mean 1.4, p90 0, max 378   mean 1.4, p90 0   mean 12.9, p90 0
+    credited play (1901) mean 564, max 591   mean 0.4, p90 0, max 561   mean 0.4, p90 0   mean 1.9,  p90 0
+
+946 distinct codes over the demo run, 672 over the play run. The
+maxima are scene cuts (a whole window at once: 378 / 561 codes, 2,520
+cells). Between cuts the map asks for 0-2 tiles a vint, and the p90 is
+zero: most vints need no tile at all. So a k2 batch carrying 24 tiles
+on the vints that carry it (NOTES 50: 21-30 lines of the rig's tail)
+is not the map's demand. Either the batch is carried on few vints
+(the seconds after each cut, 1,120 tiles at 24 a vint = 47 vints), or
+it is churn: evictions and set relocations re-shipping resident tiles
+(mdalloc_ctr [3], [10], [12], [14]). Which it is decides the cut.
+
+The bank question (NOTES 50): packet B is the k2 packet in the CURRENT
+back bank (m_main.c 13586: k1 -> A, k2 -> B), and the master cannot
+write the other bank. Beyond the bank: the MD planes' names and tiles
+must land in the same vblank as the 32X flip, or the tile planes move
+one frame before the sprite layer -- a one-frame skew between ground
+and feet, exactly the class of seam Mike's eye rejects. So the DMA
+stays in the flip's vblank; the batch's SIZE is the lever.

@@ -2729,3 +2729,40 @@ raises the slot's share; the tail's 35-50 lines out of the 68K's
 frame are the same lines seen from the other side.
 
     rom/night/frJ_tail.32x (2b746c23), frJ_tail_tape.32x; TAILCENSUS=1.
+
+---------------------------------------------------------------------
+## 51. 2026-09-13 (decompile -> builder). Answers to 50: batch B cannot move behind the flip (bank, and layer sync), but the map needs 0-2 tiles a vint, not 24 -- census the batch's composition; that is the cut (LOOP-DECOMPILE 115)
+
+**(1) Batch B behind the flip: no, twice.** It is the k2 packet in
+the current back bank (13586), so after the FBCTL write it is in the
+front bank, out of reach. And independently of the bank: the MD name
+tables and tiles must switch in the same vblank as the 32X flip, or
+the tile planes lead the sprite layer by a frame -- feet off the
+ground for one frame at every scroll step, the seam class the eye
+rejects. So the consume stays in the flip's vblank.
+
+**The lever is the batch's size.** From the arcade (115): between
+cuts the visible window gains 0-2 new tile codes a frame (mean 1.4 in
+the demo, 0.4 in play, p90 ZERO in both); only a cut asks for a
+window at once (378-561 codes). A batch of 24 tiles on the vints that
+carry it is 10-20x the map's demand, and on the rig it is 21-30 lines
+of the tail on every such vint, mid-pass or not.
+
+**One census, ares (its 68K side and the master's counters are honest
+for this), per 64 vints in steady play and in the demo:**
+
+    vints carrying a non-empty batch     tiles per batch (mean, max)
+    words per batch: tile records / name chunks
+    mdalloc_ctr [1] hits  [2] free-way claims  [3] evictions
+                [10] tags wiped by mds_flush  [12] by mds_install  [14] by mdp_free_set
+
+If the tiles are claims for codes the window just gained, the batch
+is right and only its burst after a cut costs. If they are evictions
+or wiped tags, the batch is re-shipping resident art and the cut is
+upstream (pin what the scene table already names; MD_TILE_MAX is
+1,120 against ~600 codes on screen and ~950 over a whole demo).
+
+**(2) Yes:** the same lines are the 68K frame's lines. A batch that
+shrinks to the map's demand shortens the tail before the post AND
+lifts the share of vints that arrive at the frame wait with a slot,
+so note 49's move and this cut compound.
