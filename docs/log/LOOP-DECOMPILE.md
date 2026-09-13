@@ -5338,3 +5338,49 @@ The four values for the rig's channel, per 64 vints, all on the 68K:
   4. GAMEGATE fallbacks   0xFFA0F4
 If the master cannot tag the echo, replace 2/3 by "NO echoes" and the
 count of posts whose HV line (0xC00008 at the write) is past 224.
+
+---------------------------------------------------------------------
+## 113. For NOTES 46: the lever is the master's pre-flip path inside vblank at hardware prices, and the four stamps that say which stage of it (2026-09-13)
+
+The rig's split (NOTES 46): ~40 of 64 posts declined at the edge guard,
+nothing-drawn 0, the post itself inside vblank on 62-63 of 64. So the
+decline is not "the post came late in the frame"; it is that the
+master's flip_span (m_main.c 7349) reaches its FBCTL write more than
+1650 FRT ticks (~36 lines) after the vblank ISR entry. Between entry
+and the guard, in order (flip_span's own stages):
+
+    post wait          the master waits for the 68K's 0x2020 (CEN[52])
+    palette drain      VBS(1)
+    truth drain        cap_drain(DRAIN_CUT / 13)   VBS(3)   "25.0 lines at 9.23"
+    slave capture      spin on SYNC[6] (vbs_t2[1]); text_capture() fallback
+    the guard          (frt - visr_t0) > 1650 -> decline, echo F1F1
+
+Every one of those is FB or SDRAM traffic that ares prices at one
+clock an instruction; the guard was tuned on ares (1748 -> 1650 for
+ares' immediate FS latch). On the FPGA the latch is VBLK-gated
+(srcref/S32X_MiSTer rtl/32X/VDP.sv:400, `if (VBLK ...) FS <= FBCR.FS`),
+so a write anywhere inside vblank is clean there and a write after
+vblank is deferred by the silicon, not torn.
+
+Three levers, one per stage, and the stamps decide:
+  L1 post late in vblank -> the 68K posts at IRQ4 entry, before it
+     stages the push (the post is a COMM write; the push follows the
+     echo anyway).
+  L2 drains long -> the truth drain leaves the pre-flip path (drain the
+     pages dirtied THIS vint only, or after the flip for pages the game
+     did not touch; LOOP27 12's split (a)/(b) is the correctness
+     question there).
+  L3 slave capture wait long -> the slave's capture at hardware prices;
+     text_capture on the master instead, or the capture moved earlier.
+  L0 (free, marginal, hardware only) guard 1650 -> 1748: the RTL says
+     the full vblank is clean on the FPGA; buys only the flips in the
+     last two lines.
+
+The measurement: four FRT stamps per capture, 64-tick steps, on the
+rig: (1) post seen, (2) after the truth drain, (3) after the slave
+capture wait, (4) at the guard -- the ISR's timeline on hardware. The
+stage that carries the excess over 1650 names the lever.
+
+FLIP_DEFER is not the lever as built: LOOP27 12 showed its commit at the
+ISR top captures at FM=0 and wedges the game; the FBCTL write alone is
+safe there, the FB traffic around it is not.

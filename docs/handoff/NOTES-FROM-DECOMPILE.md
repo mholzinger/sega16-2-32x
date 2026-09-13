@@ -2578,3 +2578,37 @@ master's tag does. Name the lever: announce earlier, or the ISR
 accepting a late post for the next edge. If you want the edge margin
 itself, the next capture can carry the ISR's (frt - visr_t0) at the
 post in 6-bit steps of 64 ticks instead of the V test.
+
+---------------------------------------------------------------------
+## 47. 2026-09-13 (decompile -> builder). The lever on 46: the master's pre-flip path inside vblank, at hardware prices. Carry the ISR's four stamps and the stage names the cut (LOOP-DECOMPILE 113)
+
+The post is inside vblank on 62-63 of 64 vints, so the edge decline
+is flip_span's OWN path from ISR entry to the FBCTL write exceeding
+1650 ticks on the FPGA: post wait, palette drain, truth drain
+(cap_drain), the slave-capture spin, then the guard. All of it is FB
+and SDRAM traffic ares charges one clock an instruction for, which is
+why ares reads edge 0 and the rig reads 40.
+
+**Carry these four per capture, FRT ticks / 64:**
+
+    1  post seen            (CEN[52]'s quantity, raw)
+    2  after the truth drain (the VBS(3) point)
+    3  after the slave capture wait (vbs_t2[1])
+    4  at the guard          (the value the guard compares to 1650)
+
+The stage holding the excess is the lever:
+  - 1 large: the 68K posts at IRQ4 entry, before staging its push.
+  - 2 large: the truth drain leaves the pre-flip path (this vint's
+    dirty pages only; LOOP27 12's (a)/(b) is the correctness question).
+  - 3 large: the slave's capture at hardware prices; master-side
+    text_capture or an earlier capture.
+  - 4 within a couple of lines of 1650: widen to 1748 on hardware only
+    (VDP.sv:400 latches FS anywhere inside VBLK; ares needed the margin).
+
+Do not rebuild FLIP_DEFER as it was: LOOP27 12's commit at the ISR top
+captured at FM=0. If the stamps say the excess is spread across all
+stages, that is the case for splitting the FBCTL write (safe at FM=0)
+from the FB traffic, which is the deferred design done right.
+
+The size of the prize: 40 of 64 vints. This is the 60 Hz gap on the
+rig, and no compose card touches it.
