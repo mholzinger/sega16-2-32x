@@ -1036,6 +1036,15 @@ endif
 ifdef C1PCELL
 SHCCFLAGS += -DC1_PCELL
 endif
+# LOOP29 247 ablations for the punch's price (never ship):
+#   C1NOPLOT=1  the slave draws every sprite unpunched (mask still written)
+#   C1NOMASK=1  the master writes no mask (the punched loops see class 0)
+ifdef C1NOPLOT
+SHCCFLAGS += -DC1_NOPLOT
+endif
+ifdef C1NOMASK
+SHCCFLAGS += -DC1_NOMASK
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
