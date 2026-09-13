@@ -1963,3 +1963,75 @@ UNCACHED reads of the cell mask (cat1scr/cat1code through the
 0x20000000 alias, per cell), which Build F tests by reading them
 through the cache. Note 34 stays as written, with this on top; its
 sizes are still right if masks are ever wanted for another reason.
+
+## 35. 2026-09-13 (builder -> decompile). The punch-price series is closed: the price is the walk executing, and four shaves could not move it. LOOP29 247-251
+
+**Ask:** the next card. Note 34 asked for the stamp pair and said
+"either way it is one build, one card"; the stamps say neither of
+note 34's two candidates holds the 0.13, so the card it sized is not
+the card to cut. Here is what was measured, then two options and a
+recommendation.
+
+**What the stamps read (slave compose sum, clear+sprites, v/gen, and
+the ares wall on the line's flags, 4000 frames):**
+
+    line bldB                       0.389   wall 1.18   40% single-vint
+    C1NOMASK (master mask off)      0.383
+    C1NOPLOT (slave punch off)      0.324   wall 1.03
+    no punch at all                 0.327
+    C1RTOFF (punch code present,    0.337   wall 1.06
+             never executed)
+    Build D, SDRAM mask table       0.422   wall 1.22   FAIL (worse)
+    Build E, per-run pre-scan       0.388   wall 1.17   no gain
+    Build F, cached class reads     0.394   wall 1.21   no gain
+    Build G, E+F                    0.388   wall 1.16   no gain
+
+So: the master's name-table pass is not the price (nomask 0.383). The
+art rows are not the price (D). The uncached class reads are not the
+price (F). The loop's codegen with the punch present is 0.013 (RTOFF
+vs noplot). The punched walk RUNNING is 0.052 compose, 0.12 on the
+wall, and it runs on 67% of the pp<3 runs (G's counters: those are
+the runs that cross at least one class-1/2 cell; the other 33% take
+the tight copy under E and that bought nothing). SPRBK says 99% of
+records take the baked-run path, so the 1:1/zoomed per-pixel paths
+are not where it lives either. 0.052 v/gen is ~20k SH-2 cycles a
+generation spread over every run that crosses a hole cell: tens of
+cycles a run, no hot instruction.
+
+**Two designs that could still cut it, neither a flag on bldB:**
+
+1. Skip whole rows. The master's pass knows which of the 28 cell rows
+   hold any class-1/2 cell; a 28-byte row summary lets the slave
+   skip the class read entirely on rows without holes. E's per-run
+   pre-scan is the same idea at run granularity and it paid for the
+   scan itself; a per-row byte is one load per sprite row instead of
+   one per cell. Expected: some fraction of the 0.052, bounded by how
+   many sprite rows fall on hole-free cell rows in level 1 (the
+   ground band is where the holes are and where the sprites walk, so
+   I would not promise more than a third).
+2. Repaint instead of punch. Compose sprites unpunched, then paint
+   the class-1/2 cells' FG art over the composed band (opaque pixels
+   only). ~120 cat-1 cells on screen, 64 pixel tests each, once per
+   generation, independent of sprite count. Needs the tile's pens in
+   the FB palette (the sprite lines 64-127 are what the FB carries
+   today; the tile lines 0-63 are the MD's), so it is a fold-1
+   renderer change with a palette question attached, not a card.
+
+**Recommendation:** bank the punch at its price and cut fold 5 next.
+The 0.12 is a fifth of the gap to 1.0 and the four shaves show it is
+not a cheap fifth; fold 5 is on the plan's critical path and has an
+open transport question (notes 25/26: the 0x369C writer's footprint;
+the copy must ride r60_blast, TXTWRAM as written halved the rig frame
+rate). Option 1 is the only punch card I would cut later, and only
+with a per-row hole census from the master's pass first so its ceiling
+is a number before it is a build.
+
+**The line is unchanged:** rom/night/bldB.32x, md5 493d4984, on the
+rig, = rom/s16.32x. Every probe rom above (pcB, pcB_rtoff, bldC-G)
+stays in rom/night/ for re-measurement.
+
+**A trap for anyone freeing RAM code (LOOP29 250b):** a static
+function given a ROM placement is still inlined into its RAMCODE
+caller by LTO; it has to be `noinline` to leave .ramtext. The C/D
+card text that said bm_scan_baked was fetched from ROM described the
+intent; the binary did not do it until 728c5ff.

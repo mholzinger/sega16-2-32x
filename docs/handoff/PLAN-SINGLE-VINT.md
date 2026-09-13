@@ -668,3 +668,13 @@ is a phase, not a defect.
       walks in steady play). VERDICT: no gain; closed. The punch's cost
       is not any path that executes -- LOOP29 250's C1RTOFF ablation
       decides between codegen and execution before another card is cut.
+
+## PUNCH-PRICE SERIES CLOSED (builder, 2026-09-13): the walk executing is the price
+
+Cards C-G all closed (C fails to link, D worse, E/F/G no gain). The
+C1RTOFF ablation (LOOP29 251) puts the punch's codegen at 0.013 compose
+and its execution at 0.052 compose / 0.12 wall; no single part of the
+walk holds it. Note 35 hands the decompile thread the numbers and two
+designs (per-row hole skip; repaint-over instead of punch); the
+builder's recommendation is to bank the punch at its price and cut
+fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.

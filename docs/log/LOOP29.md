@@ -6257,3 +6257,48 @@ because the rest of the change shrank); the census roms for E, G and
 the RTOFF ablation kept overflowing for the same reason. bm_scan_baked,
 bm_scan_baked_ok and fbx_lift now carry `noinline` on their ROM
 variants; c1mask_find already did.
+
+**251, the punch's price is its execution, not its codegen.** The
+ablation from 250 linked once the ROM placements carried `noinline`
+(250b): `PHASECENSUS=1 C1RTOFF=1` on the line's flags, .ramtext
+0x6E2C. The punch code is compiled exactly as on the line and gated
+by a volatile byte that is always 0.
+
+    compose sum (clear+sprites, v/gen)   wall (nat_score, 4000 frames)
+    line (pcB)          0.389            1.18   40% single-vint
+    RTOFF (present,     0.337            1.06
+      never taken)
+    noplot              0.324            1.03
+    nopunch             0.327            --
+
+RTOFF sits on noplot, not on the line: the hot loop's codegen with the
+punch present costs 0.013 compose, and the remaining 0.052 compose /
+0.12 wall is the punched walk RUNNING. So the structural fix 250
+proposed (the punched draw in its own function or a separate loop)
+has nothing to buy.
+
+What the walk does when it runs, and what the four shaves already
+said about each part: the cell class read (uncached SDRAM; Build F
+cached it, no gain), the class-2 art row (cart ROM; Build D replaced
+it with an SDRAM mask byte, no gain), the per-cell dispatch on runs
+that touch no hole cell (Build E's pre-scan sends those to the tight
+copy, no gain; G says 67% of pp<3 runs do touch one). Each part was
+removed alone and the sum did not move, which is what a cost spread
+thinly across a large number of cells looks like: 0.052 v/gen is
+about 20k SH-2 cycles a generation across every pp<3 run that crosses
+a hole cell, i.e. tens of cycles a run. There is no single hot
+instruction to cut.
+
+The two ways left to make it cheaper are both a different design, not
+a flag: (a) draw fewer punched pixels -- restrict the punch to rows the
+master's pass marks as holding a class-1/2 cell (cat1scr already
+carries that per cell; a per-row summary byte lets the slave skip the
+class read on rows without holes, which E's per-run pre-scan
+approximates but still pays the scan for); (b) move the punch off the
+sprite runs altogether: after the band is composed, repaint the
+class-1/2 cells' art over it (the FG tile on top of the sprites, ~120
+cat-1 cells on screen, 64 pixel tests each), which needs the tile's
+pens to exist in the FB palette and is a fold-1 renderer change, not
+a card on bldB. Neither is cut. The decompile thread gets the
+numbers (note 35) and picks; my recommendation there is to bank the
+punch at its price and go to fold 5.
