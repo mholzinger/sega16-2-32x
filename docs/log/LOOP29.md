@@ -6490,3 +6490,24 @@ Two cards fall out, both slave-side and both in the sprite phase:
       pens are < 16, so word + base*0x01010101 has no carries; head and
       tail bytes to alignment, longwords between. Cuts the store count
       of the 0.60 by up to four; the bake could carry the aligned form.
+
+**255c, what a generation is on the slave (pcHI5-8):** one chain per
+ship (chains = ships = gens, 200 in 400 frames at the heavy window,
+194 in 200 at the light one: no chain is composed and thrown away),
+19 compose calls a chain, every one a 12-row strip -- the slave
+composes the whole 224-row picture (BAND_SHIFT 0 puts the master's
+share at nothing on this line). Per strip the record loop reads all
+64 snapshot headers through the uncached alias before the row clip:
+19 x 64 x 6 halfwords = 7,296 uncached reads a generation, ~0.2 v at
+~12 cycles each, which is most of 255b's 0.395 remainder before a
+single record is clipped, covered or stamped. (1,226 bake hits a
+generation at that window are ~64 a strip: the live list there is far
+longer than the 17 records a single frame's snapshot showed at f3000
+-- the punch script's kills leave body parts.) The first cut of the
+row-height buckets and the pp=3 pass counts (pcHI6) shared census
+slots with the 255b tick sums and read garbage; pcHI7 re-did them on
+clean slots (CEN[53..55]), then pcHI8 took those slots for the
+command/chain/window census in s_main.c.
+
+    rom/night/pcHI2  phase split      pcHI3  pixels/runs/visits
+    rom/night/pcHI4  bake/draw ticks  pcHI5-8 calls, rows, chains

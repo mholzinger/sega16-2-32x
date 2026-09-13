@@ -45,6 +45,9 @@ volatile uint8_t slave_in_compose;
  * accumulated here from the band stamps (2 = band0 start, 3 = band end)
  * so the dispatch site pays only the calls (region guard). */
 #define STB ((volatile uint32_t *)0x2603992C)
+#ifndef CEN
+#define CEN ((volatile uint32_t *)0x2602FF00)   /* the phase census slots (m_main.c) */
+#endif
 static uint16_t st_last;
 static uint8_t st_band;
 /* (the one-generation event ring that lived here is retired — the
@@ -249,6 +252,11 @@ __attribute__((section(".ramtext"))) void s_main(void)
              * utilization. */
             uint16_t gw0 = frt_s();
             st_s(1);
+#ifdef PHASE_CENSUS
+            CEN[53]++;                                   /* 255d: slave commands */
+            if ((cmd & 0xF000) == 0x3000) CEN[55]++;     /* window commands */
+            else if (cmd & 0x0040) CEN[54]++;            /* chain commands (3 bands) */
+#endif
             if ((cmd & 0xF000) == 0x3000) {
 #ifndef DIRECT_FB
                 slave_window_k(cmd);         /* slice blit + row-region compose */

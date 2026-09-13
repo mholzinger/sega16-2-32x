@@ -2340,3 +2340,14 @@ record's x, which it knows.
 shows until the pass is under 1.0; (a) alone is not enough, (a)+(b)
 may be. That is why I would cut them as one card with two flags and
 measure each alone first.
+
+**40b (builder, 03:55).** The call count from 255c: one chain per
+ship, 19 twelve-row strips a chain over the full 224 rows, and every
+strip reads all 64 snapshot headers uncached before clipping -- 7,296
+uncached halfword reads a generation, ~0.2 v of the 0.40 remainder
+by arithmetic alone. Card (a)'s shape is therefore: read the 64
+headers ONCE per chain into a compact live list with row ranges (the
+snapshot is latched for the chain: SYNC[13]), then each strip walks
+only the records whose rows it meets. That removes the header reads
+and the per-strip clip of records that miss the strip; what stays per
+strip is the bake lookup and the draw of the records that hit it.

@@ -5100,6 +5100,10 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
     uint32_t sp_c; __asm__ __volatile__("mov r15,%0" : "=r"(sp_c));
     const int on_slave = (sp_c & 0x000FFFFFu) >= 0x0003F800u;   /* 255b: the slave's stack */
+    if (on_slave) {                                  /* 255c: slave compose calls */
+        CEN[63]++;                                   /* all calls */
+        CEN[62] += (uint32_t)(ymax - ymin);          /* rows */
+    }
 #endif
 #ifdef SPRITES_OFF_TEST
     /* A/B probe for the cart-bus contention hypothesis (LOOP iter 4):
@@ -5353,7 +5357,6 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                 const uint8_t *rt = fr + 8;
                 SPRBK[0]++;
 #if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
-                if (on_slave) CEN[62]++;                 /* 255b: slave record-strip visits (baked) */
                 uint16_t td_ = frt();
 #endif
                 for (int y = top; y < bottom; y++) {
