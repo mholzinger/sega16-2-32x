@@ -6966,3 +6966,22 @@ census is corrected the same way and re-measured below; the
 FRT-stamped facts stand: the post is seen 2,300-3,200 ticks after the
 master's ISR entry on the FPGA (259a), and stage 2 is the CRAM flush
 (263). What fills the 50-70 lines before the post is open again.
+
+**262c, the 68K tail with the jump corrected (frJ_tail3, 3+2 launches,
+mean lines a vint over the vints carrying the stage):**
+
+                       entry->A  batch A  batch B  pump  blast  blast->post  no-idle vints/64
+    rig, stock demo    2         1        3 3      2 2   0 0 2  0            22 29 35 34
+    rig, walk tape     --        2 2 2    2 2      2 2   2 5 0  0            30 33
+    ares               2         1        1 3      2     0      0            32 40
+
+The shim's IRQ4 body takes ~10 lines from its entry to the post on
+the FPGA -- not the 35-50 that 260b summed. The master's FRT stamps
+still say the post is seen 50-70 lines after ITS entry (259a). The
+gap is between the two entries: the FM gate's vint wrapper jumps to
+the GAME's IRQ4 handler first and runs the shim's body (fmgate_partb)
+after the game's rte (md_start.s ~390-436), so "IRQ4 entry" here is
+the game's handler's EXIT. What precedes the post on the rig is the
+game's own vint handler at hardware prices. The next capture carries
+the shim body's entry line (V - 224) on tag 6 to read that gap
+directly.

@@ -2863,9 +2863,9 @@ void shim_vblank(void) {
 #define TCD(b_, a_) ((int8_t)((b_) - (a_)) < 0 ? ((int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : 0) : (uint8_t)((b_) - (a_)))
 		tc_sum[0] += TCD(a0, ve); tc_sum[1] += TCD(a1, a0); tc_sum[2] += TCD(b1, b0);
 		tc_sum[3] += TCD(pu, b1); tc_sum[4] += TCD(bl, pu); tc_sum[5] += TCD(po, bl);
-		if (*(volatile uint8_t*)0xFFA1F6) tc_sum[6] += TCD(ve, TCV(0xFFA1F4));   /* the thunk re-arms on the token */
+		tc_sum[6] += (uint8_t)(ve - 0xE0u) > 63u ? 63u : (uint8_t)(ve - 0xE0u);   /* 262c: the shim body's entry line past 224 */
+		if (!*(volatile uint8_t*)0xFFA1F6) tc_noidle++;
 #undef TCD
-		else tc_noidle++;
 #undef TCV
 		if (++tc_vc >= 64) {
 			for (int k = 0; k < 7; k++) { unsigned m = tc_sum[k] >> 6; tc_val[k] = (uint8_t)(m > 63 ? 63 : m); tc_sum[k] = 0; }
