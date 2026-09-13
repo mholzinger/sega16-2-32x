@@ -631,3 +631,24 @@ is a phase, not a defect.
     Build E, rig: frE 20 20 15 14 15 (B 21 19 7 15 18); attract black
       shares over three launches 0.00-0.01. VERDICT: no gain, no harm;
       not the line.
+
+## BUILD G CARD (builder, 2026-09-13 07:45) -- the tight copy, with the scan cached
+
+    rom        rom/night/bldG.32x            (md5 below)
+    base       bldB (md5 493d4984, the line)
+    change     TWO flags that are one change: C1FAST=1 (a punched run
+               whose cells are all class 0 takes the original tight
+               copy; only runs touching a class-1/2 cell walk cells) and
+               C1CACHED=1 (the per-run class scan and the cell walk read
+               the mask through the slave's cache instead of the
+               uncached alias). Build E was the first without the
+               second and its scan cost what it saved; Build F the
+               second without the first and had nothing to save.
+    why        the generation trace (LOOP29 249b): the punch costs the
+               slave's compose 0.065 v/gen, 0.059 of it present with no
+               mask at all -- the per-cell loop control around every
+               run. 99% of level-1 records take the baked-run path.
+    gates      census-free wall against bldB's own (nat_score, same
+               run); picture equal to bldB incl. late-coin; rig frame
+               rate; three launches; Mike: does it look like bldB.
+    numbers    (appended when the runs land)
