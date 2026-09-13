@@ -7213,3 +7213,39 @@ spare, halving it clears it on most vints, and note 47's 1,748
 widening (+98 ticks) would catch only the closest vints. 266c
 ablates the copy on the rig to confirm the rate moves before anyone
 designs the move.
+
+## 266c. THE ABLATION: REMOVING THE TEXT SNAPSHOT NEARLY DOUBLES THE RIG'S PRESENTED RATE (2026-09-13 16:50)
+
+`TEXTCAPOFF=1` (never a ship: the text layer draws from a stale
+TEXT_U, so the picture is wrong by construction and only the rate
+means anything), on the line's flags with BOOTFLIPRATE:
+
+    presented frames per 64 vints, rig, two launches, eight captures each
+      TEXTCAPOFF   32 41 21 33 34 28 31 28
+                   32 43 15 34 33 28 34 26
+      bldB / bldH / bldHI / bldJ (every build in this arc)   16-21
+
+    the ISR's own flip attempt, with the copy gone (128-tick steps, guard 12.9)
+      rig    post 6   preCopy 6-7   postCopy 7-9   guard 7     (was 14-17)
+      ares   post 5   preCopy 5     postCopy 6     guard 7     (was 9)
+
+~18 per 64 becomes ~31 per 64 -- 17 fps to 29 fps -- and the guard is
+reached at ~900 ticks instead of 1,800-2,200, exactly the 266b
+arithmetic. The dips (21, 15) are the demo->title transition slots,
+present in every rate read.
+
+**So the 60 Hz gap on the FPGA is one copy: 3,712 bytes of the game's
+text RAM read out of the framebuffer inside the flip guard's window,
+every vint.** Not the compose, not the sprite phase, not the tile
+batch, not the palette. Every card in this arc that ranked on ares
+was ranking a machine whose flip never declines (ares: 0 edge
+declines, 29/64 presented, the copy 450 ticks inside a 1,650 guard).
+
+Next: the fix. Three shapes, all already in the tree --
+  TEXTCAPMASK   copy only the 8-group changed set (the code exists,
+                unbuilt on this line)
+  TEXTCAPSLAVE  the slave takes the snapshot
+  fold 5        the copy rides the FM=0 slot (notes 25/26/49)
+and the picture must survive whichever is chosen: the snapshot is
+what makes the SH-2's text layer coherent with the frame being
+flipped.

@@ -7531,6 +7531,14 @@ static int flip_span(void)
 #ifdef STAMP6_CENSUS
         if (s6_first) stc_t[1] = (uint16_t)(frt() - visr_t0);   /* 266: before the text copy (the live R60 branch) */
 #endif
+#ifdef TEXTCAP_OFF
+        /* LOOP29 266c ABLATION, NEVER A SHIP: skip the 3,712-byte FB->SDRAM
+         * text snapshot inside the flip guard's window. The text layer draws
+         * from whatever TEXT_U holds (stale after the first frame), so the
+         * PICTURE IS WRONG BY CONSTRUCTION -- the only number this build
+         * produces that means anything is the rig's presented rate. */
+        if (0)
+#endif
         for (int i = 0; i < 928; i += 4) {
 #elif defined(K2_FREE)
         for (int i = 0; i < 928; i += 4) {   /* 0x740 words = 928 longs

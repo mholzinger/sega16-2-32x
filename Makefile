@@ -1038,6 +1038,12 @@ endif
 # `make ... BOOTFLIPRATE=1 STAMP6CENSUS=1` = LOOP29 266: the flip path's four
 # FRT stamps -- flip_span entry (the post), before the TEXTCAP copy, after it,
 # at the guard. 128-tick steps; 1650 = 12.9.
+# `make ... TEXTCAPOFF=1` = LOOP29 266c ablation, NEVER A SHIP: the ISR's
+# 3,712-byte framebuffer text snapshot is skipped (text goes stale; only the
+# rig's presented rate means anything).
+ifdef TEXTCAPOFF
+SHCCFLAGS += -DTEXTCAP_OFF
+endif
 ifdef STAMP6CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP6_CENSUS
