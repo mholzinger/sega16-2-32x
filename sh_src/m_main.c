@@ -5119,7 +5119,25 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             uint8_t *d = row + (lo - 184);
                             int m = hi - lo;
 #ifdef C1_PUNCH
+#ifdef C1_FAST
+                            /* Build E (LOOP29 248): the ablation's 0.13
+                             * is the punched loop's SHAPE, not its art
+                             * reads (nomask 1.16 vs noplot 1.03, and
+                             * Build D's SDRAM masks read 1.22). A run
+                             * whose cells are all class 0 -- most runs,
+                             * cat-1 is 11% of level 1 -- takes the
+                             * original tight copy; only runs touching a
+                             * class-1/2 cell walk cells. */
+                            int c1any = 0;
                             if (punch) {
+                                const volatile uint8_t *c1q = CAT1SCR_U(y >> 3);
+                                for (unsigned cx = (unsigned)(lo - 184) >> 3, ce = (unsigned)(hi - 185) >> 3; cx <= ce; cx++)
+                                    if (c1q[cx]) { c1any = 1; break; }
+                            }
+                            if (punch && c1any) {
+#else
+                            if (punch) {
+#endif
                                 /* 244c: per CELL, not per pixel (frc1p95b
                                  * read 12 16 8 19 9 against 19-21: the
                                  * per-pixel test on every sprite pixel
