@@ -1,0 +1,5 @@
+s16b_sprline_arcade goldnaxe frames 1500-4000 (2501 frames, 560224 lines)
+records 17247 (6.9/frame), zoomed 0 (0.0%), hidden 0
+lines over 20 sprites: 0 (0.00%)   lines over 320 px: 41 (0.01%)   worst line: 8 sprites, 340 px
+sprites-per-line histogram: 0:373518 1:32514 2:30090 3:41092 4:43761 5:37929 6:1202 7:109 8:9 
+px-per-line histogram (64 px bins): 0-63:404514 64-127:43542 128-191:47132 192-255:47147 256-319:17367 320-383:522 

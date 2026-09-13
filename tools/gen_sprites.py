@@ -21,6 +21,11 @@ PAIRS = {
                   ('epr-11682.b6', 'epr-11678.b2'),
                   ('epr-11683.b7', 'epr-11679.b3'),
                   ('epr-11684.b8', 'epr-11680.b4')],
+    # Golden Axe set 6: three 256 KB pairs, (even byte, odd byte) per MAME's load
+    # offsets (ic12 @0 / ic9 @1, ic13 @0x40000 / ic10 @0x40001, ic14 / ic11)
+    'goldnaxe':  [('mpr-12379.ic12', 'mpr-12378.ic9'),
+                  ('mpr-12381.ic13', 'mpr-12380.ic10'),
+                  ('mpr-12383.ic14', 'mpr-12382.ic11')],
     'altbeastj': [('epr-11729.b5', 'epr-11725.b1'),
                   ('epr-11730.b6', 'epr-11726.b2'),
                   ('epr-11731.b7', 'epr-11727.b3'),
@@ -34,7 +39,7 @@ out = bytearray()
 for hi_name, lo_name in PAIRS:
     hi = (ROMS / hi_name).read_bytes()
     lo = (ROMS / lo_name).read_bytes()
-    assert len(hi) == len(lo) and len(hi) in (0x10000, 0x20000)   # US 128KB / JP 64KB pairs
+    assert len(hi) == len(lo) and len(hi) in (0x10000, 0x20000, 0x40000)   # AB US 128KB / AB JP 64KB / Golden Axe 256KB pairs
     block = bytearray(2 * len(hi))          # one interleaved pair = one bank unit per half
     block[0::2] = hi
     block[1::2] = lo

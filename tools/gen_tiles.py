@@ -17,6 +17,7 @@ ROMS = ROOT / 'roms' / GAME
 # GAME_ALTBEASTJ).
 PLANES = {
     'altbeast':  [['opr-11674.a14'], ['opr-11675.a15'], ['opr-11676.a16']],
+    'goldnaxe':  [['epr-12385.ic19'], ['epr-12386.ic20'], ['epr-12387.ic21']],   # 3 x 128 KB, one plane each (mame -listxml offsets 0/0x20000/0x40000)
     'altbeastj': [['epr-11722.a14', 'epr-11736.b14'],
                   ['epr-11723.a15', 'epr-11737.b15'],
                   ['epr-11724.a16', 'epr-11738.b16']],

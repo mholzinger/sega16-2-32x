@@ -712,3 +712,50 @@ and the same idioms should carry far better than AB->GA did.
 
 Which set to port is Mike's call: set 6 is what the kit's MCU work
 (AB's shim) already handles; the JP set needs no MCU work at all.
+
+---------------------------------------------------------------------
+## 14. Scaffolding for the builder: assets extract, sprites fit the MD budget, corpus recorded
+
+Asked "what else helps a builder" (2026-09-13). Three things a builder
+hits in the first hour, done from the decompile side:
+
+**Assets extract through the kit generators.** `gen_tiles.py` and
+`gen_sprites.py` now carry the Golden Axe ROM lists (from MAME's load
+offsets: three 128 KB tile planes; three sprite pairs ic12/ic9,
+ic13/ic10, ic14/ic11, even/odd byte). `gen_sprites.py` asserted on
+256 KB pairs (it knew 128 KB US and 64 KB JP); widened. Outputs, run
+into the scratch dir so the AB build products in `sh_src/` stayed
+byte-identical (md5-checked before and after): tiles.bin 1,048,576 B =
+16,384 tiles, 16,148 non-blank (AB: same count); sprites.bin
+**1,572,864 B = 24 banks of 64 KB** (AB: 1 MB). The cart consequence:
+AB ships at exactly 4.00 MB with 1 MB tiles + 1 MB sprites + 256 KB
+program (SILICON.md 4e); Golden Axe adds 512 KB of sprites and 256 KB
+of program before a byte of 32X code, so the port needs either the
+SSF2 mapper (derived in SILICON 4e, never run here) or 4bpp tiles.
+That is a design decision, not a derivation, and it is the builder's
+first.
+
+**The sprite chip can draw this title's sprites.** `tools/
+s16b_sprline_arcade.lua` (new, arcade-side: TOOLKIT "Ask the host
+hardware to draw it") walked the live sprite list every frame of
+stage-1 play (f1500-f4000, 2,501 frames, 560,224 scanlines):
+
+    records            6.9 per frame, max 8 on a line
+    zoomed             0 of 17,247  (stage 1; later stages may zoom)
+    lines > 20 sprites 0
+    lines > 320 px     41 = 0.01%   (worst line 340 px)
+
+AB read 0.18% / 8.05% / worst 808 px and needed the hybrid. Golden
+Axe's stage 1 is inside the H40 budget on every line but 41 in 2,501
+frames: a pure MD-hardware sprite path is on the table here, subject
+to the shadow/priority cases (priority 3 records: 2 of 11 in play,
+entry 12) and to later stages. Per-title decision, as TOOLKIT says.
+
+**The arcade attract corpus.** `tools/arcade_census.lua` now takes the
+title's tile/text/WRAM addresses from the environment (AB's remain the
+defaults); recording `docs/arcade/goldnaxe/` (gitignored), no-coin cold
+boot, `ref_NNNNNN.png` every frame to 5400 plus the tile/text/WRAM
+dumps at the usual frames — the oracle side of `tools/attract_parity.py`
+for this title. Its scene anchors (SCENES) are AB's frame numbers and
+will need Golden Axe's cuts: from entry 4, FBI card to f240, title by
+f480, demo from about f1000, title again by f1500.
