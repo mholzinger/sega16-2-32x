@@ -1017,6 +1017,11 @@ ifdef TAILCENSUS
 MDCCFLAGS += -DTAIL_CENSUS
 export TAILCENSUS
 endif
+# `make ... BOOTFLIPRATE=1 CONSUMECENSUS=1` = LOOP29 262: packet B's consume
+# split in lines (preamble / rows / tail / whole) as mean and max per 64 vints.
+ifdef CONSUMECENSUS
+MDCCFLAGS += -DCONSUME_CENSUS
+endif
 # `make ... MDSTATE=1` = PLAN-SINGLE-VINT fold 4 (LOOP29 233): the 68K
 # posts one state word per vint from IRQ4 on COMM14 (tag E, sequence,
 # cutscene byte 0xFFF148, round 0xFFF142); the SH-2 takes the round from

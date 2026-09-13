@@ -727,6 +727,12 @@ static void md_consume(uint32_t pkt_base) {
 					volatile uint16_t *e = sc + 8;
 					uint16_t isa = (uint16_t)(sc[2] & 0x8000u ? 1 : 0);
 					uint32_t nbase = isa ? 0xC000u : 0xE000u;
+#ifdef DMA_CENSUS
+					(*(volatile uint16_t*)0xFFA1FE)++;   /* LOOP29 261a: chunk consumes */
+#endif
+#ifdef CONSUME_CENSUS
+					if (r60_isB) *(volatile uint16_t*)0xFFA1FC = *(volatile uint16_t*)0xC00008;   /* LOOP29 262: V before the row loop */
+#endif
 					for (uint16_t r = 0; r < 7; r++) {
 						uint16_t hdr = *e++;
 						uint16_t w1  = *e++;
@@ -762,6 +768,7 @@ static void md_consume(uint32_t pkt_base) {
 							 * them. 0xFFA240 spans, 0xFFA242 words. */
 							(*(volatile uint16_t*)0xFFA240)++;
 							(*(volatile uint32_t*)0xFFA242) += l1;
+							(*(volatile uint16_t*)0xFFA1FC)++;   /* LOOP29 261a: span DMAs (0xFFA240 block is clobbered, LOOP27 2466) */
 #endif
 							e += l1;
 							st = (uint16_t)(st + l1);
@@ -783,6 +790,9 @@ static void md_consume(uint32_t pkt_base) {
 					*(volatile uint16_t*)0xFFA08A =
 						*(volatile uint16_t*)0xC00008;   /* V after spans */
 					*(volatile uint16_t*)0xFFA170 = *(volatile uint16_t*)0xC00008;   /* fine: spans done */
+#ifdef CONSUME_CENSUS
+					if (r60_isB) *(volatile uint16_t*)0xFFA1FE = *(volatile uint16_t*)0xC00008;   /* LOOP29 262: V after the rows */
+#endif
 					{	/* full-screen hscroll: reg 0x0B = 00 (init), so only
 						 * 0xFC00 (A) and 0xFC02 (B) matter — two header words,
 						 * sc[3] and sc[7], in EVERY packet (2026-09-05). The 56-
@@ -2111,7 +2121,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS)
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2859,6 +2869,34 @@ void shim_vblank(void) {
 		{
 			uint8_t tag = (uint8_t)((tc_vc >> 3) & 7);
 			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | tc_val[tag]);
+		}
+	}
+#endif
+#ifdef CONSUME_CENSUS
+	/* LOOP29 262: the chunk consume (packet B) split in lines on the rig:
+	 * preamble (entry 0xFFA08E -> before the row loop 0xFFA1FC), rows
+	 * (-> after the rows 0xFFA1FE), tail (-> 0xFFA086 after the return).
+	 * Tags 0-2 = means, 3 = the whole consume's mean, 4-6 = maxima,
+	 * 7 = the whole consume's max; lines, cap 63, per 64 vints. */
+	{
+		static uint8_t cc_vc, cc_val[8], cc_max[4];
+		static uint16_t cc_sum[4];
+#define CCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
+		uint8_t v0 = CCV(0xFFA08E), v1 = CCV(0xFFA1FC), v2 = CCV(0xFFA1FE), v3 = CCV(0xFFA086);
+		uint8_t d[4] = { (uint8_t)(v1 - v0), (uint8_t)(v2 - v1), (uint8_t)(v3 - v2), (uint8_t)(v3 - v0) };
+#undef CCV
+		for (int k = 0; k < 4; k++) { cc_sum[k] += d[k]; if (d[k] > cc_max[k]) cc_max[k] = d[k]; }
+		if (++cc_vc >= 64) {
+			for (int k = 0; k < 4; k++) {
+				unsigned m = cc_sum[k] >> 6; cc_val[k] = (uint8_t)(m > 63 ? 63 : m);
+				cc_val[4 + k] = (uint8_t)(cc_max[k] > 63 ? 63 : cc_max[k]);
+				cc_sum[k] = 0; cc_max[k] = 0;
+			}
+			cc_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((cc_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | cc_val[tag]);
 		}
 	}
 #endif

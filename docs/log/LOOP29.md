@@ -6891,3 +6891,15 @@ lines go inside that needs the consume split on the rig (V stamps per
 stage inside md_consume's B path); the composition census cannot
 say. What it does say: the tile batch is not the lever, and neither
 is the chunk's word count.
+
+## 262. THE CHUNK CONSUME SPLIT ON THE RIG (2026-09-13 10:30)
+
+261a left batch B's 21-30 lines unexplained by its DMAs (1-4 a chunk)
+or its words (~60). `CONSUMECENSUS=1` with `BOOTFLIPRATE=1`: V stamps
+inside md_consume's B path before the row loop (0xFFA1FC) and after
+the rows (0xFFA1FE), with the existing entry stamp (0xFFA08E) and the
+after-return stamp (0xFFA086): preamble (FM test, magic, the verify
+block, the header reads), rows (7 headers, the span DMAs, the EDGE42
+pairs), tail (the hscroll/vscroll writes and the return). Means and
+maxima per 64 vints on the channel (tags 0-2 / 4-6; 3 and 7 = the
+whole consume).
