@@ -369,12 +369,20 @@ TABLES = {
     # NOT at coin — the HUD writer selects on them. Measured, not read.
     'ATTRACT_FLAG': (0xFFEC26, 0),
     'CREDITED_FLAGS': (0xFFEC28, 0xFFEC29),
-    # Scene byte HYPOTHESES (the bytes in the 0xFFEC00 block that changed
-    # attract>coin>start>cutscene>play): 0xFFEC2A 00>00>00>01>04,
-    # 0xFFEC2C 00>00>15>05>14, 0xFFEC2D 00>00>26>2c>2c, 0xFFEC00 01>02>01.
-    # 0xFFEC20 is a frame counter (IRQ4 0x30A8), 0xFFEC21 its 30/60 reload.
-    # Consumers to be read before any is called the scene byte.
-    'SCENE_BYTE_CANDIDATES': [0xFFEC2A, 0xFFEC2C, 0xFFEC2D, 0xFFEC00],
+    # There is no scene byte behind the page selects. The scroll/page
+    # engine at 0x3E1C-0x3E8C (consumer read) derives them every call from
+    # the camera: hpos = (0xFFECE0 + 0xFFED24 + 192) & 0x1FF -> shadow
+    # 0xFFECE2 (scr1) / 0xFFECE4 (scr2), page word = table[(x >> 8) & 6]
+    # with the row halves swapped (ror #8) when bit 8 of (0xFFECE6 +
+    # 0xFFED28/2C) is set; the scr2 table is pc-relative 0x4792, the scr1
+    # table comes in a0 from the caller (per scene). The vpos shadows are
+    # 0xFFECE8 / 0xFFECEA. Constant page writers: 0x53F4/0x53FA (title:
+    # 0x1100 / 0x2222), 0x36396/0x3639C (0x1111 / 0), 0x3703A/E (0 at a
+    # scene init). 0xFFEC2A is a general timer (addq/subq/cmpi #300/#690/
+    # #1800 at 0x742-0x85C), not a scene index.
+    'SCROLL_SHADOWS': {'scr1_hpos': 0xFFECE2, 'scr2_hpos': 0xFFECE4, 'scr1_vpos': 0xFFECE8, 'scr2_vpos': 0xFFECEA,
+                       'cam_x': 0xFFECE0, 'cam_y': 0xFFECE6, 'page_engine': 0x03E1C, 'scr2_page_table': 0x04792},
+    'SCENE_BYTE_CANDIDATES': [0xFFEC2C, 0xFFEC2D, 0xFFEC00],   # HYPOTHESIS; consumers unread
     # Tile priority bit (word bit 15) census: only pages C, D, E carry it
     # (378 / 473 / 595 of 2048 words each = 23.5% of the 0x10C000 plane,
     # 4.4% of all tile RAM); pages 0-B and F have none. Sprite records in

@@ -639,3 +639,16 @@ Left for rung 7: the scene byte's consumer, the cat-1 whole-vs-per-
 pixel census against the arcade frames (AB 104/106), the attract step
 byte, and the round-by-round sprite census — each needs a play driver
 that reaches later stages, which the scripted walk does not.
+
+Correction, same evening: **no scene byte switches the page selects.**
+The scroll/page engine at 0x3E1C-0x3E8C computes them from the camera
+every call: hpos = (0xFFECE0 + 0xFFED24 + 192) & 0x1FF into the
+shadows 0xFFECE2/0xFFECE4, and the page word = table[(x >> 8) & 6],
+row halves swapped (`ror.w #8`) when bit 8 of the Y sum (0xFFECE6 +
+0xFFED28 / 0xFFED2C) is set; scr2's table is pc-relative 0x4792,
+scr1's arrives in a0 from the caller. So the four page words seen
+across the probes (0x1100/0x2222 title, 0xF1E0/0xF7E6 demo,
+0x1302/0xF7E6 play) are camera positions through per-scene tables,
+and the port's per-scene static assignment (memory: sky allocator
+order) keys on the table, not on a byte. 0xFFEC2A is a general timer
+(cmpi #300/#690/#1800), struck from the candidates.
