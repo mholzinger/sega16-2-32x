@@ -14157,10 +14157,16 @@ RAMCODE void m_main(void)
                                         unsigned n = pgn * 2048u + (((unsigned)vy >> 3) & 31u) * 64u + ((vx >> 3) & 63u);
                                         hv = CAT1HOLE_GET(cat1hole + (unsigned)md_round * CAT1HOLE_BYTES_PER_SCENE, n);
                                         if (hv == 2) {
+#ifdef C1_MASKTAB
+                                            unsigned mi = c1mask_find(w & 0x1FFFu);   /* raw code, as baked */
+                                            if (mi == 0xFFFFu) hv = 1;             /* not in the scene's list: whole cell */
+                                            else cat1code[row][col] = (uint16_t)mi;
+#else
                                             unsigned c2 = w & 0x1FFF;
                                             if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
                                             GAME_TILE_REMAP(c2);
                                             cat1code[row][col] = (uint16_t)c2;
+#endif
                                         }
                                     } else
                                         hv = 1;         /* no bake for this page: whole cell */
