@@ -611,8 +611,21 @@ volatile uint8_t  mdalloc_pin[128];
  * a cat-1 tile's own transparent pixels lose the sprite there. */
 static uint8_t cat1scr[28][40];          /* 0 no hole, 1 whole cell, 2 per pixel */
 static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
+#ifdef C1_CACHED
+/* Build F (LOOP29 249): the slave reads the mask through its CACHE.
+ * Every read of the uncached alias is an SDRAM round trip on the hot
+ * loop (a byte per cell in the baked path, a byte per PIXEL in the
+ * 1:1/zoomed paths) and the ablation's 0.13 survived Builds D and E,
+ * which changed everything else in that loop. The slave purges its
+ * cache at every window start, the master's writes are write-through,
+ * and the mask is one generation old by design, so cached reads are
+ * exactly as fresh as the uncached ones were. */
+#define CAT1SCR_U(r) ((const uint8_t *)cat1scr[(r)])
+#define CAT1CODE_U(r) ((const uint16_t *)cat1code[(r)])
+#else
 #define CAT1SCR_U(r) ((const volatile uint8_t *)(0x20000000u | (uint32_t)cat1scr[(r)]))
 #define CAT1CODE_U(r) ((const volatile uint16_t *)(0x20000000u | (uint32_t)cat1code[(r)]))
+#endif
 #include "cat1hole.h"
 extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
 #ifdef C1_MASKTAB
