@@ -6355,3 +6355,16 @@ show; not chased further -- the stamp replaces that path).
 
 Roms: rom/night/bldH1.32x (H1, md5 ac13b8d3), bldH2 (862aa999), pcH1-2,
 pcH (H5 census), bldH (H5).
+
+**253, card H measured and on the rig (01:30).** bldH (H6, md5 ca80af61):
+wall 1.14 against bldB's 1.18 in the same sitting, compose sum 0.368
+(line 0.389, floor 0.324), 40% single-vint on both, every picture gate
+at bldB's number, rig rate 16 19 18 15 21 (the line's class), three
+launches with no level black. The late-coin play share read 0.085 on
+bldH against bldB's 0.036 and it is the 227 phase re-roll: shifting
+the coin frame moves the black between the roms (bldB black at +10,
+bldH at 0, neither elsewhere). Card block in PLAN. Mike's eye owed.
+The demo-aligned diff (scratch aligndemo.py: bldB screenshots at
+every frame in a ±40 window, the candidate's single frame, the
+minimum-diff pair) is the picture gate for any change to the sprite
+loops from here; the frame-N diff is not.

@@ -2103,3 +2103,63 @@ before.
 **Then, before fold 5:** the scan memo (note 33, item 2), ~0.08. If
 both land the line is at the threshold and fold 5 / RELBANK are what
 cross it on the 68000 side.
+
+## 37. 2026-09-13 (builder -> decompile). Card H, the stamp: 1.18 -> 1.14, picture = bldB's minus a defect the arcade never had; note 36 expected 1.06-1.08. LOOP29 252-253
+
+**Ask:** (1) look at the card and say whether 1.14 banks it or whether
+you want the per-band cost chased (below); (2) the game's tile bank
+request (0xFFF095) per round, from the bytes -- the mask baker needs
+it for any scene whose class-2 codes carry bit 0x1000 (level 1 has
+none; I set rounds 1-4 to round 0's measured 1). Card I (the scan
+memo) is next either way; it waits only on Mike's eye for bldH.
+
+**What was built.** Note 36's shape exactly: sprite loops unpunched,
+the hole cells under the drawn records written MD-through after the
+pp<3 pass, pp=3 records after that. rom/night/bldH.32x, flags = the
+line's + C1STAMP=1, on the rig.
+
+**What it cost, and why six cuts (LOOP29 252).** Slave compose sum,
+v/gen; the line 0.389, punch off 0.324:
+
+    H1 every hole cell of every row a sprite touched     0.472
+    H2 per-run/pixel cover marks (byte map)              0.437
+    H3 + pp=3 pass only when a pp=3 record exists        0.434
+    H4 cover = record rectangles, two words a cell row   0.385-0.390
+       (H4 with the FB writes removed                    0.375)
+    H5 master emits hole bits per cell row; the slave
+       reads classes only for hole & cover cells         0.368
+    H6 = H5 with the cover per call (both CPUs compose)  0.368
+
+Your 0.03 estimate for step 2 assumed FB writes at SDRAM prices.
+They are not: H1's 17 KB of zero-over-zero cost 0.148 -- the 32X FB
+write floor, ~0.15 us a byte. Restricting to covered cells was the
+obvious fix and the SH-2's write-through byte stores for the cover
+marks (H2) cost more than they saved; the record rectangle (H4) has
+no per-run work at all. What is left above the floor, 0.044, is
+0.015 of FB writes and ~0.03 of per-BAND work: the compose is called
+per strip, and each call pays the cover clear, the record scan's
+rectangles, and two uncached longwords a cell row. That per-band
+cost is the thing to chase if you want the rest; one stamp a
+generation is not possible as-is because each strip is blitted as
+soon as it is composed.
+
+**The picture.** A frame-N pixel diff of two roms is NOT a gate: they
+run at different speeds and the input script lands on different game
+frames (32k pixels at play f1000, the player mid-stride). Aligned on
+the ATTRACT demo (no input; the game's state is a function of its
+own frame count; bldB captured at every frame in a ±40 window, the
+minimum-diff pair) the residual is 527/533 pixels at f1000/f1200,
+all in the grass rows 20-22: dark specks bldB draws in the grass and
+bldH does not. The mask table was suspected and cleared (installed,
+81 codes, class map right, no bank-bit codes in level 1); the sprite
+list has no record over part of the speck region. The ARCADE decides:
+mame altbeast's attract captured headless and content-matched (same
+scroll, same zombies) has NO specks. bldH's grass is the arcade's;
+the specks are the punch's own defect in the line (its class-2 art
+path writes something the arcade does not show; not chased, the
+stamp replaces that path). Every other gate reads bldB's number; the
+late-coin play black (0.085 vs 0.036) is the 227 phase re-roll --
+shifting the coin by ten frames swaps which rom goes black.
+
+**The rig.** Rate 16 19 18 15 21 (bldB 21 19 7 15 18). Three
+launches, no level black.

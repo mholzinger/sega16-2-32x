@@ -713,9 +713,23 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
              Implies C1MASKTAB. Six cuts to get here: LOOP29 252.
     flags    the line's + C1STAMP=1
 
-    ares wall (nat_score, 4000 frames)    bldH 1.14   bldB (below)
+    ares wall (nat_score, 4000 frames)    bldH 1.14   bldB 1.18 (same run, same day)
     slave compose sum (v/gen)             bldH 0.368  bldB 0.389  punch off 0.324
-    single-vint share                     bldH (below)
+    single-vint share                     40% (pcH bins 951/1417/22/9; pcB 971/1408/24/11)
+    picture gates (ares)                  title 0.273 demo 0.038 eye 0.487 title2 0.255
+             return 0.040/0.038 face blue-upper 0.58 (bldB 0.62) play black
+             0.037 0.036 0.042 0.043 -- all bldB's; late-coin play black
+             0.085 0.082 0.089 vs bldB 0.036 0.042 0.042 -- the same-round
+             return's PHASE re-roll (227), not the stamp: shifting the coin
+             by frames, f3400/f3800 black share --
+                 coin -20  bldB 0.044/0.042  bldH 0.044/0.042
+                 coin -10  bldB 0.036/0.042  bldH 0.036/0.042
+                 coin   0  bldB 0.036/0.042  bldH 0.085/0.082
+                 coin +10  bldB 0.086/0.084  bldH 0.036/0.041
+                 coin +20  bldB 0.036/0.040  bldH 0.036/0.038
+             Each rom has one coin frame that lands the tree band black;
+             they differ by ten frames. (The rig's three launches saw no
+             level black on bldH.)
     check mode                            not touched by this card (fold 2 unchanged)
     picture, aligned on the attract demo  bldH vs bldB f1000/f1200: 527/533 px,
              all in the grass rows 20-22: dark specks bldB draws and the
