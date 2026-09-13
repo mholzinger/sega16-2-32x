@@ -463,3 +463,45 @@ x 16 = 0x1B0). Fits, without the duplicates.
 Also corrected: the census tools' PCs are the instruction AFTER the
 writer (MAME's PC in a write tap has advanced; the 0x2F94 movep reads
 as 0x2F96). The tools now say so; entry 5's PCs read that way.
+
+---------------------------------------------------------------------
+## 9. Rung 5, tiles and TAS: 24 dirty sites, 8 table-offset blitters, 16 tas
+
+All 57 tile-RAM literals classified (first half; 23 duplicates in the
+second half listed apart). Footprints read from each loop:
+
+    whole plane    0x399E (movea.l fill, the census's 183,402 writes), 0x6ED6 (fill), 0xC59A/0xC5A0 (clear, two bases), 0xC5E2 (tilemap builder)
+    RLE loader     0x1FE2/0x1FEA even passes, 0x1FF2/0x1FFA odd passes: pages 0-5 and 6-B; 0x2056 bytes into pages C-E
+    table-offset   0x2166, 0x50B4, 0x586A, 0x36404, 0x36484, 0x364AE, 0x36AD8, 0x37092: `lea base ; adda.w (aN)+` — AB's
+                   strip-blitter precise thunk (page from the table's first word) applies; two read the word through a2/a3
+    scratch        0x60F6 saves 16 KB of WRAM into pages 1-4 (0x6126 restores: read-only, remap only); 0x4C62 keeps
+                   counters IN tile RAM page 2 (subq.b on (a0)+) — a read-modify-write the FB staging must honour
+    small          0x6356-0x636E, 0x63AC (page 0-1), 0x73A6/0x73B6/0x73C4 (28 rows of 9 longs, one page each), 0x7AE8/0xC4B2
+                   (computed offsets inside the 0x10C000 plane)
+    pointer        0x731A computes a tile address into object fields; the store is 0x7398 after `movea.l 56(a6),a0`
+                   at 0x7390 — mark at use (TILE_PTR_USE_SITES)
+
+The RLE loader is AB's idiom with a different instruction layout
+(`RLE_EVEN_PASS` = 0x200A, the layout is in the table's comment); the
+odd pass at 0x201E has a zero-run branch AB's does not.
+
+**TAS: 22 in the listing, 16 in reachable code**, on object fields
+(73/72/120/70(a6)), 3(a0), 0xFFEC2A.w, and eight on 0x25E1(a1) /
+0x3DF9(a1) in bank 04 — the MD drops TAS's write cycle, so each form
+needs a shim thunk; the table lists the sites and their four bytes,
+thunk addresses left for the builder.
+
+DATA_EXCLUDE: every hardware-looking operand objdump prints was
+listed (95 + 57 + 170) and all are in instruction context; the ASCII
+run at 0x6818 decodes to `move.l 0x202020,d0`, outside every remap
+range. Empty for now.
+
+Correction to entry 5: the 0x110746-0x110CF8 text writes are NOT a
+row-scroll table. Text RAM is a 64-column map at 128 bytes a row, so
+0x746 is row 14 column 35: the intro cutscene's speech box ("HIS
+MAJESTY AND THE PRINCESS..." in the f1500 snapshot), typed by
+0x3EB4/0x3EBE/0x3EF6. That is the LOOP29 225 typewriter class (FM
+gate the glyph store, not the state routine). Golden Axe's per-frame
+text load in play is therefore the HUD rows 0-2 (0xC8CC/0xC900/0xC918
+from the leas at 0xC764-0xC7A2), about 60 writes a frame, plus the
+dialogue when a box is open.

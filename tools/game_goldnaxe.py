@@ -141,16 +141,121 @@ TABLES = {
     'PAL_THUNK_APOST': None,
     'PAL_LAUNCH': None,     # AB's cycle-launch pointer table; no equivalent found (0x2DCC / 0x66ED0 are colour tables, not scripts)
 
+
+    # ------------------------------------------------------------------
+    # TILE RAM (entry 9). Same thunk mechanism as AB: the base-load
+    # instruction becomes `jsr thunk`, the thunk ORs page bits (page =
+    # tile offset >> 12, 16 pages of 4 KB) into the dirty bitmap and runs
+    # the displaced instruction. TARGETS HERE ARE ARCADE ADDRESSES
+    # (0x10xxxx); AB's file stores post-remap 0x85xxxx targets because the
+    # check runs after remap() — the builder applies MEMMAP's remap to
+    # these before the assert. Page bits read from each loop body.
+    # (site, opcode word, target, page bits, note)
+    'TILE_DIRTY_SITES': [
+        (0x01FE2, 0x45F9, 0x100000, 0x003F, "RLE even-byte pass A: 12288 words = 0x100000-0x105FFF"),
+        (0x01FEA, 0x45F9, 0x106000, 0x0FC0, "RLE even-byte pass B: 0x106000-0x10BFFF"),
+        (0x01FF2, 0x45F9, 0x100001, 0x003F, "RLE odd-byte pass A"),
+        (0x01FFA, 0x45F9, 0x106001, 0x0FC0, "RLE odd-byte pass B"),
+        (0x02056, 0x43F9, 0x10C000, 0x7000, "RLE bytes into 0x10C000-0x10EFFF (table 0x2A3C[ED4A])"),
+        (0x048E2, 0x41F9, 0x102000, 0x000C, "byte strip from ROM 0x5236 into page 2 (length table-driven; page 3 as margin)"),
+        (0x04C62, 0x41F9, 0x102000, 0x000C, "RMW: subq.b #1,(a0)+ counters kept IN tile RAM page 2"),
+        (0x060F6, 0x47F9, 0x101000, 0x001E, "scratch SAVE: 4096 longs of WRAM 0xFFC000 -> 0x101000-0x104FFF (restore at 0x6126 is read-only: remap only, no thunk)"),
+        (0x06356, 0x41F9, 0x1000B2, 0x0001, "37 words"), (0x0635E, 0x41F9, 0x100D32, 0x0001, "37 words"),
+        (0x06366, 0x41F9, 0x1000B2, 0x0001, "25 rows stride 128"), (0x0636E, 0x41F9, 0x1000FC, 0x0001, "25 rows stride 128"),
+        (0x063AC, 0x43F9, 0x10023A, 0x0003, "4 x 0x63C6 blocks stride 640 (10 x 5 rows)"),
+        (0x06ED6, 0x41F9, 0x100000, 0xFFFF, "fill 16384 longs = the whole 64 KB"),
+        (0x071F2, 0x43F9, 0x100128, 0x0003, "HYPOTHESIS: a1 handed to code after the 0x3C90 wait; footprint unread"),
+        (0x073A6, 0x43F9, 0x106004, 0x0040, "28 rows x 9 longs stride 128 from ROM 0x71CDE"),
+        (0x073B6, 0x43F9, 0x101004, 0x0002, "28 rows x 9 longs from ROM 0x718EE"),
+        (0x073C4, 0x43F9, 0x100004, 0x0001, "28 rows x 9 longs from table 0x7460[ED4A]"),
+        (0x07AE8, 0x41F9, 0x10C000, 0x7000, "computed offset within the 0x10C000 plane"),
+        (0x0C4B2, 0x41F9, 0x10C000, 0x7000, "computed offset within the 0x10C000 plane"),
+        (0x0C59A, 0x41F9, 0x100000, 0x00FF, "clear 6144 longs, index & 0x7FFC, base 0x100000 (page-select by ED4A)"),
+        (0x0C5A0, 0x43F9, 0x108000, 0xFF00, "the same clear's second base"),
+        (0x0C5E2, 0x45F9, 0x100000, 0xFFFF, "tilemap builder from table 0xCCE6[ED4A]: 4 x 64 x 16 (bsr 0xC62A); whole plane"),
+        (0x0399E, 0x207C, 0x100000, 0xFFFF, "fill 16384 longs (movea.l #imm); the 183,402-write site of the census"),
+    ],
+    # Block copies whose tile offset is the FIRST WORD OF THE TABLE at a0:
+    # `lea base,aN ; adda.w (a0)+,aN ; <rows of 128>`. AB's STRIP_BLITTER
+    # precise thunk (page from (A0), marks page and page+1) applies with
+    # one change: add the base's own page (0 for 0x100000, 0 for 0x100C00
+    # unless the offset crosses, 1 for 0x101000). (site, opcode word,
+    # base) — displaced instruction is the 6-byte lea, a0 is intact at it.
+    # 4th field = the register holding the table pointer whose first word
+    # is the offset (`adda.w (aN)+` follows the lea): a0 except 0x36404
+    # (a2, D0DA) and 0x364AE (a3, D0DB).
+    'STRIP_BLITTERS': [
+        (0x02166, 0x43F9, 0x100C00, 'a0'), (0x050B4, 0x43F9, 0x100C00, 'a0'), (0x0586A, 0x43F9, 0x100000, 'a0'),
+        (0x36404, 0x41F9, 0x101000, 'a2'), (0x36484, 0x43F9, 0x100000, 'a0'), (0x364AE, 0x41F9, 0x101000, 'a3'),
+        (0x36AD8, 0x43F9, 0x100000, 'a0'), (0x37092, 0x43F9, 0x100000, 'a0'),
+    ],
+    'STRIP_BLITTER_MOVEW': None,   # AB's `movew (a0)+,d0` clobber does not occur: these use adda.w into an address register
+    'STRIP_BLITTER_BASE': None,    # superseded by STRIP_BLITTERS above
+    # A tile pointer computed into object fields and used later (like the
+    # palette pointer at 0x5538): 0x731A `lea 0x100004,a1` + offsets ->
+    # 56(a6) and +4096 -> 60(a6); the store is `move.w (a1),(a0)` at
+    # 0x7398 after `movea.l 56(a6),a0` at 0x7390 (206E 0038, 4 bytes).
+    # Mark at use, pages 0-1.
+    'TILE_PTR_USE_SITES': [(0x07390, 4, 0x0003, "movea.l 56(a6),a0 -> move.w (a1),(a0) at 0x7398")],
+    # Read-only tile leas (remap only, never thunked): 0x49DC (copies
+    # 0x10F531.. INTO text RAM 0x110531), 0x6126 (scratch restore).
+    'TILE_READONLY_LEAS': [0x049DC, 0x06126],
+    'TILE_DIRTY_SITES_DUP': [0x577B6, 0x578B0, 0x57B38, 0x57F4A, 0x58700, 0x58FAA, 0x58FC2, 0x591F8, 0x59200, 0x59208, 0x59210,
+                             0x5924E, 0x59D6E, 0x5A08A, 0x5A1B2, 0x5A23E, 0x5A24E, 0x5A25C, 0x5A980, 0x5F34A, 0x5F432, 0x5F438, 0x5F47A],
+    # The RLE tile loader (0x2004 even pass, 0x201E odd pass) is AB's
+    # idiom with a different instruction layout. Even pass at 0x2004:
+    #   +0  3E3C 2FFF   move.w #12287,d7      (word budget)
+    #   +4  7600        moveq #0,d3
+    #   +6  1619        move.b (a1)+,d3       run length      <- RLE_EVEN_PASS (0x200A)
+    #   +8  1819        move.b (a1)+,d4       value
+    #   +A  1484        move.b d4,(a2)        store even byte
+    #   +C  548A        addq.l #2,a2
+    #   +E  5347        subq.w #1,d7
+    #   +10 6506        bcs +6
+    #   +12 51CB FFF6   dbf d3,+A
+    #   +16 60EC        bra +4
+    # AB's rewrite (+2..+6 -> lsl/move.w, dbf at +A) must be re-laid for
+    # this shape; the odd pass at 0x201E stores `move.b (a1)+,(a2)` with a
+    # zero-run branch (0x2022/0x2034).
+    'RLE_EVEN_PASS': 0x0200A,
+    'RLE_ODD_PASS': 0x0201E,
+
+    # ------------------------------------------------------------------
+    # TAS (entry 9). The Mega Drive drops the write half of TAS's RMW
+    # cycle, so every `tas` becomes a thunk. 22 in the listing, 8 of them
+    # in the unreached second half. Thunks are per addressing form (the
+    # shim provides them; None until assigned). (site, 4 bytes, thunk)
+    'TAS_SITES': [
+        (0x0240C, bytes([0x4A,0xEE,0x00,0x49]), None),  # tas 73(a6)
+        (0x02458, bytes([0x4A,0xEE,0x00,0x49]), None),  # tas 73(a6)
+        (0x024E2, bytes([0x4A,0xF8,0xEC,0x2A]), None),  # tas 0xFFEC2A.w
+        (0x03596, bytes([0x4A,0xE8,0x00,0x03]), None),  # tas 3(a0)
+        (0x04B86, bytes([0x4A,0xEE,0x00,0x48]), None),  # tas 72(a6)
+        (0x08010, bytes([0x4A,0xEE,0x00,0x78]), None),  # tas 120(a6)
+        (0x080A2, bytes([0x4A,0xEE,0x00,0x78]), None),  # tas 120(a6)
+        (0x3789A, bytes([0x4A,0xEE,0x00,0x46]), None),  # tas 70(a6)
+        (0x4506A, bytes([0x4A,0xE9,0x25,0xE1]), None),  # tas 0x25E1(a1)  bank 04: object code? unexecuted in traces
+        (0x450C6, bytes([0x4A,0xE9,0x25,0xE1]), None),
+        (0x450DA, bytes([0x4A,0xE9,0x25,0xE1]), None),
+        (0x45198, bytes([0x4A,0xE9,0x25,0xE1]), None),
+        (0x4545E, bytes([0x4A,0xE9,0x25,0xE1]), None),
+        (0x45D0C, bytes([0x4A,0xE9,0x3D,0xF9]), None),  # tas 0x3DF9(a1)
+        (0x45D62, bytes([0x4A,0xE9,0x25,0xE1]), None),
+        (0x46156, bytes([0x4A,0xE9,0x25,0xE1]), None),
+    ],
+    'TAS_SITES_DUP': [0x55F0C, 0x5641E, 0x57A5C, 0x5AEA8],   # second half; 0x55F0C is an indexed form (4AF1 F27F)
     # ------------------------------------------------------------------
     # NOT YET DERIVED — each names the census that derives it.
-    'TILE_DIRTY_SITES': None,   # 57 literal sites (entry 8 list) + 0x399E movea.l #0x100000 fill; page bits from each loop
     'TEXT_IDIOM': None,         # 170 literal text sites; the movew->addw family is an AB text-writer shape, re-derive
     'TXT_WRAM_CLEAR_SITES': None, 'TXT_WRAM_WRITERS': None,   # HUD writers 0xC8CC/0xC900/0xC918 (census), row table 0x3EB4/0x3EF6
     'FMGATE_ENTRIES': None, 'FMGATE_SPANS': None,   # FB-writer entries: tile loaders 0x1FE2-0x2066, 0x399E, text writers
-    'TAS_SITES': None,          # scan `tas` opcodes (4AE8/4AF8/4AEE) in prog68k.asm
-    'RLE_EVEN_PASS': None,      # HYPOTHESIS: 0x1FE2/0x1FF2 (lea 0x100000 / 0x100001 = even/odd passes) is the same loader idiom
-    'STRIP_BLITTER_MOVEW': None, 'STRIP_BLITTER_BASE': None,
-    'DATA_EXCLUDE': None,       # scan for word pairs that decode as 0x0014xxxx/0x0010xxxx/0x0011xxxx inside data (entry 50 rule 2)
+    # Every 0x10xxxx/0x11xxxx/0x14xxxx operand objdump prints was listed
+    # (95 palette, 57 tile, 170 text); all sit in instruction context. The
+    # one data run that decodes to a hardware-looking literal is the ASCII
+    # at 0x6818-0x6830 ("M   ") = `move.l 0x202020,d0` at 0x6824, outside
+    # the 2 KB sprite window and outside every MEMMAP range. Nothing to
+    # exclude yet; re-run the check when TEXT sites are thunked.
+    'DATA_EXCLUDE': [],
     'BOOT_JUMPINS': None, 'BOOT_PCREL': None,   # boot copy region for this title is TBD (boot runs from ROM 0x40E; no RAM copy seen yet)
     'SPAWN_META': None, 'SPAWN_LO': None, 'SPAWN_CAP': None,
     'REBASE_TABLES': None, 'HARVESTED_HANDLERS': None, 'HARVEST_BLACKLIST': None, 'HARVEST_BOUND': None,
