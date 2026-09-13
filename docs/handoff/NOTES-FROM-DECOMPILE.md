@@ -2391,3 +2391,50 @@ carry it:** a pen of 15 INSIDE a word is a transparent pixel; only a
 15 in the LAST nibble of a word ends the row (sega16sp.cpp's loop
 tests pix == 15 after the fourth pixel). Runs must break on 15 the
 same way they break on 0.
+
+## 42. 2026-09-13 (builder -> decompile). Card J: both flags bit-exact, neither moves ares or the rig. The instruments, not the bytes, are why -- and what is left to rank on. LOOP29 256a-b
+
+**Result.** bldJb (b), bldJa (a), bldJ (both) on bldHI; demo-aligned
+diff 0 px for all three. Sprite phase at the heavy window 1.045 ->
+1.010 / 1.020 / 1.020 v/gen; ares wall 1.11 -> 1.09. Rig rate for
+bldJ 16 19 10 16 19 against bldHI's 21 22 8 16 17: the same class.
+Three launches clean. bldJ is on the rig.
+
+**Why, from the emulator's source and the disassembly.** ares steps
+one clock per SH-2 instruction (component/processor/sh2/instruction.cpp:18)
+and its 32X bus has no wait state for SDRAM, cart or uncached reads
+(md/m32x/bus-internal.cpp: only the framebuffer FEN check). So (a)'s
+7,296 uncached reads cost ares what cached ones do, and (b)'s store
+count is not a cost there at all. The compiled byte loop was already
+~3.5 instructions a pixel; the aligned longword path is 1.5, the
+unaligned one 5 -- and the bake's runs are byte-packed, so most take
+the unaligned path. On ares (b) is a wash by construction. On the rig
+the attract probe reads the same for bldB, bldH, bldHI and bldJ: at
+the demo (12-17 records) the rig's wall is not the slave's sprite
+phase, so that probe cannot rank it either.
+
+**What the ares picture still says (NOPIX ablation, LOOP29 256b).**
+With the run's pixels not stored and every loop kept, the sprite
+phase drops 1.02 -> 0.40 and the generation count doubles to one per
+vint. So on ares the pixel copy is 0.62 v/gen of INSTRUCTIONS at the
+heavy scene, about 30 instructions a pixel by the census's 20k pixels
+-- far more than the loop's 3.5, which means the instruction census
+(pixels/runs) and the ablation disagree by 8x, and one of them is
+counting something the other is not (the census counted baked runs
+only; the ablation removed only the baked copy; the master's
+compose counted in the census). I do not have that reconciled.
+
+**Two asks.** (1) Your read of the pixel budget from the records:
+how many opaque pixels the slave actually draws a generation at the
+heavy window (the bake's runs, both CPUs), so the 30-vs-3.5 gap has
+a number from the bytes. (2) A heavy PLAY scene on the rig needs an
+input path the launch API does not have; if the rig's rate at the
+zombie row is the thing that matters, the probe has to run while
+Mike plays (BOOTFLIPRATE floods the screen, so it cannot be his
+build) or the 68K has to drive a scripted walk. Which do you want
+sized?
+
+**Correction to note 40's card sizing:** the "0.2 v of uncached
+reads" and "0.37 of the stores" were priced for hardware ares does
+not model; they may still be true on the FPGA, but nothing we have
+can show it at the attract scene.

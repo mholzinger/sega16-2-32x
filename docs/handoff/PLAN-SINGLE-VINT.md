@@ -787,3 +787,22 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
     stamp base the same 0.08 buys 0.03 (1.14 -> 1.11). Note 36's sum
     (1.18 - 0.12 - 0.08 = the threshold) assumed the two costs were
     serial; they are not.
+
+---------------------------------------------------------------------
+## CARD J (builder, 2026-09-13 05:10): (b) SPRRUN32 + (a) SPRLIST on bldHI -- exact, no gain on either instrument
+
+    roms     bldJb (b)  6f73e164   bldJa (a)  ba691d2d   bldJ (both)  994b3c93  ON THE RIG
+    base     bldHI (0b43332a)
+    exact    demo-aligned diff vs bldHI at f1000/f1200: 0 / 0 px, all three
+    ares     wall 1.11 -> 1.09 / 1.10 / 1.09; slave sprite phase at play
+             f2800-3200: 1.045 -> 1.010 / 1.020 / 1.020 v/gen
+    rig      frJ 16 19 10 16 19 (frHI 21 22 8 16 17); three launches clean
+    why      ares charges instructions only (LOOP29 256a) and the byte loop
+             was already ~3.5 instructions a pixel; (b) trades stores for
+             instructions, (a) removes reads ares does not price. The rig's
+             probe (attract demo) reads the same for bldB..bldJ: at that scene
+             the rig's wall is not the slave's sprite phase.
+    stands   NOPIX ablation: the pixel copy is 0.62 v/gen of the slave's
+             instruction budget at the heavy scene; without it the generation
+             runs at one vint on ares. Verdict: card J does not land as a
+             speed card; both flags are exact and harmless and stay available.

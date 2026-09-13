@@ -6574,3 +6574,39 @@ stored, loops kept) says how much of the drawing is the copy itself.
 This re-reads every ares wall in this log as an instruction-count
 ranking: it cannot rank a change whose payoff is memory traffic, the
 same limit CLAUDE.md records for MAME's FB-write stall.
+
+**256b, card J's verdict: exact, and neither instrument moves.**
+
+    rig rate (presented/64 vints)   frJ  16 19 10 16 19    frHI 21 22 8 16 17
+                                    (same class; the 18 s slot 16 vs 21 is one
+                                    launch each -- the probe's resolution)
+    three launches of bldJ          level shots 0.00-0.02; the 30 s slot black
+                                    twice (the demo->title fade, as bldH/bldHI)
+    NOPIX ablation (pcJnp: the run's pixels not stored, every loop kept)
+                                    sprites 1.020 -> 0.402 v/gen, and the
+                                    generation count 198 -> 400 in 400 frames:
+                                    the single-vint lock, on ares, with the
+                                    pixel loop gone
+
+The disassembly says why (b) cannot show on ares: the compiler had
+already made the byte loop tight (the line's copy runs ~3.5
+instructions a pixel), the aligned longword path is 6 instructions
+per 4 pixels, the unaligned one 20 per 4 (four byte loads, four
+extends, shifts, ors) -- more instructions than the byte loop, fewer
+stores. ares steps one clock an instruction (instruction.cpp:18) and
+charges no memory wait, so on ares (b) is a wash by construction;
+what it saves is the SDRAM write-through stall the rig would have to
+show, and the rig's attract probe did not. (a) removed the uncached
+header reads, which ares also does not price; on the rig, nothing
+either.
+
+What stands: the pixel copy is 0.62 v/gen of the slave's INSTRUCTION
+budget at the heavy scene (NOPIX), and removing it alone puts the
+generation at one vint on ares. The store count was the wrong axis.
+The instruction count per pixel is the axis ares can rank, and the
+rig has not yet been shown a scene where the slave is the wall (its
+probe runs the attract's demo, 12-17 records, and its rate there is
+the same for bldB, bldH, bldHI and bldJ: the rig's wall at that
+scene is not the slave's sprite phase).
+
+    rom/night/bldJ (994b3c93, on the rig), bldJa, bldJb, frJ, pcJ*, pcJnp
