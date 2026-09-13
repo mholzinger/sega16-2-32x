@@ -1064,6 +1064,12 @@ endif
 ifdef C1STAMP
 SHCCFLAGS += -DC1_STAMP
 endif
+# `make ... SCANMEMO=1` = Card I (NOTES 33.2, LOOP29 254): each plane's
+# baked scan is memoized by (round, pages, vy0, vx0 cell) and re-merged
+# while the scroll stays inside the cell. Needs SETCOLS.
+ifdef SCANMEMO
+SHCCFLAGS += -DSET_COLS_MEMO
+endif
 ifdef C1STAMPNW
 SHCCFLAGS += -DC1_STAMP_NW
 endif

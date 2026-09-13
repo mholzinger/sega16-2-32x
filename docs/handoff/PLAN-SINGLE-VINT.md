@@ -751,3 +751,32 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
     with the punch off): 0.015 FB writes, the rest the per-band cover
     and class reads. What the five earlier cuts cost, and why, is in
     LOOP29 252 (the FB write floor, the SH-2's write-through stores).
+
+---------------------------------------------------------------------
+## CARD I (builder, 2026-09-13 02:40): the SCAN MEMO -- rom/night/bldI.32x, and on H: bldHI.32x
+
+    roms     bldI  (bldB + SCANMEMO=1)           md5 4bf9e5de
+             bldHI (bldH + SCANMEMO=1 = bldB + C1STAMP=1 SCANMEMO=1)  md5 0b43332a
+    base     bldB (the line) / bldH (card H)
+    change   SCANMEMO=1 (NOTES 33.2): each plane's baked scan is kept as
+             a compact list of the sets it touched, keyed by (round, its
+             four pages, vy0, vx0 cell); re-merged while the key matches,
+             re-scanned when the scroll crosses a cell. On the punch line
+             the memo runs from ROM (.ramtext full); on H from RAM.
+    check mode (scHI, memo vs fresh + live vs baked)   0/0 over 3,039 planes
+    scan drain (census, v/gen)   bldB 0.095 (573 ticks a plane)
+                                 bldI 0.014 (82)   bldHI 0.010 (60)
+                                 fresh scans 0.02 a generation (36 in 1,700)
+    ares wall (4000 frames)      bldI 1.18 (bldB 1.18)   bldHI 1.11 (bldH 1.14)
+    picture gates (bldI)         title 0.273 demo 0.038 eye 0.488 title2 0.255
+                                 return 0.040/0.038 face 0.58 play 0.036 0.036
+                                 0.041 0.041 late-coin 0.036 0.042 0.042 -- bldB's
+    rig                          (bldHI: below)
+
+    The memo is exact and takes the scan from 0.095 to 0.01 -- and the
+    WALL of the punch line does not move (1.18 -> 1.18). The master's
+    maps drain is not on that line's critical path: the wall there is
+    the slave's punched compose, and the scan ran in its shadow. On the
+    stamp base the same 0.08 buys 0.03 (1.14 -> 1.11). Note 36's sum
+    (1.18 - 0.12 - 0.08 = the threshold) assumed the two costs were
+    serial; they are not.

@@ -2964,6 +2964,94 @@ RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
 }
 #endif
 
+#ifdef SET_COLS_MEMO
+/* the bm_* field macros (tcount = a->tcount ...) are lifted for the memo,
+ * which names two states' fields; re-defined below it */
+#undef tcount
+#undef col_lvl
+#undef amb_col
+/* Card I (NOTES 33.2, LOOP29 254): the baked scan's answer for a plane
+ * depends only on (round, its four pages, vy0, vx0>>3); those change
+ * when the scroll crosses a cell, every few frames at play speed. Keep
+ * each plane's last answer as a compact list of the sets it touched and
+ * re-merge it while the key matches; the 573-tick cart read (246) is
+ * paid once per crossing instead of every generation. The merge is the
+ * sequential accumulation's exact equivalent: a set's level within a
+ * plane is its max, two levels inside the plane set its amb bit, and a
+ * plane whose max differs from what the state already holds sets it
+ * too -- the same test the scan applies entry by entry. Check mode
+ * (SET_COLS_CHECK) compares every reused answer with a fresh scan. */
+struct bm_memo {
+    uint32_t key0, key1;
+    uint8_t n, cc[128];
+    uint16_t tcount[128];
+    uint8_t col_lvl[128], amb[128];
+};
+static struct bm_memo bm_memo_s[4];          /* which*2 + aset, .bss */
+static struct bm_state bm_memo_tmp;          /* a fresh plane scan lands here */
+#ifdef SET_COLS_CHECK
+static void bm_memo_check(const struct bm_memo *m, const struct bm_state *y)   /* ROM: a probe */
+{
+    for (int c = 0; c < 128; c++) {
+        if ((m->tcount[c] != 0) != (y->tcount[c] != 0)) CEN[60]++;
+        if (m->tcount[c] && (m->col_lvl[c] != y->col_lvl[c] || m->amb[c] != y->amb_col[c])) CEN[61]++;
+    }
+}
+#endif
+#ifndef C1_STAMP
+/* the punch line's .ramtext is full (bldI overflowed by the memo's
+ * bytes); without the stamp the memo runs from ROM -- ~150 instructions
+ * twice a generation, against the 573-tick cart scan it replaces */
+__attribute__((noinline)) static void bm_scan_memo(struct bm_state *a, int which, int aset)
+#else
+RAMCODE static void bm_scan_memo(struct bm_state *a, int which, int aset)
+#endif
+{
+    const layer_regs *lr = &snap[which];
+    const uint8_t *pq = aset ? lr->pq_a : lr->pq;
+    int vy0 = aset ? lr->vy0_a : lr->vy0;
+    int vx00 = aset ? lr->vx0_a : lr->vx0;
+    uint32_t k0 = ((uint32_t)pq[0] << 24) | ((uint32_t)pq[1] << 16) | ((uint32_t)pq[2] << 8) | pq[3];
+    uint32_t k1 = ((uint32_t)(vy0 & 0x1FF) << 16) | ((((uint32_t)vx00 >> 3) & 0x7Fu) << 8)
+                | ((uint32_t)md_round << 4) | 8u | ((uint32_t)which << 1) | (uint32_t)aset;
+    struct bm_memo *m = &bm_memo_s[which * 2 + aset];
+    if (m->key0 != k0 || m->key1 != k1) {
+        struct bm_state *t = &bm_memo_tmp;
+        bm_reset(t);
+        bm_scan_baked(t, which, aset);
+        for (unsigned i = 0; i < m->n; i++) {  /* retire the old answer's sets (the
+                                                 * check reads every entry) */
+            unsigned c = m->cc[i];
+            m->tcount[c] = 0; m->col_lvl[c] = 0; m->amb[c] = 0;
+        }
+        unsigned n = 0;
+        for (unsigned c = 0; c < 128; c++) {
+            if (!t->tcount[c]) continue;
+            m->cc[n++] = (uint8_t)c;
+            m->tcount[c] = t->tcount[c];
+            m->col_lvl[c] = t->col_lvl[c];
+            m->amb[c] = t->amb_col[c];
+        }
+        m->n = (uint8_t)n;
+        m->key0 = k0; m->key1 = k1;
+#ifdef PHASE_CENSUS
+        CEN[63]++;                           /* fresh plane scans */
+#endif
+    }
+    for (unsigned i = 0; i < m->n; i++) {
+        unsigned c = m->cc[i];
+        a->tcount[c] = (uint16_t)(a->tcount[c] + m->tcount[c]);
+        if (m->amb[c]) a->amb_col[c] = 1;
+        uint8_t lvl = m->col_lvl[c];
+        if (a->col_lvl[c] && a->col_lvl[c] != lvl) a->amb_col[c] = 1;
+        if (lvl > a->col_lvl[c]) a->col_lvl[c] = lvl;
+    }
+}
+#define tcount  (a->tcount)
+#define col_lvl (a->col_lvl)
+#define amb_col (a->amb_col)
+#endif
+
 RAMCODE static void build_maps(int par, uint16_t bank1)
 {
     struct bm_state st;                     /* STACK: hot path stays fast */
@@ -3664,7 +3752,14 @@ RAMCODE static int build_maps_chunk(int par)
             bm_scan_baked(&bk, BM->which, BM->aset);
             bm_check_cmp(&chk, &bk);         /* CEN[60] presence, [61] level, [62] planes */
 #endif
+#ifdef SET_COLS_MEMO
+            bm_scan_memo(a, BM->which, BM->aset);
+#ifdef SET_COLS_CHECK
+            bm_memo_check(&bm_memo_s[BM->which * 2 + BM->aset], &bk);   /* the reused answer vs the fresh scan */
+#endif
+#else
             bm_scan_baked(a, BM->which, BM->aset);
+#endif
             nrows = 0;                       /* whole plane done */
             BM->row = 0xFF;
         } else
@@ -4954,8 +5049,8 @@ RAMCODE static void c1_stamp(const c1cov_t c1cov, int ymin, int ymax)
             for (unsigned k = 0; k < hn; k++) {
                 unsigned cx = hc[k];
                 uint8_t *d = row + cx * 8;
-#ifdef PHASE_CENSUS
-                CEN[63]++;                             /* H: cell rows stamped */
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+                CEN[62]++;                             /* H: cell rows stamped ([63] = the memo's fresh scans) */
 #endif
 #ifdef C1_STAMP_NW
                 (void)d; (void)c1c; (void)py;          /* ablation: cover + class reads, no FB writes */

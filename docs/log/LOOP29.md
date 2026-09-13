@@ -6368,3 +6368,37 @@ The demo-aligned diff (scratch aligndemo.py: bldB screenshots at
 every frame in a ±40 window, the candidate's single frame, the
 minimum-diff pair) is the picture gate for any change to the sprite
 loops from here; the frame-N diff is not.
+
+## 254. CARD I, THE SCAN MEMO: EXACT, THE SCAN GONE, THE WALL UNMOVED ON THE PUNCH LINE (2026-09-13 02:40)
+
+`SCANMEMO=1` (m_main.c bm_scan_memo, before build_maps): per plane
+(which, aset) a memo {key, n, cc[128], tcount/col_lvl/amb[128]}; key =
+(pq[0..3], vy0 & 0x1FF, (vx0 >> 3) & 0x7F, md_round, which, aset).
+Miss: bm_reset + bm_scan_baked into a scratch state, retire the old
+list's entries, copy the nonzero sets. Hit or miss: merge the list into
+the live state -- tcount += , amb |= memo amb, the level rule the scan
+applies per entry applied once per set (a plane's max against the
+state's). Check mode compares every reused answer with a fresh scan:
+0/0 over 3,039 planes (scHI). The bm_* field macros (tcount = a->tcount)
+had to be lifted around the memo, which names two states' fields.
+
+    scan drain v/gen     bldB 0.095   bldI 0.014   bldHI 0.010
+    fresh scans          36 in 1,700 generations (the play2 script; the
+                         scroll crosses a cell rarely there -- expect more
+                         on a walking script, at most one plane a crossing)
+    wall                 bldI 1.18 = bldB 1.18      bldHI 1.11 (bldH 1.14)
+
+The lesson is the wall's shape: the master's drain and the slave's
+compose overlap, and on the punch line the slave is the wall, so the
+master's 0.08 was free. Every planning sum that added the drain to the
+compose (note 36's) overstates what a master-side cut buys until the
+slave is under the master. The 227-style trap did not bite here: the
+title/demo/eye/return/face/play gates all read bldB's numbers.
+
+.ramtext: bldI put the memo in ROM (the punch line overflowed by its
+bytes); bldHI keeps it in RAM (0x6394 + the memo). scI (check on the
+punch line) does not fit; the check ran on the H base, where the memo's
+code is identical.
+
+    rom/night/bldI.32x   4bf9e5de     rom/night/bldHI.32x  0b43332a
+    rom/night/pcI / pcHI / scHI / frHI  probes
