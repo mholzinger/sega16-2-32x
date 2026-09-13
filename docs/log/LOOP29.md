@@ -7280,3 +7280,36 @@ sits in the full-copy path, which the mask branch replaces, so it
 reads 0 and the guard mean mixes the 7 cheap vints with the 8th full
 one. Not worth re-cutting -- the rate is the number that matters and
 the picture gates are the check.
+
+## 267a. CARD L FAILS THE RIG PICTURE: WHOLE TILE SETS BLACK AT 27/64 (2026-09-13 17:50)
+
+bldL's ares gates are the line's to three decimals -- title 0.273,
+demo 0.038, eye 0.490, title2 0.255, return 0.041/0.039, face 0.58,
+play 0.037 0.036 0.042 0.042, late-coin 0.036 0.042 0.042 -- and its
+demo-aligned diff against bldJ is 0 pixels. **On the rig it is
+broken**, identically on all three launches:
+
+    level shots   trees 0.20  fg 0.60-0.86   all 0.32-0.40
+                  (bldB/bldH/bldHI/bldJ: 0.00-0.02)
+
+The named visual (231's signature): the title's tiger statue and the
+gravestone/tree sets draw BLACK, the ALTERED BEAST logo draws in the
+wrong colour set (white for red), and the level's FG band is mostly
+black -- the MD residency allocator's blank-slot look, plus a colour
+set that never landed. Not text: the text layer is the only thing the
+capture feeds, and the tiles and palette are what broke.
+
+Two candidates, and they are separable because the text capture
+cannot touch tiles at all:
+  (a) the MASK protocol (COMM2's high byte is written by ONE of the
+      four COMM2 writers -- md_main.c:3519 -- and the other three
+      write plain BANK_SHADOW, so a mask can be cleared before the
+      master reads it; that makes TEXT stale, not tiles);
+  (b) the RATE. At 27 presented frames per 64 vints instead of 18 the
+      display advances faster than the MD builder fills VRAM and the
+      colour-set allocator settles; the flip guard was throttling the
+      presentation to what the pipeline could feed, and the decline
+      was doing that job by accident.
+267b ablates the capture entirely (TEXTCAPOFF as a PICTURE build --
+text stale by construction, tiles untouched) and looks at the tiles
+on the rig. Black tiles there = (b), the rate.
