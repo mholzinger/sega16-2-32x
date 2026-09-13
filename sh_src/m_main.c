@@ -5502,7 +5502,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                                 }
                             } else
 #endif
-#if defined(SPR_RUN32) && !defined(SPR_LATE_DIAG)
+#ifdef SPR_NOPIX
+                            { d += m; s += m; m = 0; }   /* 256 ablation: the run's pixels not stored (never a ship) */
+#elif defined(SPR_RUN32) && !defined(SPR_LATE_DIAG)
                             {
                                 /* Card J (b), NOTES 41 / LOOP29 256: base is
                                  * (pair << 4) and every baked pen is 1..14

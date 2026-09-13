@@ -6543,3 +6543,34 @@ with the list (it indexes flick_lvl by the original record number).
 
 Roms: bldJb / pcJb (b), bldJa / pcJa (a), bldJ / pcJ (both); the
 measurements follow.
+
+**256a, measured on ares (all six roms link; pcJ .ramtext 0x6AF0):**
+
+    rom     flags              wall   sprites v/gen at play f2800-3200   slave pass
+    bldHI   base               1.11   1.045                              1.320
+    bldJb   SPRRUN32           1.09   1.010                              1.279
+    bldJa   SPRLIST            1.10   1.020                              1.297
+    bldJ    both               1.09   1.020                              1.298
+
+    exactness (demo-aligned diff vs bldHI at f1000/f1200): 0 / 0 pixels for
+    all three -- both flags are bit-exact.
+
+Neither flag moves the phase on ares, and note 40/41's arithmetic said
+they should: (a) removes 7,296 uncached reads a generation, (b) removes
+two thirds of the stores. The reason is the instrument, not the code:
+**ares charges the SH-2 instruction cycles only.** M32X::SH7604::step
+adds the instruction's clocks; bus-internal.cpp has no wait state for
+SDRAM, cart ROM or uncached reads (the only bus wait is the framebuffer
+FEN check); the SH-2 cache is not modelled for data. So on ares an
+uncached header read costs what a cached one does and a byte store
+costs what a longword store does, and the "slave ticks per pixel" of
+255a-b are instruction counts. What (a) and (b) save is exactly what
+ares cannot see -- SDRAM write-through stores and uncached SDRAM reads
+-- and the only instrument that can see it is the rig's frame-rate
+probe (frJ). 255's split still says where the INSTRUCTIONS go
+(drawing 0.60, scan 0.40); the NOPIX ablation (256b, pixels not
+stored, loops kept) says how much of the drawing is the copy itself.
+
+This re-reads every ares wall in this log as an instruction-count
+ranking: it cannot rank a change whose payoff is memory traffic, the
+same limit CLAUDE.md records for MAME's FB-write stall.

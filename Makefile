@@ -1079,6 +1079,9 @@ endif
 ifdef SPRLIST
 SHCCFLAGS += -DSPR_LIST
 endif
+ifdef SPRNOPIX
+SHCCFLAGS += -DSPR_NOPIX
+endif
 ifdef C1STAMPNW
 SHCCFLAGS += -DC1_STAMP_NW
 endif
