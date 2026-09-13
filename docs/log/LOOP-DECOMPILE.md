@@ -5691,3 +5691,71 @@ drawn' (NOTES 46). If the generation is now the wall, 'nothing drawn'
 is what the remaining ~37 declines must read. If they still read
 'past the edge', the guard is closing for a second reason and the
 post's own ~900 ticks is next.
+
+---------------------------------------------------------------------
+## 121. NO, IT WAS NEVER RULED OUT, AND THE MISSING MEASUREMENT SAYS IT WORKS: the MD plane needs at most 30 QUANTISED COLOURS, and every scene packs into 3 lines x 15 with each set inside one line (2026-09-13)
+
+Mike: "earlier you mentioned rebaking graphics with fewer palette
+layers -- did we ever rule that out?" No. LOOP11 proposed the
+colour-level pack; LOOP18 doubted it because the 36-colour figure was
+an ATTRACT number and named the missing measurement -- "the distinct
+MD-quantised colour count of the visible BG window during GAMEPLAY";
+LOOP28 553 then measured SETS (mean 5.72, max 45, over 6 on 29% of
+vints) and parked the whole question as "real, and not the big lever."
+The colour count in gameplay was never taken. Here it is.
+
+**Method.** MAME, arcade. Both tile planes' visible windows walked
+from the latched registers (page quadrants 0xE80+2*which, vy 0xE90+,
+vx 0xE98+), every cell's colour set = (word >> 6) & 0x7F, each set's
+8 palette words at 0x840000 + (set*8+pen)*2, each word quantised to
+the MD's 3 bits a channel (r = ((v&0xF)<<1)|((v>>12)&1), then >> 2;
+g at bit 4 / 13, b at bit 8 / 14). FG pen 0 is transparent and is
+excluded; BG pen 0 is opaque (jts16_prio.v:87) and is counted.
+
+    scene                  sets BG   sets FG   MD-quantised COLOURS (union, max)
+    round 0, credited play  14.7/16    7.3/8    23
+    round 0 demo            15.3/16    7.6/8    23
+    round 1 demo             7.9/8     5.0/5    28
+    round 2 demo             6.6/7     6.3/10   24
+    round 3 demo             6.9/7     4.9/5    24
+    round 4 demo             6.5/10    6.4/10   30
+
+**So the squeeze the allocator fights does not exist at COLOUR level.**
+Up to 24 distinct colour SETS are on screen at once (round 0: 16 BG +
+8 FG) against six MD slots -- which is why the LRU thrashes and why
+LOOP29 231's blank-slot signature keeps returning -- but those 24 sets
+draw at most 23 distinct MD colours, and no round exceeds 30. The
+shipping MDP_LINES = 3 gives 45 usable pens.
+
+**And it PACKS, which is the part nobody checked.** A tile draws from
+ONE CRAM line, so the count is not enough: every set's colours must
+fit inside a single line. Partitioning each scene's sets into 3 bins
+with a per-bin colour union <= 15 (exhaustive with memo on the bin
+states, 20 distinct scenes across the five rounds):
+
+    scenes packed into 3 x 15 with every set inside one line   20 of 20
+    worst per-line occupancy                                    8 / 14 / 15
+    round 1 and round 4 do NOT fit 2 lines; all five fit 3; 4 lines is slack
+
+Colours are duplicated across lines where a set needs them -- that is
+what the spare 45 - 30 buys, and it is a bake-time choice, not a
+runtime one.
+
+**What this makes possible.** A per-scene baked line assignment means
+mdp_assign_set never evicts, because there is nothing to evict: every
+set on screen has a home line for the whole scene. LOOP29 231's black
+tile sets, card L's black tiger statue and gravestones, the wrong
+logo set, the gravestone flicker and the "stolen pair shows the
+stealer's colours" family all share one mechanism -- eviction and
+reassignment under pressure -- and this removes the pressure by
+construction rather than tuning the LRU.
+
+**Caveats, honestly.** (1) The 3-bit quantisation merges colours the
+arcade separates; the bake must check that no merge lands inside one
+tile's own gradient (the sky banding LOOP11 flagged). (2) These are
+the five rounds' main scenes at 25-frame sampling, not cutscenes, the
+boss frames or the ending. (3) Sets whose palette the CYCLERS rewrite
+(19-21, entry 93) change colours within a scene: their LINE can be
+fixed and their pens repainted in place, which is what the cyclers
+already do on the arcade -- but the pack must reserve the pens they
+cycle THROUGH, not just the ones they hold at the sample.
