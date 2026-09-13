@@ -6402,3 +6402,48 @@ code is identical.
 
     rom/night/bldI.32x   4bf9e5de     rom/night/bldHI.32x  0b43332a
     rom/night/pcI / pcHI / scHI / frHI  probes
+
+## 255. THE SLAVE'S PER-PHASE SUMS AT A HEAVY SPRITE SCENE, bldHI (2026-09-13 03:30)
+
+Mike passed bldHI (presentation, legs, zombies, grass) and asked for
+the slave's per-phase sum at a heavy scene, not the run average. The
+run average (0.368 over the play2 script's first 1,200 frames) hid a
+factor of three. Instrument: st_s(10) after each 12-row strip's clear,
+st_s(11) after its compose_sprites, st_s(13) before every band end
+(STB[0..3] = clear, sprites, cat1, text+service), pcHI2 = bldHI's
+flags + PHASECENSUS. Sums differenced over 200-frame windows, with the
+32X's sprite list at the window end:
+
+    play2 (walk right, punch)   gens  clear  sprites  cat1  text  | recs  rows
+      f1000-1200               194  0.103  0.242    0     0.093 |   4    122
+      f1400-1600               108  0.145  0.756    0     0.094 |  16    719
+      f2000-2200               100  0.150  0.895    0     0.095 |  14    730
+      f2800-3000               100  0.176  1.019    0     0.099 |  17    767
+      f3000-3200                99  0.176  1.071    0     0.099 |  18    780
+    attract, first demo
+      f 800-1000               100  0.157  0.790    0     0.215 |  12    515
+      f1400-1600               186  0.140  0.320    0     0.150 |   1    108
+
+At f3000 the list is seven zombies (64 rows x 36 px, one per 40 px
+across the screen), the player and nine small records: 26k rectangle
+pixels. The slave's sprite phase alone is a vint there, the whole
+slave pass ~1.35, and the generation count says it exactly: 100
+generations in 200 frames, the 2-vint lock. The clear is a fixed
+0.15-0.18 (224 rows x 320 B of long stores into sbuf), text 0.1 in
+play and 0.21 in the attract, cat-1 nothing (it is on the MD).
+
+Per pixel that is 15-25 SH-2 cycles for a byte copy -- the sprite
+phase is not the copy loop's cost alone. What else it holds: the
+record scan runs once per 12-row strip (19 strips a generation x 64
+records, a bake_find per live record per strip), the run decode per
+row, the stamp per band (H). The next instrument counts runs, pixels
+and record-strip visits at the same window so the card can be sized
+from cycles per pixel, per run and per visit rather than guessed.
+
+CORRECTION to 252 and PLAN card H: the compose target on the line is
+sbuf in SDRAM, not the framebuffer -- DIRECTFB is not in the shipping
+flags (the DIRECT_FB arm of the clear/compose is dead code on the
+line, as 169 already noted for the ablation). H1's 0.148 for ~17 KB of
+stamps and H2's cover marks were the SH-2's write-through SDRAM stores,
+not "the 32X FB write floor". The measurements stand; the name of the
+cost was wrong.

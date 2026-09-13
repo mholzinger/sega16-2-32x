@@ -5342,6 +5342,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             if (fr) {
                 const uint8_t *rt = fr + 8;
                 SPRBK[0]++;
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+                CEN[62]++;                               /* 255: record-strip visits (baked) */
+#endif
                 for (int y = top; y < bottom; y++) {
                     RL_MARK(8 + y);
                     const uint8_t *sp = fr + *(const uint16_t *)
@@ -5367,6 +5370,10 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             const uint8_t *s = sp + (lo - x);
                             uint8_t *d = row + (lo - 184);
                             int m = hi - lo;
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+                            CEN[60] += (uint32_t)m;      /* 255: baked pixels */
+                            CEN[61]++;                   /* 255: baked runs */
+#endif
 #ifdef C1_PUNCH
 #ifdef C1_FAST
                             /* Build E (LOOP29 248): the ablation's 0.13
@@ -8676,7 +8683,9 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
                                               * the full-height row-walk
                                               * of tall zoomed actors */
         int ye = (y + 12 > hi) ? hi : y + 12;
+        st_s(10);                        /* 255: strip clear -> STB[0] */
         compose_sprites(y, ye, par);
+        st_s(11);                        /* 255: strip sprites -> STB[1] */
         slave_service_stream();
     }
     PHASE(2);

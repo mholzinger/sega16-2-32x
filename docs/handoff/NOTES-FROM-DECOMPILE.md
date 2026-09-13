@@ -2254,3 +2254,43 @@ work of the sprite loops (clear, cover, record scan and stamp are
 flat). If the split sums show the sprites term tracking the load at
 ~2x from light to heavy windows, the card is the inner loop's cost
 per source pixel, not another fixed cost. Send the sums and I pick.
+
+## 39. 2026-09-13 (builder -> decompile). Mike passed bldHI. The slave's per-phase sums at a heavy scene: the sprite phase alone is a vint. LOOP29 255
+
+Mike's eye passed bldHI (presentation, legs through the grass, zombies
+behind the ground, the grass line). His next card is the heavy-sprite
+slowdown, and he asked for the slave's per-phase sum at a heavy scene
+rather than the run average. On pcHI2 (bldHI + census, the sums split
+per phase), 200-frame windows, v/gen:
+
+    scene                          clear  sprites  cat1  text  | records  rows
+    play, 4 records (f1000-1200)   0.10   0.24     0     0.09  |    4     122
+    play, 16 records (f1400-1600)  0.15   0.76     0     0.09  |   16     719
+    play, 18 records (f3000-3200)  0.18   1.07     0     0.10  |   18     780
+    attract demo (f800-1000)       0.16   0.79     0     0.22  |   12     515
+
+The heavy scene is seven zombies (64 x 36) in a row plus the player:
+26k rectangle pixels, and the generation count is 100 per 200 frames
+-- the 2-vint lock, with the slave's sprite phase alone at a vint and
+the slave pass at ~1.35. Clear is fixed (~0.15, the 72 KB of sbuf
+long stores a generation), text 0.1, cat-1 nothing.
+
+Fifteen to twenty-five cycles a pixel is not a byte copy. The sprite
+phase also carries the record scan per 12-row strip (19 strips x 64
+records, a bake_find per live record per strip), the run decode per
+row, and card H's stamp per band. The census that splits those is
+running (runs, pixels, record-strip visits at the same window); its
+numbers come to you next so the card is sized from cycles per pixel,
+per run and per visit. Two things you can already read from the bytes
+meanwhile: (1) whether the compose could run once per band (three
+bands) instead of per 12-row strip -- what the strip granularity is
+for on the line (the blit-chase note in m_main.c says the strips were
+for the master's pickup latency), and (2) the zombie row's geometry:
+seven identical 64x36 records at 40-px spacing is the same art seven
+times, which a row-cache or a per-record "same as the last record's
+art, shifted" path would exploit.
+
+**Correction:** the line's compose target is sbuf in SDRAM, not the
+framebuffer (DIRECTFB is not a shipping flag). Note 37's "FB write
+floor" was the SH-2's write-through SDRAM stores. Same numbers, right
+name.

@@ -748,9 +748,11 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
 
     Expected by NOTES 36: 1.06-1.08. Measured: 1.14 (from 1.18). The
     stamp's own price is 0.044 v/gen on the compose sum (0.368 vs 0.324
-    with the punch off): 0.015 FB writes, the rest the per-band cover
+    with the punch off): 0.015 sbuf writes, the rest the per-band cover
     and class reads. What the five earlier cuts cost, and why, is in
-    LOOP29 252 (the FB write floor, the SH-2's write-through stores).
+    LOOP29 252 -- read with 255's correction: the target is sbuf in
+    SDRAM (DIRECTFB is not a shipping flag), the cost was the SH-2's
+    write-through stores, not the framebuffer.
 
 ---------------------------------------------------------------------
 ## CARD I (builder, 2026-09-13 02:40): the SCAN MEMO -- rom/night/bldI.32x, and on H: bldHI.32x

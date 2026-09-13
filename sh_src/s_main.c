@@ -52,8 +52,9 @@ static uint8_t st_band;
 __attribute__((section(".ramtext"), noinline)) void st_s(unsigned ev)
 {
     uint16_t now = frt_s();
-    /* pass sums (all bands): 11 = clear+sprites done, 12 = cat1 done;
-     * text = band remainder. 2/3 (band start/end) re-base the clock */
+    /* pass sums (all bands): 10 = strip clear, 11 = strip sprites (and the
+     * band's compose remainder), 12 = cat1 done, 13 = text + service to the
+     * band end (LOOP29 255). 2/3 (band start/end) re-base the clock */
     if (ev >= 10)
         STB[ev - 10] += (uint16_t)(now - st_last);
     st_last = now;
@@ -280,17 +281,20 @@ __attribute__((section(".ramtext"))) void s_main(void)
 #endif
                 st_s(2);
                 slave_concurrent_k((uint16_t)(cmd & ~0x0070));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
 #ifdef BLIT_CHASE
                 slave_fence(108 + BAND_SHIFT);   /* band 1 ends inside
                                                   * the master's half */
 #endif
                 slave_concurrent_k((uint16_t)((cmd & ~0x0070) | 0x10));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
 #ifdef BLIT_CHASE
                 slave_fence(224);
 #endif
                 slave_concurrent_k((uint16_t)((cmd & ~0x0070) | 0x20));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
             } else {
                 /* master-relaunched chain: the latch must span the
