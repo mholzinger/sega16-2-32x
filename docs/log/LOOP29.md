@@ -7338,3 +7338,56 @@ same MD residency allocator the tiles use -- incoherent text cells
 claim and evict slots, which is exactly the blank-slot signature and
 the wrong colour set on the logo. The fully stale snapshot
 (TEXTCAPOFF) makes no claims at all, which is why it looks right.
+
+---------------------------------------------------------------------
+## 268. THE ECHO CENSUS ON THE CLEAN HIGH-RATE BUILD: THE GUARD IS NO LONGER THE WALL; THE GENERATION IS (2026-09-13 22:25)
+
+NOTES 61's second ask, run on the CLEAN ablation (ecTC = TEXTCAPOFF +
+ECHOCENSUS + BOOTFLIPRATE, md5 0b27b244) rather than on card L, since
+card L fails its picture (267a-b) and the ablation has the same rate
+with a right picture. Two rig launches, per 64 vints, 68K-side
+classification of the echo word the master leaves for each post
+(md_main.c 2770; the tags are m_main.c 7734/7767/7785):
+
+    tag  meaning                       bldJ (258)   ecTC r1   ecTC r2
+    0    OK (F102/F103)                   ~18          --        19
+    1    past the vblank edge (F1F1)      ~40         13, 0     2
+    2    nothing drawn (F1F2)              0           0        0, 0
+    3    NOTHING SHIPPED (F1F3)            --         31        32
+    4    posted, no echo (F000)            --          --       0
+    5    no post (F001)                    0          0, 0      --
+    6    GAMEGATE fallback releases       --         32, 37    21
+    7    posts with V >= 0xE0             --          --       63
+
+**The prediction in NOTES 61 was half right and the half it missed is
+the useful half.** Past-the-edge declines collapse from ~40 of 64 to 2
+and 13: removing the 928-longword text snapshot from inside the guard
+buys back the window, exactly as 266b/266c measured. But the declines
+do not become "nothing drawn" (tag 2 is the DIRECT_FB gate and is not
+compiled on this line). They become **tag 3, `!nat_shipped`** -- the
+whole-frame flip gate at m_main.c 7785: no CLOSED generation was
+blitted into the hidden bank during the window that just ended, so
+flipping would step the display backward.
+
+That is the same statement NOTES 61 wanted, in this line's vocabulary:
+**the wall has moved off the flip guard and onto the generation.** The
+master now reaches the guard in time and finds nothing new to show.
+~31 of 64 shipped generations against ~31 of 64 "nothing shipped" is
+one generation every two vints, which is the 31/64 presented rate read
+directly off the producer rather than off the display.
+
+Two details worth keeping:
+
+  - **tag 7 = 63 of 64.** Every post still arrives with V >= 0xE0, i.e.
+    inside the vblank band, confirming 264b's line 238-249 post from
+    the 68K side on a build that is no longer late at the guard. The
+    post's timing was never the problem; what ran after it was.
+  - **fallback releases stay high (21-37 of 64).** GAMEGATE still has
+    to release the game on most declining vints. That is expected while
+    half the vints decline, and it is the number that should fall when
+    the generation closes every vint -- a second, independent read on
+    the same wall.
+
+So the next cut is a generation cut, not a transport cut, and the
+transport's remaining cost (the text path) is what fold 5 removes
+rather than shrinks.
