@@ -22,6 +22,11 @@ args = getScriptArgs()
 out_path = args[0] if args else '/tmp/timing_census.json'
 game = args[1] if len(args) > 1 else 'altbeast'
 
+listing = currentProgram.getListing()
+fm = currentProgram.getFunctionManager()
+refmgr = currentProgram.getReferenceManager()
+mem = currentProgram.getMemory()
+
 HW_ALTBEAST = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
     (0x3F0000, 0x3FFFFF, 'tilebank'),
     (0x400000, 0x40FFFF, 'tileram'),
