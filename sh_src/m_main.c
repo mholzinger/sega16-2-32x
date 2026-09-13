@@ -8057,7 +8057,9 @@ void visr_vbi(void)
          * bails (DIAG[59]), edge declines (DIAG[44]), holds (DIAG[29]), ISR entries (DIAG[49]) */
         static uint32_t s4_prev[4];
         uint32_t cur[4] = { DIAG[59], DIAG[44], DIAG[29], DIAG[49] };
-        for (int k = 0; k < 4; k++) { stc_t[k] = (uint16_t)((cur[k] - s4_prev[k]) << 7); s4_prev[k] = cur[k]; }
+        /* v2: a VINT INDICATOR (0/1) scaled so the 68K's 64-vint mean is the
+         * count of such vints (delta<<13 >>7 = 64 per vint, summed >>6) */
+        for (int k = 0; k < 4; k++) { uint32_t d = cur[k] - s4_prev[k]; stc_t[k] = (uint16_t)((d ? 1u : 0u) << 13); s4_prev[k] = cur[k]; }
     }
 #endif
 #ifdef STAMP3_CENSUS

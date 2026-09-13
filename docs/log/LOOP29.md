@@ -7069,3 +7069,12 @@ window would still be live at ~40 of 64 vints. 264c carries DIAG[59]
 the lever is not any tail and not the guard: it is the master's
 window work overrunning the vint on hardware -- or the ISR flipping
 on a post even while a window is live.
+
+**264c, first read (frJ_s4, counts per vint carried as a 64-vint mean --
+the mean of a 0/1 quantity rounds to 0 or 1, so this read is coarse):**
+ares: stale bails 0, edge declines 0, holds 0-1, ISR entries 1 a vint.
+Rig: ISR entries 1 a vint; stale bails read 1 and 0 (i.e. present, on
+the order of half the vints); edge declines read 2 a vint (the counter
+increments more than once a vint: the body's fallback retries and
+declines again). The v2 probe carries each as a vint indicator so the
+64-vint mean is the COUNT of vints with the event.
