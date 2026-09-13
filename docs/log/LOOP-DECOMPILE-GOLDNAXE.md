@@ -574,3 +574,30 @@ and the hand reads the HYPOTHESIS labels ask for (33 jump-table counts,
 MCU_BUSY's consumer, the 0x71F2 footprint). The kit gained three tools
 that took no AB literals: the handler harvest, the jump-table bounder,
 the FM-gate span deriver.
+
+---------------------------------------------------------------------
+## 11. Rung 6: the sound-post map — 201 sites, 48 commands, one entry
+
+`tools/s16b_sound_posts.py goldnaxe 0x3616` (generic; AB's
+sound_posts.py read AB-only artifacts) -> `docs/audit/goldnaxe/
+sound_posts.md`. The entry is 0x3616 (d0.b = command), reached by 201
+bsr/jsr sites, all in the first half; 159 load an immediate just
+before (moveq), 42 compute the command. 48 distinct commands; the
+most-posted are 0x97 (32 sites), 0x95 (22), 0xA0 (9), 0x53 (8).
+
+The posting convention, re-derived for this program (entry 6 has the
+trace that proved the path): command 0 goes straight to the mapper's
+latch at 0x3674 (stop-all, resets the ring count); any other command is
+de-duplicated against the 32-byte ring 0xFFEC40-5F (0x3658-0x366A
+`cmp.b (a0)+,d0 ; beq`) and pushed (0x366C, count 0xFFEC3C++); IRQ4
+pops one per vint into 0xFFECFC (0x3314-0x3336, read pointer 0xFFEC3E
+wrapping at 0xFFEC60); the MCU forwards non-0xFF to the Z80 and
+rewrites 0xFF. Command 0x9C is dropped unless 0xFFEC26 bit 0 and
+0xFFEC1B bit 1 are both set (0x361C-0x3632) — HYPOTHESIS: the demo-
+sounds DSW gate (0xFFEC1B is the DSW1 image the boot stores at 0x4DA).
+
+For the sound thread: the Z80 program epr-12390 shares AB's reset and
+IRQ stubs byte for byte (0x000-0x00F, 0x038-0x042: `jp $00C2`, `call
+$0089`) but only 2,154 of 32,768 bytes overall, so
+docs/sound/SOUND_DRIVER.md's map applies to the entry points and not
+to the tables; the command set above is what the map must decode.
