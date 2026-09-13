@@ -610,6 +610,9 @@ volatile uint8_t  mdalloc_pin[128];
  * compose, which reads it through the uncached alias). Cell granular:
  * a cat-1 tile's own transparent pixels lose the sprite there. */
 static uint8_t cat1scr[28][40];          /* 0 no hole, 1 whole cell, 2 per pixel */
+#ifdef C1_RTOFF
+static volatile uint8_t c1_rt_off;       /* LOOP29 250 ablation: stays 0 at run time */
+#endif
 static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
 #ifdef C1_CACHED
 /* Build F (LOOP29 249): the slave reads the mask through its CACHE.

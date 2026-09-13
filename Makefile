@@ -1044,6 +1044,9 @@ SHCCFLAGS += -DC1_NOPLOT
 endif
 ifdef C1NOMASK
 SHCCFLAGS += -DC1_NOMASK
+endif#   C1RTOFF=1   the punch code is compiled but never taken at run time
+ifdef C1RTOFF
+SHCCFLAGS += -DC1_RTOFF
 endif
 # `make ... C1MASKTAB=1` = Build D (LOOP29 247, NOTES 34): the scene's
 # class-2 tile opacity masks (tools/bake_cat1mask.py -> sh_src/cat1mask.h,

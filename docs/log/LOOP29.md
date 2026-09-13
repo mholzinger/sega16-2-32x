@@ -6223,3 +6223,27 @@ so the 1:1/zoomed paths are irrelevant to it. Build E's fast path was
 the right idea; its pre-scan read the mask through the uncached alias
 per run, which is the same class of cost it was removing. Build G =
 E's fast path with F's cached reads.
+
+## 250. BUILD G: THE FAST PATH FIRES ON 67% OF RUNS AND SAVES NOTHING; THE PRICE IS NOT THE LOOP THAT RUNS (2026-09-13 08:10)
+
+pcG (E's fast path + F's cached reads, with the census): wall 1.18,
+echo 1.11 -- the line's numbers exactly; compose pass sum 0.388 v/gen
+against the line's 0.389; and the counters say the fast path DOES fire:
+790,990 runs took the tight copy against 387,576 that walked cells
+(67%). Census-free the wall read 1.16 vs 1.18. So two thirds of the
+punched runs now execute byte-for-byte the original copy loop and the
+compose sum does not move, while noplot (punch a compile-time 0) reads
+0.324. The remaining explanation is that the PRESENCE of the punch
+code costs -- compose_sprites is one large RAMCODE function and the
+extra paths change the codegen of the loops that still run (register
+pressure, spills in the run loop) -- not any punch path that executes.
+Cards C-G all changed what executes; none changed that.
+
+**The ablation that separates the two:** `C1RTOFF=1` -- the punch code
+compiled exactly as on the line, gated at run time by a volatile byte
+that is always 0. If its compose sum reads ~0.32, the cost is the code
+running (and something in the walked third is dearer than it looks);
+if it reads ~0.39, the cost is codegen, and the fix is structural (the
+punched draw in its own function or a separate loop).
+
+Build G's card: no gain (wall 1.16-1.18); picture equal to B; closed.
