@@ -1009,6 +1009,18 @@ ifdef STAMPCENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP_CENSUS
 endif
+# `make ... BOOTFLIPRATE=1 STAMP2CENSUS=1` = NOTES 53: stage 2 split -- after
+# cram_flush_pen (VBS 1), after the page merge (VBS 2), after the truth drain
+# (VBS 3), and pages actually copied (DIAG[54]) per vint; same channel.
+ifdef STAMP2CENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP2_CENSUS
+endif
+# `make ... BOOTFLIPRATE=1 STAMP3CENSUS=1` = LOOP29 264: the master FRT's ticks per vint (>>10) on the channel -- is the FRT prescale the same on the FPGA?
+ifdef STAMP3CENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP3_CENSUS
+endif
 # `make ... BOOTFLIPRATE=1 TAILCENSUS=1` = NOTES 49 / LOOP29 260: the 68K's
 # IRQ4 tail split in lines (entry->A, batch A, batch B, pump, blast,
 # blast->post, idle before IRQ4) as means per 64 vints; tag 7 = vints with

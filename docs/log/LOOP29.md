@@ -6985,3 +6985,20 @@ the game's handler's EXIT. What precedes the post on the rig is the
 game's own vint handler at hardware prices. The next capture carries
 the shim body's entry line (V - 224) on tag 6 to read that gap
 directly.
+
+**262d, the shim body's entry line (frJ_tail4, tag 6 = V - 224 at
+fmgate_partb's entry, mean per 64 vints):** ares 4; rig 7 (stock
+demo), 4 and 17 (walk tape). With the corrected tail of ~10 lines the
+68K posts at roughly line 224 + 15..27 on the FPGA -- and the master's
+FRT stamps say the post is seen 2,300-3,200 ticks after its ISR entry,
+which at ares's 46 ticks a line is 50-70 lines. The two accounts
+disagree by ~40 lines. Either the FPGA raises the SH-2's V interrupt
+~35 lines before line 224, or the master's FRT ticks faster on the
+FPGA than the 46 a line the guard assumes: the master programs its
+FRT at phi/32 (12,052 ticks a vint) and the slave's runs at phi/8
+(48,208; s_main.c calibration note); if the FPGA's SH-2 ignores TCR
+and ticks at phi/8, every FRT-priced bound on the master -- the
+1,650-tick edge guard, the 1,748 widening, the drain budgets -- is
+four times tighter in lines on hardware than on ares, and 259a's
+"post seen at 50-70 lines" is 12-17 lines, the 68K's own account. 264
+measures the FRT's ticks per vint on both machines.

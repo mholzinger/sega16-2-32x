@@ -78,8 +78,11 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
-#ifdef STAMP_CENSUS
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS)
 static uint16_t stc_t[4];                 /* NOTES 47 / LOOP29 259: the ISR's four pre-flip stamps */
+#endif
+#ifdef STAMP2_CENSUS
+static uint32_t stc_pages;                /* NOTES 53: DIAG[54] at the last stamp */
 #endif
 #ifdef ECHO_CENSUS
 #define ECHO_NO_TAG(r) (0xF1F0u | (r))    /* NOTES 45: the decline reason rides the echo word */
@@ -7535,6 +7538,9 @@ static int flip_span(void)
     cram_flush_pen();
 #endif
     VBS(1);                             /* after the palette drain */
+#ifdef STAMP2_CENSUS
+    stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 53: after cram_flush_pen */
+#endif
     pg_pending |= MARS_SYS_COMM10 & 0x1FFF;
 #ifdef PG_STICKY
     /* marks enter WATCH: a pointer-load mark can arrive
@@ -7555,6 +7561,9 @@ static int flip_span(void)
     pg_pending |= pg_watch;      /* unstable pages: recapture the
                                   * latest stream state pre-flip */
     VBS(2);                             /* after the page merge */
+#ifdef STAMP2_CENSUS
+    stc_t[1] = (uint16_t)(frt() - visr_t0);                        /* NOTES 53: after the page merge */
+#endif
 #ifdef DRAIN_CUT
     /* LOOP28 107, THE 60 FPS SHAPE. The flip write must land within 35.9
      * lines of ISR entry or the FPGA defers it to the next vblank and the
@@ -7571,6 +7580,11 @@ static int flip_span(void)
     VBS(3);                             /* after the truth drain */
 #ifdef STAMP_CENSUS
     stc_t[1] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: after the truth drain */
+#endif
+#ifdef STAMP2_CENSUS
+    stc_t[2] = (uint16_t)(frt() - visr_t0);                        /* NOTES 53: after the truth drain */
+    stc_t[3] = (uint16_t)((DIAG[54] - stc_pages) << 7);            /* pages copied this vint, x128 so the channel shows the count */
+    stc_pages = DIAG[54];
 #endif
 #ifdef PG_SKIP_PKT
     /* MD-PLANE MAILBOX MIRROR (LOOP29 139). The page-12 restore used to
@@ -7640,8 +7654,10 @@ static int flip_span(void)
      * with this off; expect the FPGA not to tear. */
     if (0) {
 #else
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS)
 #ifdef STAMP_CENSUS
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
+#endif
     {   /* two stamps a vint on COMM6 (the k1 announce register: the 68K
          * writes 0xB101 there before its post and this ISR runs after it;
          * bit 15 clear so no stamp word can read as the announce), 128-tick
@@ -8036,6 +8052,14 @@ void visr_vbi(void)
     uint16_t t0 = frt();
 #ifdef K2_FREE
     visr_t0 = t0;
+#ifdef STAMP3_CENSUS
+    {   /* LOOP29 264: the master's FRT ticks per vint, carried as ticks >> 10
+         * (ares 12,052 -> 11; a phi/8 FRT would read 47) */
+        static uint16_t visr_prev;
+        stc_t[0] = (uint16_t)((uint16_t)(t0 - visr_prev) >> 3);
+        visr_prev = t0;
+    }
+#endif
 #ifdef FLIP_CENSUS
     CEN[18]++;                           /* V-ISR entries = denominator */
 #ifdef NT_PROBE
