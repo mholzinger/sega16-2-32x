@@ -7155,3 +7155,28 @@ cram_set's direct-store branch, not from a flush, so they do not
 price stage 2 either. NOTES 54 and the stage-2 half of NOTES 56 are
 retracted; 266a measures the copy directly (STAMP6CENSUS: flip_span
 entry / before the copy / after the copy / at the guard).
+
+**266a, the text copy priced on both machines (frJ_s6, stamps either
+side of m_main.c:7521's live copy; 128-tick steps from the ISR entry):**
+
+    ares                post 6   preCopy 5   postCopy 9-12   guard 9
+    rig (cleanest launch) post 23  preCopy 24  postCopy 27-30  guard 29-33
+
+Per call the copy is postCopy - preCopy: ares 4 steps (~512 ticks),
+rig 3-6 steps (~384-768 ticks). **The copy costs the same on both
+machines** -- it is 3,712 bytes of uncached FB reads, but they are
+~11 lines there too, and the FPGA does not multiply them. So 266's
+"this is the ~900 ticks" is only half right: the copy is ~500 ticks
+on BOTH, and the machine gap is somewhere else.
+
+Where: the rig's flip_span ENTRY reads 18-23 steps (2,300-2,950
+ticks) against ares's 6 -- but 265 already showed that stamp is the
+LAST flip_span call of the vint, and on a declining vint the body's
+fallback calls it again long after the ISR's own attempt. The three
+deltas inside a call (entry->copy->guard) are call-local and agree
+between machines; only the entry offset differs, and it is measuring
+two different calls. 266b latches the stamps to the FIRST call after
+each ISR entry -- the ISR's own attempt, the one the guard is about.
+Until that reads, nothing is proven about where the FPGA's vint
+actually goes, and the 900-tick stage-2 figure from 263 is retired
+along with its label.

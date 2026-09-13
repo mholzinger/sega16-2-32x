@@ -84,6 +84,13 @@ static uint16_t stc_t[4];
 #ifdef STAMP5_CENSUS
 static uint16_t s5_pick, s5_pick_off; static uint32_t s5_isr;   /* LOOP29 265: the window's pickup */
 #endif
+#ifdef STAMP6_CENSUS
+/* LOOP29 266a: flip_span runs TWICE on a declining vint -- the ISR's own
+ * call and the body's fallback -- and the carrier sends at the guard, so
+ * the last call wins and the channel showed the body's. Latch the FIRST
+ * call after each ISR entry; that is the one the guard is about. */
+static uint8_t s6_first;
+#endif
 #ifdef STAMP2_CENSUS
 static uint32_t stc_pages;                /* NOTES 53: DIAG[54] at the last stamp */
 #endif
@@ -7405,8 +7412,11 @@ static int flip_span(void)
      * harvested is kept, not re-zeroed. */
     if (!fbx_landed) fbx_lift();
 #endif
-#if defined(STAMP_CENSUS) || defined(STAMP6_CENSUS)
+#ifdef STAMP_CENSUS
     stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: post seen (flip_span entry) */
+#endif
+#ifdef STAMP6_CENSUS
+    if (s6_first) stc_t[0] = (uint16_t)(frt() - visr_t0);          /* 266a: the ISR's own call */
 #endif
 #ifdef FLIPRATE_MEANSUM
     if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
@@ -7519,7 +7529,7 @@ static int flip_span(void)
         if (r60_txt_alt)
 #endif
 #ifdef STAMP6_CENSUS
-        stc_t[1] = (uint16_t)(frt() - visr_t0);       /* LOOP29 266: before the text copy (the R60 branch is the live one) */
+        if (s6_first) stc_t[1] = (uint16_t)(frt() - visr_t0);   /* 266: before the text copy (the live R60 branch) */
 #endif
         for (int i = 0; i < 928; i += 4) {
 #elif defined(K2_FREE)
@@ -7570,7 +7580,7 @@ static int flip_span(void)
     cram_flush_pen();
 #endif
 #ifdef STAMP6_CENSUS
-    stc_t[2] = (uint16_t)(frt() - visr_t0);           /* LOOP29 266: after the text copy */
+    if (s6_first) stc_t[2] = (uint16_t)(frt() - visr_t0);       /* 266: after the text copy */
 #endif
     VBS(1);                             /* after the palette drain */
 #ifdef STAMP2_CENSUS
@@ -7690,8 +7700,11 @@ static int flip_span(void)
     if (0) {
 #else
 #if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS) || defined(STAMP6_CENSUS)
-#if defined(STAMP_CENSUS) || defined(STAMP6_CENSUS)
+#ifdef STAMP_CENSUS
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
+#endif
+#ifdef STAMP6_CENSUS
+    if (s6_first) { stc_t[3] = (uint16_t)(frt() - visr_t0); s6_first = 0; }   /* 266a: this vint is spoken for */
 #endif
     {   /* two stamps a vint on COMM6 (the k1 announce register: the 68K
          * writes 0xB101 there before its post and this ISR runs after it;
@@ -8089,6 +8102,9 @@ void visr_vbi(void)
     uint16_t t0 = frt();
 #ifdef K2_FREE
     visr_t0 = t0;
+#ifdef STAMP6_CENSUS
+    s6_first = 1;                        /* 266a: arm for this vint's first flip_span */
+#endif
 #ifdef STAMP4_CENSUS
     {   /* LOOP29 264c: per vint, x128 so the channel shows counts: stale-window
          * bails (DIAG[59]), edge declines (DIAG[44]), holds (DIAG[29]), ISR entries (DIAG[49]) */
