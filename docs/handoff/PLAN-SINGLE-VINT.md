@@ -697,3 +697,43 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
   Then    fold 5 on the packet side (NOTES 25/26/27), then RELBANK on
           the rig -- the 68000 side, which pays once the wall is under
           1.00.
+
+---------------------------------------------------------------------
+## CARD H (builder, 2026-09-13 01:30): the STAMP -- rom/night/bldH.32x
+
+    rom      rom/night/bldH.32x   md5 ca80af61   ON THE RIG (three launches)
+    base     bldB (493d4984), THE LINE
+    change   C1STAMP=1: the slave's sprite loops compile unpunched
+             (.ramtext 0x6F38 -> 0x6394); after the pp<3 pass each band
+             writes MD-through (0) over the hole cells under the drawn
+             records' rectangles (class 1 whole, class 2 by the
+             cat1mask.h opacity bit); the pp=3 records draw after,
+             only when the list has one. The master's name-table pass
+             also emits each cell row's hole cells as bits (cat1hb).
+             Implies C1MASKTAB. Six cuts to get here: LOOP29 252.
+    flags    the line's + C1STAMP=1
+
+    ares wall (nat_score, 4000 frames)    bldH 1.14   bldB (below)
+    slave compose sum (v/gen)             bldH 0.368  bldB 0.389  punch off 0.324
+    single-vint share                     bldH (below)
+    check mode                            not touched by this card (fold 2 unchanged)
+    picture, aligned on the attract demo  bldH vs bldB f1000/f1200: 527/533 px,
+             all in the grass rows 20-22: dark specks bldB draws and the
+             ARCADE does not (mame altbeast attract ref_000704, same scroll
+             and zombies, captured headless). bldH's grass = the arcade's.
+             A frame-N diff of two roms is NOT a gate (32k px at play
+             f1000: the roms run at different speeds); the aligned demo is.
+    rig frame rate (frH, presented/64 vints)   16 19 18 15 21   (bldB 21 19 7 15 18)
+    rig black shares, three launches (18/24/30/50/56 s)
+             level shots 0.00-0.02 on all three; the 30 s slot read the
+             title (0.29) twice and a full-black frame once (launch 2,
+             the demo->title fade; the level shots of that launch 0.00).
+    Mike's eye   owed: legs through the grass tufts, zombies behind the
+             ground, and the grass line clean of specks -- "does it look
+             like bldB", minus bldB's specks.
+
+    Expected by NOTES 36: 1.06-1.08. Measured: 1.14 (from 1.18). The
+    stamp's own price is 0.044 v/gen on the compose sum (0.368 vs 0.324
+    with the punch off): 0.015 FB writes, the rest the per-band cover
+    and class reads. What the five earlier cuts cost, and why, is in
+    LOOP29 252 (the FB write floor, the SH-2's write-through stores).
