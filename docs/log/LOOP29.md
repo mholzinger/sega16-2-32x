@@ -6187,3 +6187,21 @@ natural one and it was wrong; the measurement is what settles it.
 cells' classes (one byte per cell, 2-9 loads a run); if all are class
 0 it takes the ORIGINAL tight copy. Cat-1 is 11% of level 1's cells,
 so most runs never see the cell walk. Card in PLAN when D's closes.
+
+## 249. BUILD E READS 1.17; THE PRICE IS THE UNCACHED MASK READS (2026-09-13 07:10)
+
+bldE (the tight copy for all-class-0 runs): wall 1.17 against the
+line's 1.18 -- nothing; picture equal to B including the late-coin
+game. (Its census rom would not fit .ramtext even with the baked scan
+in ROM; the wall is nat_score's own, census-free, and it equals the
+census reading on every rom so far.) So neither the art rows (D) nor
+the loop's shape (E) is the 0.13, and what both left untouched is the
+one thing every punched pixel does: read the cell mask through the
+UNCACHED SDRAM alias -- a bus round trip per cell in the baked path
+and per PIXEL in the 1:1 and zoomed paths (c1_hit's m[] and cd[]).
+noplot (1.03) removed those reads along with everything else.
+
+**Build F (`C1CACHED=1`):** the slave reads cat1scr/cat1code through
+its cache. Fresh enough by construction: the slave purges its cache at
+every window start, the master's mask writes are write-through, and the
+mask is one generation behind the compose by design. One flag on bldB.

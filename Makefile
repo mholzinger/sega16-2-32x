@@ -1059,6 +1059,12 @@ endif
 ifdef C1FAST
 SHCCFLAGS += -DC1_FAST
 endif
+# `make ... C1CACHED=1` = Build F (LOOP29 249): the slave reads the punch's
+# cell mask through its cache instead of the uncached SDRAM alias (a
+# round trip per cell, per pixel on the 1:1/zoomed paths). Needs C1PUNCH.
+ifdef C1CACHED
+SHCCFLAGS += -DC1_CACHED
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
