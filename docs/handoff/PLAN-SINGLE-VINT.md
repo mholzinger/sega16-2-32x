@@ -678,3 +678,22 @@ walk holds it. Note 35 hands the decompile thread the numbers and two
 designs (per-row hole skip; repaint-over instead of punch); the
 builder's recommendation is to bank the punch at its price and cut
 fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
+
+---------------------------------------------------------------------
+## AFTER THE PUNCH-PRICE SERIES (2026-09-13): NEXT CARDS, PICKED BY THE DECOMPILE THREAD (NOTES 36)
+
+    line    bldB   wall 1.18   40% single-vint
+    punch off (ablation, 251)     1.03      <- the 0.12 is half of what is left that anyone knows how to cut
+
+  Card H  the STAMP (NOTES 36): compose unpunched with the original
+          loops; stamp transparent (0) over the hole cells from the
+          master's class map and Build D's SDRAM masks; draw pp=3
+          sprites after. Expected 1.18 -> ~1.06-1.08. Gate: pixel diff
+          vs bldB near zero (the pp=3-over-pp=2-in-a-hole case only),
+          Mike's eye, rig frame rate.
+  Card I  the scan memo (NOTES 33.2): reuse each plane's scan while its
+          (pq, tx, row range) is unchanged. Expected ~0.08. Gate: check
+          mode 0/0, wall.
+  Then    fold 5 on the packet side (NOTES 25/26/27), then RELBANK on
+          the rig -- the 68000 side, which pays once the wall is under
+          1.00.

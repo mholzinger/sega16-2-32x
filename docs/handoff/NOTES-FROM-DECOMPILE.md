@@ -2035,3 +2035,71 @@ function given a ROM placement is still inlined into its RAMCODE
 caller by LTO; it has to be `noinline` to leave .ramtext. The C/D
 card text that said bm_scan_baked was fetched from ROM described the
 intent; the binary did not do it until 728c5ff.
+
+---------------------------------------------------------------------
+## 36. 2026-09-13 (decompile -> builder). The pick: the STAMP -- compose unpunched, stamp through-pixels on the hole cells, draw pp=3 sprites after. Then the scan memo. Then fold 5.
+
+**Why not bank it.** The line is 1.18 and the threshold is 1.00, and
+nothing is paid until the wall is under it (168). After the punch's
+0.12 the known remaining cuts are the scan's cart reads (0.095, note
+33's memo) and nothing else the censuses have found; 1.18 - 0.12 -
+0.08 is the threshold. Fold 5 and RELBANK are the 68000 side and pay
+only once the wall has crossed. So the 0.12 is not "a fifth of the
+gap", it is half of what is left that anyone knows how to cut.
+
+**Why not option 1.** Build E was the per-run form of the row skip and
+bought nothing; the holes are in the ground band and so are the
+sprites' feet. A per-row byte saves the class read on rows that never
+cost anything.
+
+**Option 2, in the form that has no palette question.** The punch
+exists to make a sprite pixel TRANSPARENT where a foreground cat-1
+pixel is opaque, so the MD's plane A shows (175: cram[0] = 0x8000,
+an unwritten pixel shows the MD). The repaint does not need the tile's
+colours at all -- it needs to write that transparent value where the
+cat-1 pixel is opaque, over whatever the sprites left. So:
+
+    1. compose every sprite with the ORIGINAL tight loops, no class
+       test anywhere (the RAM-code slot gets vi95's bytes back);
+    2. for each hole cell on screen (the master's cat1scr, ~270 in
+       level 1's strip: class 1 = fill the cell with 0, class 2 = write
+       0 where the mask bit is set, from Build D's SDRAM mask table,
+       which exists behind C1MASKTAB and was exact);
+    3. then draw the pp = 3 sprites, unpunched, on top.
+
+Cost, bounded rather than spread: step 2 is at most ~270 cells x 64
+pixels = 17 KB of FB writes a generation, a quarter of a screen pass,
+~7 lines, ~0.03 v/gen -- and it is the SAME every generation, no
+per-run branch in the sprite loops, which is where G's counters put
+the 0.052. Restricting the stamp to cells under sprites (mark each
+SPRITE's cell rectangle, one store per record, not per run) brings it
+to the ~30-100 cells the sprites actually cover, ~0.01. Expected on
+the wall: 1.18 -> ~1.06-1.08 by 251's own subtraction (punch off =
+1.03, plus the stamp).
+
+**Correctness, and the one case it is not exact.** Measured on the
+arcade, MAME, rounds 0-4 forced by the DIP table, 67 samples of the
+live sprite records each (word 0 low byte = top, high byte = bottom;
+word 4 bits 7-6 = pp):
+
+    round   pp=2 records   pp=3 records
+      0        388             5
+      1        268             8
+      2        336             5
+      3        320            23
+      4        197             1
+
+So pp = 3 sprites exist in every round (entry 59 sampled one scene and
+saw none). Step 3 draws them after the stamp, which is their priority
+against cat-1 (1<<3 > 4). The only deviation from the arcade is a
+pp = 3 sprite overlapping a pp = 2 sprite INSIDE a hole cell where
+list order put the pp = 2 one in front: the arcade shows the tile, the
+stamp shows the pp = 3 sprite. Gate: a pixel diff of the stamp build
+against bldB (the punch is exact) over the play script; the count of
+differing pixels is that case and nothing else, and it should be near
+zero. Then Mike's eye: legs through the grass, zombies behind, as
+before.
+
+**Then, before fold 5:** the scan memo (note 33, item 2), ~0.08. If
+both land the line is at the threshold and fold 5 / RELBANK are what
+cross it on the 68000 side.
