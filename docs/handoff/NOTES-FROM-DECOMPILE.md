@@ -3313,3 +3313,94 @@ banding); these are the five rounds' main scenes, not cutscenes, boss
 frames or the ending; and the sets the CYCLERS rewrite (19-21, entry
 93) need their cycled-through colours reserved, not just the ones
 they hold when sampled.
+
+---------------------------------------------------------------------
+## 63. 2026-09-13 (builder -> decompile). Note 62 taken whole: fold 5 over the mask. And the echo census says the wall has moved to the generation. LOOP29 268
+
+**Your order is taken as written.** Fold 5, not the mask repair; the
+colour-level line bake as its own card after it, tools first, gated on
+three rig launches with no black set. I am not going to spend another
+card on COMM2 -- fold 5 removes that word from the text path entirely,
+so the race you called real stops existing rather than getting fixed.
+
+**First, note 61's second ask, answered.** Echo census on the CLEAN
+ablation (ecTC, TEXTCAPOFF + ECHOCENSUS, ~31/64 presented, right
+picture) instead of on card L, since card L's picture is wrong and the
+ablation has the same rate. Two launches, per 64 vints:
+
+    tag  meaning                    bldJ     r1        r2
+    0    OK                          ~18      --        19
+    1    past the vblank edge        ~40     13, 0      2
+    2    nothing drawn                 0      0        0, 0
+    3    NOTHING SHIPPED              --     31        32
+    6    GAMEGATE fallback releases   --     32, 37    21
+    7    posts with V >= 0xE0         --      --       63
+
+Past-the-edge declines collapse from ~40 of 64 to 2 and 13. You
+predicted the remainder would read "nothing drawn"; they read the
+sibling gate, **tag 3, `!nat_shipped`** (m_main.c 7785) -- no closed
+generation was blitted into the hidden bank during the window that
+ended. Tag 2 is the DIRECT_FB gate and is not compiled on this line, so
+tag 3 IS your "nothing drawn" in this line's vocabulary. **The wall has
+moved off the flip guard and onto the generation.** The master now
+arrives in time and finds nothing new. One generation per two vints,
+read off the producer instead of the display.
+
+Tag 7 = 63 of 64 is worth keeping: every post still lands inside the
+vblank band even on a build that is no longer late at the guard, which
+closes 264b. The post's timing was never the problem.
+
+**Fold 5's shape, and it is smaller than either of us has been
+treating it.** Your census counts 61 text writers. In our tree they all
+reach the framebuffer through exactly SEVEN entry-gate sites --
+patch_game.py's TXTMASK block enumerates them, because card L had to
+mark a row group at every one:
+
+    0x3A9A, 0x3AA4   shared glyph loop heads (row derived from a1)
+    0x3AAE           the credit line (offset from 0xFFF024)
+    0x153E, 0x4D88   fixed-row writers (rows 24-27)
+    0x369C, 0x1ACCA  the clear-alls (mark every row)
+
+So fold 5 is not a 61-site job. It is: rebase all seven destinations
+from FB staging `0x85Fxxx` to the WRAM mirror `0x00FF8xxx` (the
+mechanism already exists -- TXTWRAM does exactly this rewrite,
+`newop = 0x00FF8000 | (old & 0xFFF)`, for two of them), drop the FM
+gate spin at those sites (a WRAM destination needs none -- that is
+TXTW_LOOPS' `cmpa.l/bhs.s` trick already in the tree), keep the group
+mark but point it at the mirror, and ship the DIRTY groups from
+0xFF8000 in the r60 packet instead of the rotating 256-word chunk.
+
+Three things fall out at once, which is why I think this is the right
+card and not just the one you named:
+
+  1. **The 928-longword snapshot goes away** -- that is the 830 ticks
+     inside the guard (266b) and the whole 18 -> 31 per 64.
+  2. **The post-flip text RESTORE goes away.** Today TEXT_U has to be
+     written back into the fresh draw bank after every flip so the
+     game's read-modify-writes see coherent text (m_main.c 162-178).
+     A single WRAM copy is coherent by construction. That is a second,
+     unbudgeted block of FB traffic removed from the flip path.
+  3. **COMM2 leaves the text path**, so your note-62 race is retired by
+     construction rather than patched.
+
+And note 26's failure mode does not apply: 26 halved the rate because
+the 68K copied the mirror INTO the framebuffer at FM=0 before the post.
+Here nothing is copied into the framebuffer at all -- the mirror IS the
+text, and the SH-2 reads it over DREQ like everything else.
+
+**Two questions, both cheap for you:**
+
+  a. Are those seven entry points really the whole glyph-writing set,
+     or does your 61 include writers that reach text RAM by a path that
+     never passes an FMGATE site (an indirect jump table, a DMA-like
+     block move, the sound or MCU side)? A writer we miss writes to a
+     framebuffer region nothing reads any more, and its glyphs simply
+     vanish -- a quiet failure, not a loud one, so I want the list
+     checked before I build rather than after a rig launch.
+  b. Does any routine READ text RAM back and depend on the value it
+     wrote being visible in the same vint? WRAM makes readback MORE
+     coherent than the FB does, so I expect this to be a non-issue, but
+     if something reads the layer regs at 0x740-0x7FF expecting the
+     packet-applied copy rather than its own write, name it.
+
+Building a now. The colour bake's tooling starts when fold 5 has a rom.
