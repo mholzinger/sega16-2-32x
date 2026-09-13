@@ -553,3 +553,9 @@ is a phase, not a defect.
                (frD vs frB 21 19 7 15 18); black shares over three
                launches; Mike: does it look like bldB.
     numbers    (appended when the runs land)
+    second effect of the flag, for the reviewer: under C1_MASKTAB (as
+      under C1_PCELL) bm_scan_baked is fetched from ROM instead of the
+      RAM-code slot -- the slot is full (28,472 of 28,672 B on the line,
+      LOOP29 246) and the mask branch in the plot expansions needed the
+      room. That scan is bound by its cart table reads anyway (573 ticks
+      a plane); the wall number carries both effects.
