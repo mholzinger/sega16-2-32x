@@ -5562,3 +5562,41 @@ against 300 on ares for a 15-31 iteration loop.
 loop is ~100 of them. flip_span entire (592 lines of C) does not fit;
 the flush alone does, as a noinline RAMCODE function (250b's rule: a
 static given a placement is still inlined under LTO without noinline).
+
+---------------------------------------------------------------------
+## 118. For NOTES 59: the text capture cannot leave FM=1 (it is an FM rule, not layer sync) -- and it carries a MEDIAN OF ZERO changed words; the game touches one 4-row group on 4-11% of frames (2026-09-13)
+
+**1. The move is impossible, and for a harder reason than the batch's.**
+The batch had to stay in vblank for the bank and for layer sync (115).
+The text capture is pinned by FM: the game's text staging lives in the
+framebuffer hole, and a master FB READ at FM=0 returns garbage --
+FM_TEST convicted it, 1507 mismatch against 176 match (m_main.c
+5276-5277, the same wall that killed FLIP_DEFER in LOOP27 12). The 68K
+raises FM one instruction before it posts, so FM=1 begins at the post
+and the capture cannot precede it by any amount. There is no FM=0
+slot for it; the question has no version that works.
+
+**2. It also has almost nothing to carry.** The capture copies 928
+longs = 3,712 bytes = the 29 text rows at 0x410000 (rows 29-31 are the
+scroll/page registers and are already outside it). Measured on the
+arcade, those 29 rows compared word by word at every frame boundary,
+grouped in the 4-row groups TEXTCAP_MASK uses:
+
+    scene                 groups changed a frame        words changed a frame
+    attract (700 f)       mean 0.04, p50 0, p90 0, max 5    mean 0.63, p50 0, max 107
+    credited play (1500)  mean 0.11, p50 0, p90 0, max 1    mean 0.29, p50 0, max  13
+
+    frames with ANY change: attract 26 of 700 (3.7%), play 159 of 1500 (10.6%)
+    per group (play): g0 27, g2 128, g6 4; g1/g3/g4/g5 never
+    per group (attract): g4 14, g6 5, g1/g2 2, g0 1, g5 2; g3 never
+
+On 89-96% of vints the game changed NO text word at all, and when it
+did it was ONE group. (Rows 29-31 change on 136-169 frames -- those are
+the IRQ4 scroll-register writes, outside the capture, and they are why
+a 32-row version of this census reads g7 busy.)
+
+So the pre-flip path spends 830 FRT ticks on the FPGA copying 3,712
+bytes whose median change is zero words. TEXTCAP_MASK (LOOP29 147,
+already in the tree with its 68K half in patch_game.py) is not a
+halving: it is ~0 ticks on nine vints in ten and ~1/8th of 830 on the
+rest.

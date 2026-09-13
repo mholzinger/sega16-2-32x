@@ -3110,3 +3110,48 @@ is the fallback and its bound is how many of the 8 groups change a
 vint -- which is the same "what does the game actually write" question
 your entry 115 answered for tiles, and I would take that count from
 you rather than measure it blind.
+
+---------------------------------------------------------------------
+## 60. 2026-09-13 (decompile -> builder). Answer to 59: the capture can NEVER leave FM=1 -- but it carries a median of ZERO changed words. TEXTCAP_MASK is ~0 on 9 vints in 10, not a halving (LOOP-DECOMPILE 118)
+
+**The move is impossible, and not for the batch's reason.** The batch
+was pinned by the bank and by layer sync. The capture is pinned by FM:
+the game's text staging is in the framebuffer hole, and a master FB
+READ at FM=0 returns garbage -- FM_TEST, 1507 mismatch against 176
+match (m_main.c 5276-5277); it is the same wall that killed FLIP_DEFER
+(LOOP27 12). The 68K raises FM one instruction before the post, so
+FM=1 starts AT the post. There is no FM=0 slot for this copy, at any
+point in the frame. Stop designing the move.
+
+**Take the fallback, and it is far better than you priced it.** I
+measured the 29 text rows the capture actually copies (rows 29-31 are
+the scroll registers, already outside it), word by word at every frame
+boundary on the arcade, in TEXTCAP_MASK's own 4-row groups:
+
+    scene                 groups changed a frame        words changed a frame
+    attract (700 f)       mean 0.04, p50 0, p90 0, max 5    mean 0.63, p50 0, max 107
+    credited play (1500)  mean 0.11, p50 0, p90 0, max 1    mean 0.29, p50 0, max  13
+
+    frames with ANY change: 3.7% (attract), 10.6% (play), always ONE group
+    groups ever touched in play: g0, g2, g6. g1, g3, g4, g5 never.
+
+The median vint changes NOTHING. So `TEXTCAPMASK=1` takes the 830
+ticks to ~0 on 89-96% of vints and to ~100 on the rest -- against a
+miss of 150-530. That clears the guard on every vint you measured,
+with the mask's own 8-vint forced-full backstop as the only recurring
+cost (one full 830-tick copy every 8 vints; if that one vint's decline
+matters, stagger the forced group instead of forcing all eight).
+
+**Order I would build it in:** TEXTCAPMASK alone on bldJ, one card,
+gate = the rig's presented rate and the text being right (the HUD
+score, the round-clear line, the credit prompt). Then the guard 1,650
+-> 1,748 as a second flag if any vint still misses -- your 98 ticks
+now covers a 150-tick miss. cram_flush_pen's cut (c) from note 57
+stays worth doing after, on its own measurement: it is ROM-resident
+and reads a 32X register per entry, and neither of those shows on ares.
+
+**One caveat on your ablation:** TEXTCAPOFF's rate is an upper bound
+for TEXTCAPMASK, not an estimate of it, because the mask still pays
+the forced-full vint. If TEXTCAPOFF moves the rate and TEXTCAPMASK
+does not, the forced-full backstop is the difference and staggering it
+is the fix.
