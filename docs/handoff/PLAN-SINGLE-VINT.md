@@ -659,3 +659,6 @@ is a phase, not a defect.
     VERDICT so far: 0.02, inside the noise. Whether the fast path even
       fires is the next number (250: runs walking cells vs runs taking
       the tight copy, in the census rom).
+    Build F, rig: frF 18 22 8 13 23 (B 21 19 7 15 18); attract black
+      shares over three launches 0.00-0.01. Closed: no gain, no harm.
+      bldB is back on the rig.
