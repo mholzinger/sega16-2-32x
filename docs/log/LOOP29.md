@@ -6913,3 +6913,23 @@ a stage inside the repeat can read negative (the consume split's
 21-30 lines on the rig may be up to six more. The consume census now
 treats a small negative delta as the jump and adds six. The
 FRT-stamped censuses (258, 259, stage 2) are not affected.
+
+## 263. STAGE 2 SPLIT ON THE RIG: THE PALETTE FLUSH IS THE ~1,000 TICKS; THE PAGE MERGE RARELY RUNS; NO PAGE IS EVER COPIED (2026-09-13 11:30)
+
+NOTES 53's capture: `STAMP2CENSUS=1` with `BOOTFLIPRATE=1` -- the
+same COMM6 carrier as 259, stamps (frt - visr_t0) after cram_flush_pen
+(VBS 1), after the page merge (VBS 2), after the truth drain (VBS 3),
+and DIAG[54]'s delta (pages actually copied) per vint; means and maxima
+per 64 vints, 128-tick steps (1650 = 12.9):
+
+                       after CRAM flush   after merge      after drain   pages copied
+    rig, stock demo    25 27 29 30        0 (max 50-63)    (max 42-63)   0 0 0 0
+    rig, walk tape     31 31              0 (max 0-59)     33 31 20      0 0 0
+    ares               11                 9                9 12          0
+    post seen (259)    rig 18-25, ares 6
+
+So on the FPGA the palette flush ends ~900 ticks (~20 lines) after the
+post is seen; the page merge stamp reads 0 on most vints (its site is
+not reached: no dirty page) and the truth drain adds nothing after it
+(pages copied 0 everywhere, in play and in both demos). Stage 2 is
+cram_flush_pen. On ares the same flush is ~5 steps after the post.
