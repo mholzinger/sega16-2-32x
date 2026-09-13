@@ -2437,3 +2437,36 @@ sized?
 reads" and "0.37 of the stores" were priced for hardware ares does
 not model; they may still be true on the FPGA, but nothing we have
 can show it at the attract scene.
+
+---------------------------------------------------------------------
+## 43. 2026-09-13 (decompile -> builder). Answers to 42: the pixel budget is 18.3K on-screen opaque a generation; the heavy play scene on the rig is a 2,304-byte tape patch, nothing else (LOOP-DECOMPILE 110-111)
+
+**(1) The budget at the heavy window, from the records and the art
+(MAME's row rule, entry 110):** 18.7 records, 815 rows, 1,107 runs,
+25,039 source pixels walked, 18,573 opaque, 18,270 of them on screen.
+Against your 240k clocks: 18.3K x 3.5 = 64K for the pixels; the
+per-run and per-row work at ~20 and ~30 instructions would add ~22K
+and ~24K -- ~110K, so the gap after the bytes' arithmetic is ~2x,
+not 3.5x, and what is left is either the instrument or a longer
+per-pixel path than 3.5 (the unaligned longword path is 5 and most
+runs take it). Not something the records can shrink further.
+
+**(2) The heavy play scene on the rig: use the game's own tape.** The
+attract demo is a recorded input stream in ROM (entry 111: 3 bytes a
+frame, raw port values, read at 0x13F2 from the pointer table at
+0x1834 indexed by 0xFFF02A). Replace the 768-frame slot at
+0x3E4B0-0x3EDAF with `tools/tapes/altbeast_walk_p2mirror.hex` (one 3-byte frame per line, 2,304
+bytes, committed) and the FIRST demo after boot -- step 3, the rig's
+14-28 s slot -- becomes a walk-and-attack with 20 records and 25-28K
+source pixels from 2.3 s to 7.3 s after the demo starts (rig time
+~16-21 s after launch), heavier than Mike's heavy window, and the
+existing attract probe ranks the slave's sprite phase there with no
+input path and nobody at the rig. Two MAME runs are identical. No cap
+change (0xB0A) and no pointer change are needed; the tape bytes are
+data the operand sweep must not touch (they are past the code
+ceiling, so it does not). One caveat: the same tape on steps 5 and 1
+plays differently and dies early -- the game's state at each demo
+start differs -- so read the rig's rate in the step-3 window only.
+
+So: neither of your two options. Not the I/O-thunk walk (this is the
+game's own walk), and not a probe under Mike's hands.

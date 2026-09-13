@@ -5241,3 +5241,54 @@ Store count per frame if each run is copied as head bytes + longwords
 no-carry claim holds by the format: colour = (word 4 low byte) << 4 |
 pen (MAME colpri), so a run's base is a multiple of 16 and its pens
 are 1-14; adding base * 0x01010101 to four packed pens never carries.
+
+---------------------------------------------------------------------
+## 111. A heavy PLAY scene with no input path: the attract demo is a 3-byte-a-frame tape in ROM, and a recorded walk tape makes the first demo a 20-record scene (2026-09-13)
+
+For NOTES 42 (2). Entry 78 found the recorder; this reads the player.
+
+**The tape (0x1366-0x13F6).** Each frame the game reads 0xC41003 (P1),
+0xC41007 (P2), 0xC41005 into d0/d1/d5. With 0xFFF026 bit 0 set
+(attract) it replaces them from a tape: a0 = long at 0x1834 + ((0xFFF031
+& 0x18) >> 1) -- four pointers, one per pair of steps -- plus
+0xFFF02A * 3; if 0xFFF15E is set the game WRITES d0/d1/d5 there
+instead (the recorder). Bytes are the raw active-low port values
+(MAME segas16b.cpp P1: 0x02 button 1, 0x04 button 2, 0x01 button 3,
+0x10 down, 0x20 up, 0x40 right, 0x80 left; 0xFF = nothing).
+
+    0x1834   0x3F6B0 (steps 0-1)  0x3E4B0 (2-3)  0x3EDB0 (4-5)  0x3E4B0 (6-7)
+    slots    0x3E4B0-0x3EDAF and 0x3EDB0-0x3F6AF are 768 frames each;
+             0x3F6B0 runs to the end of the image (794)
+    0xFFF02A demo frame counter, zeroed at game start (0x6D0), +1 a
+             frame (0x12EC); the demo ends at 698 (0xB08 cmpiw #698)
+             or when a player's 0xFFF028/029 bit 5 sets (0xAEA/0xAF4)
+    0x1ED4   the demo entry sets BOTH players active (0xFFF028 = 0xFFF029 = 1)
+    boot     step order 2 (SEGA card) -> 3 (demo, tape 0x3E4B0) -> 4 (eye)
+             -> 5 (demo) -> 7 -> 0 (table) -> 1 (demo) -> ... so the
+             rig's "first level-1 demo, 14-28 s" is step 3 = 0x3E4B0
+
+**Measured (MAME, the arcade).** Credited play with no input: the
+swarm reaches 21 records / 30-32K source px at frame 980-1280 of the
+round -- past the 698 cap. In the demo an idle player dies at ~664.
+Raising the cap (0xB0A) and playing a recorded walk-and-attack tape
+(Right held, button 1 every 30 frames, recorded from credited play by
+reading the three ports each frame, index = 0xFFF02A + 1) with the P2
+byte MIRRORED from P1 (both demo players walk) gives, in the step-3
+demo:
+
+    demo frame   136   236   336   436   536
+    records       20    20    16    20     9
+    source kpx    28    25    24    27    19
+
+Two runs identical. Against Mike's heavy window (18.7 records, 25K
+source / 18.3K opaque, entry 110) this is the same class or heavier,
+2.3-7.3 s after the demo starts, inside the original cap: NO cap
+change and NO pointer change are needed, only the 2,304 tape bytes at
+0x3E4B0 (tools/tapes/altbeast_walk_p2mirror.hex). The same tape on
+steps 5 and 1 plays differently (the game's state differs per step)
+and ends early; step 3 is the one the rig's slot lands on.
+
+Also for NOTES 42 (1): at the heavy window the slave's budget is
+18,270 ON-SCREEN opaque pixels a generation (sprite x = raw - 184;
+only 20 of 393 records sit left of the screen, none right), 25,039
+source pixels walked, 1,107 runs, 815 rows, 18.7 records.
