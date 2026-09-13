@@ -6804,3 +6804,30 @@ release the thunk's next spin visit restamped and the next IRQ4 read
 a whole frame (saturated). Fixed: the thunk arms the stamp when the
 token is consumed, so the stamp is the pass's ARRIVAL at its wait;
 re-measured next.
+
+**260b, re-armed read (the frame-done stamp = the pass's arrival at its
+wait, armed on the token; mean lines a vint over the vints that had
+the stage; "no-idle" = vints per 64 where IRQ4 came before the pass
+arrived):**
+
+    rig, stock demo    entry->A 2   batch A --    batch B 26 30   pump 2 6 6
+                       blast 0-1    blast->post 0  idle 5 48 63 63   NO-IDLE 28 35 35 36 53 59
+    rig, walk tape     entry->A 2 13   batch A 1 9   batch B 21 25 26 29   pump 2 2 6
+                       blast 3-6    blast->post 0  idle 63 63 63   NO-IDLE 21 31 32
+    ares               entry->A 2   batch A 1   batch B 5 22   pump 26   blast 0
+                       blast->post 0   idle 63   no-idle 32 40
+
+The tail's weight stands: batch B 21-30 lines on the rig (the second
+consume, md_consume(0x85E800)), the pump 2-6, batch A 1-9, the blast
+0-6, and the post follows the blast at once -- ~35-50 lines of FB
+traffic before the post. The slot's size when it exists is large
+(idle saturates at 63 lines on most captures), but it EXISTS on only
+a minority of vints: on the stock demo IRQ4 finds the pass still
+running on 28-59 of 64 vints, on the walk tape 21-32 (ares 32-40).
+The game is released on nearly every vint (the fallbacks, 258) and
+its pass is longer than a vint, so most IRQ4s land mid-pass, where
+note 49's plan falls back to today's order. Moving the traffic into
+the slot buys the vints that have one: roughly a third to two thirds
+of them on the rig, scene-dependent.
+
+    rom/night/frJ_tail.32x (2b746c23), frJ_tail_tape.32x

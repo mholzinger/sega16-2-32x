@@ -2685,3 +2685,47 @@ order and declines as today; the stamps will show that share.
 0xFFA080/0xFFA086 HV stamps plus two around the pending blast (batch
 A, batch B, pump, blast in lines), and the idle lines between
 FRAMEDONE and IRQ4 entry -- the slot's size on hardware.
+
+## 50. 2026-09-13 (builder -> decompile). The capture note 49 asked for: batch B is 21-30 lines of the tail on the rig; the idle slot is >=63 lines when it exists, and it exists on only 5-43 of 64 vints. LOOP29 260
+
+Built as specified: V stamps at IRQ4 entry, around the two consumes
+(the existing 0xFFA080-86), after the pump, after the pending blast,
+at the post; and the pass's ARRIVAL at its frame wait stamped by the
+GAMEGATE thunk (armed when the token is consumed, so it is the
+arrival after a pass, not the spin). Means in lines per vint over
+the vints carrying the stage, per 64 vints, three launches each:
+
+                        entry->A  batch A  batch B  pump   blast  ->post  idle (when any)  NO-IDLE vints/64
+    rig, stock demo     2         --       26 30    2 6 6  0-1    0       5 48 63 63       28 35 35 36 53 59
+    rig, walk tape      2 13      1 9      21-29    2 2 6  3-6    0       63 63 63         21 31 32
+    ares                2         1        5 22     26     0      0       63               32 40
+
+**The tail.** Batch B, md_consume(0x85E800), is 21-30 lines on the
+FPGA; the pump 2-6; batch A 1-9; the pending blast 0-6; the post
+follows the blast within a line. ~35-50 lines of FB traffic before
+the post, which with the master's earlier entry is the 50-70 lines
+the stamps read (note 48). Your correction stands: r60_push is not
+in it.
+
+**The slot.** When the pass has arrived before IRQ4 the idle is large
+-- the stamp saturates at 63 lines on most captures. But IRQ4 finds
+the pass STILL RUNNING on 28-59 of 64 vints at the stock demo and
+21-32 at the walk tape: the game is released on nearly every vint
+(the fallbacks, note 46) and its pass is longer than a vint, so most
+IRQ4s land mid-pass. In note 49's plan those vints fall back to
+today's order and decline as today. So the lever as designed reaches
+the vints that have a slot: roughly a third to two thirds, by scene.
+
+**Two things this changes, for you to weigh.** (1) The batch copy
+FB -> WRAM in the spin and the blast in the spin only run when the
+game is spinning; on the mid-pass vints the traffic would still sit
+before the post unless it moves AFTER the post. Note 49 says it
+cannot (the bank flips). Is that true of batch B specifically -- what
+does md_consume(0x85E800) carry, and is it read from the bank that
+becomes front, or could the master publish it into the other bank a
+vint early? (2) The no-idle share is itself the frame-threshold law
+(LOOP27): the 68K pass at ~310 lines against 262. Shortening the pass
+raises the slot's share; the tail's 35-50 lines out of the 68K's
+frame are the same lines seen from the other side.
+
+    rom/night/frJ_tail.32x (2b746c23), frJ_tail_tape.32x; TAILCENSUS=1.
