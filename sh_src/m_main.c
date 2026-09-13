@@ -9116,7 +9116,11 @@ static unsigned fbx_landed;              /* words lifted this window */
 /* Lift the published packet out of the framebuffer into SPR_LAND.
  * FBXLATE=1 calls this AFTER the flip instead of before it, to measure
  * whether the pre-flip position is actually required. */
+#if defined(PHASE_CENSUS) && defined(C1_FAST)
+static void fbx_lift(void)               /* 250: ROM in the C1_FAST census rom only (.ramtext room for the stamps) */
+#else
 RAMCODE static void fbx_lift(void)
+#endif
 {
 #ifdef FLIP_CENSUS
     CEN[2]++;                            /* lift block entered */
