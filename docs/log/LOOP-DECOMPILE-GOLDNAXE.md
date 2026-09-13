@@ -667,7 +667,10 @@ a8/a6 high). Facts:
 256 KB is a rewrite (56,081 bytes equal to JP's, 61,279 to US2's). So
 entry 8's "duplicate routines in the second half" are the OLDER
 program's upper bank that set 6 still ships and never reaches — which
-is why no trace touched them. Alignment set 6 vs JP: pending (game_align still running).
+is why no trace touched them. Alignment set 6 vs JP (`game_align.py goldnaxe goldnaxejd`): 167,341 of
+170,088 instructions matched, 98.4%, in 530 blocks — the same carry
+altbeast -> altbeastj had (98.8%), so `game_derive.py goldnaxe
+goldnaxejd` should translate the set-6 table almost whole.
 
 **All three run the same low memory map** — tiles 0x100000, text
 0x110000, palette 0x140000, sprites at 0x200000 at boot, I/O 0xC40000:
