@@ -2849,7 +2849,7 @@ void shim_vblank(void) {
 		uint8_t pu = TCV(0xFFA1F8), bl = TCV(0xFFA1FA), po = TCV(0xFFA0A0);
 		tc_sum[0] += (uint8_t)(a0 - ve); tc_sum[1] += (uint8_t)(a1 - a0); tc_sum[2] += (uint8_t)(b1 - b0);
 		tc_sum[3] += (uint8_t)(pu - b1); tc_sum[4] += (uint8_t)(bl - pu); tc_sum[5] += (uint8_t)(po - bl);
-		if (*(volatile uint8_t*)0xFFA1F6) { tc_sum[6] += (uint8_t)(ve - TCV(0xFFA1F4)); *(volatile uint8_t*)0xFFA1F6 = 0; }
+		if (*(volatile uint8_t*)0xFFA1F6) tc_sum[6] += (uint8_t)(ve - TCV(0xFFA1F4));   /* the thunk re-arms on the token */
 		else tc_noidle++;
 #undef TCV
 		if (++tc_vc >= 64) {

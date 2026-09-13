@@ -6784,3 +6784,23 @@ mean lines per vint for entry->A, batch A, batch B, pump, blast,
 blast->post, idle, and tag 7 = vints per 64 with no idle (the pass
 had not reached its frame wait when IRQ4 came). Deltas are V-counter
 bytes, so a stage that crosses the vblank jump reads a few lines off.
+
+**260a, first read (mean lines a vint, 3 launches x 8 shots each):**
+
+    rig, stock demo    entry->A 2 (one 34)   batch A 2-6   batch B 26   pump 6-9
+                       blast 1   blast->post 0   idle 63 (sat)   no-idle vints 0
+    rig, walk tape     entry->A 2            batch A 2     batch B 22-29  pump 2-14
+                       blast 1-5   blast->post 0 (one 20)   idle 63   no-idle 0
+    ares               entry->A 2   batch A 1   batch B 9-22   pump 18   blast 0
+                       blast->post 0   idle 63   no-idle 0
+
+Batch B -- the second consume, md_consume(0x85E800) -- is the tail's
+weight on hardware: 22-29 lines, against batch A's 2-6 and the pump's
+2-14; the pending blast is 1-5 lines and the post follows it at once.
+Summed, the pre-post tail is ~35-50 lines, the stamp census's 50-70
+lines from the master's earlier entry. The idle read is NOT yet the
+slot's size: the frame-done stamp re-armed at IRQ4, so after a
+release the thunk's next spin visit restamped and the next IRQ4 read
+a whole frame (saturated). Fixed: the thunk arms the stamp when the
+token is consumed, so the stamp is the pass's ARRIVAL at its wait;
+re-measured next.

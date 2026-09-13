@@ -1400,11 +1400,23 @@ if FMGATE:
             # NOTES 49 / LOOP29 260: stamp V on the thunk's first visit after
             # a release (the game reached its frame-wait loop = FRAMEDONE);
             # the shim's IRQ4 clears the flag after reading the stamp.
-            fmgate_words += [0x4A38, 0xA1F6,              # tst.b  (0xFFA1F6).w   already stamped?
+            fmgate_words += [0x4A38, 0xA1F6,              # tst.b  (0xFFA1F6).w   stamped since the last release?
                              0x660C,                      # bne.s  +12
-                             0x31F9, 0x00C0, 0x0008, 0xA1F4,   # move.w (0xC00008).l,(0xFFA1F4).w
+                             0x31F9, 0x00C0, 0x0008, 0xA1F4,   # move.w (0xC00008).l,(0xFFA1F4).w  (the pass ARRIVED here)
                              0x50F8, 0xA1F6]              # st.b   (0xFFA1F6).w
-        fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
+            # the flag clears when the token is consumed (below), so the
+            # next stamp is the arrival after the NEXT pass, not the spin
+            fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
+                             0x6710,              # beq.s  nogo (+16)
+                             0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?
+                             0x660A,              # bne.s  nogo (+10)
+                             0x4238, 0xA0F5,      # clr.b  (0xFFA0F5).w   consume, Z=1
+                             0x4238, 0xA1F6,      # clr.b  (0xFFA1F6).w   arm the next arrival stamp
+                             0x4E75,              # rts
+                             0x7001,              # nogo: moveq #1,d0
+                             0x4E75]              # rts
+        else:
+            fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
                          0x670C,              # beq.s  nogo
                          0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?
                          0x6606,              # bne.s  nogo           (still mid-frame: hold)
