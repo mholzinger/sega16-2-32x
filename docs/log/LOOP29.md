@@ -6139,3 +6139,24 @@ per-cell call bought nothing. bldB stays the line and is back on the
 rig. Next measurement, not a guess: time the baked-run punched loop
 against the plain run copy (a slave-side stamp pair), and the master's
 mask writes in the name-table pass, before another card is cut.
+
+## 247. THE STAMP PAIR BY SUBTRACTION: THE SLAVE'S PUNCHED LOOP HOLDS THE PRICE; BUILD D IS THE MASK TABLE (2026-09-13 05:30)
+
+Mike: run the stamp pair first, then note 34. Done as an ablation in
+the phase census (no new stamps in a full .ramtext): C1NOPLOT (the
+slave draws every sprite unpunched, the master still writes the mask)
+and C1NOMASK (the master writes no mask; the loops see class 0).
+
+    pcB (the line + census)     wall 1.18   echo 1.11   mtask 0.79
+    pcB_noplot                  wall 1.03   echo 0.96   mtask 0.74
+    pcB_nomask / nopunch        (below)
+
+The slave's punched plot holds 0.15 of wall; the master's mask writes
+cost nothing measurable. Note 34's reading from the code -- the
+class-2 art rows read from the cart inside the punched loop -- is the
+prediction this matches. Build D therefore: `C1MASKTAB=1`, the scene's
+1-bit opacity masks (tools/bake_cat1mask.py, 81-192 tiles a scene,
+<= 1.5 KB) copied to SDRAM at mds_install, a mask index per class-2
+cell from the name-table pass (binary search of the raw code), and one
+SDRAM byte per cell row in the punched loop instead of eight cart
+bytes. Nothing added to .ramtext (the loop shrinks). Card in PLAN.
