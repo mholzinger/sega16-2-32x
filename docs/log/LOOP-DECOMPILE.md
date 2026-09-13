@@ -5470,3 +5470,40 @@ must land in the same vblank as the 32X flip, or the tile planes move
 one frame before the sprite layer -- a one-frame skew between ground
 and feet, exactly the class of seam Mike's eye rejects. So the DMA
 stays in the flip's vblank; the batch's SIZE is the lever.
+
+---------------------------------------------------------------------
+## 116. For NOTES 52: the cell chunk's 56-72 words on a static map are the protocol's own weight (the loss-backstop row, headers, edge pairs), and the truth drain has nothing of the game's to drain in play (2026-09-13)
+
+**The chunk, from the emitter (m_main.c ~14840-14960, NT_WRAP):** each
+window visits 7 rows of one plane (md_phase: 8 phases cover 28 rows x
+2 planes), mirror-diffs each row against md_dbg_nt and ships only
+changed cells as spans -- and, every window, forces ONE rotating row
+back to full-ship as a LOSS BACKSTOP ("~+3 lines/window": 40 cells, one
+40-word span). Header 8 + 7 row headers x 2 + the backstop row 40 +
+EDGE42 pairs (2 words a row when sent) = 56-72 words. That is the
+measured chunk exactly (NOTES 52: 56-72 words, 177 of 200 vints). The
+map itself changes nothing on those vints: entry 115 read p90 = 0 new
+cells a frame on the arcade, and entry 99 found no in-play tile-RAM
+writer (the level's pages are unpacked once per scene). So on the rig
+the 21-30 lines of batch B are: one 40-word FB-sourced DMA and its
+six-register setup, ~30 header/edge words read by the 68K through
+the window, and the row walk -- none of it for the game.
+
+**The drain, from the ISR (7538-7556):** pg_pending |= COMM10 & 0x1FFF,
+where COMM10's low 13 bits are the DIRTY-PAGE mask the tile-RAM write
+thunks build at 0xFFB9FE (patch_game.py ~1226; BUSES.md's COMM10 line
+said "palette-dirty" and is corrected). In play that mask is zero --
+no writer -- so cap_drain should copy no page; what remains in stage
+2 is cram_flush_pen (VBS(1)), the page merge (VBS(2)) and PG_STICKY's
+watch (pages stay pending 12 cycles after any mark). Which of those is
+the rig's ~1,000 ticks a vint is one capture away (the VBS stamps
+exist).
+
+**Arithmetic for the guard (1,650 ticks = ~36 lines) on a mid-pass
+vint, where note 49's move cannot help:** post = the 68K tail after
+IRQ4 entry: batch A 1-9 + batch B + pump 2-6 + blast 0-6; then stage 2.
+With batch B at 21-30 and stage 2 at 22 lines the sum is ~50-70 and
+every such vint declines. With the chunk reduced to its map demand
+(a header, no backstop row, no empty rows) batch B is ~2-4 lines and
+the post lands at ~8-20 lines; stage 2 must then be under ~16 lines
+for the flip to make the guard. Both cuts are needed; neither alone.

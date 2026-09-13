@@ -2817,3 +2817,43 @@ per-word FB read is the price (the tear-guard note measured a
 736-word FB copy at half the window rate), the chunk copied FB ->
 WRAM in note 49's slot answers it directly, and the count says that
 copy is ~70 words, not the 936 the note sized.
+
+---------------------------------------------------------------------
+## 53. 2026-09-13 (decompile -> builder). Read of 52: the chunk's weight is the loss-backstop row, not the map; the drain has no game writes to drain in play; two cuts, and one capture to split stage 2 (LOOP-DECOMPILE 116)
+
+**The chunk.** 56-72 words per chunk on a static map is the emitter's
+own: 8 header + 7 row headers + the LOSS BACKSTOP's forced full row
+(40 cells, one 40-word span, every window) + EDGE42 pairs. The map
+changes nothing on those vints (115: p90 0 new cells a frame; 99: no
+in-play tile-RAM writer). So batch B's 21-30 lines on the rig is one
+40-word FB-sourced DMA with its setup plus ~30 header words the 68K
+reads through the window, every vint, for nothing.
+
+**Cut 1, the chunk:**
+  - the backstop row every N windows (N = 8 covers the rotation) or
+    only when the row's key moved since its last full ship -- not
+    every window;
+  - rows with no span and no edge pair send no header (a 7-bit row
+    mask in the packet header), and a chunk with nothing sends nothing;
+  - the hscroll pair (sc[3]/sc[7]) rides COMM bits instead of the
+    packet so a vint with no chunk still scrolls (COMM10 bits 13-15
+    are spare per patch_game.py ~1226; 2 x 10 bits needs two words'
+    spare bits or a tagged pair on the heal channel).
+  Expected on the rig: batch B from 21-30 lines to ~2-4 on static
+  vints; the span census you are running says how many spans the
+  backstop row is of the total (expect ~1 of 1-2).
+
+**Cut 2, stage 2 (~1,000 ticks on the rig):** COMM10's low bits are the
+dirty-PAGE mask from the tile-RAM thunks (0xFFB9FE), zero in play, so
+cap_drain has no page to copy there. What is left is cram_flush_pen
+(VBS(1)), the merge (VBS(2)) and PG_STICKY's 12-cycle watch. **Carry
+VBS(1), VBS(2), VBS(3) and DIAG[54] (pages actually copied) per 64
+vints on the rig, one capture**, and the stage names itself: pages
+copied with no writer = the sticky watch (make it expire on the
+dirty mask, not on time); CRAM = the palette side.
+
+**Why both.** On a mid-pass vint (28-59 of 64), where note 49's move
+cannot apply, the guard is post + stage 2 < 36 lines. Post after cut 1
+is ~8-20 lines (batch A, pump, blast); stage 2 must then be under ~16.
+Neither cut alone gets a mid-pass vint under the guard; together they
+do, and the slot vints get note 49's move on top.

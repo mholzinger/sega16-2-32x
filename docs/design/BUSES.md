@@ -65,9 +65,11 @@ read 68000 work RAM. Everything the game writes has to be copied by the
     COMM6    slave acks (0xB101)
     COMM8    the heal channel: 0xBAxx scene switch, 0xBBxx flip counts,
              BAD1 torn-packet echoes, the glow-mask grant
-    COMM10   the 16-region palette-dirty word | round<<13 (masked to
-             0x1FFF since 222/226) -- THREE writers, one reader at an
-             edge; the race in LOOP29 227
+    COMM10   the 13-bit DIRTY-PAGE mask (0xFFB9FE, set by the tile-RAM
+             write thunks; the master ORs it into pg_pending) | round<<13
+             (masked to 0x1FFF since 222/226) -- THREE writers, one reader
+             at an edge; the race in LOOP29 227. (Corrected 2026-09-13:
+             an earlier line here called it the palette-dirty word.)
     COMM12   0xD000 | the late-V stamp
     COMM14   boot handshake (B007/B008), then the vblank count
     Master<->slave signalling moved OFF COMM into SDRAM mailboxes (SYNC)
