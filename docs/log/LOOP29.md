@@ -7119,3 +7119,39 @@ entry 0 of 64 -- the same as ares (span 4, max 6, straddle 0). The
 master's per-vint window finishes inside the vint on hardware; it is
 not what the stale bail (rare, 264c/265) or the decline (every vint,
 265) is about. The pre-flip path's own length past the post is.
+
+## 266. RETRACTION: STAGE 2 IS NOT THE PALETTE FLUSH -- cram_flush_pen IS NOT COMPILED ON THIS LINE (2026-09-13 15:30)
+
+Cutting NOTES 57's cut (c) exposed two errors of mine, one in the code
+and one in the instrument.
+
+**1. PAL_PEN is not a shipping flag.** `.build_flags` carries PEN_HOLD,
+PEN_REPAINT and PEN_MATCH -- not PAL_PEN -- so `cram_flush_pen` and its
+per-entry PEN read are `#ifdef`-ed out of every build in this arc. The
+function has no symbol in rom/s16.elf. Note 57's cut (c) is a no-op on
+this line (the flag CRAMFLUSHRAM=1 is in the tree and correct for any
+build that does define PALPEN; both its halves stand for that case,
+and the PEN re-test is DEAD there rather than merely redundant: when
+it read low the enclosing `while (d)` re-entered and wrote the entry
+anyway, and cram_dirt[w] was cleared regardless, so it never skipped,
+reordered or deferred an entry -- it only cost a blocking register
+read).
+
+**2. The STAMP2 stamp was mislabelled.** LOOP29 263 placed
+`stc_t[0]` after `VBS(1)` and called it "after cram_flush_pen". The
+call site sits ~30 lines BELOW VBS(1). What that stamp actually
+measured is everything between flip_span's entry and VBS(1) -- and
+what fills that span, under FB_TEXT_READ + TEXTCAP_EARLY +
+TEXTCAP_FULL + R60, is the TEXT CAPTURE: a 928-longword (3,712-byte)
+copy from the game's text RAM in the FRAMEBUFFER (FB_TEXT
+0x2401F000, uncached) into SDRAM (TEXT_U 0x26026000, uncached), every
+ISR, between the post and the FBCTL write -- inside the guard's
+window. Uncached FB reads block; SDRAM writes post. Fold 5's own
+note (25/26) already said this copy must ride the FM=0 slot and that
+TXTWRAM as written halved the rig's frame rate; it is the same copy.
+
+263a's DIAG[19] counts stand as CRAM writes but they come from
+cram_set's direct-store branch, not from a flush, so they do not
+price stage 2 either. NOTES 54 and the stage-2 half of NOTES 56 are
+retracted; 266a measures the copy directly (STAMP6CENSUS: flip_span
+entry / before the copy / after the copy / at the guard).

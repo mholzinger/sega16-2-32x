@@ -1027,6 +1027,21 @@ MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP4_CENSUS
 endif
 # `make ... BOOTFLIPRATE=1 STAMP5CENSUS=1` = LOOP29 265: the master window's span (pickup->ack), its pickup offset and ack offset from the ISR entry (ticks>>10; a vint = 11.8), and vints per 64 whose window straddled an ISR entry.
+# `make ... CRAMFLUSHRAM=1` = Card K (NOTES 57, LOOP29 266): cram_flush_pen
+# gets RAMCODE + noinline (it inlines into flip_span, which lives in the CART
+# window) and its dead per-entry PEN register read is removed. CRAM contents
+# are unchanged by construction; the saving is fetch stalls and blocking reads
+# on the FPGA, which ares cannot price.
+ifdef CRAMFLUSHRAM
+SHCCFLAGS += -DCRAM_FLUSH_RAM
+endif
+# `make ... BOOTFLIPRATE=1 STAMP6CENSUS=1` = LOOP29 266: the flip path's four
+# FRT stamps -- flip_span entry (the post), before the TEXTCAP copy, after it,
+# at the guard. 128-tick steps; 1650 = 12.9.
+ifdef STAMP6CENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP6_CENSUS
+endif
 ifdef STAMP5CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP5_CENSUS

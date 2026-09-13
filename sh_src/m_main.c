@@ -78,7 +78,7 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS)
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS) || defined(STAMP6_CENSUS)
 static uint16_t stc_t[4];
 #endif
 #ifdef STAMP5_CENSUS
@@ -3864,7 +3864,19 @@ __attribute__((always_inline))
  * when the budget runs out stays dirty and goes in the next window. The
  * palette can lag a frame; the pipeline must never stall. */
 static uint32_t cram_dirt[8];
+/* Card K (NOTES 57, LOOP29 266): RAMCODE + noinline. Without both, this
+ * inlines into flip_span, which m_main.c declares with no placement --
+ * and the map puts _flip_span at 0x02045df0, the CART window (against
+ * _blit_half 0x060324a8 in SDRAM). On the FPGA a cart fetch under the
+ * master's own traffic is the 4-6x stall md_consume already paid for
+ * (md_main.c ~515); on ares every fetch is one clock, which is why 900
+ * ticks here read as 300 there. 250b: a placement without noinline is
+ * folded back into the RAMCODE caller by LTO and moves nothing. */
+#ifdef CRAM_FLUSH_RAM
+__attribute__((noinline)) RAMCODE static void cram_flush_pen(void)
+#else
 static void cram_flush_pen(void)
+#endif
 {
     volatile uint16_t *cram = (volatile uint16_t *)&MARS_CRAM;
     for (int w = 0; w < 8; w++) {
@@ -3888,7 +3900,21 @@ static void cram_flush_pen(void)
                 int i = w * 32 + b;
                 cram[i] = (uint16_t)(cram_mirror[i] & 0x7FFF);
                 DIAG[19]++;
+            /* Card K: the PEN re-test is DEAD, not merely redundant. When
+             * it read low the do-while exited, the enclosing `while (d)`
+             * saw d != 0 and re-entered, and the next entry was written
+             * anyway; cram_dirt[w] is cleared below whatever happened. So
+             * it never skipped an entry, never reordered one, and never
+             * left one dirty -- it only cost one 32X register READ per
+             * entry, and reads block where writes post. (Both callers are
+             * inside vblank, where VDP.sv:400-406 pins PEN high for the
+             * whole interval, so the bit was constant-true as well.)
+             * Dropping it is exact by construction. */
+#ifdef CRAM_FLUSH_RAM
+            } while (d);
+#else
             } while (d && (MARS_VDP_FBCTL & 0x2000));
+#endif
         }
         cram_dirt[w] = 0;
     }
@@ -7379,8 +7405,8 @@ static int flip_span(void)
      * harvested is kept, not re-zeroed. */
     if (!fbx_landed) fbx_lift();
 #endif
-#ifdef STAMP_CENSUS
-    stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: post seen */
+#if defined(STAMP_CENSUS) || defined(STAMP6_CENSUS)
+    stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: post seen (flip_span entry) */
 #endif
 #ifdef FLIPRATE_MEANSUM
     if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
@@ -7492,6 +7518,9 @@ static int flip_span(void)
 #ifndef TEXTCAP_FULL
         if (r60_txt_alt)
 #endif
+#ifdef STAMP6_CENSUS
+        stc_t[1] = (uint16_t)(frt() - visr_t0);       /* LOOP29 266: before the text copy (the R60 branch is the live one) */
+#endif
         for (int i = 0; i < 928; i += 4) {
 #elif defined(K2_FREE)
         for (int i = 0; i < 928; i += 4) {   /* 0x740 words = 928 longs
@@ -7539,6 +7568,9 @@ static int flip_span(void)
      * to the MD backdrop (entry 22). The palette must not depend on the
      * flip landing. */
     cram_flush_pen();
+#endif
+#ifdef STAMP6_CENSUS
+    stc_t[2] = (uint16_t)(frt() - visr_t0);           /* LOOP29 266: after the text copy */
 #endif
     VBS(1);                             /* after the palette drain */
 #ifdef STAMP2_CENSUS
@@ -7657,8 +7689,8 @@ static int flip_span(void)
      * with this off; expect the FPGA not to tear. */
     if (0) {
 #else
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS)
-#ifdef STAMP_CENSUS
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS) || defined(STAMP6_CENSUS)
+#if defined(STAMP_CENSUS) || defined(STAMP6_CENSUS)
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
 #endif
     {   /* two stamps a vint on COMM6 (the k1 announce register: the 68K
@@ -7671,7 +7703,9 @@ static int flip_span(void)
         if (a > 127) a = 127; if (b > 127) b = 127;
         MARS_SYS_COMM6 = (uint16_t)(((unsigned)stc_pair << 14) | (a << 7) | b);
         stc_pair ^= 1;
+#ifndef STAMP6_CENSUS
         stc_t[1] = stc_t[2] = 0;         /* a path that skips a stage carries 0 */
+#endif
     }
 #endif
     if ((uint16_t)(frt() - visr_t0) > 1650) {
