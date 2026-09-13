@@ -410,3 +410,56 @@ into the 0x110746-0x110CF8 block — identify it first), tile loaders
 math-chip sites (0xAB6E/76, 0xAE3E-78, 0xABC8-0xAC02, plus their READS
 from a trace), the direct latch site (0x3674), and the sprite base
 (none: it is the variable 0xFFECC4).
+
+---------------------------------------------------------------------
+## 8. Rung 5, palette: 53 dirty sites, one queue drain, no runtime cycler
+
+`tools/game_goldnaxe.py` rewritten by hand (the derive output is gone;
+its two surviving keys are carried). New keys the patcher does not have
+yet, because this title needs them: `MEMMAP` (the source ranges of
+entry 2 — patch_game.py's remap() hard-codes AB's), `SPRITE_BASE_VAR`,
+`MCU_SIGNATURE`, `FRAME_FLAG`/`FRAME_SKIP_FLAG`/`MISSED_FRAME_CTR`,
+`MCU_ROM_CHECK`, `PAL_PTR_USE_SITES`, and `None` for every AB idiom
+that has no counterpart here (the patcher must accept None, not only
+"present").
+
+**Palette writers, all 95 literal sites in the listing classified.**
+53 `PAL_DIRTY_SITES` in the first half, each with its footprint read
+from the loop after it (masks are 256-byte regions of the 4 KB palette):
+
+    every frame   0x115A (0x140050, 16 B) 0x1176 (0x140060, 16-32 B)   the 0x2DCC colour table indexed by 0xFFE037/0xFFE0B7
+    every vint    0x30EE (0x140040, 16 B)                                 IRQ4, table 0x66ED0 indexed by 0xFFECC3 & 7
+    at cuts       0x3C64 clear-all (0x000-0x7FF), 0x6412 (0x080-0x31F), 0x5436/0x5448/0x488C/0x60CE/0x3B60/0x7142
+    init blocks   0x5A84.. and 0x6B78.. (12 `move.w #imm` each into pens 0-0x13), 0x9D82.. (6), 0x36360/68/78, 0x365A0/AC, 0x37052, 0x3711C, 0x3725C
+
+Every site's displaced bytes were checked to carry the 0x0014xxxx
+literal as their last long, the shape the patcher asserts. The one
+that did not — 0x5538 `move.l #0x140720,56(a6)`, literal mid-
+instruction — is a pointer stored into an object field and used at
+0x55A0 (`movea.l 56(a2),a1`, four bytes); it gets its own key with the
+mark-at-use rule from LOOP29 166.
+
+**The queue drain is AB's PAL_THUNK_B idiom byte for byte.** IRQ4's
+`bsr 0x3280` drains a (dst, src) queue at 0xFFF002/0xFFF006 with
+`movea.l (a2)+,a1 ; movea.l (a2)+,a0` at 0x328C (225A 205A) and 7 longs
+per entry — 28 bytes, same as AB's 0x2DC8/0x3C5A — so the patcher's
+thunk B (region from a1, marks r and r+1) applies unchanged. The
+pusher seen in play is 0x4060 (0x140800 + (d0<<5) + 2 into the queue:
+the census's 0x800-0x9DC writes). **No runtime-offset cycler exists**
+(0x3B5C and 0x3C82 add d0 to the SOURCE, not the destination), so
+PAL_THUNK_A/APOST are None.
+
+**42 duplicate sites in the second half** (0x53EA2-0x5CC42, a partial
+copy of the low code) are listed separately: no trace has executed any
+PC above 0x3FFFF except banks 01 and 03 (object handlers at 0x18Cxx-
+0x1E7xx and 0x37Dxx). HYPOTHESIS: unreachable; the builder can thunk or
+skip them, remap() rebases their literals either way.
+
+Slot budget: AB's palette thunks end at 0xBCF4 where the FM-gate thunks
+start (fmgate_tab.h) and the shim RAM ends at 0xBFFF; 53 + 1 sites =
+0x360 bytes from 0xBA00 leaves 0x2A0 for FM-gate thunks (AB uses 27
+x 16 = 0x1B0). Fits, without the duplicates.
+
+Also corrected: the census tools' PCs are the instruction AFTER the
+writer (MAME's PC in a write tap has advanced; the 0x2F94 movep reads
+as 0x2F96). The tools now say so; entry 5's PCs read that way.

@@ -6,6 +6,8 @@
 --      (size, base) region pairs. Golden Axe's MCU programs a table that is
 --      NOT the one at MCU ROM 0xFEA, so a byte search gives the wrong map.
 --   2. counts 68K writes per 64 KB page (with writer PCs) over the run.
+--      NOTE: cpu.state PC inside a write tap is the NEXT instruction, so every
+--      PC printed is "writer + one instruction" (measured: 0x2F94 movep -> 0x2F96).
 --      THE TAP MUST BE REINSTALLED EVERY FRAME: update_mapping()
 --      (315_5195.cpp) unmaps 0x000000-0xFFFFFF on every region write,
 --      which silently drops a tap installed once at script start

@@ -4,6 +4,8 @@
 -- PCs, over what address extent. Indirect writers (register-addressed
 -- copies and fills) are counted the same as literal ones — that is the
 -- point; the static census only sees literals.
+-- PCs are the instruction AFTER the writer (MAME reports the advanced PC
+-- inside a write tap; measured: the 0x2F94 movep is reported as 0x2F96).
 -- Regions come from the title's live memory map (tools/s16b_map_probe.lua).
 -- Sprite RAM is classified by the 64 KB page named in the sprite-base
 -- variable at the moment of the write (Golden Axe's MCU moves it).
