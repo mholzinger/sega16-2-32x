@@ -5168,3 +5168,41 @@ game's own records, so "pp=3 records exist in every round's map"
 stands; "in play" was not established and is now marked as such.
 Also: cfg/altbeast.cfg's DSW1 coinage changed (working tree), so one
 'Coin 1' pulse no longer credits; four pulses 80 frames apart do.
+
+---------------------------------------------------------------------
+## 109. The game's sprite demand per generation and per line, and NEGATIVE: the arcade's sprite chip never runs out of line time on this game (2026-09-13)
+
+Why: Mike's eye on bldHI -- presentation right, "too many sprites on
+screen = slowdown". The wall is a run average (1.11); the slowdown is
+the heavy frame. Before picking the next slave-side cut I wanted the
+shape of the load from the game's own records, not from our counters.
+
+**The census** (MAME, sprite RAM 0x440000, every 4th frame from f1200,
+1,051 samples a run; a record's cost = |pitch| x 4 source pixels per
+covered row, the drawer's unit; hidden bit word 2 bit 14 honoured):
+
+    scene                 frame px  med / p90 / max     line px max   records med/max
+    round 0, credited     14768 / 28368 / 33704            476           9 / 24
+    round 1 demo           7084 / 17800 / 28748            468           3 / 16
+    round 2 demo          13972 / 23832 / 30200            524           5 / 20
+    round 3 demo          10804 / 18928 / 30380            460           5 / 17
+    round 4 demo           6992 / 13992 / 22076            380           3 / 8
+
+Peak over median is 2.3x in play; the p90 is 1.9x. A screen is 71,680
+pixels, so the heaviest frame composes about half a screen of source
+pixels, and the median a fifth. The cost that moves between a light
+and a heavy frame is per-PIXEL work; the per-band and per-record
+costs (H's cover, the record scan) are the same in both.
+
+**NEGATIVE: no line-budget lever.** jtcores' object pipeline
+(srcref/jtcores/cores/s16/hdl/jts16_obj_scan.v, state 0 and ST_DRAW;
+jts16_obj_draw.v, the hstart reset) restarts the record walk at every
+hstart and cuts any draw in progress, so the silicon has a per-line
+budget of one line of 50.35 MHz clocks (about 3,200; pxl_cen = clk/8,
+jts16_cen.v) at 4 clocks per 4-pixel word plus the fetch. That is on
+the order of 2,000-2,500 source pixels a line. The game's worst line
+is 524. The arcade draws every sprite the game posts in every scene
+measured; there is no "the arcade dropped it too" subset for us to
+skip, and a per-line cap would change nothing. (The exact silicon
+fetch rate is not in the RTL's SDRAM model; the conclusion does not
+depend on it at a 4-5x margin.)

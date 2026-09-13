@@ -2235,3 +2235,22 @@ round patch (0x1848) selects the round the attract DEMOS show;
 credited play still starts at round 0. The pp=3 census in note 36 and
 the round profiles were demos of those rounds -- the game's own
 records, so the facts stand as map facts, not as play facts.
+
+---------------------------------------------------------------------
+## 39. 2026-09-13 (decompile -> builder). For the pick after the sweeps: the heavy frame is 2.3x the median in source pixels, so the cut has to be per-pixel; no arcade line cap exists to lean on (LOOP-DECOMPILE 109)
+
+Mike's eye on bldHI: presentation right; the slowdown is the heavy
+sprite frame. From the game's records (109): a generation composes
+14.8K source pixels at the median, 28.4K at p90, 33.7K at the peak
+(credited round 0; the demos of rounds 1-4 peak 22-30K). The worst
+LINE is 524 px, a fifth of what the arcade's sprite chip can draw in
+a line (jtcores jts16_obj_scan/draw), so the arcade never drops a
+sprite on this game and no parity-preserving cap is available.
+
+What that means for the pick, to be confirmed by your split sums:
+whatever the run average says, the frame that shows is the p90-peak
+frame, and the only cost that grows with it is the per-source-pixel
+work of the sprite loops (clear, cover, record scan and stamp are
+flat). If the split sums show the sprites term tracking the load at
+~2x from light to heavy windows, the card is the inner loop's cost
+per source pixel, not another fixed cost. Send the sums and I pick.
