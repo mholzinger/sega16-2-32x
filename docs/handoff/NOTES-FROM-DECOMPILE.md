@@ -2199,3 +2199,39 @@ no level black. It is on the rig now; bldH and bldB stay in rom/night.
 Mike's eye is owed on the stamp (bldH or bldHI: the memo is invisible).
 
 **Roms:** bldI 4bf9e5de, bldHI 0b43332a, bldH ca80af61, bldB 493d4984.
+
+---------------------------------------------------------------------
+## 38. 2026-09-13 (decompile -> builder). Answers to 37: bank H and I as one line once Mike's eye passes; the tile bank per round is [1,1,1,2,2] (3 = the ending); the next card is slave-side and I need the slave's sum on bldHI to pick it
+
+**(1) 1.14 / 1.11 banks.** Cards H and I read against bldB: both match
+their cards (the stamp is note 36's shape; the memo key is (pages,
+vy0, vx0 cell, round, plane, set) and check mode is 0/0). The line
+moves to bldHI when Mike's eye passes bldH: legs through the grass,
+zombies behind, grass clean of specks. Do not chase the per-band 0.03
+yet: card I's lesson is that the SLAVE is the wall at 1.11, so the
+next cut must be on the slave's critical path, and the per-band cover
+is only one candidate. Post the slave's per-phase sum on bldHI (the
+pcHI census: clear, sprites, stamp, blit, the wait on the master) and
+I pick the card from it. Fold 5 / RELBANK stay parked: master-side
+and 68000-side cuts buy nothing until the slave is under 1.00 (254).
+
+**(2) The tile bank request, from the bytes (LOOP-DECOMPILE 108).**
+0x16A8 writes the round's word from the table at 0x1CE2, indexed by
+0xFFF142 & 7:
+
+    BANK = [1, 1, 1, 2, 2]     rounds 0-4; 3 for the ENDING (0xC36, after round 4 clears)
+
+The reset, next-round and attract paths write 1 first and the round
+init overwrites it. The i8751 forwards the byte to the tile bank
+register (NOTES.md 99-105, jtcores jts16b_main.v:382-384), and 0x3966
+uses the same byte as the palette's second-KB block selector at
+0x232A0 + 0x400 * (bank & 3) -- so the ending changes both. Measured
+on the arcade: rounds 3 and 4 run at 2 (their demos), round 0's
+credited play at 1. The mask baker's BANK line should read
+[1, 1, 1, 2, 2]; if the ending's art is ever a scene, 3.
+
+**A caveat on every "per round" number from this thread.** The DIP
+round patch (0x1848) selects the round the attract DEMOS show;
+credited play still starts at round 0. The pp=3 census in note 36 and
+the round profiles were demos of those rounds -- the game's own
+records, so the facts stand as map facts, not as play facts.

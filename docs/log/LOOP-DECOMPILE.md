@@ -5124,3 +5124,47 @@ in every scene, so md_round choosing the map is right there too.
 Matches the card. What to look for: the zombies rising behind the
 ground, and the player's legs through the grass tufts -- the two
 opposite cases the per-cell/per-pixel split has to get right at once.
+
+---------------------------------------------------------------------
+## 108. 0xFFF095, the tile bank request: its writers, its values per round, and a provenance catch on "per-round" runs (2026-09-13)
+
+Asked by NOTES 37 (2). All five writers and both consumers, from the
+program (roms/altbeast/prog68k.asm):
+
+    0x16A8  round start: word from the 6-byte table at 0x1CE2, indexed
+            (0xFFF142 & 7) * 6 -> bank.w, script ptr.l
+                round 0  1  0x29E00      round 3  2  0x369C0
+                round 1  1  0x2EF10      round 4  2  0x3B0E0
+                round 2  1  0x324D0      (entries 5+ are not records)
+    0x556   reset path (stack + SR init)                         -> 1
+    0x632   soft restart, the next-round path (0xBD2 -> 0x62A)   -> 1,
+            then 0x16A8 sets the round's own value
+    0x1E6C  attract entry (sets 0xFFF031 = 4, 0xFFF026 = 1)      -> 1
+    0xC36   the ENDING: reached from 0xBC8 (cmpib #4,0xFFF142;
+            bcc 0xC04) at round clear when the round is 4        -> 3
+
+Consumers: the i8751 forwards the byte to the tile bank register
+(NOTES.md 99-105; jtcores jts16b_main.v:382-384, tile_bank[2:0] <=
+cpu_dout[2:0]), and 0x3966 uses (0xFFF095 & 3) << 10 to pick the second
+1 KB of the palette from the blocks at 0x232A0 (entry at line 85 of
+this log already had that half). So the byte is the tile bank AND the
+palette-bank selector; the ending has its own block 3 of both.
+
+Measured on the arcade (MAME, frame-sampled transitions of the byte
+with 0xFFF142 and 0xFFF031): the demos of rounds 3 and 4 run at 2 and
+the attract cards between them at 1; credited play in round 0 runs at
+1 throughout. For the mask baker: BANK = [1, 1, 1, 2, 2] by round, 3
+for the ending only.
+
+**Provenance catch, and it touches earlier entries.** Writing the
+round into 0x1848-0x184F (the "DIP round table") changes which round
+the ATTRACT DEMOS show; credited play still starts at round 0 (three
+runs, 0xFFF026 bit 0 = 0 at f1001 with 0xFFF142 = 0, rounds "forced"
+0/3/4). Every "per round" census this thread made through that patch
+without a coin (round_profile.py's script has no coin field; the pp=3
+census of NOTES 36; entries that say "rounds 0-4 forced by the DIP
+table") measured the demo of that round, not play. The demos are the
+game's own records, so "pp=3 records exist in every round's map"
+stands; "in play" was not established and is now marked as such.
+Also: cfg/altbeast.cfg's DSW1 coinage changed (working tree), so one
+'Coin 1' pulse no longer credits; four pulses 80 frames apart do.
