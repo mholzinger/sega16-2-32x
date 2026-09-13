@@ -565,3 +565,27 @@ is a phase, not a defect.
       zoomed paths) is one out-of-line RAMCODE function under C1_MASKTAB
       instead of 28 inline copies; .ramtext 0x6A10 = 27,152 B (the line
       28,472). Build C measured that call at noise.
+    numbers (pcD, ares play2 4000): wall 1.22 v/gen (B 1.18), single-vint
+      37% (40%), echo 1.14 (1.11), mtask 0.77 (0.79). Picture: title,
+      demos, eye, title2 equal to B; the rest and the rig below.
+    VERDICT so far: no gain. The art reads were not the price; LOOP29
+      248 re-reads the ablation: the punched loop's SHAPE holds 0.13.
+
+## BUILD E CARD (builder, 2026-09-13 06:40) -- the tight copy for class-0 runs
+
+    rom        rom/night/bldE.32x            (md5 below)
+    base       bldB (md5 493d4984, the line)
+    change     ONE flag: C1FAST=1 (-DC1_FAST). A punched sprite run first
+               reads the class byte of each cell it covers (2-9 loads); if
+               every cell is class 0 it takes the ORIGINAL tight copy
+               loop; only runs that touch a class-1/2 cell walk cells.
+               No picture change by construction (class-0 cells were
+               drawn whole either way). No mask table, no other change.
+    why        the ablation re-read (248): noplot 1.03 vs nomask 1.16 --
+               the per-cell walk itself on every punched run is the price;
+               cat-1 is 11% of level 1's cells, so most runs cross none.
+    gates      ares wall (pcE) against pcB 1.18, expected ~1.05; picture
+               equal to bldB incl. the late-coin game; rig frame rate
+               (frE vs frB 21 19 7 15 18); black shares over three
+               launches; Mike: does it look like bldB.
+    numbers    (appended when the runs land)
