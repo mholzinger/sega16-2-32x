@@ -291,9 +291,68 @@ TABLES = {
     # 8 on row 10, the rest scattered; 8 layer-register sites above.
     # Full list: python3 -c "..." over roms/goldnaxe/prog68k.asm, or
     # LOOP-DECOMPILE-GOLDNAXE 10.
+
+    # ------------------------------------------------------------------
+    # RELOCATION (entry 10). The port runs the program from the cart at
+    # 0x9xxxxx, so every absolute code pointer in ROM must be rebased.
+    # Handler dispatch: objects are 64 x 128 B at 0xFFC000 and 16 x 64 B at
+    # 0xFFE100, byte 0 bit 7 = active, handler long at +2 (dispatch loops
+    # 0x3CD0 / 0x3D12). Six `movea.l 2(a6),a0 ; jsr/jmp (a0)` funnels in
+    # reachable code (AB's DISPATCHERS thunk normalizes the pointer at
+    # the funnel). (site, expected 6 bytes, thunk abs.w — builder assigns)
+    'DISPATCHERS': [
+        (0x03CEA, [0x20,0x6E,0x00,0x02,0x4E,0x90], None),  # main object loop, jsr
+        (0x03D20, [0x20,0x6E,0x00,0x02,0x4E,0x90], None),  # 16-object table loop, jsr
+        (0x07938, [0x20,0x6E,0x00,0x02,0x4E,0xD0], None),  # jmp
+        (0x0D44A, [0x20,0x6E,0x00,0x02,0x4E,0xD0], None),  # jmp
+        (0x10D30, [0x20,0x6E,0x00,0x02,0x4E,0xD0], None),  # jmp
+        (0x1450C, [0x20,0x6E,0x00,0x02,0x4E,0xD0], None),  # jmp
+    ],
+    'DISPATCHERS_DUP': [0x56BD6, 0x56C0C, 0x5A7D0],
+    # Handler values seen live in the object tables on the ARCADE
+    # (tools/s16b_handler_harvest.lua, 5400 frames attract + 5400 frames
+    # of stage-1 play: docs/audit/goldnaxe/handlers_play0/1.txt). Stage 1
+    # only — later stages add more; extend with the port's own runtime
+    # harvest (AB's RV=1 method) before shipping.
+    'HARVESTED_HANDLERS': [0x2490, 0x55FA, 0x5658, 0x56D4, 0x5728, 0x5794, 0x580C, 0x78C2, 0x7912, 0x7E6E, 0x7F7A, 0x871E, 0x8750, 0x877E, 0x87A2, 0x888A, 0x9570, 0x9656, 0x9712, 0x9C60, 0x9CA2, 0x9D3A, 0x9E08, 0x9F1C, 0x9F54, 0x9FBA, 0xAEE2, 0xAF40, 0xD3FE, 0x10CE4, 0x144C0, 0x18C98, 0x1C8BE, 0x1DC94, 0x218CC, 0x283BC, 0x2B22E],
+    'HARVEST_BLACKLIST': [0x0400, 0x0404, 0x040C],      # vector-table values that also occur as data
+    'HARVEST_BOUND': 0x40000,      # code in banks 0-3; bank 4 has unreached object code (tas sites), 5 the duplicate, 6-7 data
+    # Jump tables of absolute pointers: `lea pc(tbl),a0 ; movea.l (a0,dN.w),a0`.
+    # 93 tables, counts from tools/s16b_jumptables.py (docs/audit/goldnaxe/
+    # jumptables.txt): rule 'idx' = the consumer's andi/cmpi bound (22,
+    # consumer-verified), 'adjacent' = the pointer run reaches the next
+    # table so the next start bounds it (38, structural — the 51+7 pairs
+    # per object module), 'run' = the run ended on a non-pointer long
+    # (33, a filter: HYPOTHESIS until each consumer's index is read).
+    # 0x2A3C and 0xCCD6 hold DATA pointers (RLE level tables) — rebased
+    # the same way. (start, count, rule)
+    'REBASE_TABLES': [(0x2902, 5, 'run'), (0x2A3C, 5, 'run'), (0x2AAA, 18, 'run'), (0x2CA8, 5, 'run'), (0x7448, 10, 'run'), (0xCCD6, 9, 'run'), (0xDEF6, 52, 'adjacent'), (0xDFC6, 7, 'idx'), (0xEFB0, 51, 'adjacent'), (0xF07C, 7, 'run'), (0xFBF6, 51, 'adjacent'), (0xFCC2, 7, 'run'), (0x107AE, 51, 'adjacent'), (0x1087A, 7, 'run'), (0x117FA, 52, 'adjacent'), (0x118CA, 7, 'idx'), (0x1286E, 51, 'adjacent'), (0x1293A, 7, 'run'), (0x134B4, 51, 'adjacent'), (0x13580, 7, 'run'), (0x13FFA, 51, 'adjacent'), (0x140C6, 7, 'run'), (0x14FB8, 52, 'adjacent'), (0x15088, 7, 'idx'), (0x1606A, 51, 'adjacent'), (0x16136, 7, 'run'), (0x16C50, 51, 'adjacent'), (0x16D1C, 7, 'run'), (0x17786, 51, 'adjacent'), (0x17852, 7, 'run'), (0x18696, 27, 'run'), (0x198E4, 45, 'adjacent'), (0x19998, 4, 'idx'), (0x1ACAA, 45, 'adjacent'), (0x1AD5E, 4, 'idx'), (0x1C068, 45, 'adjacent'), (0x1C11C, 4, 'idx'), (0x1D44A, 45, 'adjacent'), (0x1D4FE, 4, 'idx'), (0x1E824, 45, 'adjacent'), (0x1E8D8, 4, 'idx'), (0x1FC18, 45, 'adjacent'), (0x1FCCC, 4, 'idx'), (0x21022, 45, 'adjacent'), (0x210D6, 4, 'idx'), (0x223E2, 45, 'adjacent'), (0x22496, 7, 'run'), (0x23532, 45, 'adjacent'), (0x235E6, 7, 'run'), (0x248FE, 45, 'adjacent'), (0x249B2, 17, 'idx'), (0x260CA, 45, 'adjacent'), (0x2617E, 17, 'idx'), (0x277D4, 45, 'adjacent'), (0x27888, 17, 'idx'), (0x28CD2, 45, 'adjacent'), (0x28D86, 7, 'run'), (0x29CEC, 45, 'adjacent'), (0x29DA0, 7, 'run'), (0x2AB9A, 45, 'adjacent'), (0x2AC4E, 53, 'idx'), (0x2BC58, 5, 'run'), (0x2BCAC, 40, 'adjacent'), (0x2BD4C, 7, 'run'), (0x2C254, 4, 'idx'), (0x2CD06, 16, 'idx'), (0x2CD52, 40, 'adjacent'), (0x2CDF2, 7, 'run'), (0x2DDC4, 16, 'idx'), (0x2DE18, 40, 'adjacent'), (0x2DEB8, 7, 'run'), (0x2F006, 5, 'run'), (0x2F05A, 40, 'adjacent'), (0x2F0FA, 7, 'run'), (0x300C0, 16, 'idx'), (0x3010C, 40, 'adjacent'), (0x301AC, 7, 'run'), (0x31196, 16, 'idx'), (0x311EA, 40, 'adjacent'), (0x3128A, 7, 'run'), (0x32560, 5, 'run'), (0x325B4, 40, 'adjacent'), (0x32654, 7, 'run'), (0x33688, 16, 'idx'), (0x336D4, 40, 'adjacent'), (0x33774, 7, 'run'), (0x34700, 16, 'idx'), (0x34754, 40, 'adjacent'), (0x347F4, 7, 'run'), (0x35B80, 45, 'adjacent'), (0x35C34, 7, 'run'), (0x36176, 4, 'idx'), (0x37AB2, 10, 'adjacent')],
+    # Reads of the vector area as data: the score printer takes a0 = 0x0
+    # or 0x80 (0x3AC4/0x3ADA/0x3AE0/0x3AE6, `lea abs.w`, then `move.l
+    # (a0),d0 ; rol.l #4` digit decode — HYPOTHESIS on what it means) and
+    # 0x5F74/0x5F7A read the two longs at 0x3F0/0x3F8 (vectors 252-254,
+    # bytes 77 96 77 96 ff ff ff ff ff ff ff ff 00 00 04 0c) as a compare list. In the port
+    # address 0 is the MD side; these six reads must be redirected to the
+    # cart copy of the table (AB: LOW_VECTOR_READS).
+    'LOW_VECTOR_READS': [0x03AC4, 0x03ADA, 0x03AE0, 0x03AE6, 0x05F74, 0x05F7A],
+    # The one abs.w control transfer into code (scanned 4EB8/4EF8/4878/4xF8
+    # forms): 0x5F52 `jmp 0x45C.w` (4EF8 045C) — cannot hold a 0x9xxxxx
+    # target after relocation; AB's ABSW_JMP thunk idiom (site, target).
+    'ABSW_JMP': (0x05F52, 0x045C),
+    # FM-gate spans (rts-bounded regions around every FB-destined writer:
+    # tile + text) and the control transfers into them, derived by
+    # tools/s16b_fmgate_spans.py from this file's sites + the census
+    # (docs/audit/goldnaxe/fmgate_spans.txt). Which regions are FB-
+    # destined in the port (tiles yes; text WRAM-staged or FB) is the
+    # builder's; entries become (site, displaced len, first word) once the
+    # gate thunk shape is fixed. VINT-context census writers are only the
+    # layer registers (0x2FA0-0x2FE4), which are shadowed, not FB.
+    'FMGATE_SPANS': [(5122, 6602), (6664, 6796), (8142, 8306), (8550, 8588), (14394, 14708), (14750, 14768), (16048, 16066), (16098, 16124), (16150, 16188), (18506, 19064), (19554, 19600), (20660, 20698), (22540, 22670), (24390, 24976), (25404, 25474), (25488, 25540), (28360, 29686), (31424, 31512), (40484, 40512), (40568, 40628), (42620, 42666), (50084, 50426), (50586, 50728), (51024, 51490), (219840, 222418), (223960, 225462)],
+    'FMGATE_ENTRIES_BY_SPAN': {0: [5122, 5230, 5804, 6150, 6572], 1: [6664, 6688, 6710], 2: [8142], 3: [8550], 4: [14552, 14690], 5: [14750], 6: [16048, 16058], 7: [16098], 8: [16150], 9: [18506, 19064], 10: [19554, 19564], 11: [20660, 20686], 12: [22634], 13: [], 14: [], 15: [25488], 16: [28360, 28374, 28938], 17: [31424, 31442, 31454, 31464, 31490, 31502, 31510], 18: [40484], 19: [40568], 20: [42620, 42654, 42666], 21: [50084, 50126, 50220, 50354, 50372], 22: [], 23: [51024, 51134, 51150], 24: [219892, 221958, 221972, 221986, 222000], 25: [223960, 225314]},
+    'FMGATE_ENTRIES': None,
+    'REBASE_EXCLUDE': [],   # no word table forging pointers found yet (needs the port's rebase scan report)
     # ------------------------------------------------------------------
     # NOT YET DERIVED — each names the census that derives it.
-    'FMGATE_ENTRIES': None, 'FMGATE_SPANS': None,   # FB-writer entries: tile loaders 0x1FE2-0x2066, 0x399E, text writers
     # Every 0x10xxxx/0x11xxxx/0x14xxxx operand objdump prints was listed
     # (95 palette, 57 tile, 170 text); all sit in instruction context. The
     # one data run that decodes to a hardware-looking literal is the ASCII
@@ -301,9 +360,9 @@ TABLES = {
     # the 2 KB sprite window and outside every MEMMAP range. Nothing to
     # exclude yet; re-run the check when TEXT sites are thunked.
     'DATA_EXCLUDE': [],
-    'BOOT_JUMPINS': None, 'BOOT_PCREL': None,   # boot copy region for this title is TBD (boot runs from ROM 0x40E; no RAM copy seen yet)
+    'STRIDE_TABLES': None,     # asset tables with embedded ROM pointers: the RLE level tables 0x2A3C/0xCCD6 are in REBASE_TABLES; others need the port's rebase scan
+    'IMM_OVERRIDES': None,     # #imm values that are pointers (AB 0x3C92): none found by the literal scan; the rebase report will say
+    'DATA_PTR_NORM': None,     # stored ROM-pointer readers (AB's spawn walker): the 0x5538/0x731A pointer stores are hardware, not ROM
+    'BOOT_JUMPINS': None, 'BOOT_PCREL': None,   # AB displaced its 0x400-0x808 boot into RAM; whether GA's boot (0x40E-0x5A0, runs from ROM) needs the same is the shim design's call
     'SPAWN_META': None, 'SPAWN_LO': None, 'SPAWN_CAP': None,
-    'REBASE_TABLES': None, 'HARVESTED_HANDLERS': None, 'HARVEST_BLACKLIST': None, 'HARVEST_BOUND': None,
-    'STRIDE_TABLES': None, 'IMM_OVERRIDES': None, 'LOW_VECTOR_READS': None, 'ABSW_JMP': None,
-    'DISPATCHERS': None, 'DATA_PTR_NORM': None, 'REBASE_EXCLUDE': None,
 }

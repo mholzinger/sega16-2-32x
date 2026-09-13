@@ -505,3 +505,72 @@ gate the glyph store, not the state routine). Golden Axe's per-frame
 text load in play is therefore the HUD rows 0-2 (0xC8CC/0xC900/0xC918
 from the leas at 0xC764-0xC7A2), about 60 writes a frame, plus the
 dialogue when a box is open.
+
+---------------------------------------------------------------------
+## 10. Rung 5, text and relocation: the table is complete except for what the port's own design decides
+
+`tools/game_goldnaxe.py` now carries every key the AB patcher reads,
+each either derived with its consumer named, or None with the reason.
+
+**Text.** Layer registers: IRQ4 writes the four scroll words every vint
+(0x2FA0-0x2FCA, `move.w d0,abs.l`), page selects at cuts (0x5A74/7C,
+0x639E/A6) — AB's MDHSCR shape. The shared copy/clear loop heads are
+AB's 0x3A9A/0x3AA4 idiom byte for byte: 0x3EB0 `move.b (a0)+,(a1)+ ;
+addq.l #1,a1` and 0x3EBA `clr.b (a1) ; addq.l #2,a1` (the CLR
+read-modify-write site). AB's two TXT_WRAM writers both exist here:
+the credit line at 0x3EE2 (`lea 0x110000,a1 ; adda.w 0xFFEC24,a1`,
+clears 9 glyphs; 18,585 census writes at row 23) and the HUD at 0xC750
+(magic pots row 25 through 0xC7B0, name/score rows 0-1 through 0xC8A6,
+per player from the credited flags 0xFFEC28/29 and the player objects
+0xFFC000/0xFFC200). 170 text literals in the first half: 22 on row 0,
+16 on row 25, 8 each on rows 4 and 10, 8 layer registers.
+
+**Relocation.** Objects: 64 x 128 B at 0xFFC000 and 16 x 64 B at
+0xFFE100, active = byte 0 bit 7, handler long at +2 (the dispatch loops
+at 0x3CD0 / 0x3D12). Six `movea.l 2(a6),a0 ; jsr/jmp (a0)` funnels =
+DISPATCHERS. `tools/s16b_handler_harvest.lua` read the handler field of
+every active object every frame on the arcade: 37 distinct values over
+5400 frames of attract plus 5400 of stage-1 play (29 / 19, 8 play-only),
+all on instruction boundaries — HARVESTED_HANDLERS, stage 1 only.
+
+Jump tables: 93 `lea pc(tbl) ; movea.l (a0,dN.w)` tables, bounded by
+`tools/s16b_jumptables.py` three ways (docs/audit/goldnaxe/jumptables.txt):
+22 by the consumer's own andi/cmpi immediate, 38 by adjacency (the
+pointer run reaches the next table's start — the 51-entry state table
++ 7-entry table pairs of each object module, e.g. 0xEFB0 + 51 x 4 =
+0xF07C), 33 by the run ending on a non-pointer long, which is the
+filter AB's entry 17 warned about and stays HYPOTHESIS until each
+consumer's index is read. Two of the 93 hold data pointers (the RLE
+level tables 0x2A3C, 0xCCD6) and are rebased the same way.
+
+Low reads: the score printer takes a0 = 0x0 / 0x80 (0x3AC4/DA/E0/E6) and
+0x5F74/0x5F7A read the longs at 0x3F0/0x3F8 (7796 7796, FFFFFFFF) as a
+compare list — six LOW_VECTOR_READS. One abs.w transfer into code:
+0x5F52 `jmp 0x45C.w` — ABSW_JMP, AB's idiom.
+
+**FM gate.** `tools/s16b_fmgate_spans.py` (the generic form of LOOP
+23's fmgate_derive.py, which carried AB's censuses as literals) wraps
+every FB-destined writer — 44 static sites from this table plus 40
+executed writers from the census — in its rts-bounded region and
+scans the whole listing for control transfers into those regions: 26
+spans, 55 entries (docs/audit/goldnaxe/fmgate_spans.txt). The only
+VINT-context writers are the layer registers, which are shadowed, so
+every gate is MAIN-context. Which text regions are FB-destined depends
+on the port's text path, so FMGATE_ENTRIES stays None and the spans
+and per-span entries are in the file for the builder to cut.
+
+**Still None, and why**: PAL_THUNK_A/APOST/LAUNCH and STRIP_BLITTER_*
+(no such idiom here), TEXT_IDIOM and TXT_WRAM_CLEAR_SITES (depend on
+the text remap destination), BOOT_JUMPINS/PCREL (whether the boot is
+displaced into RAM is the shim design's call; GA's boot runs from ROM
+0x40E-0x5A0), SPAWN_* (AB's spawn script; GA's stage scripts are
+reached through the jump tables and the harvested handlers instead),
+STRIDE_TABLES/IMM_OVERRIDES/DATA_PTR_NORM (the port's rebase-scan report
+is the census that finds them; none surfaced in the literal scan).
+
+Rung 5 status: the mechanical derivation is done; what remains is a
+patcher that reads MEMMAP instead of AB's addresses and tolerates None,
+and the hand reads the HYPOTHESIS labels ask for (33 jump-table counts,
+MCU_BUSY's consumer, the 0x71F2 footprint). The kit gained three tools
+that took no AB literals: the handler harvest, the jump-table bounder,
+the FM-gate span deriver.

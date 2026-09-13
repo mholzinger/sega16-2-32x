@@ -70,3 +70,46 @@ and rewrites 0xFF. The shim replaces the MCU: read 0xFFECFC each vint,
 post if != 0xFF, write 0xFF back. One direct path exists (0x3674 writes
 mapper reg 3 at 0xFE0007 itself, used for stop-all); the patcher must
 redirect that single site. 0xC43001 is NOT the latch.
+
+## 8. What the patcher must grow before it can eat tools/game_goldnaxe.py (entries 8-10)
+
+- `remap()` reads AB's source ranges as literals (patch_game.py:76-140).
+  Read them from TABLES['MEMMAP'] — Golden Axe's tile RAM is 0x100000,
+  text 0x110000, palette 0x140000, bank 0x1F2001/3, math chips 0x1F0000/
+  0x1F1000/0x1E0000 — and drop sprite RAM from the remap: the game
+  writes sprites through the variable at 0xFFECC4 (entry 3) and the shim
+  sets it; the only sprite literals are the reset terminators at
+  0x5A6C/0x6B70 (`move.w #-1,0x200004`).
+- `T(key)` raises on a missing key; it must also accept None as "idiom
+  absent in this title" for the keys listed None in the file.
+- TILE_DIRTY_SITES/STRIP_BLITTERS targets are ARCADE addresses (AB's
+  file stores post-remap targets); apply remap before the byte assert.
+- New keys: SPRITE_BASE_VAR, MCU_SIGNATURE (write the four words every
+  vint after the game clears them, entry 6), FRAME_FLAG, MCU_ROM_CHECK
+  (keep 0x714-0x7FE byte-exact or drop the check), PAL_PTR_USE_SITES and
+  TILE_PTR_USE_SITES (4-byte mark-at-use thunks), TXT_LOOP_HEADS,
+  LAYER_REG_SITES, DISPATCHERS with thunk=None, TAS_SITES with nine
+  addressing forms (73/72/120/70(a6), 3(a0), abs.w, 0x25E1/0x3DF9(a1),
+  indexed) — the shim needs a thunk per form.
+- Thunk slots: 53 palette sites + thunk B from 0xBA00 leave 0x2A0 bytes
+  before the FM-gate thunks if they keep AB's layout; the 42 second-half
+  duplicates are excluded on the "never executed" hypothesis (entry 8).
+
+## 9. Delivery units and the per-frame text (entries 5, 9, 10)
+
+Per frame in play: palette 24 words (0x140050-0x14007E from 0x115A/0x1176)
+plus 16 bytes (0x140040 from IRQ4), sprites 14 records, text = HUD rows
+0-1 and 25 (about 60 writes) plus the credit line and, when open, the
+cutscene speech box typed through 0x3EB0/0x3EBA. Tile RAM: nothing
+per frame; stages load at the cut through the RLE passes (0x1FE2..)
+and the 0x10C000 plane (0x2056), and 0x60F6 saves 16 KB of WRAM INTO
+tile pages 1-4 at some cut (a scratch the staging copy must keep
+readable: 0x6126 reads it back).
+
+## 10. Three kit tools that carry no AB literals (entry 10)
+
+tools/s16b_handler_harvest.lua (object handler values from the running
+arcade), tools/s16b_jumptables.py (jump-table counts three ways, with
+the rule named per table), tools/s16b_fmgate_spans.py (FM-gate spans
+and entries from the game file + the write census). Run them for the
+next title before reading a single routine by hand.
