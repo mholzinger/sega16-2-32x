@@ -727,7 +727,9 @@ ic13/ic10, ic14/ic11, even/odd byte). `gen_sprites.py` asserted on
 into the scratch dir so the AB build products in `sh_src/` stayed
 byte-identical (md5-checked before and after): tiles.bin 1,048,576 B =
 16,384 tiles, 16,148 non-blank (AB: same count); sprites.bin
-**1,572,864 B = 24 banks of 64 KB** (AB: 1 MB). The cart consequence:
+**1,572,864 B = 12 sprite banks of 128 KB** (`sega16sp.cpp`, sys16b:
+0x20000 bytes per bank, `bank %= numbanks`, so bank-field values 12-15
+wrap; AB has 8 banks). The cart consequence:
 AB ships at exactly 4.00 MB with 1 MB tiles + 1 MB sprites + 256 KB
 program (SILICON.md 4e); Golden Axe adds 512 KB of sprites and 256 KB
 of program before a byte of 32X code, so the port needs either the
@@ -753,8 +755,8 @@ entry 12) and to later stages. Per-title decision, as TOOLKIT says.
 
 **The arcade attract corpus.** `tools/arcade_census.lua` now takes the
 title's tile/text/WRAM addresses from the environment (AB's remain the
-defaults); recording `docs/arcade/goldnaxe/` (gitignored), no-coin cold
-boot, `ref_NNNNNN.png` every frame to 5400 plus the tile/text/WRAM
+defaults); recorded `docs/arcade/goldnaxe/` (gitignored), no-coin cold
+boot, `ref_NNNNNN.png` every frame to 5400 (5,400 frames on disk) plus the tile/text/WRAM
 dumps at the usual frames — the oracle side of `tools/attract_parity.py`
 for this title. Its scene anchors (SCENES) are AB's frame numbers and
 will need Golden Axe's cuts: from entry 4, FBI card to f240, title by
