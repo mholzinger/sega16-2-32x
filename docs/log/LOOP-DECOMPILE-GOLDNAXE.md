@@ -274,3 +274,106 @@ something else.
 Rung 3 done. The three numbers the builder needs: per frame in play,
 text 142.5 (with a probable row-scroll table), palette 28 over 24
 words, sprites 42; tiles 0.
+
+---------------------------------------------------------------------
+## 6. Rung 4: the frame protocol and the 68000's work per vint
+
+**The trace.** `tools/arcade_trace.lua` now takes any play driver
+(`AT_PLAY=tools/auto_goldnaxe.lua`, new: coin f600, `1 Player Start`
+f800, Button 1 f900 picks the first hero, walk right + attacks);
+`tools/arcade_trace.py` takes the title's addresses
+(`AT_IDLE=0x3C9C,0x3CA0,0x3CA2,0x3CA8,0x3CB0,0x3CB8,0x3CC0 AT_IRQ4=0x2F60`)
+and now counts collapsed wait-loop iterations as idle (it counted
+listed lines only, which reported the wait as 0.19%; entry 88's
+correction applied to the wait as well as the total). Eight frames of
+stage-1 play from f2400, three enemies on screen:
+
+    executed per vint          15,279     (AB entry 88: 14,209)
+      the frame wait            6,415     42.0%   flag spin + signature spin
+      WORK                      8,864     (AB: 8,184, +8%)
+        IRQ4 handler            2,044 / 1,989 alternating   23% of work
+    arcade cycles/instruction    10.9     (166,667 / 15,279) — a normal 68000 mix, as AB
+    our allowance                14.4     (127,841 / 8,864)
+    CPU location at every vblank: 0x3CA0, the wait loop — the game
+    finishes its frame with margin in stage 1
+
+The same conclusion as AB's entry 88: the arcade is not bus-bound and
+there are no stalls to avoid paying; the 68K margin is 14.4/10.9 = 32%
+before any shim cost. Biggest routines per vint (Ghidra names, census
+functions; 20.5% = 3,129 instructions fall outside Ghidra's 360
+function bounds and are unattributed — AB's entry 51 problem again,
+naming is rung 7): FUN_3cc8 622, FUN_c924 617, FUN_c4b2 434, FUN_bd54
+333, FUN_306a (the sprite copy) 295, FUN_40e6 275.
+
+**The frame wait, with its consumers** (`0x3C90`):
+
+    3C90  clr.l $FFECD8 ; clr.l $FFECDC        wipe the MCU signature
+    3C98  clr.b $FFEC1C                         drop the frame flag
+    3C9C  tst.b $FFEC1C ; beq 3C9C              spin until IRQ4 sets it (0x2F7A addq.b #1,$FFEC1C)
+    3CA2  cmpi.w #$048C,$FFECD8 ; bne 3CA2      spin until the MCU has rewritten
+    3CAA  cmpi.w #$159D,$FFECDA ; bne 3CA2        its four signature words
+    3CB2  cmpi.w #$26AE,$FFECDC ; bne 3CA2        (entry 3 saw the MCU write
+    3CBA  cmpi.w #$37BF,$FFECDE ; bne 3CA2         them every vblank)
+    3CC2  dbf d0,3C90 ; rts                     wait N frames
+
+So the vint handshake is TWO conditions: IRQ4 must set 0xFFEC1C, and
+the conductor must then write 048C 159D 26AE 37BF to 0xFFECD8-DE, every
+frame, after the game cleared them. A shim that only raises IRQ4 hangs
+at 0x3CA2. A second copy of the routine at 0x56BA4 (the 0x568xx block is
+a partial duplicate of 0x3990-0x3D00: 776 of 880 bytes equal) waits N
+frames without the signature check.
+
+**IRQ4 (`0x2F60`, vector 0x404, rte at 0x3172)**: saves all registers;
+`tst.b $FFEC1E` skips the whole frame side (-> 0x316E) when set;
+`tst.b $FFEC1C` non-zero = the game had not consumed the last flag ->
+`addq.w #1,$FFED4C` (a missed-frame counter, AB's 0xFFF144) and skip
+to 0x30FC; else sets the flag, `movea.l` the sprite base from 0xFFECC4,
+writes the tile bank (`movep.w d0,1(a0)`, a0 = 0x1F2000, value
+0xFFEC95), copies the sprite lists (0x3018-0x3082, entry 3), writes
+0xC40001 <- 0xFFEC18 (0x3092: display gate is bit 5 of EC18; 20 `bset
+#5` sites and 17 `bclr #5` sites in the program) and 0xC43001 <-
+0xFFEC94 (0x309A — NOT the sound path, see below), runs 30-frame
+counters (EC20/EC21), pushes four longs from a table at 0x66ED0 indexed
+by `0xFFECC3 & 7` to palette 0x140040-4F (a cycler for pens 0x20-0x27,
+every vint), then calls 0x3338, 0x3314 (the sound ring pop) and 0x3586.
+
+**The sound-post path — proven by trace, after three taps lied.**
+
+    68K   0x3650-0x3672  push: find a free slot in the ring 0xFFEC40-5F, store, addq.b #1,$FFEC3C
+    68K   0x3314-0x3336  pop (called by IRQ4 every vint): if $FFEC3C != 0, move.b (a0)+ -> $FFECFC
+                          with read pointer $FFEC3E wrapping at EC60, count--
+    MCU   0x82E-0x84F    main loop: read 68K 0xFFECFC through the mapper (regs 07-09, 05<-02,
+                          wait reg 2 bit 6), `inc a; jz` = skip if 0xFF, else `dec a` and
+                          movx @r0 with r0=3 = the Z80 latch; then rewrite the mailbox to 0xFF
+                          via regs 0A-0C from the table at MCU 0x0B1A
+    Z80   $0038 -> $0089 in a,($C0)   one IRQ per command
+    68K   0x3674-0x367E  the direct path: move.b d0,$FFEC3C ; move.b d0,$FE0007 (mapper reg 3
+                          straight from the 68K) — ran once in 3000 frames (f1077, value 0x00)
+
+Counted in one 165-frame window (f795-f960, start + hero select):
+17 ring stores at 0x366C, 17 pops at 0x3322, 17 Z80 IRQ entries at
+$0038. Same convention as AB (mailbox byte, 0xFF = empty, MCU forwards
+and clears) at a different address: **0xFFECFC**. Share of the 68K's
+work: under 0.2% per vint.
+
+**Three lua taps under-reported this and the MAME trace settled it.**
+(1) A 68K write tap on 0xC43001 saw only 0xFF — that port is not the
+latch at all, and the tap can also die mid-frame: `update_mapping()`
+unmaps the whole space whenever the MCU changes region 4's base.
+(2) An MCU `xdata` write tap recorded 2 writes to mapper reg 3 in 3000
+frames; the Z80 got 17 IRQs in 165 of them. (3) A Z80 `io` read tap
+counted 3 reads of port $C0 while the Z80 trace over the same frames
+shows 17. Taps are for counting bulk traffic; anything protocol-critical
+is proven with `trace` (the debugger's instruction log is exact, entry
+88's tool). The write census of entry 5 stands for bulk regions (its
+counts match the trace's IRQ4 rate) and is NOT to be read for
+one-per-frame events.
+
+**Also NOT sound: the 315-5296 writes.** Boot writes 0xC43007 <- 0x80
+(AB's "TODO identify"), 0xC43035 <- 0x1F, 0x13, then two DSW-derived
+bytes; per vint 0xC43001 <- 0xFFEC94 (0xFF throughout play). I/O-chip
+configuration and outputs; which port is which is a rung-7 read of the
+315-5296 (jtcores `jts16b_cabinet.v`).
+
+Rung 4 done. The three numbers: 15,279 executed / 8,864 work per vint;
+sound post < 0.2%; the biggest routine is the IRQ4 handler at ~2,000.

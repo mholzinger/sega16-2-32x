@@ -19,7 +19,9 @@ local START = tonumber(os.getenv('AT_START') or '7000')
 local LEN   = tonumber(os.getenv('AT_LEN')   or '8')
 local OUT   = os.getenv('AT_OUT') or '/tmp/arc.log'
 local frames = 0
-if os.getenv('AT_PLAY') == '1' then dofile('tools/auto_beast.lua') end
+local play = os.getenv('AT_PLAY')
+if play == '1' then dofile('tools/auto_beast.lua')            -- Altered Beast (historical default)
+elseif play and play ~= '' then dofile(play) end               -- any driver, e.g. AT_PLAY=tools/auto_goldnaxe.lua
 emu.register_frame_done(function()
     frames = frames + 1
     if frames == START then

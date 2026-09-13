@@ -53,3 +53,20 @@ scroll table — hypothesis), palette 28 writes over a fixed 24-word
 window 0x140050-0x14007E, sprite records 14 (42 writes), I/O 2, tile
 bank 2. Golden Axe's per-frame palette is 48 bytes, not AB's paired
 128-word pushes.
+
+## 6. The vint handshake has two halves, and the shim owns both (entry 6)
+
+Per vint the conductor must: raise IRQ4 (the handler sets 0xFFEC1C
+itself), and AFTER the game has cleared them write the four words
+048C 159D 26AE 37BF to 0xFFECD8/DA/DC/DE — the game spins at 0x3CA2
+until they are back. Missing the second half hangs the game at the
+first frame wait. Missed frames are counted by the game at 0xFFED4C.
+
+## 7. Sound posts go through the mailbox 0xFFECFC (entry 6)
+
+The game queues commands in a ring at 0xFFEC40-5F, IRQ4 pops one per
+vint into 0xFFECFC, the MCU forwards any value != 0xFF to the Z80 latch
+and rewrites 0xFF. The shim replaces the MCU: read 0xFFECFC each vint,
+post if != 0xFF, write 0xFF back. One direct path exists (0x3674 writes
+mapper reg 3 at 0xFE0007 itself, used for stop-all); the patcher must
+redirect that single site. 0xC43001 is NOT the latch.
