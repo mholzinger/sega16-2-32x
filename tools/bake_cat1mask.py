@@ -56,10 +56,11 @@ for s in range(SCENES):
         # the runtime searches by the RAW 13-bit code, but the ART of a
         # bank-1 code lives at (code & 0xFFF) + bank*0x1000 (m_main.c's
         # name-table pass: 0xFFF095, the game's tile bank request). The
-        # first cut masked tiles[c] for every code and the bank-1 grass
-        # tiles got another tile's opacity (LOOP29 252, the demo diff's
-        # 527 specks). BANK is the game's request in that scene; round 0
-        # reads 1 in ares (demo f1000, play f1500); rounds 1-4 unmeasured.
+        # first cut masked tiles[c] for every code; no level-1 class-2
+        # code carries the bank bit (header unchanged, LOOP29 252), so
+        # this matters only if a later scene has one. BANK is the game's
+        # request in that scene; round 0 reads 1 in ares (demo f1000,
+        # play f1500); rounds 1-4 unmeasured.
         art = (c & 0xFFF) + BANK[s] * 0x1000 if c & 0x1000 else c
         t = tiles[art * 64:(art + 1) * 64]
         m = bytes(sum(((1 << (7 - px)) if t[py * 8 + px] else 0) for px in range(8)) for py in range(8))

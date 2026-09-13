@@ -6339,15 +6339,19 @@ ATTRACT demo (no input; the game's state is a pure function of its own
 frame count, so the same picture exists in both roms one or two frames
 apart): H2 vs bldB at demo f1000/f1200 = 527/533 pixels, all in cell
 rows 20-22 (the grass), spread across the width -- dark specks in
-bldB's grass that the stamp did not show. Those were the MASK TABLE:
-tools/bake_cat1mask.py masked tiles[code] for every code, but a code
-with bit 0x1000 has its art at (code & 0xFFF) + bank*0x1000 (the
-game's tile bank request, 0xFFF095, reads 1 in round 0). Build D
-carried the same wrong masks; its black-share gates could not see it.
-Fixed in the baker (BANK per scene; rounds 1-4 unmeasured, set to 1),
-header regenerated. bldB's specks are the sprite pixels the arcade
-shows through the grass's transparent pixels; the stamp must show the
-same.
+bldB's grass that the stamp did not show. They are NOT the stamp's error. The mask table was suspected (the
+baker masks tiles[code] without the tile bank) and cleared: no class-2
+code in level 1 carries the bank bit, the regenerated header is
+byte-identical, the installed table reads 81 codes for scene 0 and the
+class map's rows 20-23 read 35/40/13/7 class-2 cells. The sprite list
+at the frame (SPR_SNAP) has no record over x 150-200 where the specks
+also sit, so they are not sprite pixels either. The ARCADE decides:
+mame altbeast attract, frames 600-1400 captured headless, content-
+matched on the upper 150 rows to bldB's demo f1001 -> ref_000704, the
+same scroll and zombie positions. Its grass carries no specks. bldH's
+grass rows equal the arcade's; bldB's specks are the punch line's own
+defect (the class-2 art path writes something the arcade does not
+show; not chased further -- the stamp replaces that path).
 
 Roms: rom/night/bldH1.32x (H1, md5 ac13b8d3), bldH2 (862aa999), pcH1-2,
 pcH (H5 census), bldH (H5).

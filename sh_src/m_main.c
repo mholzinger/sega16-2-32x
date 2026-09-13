@@ -4905,8 +4905,8 @@ __attribute__((noinline)) static void mdspr_claim(void)
  * with byte stores into a 10 KB map and read 0.437/0.434: the SH-2's
  * write-through stores were the price, not the stamp. Over-cover is
  * harmless: a hole cell no sprite pixel reached holds 0 already. */
-static uint32_t c1cov[28][2];
-static inline void c1cov_rect(int xpos, int pitch, int top, int bottom)
+typedef uint32_t c1cov_t[28][2];             /* H6: per CALL (both CPUs compose strips) */
+static inline void c1cov_rect(c1cov_t c1cov, int xpos, int pitch, int top, int bottom)
 {
     int w = (pitch < 0 ? -pitch : pitch) * 4;
     int x0 = xpos - 184, x1 = x0 + w;
@@ -4927,7 +4927,7 @@ static inline void c1cov_rect(int xpos, int pitch, int top, int bottom)
     if (re > 27) re = 27;
     for (; r <= re; r++) { c1cov[r][0] |= lo; c1cov[r][1] |= hi; }
 }
-RAMCODE static void c1_stamp(int ymin, int ymax)
+RAMCODE static void c1_stamp(const c1cov_t c1cov, int ymin, int ymax)
 {
     if (ymin < 0) ymin = 0;
     if (ymax > 224) ymax = 224;
@@ -4959,7 +4959,7 @@ RAMCODE static void c1_stamp(int ymin, int ymax)
 #endif
 #ifdef C1_STAMP_NW
                 (void)d; (void)c1c; (void)py;          /* ablation: cover + class reads, no FB writes */
-                if (hv[k] == 2) { unsigned mb = C1MASK_U[(unsigned)c1c[cx] * 8u + py]; if (mb == 0x5Au) c1cov[0][0] = 0; }
+                if (hv[k] == 2) { unsigned mb = C1MASK_U[(unsigned)c1c[cx] * 8u + py]; if (mb == 0x5Au) CEN[62]++; }
 #else
                 if (hv[k] == 1) {
                     ((uint32_t *)d)[0] = 0; ((uint32_t *)d)[1] = 0;
@@ -4981,19 +4981,20 @@ RAMCODE static void c1_stamp(int ymin, int ymax)
         }
     }
 }
-__attribute__((noinline)) RAMCODE static int compose_pass(int ymin, int ymax, int par, int pass);
+__attribute__((noinline)) RAMCODE static int compose_pass(c1cov_t c1cov, int ymin, int ymax, int par, int pass);
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
+    c1cov_t c1cov;                               /* on this CPU's stack */
     for (int r = (ymin < 0 ? 0 : ymin) >> 3; r * 8 < ymax && r < 28; r++)
         c1cov[r][0] = c1cov[r][1] = 0;
-    int n3 = compose_pass(ymin, ymax, par, 0);   /* pp < 3, unpunched, covering cells */
-    c1_stamp(ymin, ymax);
+    int n3 = compose_pass(c1cov, ymin, ymax, par, 0);   /* pp < 3, unpunched, covering cells */
+    c1_stamp(c1cov, ymin, ymax);
     if (n3)                                      /* H3: the record scan is the band's
                                                   * fixed cost; pay it twice only when
                                                   * a pp = 3 record is in the list */
-        compose_pass(ymin, ymax, par, 1);        /* pp = 3 over the holes */
+        compose_pass(c1cov, ymin, ymax, par, 1); /* pp = 3 over the holes */
 }
-__attribute__((noinline)) RAMCODE static int compose_pass(int ymin, int ymax, int par, int pass)
+__attribute__((noinline)) RAMCODE static int compose_pass(c1cov_t c1cov, int ymin, int ymax, int par, int pass)
 #else
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #endif
@@ -5195,7 +5196,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             bottom = ylim;
         }
 #ifdef C1_STAMP
-        if (!pass) c1cov_rect(xpos, pitch, top, bottom);
+        if (!pass) c1cov_rect(c1cov, xpos, pitch, top, bottom);
 #endif
 #ifdef SPR_LINE_PROBE
         {
