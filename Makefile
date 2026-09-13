@@ -993,6 +993,15 @@ endif
 ifdef BOOTFLIPRATE
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FLIPRATE
 endif
+# `make ... BOOTFLIPRATE=1 ECHOCENSUS=1` = NOTES 45 / LOOP29 258: why 46 of
+# 64 vints present no frame. The master tags its declines into the echo
+# word (0xF1F1 edge / F1F2 nothing drawn / F1F3 nothing shipped); the 68K
+# classifies every vint and the value channel carries eight tagged counts
+# per 64 vints (tag 3 bits | count 6 bits, the tag stepping every 8 vints).
+ifdef ECHOCENSUS
+MDCCFLAGS += -DECHO_CENSUS
+SHCCFLAGS += -DECHO_CENSUS
+endif
 # `make ... MDSTATE=1` = PLAN-SINGLE-VINT fold 4 (LOOP29 233): the 68K
 # posts one state word per vint from IRQ4 on COMM14 (tag E, sequence,
 # cutscene byte 0xFFF148, round 0xFFF142); the SH-2 takes the round from

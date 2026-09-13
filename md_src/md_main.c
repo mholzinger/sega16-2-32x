@@ -90,6 +90,13 @@ extern uint16_t read_joypad(uint8_t player);
 #define TP_ECHO_OK 0xF102
 #define TP_ECHO_NO 0xF1FF
 #endif
+#ifdef ECHO_CENSUS
+/* NOTES 45: the master tags its declines 0xF1F1 (past the edge), 0xF1F2
+ * (nothing drawn), 0xF1F3 (nothing shipped); the waits accept them too */
+#define ECHO_SEEN(c) ((c) == TP_ECHO_OK || (c) == TP_ECHO_NO || (((c) & 0xFFFCu) == 0xF1F0u && ((c) & 3u)))
+#else
+#define ECHO_SEEN(c) ((c) == TP_ECHO_OK || (c) == TP_ECHO_NO)
+#endif
 // MCU mailboxes are per-game (game_irq.h: US 0xFFF0C0/C2/C4, JP
 // 0xFFF0D2/D0/D4 — the 68K program reads only its own MCU's addresses)
 #define MCU_COINS   (*(volatile uint8_t*)GAME_MCU_COINS)  // MCU posts inverted SERVICE
@@ -2104,6 +2111,12 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
+#ifdef ECHO_CENSUS
+		{	/* nine bits: tag in blue, count in green+red */
+			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
+			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
+		}
+#endif
 		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
 		for (int q = 0; q < 64; q++)
 			*(volatile uint16_t*)0xC00000 = col;
@@ -2742,6 +2755,42 @@ void shim_vblank(void) {
 			fr_vc = 0;
 		}
 		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | 0x80 | fr_val);
+	}
+#endif
+#ifdef ECHO_CENSUS
+	/* NOTES 45 / LOOP29 258: WHY 46 OF 64 VINTS PRESENT NO FRAME. At each
+	 * vint top classify the echo word the master left for the previous
+	 * vint's post (the 68K pre-writes 0xF000 at every post and 0xF001
+	 * here after reading, so "no echo" and "no post" are told apart):
+	 *   0 OK (F102/F103)  1 past the edge (F1F1)  2 nothing drawn (F1F2)
+	 *   3 nothing shipped (F1F3)  4 posted, no echo (F000)  5 no post (F001)
+	 *   6 GAMEGATE fallbacks (0xFFA0F4 delta)  7 posts with V >= 0xE0 at post
+	 * Per 64 vints; the value channel carries tag (3 bits) | count (6 bits,
+	 * cap 63), the tag stepping every 8 vints, so each capture reads one
+	 * of the eight for the previous window. Decode: 9-bit CRAM colour. */
+	{
+		static uint8_t ec_vc, ec_cnt[8], ec_val[8], ec_fb_last;
+		uint16_t c4 = *mars_comm4;
+		uint8_t posted = (c4 != 0xF001);
+		if (c4 == 0xF102 || c4 == 0xF103) ec_cnt[0]++;
+		else if (c4 == 0xF1F1) ec_cnt[1]++;
+		else if (c4 == 0xF1F2) ec_cnt[2]++;
+		else if (c4 == 0xF1F3) ec_cnt[3]++;
+		else if (c4 == 0xF000) ec_cnt[4]++;
+		else if (c4 == 0xF001) ec_cnt[5]++;
+		if (posted && (uint8_t)(*(volatile uint16_t*)0xFFA0A0 >> 8) >= 0xE0) ec_cnt[7]++;
+		*mars_comm4 = 0xF001;
+		if (++ec_vc >= 64) {
+			uint8_t fb = *(volatile uint8_t*)0xFFA0F4;
+			ec_cnt[6] = (uint8_t)(fb - ec_fb_last);
+			ec_fb_last = fb;
+			for (int k = 0; k < 8; k++) { ec_val[k] = ec_cnt[k] > 63 ? 63 : ec_cnt[k]; ec_cnt[k] = 0; }
+			ec_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((ec_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | ec_val[tag]);
+		}
 	}
 #endif
 #ifdef BOOT_MOTION
@@ -3390,6 +3439,9 @@ void shim_vblank(void) {
 				 * flip NEVER made vblank: 8 flips in 1602 vints. The
 				 * push must overlap the flip span; the real fix is a
 				 * smaller packet.) */
+#ifdef ECHO_CENSUS
+				*mars_comm4 = 0xF000;                /* NOTES 45: "posted, no echo yet" */
+#endif
 				*mars_comm0 = 0x2020;                /* post: ISR flips */
 				*(volatile uint16_t*)0xFFA0A0 =
 					*(volatile uint16_t*)0xC00008;   /* V at post */
@@ -3502,8 +3554,7 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 #endif
-				while (*mars_comm4 != TP_ECHO_OK
-				       && *mars_comm4 != TP_ECHO_NO) {   /* flip-hold tail */
+				while (!ECHO_SEEN(*mars_comm4)) {   /* flip-hold tail */
 					uint8_t vv = (uint8_t)
 						(*(volatile uint16_t*)0xC00008 >> 8);
 					if (vv > 0xF8 || vv < 0xDF)
@@ -3910,8 +3961,7 @@ void shim_vblank(void) {
 				 * 68.2 it replaces. V-bounded: past 0xF8 (or wrapped
 				 * out of vblank entirely) the ISR declined this vint's
 				 * flip — release and let the body fallback decide. */
-				while (*mars_comm4 != TP_ECHO_OK
-				       && *mars_comm4 != TP_ECHO_NO) {
+				while (!ECHO_SEEN(*mars_comm4)) {
 					/* 0xF1FF = the ISR DECLINED the flip (edge
 					 * guard: too late in vblank — drop, not tear);
 					 * release the game immediately either way */

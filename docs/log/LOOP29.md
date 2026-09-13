@@ -6655,3 +6655,26 @@ dumps in one run) read the same 12 records at every frame. One run
 per frame, as the windowed sweeps already did.
 
     rom/night/*_tape.32x (frJ_tape 6e09a893, frHI_tape 08aeeb3a, bldJ_tape a0259190)
+
+## 258. THE ECHO CENSUS: WHY 46 OF 64 VINTS PRESENT NO FRAME ON THE RIG (2026-09-13 07:00)
+
+NOTES 45 (decompile): the rig's 18/64 is a DECLINE count -- a presented
+frame is one OK echo on a 68K post -- and two load-independent
+mechanisms would each give it: H1 the chain's fixed costs at hardware
+prices (declines read "nothing drawn"), H2 the 68K's post landing past
+the vblank edge (declines read "past the edge", fallbacks high).
+
+`ECHOCENSUS=1` with `BOOTFLIPRATE=1`: the master's three decline sites
+write 0xF1F1 (past the edge, the 1650-tick guard), 0xF1F2 (nothing
+drawn), 0xF1F3 (nothing shipped) instead of 0xF1FF (ECHO_NO_TAG); the
+68K's echo waits accept them (ECHO_SEEN). The 68K pre-writes COMM4 =
+0xF000 at every post and 0xF001 after classifying at the next vint
+top, so "posted, no echo" and "no post" are told apart. Eight counts
+per 64 vints: OK, edge, nothing drawn, nothing shipped, no echo, no
+post, GAMEGATE fallbacks (0xFFA0F4 delta), posts with V >= 0xE0 at the
+post. The value channel carries tag (3 bits, blue) | count (6 bits,
+green+red), the tag stepping every 8 vints; the painter takes nine
+bits under the flag and the decode is the 9-bit colour. Each capture
+reads one of the eight for the previous window; eight captures a
+launch, three launches each at the stock demo (frJ_echo) and the walk
+tape (frJ_echo_tape). Sanity: the same rom in ares.

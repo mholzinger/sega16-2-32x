@@ -78,6 +78,11 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
+#ifdef ECHO_CENSUS
+#define ECHO_NO_TAG(r) (0xF1F0u | (r))    /* NOTES 45: the decline reason rides the echo word */
+#else
+#define ECHO_NO_TAG(r) 0xF1FFu
+#endif
 #ifdef HS_CENSUS
 #define hsc_win  (*(volatile uint16_t *)0x26028D82)   /* vint counter (ISR entry) */
 #define HSC_RING ((volatile uint16_t *)0x26028D40)   /* [16][2]: pkt win, flip win */
@@ -7625,7 +7630,7 @@ static int flip_span(void)
 #else
     if ((uint16_t)(frt() - visr_t0) > 1650) {
 #endif
-        MARS_SYS_COMM4 = 0xF1FF;
+        MARS_SYS_COMM4 = ECHO_NO_TAG(1);
 #ifdef FLIP_CENSUS
         CEN[21]++;                       /* declined: past the vblank edge */
 #endif
@@ -7658,7 +7663,7 @@ static int flip_span(void)
      * pipeline produced by re-shipping sbuf. DIAG[29] counts held
      * flips (free here: ROW_DEFER is compiled out on R60 ships). */
     if (dfb_nohold ? 0 : !dfb_drawn) {
-        MARS_SYS_COMM4 = 0xF1FF;
+        MARS_SYS_COMM4 = ECHO_NO_TAG(2);
 #ifdef FLIP_CENSUS
         CEN[22]++;                       /* declined: nothing drawn */
 #endif
@@ -7676,7 +7681,7 @@ static int flip_span(void)
      * cycle_dirt carried, the held 68K releases on F1FF. DIAG[29]
      * counts holds (free here: ROW_DEFER is compiled out). */
     if (!nat_shipped) {
-        MARS_SYS_COMM4 = 0xF1FF;
+        MARS_SYS_COMM4 = ECHO_NO_TAG(3);
 #ifdef FLIP_CENSUS
         CEN[23]++;                       /* declined: nothing shipped */
 #endif
