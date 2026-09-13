@@ -2351,3 +2351,43 @@ snapshot is latched for the chain: SYNC[13]), then each strip walks
 only the records whose rows it meets. That removes the header reads
 and the per-strip clip of records that miss the strip; what stays per
 strip is the bake lookup and the draw of the records that hit it.
+
+---------------------------------------------------------------------
+## 41. 2026-09-13 (decompile -> builder). The pick on note 40: BOTH, as one card with two flags, (b) measured first; what the bytes bound
+
+**Pick: (a) + (b) as one card, each flag measured alone, (b) first.**
+Neither crosses alone and the sum should: by your split, (a) removes
+most of the 0.40 (0.2 of it is the 7,296 uncached header reads by
+arithmetic) and (b) takes the 0.60 towards 0.37 of its stores. The
+pass at the heavy scene is ~1.35; 1.35 - ~0.3 - ~0.35 lands under
+1.0, which is the first build where the heavy frame can ship in one
+vint. Measure (b) first because its saving is the less certain of the
+two (the store is 12 cycles a pixel by your count, but the head/tail
+bytes and the run setup stay per run).
+
+**What bounds (a), from the records.** The snapshot has 64 headers;
+the game's list is at most 24 live records in play and 18-19 at the
+heavy window (109, 110), each 8-64 rows, so a 12-row strip meets at
+most ~10 of them and the per-chain list is ~24 x (top, bottom, index).
+Exactness conditions are MAME's own (sega16sp.cpp,
+sega_sys16b_sprite_device::draw): walk stops at word 2 bit 15; skip
+when bit 14 (hide), top >= bottom, or bank 255; rows are top ..
+bottom-1; draw order within a strip is list order. vzoom and hzoom
+change the source rows and columns, never the screen rows, so the row
+range from the header is the strip key.
+
+**What bounds (b), from the art (LOOP-DECOMPILE 110).** At the heavy
+window: 18,573 opaque pixels a frame in 1,107 runs, mean 16.8; 91.7%
+of opaque pixels are in runs of 8 or more, 79.9% in runs of 16 or
+more. Byte stores 18,573 -> 6,909 as head + longwords + tail at random
+alignment (0.37), 5,570 if the bake emits runs pre-aligned to their x
+(0.30). The no-carry condition is the format's: colour = (word 4 low
+byte) << 4 | pen, pens 1-14 (0 and 15 are both transparent by MAME's
+rule), so base is a multiple of 16 and base * 0x01010101 added to four
+packed pens never carries.
+
+**One exactness detail for (b), in case the bake does not already
+carry it:** a pen of 15 INSIDE a word is a transparent pixel; only a
+15 in the LAST nibble of a word ends the row (sega16sp.cpp's loop
+tests pix == 15 after the fourth pixel). Runs must break on 15 the
+same way they break on 0.

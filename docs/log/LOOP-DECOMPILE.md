@@ -5206,3 +5206,38 @@ measured; there is no "the arcade dropped it too" subset for us to
 skip, and a per-line cap would change nothing. (The exact silicon
 fetch rate is not in the RTL's SDRAM model; the conclusion does not
 depend on it at a 4-5x margin.)
+
+---------------------------------------------------------------------
+## 110. The art's run structure at the heavy window, from the records and the sprite ROM: 18.6K opaque px in 1,107 runs a frame, mean 16.8; a longword run copy is 0.37 of the byte stores (2026-09-13)
+
+For NOTES 40's card (b). The live records over credited play (round
+0, my walking script, every 20th frame from f1200, sprite RAM
+0x440000) decoded against sh_src/sprites.bin with MAME's row rule
+(src/mame/sega/sega16sp.cpp, sega_sys16b_sprite_device::draw): the
+row starts at addr + pitch, words are read forward (backward with the
+nibbles reversed when word 2 bit 8 is set), pens 0 AND 15 are not
+drawn, and the row ends only when a word's LAST nibble is 15. (My
+first decoder ended a row at any 15 nibble and found nothing; a 15
+inside a word is a transparent pixel, not an end.)
+
+    window                    records  rows   source px  opaque px  runs   mean run
+    f2800-3200 (heavy)         18.7     815    25,039     18,573    1,107    16.8
+    f1200-5400 (whole run)      9.7     438    15,291     11,036      629    17.5
+
+Cross-check against the builder's 255a at the same window (17-18
+records, ~20k pixels, ~1,000 runs of 19.6): same scene within the
+scripts' difference.
+
+Where the opaque pixels sit (heavy window; the whole run is within a
+point of it, and the whole 1 MB of art reads 90.8 / 76.6 / 48.8 at
+8 / 16 / 32):
+
+    in runs >= 4    98.3%      >= 12   86.0%      >= 24   71.9%
+    in runs >= 8    91.7%      >= 16   79.9%      >= 32   65.1%
+
+Store count per frame if each run is copied as head bytes + longwords
++ tail bytes: 18,573 byte stores -> 6,909 (0.37) at random alignment,
+5,570 (0.30) if the bake emits each run pre-aligned to its x. The
+no-carry claim holds by the format: colour = (word 4 low byte) << 4 |
+pen (MAME colpri), so a run's base is a multiple of 16 and its pens
+are 1-14; adding base * 0x01010101 to four packed pens never carries.
