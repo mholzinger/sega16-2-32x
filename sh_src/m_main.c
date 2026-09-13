@@ -5130,11 +5130,20 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                                     } else if (v == 1) {
                                         d += k; s += k;
                                     } else {
+#ifdef C1_MASKTAB
+                                        unsigned mb = C1MASK_U[(unsigned)c1c[cx] * 8u + py];   /* one SDRAM byte per cell row */
+                                        unsigned bit = 0x80u >> (sx & 7u);
+                                        for (int q = 0; q < k; q++) {
+                                            if (!(mb & bit)) { *d = (uint8_t)(base + *s); PENTAP(e[4], *s); }
+                                            d++; s++; bit >>= 1;
+                                        }
+#else
                                         const uint8_t *art = altbeast_tiles + (unsigned)c1c[cx] * 64u + py * 8u + (sx & 7u);
                                         for (int q = 0; q < k; q++) {
                                             if (!art[q]) { *d = (uint8_t)(base + *s); PENTAP(e[4], *s); }
                                             d++; s++;
                                         }
+#endif
                                     }
                                     sx += (unsigned)k; m -= k;
                                 }
