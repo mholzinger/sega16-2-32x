@@ -1021,6 +1021,11 @@ ifdef STAMP3CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP3_CENSUS
 endif
+# `make ... BOOTFLIPRATE=1 STAMP4CENSUS=1` = LOOP29 264c: per vint on the channel: stale-window bails, edge declines, holds, ISR entries.
+ifdef STAMP4CENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP4_CENSUS
+endif
 # `make ... BOOTFLIPRATE=1 TAILCENSUS=1` = NOTES 49 / LOOP29 260: the 68K's
 # IRQ4 tail split in lines (entry->A, batch A, batch B, pump, blast,
 # blast->post, idle before IRQ4) as means per 64 vints; tag 7 = vints with

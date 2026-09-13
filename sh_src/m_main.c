@@ -78,7 +78,7 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS)
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS)
 static uint16_t stc_t[4];                 /* NOTES 47 / LOOP29 259: the ISR's four pre-flip stamps */
 #endif
 #ifdef STAMP2_CENSUS
@@ -7654,7 +7654,7 @@ static int flip_span(void)
      * with this off; expect the FPGA not to tear. */
     if (0) {
 #else
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS)
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS)
 #ifdef STAMP_CENSUS
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
 #endif
@@ -8052,6 +8052,14 @@ void visr_vbi(void)
     uint16_t t0 = frt();
 #ifdef K2_FREE
     visr_t0 = t0;
+#ifdef STAMP4_CENSUS
+    {   /* LOOP29 264c: per vint, x128 so the channel shows counts: stale-window
+         * bails (DIAG[59]), edge declines (DIAG[44]), holds (DIAG[29]), ISR entries (DIAG[49]) */
+        static uint32_t s4_prev[4];
+        uint32_t cur[4] = { DIAG[59], DIAG[44], DIAG[29], DIAG[49] };
+        for (int k = 0; k < 4; k++) { stc_t[k] = (uint16_t)((cur[k] - s4_prev[k]) << 7); s4_prev[k] = cur[k]; }
+    }
+#endif
 #ifdef STAMP3_CENSUS
     {   /* LOOP29 264: the master's FRT ticks per vint, carried as ticks >> 10
          * (ares 12,052 -> 11; a phi/8 FRT would read 47) */

@@ -7042,3 +7042,30 @@ BODY's fallback when the ISR gave up; a mean over both mixes ~1,000-
 tick posts with the late ones the body finds (maxima 36-55 steps =
 4,600-7,000 ticks). 264b carries the post's own line, mean and max,
 to say whether the late posts are late on the 68K's clock too.
+
+**264b, the 68K's post line (frJ_tail6, lines past 224, mean / max per
+64 vints):**
+
+                       vint top    body entry     post          B consume end
+    ares               1 / 1       4 / 5          11-13 / 13    9 / 10-19
+    rig, stock demo    1 / 2       4-12 / 5-63    14-25 / 22-29 9 / 20-21
+    rig, walk tape     1 / 2       4 / 63         14 / 27       11 / 21
+
+The 68K posts at line 238-249 on the FPGA, never past line ~253 in
+these windows (post max 22-29). From a master ISR entry at MD line
+~222 (264, the RTL) that is 700-1,250 FRT ticks -- inside the
+1,650-tick guard on every vint. Yet the master declines ~40 of 64
+posts "past the edge" (258) and its post-seen mean is 2,300-3,200
+ticks (259a). The reconciliation is in visr_vbi's first lines: `if
+(COMM0) { DIAG[59]++; return; }` -- a window command still live at the
+vint makes the ISR RETURN AT ENTRY, spin nothing, flip nothing; the
+body's fallback then finds the post when its own window work ends,
+and flip_span's guard measures that moment against visr_t0 and
+declines it. On ares DIAG[59] reads 0 in every window (the window
+work finishes before the vint); on the FPGA, at hardware prices, the
+window would still be live at ~40 of 64 vints. 264c carries DIAG[59]
+(stale bails), DIAG[44] (edge declines), DIAG[29] (holds) and DIAG[49]
+(ISR entries) per vint to the rig. If the bails match the declines,
+the lever is not any tail and not the guard: it is the master's
+window work overrunning the vint on hardware -- or the ISR flipping
+on a post even while a window is live.
