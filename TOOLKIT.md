@@ -955,16 +955,48 @@ Find the title's discriminator scene at rung 3, not later — see
 "Geometry-convention rule".
 
 **Encryption gates the title choice** (surveyed 2026-08-17, `-listxml`
-grep for `317-*.key`). FD1094 decrypts opcodes as a function of CPU
-STATE, so those sets can never yield one flat patchable binary — they
-are out of scope for a static patcher, permanently.
-  - Clean (no key ROM): `shinobi5` (S16B, and NO MCU — cheapest
-    possible second title, skips the whole MCU bucket), `goldnaxe`
-    (i8751, same shape as AB), `tturf`, `wb3`, `aliensyn`.
-  - Blocked: `goldnaxe3`, `shinobi2`, `eswat`, `passsht` (FD1094);
-    `dunkshot` (FD1089); `altbeast2` (317-0066 key).
-  - Only `altbeast.zip` is in `./mame`; title #2 needs the dump on
-    disk before any of stage 3 can start.
+grep for `317-*.key`; RE-CHECKED 2026-09-12 against MAME 0.288). FD1094
+decrypts opcodes as a function of CPU STATE, so a static patcher cannot
+decrypt those sets itself — but it does not have to: MAME carries a flat
+pre-decrypted clone for most of them, suffixed `d` ("bootleg of FD1094
+317-xxxx set"). The `d` set's program ROMs (`bootleg_epr-*`) are the
+decrypted image, the CPU is a plain MC68000, art/sound ROMs are the
+originals, driver status good. Feed the `d` program to `patch_game.py`.
+Verified: `eswatd`, `cottond`, `dduxd`, `fpointd`, `bayrouted`,
+`goldnaxe1d`. (The 2026-08-17 "permanently out of scope" reading was
+wrong for these; it cost nothing but it kept half the S16B list off
+the table.)
+  - Clean (plain 68000 set): `goldnaxe` (set 6 US, i8751 317-0123A,
+    same shape as AB), `aliensyn` (no MCU), `fantzn2x` (S16C, no MCU),
+    `ddux1` (i8751), `bayroute1` (US, unprotected), `afightere`,
+    `shinobi5`, `tturf`, `wb3`.
+  - Reachable via a `d` set: `eswat`, `cotton`, `ddux`, `bayroute`,
+    `fpoint`.
+  - Still blocked: `aceattac`, `bullet`, `exctleag` (FD1094, no `d`
+    set — needs a state-tracked decrypt, unproven here); `dunkshot`
+    (FD1089, a STATIC cipher with no CPU-state term, so derivable, but
+    nobody has); `altbeast2` (317-0066 key).
+  - S16A titles (`fantzone`, `alexkidd`, `mjleague`, `bodyslam`,
+    `afightera`) are clean but need the S16A variant of the kit: no
+    315-5195 mapper, different sound wiring, jtcores `s16` core.
+  - Only `altbeast.zip`/`altbeastj.zip` are in `./mame` and
+    `roms/`; title #3 needs the dump on disk before stage 3 can start.
+
+**Stage 3 title: GOLDEN AXE (`goldnaxe`, set 6 US) — Mike's call,
+2026-09-12.** Chosen over Alien Storm because it exercises the kit as
+built and nothing else: same board, same 315-5195 mapper, same i8751
+conductor shape (317-0123A, 4 KB, dumped), same YM2151 + uPD7759 sound
+board, 2.54 MB flat (no SSF2), jtcores `s16b` is the spec. Alien Storm
+would have added four unbuilt subsystems before a frame composed:
+FD1094 (no `d` set for `astorm`), System 18's third plane on the MD VDP
+(which ARCHITECTURE.md already fills with both S16 planes), 2x YM3438 +
+RF5C68 sound, and the SSF2 mapper (SILICON.md 4e, derived, never run).
+Stage 0 (AB at 60) keeps priority; Golden Axe starts when its set is in
+`roms/goldnaxe` + `mame/goldnaxe.zip`. First rung: `make
+GAME=goldnaxe SPRLINE=1` + `tools/sprline_probe.lua` (hybrid vs
+framebuffer sprites), then the write-tap census (step a below). One
+known difference to diff first: its Z80 program is `epr-12390`, not
+AB's `epr-11671`, so `docs/sound/SOUND_DRIVER.md` needs a re-check.
 
 Per-title work the write-observer pattern implies (do it in this
 order, it is the cheapest path):
