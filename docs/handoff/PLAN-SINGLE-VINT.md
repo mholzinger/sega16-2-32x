@@ -533,3 +533,23 @@ is a phase, not a defect.
       baked-run path's punched loop (every pp < 3 sprite pixel now runs
       the cell loop instead of the tight run copy) and the master's
       mask writes in the name-table pass.
+
+## BUILD D CARD (builder, 2026-09-13 05:50) -- the mask table
+
+    rom        rom/night/bldD.32x            (md5 below)
+    base       bldB (md5 493d4984, the line)
+    change     ONE flag: C1MASKTAB=1 (-DC1_MASKTAB). The scene's class-2
+               tile opacity masks (tools/bake_cat1mask.py: 81/139/192/14/
+               130 tiles a scene, <= 1,536 B) are copied to SDRAM at
+               mds_install; the name-table pass stores a mask INDEX per
+               class-2 cell (binary search of the raw 13-bit code, in
+               ROM); the slave's punched loops read one SDRAM byte per
+               cell row and test a bit, instead of eight cart bytes.
+               Class 0/1 handling unchanged. Nothing added to .ramtext.
+    why        the ablation (247): noplot 1.03 / nomask 1.16 / line 1.18
+               -- the art reads inside the punched loop hold 0.13.
+    gates      ares wall (pcD) against pcB 1.18, expected ~1.05; picture
+               equal to bldB incl. the late-coin game; rig frame rate
+               (frD vs frB 21 19 7 15 18); black shares over three
+               launches; Mike: does it look like bldB.
+    numbers    (appended when the runs land)

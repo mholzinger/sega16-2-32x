@@ -6160,3 +6160,13 @@ prediction this matches. Build D therefore: `C1MASKTAB=1`, the scene's
 cell from the name-table pass (binary search of the raw code), and one
 SDRAM byte per cell row in the punched loop instead of eight cart
 bytes. Nothing added to .ramtext (the loop shrinks). Card in PLAN.
+
+    pcB_nomask                  wall 1.16   echo 1.09   mtask 0.74
+    pcB_nopunch                 wall 1.05   echo 0.97   mtask 0.75
+
+So: the mask writes cost 0.00, the punched loops' own shape 0.02
+(nomask vs the line), and the class handling with its cart art rows
+0.13 (nomask 1.16 -> noplot 1.03). Note 34's reading holds: the art
+rows from the cart inside the slave's loop. Build D's first cut spilled
+.ramtext by inlining the mask-index search into the name-table pass;
+the search is out of line in ROM now.
