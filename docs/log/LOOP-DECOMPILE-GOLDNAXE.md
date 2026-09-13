@@ -1,0 +1,184 @@
+# LOOP-DECOMPILE-GOLDNAXE — the Golden Axe decompile thread
+
+Format as `docs/log/LOOP-DECOMPILE.md` (Altered Beast). Brief:
+`docs/handoff/HANDOFF-DECOMPILE-GOLDNAXE.md`. Provenance rule (AB entry
+50): a claim names the instruction that consumes the value, or the
+running frame that showed it, or it is marked HYPOTHESIS.
+
+Set: `goldnaxe` (set 6 US, i8751 317-0123A), MAME 0.288, arcade oracle
+`mame goldnaxe -rompath ./mame`. Program image `roms/goldnaxe/prog68k.bin`.
+
+---------------------------------------------------------------------
+## 1. Rung 1: the program image (2026-09-12)
+
+`roms/goldnaxe/prog68k.bin` = `epr-12545.ic2` at the even byte,
+`epr-12544.ic1` at the odd byte, 524,288 bytes. Byte order taken from
+MAME's own load table, not guessed: `mame -listxml goldnaxe` reports
+`maincpu off=00000000 epr-12545.ic2`, `off=00000001 epr-12544.ic1`
+(the `ROM_LOAD16_BYTE` pair in `segas16b.cpp`).
+
+Proof the order is right (a swapped image would fail all three):
+
+    offset 0   initial SP  0xFFFFFF00     top of work RAM (region 3 below)
+    offset 4   reset PC    0x000400       inside the image
+    vectors    IRQ1-3,5-7 -> 0x40C (rte); IRQ4 -> 0x404 -> bra 0x2F60
+
+The boot at 0x40E disassembles as a boot (`m68k-elf-objdump -D -b
+binary -m 68000`): clears d0-d7/a0-a6, writes 0x80 to 0xC43007 and
+0xC40001 (same two I/O writes AB's boot makes), clears 0xFFC000-0xFFFFFF
+(3840 longs = 15 KB, keeping byte 0xFFEC00 across the clear), then
+`jsr 0x6AC0; jsr 0x4D76` and the DSW decode. So the same 315-5296 I/O at
+0xC4xxxx and the same 16 KB work-RAM window as AB.
+
+**What the boot does NOT do: program the 315-5195.** AB's boot copies a
+16-byte mapper table from ROM 0x1986 to 0xFE0020 at 0x440; Golden Axe's
+boot has no such copy. The only `0xFE0020` literal in the image is at
+0x58822, in a routine at 0x5880E that copies 16 bytes from 0x2F89 — an
+ODD address in the middle of the IRQ4 handler (the bytes there are the
+`lea 0x1F2000,a0` instruction) — and nothing references 0x5880E/0x58814
+by absolute address. HYPOTHESIS: stale code from another link of the
+program, never reached. Rung 4's trace will say whether it ever runs.
+
+The mapper is programmed by the MCU alone. Entry 2.
+
+---------------------------------------------------------------------
+## 2. THE MEMORY MAP IS NOT ALTERED BEAST'S, and the table in the MCU ROM at 0xFEA is a decoy
+
+The brief says region 0 is 512 KB and "same board as AB"; the rest of the
+map was assumed AB's (tile RAM 0x400000, sprites 0x440000, palette
+0x840000). Byte search seemed to confirm it: `317-0123a.c2` holds, at the
+same offset 0xFEA as AB's MCU, the byte-identical table
+`02 00 02 08 00 3F 00 FF 04 44 0D 40 00 84 00 C4`.
+
+**That table is never used.** Captured from the running arcade
+(`tools/s16b_map_probe.lua`, a write tap on the i8751's external data
+bus, MAME space `xdata`, where every 315-5195 register write lands):
+
+    frame 6, MCU -> regs 10..1F:  02 00 | 00 1F | 08 1E | 00 FF | 04 20 | 0D 10 | 00 14 | 00 C4
+
+That table lives at MCU ROM 0x522, loaded by `MOV DPTR,#0522h` at MCU
+0x515. Decoded with `315_5195.cpp compute_region` (size code &3 -> 64K /
+128K / 512K / 2M; base = byte<<16 & ~mask) and the region roles from
+`segas16b.cpp memory_mapper` (case 7 I/O, 6 palette, 5 tile+text, 4
+sprites, 3 work RAM, 2/1/0 board-specific):
+
+| r | bytes | 68K range | what | AB's |
+|---|---|---|---|---|
+| 0 | 02 00 | 0x000000-0x07FFFF | program ROM, 512 KB | 0x000000 (256 KB used) |
+| 1 | 00 1F | 0x1F0000-0x1FFFFF | 171-5797 bank/math: **tile bank at 0x1F2001/3**, 315-5248 multiplier at +0x0000, compare/timer at +0x1000 (`rom_5797_bank_math_w`, segas16b.cpp:1017) | 0x080000 (2nd ROM, empty) |
+| 2 | 08 1E | 0x1E0000-0x1EFFFF | 5797 region 2, `unknown_rgn2` (segas16b.cpp:931); 49 writes in 1200 frames from 0xABxx | 0x3F0000 tile bank |
+| 3 | 00 FF | 0xFF0000-0xFFFFFF | work RAM 16 KB, effective 0xFFC000-0xFFFFFF | same |
+| 4 | 04 20 | 0x200000-0x20FFFF | sprite RAM 2 KB — **BUT SEE ENTRY 3, THE MCU MOVES IT** | 0x440000 |
+| 5 | 0D 10 | 0x100000-0x11FFFF | tile RAM 64 KB at 0x100000, text RAM 4 KB at 0x110000 | 0x400000 / 0x410000 |
+| 6 | 00 14 | 0x140000-0x14FFFF | palette RAM 4 KB | 0x840000 |
+| 7 | 00 C4 | 0xC40000-0xC4FFFF | I/O 315-5296 | same |
+
+Cross-check against what the 68K actually writes (same probe, tap
+reinstalled every frame, 1200 frames of attract, by 64 KB page):
+
+    10xxxx  247,475   tile RAM   (0x39AE fills it: lea 0x100000 / 16384 longs)
+    11xxxx   58,662   text RAM   (0x3972, 0x5854, 0x3EF6 ...)
+    14xxxx   12,120   palette    (0x3C8C x6144, then the 0x1172.. cyclers)
+    1Fxxxx    4,285   tile bank  (0x2F96 = the IRQ4 movep, 2 per vint) + math at 0xA8D6..
+    1Exxxx       49   region 2
+    20xxxx    2,352   sprite RAM at its boot base
+    50/60/70/80/90xxxx  401,270   sprite RAM at the MCU's OTHER bases (entry 3)
+    C4xxxx    2,316   I/O (0x3098/0x30A0 every vint: 0xC40001 <- 0xFFEC18, 0xC43001 <- 0xFFEC94)
+
+Every page the 68K writes is explained by the table; nothing lands
+outside it except the moving sprite base. **The table at 0xFEA is what
+a byte search finds and it is wrong for this title.** The kit rule that
+follows: the S16B memory map is captured from the MCU's register writes
+on the running arcade, never read out of a ROM.
+
+Probe trap, paid once: `install_write_tap` installed at script start
+reads 0 writes for the whole run, because `update_mapping()`
+(315_5195.cpp) unmaps 0x000000-0xFFFFFF on every region-register write
+and drops the tap with it. Reinstall the tap every frame (the tool does).
+
+---------------------------------------------------------------------
+## 3. THE MCU MOVES SPRITE RAM EVERY FRAME and tells the 68K where it went
+
+The 68K's sprite-list copy (0x3018-0x3082, `move.l (a3)+,(a2)+` x3 +
+`addq #4,a2` per record, source lists at 0xFFF400/0xFFF800, terminator
+`move.w #-1,(a2)` at 0x3084) writes through a2, and a2 comes from
+`move.w 0xFFECC4,d0; swap d0; movea.l d0,a2` at 0x2F80-0x2F86 — the
+high word of the long at 0xFFECC4, which boot sets to 0x00200000 at
+0x586. Only two other sites read it (0x39BA, 0x568CE, both
+`movea.l 0xFFECC4,a0` before an 80-record clear) and NO 68K instruction
+writes it after boot.
+
+**The MCU writes it, and remaps region 4 to match, every vblank.** From
+the xdata tap, frames 12-16, identical each frame:
+
+    regs 10-1F <- 02 00 00 1F 08 1E 00 FF 04 [50] 0D 10 00 14 00 C4   region 4 base = 0x50
+    regs 0A,0B,0C <- 7F F6 62  (= 68K address 0xFFECC4)
+    regs 00,01    <- 00 50
+    reg  05       <- 01        (write latch: 0xFFECC4 <- 0x0050)
+
+Observed on the 68K side: 0xFFECC4 reads 0x00500000 from frame 7,
+0x00000000 at frame 11, 0x00200000 at frame 12 (boot re-store), 0x00500000
+from frame 13; at frame 1200 it reads 0x00200000 again and 0x500000 reads
+back as open bus (`FF00 FF20 FF0F ...`) while 0x200000 holds live sprite
+records. Over 1200 frames the sprite writes landed in pages 0x20, 0x50,
+0x60, 0x70, 0x80 and 0x90, so the base rotates through at least six
+values. This is 317-0123A's protection: sprite RAM is wherever the MCU
+says this frame, and a program that ignores 0xFFECC4 draws nothing.
+
+**For the port this is good news.** Our shim replaces the MCU
+(NOTES.md "i8751 MCU — it's the system's conductor"), so it owns
+0xFFECC4: set it ONCE to the port's sprite staging buffer and never
+rotate. The sprite writes are already indirect, so no patch site is
+needed for them at all — the opposite of AB, where 0x440000 literals had
+to be rebased. NOTES-FROM-DECOMPILE-GOLDNAXE 1.
+
+The rest of the MCU's per-vblank protocol, as captured (the CONSUMING 68K
+instructions are rung 5 work; until then these are observations, not
+mailbox claims):
+
+    reg 04 <- 0B                              raise IRQ4 (the 68K's vblank comes from the MCU, as AB)
+    read  0xC41002, 0xC41006, 0xC42002, 0xC42000   P1, P2, DSW2, DSW1 through the mapper
+    write 0xFFECD0 <- FFFF, 0xFFECD2 <- FFFD   (P1/P2 images? inverted; HYPOTHESIS)
+    write 0xFFEC96 <- FFxx                     (coin/service byte? HYPOTHESIS)
+    write 0xFFECD8/DA/DC/DE <- 048C 159D 26AE 37BF   a constant signature, every frame
+    read  0xFFECD4, 0xFFEC1E, 0xFFECFC          (busy/handshake candidates)
+    frame 10: reads 68K ROM 0x714..0x7FE, then reg 06 <- 02, reg 02 <- 00
+              (ROM checksum before releasing the 68K from reset, as AB's
+              MCU checksums 2 KB; THE PATCHER MUST LEAVE 0x714-0x7FE
+              BYTE-EXACT or emulate the check in the shim)
+    frame 11: reg 03 <- 40                      sound latch init/silence (AB's MCU writes the same 0x40)
+
+4,117 register writes in 1,200 frames = 3.4 per frame after boot.
+
+---------------------------------------------------------------------
+## 4. Rung 2 started: rig, census, discriminator candidates
+
+`tools/ghidra_run.sh` takes `GAME=goldnaxe` (project `goldnaxe`, image
+`roms/goldnaxe/prog68k.bin`, census default
+`docs/audit/goldnaxe/timing_census.json`, gitignored). Import + auto-
+analysis: 360 functions, 207 backward branches. `tools/ghidra/
+timing_census.py` now carries a per-game hardware table (`HW_GOLDNAXE`,
+the map of entry 2); the first census ran with AB's ranges and its
+`hw_refs` were meaningless — re-run pending as this is written.
+
+Arcade attract, headless snapshots every 240-300 frames to 5400:
+
+    f240   FBI "Winners Don't Use Drugs" (US set)
+    f480   title logo mid-animation, "INSERT COIN"
+    f720   title: full GOLDEN AXE logo, SEGA 1989 — unique, asymmetric, full-bleed
+    f1200  attract demo: forest stage, hero + red silhouettes (the shadow/hilite look)
+
+Text-RAM control words at those frames (offsets per AB entry 11: 0xE80/
+0xE82 scr1/scr2 page select, 0xE90/0xE92 vpos, 0xE98/0xE9A hpos; base
+0x110000 here):
+
+    f720   pages 1100 / 2222   vpos 0000 / 015F   hpos 00C0 / 00C0
+    f1200  pages F1E0 / F7E6   vpos 00BF / 00BF   hpos 009C / 00A5
+
+**The title is NOT a discriminator for the X-scroll sign**: hpos=0xC0 is
+the neutral value (TOOLKIT "Geometry-convention rule": xs=0xC0 -> eff=0
+validates both signs). It pins the page select, the Y sign (scr2 vpos
+0x15F is non-neutral) and the priority order. The demo at f1200 has
+non-neutral X on both planes (0x9C, 0xA5) over the forest art, which is
+the X-sign discriminator IF the attract is deterministic frame-for-frame
+under no input — to be re-measured twice before it is pinned.

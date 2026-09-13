@@ -20,13 +20,9 @@ from ghidra.program.model.address import AddressSet
 
 args = getScriptArgs()
 out_path = args[0] if args else '/tmp/timing_census.json'
+game = args[1] if len(args) > 1 else 'altbeast'
 
-listing = currentProgram.getListing()
-fm = currentProgram.getFunctionManager()
-refmgr = currentProgram.getReferenceManager()
-mem = currentProgram.getMemory()
-
-HW = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
+HW_ALTBEAST = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
     (0x3F0000, 0x3FFFFF, 'tilebank'),
     (0x400000, 0x40FFFF, 'tileram'),
     (0x410000, 0x410FFF, 'textram'),
@@ -39,6 +35,27 @@ HW = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
     (0xFFF144, 0xFFF145, 'misscounter'),
     (0xFFC000, 0xFFFFFF, 'workram'),
 ]
+# Golden Axe (goldnaxe, 171-5797 board): the map the i8751 programs into the
+# 315-5195 at runtime, captured on the arcade with tools/s16b_map_probe.lua
+# (LOOP-DECOMPILE-GOLDNAXE 2). NOT the table at MCU ROM 0xFEA. Region 4
+# (sprite RAM) is MOVED by the MCU between 0x20/0x50/0x60/0x70/0x80/0x90
+# pages and published to the 68K in 0xFFECC4, so its writes are indirect.
+HW_GOLDNAXE = [
+    (0x1F0000, 0x1FFFFF, 'bank_math'),     # 5797: tile bank at +0x2001/3, multiplier +0x0000, cmp/timer +0x1000
+    (0x1E0000, 0x1EFFFF, 'rgn2'),          # 5797 region 2 (MAME: unknown_rgn2)
+    (0x100000, 0x10FFFF, 'tileram'),
+    (0x110000, 0x110FFF, 'textram'),
+    (0x200000, 0x20FFFF, 'spriteram'),     # base at boot; see above
+    (0x500000, 0x50FFFF, 'spriteram_alt'), # one of the MCU's alternative sprite bases
+    (0x140000, 0x140FFF, 'palette'),
+    (0xC40000, 0xC43FFF, 'io'),
+    (0xFE0000, 0xFE003F, 'mapper'),
+    (0xFFECC4, 0xFFECC7, 'sprite_base_var'),
+    (0xFFEC1C, 0xFFEC1F, 'frameflag_cand'), # IRQ4 tests 0xFFEC1C/1E first; hypothesis until read
+    (0xFFC000, 0xFFFFFF, 'workram'),
+]
+HW = HW_GOLDNAXE if game == 'goldnaxe' else HW_ALTBEAST
+
 
 def hw_label(a):
     a &= 0xFFFFFF                      # 68000: 24-bit bus; short absolute

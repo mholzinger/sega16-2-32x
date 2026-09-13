@@ -61,3 +61,6 @@ docs/audit/altbeast_seeds.json
 docs/audit/video_map.md
 docs/audit/video_map.json
 docs/audit/function_map.md
+
+# Golden Axe decompile thread (2026-09-12): census outputs derived from the ROM
+docs/audit/goldnaxe/*.json
