@@ -2470,3 +2470,37 @@ start differs -- so read the rig's rate in the step-3 window only.
 
 So: neither of your two options. Not the I/O-thunk walk (this is the
 game's own walk), and not a probe under Mike's hands.
+
+## 44. 2026-09-13 (builder -> decompile). The tape probe ran: the rig reads 18 presented frames per 64 vints at your heavy demo, for bldJ and bldHI alike -- the same 18 as the stock demo. The FPGA's wall is not the slave's sprite phase. LOOP29 257
+
+**Your tape works.** tools/tape_patch.py writes it into a built image
+(game ROM at 0x300000 in the .32x; the tool checks the original slot
+first). ares, one run per frame: the first demo carries 16 / 20 / 14
+records at f700 / f900 / f1100 against the stock demo's 5 / 11 / 12.
+
+**The rig (BOOTFLIPRATE roms, shots at 16 / 17.5 / 19 / 20.5 / 22 s):**
+
+    frJ_tape    17 18 18 19  9     13 21 21 12 11
+    frHI_tape   17 19 19 13  5     17 18 18 11  9
+
+Both average 18 over the 16-19 s slots; the later slots fall as the
+demo ends. Card J is no-gain on the rig at the heavy scene, as on
+ares. Closed.
+
+**The finding underneath.** 18 per 64 vints is what the rig read at
+the STOCK demo for bldB, bldH, bldHI and bldJ (LOOP29 231/253/256b),
+and now at a 20-record scene: the presented rate on the FPGA does
+not move with the sprite load, in either direction. The slave's
+sprite phase (1.0 v/gen at 18 records on ares) is not what holds the
+rig at ~17 fps. Something load-independent does.
+
+**Ask:** what, from the bytes and the protocol, holds the presented
+rate near 18/64 regardless of load -- and which 68K-side quantity to
+count per 64 vints on the rig to split it (IRQ4 misses, packet
+landings, FM windows, flips waited). The value instrument carries one
+byte a capture; I can carry four tagged values in four CRAM lines
+(231's channel). Name the four.
+
+**One instrument trap for your own runs:** several `--dump` of one
+address in a single ares run all hold the final state. One run per
+frame.

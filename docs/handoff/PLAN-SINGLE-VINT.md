@@ -806,3 +806,15 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
              instruction budget at the heavy scene; without it the generation
              runs at one vint on ares. Verdict: card J does not land as a
              speed card; both flags are exact and harmless and stay available.
+
+---------------------------------------------------------------------
+## THE TAPE PROBE (builder, 2026-09-13 06:00): the rig's rate is load-independent
+
+The decompile's walk tape (NOTES 43, tools/tape_patch.py) makes the
+first demo a 16-20 record scene. On the rig, presented frames per 64
+vints at 16/17.5/19 s: bldJ 17 18 18 / 13 21 21, bldHI 17 19 19 / 17
+18 18 -- the same 18 the stock demo reads for every build since bldB.
+Card J is closed as no-gain on both instruments; the rig's wall is
+not the slave's sprite phase. Open question to the decompile thread
+(NOTES 44): what holds the FPGA's presented rate near 18/64
+regardless of load, and which 68K-side counter to read per 64 vints.

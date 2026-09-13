@@ -6612,3 +6612,46 @@ the same for bldB, bldH, bldHI and bldJ: the rig's wall at that
 scene is not the slave's sprite phase).
 
     rom/night/bldJ (994b3c93, on the rig), bldJa, bldJb, frJ, pcJ*, pcJnp
+
+## 257. THE TAPE PROBE: THE RIG'S RATE AT A HEAVY PLAY SCENE IS THE SAME AS AT A LIGHT ONE, WITH OR WITHOUT CARD J (2026-09-13 06:00)
+
+NOTES 43 (decompile, c836bca): the attract demo is the game's own
+recorded input stream (3 raw port bytes a frame at ROM 0x3E4B0, 768
+frames), so a recorded walk-and-attack written into that slot makes
+the FIRST demo after boot a 20-record scene -- the rig's heavy play
+probe with no input path and nobody at the rig. tools/tape_patch.py
+writes tools/tapes/altbeast_walk_p2mirror.hex into a built image (the
+game ROM sits at 0x300000 in the .32x; the tool checks the slot holds
+the original tape first). frJ_tape, frHI_tape, bldJ_tape, bldHI_tape.
+
+Verified in ares with one run per frame (below: why one run):
+
+    attract      bldJ records/rows      bldJ_tape records/rows
+    f700           5 / 336               16 / 502
+    f900          11 / 490               20 / 660
+    f1100         12 / 479               14 / 615
+
+**Rig, BOOTFLIPRATE roms, five shots at 16 / 17.5 / 19 / 20.5 / 22 s
+after launch (the decompile's heavy window is ~16-21 s):**
+
+    frJ_tape   launch 1   17 18 18 19  9      launch 2   13 21 21 12 11
+    frHI_tape  launch 1   17 19 19 13  5      launch 2   17 18 18 11  9
+
+Over the 16-19 s slots both roms average 18 presented frames per 64
+vints. Card J does not move the rig at the heavy scene either. And
+the number itself is the finding: 18 is what the rig read for bldB,
+bldH, bldHI and bldJ at the STOCK demo (12-17 records, 231/253) --
+the rig's presented rate does not depend on the sprite load. On the
+FPGA the wall is not the slave's compose; something load-independent
+holds the presented rate near 18/64 (~17 fps). The slowdown Mike
+sees with many sprites is therefore not the slave's sprite phase --
+or the probe's 64-vint window is too coarse to see a heavy-scene dip
+inside it (the 20.5/22 s slots fall as the demo ends, so the window
+edges are visible at this resolution).
+
+**Instrument trap, recorded:** several `--dump` of the same address in
+ONE ares run all hold the FINAL state -- the first tape check (six
+dumps in one run) read the same 12 records at every frame. One run
+per frame, as the windowed sweeps already did.
+
+    rom/night/*_tape.32x (frJ_tape 6e09a893, frHI_tape 08aeeb3a, bldJ_tape a0259190)
