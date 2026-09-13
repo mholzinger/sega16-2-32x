@@ -4923,6 +4923,12 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         const int punch = 0;                 /* LOOP29 247 ablation: the
                                               * slave draws unpunched; the
                                               * master still writes the mask */
+#elif defined(C1_RTOFF)
+        /* LOOP29 250 ablation: the punch code is PRESENT and compiled
+         * but never taken at run time -- separates "the punch's code
+         * changed the codegen of the hot loop" from "the punch's code
+         * runs". c1_rt is never written; the compiler cannot prove it. */
+        const int punch = (pp < 3) && c1_rt_off;
 #else
         const int punch = (pp < 3);
 #endif
