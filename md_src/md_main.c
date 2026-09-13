@@ -2857,9 +2857,14 @@ void shim_vblank(void) {
 #define TCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
 		uint8_t ve = TCV(0xFFA1F2), a0 = TCV(0xFFA080), a1 = TCV(0xFFA082), b0 = TCV(0xFFA084), b1 = TCV(0xFFA086);
 		uint8_t pu = TCV(0xFFA1F8), bl = TCV(0xFFA1FA), po = TCV(0xFFA0A0);
-		tc_sum[0] += (uint8_t)(a0 - ve); tc_sum[1] += (uint8_t)(a1 - a0); tc_sum[2] += (uint8_t)(b1 - b0);
-		tc_sum[3] += (uint8_t)(pu - b1); tc_sum[4] += (uint8_t)(bl - pu); tc_sum[5] += (uint8_t)(po - bl);
-		if (*(volatile uint8_t*)0xFFA1F6) tc_sum[6] += (uint8_t)(ve - TCV(0xFFA1F4));   /* the thunk re-arms on the token */
+		/* LOOP29 262a: the NTSC V counter repeats E5-EA at the vblank start; a
+		 * small negative delta is the jump (+6), a large one is a stage that
+		 * did not run this vint (0) -- the uncorrected form averaged 253s in */
+#define TCD(b_, a_) ((int8_t)((b_) - (a_)) < 0 ? ((int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : 0) : (uint8_t)((b_) - (a_)))
+		tc_sum[0] += TCD(a0, ve); tc_sum[1] += TCD(a1, a0); tc_sum[2] += TCD(b1, b0);
+		tc_sum[3] += TCD(pu, b1); tc_sum[4] += TCD(bl, pu); tc_sum[5] += TCD(po, bl);
+		if (*(volatile uint8_t*)0xFFA1F6) tc_sum[6] += TCD(ve, TCV(0xFFA1F4));   /* the thunk re-arms on the token */
+#undef TCD
 		else tc_noidle++;
 #undef TCV
 		if (++tc_vc >= 64) {

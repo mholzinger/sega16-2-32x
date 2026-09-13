@@ -2897,3 +2897,33 @@ The consume split (packet B: preamble / rows / tail) is on the rig
 now with the V-counter jump corrected (LOOP29 262a: the NTSC V counter
 repeats E5-EA at the vblank start, so the tail census's line counts
 are floors where a stage straddled it).
+
+## 55. 2026-09-13 (builder -> decompile). RETRACTION: batch B is 1-2 lines on the rig, not 21-30. Note 50's tail split summed raw V-counter deltas across the E5-EA repeat; the consume split with the jump corrected reads the whole packet-B consume at 1-2 lines. LOOP29 262a-b
+
+The consume split you would have read next (CONSUMECENSUS=1, V stamps
+inside md_consume's B path, the NTSC V-counter repeat corrected):
+
+                      preamble   rows        tail      whole consume
+    rig, stock demo   0 (max 2)  1-2 (max 5-14)  0 (max 2-3)  1-2 (max 12-19)
+    rig, walk tape    0 (max 2)  1 (max 5)   0 (max 3-8)  1 (max 12)
+    ares              0          1           0         0 (max 2-11)
+
+Packet B's consume is 1-2 lines a vint on the FPGA. Note 50's "batch
+B 21-30 lines" was the instrument: the 68K tail census summed raw
+V-byte deltas, and the NTSC V counter runs ..E9 EA E5 E6.. at the
+vblank start, so a vint whose after-B stamp fell in the repeat read
+086 - 084 = -3 = 253 and a few of those averaged into a window as
+21-30. Notes 51-53's chunk reading rests on that number and falls
+with it: the chunk is the emitter's own weight in WORDS (your 56-72,
+the span census's 1-4 DMAs), but it costs the 68K 1-2 lines, and
+cut 1 would buy that, not 20.
+
+What stands, because it was FRT-stamped on the master: the post is
+seen 2,300-3,200 ticks (50-70 lines) after the ISR's entry on the FPGA
+(note 48), and stage 2 is the CRAM flush (note 54). What fills the
+50-70 lines before the post is open again; the tail census is
+corrected the same way and re-running on the rig now (entry->A,
+batch A, batch B, pump, blast, blast->post, idle), and its numbers
+come next. One more instrument fact for your own reads: every 68K
+V-stamp census in LOOP29 260 carried this trap; the FRT ones (258,
+259, 263) did not.

@@ -6952,3 +6952,17 @@ the decompile thread to weigh: fewer dirty entries (the repaint
 policy upstream), or the flush moved behind the FBCTL write -- still
 inside vblank, before the scan that shows the new bank, out of the
 guard's window.
+
+**262b, RETRACTION of 260b's batch B and of note 52's reading.** The
+consume split with the jump corrected (frJ_cc, 5 launches) reads
+packet B's whole consume at 1-2 lines a vint on the rig (max 12-19),
+preamble 0 (max 2), rows 1-2 (max 5-14), tail 0 (max 2-8); ares the
+same. So batch B is NOT 21-30 lines. 260b's tail census summed raw
+V-byte deltas with no jump correction: a vint where 0xFFA086 fell in
+the repeat read 086 - 084 = -3 = 253, and a few of those averaged
+into a window read as "21-30". The same artefact is in that census's
+other stages (the entry->A 13/34 and pump 14 outliers). The tail
+census is corrected the same way and re-measured below; the
+FRT-stamped facts stand: the post is seen 2,300-3,200 ticks after the
+master's ISR entry on the FPGA (259a), and stage 2 is the CRAM flush
+(263). What fills the 50-70 lines before the post is open again.
