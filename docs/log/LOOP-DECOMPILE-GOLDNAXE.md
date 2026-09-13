@@ -601,3 +601,41 @@ IRQ stubs byte for byte (0x000-0x00F, 0x038-0x042: `jp $00C2`, `call
 $0089`) but only 2,154 of 32,768 bytes overall, so
 docs/sound/SOUND_DRIVER.md's map applies to the entry points and not
 to the tables; the command set above is what the map must decode.
+
+---------------------------------------------------------------------
+## 12. Rung 7 (part): page shadows behind pointers, the attract bit measured, priority censuses
+
+**Page selects go through pointers.** IRQ4 at 0x2FD0-0x2FE2: `movea.l
+0xFFECEC,a0 ; move.w 0xFFECF4,(a0)` and `movea.l 0xFFECF0,a0 ; move.w
+0xFFECF6,(a0)`; boot stores #0x110E80 / #0x110E82 into the two pointer
+longs at 0x554/0x55C. The shadows are 0xFFECF4 (scr1) and 0xFFECF6
+(scr2) — AB's page shadows had to be found behind a scene byte (entries
+92-94); here the port can simply retarget the two pointers at boot and
+never patch the stores. The scroll words are written direct (0x2FA0-
+0x2FCA, entry 10).
+
+**Attract and credited, measured on the arcade** (the brief's warning
+about AB's inverted first reading): the 0xFFEC00 system block was
+snapshotted at f500 (attract), f700 (after coin), f900 (after START),
+f1500 (cutscene), f2400 (play) and diffed. 0xFFEC26 bit 0 reads 1, 1,
+0, 0(0x40), 0 — set through attract and the credited title, cleared by
+START: the attract flag, and the one the sound post consults with the
+DSW image (entry 11). 0xFFEC28 / 0xFFEC29 bit 0 read 0, 0, 1, 1, 1: the
+per-player in-game flags the HUD writer selects on — set at START, not
+at coin. Scene-byte candidates (all HYPOTHESIS until a consumer is
+read): 0xFFEC2A (00>00>00>01>04), 0xFFEC2C, 0xFFEC2D, 0xFFEC00. The
+sound ring itself is visible in the diff (0xFFEC40-5F filling with
+0x91/0x95/0x97/0x98 in play).
+
+**Priority censuses.** Tile word bit 15 is set only in pages C, D, E
+(378 / 473 / 595 of 2048 words — 23.5% of that plane, 4.4% of tile
+RAM); pages 0-B and F carry none. Page selects in play are scr1 0x1302,
+scr2 0xF7E6 (attract demo 0xF1E0 / 0xF7E6), so pages E and F serve
+both layers across scenes. Sprite records in stage-1 play: 11 live,
+priority field 9 x 0 and 2 x 3; cutscene 7 live, 3 x 0 and 4 x 3.
+Bases seen: 0x300000, 0x600000, 0x900000 (entry 3's rotation).
+
+Left for rung 7: the scene byte's consumer, the cat-1 whole-vs-per-
+pixel census against the arcade frames (AB 104/106), the attract step
+byte, and the round-by-round sprite census — each needs a play driver
+that reaches later stages, which the scripted walk does not.

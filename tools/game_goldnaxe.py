@@ -351,6 +351,37 @@ TABLES = {
     'FMGATE_ENTRIES_BY_SPAN': {0: [5122, 5230, 5804, 6150, 6572], 1: [6664, 6688, 6710], 2: [8142], 3: [8550], 4: [14552, 14690], 5: [14750], 6: [16048, 16058], 7: [16098], 8: [16150], 9: [18506, 19064], 10: [19554, 19564], 11: [20660, 20686], 12: [22634], 13: [], 14: [], 15: [25488], 16: [28360, 28374, 28938], 17: [31424, 31442, 31454, 31464, 31490, 31502, 31510], 18: [40484], 19: [40568], 20: [42620, 42654, 42666], 21: [50084, 50126, 50220, 50354, 50372], 22: [], 23: [51024, 51134, 51150], 24: [219892, 221958, 221972, 221986, 222000], 25: [223960, 225314]},
     'FMGATE_ENTRIES': None,
     'REBASE_EXCLUDE': [],   # no word table forging pointers found yet (needs the port's rebase scan report)
+
+    # ------------------------------------------------------------------
+    # RENDERER FACTS (entry 12, measured on the arcade with the play driver).
+    # IRQ4 writes the page selects THROUGH POINTERS: `movea.l 0xFFECEC,a0 ;
+    # move.w 0xFFECF4,(a0)` and the same for 0xFFECF0/0xFFECF6 (0x2FD0-
+    # 0x2FE2); boot stores #0x110E80 / #0x110E82 into the pointers (0x554/
+    # 0x55C). So the page-select SHADOWS are 0xFFECF4 (scr1) / 0xFFECF6
+    # (scr2), and the port can retarget the two pointer longs at boot
+    # instead of patching the stores.
+    'PAGE_SHADOWS': (0xFFECF4, 0xFFECF6),
+    'PAGE_REG_PTRS': (0xFFECEC, 0xFFECF0),
+    # Attract flag: 0xFFEC26 bit 0 = 1 in attract and on the credited
+    # title (f500 = 01, f700 = 01), 0 from START on (f900 = 00, play = 00);
+    # the sound post uses it with the DSW image (0x361C). Credited/in-game
+    # per player: 0xFFEC28 (P1) / 0xFFEC29 (P2) bit 0, set at START (f900),
+    # NOT at coin — the HUD writer selects on them. Measured, not read.
+    'ATTRACT_FLAG': (0xFFEC26, 0),
+    'CREDITED_FLAGS': (0xFFEC28, 0xFFEC29),
+    # Scene byte HYPOTHESES (the bytes in the 0xFFEC00 block that changed
+    # attract>coin>start>cutscene>play): 0xFFEC2A 00>00>00>01>04,
+    # 0xFFEC2C 00>00>15>05>14, 0xFFEC2D 00>00>26>2c>2c, 0xFFEC00 01>02>01.
+    # 0xFFEC20 is a frame counter (IRQ4 0x30A8), 0xFFEC21 its 30/60 reload.
+    # Consumers to be read before any is called the scene byte.
+    'SCENE_BYTE_CANDIDATES': [0xFFEC2A, 0xFFEC2C, 0xFFEC2D, 0xFFEC00],
+    # Tile priority bit (word bit 15) census: only pages C, D, E carry it
+    # (378 / 473 / 595 of 2048 words each = 23.5% of the 0x10C000 plane,
+    # 4.4% of all tile RAM); pages 0-B and F have none. Sprite records in
+    # stage-1 play: 11 live, priority field (word 4 bits 7-6) 9 x 0 and
+    # 2 x 3; cutscene 7 live, 3 x 0 / 4 x 3. Page selects in play:
+    # scr1 0x1302, scr2 0xF7E6; attract demo 0xF1E0 / 0xF7E6.
+    'TILE_PRIORITY_PAGES': [0xC, 0xD, 0xE],
     # ------------------------------------------------------------------
     # NOT YET DERIVED — each names the census that derives it.
     # Every 0x10xxxx/0x11xxxx/0x14xxxx operand objdump prints was listed
