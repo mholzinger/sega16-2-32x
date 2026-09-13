@@ -14370,6 +14370,9 @@ RAMCODE void m_main(void)
                     sc[1] = 0;
                     sc[5] = (uint16_t)sent;
                     DIAG[57] += (uint32_t)sent;
+#ifdef MD_ALLOC_WHY
+                    MDA_ADD(16, sent); if (sent) MDA(17); MDA(18);   /* NOTES 51: tiles, non-empty batches, batches */
+#endif
                     if (md_phase == 0) md_phase = 1; /* forced batches do not
                                                       * advance the rotation */
                 } else {
@@ -15005,6 +15008,9 @@ RAMCODE void m_main(void)
                             o += n * 17;
                             art_n = (uint16_t)n;
                             DIAG[57] += (uint32_t)n;
+#ifdef MD_ALLOC_WHY
+                            MDA_ADD(21, n);              /* NOTES 51: art riding a chunk's tail */
+#endif
                         }
 #endif
 #else
@@ -15053,6 +15059,9 @@ RAMCODE void m_main(void)
 #endif
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
                     sc[5] = (uint16_t)(o - (sc + 8));   /* payload words */
+#ifdef MD_ALLOC_WHY
+                    MDA(19); MDA_ADD(20, sc[5]);         /* NOTES 51: cell chunks, their words */
+#endif
 #else
                     sc[1] = 1;
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
