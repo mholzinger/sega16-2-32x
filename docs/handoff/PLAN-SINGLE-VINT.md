@@ -259,6 +259,8 @@ writer is found.
 ## STATE 2026-09-13 00:30, AND THE NEXT THREE BUILDS
 
     line (presentation)   vi70    wall 1.48   18% single-vint   (ares, 232)
+    -> the line since 2026-09-12 20:15 is bldB (wall 1.18, 40%); see the
+       Build B block below and START-HERE's heading
     fold-1 build          vi95    wall ~1.11  44%               vi75's line +
                                                                  the state word from
                                                                  the game's bytes

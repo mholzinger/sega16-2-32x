@@ -197,7 +197,16 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## THE LINE: `rom/night/vi70.32x` (md5 fadafb08) = `rom/s16.32x`, ACCEPTED BY MIKE 2026-09-12 14:50 ("otherwise SOLID presentation"; LOOP29 224)
+## THE LINE: `rom/night/bldB.32x` (md5 493d4984) = `rom/s16.32x`, NAMED BY MIKE 2026-09-12 20:15 ("Behind the grass stellar lockdown on the progress"; PLAN-SINGLE-VINT Build B)
+
+bldB = vi95's flags + `C1PUNCH=1` (fold 1's hole punch, Build A) +
+`SETCOLS=1` (fold 2, Build B). Ares wall 1.18 v/gen, 40% single-vint,
+check mode 0/0 on 3,010 planes, rig frame rate 21 19 7 15 18 presented
+frames per 64 vints, attract black shares zero over three launches.
+Every card from here is one change against bldB. The previous line,
+vi70 (md5 fadafb08, accepted 2026-09-12 14:50, "otherwise SOLID
+presentation", LOOP29 224), is history: vi70 drew cat-1 in the
+framebuffer at wall 1.48 / 18%.
 
 `fmgate_defer` (68K WRAM, frame 2500 of the attract) is the handshake's
 instrument, NOT a gate (LOOP29 229 set it as one, 230 retracted that:
