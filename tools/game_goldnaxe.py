@@ -244,10 +244,55 @@ TABLES = {
         (0x46156, bytes([0x4A,0xE9,0x25,0xE1]), None),
     ],
     'TAS_SITES_DUP': [0x55F0C, 0x5641E, 0x57A5C, 0x5AEA8],   # second half; 0x55F0C is an indexed form (4AF1 F27F)
+
+    # ------------------------------------------------------------------
+    # TEXT RAM (entry 10). 170 literal sites in the first half; text RAM
+    # is a 64-column map, 128 bytes a row, rows 0-27 visible, the layer
+    # registers at +0xE80.. (AB entry 11 / jts16_mmr.v).
+    # Layer-register writers (AB's MDHSCR shape, `move.w d0,abs.l` = 33C0,
+    # and the page selects): remapped to the port's shadow words, never
+    # to the FB. IRQ4 writes the four scroll words every vint (0x2FA0-
+    # 0x2FCA); the page selects are written at cuts.
+    'LAYER_REG_SITES': [
+        (0x02FA0, 0x33C0, 0x110E98, "scr1 hpos"), (0x02FAE, 0x33C0, 0x110E90, "scr1 vpos"),
+        (0x02FBC, 0x33C0, 0x110E9A, "scr2 hpos"), (0x02FCA, 0x33C0, 0x110E92, "scr2 vpos"),
+        (0x05A74, 0x33FC, 0x110E80, "scr1 pages #0x7777 (post-STOP reset)"), (0x05A7C, 0x33FC, 0x110E82, "scr2 pages #0"),
+        (0x0639E, 0x33FC, 0x110E80, "scr1 pages #0x7777"), (0x063A6, 0x4279, 0x110E82, "clr.w scr2 pages"),
+    ],
+    # The shared text copy/clear loop heads — AB's 0x3A9A/0x3AA4 idiom
+    # exactly: `move.b (a0)+,(a1)+ ; addq.l #1,a1 ; dbf` at 0x3EB0 and
+    # `clr.b (a1) ; addq.l #2,a1 ; dbf` at 0x3EBA (the CLR read-modify-
+    # write site). Entered by every text writer with a1 = destination;
+    # the census's 0x3EB4/0x3EBE (next-PC) are these loops writing the
+    # cutscene speech box (rows 14-25 from column 35) and other strings.
+    'TXT_LOOP_HEADS': {'copy': 0x03EB0, 'clear': 0x03EBA},
+    # AB's TXT_WRAM_WRITERS idiom, both members present:
+    #  - credit line: 0x3EE2 `lea 0x110000,a1 ; adda.w 0xFFEC24,a1` (AB:
+    #    0x3AAE with 0xFFF024), clears 9 glyphs stride 2 at 0x3EF2 (AB
+    #    cleared 9 and wrote 10 words); the census's 0x3EF6 = 18,585 writes
+    #    at 0x110BCE-0x110C60 (row 23, "CREDIT n" bottom centre-right).
+    #  - HUD: 0xC750 writes both players' rows: magic pots at row 25 via
+    #    0xC7B0 (word at a1+d1 and +128; leas 0xC764/0xC76A P1, 0xC790/0xC796
+    #    P2) and name/score/health strings at rows 0-1 via 0xC8A6 (2 rows x
+    #    10 words from string table (a1,d0*4); leas 0xC776 P1 = 0x110044,
+    #    0xC7A2 P2 = 0x11005A). Per-player select: a0 = 0xFFEC28 / 0xFFEC29
+    #    (the credited flags), a6/a5 = the player object 0xFFC000 / 0xFFC200.
+    'TXT_WRAM_WRITERS': [
+        {'site': 0x03EE2, 'reg': 1, 'off_var': 0xFFEC24, 'words': 9, 'loops': [0x03EB0, 0x03EBA], 'note': 'credit line'},
+        {'site': 0x0C764, 'reg': 1, 'alt_sites': [0x0C76A, 0x0C790, 0x0C796], 'sel_var': 0xFFEC29,
+         'ranges': [(0xCCA, 0xCD5), (0xD4A, 0xD55), (0xCDA, 0xCE5), (0xD5A, 0xD65)], 'helper': 0x0C7B0, 'note': 'magic pots row 25/26'},
+        {'site': 0x0C776, 'reg': 0, 'alt_sites': [0x0C7A2], 'sel_var': 0xFFEC29,
+         'ranges': [(0x044, 0x057), (0x0C4, 0x0D7), (0x05A, 0x06D), (0x0DA, 0x0ED)], 'helper': 0x0C8A6, 'note': 'name/score rows 0-1'},
+    ],
+    'TXT_WRAM_CLEAR_SITES': None,   # AB's scene-level text FILL entry (0x369C); GA's text clears are 0x3972 (16 KB? see 0x3962) and 0x1E7C/0x1FAA/0x2078/0x20A8/0x20E4 (lea 0x110000) — classify at rung 7
+    'TEXT_IDIOM': None,             # AB's movew->addw family (abs.w low-word trap on the 0xFF8000 mirror); re-derive once the text remap destination is fixed
+    # Every first-half text literal by text-RAM row (offset >> 7), for the
+    # rung-7 classification: 22 sites on row 0, 16 on row 25, 8 on row 4,
+    # 8 on row 10, the rest scattered; 8 layer-register sites above.
+    # Full list: python3 -c "..." over roms/goldnaxe/prog68k.asm, or
+    # LOOP-DECOMPILE-GOLDNAXE 10.
     # ------------------------------------------------------------------
     # NOT YET DERIVED — each names the census that derives it.
-    'TEXT_IDIOM': None,         # 170 literal text sites; the movew->addw family is an AB text-writer shape, re-derive
-    'TXT_WRAM_CLEAR_SITES': None, 'TXT_WRAM_WRITERS': None,   # HUD writers 0xC8CC/0xC900/0xC918 (census), row table 0x3EB4/0x3EF6
     'FMGATE_ENTRIES': None, 'FMGATE_SPANS': None,   # FB-writer entries: tile loaders 0x1FE2-0x2066, 0x399E, text writers
     # Every 0x10xxxx/0x11xxxx/0x14xxxx operand objdump prints was listed
     # (95 palette, 57 tile, 170 text); all sit in instruction context. The
