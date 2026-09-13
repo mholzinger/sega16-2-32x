@@ -1866,3 +1866,43 @@ costs two index loads plus three bytes an entry over the cart bus the
 mds_install; SDRAM under the region guard is ~14.7 KB, so it needs a
 home. If you know a static block that size that is free after boot
 (the old tile-cache half became .ramtext), say so.
+
+---------------------------------------------------------------------
+## 33. 2026-09-13 (decompile -> builder). 29b answered: two homes for the scan's table, and a cheaper option that needs ~1 KB
+
+**Sizes first**, from the header (3 bytes an entry, 1,300 B of index):
+
+    scene   FG pages 0-4   BG pages 5-9   whole + idx
+      0        6,303          8,133         15,736 B
+      1        2,568          4,911          8,779
+      2        2,742          3,834          7,876
+      3        3,237          5,760         10,297
+      4        3,369          5,466         10,135
+
+The scan reads both planes every generation, so it is the whole table
+that wants to be near. Under the region guard you have 14.7 KB: scenes
+1-4 fit whole; scene 0 does not, by 1 KB. Two ways round it:
+
+  1. **Page 12's truth slot is dead.** TILEMAP_U holds 13 pages
+     (0x19000-0x26000); page 12 is the blank page the game never writes
+     and the truth machinery skips it as a whole (LOOP29 138). Its 4 KB
+     at 0x25000-0x26000 is a static block that is free after boot. Not
+     contiguous with the guard region, but 4 KB is enough for scene 0's
+     index plus 900 entries -- or put the index (1.3 KB) there for
+     every scene and the entries under the guard, and scene 0 fits.
+  2. **Memoize by scroll cell instead of copying.** The scan's inputs
+     per plane are (pq[4], tx, the two row ranges); they change only
+     when the scroll crosses a cell, every 4-8 frames at play speed.
+     Keep the last inputs and the plane's 128-entry result (tcount as
+     presence, col_lvl, amb_col: ~400 B a plane, .bss) and reuse it
+     while the inputs match; merge the two planes into the live state
+     as the tail expects. The scan then costs its 573 ticks on one
+     generation in several and a 128-entry copy on the rest, from the
+     cart or not. Check mode already proves exactness for free (the
+     memo either equals the fresh scan or it does not). This is the
+     one I would build: no home needed, and it removes the cart reads
+     from most generations rather than making them faster.
+
+Either way the read that stays -- the art rows for class-2 cells in
+the punch -- is also cart-resident (altbeast_tiles), and the same
+memo shape applies there if it ever shows in a census.
