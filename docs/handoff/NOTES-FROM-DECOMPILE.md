@@ -2163,3 +2163,39 @@ shifting the coin by ten frames swaps which rom goes black.
 
 **The rig.** Rate 16 19 18 15 21 (bldB 21 19 7 15 18). Three
 launches, no level black.
+
+## 38. 2026-09-13 (builder -> decompile). Card I measured: the memo is exact and the scan is gone, but the wall did not move on the punch line; on the stamp base the pair reads 1.11. Both cards measured; fold 5 is next by Mike's order. LOOP29 254
+
+**Ask:** the packet-side plan for fold 5 (notes 25/26/27: the 0x369C
+writer's footprint, the copy riding r60_blast in the FM=0 slot, TXTWRAM
+as written halved the rig's rate). And the tile bank per round (note 37's
+second ask) when convenient.
+
+**Card I as built:** note 33.2's shape. Per plane a memo of the sets the
+baked scan touched, keyed by (round, four pages, vy0, vx0 cell);
+re-merged while the key holds. Check mode compares every reused answer
+with a fresh scan: 0 presence / 0 level mismatches over 3,039 planes.
+Scan drain 0.095 -> 0.014 (punch line) / 0.010 (stamp base) v/gen; 36
+fresh scans in 1,700 generations of the play2 script.
+
+**The wall:**
+
+    bldB  1.18      bldI  = bldB + memo         1.18
+    bldH  1.14      bldHI = bldH + memo         1.11
+
+The master's maps drain is not on the punch line's critical path. The
+slave's compose is the wall there and the scan ran in its shadow, so
+removing 0.08 of master work bought nothing; on the stamp base, where
+the slave is 0.02 lighter, the same cut buys 0.03. Note 36's sum
+(1.18 - 0.12 - 0.08 = 1.00) added two costs that overlap. What the
+line's wall actually is, by subtraction: the slave's clear+sprites
+(0.368 on H) plus whatever the ship/flip protocol adds on top of the
+longer of the two CPUs -- the phase split in nat_score reads echo 1.09,
+mtask 0.79, ship 0.66, flip 0.76 for pcH. If you want the next lever
+sized from the bytes, that is the split to read.
+
+**Rig, bldHI:** rate 21 22 8 16 17 (the line's class); three launches,
+no level black. It is on the rig now; bldH and bldB stay in rom/night.
+Mike's eye is owed on the stamp (bldH or bldHI: the memo is invisible).
+
+**Roms:** bldI 4bf9e5de, bldHI 0b43332a, bldH ca80af61, bldB 493d4984.

@@ -771,7 +771,12 @@ fold 5 next. THE LINE stays bldB (md5 493d4984), on the rig.
     picture gates (bldI)         title 0.273 demo 0.038 eye 0.488 title2 0.255
                                  return 0.040/0.038 face 0.58 play 0.036 0.036
                                  0.041 0.041 late-coin 0.036 0.042 0.042 -- bldB's
-    rig                          (bldHI: below)
+    rig (bldHI, ON THE RIG)      rate 21 22 8 16 17 (frH 16 19 18 15 21, frB 21 19 7 15 18)
+                                 three launches: level shots 0.00-0.02 on all; the
+                                 30 s slot read black / 0.45 / 0.03 (the demo->title
+                                 transition, as on bldH and bldB)
+    Mike's eye                   owed on bldH (the stamp; the memo is invisible by
+                                 check mode). rom/night holds bldB, bldH, bldHI.
 
     The memo is exact and takes the scan from 0.095 to 0.01 -- and the
     WALL of the punch line does not move (1.18 -> 1.18). The master's
