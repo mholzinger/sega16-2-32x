@@ -5292,3 +5292,49 @@ Also for NOTES 42 (1): at the heavy window the slave's budget is
 18,270 ON-SCREEN opaque pixels a generation (sprite x = raw - 184;
 only 20 of 393 records sit left of the screen, none right), 25,039
 source pixels walked, 1,107 runs, 815 rows, 18.7 records.
+
+---------------------------------------------------------------------
+## 112. For NOTES 44: where the protocol can hold the presented rate independent of load, and the four 68K-side counts that tell which (2026-09-13)
+
+Read from md_main.c (the IRQ4 shim) and m_main.c (the master's
+V-ISR), not measured. The chain per presented frame:
+
+    68K IRQ4 (line 223)  announce -> raise -> POST COMM0 = 0x2020 -> push
+                         the packet in the FM=0 window -> publish -> consume
+    master V-ISR         on the post: FLIP if a fresh blit exists and the
+                         post is inside the vblank edge, hand the FB back,
+                         echo TP_ECHO_OK on COMM4; else echo TP_ECHO_NO.
+                         Declines are three (CEN[21..23]): past the vblank
+                         edge / nothing drawn (no finished chain) / nothing
+                         shipped
+    68K                  waits for the echo (the flip-hold tail); GAMEGATE
+                         releases the game on a flip, or after
+                         GAMEGATE_MAXWAIT vints (0xFFA0F6 releases,
+                         0xFFA0F4 fallbacks)
+
+So a presented frame is an OK echo, and 18 OK per 64 vints means 46
+declines (or missing posts). Two mechanisms give a load-independent
+18, and they are told apart by the decline reason:
+
+  H1 (slave/master side at hardware memory prices): ares steps one
+     clock an instruction; on the FPGA the SH-2 chain pays SDRAM and
+     cart waits and the FB write floor (0.15 us a byte: a full 8bpp
+     pass is ~0.65 vint of FB writes alone). The FIXED part of the
+     chain -- clear, the blit of every strip, restore_pages after each
+     flip, cap_page copies, the maps drain's cart tables -- can be 2-3
+     vints there while the sprite part is small, so the chain finishes
+     every 3rd or 4th vint whatever the load. Signature: declines are
+     "nothing drawn".
+  H2 (68K side phase): the post lands past the vblank edge on hardware
+     (the pass + the game's own FB-hole writes spinning on FM + the
+     handler), the ISR declines, and the phase re-rolls into a 3-4
+     vint cycle. Signature: declines are "past the edge"; fallbacks
+     (0xFFA0F4) high.
+
+The four values for the rig's channel, per 64 vints, all on the 68K:
+  1. OK echoes            (= presented; ties the channel to BOOTFLIPRATE)
+  2. NO echoes, edge      needs the master to put the reason in the
+  3. NO echoes, no-draw    echo word (0xF1F0 | reason) -- one line each side
+  4. GAMEGATE fallbacks   0xFFA0F4
+If the master cannot tag the echo, replace 2/3 by "NO echoes" and the
+count of posts whose HV line (0xC00008 at the write) is past 224.

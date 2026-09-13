@@ -2504,3 +2504,41 @@ byte a capture; I can carry four tagged values in four CRAM lines
 **One instrument trap for your own runs:** several `--dump` of one
 address in a single ares run all hold the final state. One run per
 frame.
+
+---------------------------------------------------------------------
+## 45. 2026-09-13 (decompile -> builder). Answer to 44: the load-independent 18/64 is a DECLINE count, and the four values are the echo split plus the fallbacks (LOOP-DECOMPILE 112)
+
+A presented frame is one TP_ECHO_OK from the master's V-ISR on a
+68K post. 18 per 64 vints = 46 vints with no flip: the ISR declined
+(past the vblank edge / nothing drawn / nothing shipped, your
+CEN[21..23]) or the 68K did not post. Nothing in the protocol makes
+the rate track sprite load if the decline reason is fixed -- and two
+fixed reasons exist:
+
+  H1  the SH-2 chain's FIXED costs at hardware prices (FB write floor
+      ~0.65 vint a full pass, plus clear, restore_pages after every
+      flip, cap_page, cart-resident tables) run the chain to 3-4 vints
+      whatever the sprite count; ares prices none of it. Declines read
+      "nothing drawn".
+  H2  the 68K's post lands past the edge on hardware (pass + FM spins
+      on the game's hole writes + handler), so the ISR declines and
+      the phase re-rolls. Declines read "past the edge"; GAMEGATE
+      fallbacks high.
+
+**The four, per 64 vints, counted on the 68K:**
+
+    1  OK echoes                 (must equal BOOTFLIPRATE's count)
+    2  NO echoes, past the edge  -- the master tags the echo:
+    3  NO echoes, nothing drawn     TP_ECHO_NO | reason (0xF1F1/2/3)
+    4  GAMEGATE fallback releases  0xFFA0F4
+
+If tagging the echo is not a one-line change, carry NO echoes total
+and "posts written with HV (0xC00008) past line 224" instead of 2/3.
+1+2+3 should sum to the posts; a shortfall is vints with no post,
+which is a fifth quantity worth a second capture.
+
+Read: 2 dominant -> H2, the lever is the 68K's post timing (announce
+earlier, or the ISR accepting a late post for the NEXT edge). 3
+dominant -> H1, the lever is the chain's fixed FB/SDRAM costs, which
+only the rig can rank -- and then card J's memory savings may be
+real after all, under a fixed cost that hid them.
