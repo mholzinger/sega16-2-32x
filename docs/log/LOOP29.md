@@ -6170,3 +6170,20 @@ So: the mask writes cost 0.00, the punched loops' own shape 0.02
 rows from the cart inside the slave's loop. Build D's first cut spilled
 .ramtext by inlining the mask-index search into the name-table pass;
 the search is out of line in ROM now.
+
+## 248. BUILD D READS 1.22: THE 0.13 IS THE PUNCHED LOOP'S SHAPE, NOT ITS ART (2026-09-13 06:30)
+
+pcD (the mask table, SDRAM byte per cell row instead of eight cart
+bytes) reads wall 1.22, echo 1.14 -- no better than the line's 1.18 /
+1.11. So the class-2 art reads were not the price, and the ablation
+has to be re-read: noplot 1.03 (no punched plotting at all) against
+nomask 1.16 (the punched loop running with class 0 everywhere, no art,
+no skips) puts 0.13 in the LOOP'S SHAPE -- the per-cell `while`, its
+per-cell k and class load and the un-unrolled inner copy -- and only
+0.02 in the class handling. Note 34's reading from the code was the
+natural one and it was wrong; the measurement is what settles it.
+
+**Build E (`C1FAST=1`):** before walking cells, a punched run scans its
+cells' classes (one byte per cell, 2-9 loads a run); if all are class
+0 it takes the ORIGINAL tight copy. Cat-1 is 11% of level 1's cells,
+so most runs never see the cell walk. Card in PLAN when D's closes.

@@ -1053,6 +1053,12 @@ endif
 ifdef C1MASKTAB
 SHCCFLAGS += -DC1_MASKTAB
 endif
+# `make ... C1FAST=1` = Build E (LOOP29 248): a punched sprite run whose
+# cells are all class 0 takes the original tight copy; only runs that
+# touch a class-1/2 cell walk cells. Needs C1PUNCH.
+ifdef C1FAST
+SHCCFLAGS += -DC1_FAST
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
