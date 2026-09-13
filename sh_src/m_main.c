@@ -615,6 +615,36 @@ static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
 #define CAT1CODE_U(r) ((const volatile uint16_t *)(0x20000000u | (uint32_t)cat1code[(r)]))
 #include "cat1hole.h"
 extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
+#ifdef C1_MASKTAB
+/* Build D (LOOP29 247, NOTES 34): the slave's punched loop reads ONE
+ * SDRAM byte per class-2 cell row -- a 1-bit opacity mask -- instead
+ * of eight cart bytes of tile art. The scene's masks (<= 192 tiles x 8
+ * bytes, tools/bake_cat1mask.py) are copied into SDRAM at mds_install;
+ * the name-table pass stores the MASK INDEX per class-2 cell (binary
+ * search of the raw 13-bit code) where it stored the tile code. */
+#include "cat1mask.h"
+static uint16_t c1mask_codes[CAT1MASK_MAX];
+static uint8_t  c1mask_bits[CAT1MASK_MAX * 8];
+static uint16_t c1mask_n;
+#define C1MASK_U ((const volatile uint8_t *)(0x20000000u | (uint32_t)c1mask_bits))
+static void c1mask_install(unsigned sc)
+{
+    if (sc >= CAT1MASK_SCENES) { c1mask_n = 0; return; }
+    unsigned n = cat1mask_n[sc];
+    for (unsigned i = 0; i < n; i++) c1mask_codes[i] = cat1mask_code[sc][i];
+    for (unsigned i = 0; i < n * 8u; i++) c1mask_bits[i] = cat1mask_bits[sc][i];
+    c1mask_n = (uint16_t)n;
+}
+static inline unsigned c1mask_find(unsigned code)
+{
+    unsigned lo = 0, hi = c1mask_n;
+    while (lo < hi) {
+        unsigned mid = (lo + hi) >> 1;
+        if (c1mask_codes[mid] < code) lo = mid + 1; else hi = mid;
+    }
+    return (lo < c1mask_n && c1mask_codes[lo] == code) ? lo : 0xFFFFu;
+}
+#endif
 /* 244: PER PIXEL where the bake says the cat-1 tile has transparent
  * pixels (the grass tufts): the sprite pixel is punched only where the
  * tile's own pixel is opaque. One ROM byte per such pixel. */
