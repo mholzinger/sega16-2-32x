@@ -2861,7 +2861,8 @@ void shim_vblank(void) {
 		 * small negative delta is the jump (+6), a large one is a stage that
 		 * did not run this vint (0) -- the uncorrected form averaged 253s in */
 #define TCD(b_, a_) ((int8_t)((b_) - (a_)) < 0 ? ((int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : 0) : (uint8_t)((b_) - (a_)))
-		tc_sum[0] += TCD(a0, ve); tc_sum[1] += TCD(a1, a0); tc_sum[2] += TCD(b1, b0);
+		{ uint8_t vt = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8); tc_sum[0] += (uint8_t)(vt - 0xE0u) > 63u ? 63u : (uint8_t)(vt - 0xE0u); }   /* 264a: the 68K vint top's own line past 224 (this block runs there) */
+		tc_sum[1] += TCD(a1, a0); tc_sum[2] += TCD(b1, b0);
 		tc_sum[3] += TCD(pu, b1); tc_sum[4] += TCD(bl, pu); tc_sum[5] += TCD(po, bl);
 		tc_sum[6] += (uint8_t)(ve - 0xE0u) > 63u ? 63u : (uint8_t)(ve - 0xE0u);   /* 262c: the shim body's entry line past 224 */
 		if (!*(volatile uint8_t*)0xFFA1F6) tc_noidle++;

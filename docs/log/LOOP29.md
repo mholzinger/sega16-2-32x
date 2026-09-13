@@ -7002,3 +7002,30 @@ and ticks at phi/8, every FRT-priced bound on the master -- the
 four times tighter in lines on hardware than on ares, and 259a's
 "post seen at 50-70 lines" is 12-17 lines, the 68K's own account. 264
 measures the FRT's ticks per vint on both machines.
+
+## 264. THE MASTER'S FRT RUNS AT THE SAME RATE ON THE FPGA; THE TWO CLOCKS DISAGREE ON WHEN VBLANK IS (2026-09-13 12:40)
+
+`STAMP3CENSUS=1`: the master's FRT ticks per vint (>>10) on the
+channel. ares 11, rig 11 (both launches, every capture) = 12,052
+ticks a vint = phi/32, as programmed (m_main.c SH2_FRT_TCR = 1;
+FRT.sv:55 honours CKS). 262d's four-times hypothesis is dead. So the
+disagreement is real and it is about WHEN the master's V-interrupt
+fires relative to the MD's line 224:
+
+    68K, V counter     vint top at ~224 (264a measures it), the game's
+                       handler, the shim body enters at +4..17, its
+                       tail ~10 lines, the post at ~+15..27
+    master, FRT        the post seen 2,300-3,200 ticks = 50-70 lines
+                       after visr_vbi's entry
+
+On ares both say ~15 lines. On the FPGA the master's ISR entry sits
+~35-45 lines EARLIER than the 68K's vint, in the 68K's own frame. The
+RTL: VDP.sv raises the SH-2 VINT at its V_CNT == 223 (line 317), and
+that V_CNT is re-synced to 236 on VSYNC_OCCUR from the MD (line 309)
+-- so where 32X-line 223 falls in MD lines depends on where the MD
+core's vsync pulse is, and that is the decompile thread's RTL read.
+If the master's vblank starts ~40 MD lines before the MD's, the
+1,650-tick guard (36 lines after the master's entry) closes BEFORE
+the 68K has even taken its vint, which is exactly the 40/64 edge
+declines with a 10-line 68K tail. The lever would then be the guard's
+origin, not any tail.
