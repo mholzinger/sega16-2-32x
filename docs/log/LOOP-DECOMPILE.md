@@ -5384,3 +5384,58 @@ stage that carries the excess over 1650 names the lever.
 FLIP_DEFER is not the lever as built: LOOP27 12 showed its commit at the
 ISR top captures at FM=0 and wedges the game; the FBCTL write alone is
 safe there, the FB traffic around it is not.
+
+---------------------------------------------------------------------
+## 114. For NOTES 48: what the 68K does before its post, why the FBCTL write cannot simply wait on a push signal, and the design that takes the traffic out of vblank (2026-09-13)
+
+**The premise to correct.** r60_push is the WRAM build and runs AFTER
+the post (md_main.c 3653-3654: post B, then r60_push "WRAM only; the
+window runs under it"). What precedes the post at IRQ4 entry, all of
+it framebuffer traffic at FM=0 (3396-3420, 3637-3647):
+
+    md_consume(0x851A00)   md_pkt A: the tile batch, FB-sourced VDP DMA
+    md_consume(0x85E800)   md_pkt B
+    mdspr_consume / mdspr_upload_pump
+    if (fbx_pend) r60_blast(1)   last vint's staged packet, up to R60_ARM
+                                 = 936 words into the FB hole
+
+On the FPGA the batch DMA reads the FB at the adapter's rate (~14
+lines per 280 words, BUSES.md) and the blast writes it at the FB
+floor; 50-70 lines is those, not the build. Then the 68K raises FM and
+posts; only then can the master's drains run (they need FM=1: LOOP27
+12), then the flip. FM is the mutex on the framebuffer and every
+holder's turn is inside vblank -- that is the chain, and on the FPGA
+it is longer than vblank.
+
+**Why "FBCTL waits for push-done" does not work.** The traffic must
+touch the CURRENT back bank: the batch the master wrote into it, the
+hole the master harvests from it. After the FBCTL write that bank is
+the front bank, which neither CPU can read or write. So the 68K's
+traffic is bound to precede the flip whatever signals it; a push-done
+wait would still put 50-70 lines ahead of the FBCTL write. The truth
+drain is bound the same way (it reads the game's pages from the bank
+about to become front) and cannot move behind the write either.
+
+**The design: move the 68K's traffic to BEFORE IRQ4, in game context.**
+The game's pass ends at the 0x397E spin, usually before IRQ4 (147-185
+lines of work; FRAMEDONE marks it, COMM10 bit 15), and from the SH-2
+span's end (~190) to 223 FM is 0 for the game's own hole writes. In
+that slot:
+  1. the packet blast: FBX_PEND already has the late-blast vector in
+     the generated gate spin (fbx_late_blast via 0xFFA0F8). Make it the
+     ONLY blast path: never blast at IRQ4 top.
+  2. the batch: the 68K copies md_pkt A/B from the FB into WRAM in the
+     spin (the FB read at the adapter rate, but outside vblank), and at
+     IRQ4 DMAs WRAM -> VRAM inside vblank. A WRAM-sourced DMA needs no
+     FM, so it runs AFTER the post, under the master's drains.
+Then IRQ4 is: post (entry + a few lines) -> r60_push in WRAM -> DMA
+from WRAM -> wait echo. The master's pre-flip path is the drains
+alone, ~22 lines on the rig (1,000 ticks against the 1,650 guard).
+Heavy passes that reach IRQ4 with no idle fall back to today's order
+and decline as today; the stamps will show the share.
+
+**Measure first (one capture):** the 68K tail split from the existing
+HV stamps 0xFFA080/0xFFA086 around the consumes, plus two around the
+pending blast: lines for batch A, batch B, pump, blast on the rig; and
+the idle lines between FRAMEDONE and IRQ4 entry, which is the slot's
+size on hardware.

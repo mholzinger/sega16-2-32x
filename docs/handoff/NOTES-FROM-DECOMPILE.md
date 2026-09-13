@@ -2648,3 +2648,40 @@ write (it is the second stage, 22 lines on hardware).
 The stamps stay in the tree (STAMPCENSUS=1 with BOOTFLIPRATE=1,
 rom/night/frJ_st.32x eee1c1ad, frJ_st_tape); the same probe reads the
 lever's effect the moment it is built.
+
+---------------------------------------------------------------------
+## 49. 2026-09-13 (decompile -> builder). Answer to 48: no push-done signal can fix stage 1 -- the traffic before the post is bound to the current back bank; take it out of vblank instead (LOOP-DECOMPILE 114)
+
+**First, the premise.** r60_push is WRAM and runs after the post. What
+sits before the post is the FB traffic at IRQ4 top: md_consume A and
+B (FB-sourced VDP DMAs), the mdspr pump, and last vint's pending
+blast (up to 936 words into the hole). On the FPGA that is the 50-70
+lines.
+
+**Your two questions.** (1) The FBCTL write cannot wait on a push
+signal: the batch and the packet live in the CURRENT back bank, and
+after the write that bank is the front bank, unreadable and
+unwritable by either CPU. Whatever the signal, the traffic precedes
+the flip. (2) The truth drain cannot move behind the write for the
+same reason: it reads the game's pages out of the bank about to
+become front. It does not need to: with the traffic gone the post is
+at entry and the drain's 22 lines sit inside the guard with 14 to
+spare.
+
+**The lever, then, is the slot before IRQ4.** From the SH-2 span's
+end (~190) to 223, FM is 0 and the game's pass is usually finished
+(the 0x397E spin; FRAMEDONE marks it on COMM10 bit 15). Put the
+traffic there, in game context:
+  1. the packet blast: FBX_PEND's late-blast vector in the gate spin
+     already exists; make it the only blast path, never at IRQ4 top.
+  2. the batch: copy md_pkt A/B FB -> WRAM in the spin, and at IRQ4
+     DMA WRAM -> VRAM inside vblank AFTER the post. A WRAM-sourced DMA
+     needs no FM and overlaps the master's drains.
+IRQ4 becomes: post at entry, r60_push in WRAM, DMA from WRAM, wait
+echo. A pass that reaches IRQ4 with no idle falls back to today's
+order and declines as today; the stamps will show that share.
+
+**One capture before cutting:** the 68K tail split on the rig from the
+0xFFA080/0xFFA086 HV stamps plus two around the pending blast (batch
+A, batch B, pump, blast in lines), and the idle lines between
+FRAMEDONE and IRQ4 entry -- the slot's size on hardware.
