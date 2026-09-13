@@ -7111,3 +7111,11 @@ Note 53's cut 1 (the chunk) buys ~1-2 lines of the 68K's tail --
 lever: the flush has to leave the guard's window (behind the FBCTL
 write) or shrink to ~10-15 entries a vint, and note 54's arithmetic
 says the heavy vints need the shrink.
+
+**265a, the master window on the rig (frJ_s5, ticks >> 10, a vint =
+11.8):** span pickup->ack mean 4 (max 7), pickup 0-1 after the ISR
+entry (max 3), ack offset max 8, vints whose window straddled an ISR
+entry 0 of 64 -- the same as ares (span 4, max 6, straddle 0). The
+master's per-vint window finishes inside the vint on hardware; it is
+not what the stale bail (rare, 264c/265) or the decline (every vint,
+265) is about. The pre-flip path's own length past the post is.
