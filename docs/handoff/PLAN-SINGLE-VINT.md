@@ -662,3 +662,9 @@ is a phase, not a defect.
     Build F, rig: frF 18 22 8 13 23 (B 21 19 7 15 18); attract black
       shares over three launches 0.00-0.01. Closed: no gain, no harm.
       bldB is back on the rig.
+    Build G, census rom (pcG): wall 1.18, echo 1.11 (= the line);
+      compose pass sum 0.388 (line 0.389, noplot 0.324); the fast path
+      fires on 67% of punched runs (790,990 tight copies / 387,576 cell
+      walks in steady play). VERDICT: no gain; closed. The punch's cost
+      is not any path that executes -- LOOP29 250's C1RTOFF ablation
+      decides between codegen and execution before another card is cut.
