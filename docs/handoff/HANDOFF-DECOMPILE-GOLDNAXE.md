@@ -141,7 +141,7 @@ bit 15 = end, word 4 bits 7-6 = priority.
     docs/log/LOOP-DECOMPILE-GOLDNAXE.md        the log, same format as AB's
     docs/handoff/NOTES-FROM-DECOMPILE-GOLDNAXE.md   handoffs to the builder, numbered
     tools/game_goldnaxe.py                      the patcher tables
-    docs/audit/goldnaxe/                        census outputs (json gitignored)
+    docs/audit/goldnaxe/                        census outputs; ADD docs/audit/goldnaxe/*.json to .gitignore first (only AB's timing_census.json is ignored today)
     roms/goldnaxe/prog68k.bin                   rung 1 (gitignored with the rest of roms/)
 
 First command of the new thread:
