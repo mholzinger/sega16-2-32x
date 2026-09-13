@@ -157,9 +157,12 @@ mailbox claims):
 `roms/goldnaxe/prog68k.bin`, census default
 `docs/audit/goldnaxe/timing_census.json`, gitignored). Import + auto-
 analysis: 360 functions, 207 backward branches. `tools/ghidra/
-timing_census.py` now carries a per-game hardware table (`HW_GOLDNAXE`,
-the map of entry 2); the first census ran with AB's ranges and its
-`hw_refs` were meaningless — re-run pending as this is written.
+timing_census.py` carries a per-game hardware table (`HW_GOLDNAXE`, the
+map of entry 2); the census re-run on it has 1,392 hw refs: workram
+1313, palette 22, bank_math 16, textram 11, io 9, tileram 8, rgn2 8,
+frameflag candidates 3, mapper 1, sprite_base_var 1. Those are LITERAL
+sites only — the tile fill at 0x39AE and the sprite copy write through
+registers and are invisible here, which is why rung 3 runs on the arcade.
 
 Arcade attract, headless snapshots every 240-300 frames to 5400:
 
@@ -167,18 +170,27 @@ Arcade attract, headless snapshots every 240-300 frames to 5400:
     f480   title logo mid-animation, "INSERT COIN"
     f720   title: full GOLDEN AXE logo, SEGA 1989 — unique, asymmetric, full-bleed
     f1200  attract demo: forest stage, hero + red silhouettes (the shadow/hilite look)
+    f1500  back on the title
 
-Text-RAM control words at those frames (offsets per AB entry 11: 0xE80/
-0xE82 scr1/scr2 page select, 0xE90/0xE92 vpos, 0xE98/0xE9A hpos; base
-0x110000 here):
+Layer registers at those frames (text RAM + 0xE80.., names from AB entry
+11 / `jts16_mmr.v:94-105`; base 0x110000 here):
 
-    f720   pages 1100 / 2222   vpos 0000 / 015F   hpos 00C0 / 00C0
-    f1200  pages F1E0 / F7E6   vpos 00BF / 00BF   hpos 009C / 00A5
+    f720   scr1/scr2 pages 1100 / 2222   vpos 0000 / 015F   hpos 00C0 / 00C0
+    f1200  scr1/scr2 pages F1E0 / F7E6   vpos 00BF / 00BF   hpos 009C / 00A5
+    f1500  scr1/scr2 pages 1111 / 0000   vpos 0000 / 0000   hpos 00C0 / 00C0
 
-**The title is NOT a discriminator for the X-scroll sign**: hpos=0xC0 is
-the neutral value (TOOLKIT "Geometry-convention rule": xs=0xC0 -> eff=0
-validates both signs). It pins the page select, the Y sign (scr2 vpos
-0x15F is non-neutral) and the priority order. The demo at f1200 has
-non-neutral X on both planes (0x9C, 0xA5) over the forest art, which is
-the X-sign discriminator IF the attract is deterministic frame-for-frame
-under no input — to be re-measured twice before it is pinned.
+**The attract is deterministic under no input**: two independent
+headless runs gave identical register words at all three frames and
+identical snapshot MD5s (63145ae6.. / cc9a51bd.. / ded06635..).
+
+**DISCRIMINATOR PINNED: frame 1200 of the no-input attract.** Both
+planes carry non-neutral X (0x9C, 0xA5; 0xC0 is the neutral value that
+validates both signs, TOOLKIT "Geometry-convention rule"), non-neutral
+Y (0xBF), and the forest art is unique and asymmetric (the big tree
+trunk right of centre, the hero). The title at f720 is NOT an X-sign
+discriminator (hpos 0xC0 on both planes); it pins page select and the
+scr2 Y offset (0x15F) instead. Regression rule for the builder: our
+rom's f1200 must match the arcade's `cc9a51bd..` frame, or the
+register-to-pixel convention is wrong somewhere.
+
+Rung 2 done.
