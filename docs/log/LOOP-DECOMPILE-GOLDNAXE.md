@@ -377,3 +377,36 @@ configuration and outputs; which port is which is a rung-7 read of the
 
 Rung 4 done. The three numbers: 15,279 executed / 8,864 work per vint;
 sound post < 0.2%; the biggest routine is the IRQ4 handler at ~2,000.
+
+---------------------------------------------------------------------
+## 7. Rung 5 started: the alignment carries two keys, the rest is hand work
+
+`roms/goldnaxe/prog68k.asm` (objdump -D, 171,912 lines vs AB's 94,227)
+and `python3 tools/game_derive.py altbeast goldnaxe` (3 min 0 s):
+22/35 keys written, but the numbers behind them are:
+
+    TILE_DIRTY_SITES 0/25   PAL_DIRTY_SITES 0/42   TAS_SITES 0/5
+    REBASE_TABLES 0/7       TEXT_IDIOM 0/8         DATA_EXCLUDE 0/2
+    FMGATE_ENTRIES 10/27    FMGATE_SPANS 3/11      HARVESTED_HANDLERS 4 of 43
+    MCU_SND   0xFFF0C4 -> 0xFFECFC   (2 sites)   CONFIRMED by entry 6's trace
+    MCU_COINS 0xFFF0C2 -> 0xFFEC96   (2 sites)   consistent with the MCU's per-vblank write (entry 3)
+    MCU_BUSY  unmapped                           HYPOTHESIS: 0xFFECD4, the third word the MCU reads each vblank
+
+Golden Axe is a different program, not a re-link, so the alignment
+that carried altbeastj does not carry it; the 10 "mapped" FMGATE
+entries and the 4 harvested handlers (0x102/0x104/0x106 = the vector
+table) are alignment noise, not evidence, and `tools/game_goldnaxe.py`
+says so in its banner. Two keys came out right because the MCU mailbox
+idiom (read a work-RAM word, compare the high byte with 0xFF) is the
+same code shape in both programs.
+
+The honest cost line for TOOLKIT stage 3: rungs 1-4 took one session
+(git: f12aa49 21:18 -> d963961 22:0x on 2026-09-12); rung 5 starts from
+the census, not from AB's tables. Its order, from entry 5's writers:
+palette sites (0x3C8C, the 0x1172-0x11A6 cycler block, the IRQ4 push at
+0x30EE), text sites (0xC918/0xC900/0xC8CC HUD rows; 0x3EB4/0x3EBE/0x3EF6
+into the 0x110746-0x110CF8 block — identify it first), tile loaders
+(0x39AE, 0x2012-0x206A, 0x5880), the tile bank movep (0x2F94), the
+math-chip sites (0xAB6E/76, 0xAE3E-78, 0xABC8-0xAC02, plus their READS
+from a trace), the direct latch site (0x3674), and the sprite base
+(none: it is the variable 0xFFECC4).
