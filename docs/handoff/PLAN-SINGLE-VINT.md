@@ -623,3 +623,8 @@ is a phase, not a defect.
                picture equal to B incl. late-coin; rig frame rate; three
                launches; Mike: does it look like bldB.
     numbers    (appended when the runs land)
+    Build F numbers (ares): pcF wall 1.21 (B 1.18), echo 1.13 (1.11),
+      mtask 0.76; bldF census-free 1.18; picture equal to B except the
+      aligned return 0.074/0.064 against B's 0.040/0.038 (the same-
+      round-return class re-rolled by the SH-2 timing change, 227).
+    VERDICT: FAILS -- no gain; the uncached reads were not the price.
