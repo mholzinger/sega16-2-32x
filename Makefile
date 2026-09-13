@@ -1026,6 +1026,11 @@ ifdef STAMP4CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP4_CENSUS
 endif
+# `make ... BOOTFLIPRATE=1 STAMP5CENSUS=1` = LOOP29 265: the master window's span (pickup->ack), its pickup offset and ack offset from the ISR entry (ticks>>10; a vint = 11.8), and vints per 64 whose window straddled an ISR entry.
+ifdef STAMP5CENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP5_CENSUS
+endif
 # `make ... BOOTFLIPRATE=1 TAILCENSUS=1` = NOTES 49 / LOOP29 260: the 68K's
 # IRQ4 tail split in lines (entry->A, batch A, batch B, pump, blast,
 # blast->post, idle before IRQ4) as means per 64 vints; tag 7 = vints with

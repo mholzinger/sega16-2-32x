@@ -7078,3 +7078,36 @@ the order of half the vints); edge declines read 2 a vint (the counter
 increments more than once a vint: the body's fallback retries and
 declines again). The v2 probe carries each as a vint indicator so the
 64-vint mean is the COUNT of vints with the event.
+
+## 265. RECONCILED: THE POST IS ON TIME; THE GUARD CLOSES ON THE PALETTE FLUSH (2026-09-13 14:00)
+
+The vint counts (frJ_s4 v2: a 0/1 indicator per vint, summed over 64):
+
+                        ISR entries   stale-window bails   vints with an edge decline   holds
+    ares                63 (all)      0                    0                            38-63 (nothing shipped)
+    rig, stock demo     63            7 0 0                63 (ALL)                     0
+    rig, walk tape      63            0                    (not sampled)                0
+
+The ISR runs every vint and almost never bails on a live window (the
+stale-bail hypothesis of 264b is dead: 0-7 of 64). But EVERY vint on
+the rig carries at least one edge decline, and 264c read the decline
+counter at ~2 a vint: flip_span declines, the body's fallback retries
+and declines again. And 259a's "post seen at 2,300-3,200 ticks" was a
+stamp overwritten by each retry -- the value the channel carried was
+the LAST flip_span call of the vint, not the post's arrival. The 68K's
+own account (264b: the post written at line 238-249, ~1,000 ticks
+after the master's entry) is the truth.
+
+So the FPGA's vint is: entry -> post at ~1,000 ticks -> flip_span:
+palette flush ~900 ticks (263) -> drain -> the guard reads ~2,000 >
+1,650 -> decline (F1F1) -> the body retries, declines again -> the
+GAMEGATE fallback releases the game. The 18 of 64 that present are
+the vints whose flush was short (few dirty CRAM entries). On ares:
+post ~770 + flush ~300 < 1,650 every time. The sum is the whole
+story: the guard's 1,650 ticks hold the post (~1,000) plus stage 2,
+and stage 2 on the FPGA is the CRAM flush at 250-500 cycles a write.
+Note 53's cut 1 (the chunk) buys ~1-2 lines of the 68K's tail --
+~50-100 ticks of the post's 1,000; note 54's cut 2 (the flush) is the
+lever: the flush has to leave the guard's window (behind the FBCTL
+write) or shrink to ~10-15 entries a vint, and note 54's arithmetic
+says the heavy vints need the shrink.

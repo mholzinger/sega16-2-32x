@@ -78,8 +78,11 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS)
-static uint16_t stc_t[4];                 /* NOTES 47 / LOOP29 259: the ISR's four pre-flip stamps */
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS)
+static uint16_t stc_t[4];
+#endif
+#ifdef STAMP5_CENSUS
+static uint16_t s5_pick, s5_pick_off; static uint32_t s5_isr;   /* LOOP29 265: the window's pickup */
 #endif
 #ifdef STAMP2_CENSUS
 static uint32_t stc_pages;                /* NOTES 53: DIAG[54] at the last stamp */
@@ -7654,7 +7657,7 @@ static int flip_span(void)
      * with this off; expect the FPGA not to tear. */
     if (0) {
 #else
-#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS)
+#if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS)
 #ifdef STAMP_CENSUS
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
 #endif
@@ -11222,6 +11225,9 @@ RAMCODE void m_main(void)
             }
 #endif
             t_vint = tw;
+#ifdef STAMP5_CENSUS
+            s5_pick = tw; s5_isr = DIAG[49]; s5_pick_off = (uint16_t)(tw - visr_t0);   /* LOOP29 265: the window's pickup */
+#endif
             shadow_stole = 0;
             win_no++;
 #ifdef HS_SHIP
@@ -13828,6 +13834,17 @@ RAMCODE void m_main(void)
             *(volatile uint16_t *)0x20004028 = SPR_LAND[R60_W_BM + 1];   /* landed word 21 (tag) */
 #endif
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+#ifdef STAMP5_CENSUS
+            {   /* LOOP29 265: the window's span and where it sits in the vint,
+                 * ticks >> 10 on the channel (a vint = 11.8); [3] = ISR entries
+                 * that fell inside the window (vint indicator x64) */
+                uint16_t ta = frt();
+                stc_t[0] = (uint16_t)((uint16_t)(ta - s5_pick) >> 3);
+                stc_t[1] = (uint16_t)(s5_pick_off >> 3);
+                stc_t[2] = (uint16_t)((uint16_t)(ta - visr_t0) >> 3);
+                stc_t[3] = (uint16_t)(((DIAG[49] - s5_isr) ? 1u : 0u) << 13);
+            }
+#endif
 #ifdef PHASE_CENSUS
             PHL[1] += (uint16_t)(frt() - t_vint);
 #endif

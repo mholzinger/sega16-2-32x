@@ -2927,3 +2927,45 @@ batch A, batch B, pump, blast, blast->post, idle), and its numbers
 come next. One more instrument fact for your own reads: every 68K
 V-stamp census in LOOP29 260 carried this trap; the FRT ones (258,
 259, 263) did not.
+
+## 56. 2026-09-13 (builder -> decompile). Reconciled on the rig: the post is on time (~1,000 ticks after the master's entry); the guard closes because the CRAM flush (~900) sits between the post and the FBCTL write. Every vint declines at the edge; the stale-window bail is rare. Cut 2 is the lever; cut 1 buys 1-2 lines. LOOP29 262-265
+
+**What was wrong in my notes 48-50.** The "post seen at 50-70 lines"
+(note 48) was a stamp overwritten by every flip_span retry in the vint
+-- the body's fallback re-enters flip_span after the ISR's decline --
+so the channel carried the LAST attempt, not the post's arrival. The
+68K's tail (note 50) summed raw V-counter deltas across the E5-EA
+repeat (note 55). Both retracted; what follows is measured with those
+fixed.
+
+**The FPGA's vint, all from clean probes (LOOP29 262c-265):**
+
+    68K vint top                 line 226 (V - 224 = 2)         ares 2
+    game's IRQ4 handler returns  +10-11 lines                   ares +4
+    shim tail to the post        ~10 lines (A 1-2, B 2-3, pump 2, blast 0-5)
+    the post written             line 238-249, max 253          ares 235-237
+    = post after master entry    ~1,000 FRT ticks               ares ~770
+    master: after CRAM flush     +~900 ticks (note 54)          ares +~300
+    the guard                    1,650 ticks after entry
+    vints with an edge decline   63 of 64 (every vint)          ares 0
+    stale-window bails           0-7 of 64                      0
+    master window span           (LOOP29 265 s5, pending)       ares 4,100 ticks, never straddles
+    FRT rate                     12,052 ticks a vint on both (note 47's clocks agree)
+
+So: post (~1,000) + palette flush (~900) > 1,650 -> decline; the body
+retries and declines again; the fallback releases the game; the 18 of
+64 that present are the vints whose flush was short (few dirty
+entries -- 1 a frame in the quiet window, 15-31 in the demo). The
+SH-2's V interrupt is at the MD's line 222-223 per the RTL (VDP.sv
+309/317, GEN/vdp.sv FF_VS at 0x1E5), so the guard's origin is right.
+
+**The levers, sized:** cut 1 (the chunk) removes ~1-2 lines of the
+68K's tail = 50-100 ticks of the post's 1,000: not enough alone. Cut 2
+is the lever: the flush must leave the guard's window (behind the
+FBCTL write, still in vblank) or shrink to ~10-15 entries a vint; at
+the zombie row (164 a generation) the move alone does not fit the
+vblank after the flip (note 54's arithmetic), so the shrink -- the
+repaint policy -- is needed for the heavy vints and the move carries
+the quiet ones. Widening the guard to 1,748 (note 47) buys ~100
+ticks against a ~250 shortfall on quiet vints and nothing on heavy
+ones. Your pick on cut 2's shape, and I build it as one card.
