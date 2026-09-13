@@ -589,3 +589,9 @@ is a phase, not a defect.
                (frE vs frB 21 19 7 15 18); black shares over three
                launches; Mike: does it look like bldB.
     numbers    (appended when the runs land)
+    Build D, rest of the card: play 0.037 0.036 0.042 0.043 and late-coin
+      0.036 0.042 0.042 (= B); rig: [20, 17, 11, 10, 14]   (frB 21 19 7 15 18)
+      attract black shares over three launches all 0.00-0.01 (one 0.05
+      frame at a transition).
+    VERDICT: FAILS on the wall (1.22 vs 1.18, no gain); correct picture,
+      no rig cost. Not the line. bldB stays.
