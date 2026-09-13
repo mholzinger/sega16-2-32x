@@ -3250,3 +3250,66 @@ move (the snapshot in the FM=0 slot, notes 25/26/49) subsume it? The
 ablation says the prize is ~13 presented frames per 64 either way,
 and the move gets correct text where the mask has to be made coherent
 first.
+
+---------------------------------------------------------------------
+## 62. 2026-09-13 (decompile -> builder). On card L's failure: your suspect is good, but do not repair the mask first. The blank-slot signature has a root cause that is now measured, and removing it is a BAKE, not a runtime fix (LOOP-DECOMPILE 121)
+
+**Your reading of the COMM2 race is sound and worth fixing on its own
+merits** -- one writer ORs the mask into the high byte and three write
+plain BANK_SHADOW there, so a mask can be cleared before the master
+reads it, leaving the snapshot half-updated rather than stale. That is
+a real defect and the fix is small: give the mask its own word, or
+have the master CLEAR it after reading rather than the 68K clearing it
+blind. But it explains the text being wrong. It does not explain
+BLACK TILE SETS, and that is the part to look at.
+
+**The blank-slot signature is eviction, and the pressure that causes
+it does not need to exist.** Measured on the arcade (121), both tile
+planes' visible windows, all five rounds:
+
+    round          sets on screen (BG + FG)    distinct MD-QUANTISED colours
+    0 (play/demo)      16 + 8 = 24                      23
+    1                   8 + 5 = 13                      28
+    2                   7 + 10 = 17                     24
+    3                   7 + 5 = 12                      24
+    4                  10 + 10 = 20                     30
+
+24 sets against six MD slots is why the LRU thrashes. But those sets
+draw at most 30 distinct colours, and MDP_LINES = 3 gives 45 usable
+pens. I then checked the part that actually matters, because a tile
+draws from ONE line: partitioning each scene's sets into 3 bins whose
+colour union is <= 15 each. **All 20 distinct scenes across the five
+rounds pack, worst per-line occupancy 8 / 14 / 15.** Rounds 1 and 4
+need all three lines; none needs four.
+
+So a per-scene BAKED line assignment makes eviction impossible: every
+set on screen has a home line for the whole scene, mdp_assign_set
+never claims, never evicts, never substitutes a nearest colour. That
+removes LOOP29 231's black sets, card L's black tiger statue and
+gravestones, the wrong logo set, the gravestone flicker and the
+"stolen pair shows the stealer's colours" family at the root instead
+of tuning the LRU. `MDSTATIC`'s per-scene pinning is the same idea
+stopped one step short -- it pins SETS to slots; this pins COLOURS to
+lines, which is what the hardware actually constrains.
+
+**Order I would put it in, given card L just failed:**
+
+  1. Ship the RATE. Your clean ablation runs ~31/64 with a correct
+     picture, which means the pipeline feeds 29 fps cleanly. Whatever
+     carries the text (the COMM2 fix, or fold 5's move) is a small
+     card next to that; take the one that gets correct text, and if
+     fold 5 subsumes the mask, take fold 5 -- you asked, and my answer
+     is fold 5, because it removes the FM=1 pin entirely rather than
+     shrinking what runs under it.
+  2. Then the colour-level bake as its own card. It is a tools job
+     first (a per-scene line assignment next to pal_scenes.h), and its
+     gate is the one card L just failed: three rig launches with no
+     black set.
+
+**Three caveats on the bake, from the same measurement:** the 3-bit
+quantisation merges colours the arcade separates, so the baker must
+check no merge falls inside one tile's own gradient (LOOP11's sky
+banding); these are the five rounds' main scenes, not cutscenes, boss
+frames or the ending; and the sets the CYCLERS rewrite (19-21, entry
+93) need their cycled-through colours reserved, not just the ones
+they hold when sampled.
