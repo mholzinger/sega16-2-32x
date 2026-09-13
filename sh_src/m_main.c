@@ -614,6 +614,10 @@ static uint8_t cat1scr[28][40];          /* 0 no hole, 1 whole cell, 2 per pixel
 static volatile uint8_t c1_rt_off;       /* LOOP29 250 ablation: stays 0 at run time */
 #endif
 static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
+#ifdef C1_STAMP
+static uint32_t cat1hb[28][2];            /* H5: hole cells of the row as bits (cells 0-31, 32-39) */
+#define CAT1HB_U(r) ((const volatile uint32_t *)(0x20000000u | (uint32_t)cat1hb[(r)]))
+#endif
 #ifdef C1_CACHED
 /* Build F (LOOP29 249): the slave reads the mask through its CACHE.
  * Every read of the uncached alias is an SDRAM round trip on the hot
@@ -631,6 +635,9 @@ static uint16_t cat1code[28][40];        /* the cell's tile index when 2 */
 #endif
 #include "cat1hole.h"
 extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
+#if defined(C1_STAMP) && !defined(C1_MASKTAB)
+#define C1_MASKTAB 1                      /* Card H stamps from Build D's SDRAM masks */
+#endif
 #ifdef C1_MASKTAB
 /* Build D (LOOP29 247, NOTES 34): the slave's punched loop reads ONE
  * SDRAM byte per class-2 cell row -- a 1-bit opacity mask -- instead
@@ -2908,7 +2915,7 @@ __attribute__((noinline)) static int bm_scan_baked_ok(void)   /* ROM (noinline: 
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
-#if defined(C1_PCELL) || defined(C1_MASKTAB) || (defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF)))
+#if defined(C1_PCELL) || (defined(C1_MASKTAB) && !defined(C1_STAMP)) || (defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF)))
 /* Builds C/D need a few hundred bytes of .ramtext in the plot
  * expansions; this runs twice a generation and is bound by its ROM
  * table reads anyway (LOOP29 246: 573 ticks a plane), so under those
@@ -4876,8 +4883,124 @@ __attribute__((noinline)) static void mdspr_claim(void)
 
 /* Sprites: IN-WINDOW (reads cart ROM + FB staging list in place).
  * Faithful to sega16sp.cpp; see NOTES. Row clip [ymin,ymax). */
+#ifdef C1_STAMP
+/* Card H (NOTES 36, LOOP29 252): the hole punch as a STAMP. The sprite
+ * loops run exactly as before the punch (no class test per run or per
+ * pixel); then, on every row of the band a sprite touched, the hole
+ * cells of the master's class map are written MD-through (0): class 1
+ * whole, class 2 where the tile's opacity mask bit is set (cat1mask.h,
+ * Build D's SDRAM table). pp = 3 sprites draw after the stamp: their
+ * priority beats cat-1 (1<<3 > 4). Bounded work -- at most 40 cells a
+ * row, the same every generation -- instead of a branch on every
+ * sprite run, which is where the punch's 0.052 v/gen lived (251). */
+/* H2 (LOOP29 252): the first cut stamped EVERY hole cell of every row a
+ * sprite touched and cost 0.148 v/gen -- the FB write floor: ~17 KB of
+ * stamps a generation at the 32X's FB write stall, most of them zero
+ * over zero. Now each sprite pixel/run marks its cell with the pass's
+ * id (a byte store, no clearing) and only hole cells a sprite actually
+ * covered are stamped; the class map is read once per cell row. */
+/* H4: the cover is each drawn record's RECTANGLE (xpos, |pitch|*4 wide,
+ * its clipped rows) at cell granularity -- two 32-bit words per cell row,
+ * ORed once per record per band. H2/H3 marked the cover per run/pixel
+ * with byte stores into a 10 KB map and read 0.437/0.434: the SH-2's
+ * write-through stores were the price, not the stamp. Over-cover is
+ * harmless: a hole cell no sprite pixel reached holds 0 already. */
+static uint32_t c1cov[28][2];
+static inline void c1cov_rect(int xpos, int pitch, int top, int bottom)
+{
+    int w = (pitch < 0 ? -pitch : pitch) * 4;
+    int x0 = xpos - 184, x1 = x0 + w;
+    if (x0 < 0) x0 = 0;
+    if (x1 > 320) x1 = 320;
+    if (x1 <= x0 || bottom <= top) return;
+    unsigned ca = (unsigned)x0 >> 3, cb = (unsigned)(x1 - 1) >> 3;   /* inclusive */
+    uint32_t lo = 0, hi = 0;
+    if (ca < 32) {
+        unsigned e = cb < 31 ? cb : 31;
+        lo = (e == 31 ? 0xFFFFFFFFu : ((1u << (e + 1)) - 1u)) & ~((1u << ca) - 1u);
+    }
+    if (cb >= 32) {
+        unsigned a = ca < 32 ? 0 : ca - 32;
+        hi = ((1u << (cb - 32 + 1)) - 1u) & ~((1u << a) - 1u);
+    }
+    int r = top < 0 ? 0 : top >> 3, re = (bottom - 1) >> 3;
+    if (re > 27) re = 27;
+    for (; r <= re; r++) { c1cov[r][0] |= lo; c1cov[r][1] |= hi; }
+}
+RAMCODE static void c1_stamp(int ymin, int ymax)
+{
+    if (ymin < 0) ymin = 0;
+    if (ymax > 224) ymax = 224;
+    for (int cr = ymin >> 3; cr * 8 < ymax; cr++) {
+        uint32_t cv0 = c1cov[cr][0], cv1 = c1cov[cr][1];
+        if (!(cv0 | cv1)) continue;                  /* no sprite reaches this cell row */
+        cv0 &= CAT1HB_U(cr)[0]; cv1 &= CAT1HB_U(cr)[1];   /* H5: only hole cells under sprites */
+        if (!(cv0 | cv1)) continue;
+        const volatile uint8_t *c1 = CAT1SCR_U(cr);
+        const volatile uint16_t *c1c = CAT1CODE_U(cr);
+        uint8_t hc[40], hv[40];
+        unsigned hn = 0;
+        for (unsigned cx = 0; cx < 40; cx++) {
+            if (!((cx < 32 ? cv0 >> cx : cv1 >> (cx - 32)) & 1u)) continue;
+            unsigned v = c1[cx];
+            if (v) { hc[hn] = (uint8_t)cx; hv[hn] = (uint8_t)v; hn++; }
+        }
+        if (!hn) continue;
+        int y0 = cr * 8 < ymin ? ymin : cr * 8;
+        int y1 = cr * 8 + 8 > ymax ? ymax : cr * 8 + 8;
+        for (int y = y0; y < y1; y++) {
+            uint8_t *row = DROW(8 + y);
+            const unsigned py = (unsigned)y & 7u;
+            for (unsigned k = 0; k < hn; k++) {
+                unsigned cx = hc[k];
+                uint8_t *d = row + cx * 8;
+#ifdef PHASE_CENSUS
+                CEN[63]++;                             /* H: cell rows stamped */
+#endif
+#ifdef C1_STAMP_NW
+                (void)d; (void)c1c; (void)py;          /* ablation: cover + class reads, no FB writes */
+                if (hv[k] == 2) { unsigned mb = C1MASK_U[(unsigned)c1c[cx] * 8u + py]; if (mb == 0x5Au) c1cov[0][0] = 0; }
+#else
+                if (hv[k] == 1) {
+                    ((uint32_t *)d)[0] = 0; ((uint32_t *)d)[1] = 0;
+#ifdef PHASE_CENSUS
+                    mds_ctr[5] += 8;                   /* H: bytes written */
+#endif
+                } else {
+                    unsigned mb = C1MASK_U[(unsigned)c1c[cx] * 8u + py];
+                    for (unsigned q = 0; q < 8; q++, mb <<= 1)
+                        if (mb & 0x80u) {
+                            d[q] = 0;
+#ifdef PHASE_CENSUS
+                            mds_ctr[5]++;
+#endif
+                        }
+                }
+#endif
+            }
+        }
+    }
+}
+__attribute__((noinline)) RAMCODE static int compose_pass(int ymin, int ymax, int par, int pass);
 RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 {
+    for (int r = (ymin < 0 ? 0 : ymin) >> 3; r * 8 < ymax && r < 28; r++)
+        c1cov[r][0] = c1cov[r][1] = 0;
+    int n3 = compose_pass(ymin, ymax, par, 0);   /* pp < 3, unpunched, covering cells */
+    c1_stamp(ymin, ymax);
+    if (n3)                                      /* H3: the record scan is the band's
+                                                  * fixed cost; pay it twice only when
+                                                  * a pp = 3 record is in the list */
+        compose_pass(ymin, ymax, par, 1);        /* pp = 3 over the holes */
+}
+__attribute__((noinline)) RAMCODE static int compose_pass(int ymin, int ymax, int par, int pass)
+#else
+RAMCODE static void compose_sprites(int ymin, int ymax, int par)
+#endif
+{
+#ifdef C1_STAMP
+    int n3 = 0;
+#endif
 #ifdef SPRITES_OFF_TEST
     /* A/B probe for the cart-bus contention hypothesis (LOOP iter 4):
      * sprite compose is the heaviest SH-2 cart reader (per-pixel
@@ -4918,11 +5041,15 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
          * sprites gate per pixel (they hide behind BG-cat1/FG-cat0).
          * pp=3 approximated as pp=2, occurrences counted. */
         uint8_t pp = (uint8_t)((d4 >> 6) & 3);
+#ifdef C1_STAMP
+        if (pp == 3) { if (!pass) { n3++; continue; } }
+        else if (pass) continue;
+#endif
         uint8_t thr = (uint8_t)(1u << pp);
 #ifdef C1_PUNCH
         /* FG cat-1 is level 4: a sprite shows over it iff (1 << pp) > 4,
          * i.e. pp == 3 only (segas16b_v). Everything else is punched. */
-#ifdef C1_NOPLOT
+#if defined(C1_NOPLOT) || defined(C1_STAMP)
         const int punch = 0;                 /* LOOP29 247 ablation: the
                                               * slave draws unpunched; the
                                               * master still writes the mask */
@@ -5067,6 +5194,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             top = y0;
             bottom = ylim;
         }
+#ifdef C1_STAMP
+        if (!pass) c1cov_rect(xpos, pitch, top, bottom);
+#endif
 #ifdef SPR_LINE_PROBE
         {
             int w = pitch < 0 ? -pitch : pitch;
@@ -5317,7 +5447,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                     pix = (PIX_EXPR);                                       \
                     { unsigned sx = (unsigned)(x - 184);                    \
                       if ((unsigned)(pix - 1) < 14u && sx < 320 && !C1P(sx)) \
-                          row[sx] = (uint8_t)(base + pix), PENTAP(d4, pix); }                 \
+                          row[sx] = (uint8_t)(base + pix), PENTAP(d4, pix); } \
                     x++;
 #define NIB_NC(PIX_EXPR)                                                    \
                     pix = (PIX_EXPR);                                       \
@@ -5483,6 +5613,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
             }
         }
     }
+#ifdef C1_STAMP
+    return n3;
+#endif
 }
 
 /* Text: IN-WINDOW (ROM glyphs), above sprites. Row range [row0,row1). */
@@ -14195,6 +14328,9 @@ RAMCODE void m_main(void)
                         if (isfg)
                             CAT1_PEND[row] = 0;
 #endif
+#ifdef C1_STAMP
+                        uint32_t hb0 = 0, hb1 = 0;
+#endif
 #ifdef EDGE42
                         unsigned e_pend = 0;     /* an edge cell is art-pending */
                         for (int col = -1; col <= 40; col++) {
@@ -14230,6 +14366,9 @@ RAMCODE void m_main(void)
                                         hv = 1;         /* no bake for this page: whole cell */
                                 }
                                 cat1scr[row][col] = (uint8_t)hv;
+#ifdef C1_STAMP
+                                if (hv) { if (col < 32) hb0 |= 1u << col; else hb1 |= 1u << (col - 32); }
+#endif
                             }
 #endif
                             /* 2026-09-02 (Mike's crystal ball, s16_fix2.bs1):
@@ -14573,6 +14712,9 @@ RAMCODE void m_main(void)
                             md_dbg_base[(isfg ? 28 : 0) + row] = hdr;
                         }
 #undef CB
+#endif
+#ifdef C1_STAMP
+                        if (isfg && row < 28) { cat1hb[row][0] = hb0; cat1hb[row][1] = hb1; }
 #endif
                     }
 #ifdef NT_WRAP

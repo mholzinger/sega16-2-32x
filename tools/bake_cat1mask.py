@@ -20,6 +20,7 @@ rom = open(ROM, 'rb').read()
 tiles = open(os.path.join(ROOT, 'sh_src', 'tiles.bin'), 'rb').read()
 hole = open(os.path.join(ROOT, 'sh_src', 'cat1hole.bin'), 'rb').read()
 SCENE_TABLE, SCENES = 0x1CE2, 5
+BANK = [1, 1, 1, 1, 1]      # 0xFFF095 per round; only round 0 measured (LOOP29 252)
 
 def unpack(base):
     hi = bytearray(); p = base
@@ -48,16 +49,19 @@ for s in range(SCENES):
         if hole_get(s, n) == 2:
             w = W[n]
             code = w & 0x1FFF
-            if code & 0x1000:
-                # bank-1 codes: the runtime adds bank1*0x1000 (the game's
-                # tile bank); the bake keeps the raw 13-bit code and the
-                # runtime searches with the same raw code (see m_main.c)
-                pass
             codes.add(code)
     codes = sorted(codes)
     masks = []
     for c in codes:
-        t = tiles[c * 64:(c + 1) * 64]
+        # the runtime searches by the RAW 13-bit code, but the ART of a
+        # bank-1 code lives at (code & 0xFFF) + bank*0x1000 (m_main.c's
+        # name-table pass: 0xFFF095, the game's tile bank request). The
+        # first cut masked tiles[c] for every code and the bank-1 grass
+        # tiles got another tile's opacity (LOOP29 252, the demo diff's
+        # 527 specks). BANK is the game's request in that scene; round 0
+        # reads 1 in ares (demo f1000, play f1500); rounds 1-4 unmeasured.
+        art = (c & 0xFFF) + BANK[s] * 0x1000 if c & 0x1000 else c
+        t = tiles[art * 64:(art + 1) * 64]
         m = bytes(sum(((1 << (7 - px)) if t[py * 8 + px] else 0) for px in range(8)) for py in range(8))
         masks.append(m)
     out.append((codes, masks))

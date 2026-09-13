@@ -6302,3 +6302,52 @@ pens to exist in the FB palette and is a fold-1 renderer change, not
 a card on bldB. Neither is cut. The decompile thread gets the
 numbers (note 35) and picks; my recommendation there is to bank the
 punch at its price and go to fold 5.
+
+## 252. CARD H, THE STAMP: FIVE CUTS TO GET UNDER THE PUNCH (2026-09-13)
+
+NOTES 36 picked the stamp over banking the punch: compose every sprite
+with the original loops, write MD-through (0) over the hole cells
+afterwards, draw the pp = 3 records last. `C1STAMP=1` (implies
+C1MASKTAB: the master's pass stores a mask index per class-2 cell; the
+slave's sprite loops compile with `punch = 0`, .ramtext 0x6F38 ->
+0x6058, vi95's bytes back). What each cut cost, slave compose sum
+(clear+sprites, v/gen, gen_trace over the play2 script), line 0.389,
+punch off 0.324:
+
+    H1  stamp every hole cell of every row a sprite touched        0.472
+    H2  cover marks per run/pixel (byte map, 10 KB), stamp covered  0.437
+    H3  H2 + the pp=3 pass only when a pp=3 record exists           0.434
+    H4  cover = record rectangles (|pitch|*4 wide) as two 32-bit
+        words per cell row, no per-run stores                       0.385-0.390
+    H4 with the FB writes removed (C1STAMPNW=1)                     0.375
+    H5  master emits the row's hole cells as bits; the slave reads
+        classes only for hole & cover cells                         (below)
+
+What the cuts said. H1's 0.148 is the 32X FB write floor: ~17 KB of
+zero-over-zero a generation. H2 -> H4: the SH-2's write-through byte
+stores for the cover marks cost more than the stamp they saved. H4's
+no-write ablation puts the FB writes at 0.015 and the rest (0.05) in
+the uncached class reads -- 40 a cell row, per band call, and the
+compose is called per strip. H5 removes those: two uncached longwords
+a cell row, then a class byte per hole cell under a sprite.
+
+The gate, and the trap in it. A frame-N pixel diff of two roms is not
+a diff: the roms run at different speeds, the input script lands on
+different game frames, and frame 1000 of the play script differed by
+32k pixels (the player mid-stride vs standing). Content-aligned on the
+ATTRACT demo (no input; the game's state is a pure function of its own
+frame count, so the same picture exists in both roms one or two frames
+apart): H2 vs bldB at demo f1000/f1200 = 527/533 pixels, all in cell
+rows 20-22 (the grass), spread across the width -- dark specks in
+bldB's grass that the stamp did not show. Those were the MASK TABLE:
+tools/bake_cat1mask.py masked tiles[code] for every code, but a code
+with bit 0x1000 has its art at (code & 0xFFF) + bank*0x1000 (the
+game's tile bank request, 0xFFF095, reads 1 in round 0). Build D
+carried the same wrong masks; its black-share gates could not see it.
+Fixed in the baker (BANK per scene; rounds 1-4 unmeasured, set to 1),
+header regenerated. bldB's specks are the sprite pixels the arcade
+shows through the grass's transparent pixels; the stamp must show the
+same.
+
+Roms: rom/night/bldH1.32x (H1, md5 ac13b8d3), bldH2 (862aa999), pcH1-2,
+pcH (H5 census), bldH (H5).

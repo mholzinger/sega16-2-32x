@@ -1056,6 +1056,17 @@ endif
 ifdef C1MASKTAB
 SHCCFLAGS += -DC1_MASKTAB
 endif
+# `make ... C1STAMP=1` = Card H (NOTES 36, LOOP29 252): the punch as a
+# STAMP. The sprite loops compile unpunched (vi95's bytes); after the
+# pp<3 pass the slave writes MD-through over the hole cells of every row
+# a sprite touched (class 1 whole, class 2 by the cat1mask.h opacity
+# bit), then draws the pp=3 sprites. Implies C1MASKTAB. Needs C1PUNCH.
+ifdef C1STAMP
+SHCCFLAGS += -DC1_STAMP
+endif
+ifdef C1STAMPNW
+SHCCFLAGS += -DC1_STAMP_NW
+endif
 # `make ... C1FAST=1` = Build E (LOOP29 248): a punched sprite run whose
 # cells are all class 0 takes the original tight copy; only runs that
 # touch a class-1/2 cell walk cells. Needs C1PUNCH.
