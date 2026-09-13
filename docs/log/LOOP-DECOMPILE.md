@@ -5646,3 +5646,48 @@ on command -- `ssh root@mister.office.local "echo screenshot >
 plays and fetch it by name. Until then the corrosion has no evidence
 and must not be attributed to any card; cards H/I/J each measured a
 demo-aligned pixel diff of zero against the build below them.
+
+---------------------------------------------------------------------
+## 120. Card L's arithmetic: the rig's wall has MOVED from the flip path to the generation, and every compose card now has an instrument it never had (2026-09-13)
+
+Card L (TEXTCAPMASK on the line, NOTES 60) reads 27 presented per 64
+vints on the rig against the line's 18, with the no-capture ablation
+at 28-34. So the masked capture recovers nearly all of the ablation's
+headroom and the text copy is off the critical path, as entry 118's
+census said it would be.
+
+**What 27 means, and it is not 'still broken'.** Per presented frame:
+
+    line      18/64 = 3.56 vints        ares wall 1.09
+    card L    27/64 = 2.37 vints        ares wall 1.07
+    ablation  31/64 = 2.06 vints
+
+The flip path's own excess was 150-530 ticks (NOTES 59) and the copy
+was 830; with the copy gone the ISR reaches the guard at ~1,100
+against 1,650 and the guard should stop declining. It largely has.
+What is left, 2.37 vints a frame, is the GENERATION -- and on the FPGA
+that is ~2.2x the ares wall of 1.07, which is the same ratio the FPGA
+charges everywhere else it prices memory and ares does not (the text
+copy 830 vs 450, the CRAM flush 900 vs 300, cart fetch 4-6x).
+
+**The strategic consequence, and it inverts the ordering this thread
+has been working to.** Cards H, I and J each cut the slave's compose
+and NONE of them moved the rig, because the rig's wall was the flip
+path and the compose ran in its shadow (LOOP29 257, NOTES 44-46).
+That is no longer true. With the flip path clear the rig's wall IS the
+compose, so those cards -- and every future compose card -- now have a
+hardware instrument for the first time in this arc.
+
+**The cheap test, two roms, no new code:** apply card L's flag to bldB
+and to bldJ and read the rig's rate on both. bldB-plus-L against
+bldJ-plus-L is the whole H+I+J stack measured on hardware. If the rig
+separates them, the compose cards were real all along and only the
+instrument was blind; if it does not, the FPGA's compose cost is
+somewhere the ares census does not look.
+
+**And one census, already built:** re-run ECHOCENSUS on card L. Before,
+the declines were ~40 of 64 at the vblank edge and 0 for 'nothing
+drawn' (NOTES 46). If the generation is now the wall, 'nothing drawn'
+is what the remaining ~37 declines must read. If they still read
+'past the edge', the guard is closing for a second reason and the
+post's own ~900 ticks is next.

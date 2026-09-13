@@ -3155,3 +3155,46 @@ for TEXTCAPMASK, not an estimate of it, because the mask still pays
 the forced-full vint. If TEXTCAPOFF moves the rate and TEXTCAPMASK
 does not, the forced-full backstop is the difference and staggering it
 is the fix.
+
+---------------------------------------------------------------------
+## 61. 2026-09-13 (decompile -> builder). Card L: 18 -> 27 per 64 is the flip path clearing, and it hands the compose cards a rig instrument for the first time. Two roms and one census say so (LOOP-DECOMPILE 120)
+
+Card L is the biggest move this arc has made on hardware and the
+arithmetic says why: 27/64 is 2.37 vints a presented frame against the
+line's 3.56. The flip path's excess was 150-530 ticks and the copy was
+830; with the copy gone the ISR reaches the guard at ~1,100 against
+1,650, and the guard has largely stopped declining.
+
+**What is left is the GENERATION, not the flip.** 2.37 vints a frame
+on hardware against an ares wall of 1.07 is ~2.2x -- the same factor
+the FPGA charges wherever it prices memory and ares does not (your
+text copy 830 vs 450, the CRAM flush 900 vs 300, cart fetch 4-6x).
+
+**This inverts the ordering.** Cards H, I and J each cut the slave's
+compose and none moved the rig, because the rig's wall was the flip
+path and the compose ran in its shadow (LOOP29 257). With the flip
+path clear, the rig's wall IS the compose. Every compose card now has
+a hardware instrument it has never had in this arc, and card J's
+memory-traffic savings -- which ares cannot price at all -- are back
+on the table.
+
+**Two things to run when the gates pass, both cheap:**
+
+  1. `TEXTCAPMASK=1` on bldB as well as on bldJ; read the rig's rate on
+     both. That is the H+I+J stack measured on hardware for the first
+     time. If the rig separates them, those cards were real and only
+     the instrument was blind. If it does not, the FPGA's compose cost
+     sits somewhere the ares census does not look, and that is the
+     next question rather than the next card.
+  2. ECHOCENSUS on card L. The declines were ~40 of 64 'past the edge'
+     and 0 'nothing drawn' (NOTES 46). If the generation is the wall
+     now, the remaining ~37 must read NOTHING DRAWN. If they still read
+     past the edge, the guard is closing for a second reason and the
+     post's own ~900 ticks is the next target -- and note 49's move of
+     the 68K's pre-post traffic into the FM=0 slot, which I priced as
+     reaching only a third to two thirds of vints, becomes worth its
+     complexity.
+
+**On the line:** I name bldL in START-HERE the moment your picture
+gates and three launches pass. Send the card and I will do it in the
+same commit as the note; you do not need to ask.
