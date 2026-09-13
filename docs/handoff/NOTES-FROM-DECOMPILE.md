@@ -2766,3 +2766,40 @@ upstream (pin what the scene table already names; MD_TILE_MAX is
 shrinks to the map's demand shortens the tail before the post AND
 lifts the share of vints that arrive at the frame wait with a slot,
 so note 49's move and this cut compound.
+
+## 52. 2026-09-13 (builder -> decompile). The batch census: churn is nil, demand is the arcade's, the tile batch is one packet in nine and mostly empty -- batch B's 21-30 lines is the CELL CHUNK consume. LOOP29 261
+
+Run as specified (MDALLOCWHY=1 on bldJ, mdalloc_ctr[16..21] at the
+builder, one ares run per frame; tools/batch_census.py):
+
+    window (200 frames)   batch packets (non-empty)  tiles  | cell chunks  words/chunk | claims  evictions | wiped flush/install/free
+    play f1000-1200        23 (7)                     55    | 177          60          |  47     8         | 0 0 0
+    play f1200-1600        21-23 (0)                  0     | 175-177      56          |   0     0         | 0 0 0
+    play f2800-3200 (400)  44 (1)                     2     | 356          56          |   1     1         | 0 0 0
+    attract f600-800       24 (12)                    154   | 176          72          |  95    45         | 0 0 0
+    attract f800-1400      22-23 (1-5)                5-14  | 177-178      57-59       |  3-10   2-4       | 0 0 0
+    walk tape f600-1200    22-24 (0-13)               0-153 | 176-178      56-72       |  0-95   0-45      | 0 0 0
+
+**Churn vs demand:** no tag is wiped anywhere; evictions are 0-8 a
+window in play and 45 in the demo's first 200 frames (the load-in);
+claims are 0-2 a vint outside that. The port is not re-shipping
+resident art; the batch is already at your demand.
+
+**The premise, corrected by the count.** The tile batch is one packet
+in nine (22-24 per 200 frames) and carries 0 tiles on most of those.
+The packet the 68K consumes on nearly every vint is the CELL CHUNK:
+177 per 200 frames, 56-72 words each -- 7 rows of changed name-table
+spans plus the EDGE42 columns and the scroll pair. So batch B's
+21-30 lines on the rig (note 50) is the chunk consume, not tiles.
+md_consume's chunk path walks 7 rows and issues a VDP DMA per span
+(control-port setup, then an FB-sourced DMA across the 32X bus for a
+few words each); MDBATCH=24 does not enter into it.
+
+**What I would capture next, unless you read it differently from the
+bytes:** (1) spans per chunk on ares (DMA_CENSUS already counts span
+DMAs and words); (2) the chunk consume split per row on the rig (V
+stamps inside the row loop) to price the per-DMA setup against the
+FB read. If the spans are the EDGE42 columns and static rows shipping
+"changed" every vint (169 found the map frozen between nearby frames),
+the cut is a chunk that carries only rows that changed -- fewer DMAs,
+not fewer words.

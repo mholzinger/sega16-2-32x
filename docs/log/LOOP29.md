@@ -6831,3 +6831,42 @@ the slot buys the vints that have one: roughly a third to two thirds
 of them on the rig, scene-dependent.
 
     rom/night/frJ_tail.32x (2b746c23), frJ_tail_tape.32x
+
+## 261. THE BATCH COMPOSITION CENSUS: THE TILE BATCH IS RARE AND MOSTLY EMPTY; THE EVERY-VINT PACKET IS THE CELL CHUNK (2026-09-13 09:30)
+
+NOTES 51 (decompile, c8b1f41): batch B cannot move behind the flip
+(bank + layer sync), but the map needs 0-2 new tile codes a vint (p90
+0, bursts of 378-561 only at cuts), so a 24-tile batch is 10-20x the
+demand; census the batch's composition -- churn vs demand is the cut.
+`MDALLOCWHY=1` on bldJ's flags with mdalloc_ctr[16..21] added at the
+builder (tiles shipped, non-empty batches, batch packets, cell-chunk
+packets, chunk words, art riding a chunk tail); tools/batch_census.py,
+one ares run per frame:
+
+    window (200 frames)   batch pkts (non-empty)  tiles   | cell chunks  words/chunk | claims evict | wiped
+    play f1000-1200        23 (7)                  55     |  177         60          |  47    8     | 0 0 0
+    play f1200-1600        21-23 (0)               0      |  175-177     56          |   0    0     | 0 0 0
+    play f2800-3200 (400)  44 (1)                  2      |  356         56          |   1    1     | 0 0 0
+    attract f600-800       24 (12)                 154    |  176         72          |  95   45     | 0 0 0
+    attract f800-1400      22-23 (1-5)             5-14   |  177-178     57-59       |  3-10  2-4   | 0 0 0
+    walk tape f600-1200    22-24 (0-13)            0-153  |  176-178     56-72       |  0-95  0-45  | 0 0 0
+
+Churn is nil: no tag is ever wiped (flush / install / free_set all
+0), evictions are 0-8 a window in play and 45 only in the demo's
+first 200 frames (the level's load-in), claims track the arcade's
+demand (0-2 a vint outside cuts). The tile batch is one packet in
+nine and carries 0 tiles on most of those. So the k2 packet the 68K
+consumes on nearly every vint is the CELL CHUNK: 177 per 200 frames,
+56-72 words each (7 rows of changed spans, the EDGE42 columns and
+the scroll pair), ~10k words per 200 frames. Batch B's 21-30 lines
+on the rig (260) is therefore the chunk consume, not tiles:
+md_consume's chunk path walks 7 rows and issues a VDP DMA per span
+(the `while (nc2)` loop; DMA_CENSUS already counts them), each with
+its control-port setup and its FB-sourced read across the 32X bus.
+The cut note 51 named -- shrink the batch to the demand -- is already
+the case for tiles; the weight is the chunk's span count and its
+per-span cost on the FPGA. Next capture, if the decompile thread
+agrees: DMA_CENSUS's spans per chunk on ares, and the chunk consume
+split per row on the rig (V stamps inside md_consume's row loop).
+
+    rom/night/bcJ.32x (98eb71ba), bcJ_tape.32x
