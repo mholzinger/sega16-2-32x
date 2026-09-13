@@ -14102,7 +14102,10 @@ RAMCODE void m_main(void)
 #endif
                             unsigned vx = (unsigned)(vx00 + col * 8) & 0x3FF;
                             uint16_t w = ((vx >> 9) & 1 ? pg1 : pg0)[(vx >> 3) & 0x3F];
-#ifdef C1_PUNCH
+#if defined(C1_PUNCH) && !defined(C1_NOMASK)
+                            /* (C1_NOMASK, LOOP29 247 ablation: no mask
+                             * writes; the slave's punched loops see class
+                             * 0 everywhere and cost only their own shape) */
                             if (isfg && (unsigned)col < 40u && row < 28) {
                                 unsigned hv = 0;
                                 if (w && (w & 0x8000)) {
