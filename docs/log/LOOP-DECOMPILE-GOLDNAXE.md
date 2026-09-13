@@ -194,3 +194,83 @@ rom's f1200 must match the arcade's `cc9a51bd..` frame, or the
 register-to-pixel convention is wrong somewhere.
 
 Rung 2 done.
+
+---------------------------------------------------------------------
+## 5. Rung 3: the arcade write census (TOOLKIT step a) — what changes per frame
+
+`tools/s16b_write_census.lua` (new kit tool: the arcade-side census, per
+region, tap reinstalled per frame, sprite RAM classified by the live
+base variable). Run: coin f600, `1 Player Start` f800 (Golden Axe's
+field name — `P1 Start` does not exist here), Button 1 at f900 picks the
+first hero, walk right + attacks; window f1500-f3000 verified by its own
+snapshots: f1500 = the "His majesty and the princess" intro, f3000 =
+stage 1, three enemies on screen. Output `docs/audit/goldnaxe/write_census.txt`.
+
+    region      total   writes/frame in the window   extent
+    tileram    249,508        0.0                    100000-10FFFE
+    textram    265,095      142.5                    110000-110FFE
+    palette     55,472       27.9                    140000-1409DC
+    spriteram  461,062       42.3                    200000-900500 (six bases)
+    bank_math    6,261        2.2                    1F0000-1F2002
+    rgn2           588        0.4                    1E0000-1E0008
+    io           5,905        2.0                    C40000-C43034
+
+**Tile RAM: ZERO writes per frame during play.** All 249,508 land before
+f1500: `0x39AE` (the 16384-long fill, 183,402), `0x2012/0x2038/0x2026`
+(row unpacks into 0x100000-0x10BFFE), `0x206A` (0x10C000-0x10EFFE). Stage
+1 is a static tilemap loaded at the cut; the planes then move by scroll
+registers only. AB's level 1 also streamed nothing per frame, so the
+kit's "load at the cut, scroll after" shape holds; the difference is
+where the cut happens (rung 7).
+
+**Text RAM is the heavy per-frame writer, 142.5/frame**, and the extents
+split it: `0xC918` 44,790 writes to 0x11005A-0x11016C and `0xC900`
+29,860 to 0x1100C4-0x110156 (the HUD rows, top of the text map);
+`0x3EB4/0x3EBE` 38,228 to 0x110746-0x110CF8 and `0x3EF6` 18,585 to
+0x110BCE-0x110C60 — those are above the 64x28 text map (0x000-0x6FF)
+in the row/column scroll table area. HYPOTHESIS until the consuming
+instruction is read: Golden Axe uses per-row scroll during play (the
+forest's parallax), and that table is rewritten every frame. If so it is
+a per-frame delivery unit the AB port never needed (AB's rows are
+static), and it sizes rung 7's answer.
+
+**Palette: 27.9/frame, a FIXED 24-word footprint.** `0x3C8C` clears
+0x140000-0x1407FE at cuts (6,144 = 3 full clears); during play the
+writers are the block 0x1172-0x11A6, each writing one word pair in
+0x140050-0x14007E every frame (3,672 = 2.4/frame each, 16 sites). That
+is pens 0x28-0x3F of palette set 0: a colour cycler with a 24-word
+footprint, versus AB's paired 128-word pushes (TOOLKIT step c). The
+delivery unit for Golden Axe's per-frame palette is 48 bytes, if the
+consumer confirms the block is the only per-frame writer (extent
+0x1409DC says something wrote pens up to 0x4EE at least once).
+
+**Sprite RAM: 42.3/frame through one copier.** `0x302A/C/E` (150,620
+each = 3 longs per record) and the terminators at `0x308A/0x308E` every
+frame; the 80-record clears `0x39CC/0x39CE` at cuts. Extents run
+0x200000-0x900500 because the base rotates (entry 3). 42 writes/frame is
+14 records/frame of 16 bytes: light.
+
+**Golden Axe uses the 5797 board's math chips.** `0xAB6E/0xAB76` write
+the 315-5248 multiplier at 0x1F0000/2 (84 each), `0xAE3E-0xAE78` write
+the compare/timer at 0x1F1000-0x1F1008 (29 each), and `0xABC8-0xAC02`
+write region 2 at 0x1E0000-0x1E0008 (84 each) — MAME's `unknown_rgn2`,
+which this game exercises 588 times in 3000 frames. AB used none of
+these. **The port has to answer their READS**, which a write tap cannot
+see: rung 4's trace must capture reads of 0x1F0000-0x1F1FFF and
+0x1E0000-0x1E000F, and the shim needs a multiplier/compare emulation
+(jtcores `jts16b_mul.v`, `jts16b_timer.v` are the spec).
+NOTES-FROM-DECOMPILE-GOLDNAXE 4.
+
+**I/O: two writes per vint**, `0x3098` 0xC40000 <- 0xFFEC18 (the
+display/flip/coin-counter byte — display gate is bit 5, same port as AB)
+and `0x30A0` 0xC43000 <- 0xFFEC94.
+
+**One direct sound-latch write.** `0x367E` writes 0xFE0006 once in 3000
+frames — mapper reg 3, the Z80 latch — the only 68K touch of the latch;
+AB's 68K never touched it (the MCU posts). Rung 6 decides whether the
+posting convention is "MCU mailbox, with one direct exception" or
+something else.
+
+Rung 3 done. The three numbers the builder needs: per frame in play,
+text 142.5 (with a probable row-scroll table), palette 28 over 24
+words, sprites 42; tiles 0.

@@ -35,3 +35,21 @@ The IRQ4 handler writes the 5704-style bank register itself
 (`movep.w d0,1(a0)` at 0x2F94, a0 = 0x1F2000, value from 0xFFEC95, two
 bytes per vint). AB routed the request through the MCU. The port's
 tile-bank thunk therefore hooks one 68K site, not a mailbox.
+
+## 4. The 5797 math chips are live (entry 5)
+
+Golden Axe writes the 315-5248 multiplier (0x1F0000/2), the 315-5250
+compare/timer (0x1F1000-0x1F1008) and region 2 (0x1E0000-0x1E0008,
+MAME's `unknown_rgn2`) during play. AB used none. The shim must emulate
+the multiplier and compare/timer in the 68K's address space (reads
+included; the read census is rung 4) — RTL spec `jts16b_mul.v` and
+`jts16b_timer.v` in `srcref/jtcores/cores/s16b/hdl/`, derive only.
+
+## 5. Per-frame delivery units, measured on the arcade (entry 5)
+
+Level-1 play, per frame: tile RAM 0 (stage loaded at the cut), text RAM
+142 writes (HUD rows + a 0x110746-0x110CF8 block that is probably a row
+scroll table — hypothesis), palette 28 writes over a fixed 24-word
+window 0x140050-0x14007E, sprite records 14 (42 writes), I/O 2, tile
+bank 2. Golden Axe's per-frame palette is 48 bytes, not AB's paired
+128-word pushes.
