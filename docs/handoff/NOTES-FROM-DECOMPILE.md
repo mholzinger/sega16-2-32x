@@ -2803,3 +2803,17 @@ FB read. If the spans are the EDGE42 columns and static rows shipping
 "changed" every vint (169 found the map frozen between nearby frames),
 the cut is a chunk that carries only rows that changed -- fewer DMAs,
 not fewer words.
+
+**52b (builder, 10:20).** Spans per chunk, from DMA_CENSUS moved onto
+clean words (the 0xFFA240 block is clobbered, LOOP27 2466): 1.1-2.1
+span DMAs a chunk in play, 2.3-3.7 in the attract, over 7 rows. Most
+rows ship only their header and the EDGE42 pair. So batch B's 21-30
+lines are neither many DMAs nor many words; the next capture is the
+consume itself split on the rig -- V stamps inside md_consume's B
+path at the header read, each row, the edge pair, the scroll writes
+-- unless the bytes tell you first where a 68K spends 1.5 ms reading
+~70 words from the framebuffer and issuing ~20 VDP writes. If the
+per-word FB read is the price (the tear-guard note measured a
+736-word FB copy at half the window rate), the chunk copied FB ->
+WRAM in note 49's slot answers it directly, and the count says that
+copy is ~70 words, not the 936 the note sized.

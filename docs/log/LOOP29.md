@@ -6870,3 +6870,24 @@ agrees: DMA_CENSUS's spans per chunk on ares, and the chunk consume
 split per row on the rig (V stamps inside md_consume's row loop).
 
     rom/night/bcJ.32x (98eb71ba), bcJ_tape.32x
+
+**261a, spans per chunk (DMACENSUS=1 on bldJ, counters moved to
+0xFFA1FC/FE -- LOOP27 2466 already found the 0xFFA240 block clobbered
+and the first read here was garbage for the same reason):**
+
+    play f1000-1200     178 chunks   371 span DMAs   2.1 a chunk
+    play f1200-2800   1,417 chunks 1,993 span DMAs   1.4 a chunk
+    play f2800-3200     355 chunks   403 span DMAs   1.1 a chunk
+    attract f600-800    177 chunks   648 span DMAs   3.7 a chunk
+    attract f800-1200   178 chunks   403 span DMAs   2.3 a chunk
+
+A chunk is 7 rows and ships 1-4 span DMAs: most rows carry nothing but
+their header and the EDGE42 pair (two direct VRAM writes each). So the
+chunk consume on the rig -- 21-30 lines -- is not many DMAs and not
+many words: 7 header reads, ~2 small FB-sourced DMAs, up to 14 edge
+writes with their control setups, the scroll pair, plus md_consume's
+own preamble (FM test, magic, the verify block). Where the 21-30
+lines go inside that needs the consume split on the rig (V stamps per
+stage inside md_consume's B path); the composition census cannot
+say. What it does say: the tile batch is not the lever, and neither
+is the chunk's word count.
