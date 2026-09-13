@@ -6903,3 +6903,13 @@ block, the header reads), rows (7 headers, the span DMAs, the EDGE42
 pairs), tail (the hscroll/vscroll writes and the return). Means and
 maxima per 64 vints on the channel (tags 0-2 / 4-6; 3 and 7 = the
 whole consume).
+
+**262a, a clock trap in every V-stamp census (260, 262):** the NTSC V
+counter runs ..E9 EA E5 E6.. at the vblank start -- lines E5-EA occur
+twice -- so a stage that straddles the jump reads six lines SHORT and
+a stage inside the repeat can read negative (the consume split's
+"rows 59" on ares was S2 - S1 = E7 - E8). The tail census's numbers
+(260b) are therefore floors where a stage crossed the jump; batch B's
+21-30 lines on the rig may be up to six more. The consume census now
+treats a small negative delta as the jump and adds six. The
+FRT-stamped censuses (258, 259, stage 2) are not affected.

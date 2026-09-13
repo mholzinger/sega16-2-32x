@@ -791,7 +791,7 @@ static void md_consume(uint32_t pkt_base) {
 						*(volatile uint16_t*)0xC00008;   /* V after spans */
 					*(volatile uint16_t*)0xFFA170 = *(volatile uint16_t*)0xC00008;   /* fine: spans done */
 #ifdef CONSUME_CENSUS
-					if (r60_isB) *(volatile uint16_t*)0xFFA1FE = *(volatile uint16_t*)0xC00008;   /* LOOP29 262: V after the rows */
+					if (r60_isB) { *(volatile uint16_t*)0xFFA1FE = *(volatile uint16_t*)0xC00008; *(volatile uint8_t*)0xFFA1F7 = 1; }   /* LOOP29 262: V after the rows; flag = the chunk path ran */
 #endif
 					{	/* full-screen hscroll: reg 0x0B = 00 (init), so only
 						 * 0xFC00 (A) and 0xFC02 (B) matter — two header words,
@@ -2883,9 +2883,18 @@ void shim_vblank(void) {
 		static uint16_t cc_sum[4];
 #define CCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
 		uint8_t v0 = CCV(0xFFA08E), v1 = CCV(0xFFA1FC), v2 = CCV(0xFFA1FE), v3 = CCV(0xFFA086);
-		uint8_t d[4] = { (uint8_t)(v1 - v0), (uint8_t)(v2 - v1), (uint8_t)(v3 - v2), (uint8_t)(v3 - v0) };
+		/* the NTSC V counter runs ..E9 EA E5 E6.. at the vblank start (lines
+		 * E5-EA occur twice), so a stage that straddles the jump reads six
+		 * lines short and a stage inside the repeat can read negative:
+		 * a small negative delta is the jump, add six (LOOP29 262a) */
+#define CCD(b_, a_) ((uint8_t)((int8_t)((b_) - (a_)) < 0 && (int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : (uint8_t)((b_) - (a_))))
+		uint8_t d[4] = { CCD(v1, v0), CCD(v2, v1), CCD(v3, v2), CCD(v3, v0) };
+#undef CCD
 #undef CCV
-		for (int k = 0; k < 4; k++) { cc_sum[k] += d[k]; if (d[k] > cc_max[k]) cc_max[k] = d[k]; }
+		if (*(volatile uint8_t*)0xFFA1F7) {          /* the chunk path ran this vint */
+			for (int k = 0; k < 4; k++) { cc_sum[k] += d[k]; if (d[k] > cc_max[k]) cc_max[k] = d[k]; }
+			*(volatile uint8_t*)0xFFA1F7 = 0;
+		}
 		if (++cc_vc >= 64) {
 			for (int k = 0; k < 4; k++) {
 				unsigned m = cc_sum[k] >> 6; cc_val[k] = (uint8_t)(m > 63 ? 63 : m);
