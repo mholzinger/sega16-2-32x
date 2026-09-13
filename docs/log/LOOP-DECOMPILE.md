@@ -5507,3 +5507,58 @@ every such vint declines. With the chunk reduced to its map demand
 (a header, no backstop row, no empty rows) batch B is ~2-4 lines and
 the post lands at ~8-20 lines; stage 2 must then be under ~16 lines
 for the flip to make the guard. Both cuts are needed; neither alone.
+
+---------------------------------------------------------------------
+## 117. For NOTES 56: the game changes 8-10 palette entries a frame (p90 17), the flush's loop reads a 32X register PER ENTRY for a PEN that cannot drop in vblank, and the flush and its callers are CART-ROM resident (2026-09-13)
+
+**1. The game's own palette demand, on the arcade.** Palette RAM
+0x840000-0x840FFF (2,048 words) compared entry by entry at every
+frame boundary, MAME:
+
+    scene                 entries changed a frame: mean / p50 / p90 / max
+    attract demo (701 f)      9.8 / 8 / 17 / 128
+    credited play (1901 f)    9.7 / 8 / 17 /  48
+
+That is the colour cyclers (entry 93: three scripts, 8 colours a step,
+palettes 19-21) plus the odd fade; the maxima are cuts. Against NOTES
+54's count of OUR dirty CRAM entries -- 15-31 a frame in the demo,
+36-82 a frame and 164 a generation at the zombie row -- the port
+flushes 2-10x what the game changed. The excess is the pen repaint's
+own churn (PEN_HOLD / PEN_REPAINT), not the game. (Instrument caveat:
+a MAME write tap on that range counted 0 writes while the polled
+compare saw changes; only the polled figure is used.)
+
+**2. The flush reads a 32X register once per entry, for a bit the RTL
+pins high through the whole of vblank.** cram_flush_pen's burst is
+`do { ...cram[i] = ...; } while (d && (MARS_VDP_FBCTL & 0x2000));` --
+one uncached 32X register READ per dirty entry to re-test PEN. Per the
+FPGA's own RTL (srcref/S32X_MiSTer rtl/32X/VDP.sv:400-406):
+
+    if (H_CNT == 9'h157+3-1 || VBLK || !MODE[0]) PEN <= 1;
+    else if (H_CNT == 9'h017-1)                 PEN <= 0;
+
+VBLK forces PEN high every DOT_CE, so inside vblank PEN cannot drop
+and every one of those reads is known-true before it is issued. A
+write is posted through the SH-2's write buffer; a read is a blocking
+round trip. ares prices both at one clock (memory: ares charges
+instructions only), the FPGA does not.
+
+**3. The flush and its callers run from CART ROM.** From rom/s16.lst:
+
+    _blit_half   0x060324a8    SDRAM (.ramtext)
+    _cap_drain   0x06032358    SDRAM
+    _m_main      0x06032d90    SDRAM
+    _visr_vbi    0x020462cc    CART ROM
+    _flip_span   0x02045df0    CART ROM       (cram_flush_pen inlines here)
+
+m_main.c declares visr_vbi and flip_span without RAMCODE. This repo
+has already measured this exact cost once: md_consume "ran from cart
+ROM under the master's compose traffic -- a 4-6x fetch-stall on every
+instruction" (md_main.c ~515). It is the shape of 900 ticks on the rig
+against 300 on ares for a 15-31 iteration loop.
+
+.ramtext in the tree's .lst is 0x6950 = 26,960 bytes against the
+28,672 ceiling entry 246 names -- ~1,700 bytes free, and the flush's
+loop is ~100 of them. flip_span entire (592 lines of C) does not fit;
+the flush alone does, as a noinline RAMCODE function (250b's rule: a
+static given a placement is still inlined under LTO without noinline).

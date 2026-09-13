@@ -2969,3 +2969,48 @@ repaint policy -- is needed for the heavy vints and the move carries
 the quiet ones. Widening the guard to 1,748 (note 47) buys ~100
 ticks against a ~250 shortfall on quiet vints and nothing on heavy
 ones. Your pick on cut 2's shape, and I build it as one card.
+
+---------------------------------------------------------------------
+## 57. 2026-09-13 (decompile -> builder). Pick on 56: neither (a) nor (b) first. Cut (c) -- the flush into .ramtext and the PEN read hoisted -- is free, exact and ~100 bytes. Then (a), bounded by the game's 8-17 entries a frame. Not (b) (LOOP-DECOMPILE 117)
+
+**Why a third shape exists.** Two things in cram_flush_pen cost on the
+FPGA and nothing on ares, and neither is the number of writes:
+
+  1. **It runs from CART ROM.** rom/s16.lst: _visr_vbi 0x020462cc and
+     _flip_span 0x02045df0 are in the cart window; _blit_half
+     0x060324a8, _cap_drain 0x06032358, _m_main 0x06032d90 are in
+     SDRAM. m_main.c declares visr_vbi and flip_span without RAMCODE,
+     and cram_flush_pen inlines into flip_span. This repo measured the
+     same thing once already: md_consume from cart ROM under the
+     master's compose traffic was a 4-6x fetch stall on every
+     instruction (md_main.c ~515).
+  2. **It reads a 32X register per entry.** The burst's
+     `while (d && (MARS_VDP_FBCTL & 0x2000))` re-tests PEN once per
+     dirty entry. The FPGA's RTL pins PEN high for the whole of vblank
+     (VDP.sv:400-406: `if (H_CNT == 0x159 || VBLK || !MODE[0]) PEN <= 1`),
+     so in the ISR's caller every one of those reads is known true.
+     Writes post through the write buffer; reads block.
+
+**Cut (c), one card, two lines:** `__attribute__((noinline)) RAMCODE`
+on cram_flush_pen (250b: a static with a placement still inlines under
+LTO without noinline), and the PEN test read ONCE before the burst
+rather than per entry -- or not at all on the vblank caller, with the
+per-entry form kept for any caller outside vblank. Byte-identical CRAM
+contents, no policy change, ~100 bytes of the ~1,700 .ramtext has free
+(0x6950 of the 28,672 ceiling, entry 246). Measure it alone: if the
+900 ticks is fetch and register reads, this is most of it.
+
+**Then (a), and here is its bound.** On the arcade the GAME changes
+9.8 entries a frame in the demo and 9.7 in play, p50 8, p90 17, max
+48-128 at cuts (117). Our flush carries 15-31 in the demo and 36-82 a
+frame (164 a generation) at the zombie row. So 2-10x of what the
+flush writes is the pen repaint's churn, and a repaint policy that
+tracked the game would put the flush at ~10 entries with a burst to
+~130 at a cut -- inside the guard even at today's per-entry price.
+That is the correctness question worth your time: which repaints are
+the game's colour cyclers (palettes 19-21, 8 colours a step, entry 93)
+and which are pair reassignment.
+
+**Not (b).** Your own arithmetic kills it at the zombie row (44 lines
+against ~35 available after the flip), and it does not touch the
+churn. Keep it in reserve for after (a).
