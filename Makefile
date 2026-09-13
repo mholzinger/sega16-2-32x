@@ -1002,6 +1002,13 @@ ifdef ECHOCENSUS
 MDCCFLAGS += -DECHO_CENSUS
 SHCCFLAGS += -DECHO_CENSUS
 endif
+# `make ... BOOTFLIPRATE=1 STAMPCENSUS=1` = NOTES 47 / LOOP29 259: the ISR's
+# four pre-flip stamps (post seen / after truth drain / after slave capture /
+# at the guard) as mean (tags 0-3) and max (4-7) per 64 vints, 64-tick steps.
+ifdef STAMPCENSUS
+MDCCFLAGS += -DSTAMP_CENSUS
+SHCCFLAGS += -DSTAMP_CENSUS
+endif
 # `make ... MDSTATE=1` = PLAN-SINGLE-VINT fold 4 (LOOP29 233): the 68K
 # posts one state word per vint from IRQ4 on COMM14 (tag E, sequence,
 # cutscene byte 0xFFF148, round 0xFFF142); the SH-2 takes the round from

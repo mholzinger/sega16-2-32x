@@ -78,6 +78,9 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
+#ifdef STAMP_CENSUS
+static uint16_t stc_t[4];                 /* NOTES 47 / LOOP29 259: the ISR's four pre-flip stamps */
+#endif
 #ifdef ECHO_CENSUS
 #define ECHO_NO_TAG(r) (0xF1F0u | (r))    /* NOTES 45: the decline reason rides the echo word */
 #else
@@ -7372,6 +7375,9 @@ static int flip_span(void)
 #endif
 #ifdef FLIPRATE_MEANSUM
     if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
+#ifdef STAMP_CENSUS
+    stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: post seen */
+#endif
 #endif
 #ifdef VB_SPAN
 
@@ -7563,6 +7569,9 @@ static int flip_span(void)
     cap_drain(13);               /* ALL of it — correctness */
 #endif
     VBS(3);                             /* after the truth drain */
+#ifdef STAMP_CENSUS
+    stc_t[1] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: after the truth drain */
+#endif
 #ifdef PG_SKIP_PKT
     /* MD-PLANE MAILBOX MIRROR (LOOP29 139). The page-12 restore used to
      * carry MD-plane packet B across the bank swap, and the FPGA NEEDS
@@ -7590,6 +7599,9 @@ static int flip_span(void)
         while (SYNC[6] != 0x4000 && SYNC[6] != 0x4002 && --g2) ;
 #ifdef VB_SPAN
         if (vbs_isr) vbs_t2[1] = (uint16_t)(frt() - visr_t0);
+#ifdef STAMP_CENSUS
+        stc_t[2] = (uint16_t)(frt() - visr_t0);                    /* NOTES 47: after the slave capture wait */
+#endif
 #endif
         if (!g2 || SYNC[6] == 0x4002) {  /* 0x4002: the slave saw no FM */
             DIAG[22]++;          /* slave never captured: fall
@@ -7628,6 +7640,16 @@ static int flip_span(void)
      * with this off; expect the FPGA not to tear. */
     if (0) {
 #else
+#ifdef STAMP_CENSUS
+    stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
+    {   /* four stamps in 64-tick steps, two a COMM word, for the 68K's channel */
+        unsigned a = stc_t[0] >> 6, b = stc_t[1] >> 6, c = stc_t[2] >> 6, d = stc_t[3] >> 6;
+        if (a > 255) a = 255; if (b > 255) b = 255; if (c > 255) c = 255; if (d > 255) d = 255;
+        MARS_SYS_COMM5 = (uint16_t)((a << 8) | b);
+        MARS_SYS_COMM7 = (uint16_t)((c << 8) | d);
+        stc_t[1] = stc_t[2] = 0;         /* a path that skips a stage carries 0 */
+    }
+#endif
     if ((uint16_t)(frt() - visr_t0) > 1650) {
 #endif
         MARS_SYS_COMM4 = ECHO_NO_TAG(1);

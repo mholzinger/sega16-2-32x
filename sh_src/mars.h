@@ -51,6 +51,8 @@ typedef volatile signed long int vint32;
 #define MARS_SYS_COMM0      (*(volatile uint16_t *)0x20004020) /* Primary SH2 communication */
 #define MARS_SYS_COMM2      (*(volatile uint16_t *)0x20004022)
 #define MARS_SYS_COMM4      (*(volatile uint16_t *)0x20004024) /* Secondary SH2 communication */
+#define MARS_SYS_COMM5 (*(volatile uint16_t *)0x20004026) /* Secondary SH2 communication */
+#define MARS_SYS_COMM7 (*(volatile uint16_t *)0x2000402A) /* Secondary SH2 communication */
 #define MARS_SYS_COMM6      (*(volatile uint16_t *)0x20004026)
 #define MARS_SYS_COMM8      (*(volatile uint16_t *)0x20004028) /* controller 1 current value */
 #define MARS_SYS_COMM10     (*(volatile uint16_t *)0x2000402A) /* controller 2 current value */

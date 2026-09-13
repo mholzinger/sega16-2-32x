@@ -56,6 +56,10 @@ static volatile uint16_t* const mars_comm0  = (uint16_t*) MARS_COMM0;
 static volatile uint16_t* const mars_comm2  = (uint16_t*) MARS_COMM2;
 static volatile uint16_t* const mars_comm4  = (uint16_t*) MARS_COMM4;
 static volatile uint16_t* const mars_comm6  = (uint16_t*) MARS_COMM6;
+#ifdef STAMP_CENSUS
+static volatile uint16_t* const mars_comm5  = (uint16_t*) MARS_COMM5;
+static volatile uint16_t* const mars_comm7  = (uint16_t*) MARS_COMM7;
+#endif
 #ifdef BOOT_FBXFER
 static uint8_t fbx_seq;                  /* FB-transport probe sequence */
 #endif
@@ -2111,7 +2115,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#ifdef ECHO_CENSUS
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2790,6 +2794,38 @@ void shim_vblank(void) {
 		{
 			uint8_t tag = (uint8_t)((ec_vc >> 3) & 7);
 			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | ec_val[tag]);
+		}
+	}
+#endif
+#ifdef STAMP_CENSUS
+	/* NOTES 47 / LOOP29 259: the master's four pre-flip stamps (FRT ticks
+	 * from ISR entry: post seen, after the truth drain, after the slave
+	 * capture wait, at the guard), two a COMM word in 64-tick steps, read
+	 * here every vint and cleared. Per 64 vints the channel carries tags
+	 * 0-3 = the MEAN of each stamp over the vints that carried one and
+	 * 4-7 = its MAX, in 64-tick steps (6 bits; 1650 ticks = 25.8). */
+	{
+		static uint8_t st_vc, st_val[8], st_max[4], st_n;
+		static uint16_t st_sum[4];
+		uint16_t c5 = *mars_comm5, c7 = *mars_comm7;
+		if (c5 | c7) {
+			uint8_t v[4] = { (uint8_t)(c5 >> 8), (uint8_t)c5, (uint8_t)(c7 >> 8), (uint8_t)c7 };
+			for (int k = 0; k < 4; k++) { st_sum[k] += v[k]; if (v[k] > st_max[k]) st_max[k] = v[k]; }
+			st_n++;
+			*mars_comm5 = 0; *mars_comm7 = 0;
+		}
+		if (++st_vc >= 64) {
+			for (int k = 0; k < 4; k++) {
+				unsigned mean = st_n ? st_sum[k] / st_n : 0;
+				st_val[k] = (uint8_t)(mean > 63 ? 63 : mean);
+				st_val[4 + k] = (uint8_t)(st_max[k] > 63 ? 63 : st_max[k]);
+				st_sum[k] = 0; st_max[k] = 0;
+			}
+			st_n = 0; st_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((st_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | st_val[tag]);
 		}
 	}
 #endif

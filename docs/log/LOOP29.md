@@ -6712,3 +6712,20 @@ on both (the handler runs there), so that quantity does not split
 anything; the edge tag does.
 
     rom/night/frJ_echo.32x (54a4695c), frJ_echo_tape.32x
+
+## 259. THE ISR'S FOUR STAMPS ON THE RIG: WHICH PRE-FLIP STAGE HOLDS THE EXCESS OVER 1650 (2026-09-13 07:40)
+
+NOTES 47 (decompile, 76406a8): the edge decline is flip_span's own
+path from ISR entry to the FBCTL write exceeding 1650 ticks on the
+FPGA -- post wait, palette drain, truth drain, the slave-capture
+spin, then the guard -- all FB/SDRAM traffic ares prices at one clock
+an instruction. `STAMPCENSUS=1` with `BOOTFLIPRATE=1`: the master
+records (frt - visr_t0) at four points -- post seen (CEN[52]'s
+quantity), after the truth drain (VBS(3)), after the slave capture
+wait (vbs_t2[1]), at the guard -- and writes them two a COMM word
+(COMM5, COMM7: both were unused) in 64-tick steps at the guard; the
+68K reads and clears them every vint and the channel carries, per 64
+vints, tags 0-3 = each stamp's MEAN over the vints that carried one
+and 4-7 = its MAX (6 bits, 64-tick steps; 1650 = 25.8, one line =
+0.72). The stage whose stamp holds the excess is the cut, one lever
+each per note 47.
