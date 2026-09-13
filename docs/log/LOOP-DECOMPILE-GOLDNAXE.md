@@ -652,3 +652,60 @@ across the probes (0x1100/0x2222 title, 0xF1E0/0xF7E6 demo,
 and the port's per-scene static assignment (memory: sky allocator
 order) keys on the table, not on a byte. 0xFFEC2A is a general timer
 (cmpi #300/#690/#1800), struck from the candidates.
+
+---------------------------------------------------------------------
+## 13. The Japanese and the other US set: same memory map, and the JP program has no MCU at all
+
+Asked for after the fact (2026-09-13). Copied and verified `goldnaxej`
+(set 4, Japan, FD1094 317-0121, 171-5704 board), its flat decrypted
+clone `goldnaxejd`, and `goldnaxe2` (set 2, US, 8751 317-0112, 5704
+board). Program images built the same way (4 x 128 KB: a7/a5 low,
+a8/a6 high). Facts:
+
+**The upper 256 KB is shared by all three sets** (epr-12521/12519;
+262,135 of 262,144 bytes equal to set 6's upper half). Set 6's lower
+256 KB is a rewrite (56,081 bytes equal to JP's, 61,279 to US2's). So
+entry 8's "duplicate routines in the second half" are the OLDER
+program's upper bank that set 6 still ships and never reaches — which
+is why no trace touched them. Alignment set 6 vs JP: pending (game_align still running).
+
+**All three run the same low memory map** — tiles 0x100000, text
+0x110000, palette 0x140000, sprites at 0x200000 at boot, I/O 0xC40000:
+US2's MCU programs `02 00 02 08 00 1F 00 FF 04 20 0D 10 00 14 00 C4`
+(captured live; its ROM carries AB's old table at 0xC3B unused, as set
+6's does at 0xFEA), and the JP 68K copies the set-6 table byte for byte
+from ROM 0x2FA1 at boot (0x440-0x454). One board difference: on the
+5704 sets region 2 is 0x1F0000 and the tile bank is written at
+0x1F0001/3 (JP IRQ4 0x301A-0x3026); on the 5797 set 6 it is region 1's
+0x1F2001/3. The sprite base moves on all three: set 6 and US2 through
+the MCU (entry 3), the JP through the 68K itself — its IRQ4 rewrites
+the whole mapper every vint from one of EIGHT 16-byte tables at 0x36BE
+selected by `0xFFEC2A & 7` (0x2FE2-0x3008), then takes byte 9 of that
+table as the sprite page into 0xFFECC4 (0x300E-0x3014). That is the
+FD1094 sets' anti-bootleg trick and it explains 0xFFEC2A: a counter
+that rotates the map. Measured: JP sprite writes land in 0x20xxxx and
+0x80xxxx.
+
+**The JP program replaces the conductor with 68K code.** No MCU:
+IRQ4 comes from the screen (segas16b.cpp:3909 `set_vblank_int
+irq4_line_hold` for the MCU-less configs); the frame wait at 0x3DBC is
+flag-only (`clr.b 0xFFEC1C ; tst.b ; beq`), there is NO signature spin
+(0 sites compare #0x048C, 0 refs to 0xFFECD8); coins are read by IRQ4
+itself (`move.b 0xC41001,d0 ; move.b d0,0xFFEC96` at 0x2FBE); sound
+posts go to the mapper latch directly (the ring drain at 0x33AA/0x33BC
+writes 0xFE0007; 9 latch writes in the listing, 0 refs to 0xFFECFC);
+and there is no boot ROM checksum. Every MCU-side obligation of
+NOTES-FROM-DECOMPILE-GOLDNAXE 2, 6 and 7 disappears; what remains is a
+no-op patch on the per-vint mapper rewrite and byte 9 of eight tables.
+
+**What the JP costs:** it is the FD1094 set, so the program is the
+`d` clone's decrypted image (a bootleg-labelled set in MAME); the
+title screens differ (JP boot has extra `cmpi.l` guard words in the
+boot, and the text/title assets need Mike's eye); and the table in
+`tools/game_goldnaxe.py` was derived on set 6 — the JP addresses are
+shifted (frame wait 0x3DBC vs 0x3C90, IRQ4 0x2FBA vs 0x2F60) and would
+need `game_derive.py goldnaxe goldnaxejd`, which the shared upper half
+and the same idioms should carry far better than AB->GA did.
+
+Which set to port is Mike's call: set 6 is what the kit's MCU work
+(AB's shim) already handles; the JP set needs no MCU work at all.

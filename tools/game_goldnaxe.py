@@ -1,4 +1,11 @@
-"""goldnaxe (set 6 US, i8751 317-0123A): patch tables, HAND-DERIVED.
+"""goldnaxe (set 6 US, i8751 317-0123A, 171-5797 board): patch tables, HAND-DERIVED.
+
+SETS (entry 13): goldnaxe2 (US, 8751, 5704 board) and goldnaxej/jd (Japan,
+FD1094 / flat, 5704 board, NO MCU) run the same memory map with the tile
+bank at 0x1F0001/3 instead of 0x1F2001/3; the JP program has no MCU
+protocol at all (flag-only frame wait at 0x3DBC, direct latch, coins
+from the port). This file's offsets are set 6's; derive the others from
+it with game_derive.py.
 
 STATUS 2026-09-12 (LOOP-DECOMPILE-GOLDNAXE 8): MEMMAP, MCU_*, PAL_* are
 derived with their consumers cited. Every other key is None, with the
