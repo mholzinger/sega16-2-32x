@@ -5097,6 +5097,10 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #ifdef C1_STAMP
     int n3 = 0;
 #endif
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+    uint32_t sp_c; __asm__ __volatile__("mov r15,%0" : "=r"(sp_c));
+    const int on_slave = (sp_c & 0x000FFFFFu) >= 0x0003F800u;   /* 255b: the slave's stack */
+#endif
 #ifdef SPRITES_OFF_TEST
     /* A/B probe for the cart-bus contention hypothesis (LOOP iter 4):
      * sprite compose is the heaviest SH-2 cart reader (per-pixel
@@ -5336,14 +5340,21 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
              * miss falls through to the live paths exactly as before,
              * so unbaked zoom levels cost one probe. */
             unsigned otop = d0 & 0xFF;
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+            uint16_t tb_ = frt();
+#endif
             const uint8_t *fr = bake_find(e[3], d2, GAME_SPR_BANK((d4 >> 8) & 0xF),
                                           (unsigned)(d0 >> 8) - otop,
                                           (unsigned)d5 & 0x3FF);
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+            if (on_slave) CEN[60] += (uint16_t)(frt() - tb_);       /* 255b: bake_find */
+#endif
             if (fr) {
                 const uint8_t *rt = fr + 8;
                 SPRBK[0]++;
 #if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
-                CEN[62]++;                               /* 255: record-strip visits (baked) */
+                if (on_slave) CEN[62]++;                 /* 255b: slave record-strip visits (baked) */
+                uint16_t td_ = frt();
 #endif
                 for (int y = top; y < bottom; y++) {
                     RL_MARK(8 + y);
@@ -5370,10 +5381,6 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                             const uint8_t *s = sp + (lo - x);
                             uint8_t *d = row + (lo - 184);
                             int m = hi - lo;
-#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
-                            CEN[60] += (uint32_t)m;      /* 255: baked pixels */
-                            CEN[61]++;                   /* 255: baked runs */
-#endif
 #ifdef C1_PUNCH
 #ifdef C1_FAST
                             /* Build E (LOOP29 248): the ablation's 0.13
@@ -5444,6 +5451,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                         x += (int)n;
                     }
                 }
+#if defined(PHASE_CENSUS) && !defined(SET_COLS_CHECK)
+                if (on_slave) CEN[61] += (uint16_t)(frt() - td_);   /* 255b: row/run drawing */
+#endif
                 continue;
             }
             SPRBK[1]++;

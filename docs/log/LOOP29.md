@@ -6447,3 +6447,21 @@ line, as 169 already noted for the ablation). H1's 0.148 for ~17 KB of
 stamps and H2's cover marks were the SH-2's write-through SDRAM stores,
 not "the 32X FB write floor". The measurements stand; the name of the
 cost was wrong.
+
+**255a, the pixel/run census at the heavy window (pcHI3, both CPUs'
+compose counted, the slave's sums only):**
+
+    window        gens  sprites v/gen | pixels/gen  runs/gen  px/run  baked visits/gen  misses/gen
+    f1000-1200    196   0.246        |    1,849      200      9.2        198            0.5
+    f2800-3000    100   1.042        |   19,691    1,004     19.6      1,265            0.0
+    f3000-3200     98   1.095        |   19,544    1,001     19.5      1,244            1.8
+
+2.6 slave ticks a pixel at the heavy window (a tick is phi/8, 48,208 a
+vint: ~21 cycles), 6.4 at the light one -- the fixed part dominates
+when there is little to draw. 1,265 record-strip visits a generation
+for 17 live records is ~74 per record, ten times what 19 twelve-row
+strips would give a 64-row zombie; the bake lookup and the record
+scan run more often than the geometry says. 255b splits the slave's
+sprite phase with FRT stamps: bake_find, the row/run drawing, and
+the remainder (record scan, clip, cover, stamp), slave only (the
+CPU told by its stack, as SPRLATE does).
