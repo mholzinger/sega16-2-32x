@@ -1951,3 +1951,15 @@ the Makefile with the fixed tool (verified byte-identical, LOOP-
 DECOMPILE 107). Corrected FG counts: scene 0 blank 170 / whole-cell
 1,599 / per-pixel 543; 1: 5,984 / 1,317 / 1,659; 2: 4,272 / 1,656 /
 1,432; 3: 32 / 800 / 448; 4: 16 / 1,210 / 2,294. All cat-1 is still FG.
+
+---------------------------------------------------------------------
+## 34b. 2026-09-13. Note 34's prediction is FALSIFIED by Build D (LOOP29 248)
+
+Build D put the class-2 opacity masks in SDRAM exactly as note 34
+sized them and read 1.22 against bldB's 1.18: no gain. So the punch's
+0.13 is not the cart art rows. 247's subtraction puts it in the slave's
+punched loop itself, 248/249 narrow it to the loop's shape and the
+UNCACHED reads of the cell mask (cat1scr/cat1code through the
+0x20000000 alias, per cell), which Build F tests by reading them
+through the cache. Note 34 stays as written, with this on top; its
+sizes are still right if masks are ever wanted for another reason.
