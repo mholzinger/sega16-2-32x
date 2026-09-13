@@ -136,11 +136,12 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
-## THE LINE (2026-09-12, validated twice on the rig)
+## THE LINE (STALE HEADING -- the current line is bldJ, see "THE LINE" below)
 
-**`rom/night/vi39.32x`, md5 c93dbeab, also `rom/s16.32x`. Mike:
-playable, no obvious regressions.** (vi37 was the same code; vi39 is it
-rebuilt on a clean tree.)
+**`rom/night/vi39.32x`, md5 c93dbeab. Mike: playable, no obvious
+regressions** -- that was the line on 2026-09-12 and is now history.
+The current line is `rom/night/bldJ.32x`, md5 994b3c93; scroll to the
+next "THE LINE" heading.
 
 **Read `docs/handoff/HANDOFF-20260912.md` before touching anything** --
 it carries the three routes with their measured state, six flags that
@@ -197,16 +198,29 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## THE LINE: `rom/night/bldB.32x` (md5 493d4984) = `rom/s16.32x`, NAMED BY MIKE 2026-09-12 20:15 ("Behind the grass stellar lockdown on the progress"; PLAN-SINGLE-VINT Build B)
+## THE LINE: `rom/night/bldJ.32x` (md5 994b3c93), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT cards H, I, J)
 
-bldB = vi95's flags + `C1PUNCH=1` (fold 1's hole punch, Build A) +
-`SETCOLS=1` (fold 2, Build B). Ares wall 1.18 v/gen, 40% single-vint,
-check mode 0/0 on 3,010 planes, rig frame rate 21 19 7 15 18 presented
-frames per 64 vints, attract black shares zero over three launches.
-Every card from here is one change against bldB. The previous line,
-vi70 (md5 fadafb08, accepted 2026-09-12 14:50, "otherwise SOLID
-presentation", LOOP29 224), is history: vi70 drew cat-1 in the
-framebuffer at wall 1.48 / 18%.
+bldJ = bldB + `C1STAMP=1` (card H, the stamp) + `SCANMEMO=1` (card I)
++ card J's two flags (longword run copies, the per-chain record list).
+Ares wall 1.09 v/gen against bldB's 1.18; every card's demo-aligned
+pixel diff against the build below it read ZERO; check mode 0/0 over
+3,039 planes; three clean rig launches. Mike's eye passed bldHI on
+presentation and bldJ is pixel-identical to it.
+
+**OPEN ON THIS LINE (Mike, 2026-09-13):** jutter and bitmap corrosion
+on the rig. The jutter is the wall itself -- the rig presents 18 frames
+per 64 vints on bldJ exactly as on bldB, and no card has moved it
+(LOOP29 257). The corrosion is NOT covered by any gate run so far (all
+of them were ares pixel diffs) and is a suspect, not a cosmetic: the
+stamp makes hole cells transparent so the MD plane shows, and after a
+scene cut the plane is missing art for ~16-23 vints (24 tiles a vint
+against 378-561 codes, LOOP-DECOMPILE 115). Diagnose before it is
+called cosmetic. Deferred by Mike's call until the wall crosses.
+
+Every card from here is one change against bldJ. Previous lines:
+bldB (493d4984, 1.18, named 2026-09-12 20:15, "Behind the grass
+stellar lockdown on the progress"), vi70 (fadafb08, wall 1.48/18%,
+cat-1 in the framebuffer).
 
 `fmgate_defer` (68K WRAM, frame 2500 of the attract) is the handshake's
 instrument, NOT a gate (LOOP29 229 set it as one, 230 retracted that:
@@ -286,11 +300,14 @@ flags + `C1PUNCH=1`, md5 85116f58. Builds are lettered from here with a
 card in PLAN-SINGLE-VINT (Build A = c1p95c, passed). Build B = fold 2
 (`SETCOLS=1`) on c1p95c's flags, measured on that line before it counts.
 
-**THE LINE IS bldB (Mike, 2026-09-13 04:00, LOOP29 245):** c1p95c +
-`SETCOLS=1`, md5 493d4984 -- folds 1, 2 and 4 on one rom. Build line:
-vi75's flags + MDSTATE=1 C1PUNCH=1 SETCOLS=1 (see Build B's card in
-PLAN-SINGLE-VINT for the flag set and the numbers). Next card = fold 5
-with the text copy on the packet side, then fold 3 / RELBANK on the rig.
+**THE LINE IS bldJ (2026-09-13, cards H/I/J):** bldB + `C1STAMP=1` +
+`SCANMEMO=1` + card J's two flags, md5 994b3c93, wall 1.09. It is what
+the rig runs. (bldB, c1p95c + `SETCOLS=1`, md5 493d4984, folds 1/2/4,
+is the previous line.) Next card is NOT on the compose side: the rig
+declines ~40 of 64 flips at the vblank edge guard and no compose card
+has ever moved that (LOOP29 257-265, NOTES 46-57). The lever is
+cram_flush_pen -- cart-ROM resident and reading a 32X register per
+entry (NOTES 57, cut c), then the repaint policy.
 
 **LANDING RULE (2026-09-13):** a rig black share counts only across THREE
 launches -- the same rom read a fifth black at one launch and clean at
