@@ -595,3 +595,31 @@ is a phase, not a defect.
       frame at a transition).
     VERDICT: FAILS on the wall (1.22 vs 1.18, no gain); correct picture,
       no rig cost. Not the line. bldB stays.
+    Build E numbers (ares): wall 1.17 v/gen (B 1.18; nat_score's own
+      wall, census-free -- the census rom could not fit .ramtext with
+      the pre-scan in the run loop), ships 36.5/s; picture equal to B
+      (title 0.273, demo 0.038, eye 0.479/0.487, return 0.040/0.038,
+      face 0.58/0.62, play 0.037-0.042, late-coin 0.036-0.042). Rig below.
+    VERDICT so far: no gain on the wall. The loop's shape was not the
+      price either; LOOP29 249 names the last thing D and E left alone,
+      the UNCACHED mask reads, and Build F tests it.
+
+## BUILD F CARD (builder, 2026-09-13 07:20) -- the mask read through the cache
+
+    rom        rom/night/bldF.32x            (md5 below)
+    base       bldB (md5 493d4984, the line)
+    change     ONE flag: C1CACHED=1 (-DC1_CACHED). The slave reads the
+               punch's cell mask (cat1scr) and cell codes (cat1code)
+               through its cache instead of the 0x2000_0000 uncached
+               alias. No code path changes; the same bytes are read.
+               Coherence: the slave purges its cache at every window
+               start, the master's writes are write-through, and the
+               mask is one generation behind the compose by design.
+    why        D (art rows -> SDRAM) and E (tight copy for class-0 runs)
+               both left the wall at 1.17-1.22 while noplot reads 1.03;
+               the uncached read per cell (baked path) and per PIXEL
+               (1:1/zoomed paths) is what noplot also removed.
+    gates      ares wall against B 1.18 (expected ~1.05 if this is it);
+               picture equal to B incl. late-coin; rig frame rate; three
+               launches; Mike: does it look like bldB.
+    numbers    (appended when the runs land)
