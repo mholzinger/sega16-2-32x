@@ -6247,3 +6247,13 @@ if it reads ~0.39, the cost is codegen, and the fix is structural (the
 punched draw in its own function or a separate loop).
 
 Build G's card: no gain (wall 1.16-1.18); picture equal to B; closed.
+
+**250b, a trap in the RAM-code budget:** a `static` function given a
+ROM placement (no RAMCODE) is still inlined by LTO into its RAMCODE
+caller, so "moved to ROM" moved nothing unless it is also
+`noinline`. The C/D card notes that said bm_scan_baked was fetched from
+ROM under their flags described an intent, not the binary (they linked
+because the rest of the change shrank); the census roms for E, G and
+the RTOFF ablation kept overflowing for the same reason. bm_scan_baked,
+bm_scan_baked_ok and fbx_lift now carry `noinline` on their ROM
+variants; c1mask_find already did.

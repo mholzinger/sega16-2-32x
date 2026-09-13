@@ -2885,7 +2885,7 @@ static void bm_tail(struct bm_state *a, int par);
  * and the face UPLOAD into the level pages, NOTES 23): the state word
  * says so; otherwise the live scan runs as before. */
 #include "setcols_md.h"
-static int bm_scan_baked_ok(void)          /* ROM: a few calls a generation */
+__attribute__((noinline)) static int bm_scan_baked_ok(void)   /* ROM (noinline: LTO would fold it into the RAMCODE caller) */
 {
     if (md_round >= SETCOL_SCENES) return 0;
     for (int w = 0; w < 2; w++) {
@@ -2908,13 +2908,13 @@ static int bm_scan_baked_ok(void)          /* ROM: a few calls a generation */
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
-#if defined(C1_PCELL) || defined(C1_MASKTAB) || (defined(C1_FAST) && defined(PHASE_CENSUS))
+#if defined(C1_PCELL) || defined(C1_MASKTAB) || (defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF)))
 /* Builds C/D need a few hundred bytes of .ramtext in the plot
  * expansions; this runs twice a generation and is bound by its ROM
  * table reads anyway (LOOP29 246: 573 ticks a plane), so under those
  * flags it fetches from ROM. Build E's ship rom fits with it in RAM;
  * only its census probe (the stamps) needs the room. */
-static void bm_scan_baked(struct bm_state *a, int which, int aset)
+__attribute__((noinline)) static void bm_scan_baked(struct bm_state *a, int which, int aset)
 #else
 RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
 #endif
@@ -9125,8 +9125,8 @@ static unsigned fbx_landed;              /* words lifted this window */
 /* Lift the published packet out of the framebuffer into SPR_LAND.
  * FBXLATE=1 calls this AFTER the flip instead of before it, to measure
  * whether the pre-flip position is actually required. */
-#if defined(PHASE_CENSUS) && defined(C1_FAST)
-static void fbx_lift(void)               /* 250: ROM in the C1_FAST census rom only (.ramtext room for the stamps) */
+#if defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF))
+__attribute__((noinline)) static void fbx_lift(void)   /* 250: ROM in the C1_FAST census rom only (.ramtext room for the stamps) */
 #else
 RAMCODE static void fbx_lift(void)
 #endif
