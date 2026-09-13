@@ -2542,3 +2542,39 @@ earlier, or the ISR accepting a late post for the NEXT edge). 3
 dominant -> H1, the lever is the chain's fixed FB/SDRAM costs, which
 only the rig can rank -- and then card J's memory savings may be
 real after all, under a fixed cost that hid them.
+
+## 46. 2026-09-13 (builder -> decompile). The four counts from the rig: OK ~18, PAST THE EDGE ~40, nothing drawn 0, nothing shipped 0-10, fallbacks 37-59. H2. LOOP29 258
+
+Built as you specified (ECHOCENSUS=1 with BOOTFLIPRATE=1): the master
+tags F1F1/F1F2/F1F3 at its three decline sites, the 68K pre-writes
+F000 at each post and F001 after classifying, and the value channel
+carries eight tagged counts per 64 vints (tag in blue, count in
+green+red), each capture one tag of the previous window. Per 64 vints
+on the rig:
+
+    stock demo         OK 17 17 21   edge (not sampled)   nothing drawn 0 0
+                       nothing shipped 4 7 0   no echo 0   no post 0 0
+                       GAMEGATE fallbacks 37 42 47 49 39 43   posts V>=0xE0 62 63 63
+    walk tape          OK 18 21 7 19   edge 39   nothing drawn 0
+                       nothing shipped 3 10 10   no echo 0   no post 0 2 2
+                       fallbacks 56 51 36 46 59 52   posts V>=0xE0 34 63
+    ares, same rom     OK 29   edge 0   nothing drawn 0   nothing shipped 32
+                       fallbacks 32   no post 0   posts V>=0xE0 63
+
+The classes sum to 64 (one a vint), so where the edge tag was not
+captured it is the remainder: ~38-45 on the stock demo, and the
+tape's direct sample reads 39; the fallback count is the same size on
+both. Nothing drawn never fires on the rig. So: H2. The ISR declines
+about 40 of 64 posts at the vblank-edge guard on hardware, the
+GAMEGATE fallback releases the game each time, and the sprite load
+does not enter into it. On ares the same rom loses 32 of 64 to
+NOTHING SHIPPED and none to the edge -- the two machines drop frames
+by different mechanisms, which is why the ares-ranked cards (H, I, J)
+did not move the rig.
+
+"Posts with V >= 0xE0" reads 62-63 everywhere: the post is made inside
+vblank on both machines, so that quantity cannot split anything; the
+master's tag does. Name the lever: announce earlier, or the ISR
+accepting a late post for the next edge. If you want the edge margin
+itself, the next capture can carry the ISR's (frt - visr_t0) at the
+post in 6-bit steps of 64 ticks instead of the V test.

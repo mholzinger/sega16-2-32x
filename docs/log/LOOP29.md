@@ -6678,3 +6678,37 @@ bits under the flag and the decode is the 9-bit colour. Each capture
 reads one of the eight for the previous window; eight captures a
 launch, three launches each at the stock demo (frJ_echo) and the walk
 tape (frJ_echo_tape). Sanity: the same rom in ares.
+
+**258a, read (per 64 vints; each capture is one tag of the previous
+window, so the eight are sampled, not simultaneous):**
+
+    rig, stock demo (frJ_echo, 3 launches x 8 shots)
+        OK        17  17  21              nothing drawn   0  0
+        edge      (no sample)             nothing shipped 4  7  0
+        no echo   0  0  0  0  0           no post         0  0
+        fallback  37 42  47 49  39 43     posts V>=0xE0   62 63 63
+    rig, walk tape (frJ_echo_tape, the 20-record demo)
+        OK        18 21  7 19             nothing drawn   0
+        edge      39                      nothing shipped 3 10  10
+        no echo   0  0  0                 no post         0  2  2
+        fallback  56  51 36 46  59 52     posts V>=0xE0   34 63
+    ares, the same rom, attract f700-1100
+        OK 29   edge 0   nothing drawn 0   nothing shipped 32   fallback 32
+        no echo 0   no post 0   posts V>=0xE0 63
+
+The eight sum to 64 by construction (one class a vint), so the class
+that was not sampled on the stock demo is the remainder: 64 - OK
+17-21 - shipped 0-7 - nopost 0-2 = ~38-45 PAST THE EDGE -- and the
+tape's one direct sample reads 39, and the fallback count (the game
+released without a flip) reads 37-59 on both demos, the same size. On
+the rig the ISR declines ~40 of 64 posts at the vblank-edge guard
+(the 1650-tick bound after the ISR's t0): NOTES 45's H2. "Nothing
+drawn" never fires on the rig. On ares the same rom declines 32 of 64
+for NOTHING SHIPPED (the compose not ready: the 2-vint lock) and none
+at the edge -- the two machines lose their frames to different
+mechanisms, which is why every ares-ranked card left the rig where it
+was. Posts with V >= 0xE0 read 62-63: the post is made inside vblank
+on both (the handler runs there), so that quantity does not split
+anything; the edge tag does.
+
+    rom/night/frJ_echo.32x (54a4695c), frJ_echo_tape.32x
