@@ -514,3 +514,22 @@ is a phase, not a defect.
                frame rate (frC vs frB 21 19 7 15 18); rig black shares
                across three launches.
     numbers    (appended when the runs land)
+    rom        rom/night/bldC.32x   md5 543a5e7e   (.ramtext 27,884 B)
+    flags diff against bldB: -DC1_PCELL alone.
+    ares, play2, 4000 frames (pcC vs pcB):
+      wall 1.21 v/gen (B 1.18)   single-vint 37% (40%)   ships 36.2/s (37.0)
+      echo 1.14 (1.11)  mtask 0.76 (0.79)  ship 0.64  flip 0.76
+    picture: title/demo/eye/return/play equal to B to 0.004 (frames not
+      byte-identical: SH-2 timing differs); face plane 0.58 (0.62);
+      LATE-COIN PLAY 0.083 0.081 0.089 against B's 0.036 0.042 0.042.
+    rig: frC 22 18 19 7 21 (frB 21 19 7 15 18); attract black shares
+      over THREE launches all 0.00-0.01.
+    VERDICT: FAILS. The wall did not move (1.21 vs 1.18, inside noise
+      but the wrong sign) and a credited game coined during the eye
+      reads twice B's black. The punch's price is not in the per-pixel
+      class test of the 1:1 paths; the per-cell call did not pay for
+      itself. bldB stays the line and is back on the rig. Where the
+      0.13 is: to be measured, not guessed -- the candidates are the
+      baked-run path's punched loop (every pp < 3 sprite pixel now runs
+      the cell loop instead of the tight run copy) and the master's
+      mask writes in the name-table pass.
