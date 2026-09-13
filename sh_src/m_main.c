@@ -653,7 +653,11 @@ static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd,
     unsigned v = m[sx >> 3];
     if (v == 0) return 0;
     if (v == 1) return 1;
+#ifdef C1_MASKTAB
+    return (C1MASK_U[(unsigned)cd[sx >> 3] * 8u + py] >> (7u - (sx & 7u))) & 1u;
+#else
     return altbeast_tiles[(unsigned)cd[sx >> 3] * 64u + py * 8u + (sx & 7u)] != 0;
+#endif
 }
 #ifdef C1_PCELL
 /* Build C (LOOP29 246): the 1:1 and zoomed sprite paths plot one pixel
