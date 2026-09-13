@@ -4861,7 +4861,13 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
 #ifdef C1_PUNCH
         /* FG cat-1 is level 4: a sprite shows over it iff (1 << pp) > 4,
          * i.e. pp == 3 only (segas16b_v). Everything else is punched. */
+#ifdef C1_NOPLOT
+        const int punch = 0;                 /* LOOP29 247 ablation: the
+                                              * slave draws unpunched; the
+                                              * master still writes the mask */
+#else
         const int punch = (pp < 3);
+#endif
 #else
         enum { punch = 0 };
 #endif
