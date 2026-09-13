@@ -2892,11 +2892,12 @@ static int bm_scan_baked_ok(void)          /* ROM: a few calls a generation */
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
-#if defined(C1_PCELL) || defined(C1_MASKTAB)
+#if defined(C1_PCELL) || defined(C1_MASKTAB) || (defined(C1_FAST) && defined(PHASE_CENSUS))
 /* Builds C/D need a few hundred bytes of .ramtext in the plot
  * expansions; this runs twice a generation and is bound by its ROM
  * table reads anyway (LOOP29 246: 573 ticks a plane), so under those
- * flags it fetches from ROM. */
+ * flags it fetches from ROM. Build E's ship rom fits with it in RAM;
+ * only its census probe (the stamps) needs the room. */
 static void bm_scan_baked(struct bm_state *a, int which, int aset)
 #else
 RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
