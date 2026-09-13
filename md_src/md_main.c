@@ -2841,36 +2841,21 @@ void shim_vblank(void) {
 	}
 #endif
 #ifdef TAIL_CENSUS
-	/* NOTES 49 / LOOP29 260: THE 68K TAIL SPLIT IN LINES, AND THE IDLE
-	 * BEFORE IRQ4. V stamps: IRQ4 entry (0xFFA1F2), before/after batch A
-	 * (0xFFA080/82), before/after batch B (84/86), after the sprite pump
-	 * (0xFFA1F8), after the pending blast (0xFFA1FA), at the post
-	 * (0xFFA0A0); and the game's frame-done V (0xFFA1F4, stamped by the
-	 * GAMEGATE thunk on its first visit after a release; 0xFFA1F6 = set).
-	 * Read at the next vint top for the previous vint. Per 64 vints the
-	 * channel carries MEAN lines (cap 63): 0 entry->A, 1 batch A, 2 batch
-	 * B, 3 pump, 4 blast, 5 blast->post, 6 idle (frame-done -> entry);
-	 * 7 = vints with NO idle (the pass had not finished at IRQ4). */
+	/* LOOP29 264b: WHERE IN THE FRAME. Four lines past 224, each as a mean
+	 * (tags 0-3) and a MAX (tags 4-7) per 64 vints: the 68K vint top (this
+	 * block), the shim body's entry (0xFFA1F2), the post (0xFFA0A0), and
+	 * the B consume's end (0xFFA086). The earlier tail stages are in 262c. */
 	{
-		static uint8_t tc_vc, tc_val[8], tc_noidle;
-		static uint16_t tc_sum[7];
+		static uint8_t tc_vc, tc_val[8], tc_max[4];
+		static uint16_t tc_sum[4];
 #define TCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
-		uint8_t ve = TCV(0xFFA1F2), a0 = TCV(0xFFA080), a1 = TCV(0xFFA082), b0 = TCV(0xFFA084), b1 = TCV(0xFFA086);
-		uint8_t pu = TCV(0xFFA1F8), bl = TCV(0xFFA1FA), po = TCV(0xFFA0A0);
-		/* LOOP29 262a: the NTSC V counter repeats E5-EA at the vblank start; a
-		 * small negative delta is the jump (+6), a large one is a stage that
-		 * did not run this vint (0) -- the uncorrected form averaged 253s in */
-#define TCD(b_, a_) ((int8_t)((b_) - (a_)) < 0 ? ((int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : 0) : (uint8_t)((b_) - (a_)))
-		{ uint8_t vt = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8); tc_sum[0] += (uint8_t)(vt - 0xE0u) > 63u ? 63u : (uint8_t)(vt - 0xE0u); }   /* 264a: the 68K vint top's own line past 224 (this block runs there) */
-		tc_sum[1] += TCD(a1, a0); tc_sum[2] += TCD(b1, b0);
-		tc_sum[3] += TCD(pu, b1); tc_sum[4] += TCD(bl, pu); tc_sum[5] += TCD(po, bl);
-		tc_sum[6] += (uint8_t)(ve - 0xE0u) > 63u ? 63u : (uint8_t)(ve - 0xE0u);   /* 262c: the shim body's entry line past 224 */
-		if (!*(volatile uint8_t*)0xFFA1F6) tc_noidle++;
-#undef TCD
+		uint8_t vt = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t l[4] = { (uint8_t)(vt - 0xE0u), (uint8_t)(TCV(0xFFA1F2) - 0xE0u), (uint8_t)(TCV(0xFFA0A0) - 0xE0u), (uint8_t)(TCV(0xFFA086) - 0xE0u) };
 #undef TCV
+		for (int k = 0; k < 4; k++) { uint8_t v = l[k] > 63 ? 63 : l[k]; tc_sum[k] += v; if (v > tc_max[k]) tc_max[k] = v; }
 		if (++tc_vc >= 64) {
-			for (int k = 0; k < 7; k++) { unsigned m = tc_sum[k] >> 6; tc_val[k] = (uint8_t)(m > 63 ? 63 : m); tc_sum[k] = 0; }
-			tc_val[7] = tc_noidle > 63 ? 63 : tc_noidle; tc_noidle = 0; tc_vc = 0;
+			for (int k = 0; k < 4; k++) { tc_val[k] = (uint8_t)(tc_sum[k] >> 6); tc_val[4 + k] = tc_max[k]; tc_sum[k] = 0; tc_max[k] = 0; }
+			tc_vc = 0;
 		}
 		{
 			uint8_t tag = (uint8_t)((tc_vc >> 3) & 7);

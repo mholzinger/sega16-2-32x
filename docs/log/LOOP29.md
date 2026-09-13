@@ -7029,3 +7029,16 @@ If the master's vblank starts ~40 MD lines before the MD's, the
 the 68K has even taken its vint, which is exactly the 40/64 edge
 declines with a 10-line 68K tail. The lever would then be the guard's
 origin, not any tail.
+
+**264a, the 68K's account settled (frJ_tail5, tag 0 = the vint top's
+own line past 224):** ares 2; rig 2 2 / 2 2. The 68K takes its vint at
+line 226 on the FPGA, the game's handler returns at +10-11 (rig; ares
++4), the shim's tail is ~10 lines, so the post is written at about
+line 246 -- ~1,000 FRT ticks after a master ISR entry at line ~223,
+inside the 1,650 guard. The master's "post seen" stamp (259a) was
+taken at flip_span's top, and flip_span is reached two ways: from the
+ISR's own spin (which polls COMM0 until 1,650 ticks) and from the
+BODY's fallback when the ISR gave up; a mean over both mixes ~1,000-
+tick posts with the late ones the body finds (maxima 36-55 steps =
+4,600-7,000 ticks). 264b carries the post's own line, mean and max,
+to say whether the late posts are late on the 68K's clock too.
