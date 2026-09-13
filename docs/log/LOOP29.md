@@ -7180,3 +7180,36 @@ each ISR entry -- the ISR's own attempt, the one the guard is about.
 Until that reads, nothing is proven about where the FPGA's vint
 actually goes, and the 900-tick stage-2 figure from 263 is retired
 along with its label.
+
+## 266b. THE ISR'S OWN FLIP ATTEMPT, LATCHED: THE VINT MISSES THE GUARD BY 150-530 TICKS, AND THE TEXT COPY INSIDE IT IS ~830 (2026-09-13 16:20)
+
+With the stamps latched to the FIRST flip_span call after each ISR
+entry (s6_first), 128-tick steps from the ISR entry, guard = 12.9:
+
+                   flip_span entry   before copy   after copy   at the guard
+    ares           6                 6             9-10         9   (max 10-13)
+    rig  r1        7                 6             --           14  (max 32-43)
+    rig  r2        7                 --            --           15  (max 21)
+    rig  tape t1   7                 7             13-14        16-17 (max 20)
+
+Read as ticks: the post arrives at ~900 on the rig and ~770 on ares --
+the 68K's own account (264b: the post written at line 238-249) was
+right and the ISR sees it immediately. The text copy costs ~830 ticks
+on the rig against ~450 on ares. The guard is then reached at
+1,800-2,200 on the rig and ~1,150 on ares.
+
+    rig:   post 900 + copy 830 + rest ~200  = 1,800-2,200 > 1,650  -> DECLINE
+    ares:  post 770 + copy 450 + rest ~100  = 1,150      < 1,650  -> present
+
+**The vint misses by 150-530 ticks -- 3-11 lines -- and the copy
+inside the window is 830.** 266a's "the copy costs the same on both"
+was read off the MIXED-call channel (the body's fallback call, where
+the copy is cheap or skipped); the latched call says the FPGA charges
+it ~1.8x. Every other term matches between the machines.
+
+So the lever is exactly the copy, and the margin needed is small:
+taking it out of the window clears the guard with ~500 ticks to
+spare, halving it clears it on most vints, and note 47's 1,748
+widening (+98 ticks) would catch only the closest vints. 266c
+ablates the copy on the rig to confirm the rate moves before anyone
+designs the move.

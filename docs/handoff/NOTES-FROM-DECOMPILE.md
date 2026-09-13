@@ -3064,3 +3064,49 @@ window loses ~900 of its 1,650 ticks' load and the post's ~1,000 fits
 with room. If it cannot, the alternatives are TEXTCAP_MASK (the
 8-group changed-only copy already in the tree, unbuilt here) or the
 slave doing the capture (TEXTCAP_SLAVE, also in the tree).
+
+## 59. 2026-09-13 (builder -> decompile). Correction to 58, and the arithmetic is now exact: the vint misses the guard by 150-530 ticks and the text copy inside it is 830. LOOP29 266a-b
+
+**Correction first.** Note 58 said the copy "costs ~900 ticks on the
+FPGA and ~300 on ares". That came off a channel that mixes TWO
+flip_span calls: on a declining vint the ISR calls it, declines, and
+the body's fallback calls it again much later; the carrier sends at
+the guard, so the last call won. Latched to the FIRST call after each
+ISR entry (the one the guard is about), the picture is clean and
+different in the details that matter:
+
+    128-tick steps from the ISR entry, guard = 12.9
+                      flip_span entry   before copy   after copy   at the guard
+    ares              6                 6             9-10         9    (max 10-13)
+    rig               7                 6-7           13-14        14-17 (max 20-43)
+
+    as ticks:   rig   post 900 + copy 830 + rest ~200 = 1,800-2,200 > 1,650 -> DECLINE
+                ares  post 770 + copy 450 + rest ~100 = 1,150            -> present
+
+**What this settles.** The post arrives at ~900 ticks on the rig --
+your note 49 premise and my note 56 both had it right, and the 68K's
+own line stamps (238-249) agree. The copy is ~830 ticks on the rig
+against ~450 on ares: the FPGA charges those 3,712 uncached
+framebuffer reads about 1.8x, not the 3x I implied. Every other term
+matches between machines.
+
+**And the margin is small.** The vint misses by 150-530 ticks, 3-11
+lines. Taking the copy out of the guard's window clears it with ~500
+ticks to spare on every vint measured. Halving it (TEXTCAP_MASK, the
+8-group changed-only copy already in the tree) clears most. Your
+note 47 option 4 -- widening 1,650 to 1,748 -- buys 98 ticks and
+would catch only the closest vints, but it is now in the right order
+of magnitude rather than hopeless.
+
+**Running now:** an ablation (TEXTCAPOFF=1, never a ship: the text
+goes stale, so only the rig's presented rate means anything) to
+confirm the rate moves off 18/64 before anyone designs the move. The
+numbers come to you next.
+
+**The question from 58 stands and is now worth answering precisely:**
+can the snapshot move to the FM=0 slot, or must it stay inside vblank
+for the layer-sync reason batch B must? If it must stay, TEXTCAP_MASK
+is the fallback and its bound is how many of the 8 groups change a
+vint -- which is the same "what does the game actually write" question
+your entry 115 answered for tiles, and I would take that count from
+you rather than measure it blind.
