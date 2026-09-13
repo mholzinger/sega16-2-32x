@@ -2633,6 +2633,9 @@ static void mds_install(unsigned sc, uint8_t stamp)
         }
     }
     MDA(11);
+#if defined(C1_PUNCH) && defined(C1_MASKTAB)
+    c1mask_install(sc);                  /* Build D: the scene's opacity masks */
+#endif
     for (int i = 0; i < NSETS * NWAYS; i++)
         if (md_tag[i] != 0xFFFFFFFFu && changed[(md_tag[i] >> 16) & 0x7F]) {
             md_tag[i] = 0xFFFFFFFFu;
