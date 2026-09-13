@@ -5600,3 +5600,49 @@ bytes whose median change is zero words. TEXTCAP_MASK (LOOP29 147,
 already in the tree with its 68K half in patch_game.py) is not a
 halving: it is ~0 ticks on nine vints in ten and ~1/8th of 830 on the
 rest.
+
+---------------------------------------------------------------------
+## 119. NEGATIVE: the rig's 86 named-build captures show NO corrosion, and both things that looked wrong in them are the arcade's own art (2026-09-13)
+
+Mike, on bldJ: "juttery and had some bitmap corrosion", seen both
+after a scene change and in steady play, "changes every single probe
+and build", and "you have ALL the screenshots on the MISTER". Pulled
+every capture the rig holds for a NAMED build -- bldB 5, bldC 9,
+bldD 9, bldE 9, bldF 9, bldH 15, bldHI 15, bldJ 15 = 86 -- and
+compared them against ref_arcade.
+
+**Two suspects, both cleared:**
+
+  1. The ALTERED BEAST logo is RED in some captures and WHITE in
+     others (bldHI 015641 red, bldJ 030647 white). The ARCADE does the
+     same: sampling the logo box over ref_000700-000975, the 1,564
+     logo pixels are all-red or all-white in blocks and flip between
+     them. That is the colour cycler (entry 93, palettes 19-21).
+  2. Two hard-edged panels of black/white art with green streaks in
+     the graveyard wall (bldJ 030647, x 97-167 y 117-167) read as
+     corruption. They are carved stone reliefs with moss. Matched
+     against the corpus by mean absolute difference over that exact
+     region, the closest arcade frame is ref_001790 at 22/255 -- the
+     same two panels, the same green, the same black shadow detail.
+
+**And an automatic check finds nothing anywhere.** Tile-aligned cells
+in the graveyard band (y 80-176, 480 cells a frame) holding BOTH a
+near-black and a near-white pixel -- which stone and grass never do,
+and which garbage art always does: 0 cells in all 28 arcade frames
+sampled, and 0 cells in every one of the 86 captures, every build.
+The only all-black frames are the demo-to-title fade the builder
+already logged.
+
+**So the corrosion is not in any capture we have, and the reason is
+structural: every rig capture is ATTRACT.** The launch API plus the
+screenshot FIFO can only reach attract mode (memory:
+mister-rig-self-service), and the tape probe (111) makes the attract
+carry a heavy PLAY-LIKE scene but it is still the game's own recorded
+demo, not Mike's hands. Nothing in the corpus covers a credited game.
+
+**What is needed:** one capture during Mike's play. The rig takes it
+on command -- `ssh root@mister.office.local "echo screenshot >
+/dev/MiSTer_cmd"` -- so the decompile thread can fire it while he
+plays and fetch it by name. Until then the corrosion has no evidence
+and must not be attributed to any card; cards H/I/J each measured a
+demo-aligned pixel diff of zero against the build below them.
