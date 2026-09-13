@@ -6933,3 +6933,22 @@ post is seen; the page merge stamp reads 0 on most vints (its site is
 not reached: no dirty page) and the truth drain adds nothing after it
 (pages copied 0 everywhere, in play and in both demos). Stage 2 is
 cram_flush_pen. On ares the same flush is ~5 steps after the post.
+
+**263a, what the flush writes (DIAG[19], CRAM writes, bldJ on ares):**
+
+    play f1000-1200     1.0 a frame      1.0 a generation
+    play f1200-2800    35.9 a frame     61.4 a generation
+    play f2800-3200    81.8 a frame    163.5 a generation
+    attract f600-800    0.6 a frame      1.2 a generation
+    attract f800-1200  14-31 a frame    29-63 a generation
+
+cram_flush_pen writes only the dirty entries (cram_dirt bitmap, "no
+wait, ever", bursting while PEN holds); the count is the palette
+churn of the pen repaint -- tens of entries a vint in play, 164 a
+generation at the zombie row. At ~900 ticks for 15-30 writes (the
+demo's rate, where 263 read vbs1) the FPGA prices a CRAM write at
+~30-60 ticks, 250-500 cycles; ares at a handful. Two cuts follow, for
+the decompile thread to weigh: fewer dirty entries (the repaint
+policy upstream), or the flush moved behind the FBCTL write -- still
+inside vblank, before the scan that shows the new bank, out of the
+guard's window.

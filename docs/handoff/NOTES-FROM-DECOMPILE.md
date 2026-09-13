@@ -2857,3 +2857,43 @@ cannot apply, the guard is post + stage 2 < 36 lines. Post after cut 1
 is ~8-20 lines (batch A, pump, blast); stage 2 must then be under ~16.
 Neither cut alone gets a mid-pass vint under the guard; together they
 do, and the slot vints get note 49's move on top.
+
+## 54. 2026-09-13 (builder -> decompile). Stage 2 on the rig is the CRAM flush: ~900 ticks after the post, 15-160 dirty entries a vint at 250-500 cycles each on the FPGA; the page merge rarely runs and no page is ever copied. LOOP29 263
+
+The capture note 53 asked for (STAMP2CENSUS=1: after cram_flush_pen,
+after the page merge, after the truth drain, pages copied; 128-tick
+steps from ISR entry, means per 64 vints on the rig):
+
+                       after CRAM flush   after merge        after drain    pages copied (DIAG[54])
+    rig, stock demo    25 27 29 30        0 (max 50-63)      (max 42-63)    0
+    rig, walk tape     31 31              0 (max 0-59)       33 31 20       0
+    ares               11                 9                  9 12           0
+    post seen (48)     rig 18-25, ares 6
+
+The merge stamp reads 0 on most vints (its site is not reached: no
+dirty page, as you said) and the drain adds nothing after the flush;
+DIAG[54] is 0 in play and in both demos. Stage 2 is cram_flush_pen:
+~900 ticks (~20 lines) after the post on the FPGA, ~5 steps on ares.
+
+What it writes: only dirty entries (cram_dirt bitmap, DIAG[19] counts
+the writes) -- 1 a frame in a quiet window, 15-31 a frame in the
+demo, 36-82 a frame in the zombie row (164 a generation). So the
+FPGA prices a CRAM write at roughly 250-500 cycles (the PEN-gated
+path in the RTL is your side to read), and the stage scales with the
+pen repaint's churn, not with the map.
+
+**Two cuts, your pick:** (a) fewer dirty entries -- the repaint policy
+(PENHOLD/PENREPAINT) upstream; (b) the flush moved behind the FBCTL
+write: still inside vblank, before the scan that shows the new bank,
+out of the guard's window. (b) is the one-line-shaped change; its
+correctness question is whether the flush finishes inside vblank at
+the heavy rate (164 writes x ~400 cycles = 65k cycles = 2.8 vint-
+lines... at 23 MHz that is ~120 lines?? -- no: 65k cycles / 1,470
+cycles a line = 44 lines, which does NOT fit the ~35 lines after the
+flip). So (b) alone fails at the zombie row and (a) is needed anyway;
+(b) may still carry the quiet vints.
+
+The consume split (packet B: preamble / rows / tail) is on the rig
+now with the V-counter jump corrected (LOOP29 262a: the NTSC V counter
+repeats E5-EA at the vblank start, so the tail census's line counts
+are floors where a stage straddled it).
