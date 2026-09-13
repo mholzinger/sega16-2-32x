@@ -1045,6 +1045,14 @@ endif
 ifdef C1NOMASK
 SHCCFLAGS += -DC1_NOMASK
 endif
+# `make ... C1MASKTAB=1` = Build D (LOOP29 247, NOTES 34): the scene's
+# class-2 tile opacity masks (tools/bake_cat1mask.py -> sh_src/cat1mask.h,
+# <= 1.5 KB) live in SDRAM from mds_install; the name-table pass stores a
+# mask index per class-2 cell and the slave's punched loop reads one SDRAM
+# byte per cell row instead of eight cart bytes. Needs C1PUNCH.
+ifdef C1MASKTAB
+SHCCFLAGS += -DC1_MASKTAB
+endif
 ifdef BOOTVALUESEL
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_VALUE_SEL
 endif
@@ -2621,6 +2629,8 @@ sh_src/tiles_data.o: sh_src/tiles.bin
 sh_src/cat1hole.bin: tools/bake_cat1hole.py sh_src/tiles.bin $(GAMEROMS)/prog68k.bin
 	@GAME=$(GAME) python3 tools/bake_cat1hole.py
 sh_src/cat1hole_data.o: sh_src/cat1hole.bin
+sh_src/cat1mask.h: tools/bake_cat1mask.py sh_src/cat1hole.bin sh_src/tiles.bin
+	@GAME=$(GAME) python3 tools/bake_cat1mask.py
 
 # Arcade sprite data: 16-bit-BE interleave, .incbin'd by sprites_data.s
 sh_src/sprites.bin: tools/gen_sprites.py $(GAMEROMS)/prog68k.bin $(FLAGSTAMP)
