@@ -56,10 +56,6 @@ static volatile uint16_t* const mars_comm0  = (uint16_t*) MARS_COMM0;
 static volatile uint16_t* const mars_comm2  = (uint16_t*) MARS_COMM2;
 static volatile uint16_t* const mars_comm4  = (uint16_t*) MARS_COMM4;
 static volatile uint16_t* const mars_comm6  = (uint16_t*) MARS_COMM6;
-#ifdef STAMP_CENSUS
-static volatile uint16_t* const mars_comm5  = (uint16_t*) MARS_COMM5;
-static volatile uint16_t* const mars_comm7  = (uint16_t*) MARS_COMM7;
-#endif
 #ifdef BOOT_FBXFER
 static uint8_t fbx_seq;                  /* FB-transport probe sequence */
 #endif
@@ -2800,28 +2796,33 @@ void shim_vblank(void) {
 #ifdef STAMP_CENSUS
 	/* NOTES 47 / LOOP29 259: the master's four pre-flip stamps (FRT ticks
 	 * from ISR entry: post seen, after the truth drain, after the slave
-	 * capture wait, at the guard), two a COMM word in 64-tick steps, read
-	 * here every vint and cleared. Per 64 vints the channel carries tags
-	 * 0-3 = the MEAN of each stamp over the vints that carried one and
-	 * 4-7 = its MAX, in 64-tick steps (6 bits; 1650 ticks = 25.8). */
+	 * capture wait, at the guard), two a vint on COMM6 in 128-tick steps
+	 * (bit 14 = the pair, bit 15 clear), read here every vint before the
+	 * body's own 0xB101 announce and zeroed. Per 64 vints the channel
+	 * carries tags 0-3 = the MEAN of each stamp over the vints that
+	 * carried it and 4-7 = its MAX (6 bits, 128-tick steps; 1650 ticks =
+	 * 12.9, one line = 0.36). */
 	{
-		static uint8_t st_vc, st_val[8], st_max[4], st_n;
+		static uint8_t st_vc, st_val[8], st_max[4], st_n[2];
 		static uint16_t st_sum[4];
-		uint16_t c5 = *mars_comm5, c7 = *mars_comm7;
-		if (c5 | c7) {
-			uint8_t v[4] = { (uint8_t)(c5 >> 8), (uint8_t)c5, (uint8_t)(c7 >> 8), (uint8_t)c7 };
-			for (int k = 0; k < 4; k++) { st_sum[k] += v[k]; if (v[k] > st_max[k]) st_max[k] = v[k]; }
-			st_n++;
-			*mars_comm5 = 0; *mars_comm7 = 0;
+		uint16_t w = *mars_comm6;
+		if (w && !(w & 0x8000)) {
+			uint8_t pr = (uint8_t)((w >> 14) & 1), v0 = (uint8_t)((w >> 7) & 127), v1 = (uint8_t)(w & 127);
+			st_sum[pr * 2] += v0; st_sum[pr * 2 + 1] += v1;
+			if (v0 > st_max[pr * 2]) st_max[pr * 2] = v0;
+			if (v1 > st_max[pr * 2 + 1]) st_max[pr * 2 + 1] = v1;
+			st_n[pr]++;
+			*mars_comm6 = 0;
 		}
 		if (++st_vc >= 64) {
 			for (int k = 0; k < 4; k++) {
-				unsigned mean = st_n ? st_sum[k] / st_n : 0;
+				uint8_t n = st_n[k >> 1];
+				unsigned mean = n ? st_sum[k] / n : 0;
 				st_val[k] = (uint8_t)(mean > 63 ? 63 : mean);
 				st_val[4 + k] = (uint8_t)(st_max[k] > 63 ? 63 : st_max[k]);
 				st_sum[k] = 0; st_max[k] = 0;
 			}
-			st_n = 0; st_vc = 0;
+			st_n[0] = st_n[1] = 0; st_vc = 0;
 		}
 		{
 			uint8_t tag = (uint8_t)((st_vc >> 3) & 7);

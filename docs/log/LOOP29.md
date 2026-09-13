@@ -6722,10 +6722,39 @@ spin, then the guard -- all FB/SDRAM traffic ares prices at one clock
 an instruction. `STAMPCENSUS=1` with `BOOTFLIPRATE=1`: the master
 records (frt - visr_t0) at four points -- post seen (CEN[52]'s
 quantity), after the truth drain (VBS(3)), after the slave capture
-wait (vbs_t2[1]), at the guard -- and writes them two a COMM word
-(COMM5, COMM7: both were unused) in 64-tick steps at the guard; the
-68K reads and clears them every vint and the channel carries, per 64
-vints, tags 0-3 = each stamp's MEAN over the vints that carried one
-and 4-7 = its MAX (6 bits, 64-tick steps; 1650 = 25.8, one line =
-0.72). The stage whose stamp holds the excess is the cut, one lever
+wait (vbs_t2[1]), at the guard -- and writes them two a vint on COMM6
+(the k1 announce register -- every COMM word is protocol; the first
+cut's "unused COMM5/7" were COMM6/COMM10 under another name and read
+the announce as a stamp -- bit 15 clear so no stamp word can read as
+0xB101, bit 14 = the pair) in 128-tick steps at the guard; the 68K
+reads and zeroes it at the vint top before its own announce, and the
+channel carries, per 64 vints, tags 0-3 = each stamp's MEAN over the
+vints that carried it and 4-7 = its MAX (6 bits, 128-tick steps; 1650
+= 12.9, one line = 0.36). The stage whose stamp holds the excess is the cut, one lever
 each per note 47.
+
+**259a, read (128-tick steps from ISR entry; 1650 = 12.9; a line = 0.36;
+each capture is one tag of the previous 64-vint window):**
+
+                          post seen     after truth drain   capture wait   at the guard
+    ares (attract)        mean 6        9                   0 (absent)     9      max 21 / 17 / 0 / 11-17
+    rig, stock demo       18 21 25      29                  0              24 31 33   max 0-36 / 49-60 / 0 / 63
+    rig, walk tape        18 22 25      --                  0              22 25 32 33   max 42-55 / 0-63 / 0 / 53-63
+
+On the FPGA the POST is seen 2,300-3,200 ticks (50-70 lines) after
+the ISR's entry -- already past the 1,650-tick guard before the
+master has done anything; on ares 770 ticks (17 lines). The truth
+drain adds ~500-1,000 ticks (drain mean 29 against post 21-25), the
+capture-wait stage does not exist on this line's path (0 everywhere),
+and the guard reads the drain's value plus a little. So the excess
+is stage 1, the post wait: NOTES 47's first lever -- the 68K posts at
+IRQ4 entry, before staging its push -- with the ISR's FBCTL write
+then waiting on the push rather than the post. The drain is the
+second stage and would matter once the post is early: 29 - 21 = 8
+steps (~1,000 ticks, 22 lines) of truth drain inside vblank at
+hardware prices, against 3 steps on ares.
+
+The 68K's post is late on the FPGA for the reason 227/247 recorded
+elsewhere: r60_push's ~90 lines of 68K writes into the framebuffer
+sit between IRQ4 entry and the post, and every one of them is priced
+by the FPGA's bus and by nothing in ares.

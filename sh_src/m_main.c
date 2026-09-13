@@ -7373,11 +7373,11 @@ static int flip_span(void)
      * harvested is kept, not re-zeroed. */
     if (!fbx_landed) fbx_lift();
 #endif
-#ifdef FLIPRATE_MEANSUM
-    if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
 #ifdef STAMP_CENSUS
     stc_t[0] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: post seen */
 #endif
+#ifdef FLIPRATE_MEANSUM
+    if (fs_from_isr) CEN[52] += (uint16_t)(frt() - visr_t0) / 46u;  /* post wait, lines */
 #endif
 #ifdef VB_SPAN
 
@@ -7642,11 +7642,16 @@ static int flip_span(void)
 #else
 #ifdef STAMP_CENSUS
     stc_t[3] = (uint16_t)(frt() - visr_t0);                        /* NOTES 47: at the guard */
-    {   /* four stamps in 64-tick steps, two a COMM word, for the 68K's channel */
-        unsigned a = stc_t[0] >> 6, b = stc_t[1] >> 6, c = stc_t[2] >> 6, d = stc_t[3] >> 6;
-        if (a > 255) a = 255; if (b > 255) b = 255; if (c > 255) c = 255; if (d > 255) d = 255;
-        MARS_SYS_COMM5 = (uint16_t)((a << 8) | b);
-        MARS_SYS_COMM7 = (uint16_t)((c << 8) | d);
+    {   /* two stamps a vint on COMM6 (the k1 announce register: the 68K
+         * writes 0xB101 there before its post and this ISR runs after it;
+         * bit 15 clear so no stamp word can read as the announce), 128-tick
+         * steps, bit 14 = which pair; the 68K reads and zeroes it at the
+         * next vint top */
+        static uint8_t stc_pair;
+        unsigned a = stc_t[stc_pair ? 2 : 0] >> 7, b = stc_t[stc_pair ? 3 : 1] >> 7;
+        if (a > 127) a = 127; if (b > 127) b = 127;
+        MARS_SYS_COMM6 = (uint16_t)(((unsigned)stc_pair << 14) | (a << 7) | b);
+        stc_pair ^= 1;
         stc_t[1] = stc_t[2] = 0;         /* a path that skips a stage carries 0 */
     }
 #endif

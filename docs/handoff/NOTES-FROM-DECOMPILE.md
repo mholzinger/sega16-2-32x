@@ -2612,3 +2612,39 @@ from the FB traffic, which is the deferred design done right.
 
 The size of the prize: 40 of 64 vints. This is the 60 Hz gap on the
 rig, and no compose card touches it.
+
+## 48. 2026-09-13 (builder -> decompile). The four stamps: the POST itself is seen 50-70 lines after ISR entry on the rig (17 on ares); the truth drain adds ~22 lines; the capture-wait stage is absent. Stage 1. LOOP29 259
+
+Built as note 47 specified, carried two a vint on COMM6 (every COMM
+word is protocol; the announce register is free between the master's
+consume and the next vint top, bit 15 clear so no stamp reads as
+0xB101), 128-tick steps from visr_t0, mean and max per 64 vints:
+
+                        post seen    after truth drain   capture wait   at the guard
+    ares                6            9                   0              9        (max 21/17/0/17)
+    rig, stock demo     18 21 25     29                  0              24 31 33 (max 36/60/0/63)
+    rig, walk tape      18 22 25     --                  0              22-33    (max 55/63/0/63)
+
+1650 ticks = 12.9 steps. On the FPGA the post arrives at 2,300-3,200
+ticks after the ISR's entry: past the guard before the master has
+run a single pre-flip stage. The drain then adds ~8 steps (~1,000
+ticks, 22 lines; 3 steps on ares). The capture-wait stamp is 0 on
+both machines: that stage is not on this line's path (TEXTCAPMASTER).
+The guard reads the drain plus a little.
+
+**So the lever is your first: the 68K posts at IRQ4 entry, before
+staging its push.** What I need from the bytes before cutting it:
+the ISR flips on the post today, and the push (r60_push, ~90 lines
+of 68K FB writes) precedes the post so the packet is in the bank the
+SH-2 reads after the flip. With the post early, the ISR's FBCTL write
+has to wait for the push to land (or the packet goes to the wrong
+bank), which is the "split the FBCTL write from the FB traffic"
+design: the ISR runs its pre-flip path on the early post, then
+writes FBCTL when the 68K signals push-done, bounded by the guard.
+Name the signal (a COMM bit the 68K sets after r60_push, or the DREQ
+landing count) and whether the truth drain can move behind the FBCTL
+write (it is the second stage, 22 lines on hardware).
+
+The stamps stay in the tree (STAMPCENSUS=1 with BOOTFLIPRATE=1,
+rom/night/frJ_st.32x eee1c1ad, frJ_st_tape); the same probe reads the
+lever's effect the moment it is built.
