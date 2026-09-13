@@ -635,7 +635,7 @@ static void c1mask_install(unsigned sc)
     for (unsigned i = 0; i < n * 8u; i++) c1mask_bits[i] = cat1mask_bits[sc][i];
     c1mask_n = (uint16_t)n;
 }
-static inline unsigned c1mask_find(unsigned code)
+__attribute__((noinline)) static unsigned c1mask_find(unsigned code)   /* ROM: a few hundred calls a generation; the inline form spilled .ramtext */
 {
     unsigned lo = 0, hi = c1mask_n;
     while (lo < hi) {
