@@ -7249,3 +7249,34 @@ Next: the fix. Three shapes, all already in the tree --
 and the picture must survive whichever is chosen: the snapshot is
 what makes the SH-2's text layer coherent with the frame being
 flipped.
+
+## 267. CARD L: THE MASKED TEXT CAPTURE -- THE RIG GOES 18 -> 27 PRESENTED FRAMES PER 64 VINTS, PICTURE IDENTICAL (2026-09-13 17:20)
+
+`TEXTCAPMASK=1` on the line's flags (the flag and both sides of its
+protocol have been in the tree since LOOP29 147, whose own comment
+says "on the FPGA the full capture was the largest term past the
+guard" -- the finding was made once, the flag built, and never
+shipped on this line). The game's patched text writers mark the 4-row
+group they touch (patch_game.py TXTMASK -> WRAM 0xFFA1A6), the shim
+posts the mask in COMM2's high byte, the master copies only the
+marked groups and clears it, and every 8th vint the mask is forced
+full so an ungated writer can never be stale for more than 8 vints.
+
+    rom/night/bldL.32x  md5 2eaab283   = bldJ + TEXTCAPMASK=1
+
+    ares wall                 1.07   (bldJ 1.09, bldHI 1.11, bldB 1.18)
+    rig, presented per 64     24 30 29 21 3 24 20 28
+                              26 29 25 30 28 28 29 27      mean ~27
+                              (bldJ/bldHI/bldB 16-21; the ablation 28-34)
+    picture, demo-aligned vs bldJ   0 px at f1000 and f1200 (offset +16)
+
+So the masked copy recovers most of 266c's ablation win -- ~27 of the
+~31 -- with a byte-identical picture at the aligned demo frames, and
+the ares wall improves too (1.09 -> 1.07). The remaining ~4 is the
+forced full copy every 8th vint plus the marked groups themselves.
+
+The frL_s6 stamps are not readable on this build: the preCopy stamp
+sits in the full-copy path, which the mask branch replaces, so it
+reads 0 and the guard mean mixes the 7 cheap vints with the 8th full
+one. Not worth re-cutting -- the rate is the number that matters and
+the picture gates are the check.
