@@ -5148,6 +5148,9 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                                 for (unsigned cx = (unsigned)(lo - 184) >> 3, ce = (unsigned)(hi - 185) >> 3; cx <= ce; cx++)
                                     if (c1q[cx]) { c1any = 1; break; }
                             }
+#ifdef PHASE_CENSUS
+                            if (punch) { if (c1any) CEN[63]++; else mds_ctr[5]++; }   /* 250: runs that walk cells / take the tight copy */
+#endif
                             if (punch && c1any) {
 #else
                             if (punch) {
