@@ -648,7 +648,14 @@ __attribute__((noinline)) static unsigned c1mask_find(unsigned code)   /* ROM: a
 /* 244: PER PIXEL where the bake says the cat-1 tile has transparent
  * pixels (the grass tufts): the sprite pixel is punched only where the
  * tile's own pixel is opaque. One ROM byte per such pixel. */
+#ifdef C1_MASKTAB
+/* Build D: out of line. Inlined into the 28 plot expansions the mask
+ * form spilled .ramtext (LOOP29 247); one RAMCODE copy and a call per
+ * pixel on the 1:1/zoomed paths (Build C measured that call at noise). */
+__attribute__((noinline)) RAMCODE static int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
+#else
 static inline int c1_hit(const volatile uint8_t *m, const volatile uint16_t *cd, unsigned sx, unsigned py)
+#endif
 {
     unsigned v = m[sx >> 3];
     if (v == 0) return 0;
