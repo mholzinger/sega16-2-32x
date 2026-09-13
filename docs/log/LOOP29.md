@@ -6205,3 +6205,21 @@ noplot (1.03) removed those reads along with everything else.
 its cache. Fresh enough by construction: the slave purges its cache at
 every window start, the master's mask writes are write-through, and the
 mask is one generation behind the compose by design. One flag on bldB.
+
+**249b. The slave's own number, from the generation trace (PHASECENSUS
+`gen_trace.py`, "clear+sprites" pass sum, v/gen, 860-930 gens):**
+
+    pcB (line)          0.389        pcB_nomask         0.383
+    pcB_noplot          0.324        pcB_nopunch        0.327
+    pcD (SDRAM masks)   0.422        pcF (cached reads) 0.394
+
+So the punch costs the slave's compose 0.065 v/gen, of which 0.059 is
+present with NO mask at all (class 0 everywhere, no art, no skips):
+the punched run loop's SHAPE -- the per-cell control around every run
+-- is the price, and Build D's bit-mask form made it worse (+0.033),
+Build F's cached reads changed nothing. 99% of level-1 records take
+the baked-run path (SPRBK: 96,304 hits to 859 misses in steady play),
+so the 1:1/zoomed paths are irrelevant to it. Build E's fast path was
+the right idea; its pre-scan read the mask through the uncached alias
+per run, which is the same class of cost it was removing. Build G =
+E's fast path with F's cached reads.

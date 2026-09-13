@@ -628,3 +628,6 @@ is a phase, not a defect.
       aligned return 0.074/0.064 against B's 0.040/0.038 (the same-
       round-return class re-rolled by the SH-2 timing change, 227).
     VERDICT: FAILS -- no gain; the uncached reads were not the price.
+    Build E, rig: frE 20 20 15 14 15 (B 21 19 7 15 18); attract black
+      shares over three launches 0.00-0.01. VERDICT: no gain, no harm;
+      not the line.
