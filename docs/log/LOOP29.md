@@ -6126,3 +6126,16 @@ fix is the round's tables in SDRAM at install (mds_install copies
 ~17 KB for the largest scene); the free SDRAM under the region guard is
 ~14.7 KB with _end at 0x15548, so it needs a home first (the old
 tile-cache half at 0x31000+ is .ramtext now). Not built tonight.
+
+**246c, Build C measured (card in PLAN): FAILS.** pcC wall 1.21 v/gen
+against pcB 1.18, single-vint 37% vs 40%, echo 1.14 vs 1.11; picture
+equal to B in the attract and the coin-at-title game, but the game
+coined during the eye reads 0.08 black against B's 0.04 -- the l3800
+frame shows the tree-row rectangles of the same-round-return class
+(221/227), re-rolled by an SH-2 timing change this time. Rig: frame
+rate 22 18 19 7 21 (= B), attract clean over three launches. The
+punch's 0.13 is not the per-pixel class test on the 1:1 paths; the
+per-cell call bought nothing. bldB stays the line and is back on the
+rig. Next measurement, not a guess: time the baked-run punched loop
+against the plain run copy (a slave-side stamp pair), and the master's
+mask writes in the name-table pass, before another card is cut.
