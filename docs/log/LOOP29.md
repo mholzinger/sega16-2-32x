@@ -6601,8 +6601,10 @@ header reads, which ares also does not price; on the rig, nothing
 either.
 
 What stands: the pixel copy is 0.62 v/gen of the slave's INSTRUCTION
-budget at the heavy scene (NOPIX), and removing it alone puts the
-generation at one vint on ares. The store count was the wrong axis.
+budget at the heavy scene (NOPIX: ~240k clocks for ~20k pixels, 12 a
+pixel against the loop's 3.5-5 -- the recompiler prices memory
+instructions above one clock, or the census undercounts), and
+removing it alone puts the generation at one vint on ares. The store count was the wrong axis.
 The instruction count per pixel is the axis ares can rank, and the
 rig has not yet been shown a scene where the slave is the wall (its
 probe runs the attract's demo, 12-17 records, and its rate there is

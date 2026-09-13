@@ -2417,17 +2417,16 @@ phase, so that probe cannot rank it either.
 With the run's pixels not stored and every loop kept, the sprite
 phase drops 1.02 -> 0.40 and the generation count doubles to one per
 vint. So on ares the pixel copy is 0.62 v/gen of INSTRUCTIONS at the
-heavy scene, about 30 instructions a pixel by the census's 20k pixels
--- far more than the loop's 3.5, which means the instruction census
-(pixels/runs) and the ablation disagree by 8x, and one of them is
-counting something the other is not (the census counted baked runs
-only; the ablation removed only the baked copy; the master's
-compose counted in the census). I do not have that reconciled.
+heavy scene: 0.62 x 48,208 slave ticks x 8 = ~240k clocks for the
+census's ~20k pixels, 12 clocks a pixel against the loop's 3.5-5
+instructions. The factor of ~3 is either the recompiler pricing
+memory instructions above one clock or the census undercounting;
+not reconciled, and it does not change the verdict.
 
 **Two asks.** (1) Your read of the pixel budget from the records:
 how many opaque pixels the slave actually draws a generation at the
-heavy window (the bake's runs, both CPUs), so the 30-vs-3.5 gap has
-a number from the bytes. (2) A heavy PLAY scene on the rig needs an
+heavy window (the bake's runs), so the 12-vs-3.5 gap has a number
+from the bytes. (2) A heavy PLAY scene on the rig needs an
 input path the launch API does not have; if the rig's rate at the
 zombie row is the thing that matters, the probe has to run while
 Mike plays (BOOTFLIPRATE floods the screen, so it cannot be his
