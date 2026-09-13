@@ -7313,3 +7313,28 @@ cannot touch tiles at all:
 267b ablates the capture entirely (TEXTCAPOFF as a PICTURE build --
 text stale by construction, tiles untouched) and looks at the tiles
 on the rig. Black tiles there = (b), the rate.
+
+**267b, the discriminator: the RATE is innocent, the MASK is the
+fault.** `TEXTCAPOFF=1` as a PICTURE build (bldTCOFF 1c01b978; text
+stale by construction, tiles untouched by the capture) on the rig:
+
+    level shots   trees 0.00   fg 0.00-0.03   all 0.00-0.01
+                  (bldJ 0.00-0.02; bldL 0.20 / 0.60-0.86)
+
+and the frames themselves show the graveyard complete -- every tile
+set drawn, the statues and cypresses in their right colours, only the
+text garbage. At ~31 presented frames per 64 vints, HIGHER than card
+L's 27. So the pipeline feeds a 31/64 display cleanly; card L's black
+tile sets are its MASK protocol, not the cadence the mask unlocked.
+
+That makes the lever real AND safe, and narrows the fault to the
+mask's own wiring -- the first suspect being that COMM2's high byte
+carries the mask from ONE writer (md_main.c:3519) while three others
+write plain BANK_SHADOW, so a mask can be cleared before the master
+reads it at m_main.c:7516 and TEXT_U is left PARTIALLY updated:
+some groups this frame, some several frames old. A half-updated text
+snapshot is worse than a stale one, because the text cells feed the
+same MD residency allocator the tiles use -- incoherent text cells
+claim and evict slots, which is exactly the blank-slot signature and
+the wrong colour set on the logo. The fully stale snapshot
+(TEXTCAPOFF) makes no claims at all, which is why it looks right.
