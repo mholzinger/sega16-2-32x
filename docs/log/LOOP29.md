@@ -6758,3 +6758,29 @@ The 68K's post is late on the FPGA for the reason 227/247 recorded
 elsewhere: r60_push's ~90 lines of 68K writes into the framebuffer
 sit between IRQ4 entry and the post, and every one of them is priced
 by the FPGA's bus and by nothing in ares.
+
+## 260. THE 68K TAIL SPLIT ON THE RIG, AND THE IDLE BEFORE IRQ4 (2026-09-13 08:40)
+
+NOTES 49 (decompile, 23e6099): no push-done signal can rescue stage 1
+-- the batch and the packet live in the CURRENT back bank, and after
+the FBCTL write that bank is front, unreadable by either CPU; the
+truth drain is bound the same way. What precedes the post is not
+r60_push (WRAM, after the post) but the FB traffic at IRQ4 top: the
+two batch consumes (FB-sourced VDP DMAs), the sprite pump, and last
+vint's pending blast. The lever is to move that traffic into the
+FM=0 slot before IRQ4, in game context (the pending blast at the gate
+spin, the batch copied FB -> WRAM in the spin and DMA'd WRAM -> VRAM
+after the post). One capture first: the tail split in lines and the
+idle between frame-done and IRQ4 -- the slot's size on hardware.
+
+`TAILCENSUS=1` with `BOOTFLIPRATE=1`: V stamps at IRQ4 entry
+(0xFFA1F2), the existing 0xFFA080/82/84/86 around the two consumes,
+new ones after the pump (0xFFA1F8) and after the pending blast
+(0xFFA1FA), the post's 0xFFA0A0; and the frame-done V (0xFFA1F4) stamped
+by the GAMEGATE thunk on its first visit after a release
+(tools/patch_game.py under TAILCENSUS: nine words before the token
+test; the shim clears the flag after reading). The channel carries
+mean lines per vint for entry->A, batch A, batch B, pump, blast,
+blast->post, idle, and tag 7 = vints per 64 with no idle (the pass
+had not reached its frame wait when IRQ4 came). Deltas are V-counter
+bytes, so a stage that crosses the vblank jump reads a few lines off.

@@ -1396,6 +1396,14 @@ if FMGATE:
         _want = bytes.fromhex('4a38f01c' '6708' '5278f144' '60000142')
         assert hrom[_o:_o+14] == _want, f'GAMEGATE site: {hrom[_o:_o+14].hex()}'
         gg_addr = fmgate_base + len(fmgate_words) * 2
+        if os.environ.get('TAILCENSUS'):
+            # NOTES 49 / LOOP29 260: stamp V on the thunk's first visit after
+            # a release (the game reached its frame-wait loop = FRAMEDONE);
+            # the shim's IRQ4 clears the flag after reading the stamp.
+            fmgate_words += [0x4A38, 0xA1F6,              # tst.b  (0xFFA1F6).w   already stamped?
+                             0x660C,                      # bne.s  +12
+                             0x31F9, 0x00C0, 0x0008, 0xA1F4,   # move.w (0xC00008).l,(0xFFA1F4).w
+                             0x50F8, 0xA1F6]              # st.b   (0xFFA1F6).w
         fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
                          0x670C,              # beq.s  nogo
                          0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?

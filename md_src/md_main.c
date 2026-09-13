@@ -2111,7 +2111,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS)
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2830,6 +2830,38 @@ void shim_vblank(void) {
 		}
 	}
 #endif
+#ifdef TAIL_CENSUS
+	/* NOTES 49 / LOOP29 260: THE 68K TAIL SPLIT IN LINES, AND THE IDLE
+	 * BEFORE IRQ4. V stamps: IRQ4 entry (0xFFA1F2), before/after batch A
+	 * (0xFFA080/82), before/after batch B (84/86), after the sprite pump
+	 * (0xFFA1F8), after the pending blast (0xFFA1FA), at the post
+	 * (0xFFA0A0); and the game's frame-done V (0xFFA1F4, stamped by the
+	 * GAMEGATE thunk on its first visit after a release; 0xFFA1F6 = set).
+	 * Read at the next vint top for the previous vint. Per 64 vints the
+	 * channel carries MEAN lines (cap 63): 0 entry->A, 1 batch A, 2 batch
+	 * B, 3 pump, 4 blast, 5 blast->post, 6 idle (frame-done -> entry);
+	 * 7 = vints with NO idle (the pass had not finished at IRQ4). */
+	{
+		static uint8_t tc_vc, tc_val[8], tc_noidle;
+		static uint16_t tc_sum[7];
+#define TCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
+		uint8_t ve = TCV(0xFFA1F2), a0 = TCV(0xFFA080), a1 = TCV(0xFFA082), b0 = TCV(0xFFA084), b1 = TCV(0xFFA086);
+		uint8_t pu = TCV(0xFFA1F8), bl = TCV(0xFFA1FA), po = TCV(0xFFA0A0);
+		tc_sum[0] += (uint8_t)(a0 - ve); tc_sum[1] += (uint8_t)(a1 - a0); tc_sum[2] += (uint8_t)(b1 - b0);
+		tc_sum[3] += (uint8_t)(pu - b1); tc_sum[4] += (uint8_t)(bl - pu); tc_sum[5] += (uint8_t)(po - bl);
+		if (*(volatile uint8_t*)0xFFA1F6) { tc_sum[6] += (uint8_t)(ve - TCV(0xFFA1F4)); *(volatile uint8_t*)0xFFA1F6 = 0; }
+		else tc_noidle++;
+#undef TCV
+		if (++tc_vc >= 64) {
+			for (int k = 0; k < 7; k++) { unsigned m = tc_sum[k] >> 6; tc_val[k] = (uint8_t)(m > 63 ? 63 : m); tc_sum[k] = 0; }
+			tc_val[7] = tc_noidle > 63 ? 63 : tc_noidle; tc_noidle = 0; tc_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((tc_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | tc_val[tag]);
+		}
+	}
+#endif
 #ifdef BOOT_MOTION
 	/* ARE WE ACTUALLY STREAMING, AND HOW FAST? (2026-09-08, LOOP27 37.)
 	 * Mike, fairly: "nothing ever shows actual moving streaming frames."
@@ -3020,6 +3052,9 @@ void shim_vblank(void) {
 	// so the span includes the window ack-wait — the part that scales with
 	// SH-2 speed (the MAME vs ares divergence the post-window probe missed).
 	uint8_t v_entry = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+#ifdef TAIL_CENSUS
+	*(volatile uint16_t*)0xFFA1F2 = (uint16_t)((uint16_t)v_entry << 8);   /* NOTES 49: V at IRQ4 entry */
+#endif
 
 	// ITER5: the DREQ push only fires on vints whose window was ACCEPTED
 	// (posted + acked) — those are the vints the master re-armed the DMA
@@ -3353,6 +3388,9 @@ void shim_vblank(void) {
 		mdspr_consume();                     /* P3: SAT + sprite pal */
 		mdspr_upload_pump();                 /* per-scene art chunks */
 #endif
+#ifdef TAIL_CENSUS
+		*(volatile uint16_t*)0xFFA1F8 = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pump */
+#endif
 		}
 #endif
 #ifdef POST_LATE
@@ -3418,6 +3456,9 @@ void shim_vblank(void) {
 				 * staged; FM is 0 here (the consumes above needed it),
 				 * so this is the one blast that packet gets. */
 				if (fbx_pend) { fbx_pend = 0; r60_blast(1); }
+#endif
+#ifdef TAIL_CENSUS
+				*(volatile uint16_t*)0xFFA1FA = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pending blast */
 #endif
 #if defined(FB_XPORT) && !defined(FBX_TAIL) && !defined(FBX_STAGE)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
