@@ -6131,3 +6131,69 @@ they differ. If the divergence starts at a landing or a ledge, it is
 the collision read-back. If it starts mid-air with identical inputs, it
 is something else. Positions are 64 bytes a second; the whole demo fits
 in a few KB.
+
+---------------------------------------------------------------------
+## 128. Mike's vertical dithered column is the SHADOW fallback, and it degrades exactly where the MD plane shows -- so every cell the colour bake moves to the MD plane makes it worse (2026-09-14)
+
+Mike's play shots (screenshots/20260914_1506xx): a full-height,
+hard-edged column of 50% dither, yellow in one frame and blue/white in
+the next, with Zeus's head at its top. It is not arcade art -- no S16
+effect is a hard-edged full-height rectangle -- and it appears at the
+power-up, so the port's game state in credited PLAY does reach the
+transformation even though the builder's probe shows the attract DEMO
+never does (NOTES 70).
+
+**What the hardware does.** jtcores `jts16_colmix.v:88`:
+
+    gated = (shadow & ~pal[15]) ? { dim(rpal), dim(gpal), dim(bpal) } : ...
+
+A shadow pixel DIMS whatever colour is underneath it, per pixel, every
+pixel. It is never a pattern and never a flat colour.
+
+**What we do.** m_main.c 444-450:
+
+    #ifdef DIRECT_FB
+    #define DFB_SHADOW_PIX(sx)  if ((sx) & 1) row[sx] = shadow_lut[0];
+    #else
+    #define DFB_SHADOW_PIX(sx) { uint8_t up_ = urow[sx];
+        if (up_)           row[sx] = shadow_lut[up_];
+        else if ((sx) & 1) row[sx] = shadow_lut[0]; }
+    #endif
+
+When the underlying pixel is KNOWN the shadow is correct -- a lookup
+of that colour's dimmed twin. When it is NOT known the code writes one
+flat colour, `shadow_lut[0]`, on ODD COLUMNS ONLY. That is a 50%
+vertical dither in a single colour, which is precisely the column in
+the screenshot.
+
+**And the case where it is not known is the MD plane.** `up_` is the
+32X framebuffer's own pixel. Zero there means MD-through: the colour
+lives in the Mega Drive's plane, on the other chip, and the SH-2 cannot
+read it -- FM=0 framebuffer reads return garbage (FM_TEST, 1507
+mismatch against 176 match). So the shadow is exact over 32X content
+and degrades to a one-colour column dither over everything the MD plane
+draws.
+
+**The interaction nobody has costed.** Every cell moved to the MD plane
+-- which is the entire direction of MDSTATIC, MDROUND, the colour-line
+bake and card P -- is a cell where a shadow passing over it renders as
+this dither instead of as a dim. The two strategies work against each
+other, and the more successful the plane bake is, the more visible this
+becomes. Mike reporting it now, after card P, is consistent with that.
+
+**What would fix it, in rising cost.** (1) Dither on BOTH parities
+rather than odd columns only, so it reads as a uniform 50% veil instead
+of a striped curtain -- one character change, no new information
+needed, and it is strictly closer to a dim than a stripe is. (2) Ship
+the MD plane's own shadow: the Mega Drive has a shadow/highlight mode
+and its priority bit selects it, so a shadowed MD cell could be
+rendered by the MD itself rather than faked on the 32X layer -- that is
+a real card and wants the hardware's rules read first. (3) Keep a
+parallel 1-byte-per-pixel record of what the MD plane will draw, so
+`up_` is known everywhere -- correct, and it costs a whole extra
+screen-sized buffer and the writes to maintain it, which is exactly the
+bandwidth the generation card is trying to recover.
+
+(1) is free and should be tested first: if Mike reads a uniform veil as
+acceptable where a stripe is not, the defect stops being a blocker
+without anyone paying for it.
