@@ -2060,8 +2060,24 @@ static inline void cache_purge(void)
      *                           bandwidth ares prices at zero, and the
      *                           pivot is the only lever left
      *
+     * MASTER ONLY, and that distinction cost a run. cache_purge() is
+     * shared code called from BOTH CPUs, so the first cut disabled the
+     * SLAVE's cache too -- and mars_start.s:547 records slave-cache-off
+     * as a known-BLACK state on this hardware ("cache-off alone =
+     * black"). The picture came back as blue garbage, which means the
+     * build did NOT render identically and its timing was confounded by
+     * changed work. My "safe by construction" claim was wrong as built;
+     * it is true only with this guard. Discriminate on the stack
+     * pointer, the same test 255b uses.
+     *
      * DIAGNOSTIC ONLY. Slow by construction. Never ships. */
-    *(volatile uint8_t *)0xFFFFFE92 = 0;          /* CE clear: cache off */
+    {
+        uint32_t sp_c; __asm__ __volatile__("mov r15,%0" : "=r"(sp_c));
+        if ((sp_c & 0x000FFFFFu) >= 0x0003F800u)  /* the slave's stack */
+            *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
+        else
+            *(volatile uint8_t *)0xFFFFFE92 = 0;  /* CE clear: master cache off */
+    }
 #else
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
 #endif

@@ -9171,3 +9171,61 @@ second as a spread estimate.
 of 295 is inside the wall, spread uniformly across its stages, and the
 next question is what that multiplier IS -- which is the cache-off
 discriminator, not another stamp.
+
+## 297. THE FETCH HYPOTHESIS CANNOT BE TESTED BY REMOVING CACHE -- THE MASTER DIES WITHOUT IT (2026-09-14)
+
+NOTES 87's hypothesis for LOOP29 295's uniform ~2.9x: INSTRUCTION FETCH.
+ares charges instruction cycles but not the fetch; `cache_purge()` throws
+away all 4KB every window; the cost would be a multiplier on WORK,
+identical for a write loop and a read loop, which is the signature 295
+measured. Three attempts at a discriminator, and the honest result is
+that **none of them is a measurement.**
+
+**(a) `C1_CACHED` is not this test.** The thread proposed it, but as
+implemented (m_main.c ~651) it only moves `cat1scr`/`cat1code` between
+the cached and uncached alias. That is DATA traffic, not instruction
+fetch.
+
+**(b) `PURGESTRESS` failed to move the variable, and was caught before
+it measured anything.** One extra `cache_purge` per body poll visit was
+meant to take the rate from ~1 a window to hundreds. `PS[0]` measured
+**1.0 per generation**: under `NAT_ALL_SLAVE` the master's compose branch
+is compiled out and the maps drain finishes in a single visit, so there
+are almost no visits to hook. This is NOTES 85's failure repeating --
+caught this time because the counter existed for exactly that purpose.
+
+**(c) `CACHEOFF` v1 was not safe, and my claim that it was is
+withdrawn.** I argued a disabled cache cannot be incoherent, so the build
+would render identically and differ only in fetch cost. Wrong as built:
+`cache_purge()` is shared code called from BOTH CPUs, so it disabled the
+SLAVE's cache too -- and `mars_start.s:547` already records slave
+cache-off as a known-BLACK state on this hardware. The rig returned blue
+garbage.
+
+**(d) `CACHEOFF` v2, master only (stack-pointer guard, 255b's test):
+the master cannot complete a generation.** The CCR readback on tag 2
+reads **0**, so the instrument works and the variable provably moved. But
+tag 3 (GENERATION) reads **0** and the screen shows the MD layer alone --
+SEGA logo and INSERT COIN over an empty 32X layer. The master is not
+finishing generations at all.
+
+**What that does and does not say.** It is not a slowdown, it is a wedge,
+so the work is not comparable and no factor can be extracted. What
+survives is a crude ceiling: **the master's cache is worth more than the
+entire generation budget** -- removing it does not cost 2x, it costs the
+machine. That is consistent with the fetch hypothesis and equally
+consistent with cached DATA reads mattering, and this build cannot
+separate them.
+
+**The direction that can actually run.** Removing cache kills the master,
+so the fetch term cannot be measured by subtraction. The only safe
+direction is ADDING cached traffic, which is what `C1_CACHED` does -- and
+though it tests the data half rather than the fetch half, it is the half
+that can be measured on a machine that stays alive. If cached data reads
+move the stage factors, 295's uniformity has a data component and the
+fetch attribution is not needed to explain it.
+
+**Rule, extending NOTES 85 again.** An ablation must move the quantity
+the hypothesis is about -- and it must leave the machine doing COMPARABLE
+WORK. (b) failed the first test, (c) and (d) the second. Only (d)
+produced a number, and the number is a wedge indicator, not a factor.
