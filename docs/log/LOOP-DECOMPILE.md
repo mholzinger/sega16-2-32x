@@ -7005,3 +7005,105 @@ rate, and read v/gen:
 **Do not ship the probe build.** It runs gameplay at ~44% speed and Mike
 rejected exactly that on 2026-09-11. It is a measurement, and it answers
 a question no other instrument we own can reach.
+
+---------------------------------------------------------------------
+## 141. NEGATIVE: the 0.245 is ONE trip of ~63 lines, and it is hidden. I called it the lever in NOTES 79 and I withdraw that. The general fault: ares's wall is SLAVE-gated, the rig's is MASTER-gated, so the whole ares phase split aims at a critical path hardware does not have (2026-09-14)
+
+The count landed, same run as busy:
+
+    input     cmds/gen              busy    gap     per trip
+    attract   1.01 (chain 2763, window 0)  0.580  +0.243  0.2396 v = 62.8 lines
+    play2     1.00 (chain 2559, window 0)  0.781  +0.246  0.2457 v = 64.4 lines
+
+**One trip per generation, ~63 lines, invariant across a 35% change in
+slave work.** Cost-per-trip is as flat as the product was. Zero window
+commands -- all chain, which also explains the relocated CHAIN_METER
+reading links 0: the chain command takes the self-chain branch (three
+unmetered `slave_concurrent_k` calls), not the else branch the meter sat
+on.
+
+**Both cards from NOTES 79's table are dead, and for the same reason.**
+There is nothing to batch (one command), and making the trip cheaper
+buys nothing -- because of the builder's qualification, which is the
+important part of their message:
+
+  * `echo` is elapsed launch->echo-seen, **not blocking wait**.
+  * `mtask` runs concurrently at 0.704 (attract) / 0.687 (play2).
+  * So master idle is **at most** echo - mtask = 0.118 attract, 0.340
+    play2.
+  * And on the rig the master waits for the slave **zero ticks, every
+    sample** (LOOP29 291).
+
+The ~63-line trip is real, precisely characterised, and **completely
+hidden behind the master's own tail on hardware. Attacking it buys
+zero.** I wrote in NOTES 79 that it was "the first fixed cost in this arc
+we can attack head-on." That was wrong and it is withdrawn. NEGATIVE.
+
+### The fault underneath it, which is worth more than the finding
+
+This is the third time in this arc that a term derived from the ares
+phase split evaporated on hardware, and the reason is now general enough
+to state as a rule:
+
+**In ares the generation wall is `max(echo, mtask)` and echo WINS --
+1.027 against 0.687, so the SLAVE is the critical path. On the rig the
+master never waits for the slave at all, so the MASTER is the critical
+path. The two instruments disagree about which CPU the wall is on.**
+
+LOOP29 275 opened the generation card on "the critical path is the
+SLAVE, at 1.05 v/gen against the master's 0.70." That sentence is true
+in ares and false on hardware, and every card sized from that
+decomposition aims at the wrong processor. This is the mechanism behind
+my two wrong sizings (NOTES 79's consolidation arithmetic, NOTES 79's
+lever) and it should be checked before any future card cites a phase
+number.
+
+The reason is not mysterious: ares charges instruction cycles only, so
+it reports the slave's compute honestly and the master's memory stalls
+not at all. Strip the master's stalls and the slave looks like the
+bottleneck. Add them back and it is not close.
+
+### What it does NOT overturn, and in fact confirms twice
+
+The floor probe ablated slave work and moved the floor 2.06 -> 1.57.
+That looks like it contradicts "the slave is hidden" and does not:
+
+    slave TIME    is free -- hidden behind the master, zero wait measured
+    slave TRAFFIC is not  -- it contends for the one write path, 0.49 v/gen
+
+Both are true simultaneously and together they harden NOTES 78's rule
+into a law for the rest of the project: **size every slave card in
+BYTES, never in time. A slave card that saves time and not traffic saves
+nothing.** Three independent measurements now agree on it (zero wait,
+BLITSHIFT's death, the ablation).
+
+### Where that leaves the 2.47, and why the next build matters
+
+The wall is master-gated. The master's own instruction cost is 0.687
+v/gen in ares. The rig's generation is 2.2-2.5. **So roughly 1.5-1.8
+vints of every generation is the master stalled on memory**, and entry
+137 already excluded stores by arithmetic -- 12,181 bytes cannot be 1.5
+vints at any plausible price.
+
+That leaves READS, and the master's expensive reads are the ones that
+cross to MD-side memory: the truth drain and the text capture
+(m_main.c 7726-7730, `cap_drain`). The one piece of hardware evidence we
+have fits exactly: card O masked the text capture and moved the rig
+18 -> 21-27 presented per 64, the single largest hardware movement of
+this arc.
+
+And the 68K is running 56.8 passes per 64 vints against our 28.8
+generations, arbitrating against every one of those cross-bus reads.
+
+**So entry 140's isolation build is no longer "what the answer opens".
+It is the next measurement, and it is the only one left that can carry
+the remaining 1.5-1.8 vints.** Everything else in the generation now has
+a number: slave busy 0.781, slave trip 0.245 (hidden), master
+instructions 0.687, protocol floor 1.57, stores excluded.
+
+Open ask: do we have a measured per-word cost for a master read across
+to MD-side memory? Nothing in SILICON.md carries one. If not, the
+isolation build gives it indirectly and should be read that way.
+
+Residue banked: 22.7 token releases against 27.8 presented -- five flips
+per 64 vints present without producing a token release.
