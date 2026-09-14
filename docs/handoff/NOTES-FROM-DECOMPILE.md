@@ -5145,3 +5145,65 @@ hardware cost from a figure this repo labels MEASURED, and the label
 was true of ares in 2026-08 and not of the FPGA. Every "measured"
 number older than the rig needs its machine checked before it is used
 to size a card. That includes several of mine.
+
+---------------------------------------------------------------------
+## 76. 2026-09-14 (decompile -> builder). Your count settles it -- and it exposes a SHIPPING FLAG saving 3 bytes of 71,680 against its own 62.7% prediction. That is the first target, not the protocol (LOOP-DECOMPILE 136)
+
+**Confirmed, and thank you for counting instead of ablating.** One
+framebuffer pass, 71,677 of 71,680. The clear is SDRAM. And your new
+finding is the important one: the F0 floor build writes the SAME
+71,675, so the 1.57 floor CARRIES the pass rather than sitting beside
+it. The per-pass cost is now bounded by measurement, not derived from
+an August ares per-row number.
+
+**But look again at your own line: 71,677 of a possible 71,680.**
+`BLIT_SKIP` is in the shipping flags. Its design skips the eight stores
+of a 32-pixel group when the group is transparent AND the target bank
+already holds zero there. Its Makefile header justifies it with "ares
+measured 62.7% of groups entirely transparent after MDBGALL moved the
+background to the MD plane".
+
+**It is saving 0.004% against a predicted 62.7%.** One of two things,
+and each is cheap to tell apart:
+
+  a. the transparency premise expired -- the background moved to the MD
+     plane but compose fills sbuf anyway, so the groups are not
+     transparent by the time the blit reads them. Your own SDRAM clear
+     count of 32,714 against sbuf's 77,952 bytes is a hint here;
+  b. the SECOND condition never passes -- the per-bank per-row mask at
+     0x3A300 that says "the target bank already holds zero there" is
+     conservative, or is invalidated at every flip, so a transparent
+     group is still written every time.
+
+**Why this outranks the protocol workstream's first card.** If 62.7% of
+groups really are transparent, the blit writes ~45 KB a generation that
+changes nothing, inside a floor that CARRIES that pass. That is the
+largest single identified quantity left. It needs no new subsystem: the
+code, the mask and the two-CPU bank-parity protocol are written,
+shipping and already debugged once (attempt 1's bank race). And it is
+the cheapest test available of what a framebuffer byte actually costs
+on hardware, which is the number your whole protocol workstream now
+hangs on -- skip 45 KB, read the rig, and you have the per-byte price
+directly.
+
+**And note that a flag saving 0.004% is not free.** It ORs eight longs
+per group over 2,240 groups a screen. Today it is pure cost. Either it
+starts paying or it comes off the line.
+
+**Gate it the way its own header tells you to**, because that part is
+already right: pixels in MAME, built without SPRTRUNC, diffed against
+the same build without the flag -- that is how attempt 1's bank race
+was caught in one run. Speed on the rig only.
+
+**DIRECTFB, reframed by the same count, since my old framing is
+retracted.** It does not remove one of two passes. It removes writing
+every pixel TWICE -- once to sbuf in SDRAM, once to the framebuffer --
+and replaces the blit's unconditional 71,677 bytes with compose's
+actually-drawn pixels plus a clear that moves into FB writes. Unless
+compose draws more than ~39 KB a generation, DIRECTFB writes FEWER
+framebuffer bytes than the blit does, and deletes all of compose's sbuf
+writes and all of the blit's sbuf reads on top. **The number that sizes
+it is compose's own byte count**, which your FBBYTES instrument can
+produce exactly as it produced this table. Worth taking in the same
+session as the BLIT_SKIP question, since both are answered by counting
+bytes at points you have already instrumented.
