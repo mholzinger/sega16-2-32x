@@ -2570,6 +2570,17 @@ endif
 ifdef OBJLOG
 MDCCFLAGS += -DOBJ_LOG
 endif
+# GLOWPAGE=1 = LOOP29 284 / LOOP-DECOMPILE 124. The glow animator
+# yields to the 68K whenever the CHEVRON PLANE is up -- any 4-bit
+# quadrant of either plane's page select >= 10. Pages 10/11 carry the
+# transformation and nothing else in a whole arcade run selects a page
+# that high, so it is an exact scene marker that is not palette-derived
+# (the animator cannot corrupt it), not a sentinel peek (the transform's
+# palette sits inside the ambient envelope) and needs no new channel.
+# Replaces the `pscene_cur != 0` gate, which never fired.
+ifdef GLOWPAGE
+SHCCFLAGS += -DGLOW_PAGE
+endif
 ifdef GLOWCUT
 SHCCFLAGS += -DGLOW_CUT
 endif

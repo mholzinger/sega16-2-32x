@@ -14059,6 +14059,9 @@ RAMCODE void m_main(void)
 #ifdef GLOW_PROBE
                 static uint16_t glow_pend_run;
 #endif
+#ifdef GLOW_PAGE
+                static uint8_t glow_chev;    /* the chevron plane is up */
+#endif
 #ifdef GLOW_ANIM
                 /* ONE ARCADE TICK per vint. Paused while the 68K is
                  * shipping glow blocks; resumes only after a clean
@@ -14131,6 +14134,40 @@ RAMCODE void m_main(void)
                     glow_pend_run++;
                 } else glow_pend_run = 0;
 #endif
+#ifdef GLOW_PAGE
+                /* LOOP29 284 / LOOP-DECOMPILE 124: THE SCENE GATE, DONE
+                 * RIGHT. The chevron plane is pages 10 and 11 and nothing
+                 * else in a whole arcade run selects a page >= 10, so
+                 * "any quadrant of either plane's page select >= 10" is
+                 * an exact marker for the transformation.
+                 * It fixes all three failures of the old gate at once:
+                 * it is not palette-derived, so the animator cannot
+                 * corrupt the evidence (which is what killed
+                 * `pscene_cur != 0` -- the animator writes the very
+                 * PAL_SH words the detector compares); it is not a
+                 * sentinel peek, so the transform's palette sitting
+                 * inside the ambient envelope cannot fool it; and it
+                 * needs no new channel, so it does not depend on the
+                 * state word (0xFFF148 is an OBJECT marker, not a scene
+                 * flag -- dispatcher at 0x398E, value = slot + 1).
+                 * The regs are text words 0x740 FG / 0x741 BG and
+                 * latch_layer_regs already reads them every vint. */
+                {
+                    uint16_t gp_f = TEXT_C[0x740], gp_b = TEXT_C[0x741];
+                    unsigned gp_hi = 0;
+                    for (int gq = 0; gq < 16; gq += 4) {
+                        unsigned a = (gp_f >> gq) & 0xF, b = (gp_b >> gq) & 0xF;
+                        if (a > gp_hi) gp_hi = a;
+                        if (b > gp_hi) gp_hi = b;
+                    }
+                    glow_chev = (gp_hi >= 10);
+                }
+                if (glow_on && glow_chev) {
+                    glow_pause = 8;
+                    glow_on = 0;
+                    glow_post = 3;           /* hand the words to the 68K */
+                }
+#endif
 #ifdef GLOW_CUT
                 /* LOOP29 278: THE SCENE GATE NEVER FIRED. It asks
                  * `pscene_cur != 0`, and pscene_cur is the PALETTE-
@@ -14170,6 +14207,9 @@ RAMCODE void m_main(void)
                     glow_pause--;
                 else if (!glow_on) {
                     if (pscene_cur == 0
+#ifdef GLOW_PAGE
+                        && !glow_chev
+#endif
 #ifdef GLOW_CUT
                         && !MD_STATE_CUT(md_state_word())
 #endif

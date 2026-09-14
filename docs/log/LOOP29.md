@@ -8383,3 +8383,54 @@ transport before blaming the game.
 
 **`discover/inputs/attract.csv` (empty) is now the attract script.**
 Any entry claiming to measure the attract must name the input file.
+
+---------------------------------------------------------------------
+## 284. THE PAGE-SELECT GATE WORKS: THE CHEVRON IS MEASURED AT THE RIGHT SCENE AND THE ANIMATOR NOW YIELDS (2026-09-14 12:30)
+
+With 283's retraction in hand and `attract.csv` (no input) as the
+script, the chevron is reachable and the marker LOOP-DECOMPILE 124 gave
+is exact.
+
+**The scene, found by its own marker.** Page select across the true
+attract: f1500 and f1560 read **AAAA / BBBB** -- the very values the
+decompile thread measured on the arcade -- and f1440, f1620 and later
+read 0101/5656. The whole-run probe counts 120 vints with the chevron
+plane up, highest quadrant 11, first at vint 1412.
+
+**The defect, at the right scene this time.** bldP inside the chevron:
+
+    f1510 pages AAAA/BBBB
+      set20  game  0A00 100F 100F 100F 100F 100F 100F 100F
+             shown 0A00 307F 305F 100F 100F 100F 100F 100F
+      set21  game  0A00 100F 100F 100F 100F 100F 100F 100F
+             shown 0A00 307F 305F 100F 100F 100F 100F 100F
+
+The game holds sets 20/21 flat at 0x100F for the scene -- exactly what
+the old scene gate's own comment says it does -- and our glow animator
+paints its graveyard wave over them. Sampled across eight frames of the
+window, bldP shows the game's own sets 20/21 on ZERO of them.
+
+**`GLOWPAGE=1` (bldR, md5 1c0a7637) gates the animator on the page
+select**: it yields whenever any 4-bit quadrant of either plane's page
+select is >= 10. At f1510 sets 20 and 21 now match the game EXACTLY.
+
+That gate fixes all three failures of the old one at once, and each for
+a reason 278 measured:
+
+  - it is not palette-derived, so the animator cannot corrupt the
+    evidence -- which is what killed `pscene_cur != 0`, since the
+    animator writes the very PAL_SH words the detector compares;
+  - it is not a sentinel peek, so the transform's palette sitting
+    inside the ambient envelope cannot fool it (md_main.c 1532-1546);
+  - it needs no new channel, so it does not depend on the state word --
+    and 0xFFF148 turns out to be an OBJECT marker anyway (dispatcher at
+    0x398E, value = slot + 1), not a scene flag.
+
+**What is NOT fixed by it, and should not be claimed.** Set 19's ramp
+is still one rotation step out of phase (the known LOOP29 166 offset),
+and one frame after a change the delta path still lags by a frame --
+f1511 shows the game at 100F while we still hold the previous wave.
+Both are latency, not override. And LOOP-DECOMPILE 125 stands separate:
+sets 19-21 are in every round's tilemap and in NO round's table, so
+their cells are refused and render as backdrop. The gate stops the
+animator painting over them; it does not give them a line.
