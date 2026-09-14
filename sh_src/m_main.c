@@ -6752,15 +6752,17 @@ RAMCODE static void blit_half(int ylo, int yhi)
 #endif
         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
 #ifdef FB_BYTES
-        /* NOTES 77: FRAMEBUFFER BYTES PER GENERATION, ON HARDWARE.
-         * Every skip test is above this line, so a row counted here is
-         * a row actually written to the framebuffer. 320 bytes a row.
-         * This is the ONLY framebuffer write pass on this line: the
-         * clear goes to sbuf (SDRAM) because DIRECT_FB is not in the
-         * shipping flags, and the compose and stamp write sbuf too.
-         * If this reads ~71,680 a generation the decomposition is
-         * settled without an ablation. */
-        FBB[0] += 320u;
+        /* NOTES 78 -- CORRECTED. The first cut added 320 here, at the
+         * ROW commit, and called it "bytes written". It is not: the
+         * per-group BLIT_SKIP loop below still skips ~70% of the
+         * groups in this row, and counting at the row level cannot see
+         * that. It reported 71,677 a generation, which is the bytes
+         * the blit WOULD write if no group were skipped -- an upper
+         * bound presented as a measurement. The real count is now taken
+         * per GROUP actually stored, 32 bytes each, inside the loop.
+         * FBB[3] keeps the old row-level total so the two are
+         * comparable and the error stays visible. */
+        FBB[3] += 320u;
 #endif
 #ifdef MD_PAYOFF
         /* PIVOT PAYOFF PROBE. Costs a full extra read pass over every
@@ -6975,6 +6977,18 @@ RAMCODE static void blit_half(int ylo, int yhi)
 #ifdef BLIT_SKIP_COUNT
             volatile uint32_t *bc =
                 BSCNT + ((y < 56 || (y >= 112 && y < 168)) ? 0 : 2);
+            /* NOTES 78: the skip needs BOTH "the group is transparent"
+             * AND "this bank's mask says it already holds zero". bc[1]
+             * counts groups that passed BOTH, which is 0.004% against a
+             * predicted 62.7%. Count TRANSPARENCY ALONE here and the two
+             * hypotheses separate in one run: transparent but not
+             * skipped means the MASK never passes; not transparent at
+             * all means the premise expired.
+             * Free second answer: (examined - transparent) * 32 is
+             * compose's actually-drawn bytes, which is the number that
+             * sizes DIRECTFB. */
+            volatile uint32_t *bt =
+                BSCNT + 6 + ((y < 56 || (y >= 112 && y < 168)) ? 0 : 1);
 #endif
             for (int i = 0; i < 80; i += 8, g <<= 1) {
                 uint32_t v0 = src[i + 0], v1 = src[i + 1],
@@ -6983,11 +6997,18 @@ RAMCODE static void blit_half(int ylo, int yhi)
                          v6 = src[i + 6], v7 = src[i + 7];
 #ifdef BLIT_SKIP_COUNT
                 bc[0]++;
+                if (!(v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7)) bt[0]++;
+#endif
+#ifdef FB_BYTES
+                FBB[0] += 32u;   /* examined; FBB[4] subtracts the skips */
 #endif
                 if (!(v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7)) {
                     if (was & g) {
 #ifdef BLIT_SKIP_COUNT
                         bc[1]++;
+#endif
+#ifdef FB_BYTES
+                        FBB[4] += 32u;   /* group SKIPPED: no store */
 #endif
 #ifdef BLIT_SKIP_VERIFY
                         /* THE ONLY TEST THAT SETTLES THIS. A pixel diff
@@ -10223,7 +10244,7 @@ __attribute__((noinline)) static void m_boot_init(void)
     *(volatile uint32_t *)0x26028FA8 = 0;    /* slave idle meter (s_main) */
 #ifdef BLIT_SKIP
 #ifdef BLIT_SKIP_COUNT
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 8; i++)   /* 6 -> 8: the transparency pair */
         BSCNT[i] = 0;
 #endif
 #ifdef FBSPR_PROBE

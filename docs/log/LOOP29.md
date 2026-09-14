@@ -8703,3 +8703,64 @@ true of ares in August and not of the FPGA. Every "measured" number
 older than the rig needs its machine checked before it sizes a card.
 LOOP29 168's protocol floor, which I wrote, is the same class of error
 and 287 corrected it.
+
+---------------------------------------------------------------------
+## 290. RETRACTION OF 289's HEADLINE: THE BLIT WRITES 12 KB A GENERATION, NOT 71,677. BLIT_SKIP IS WORKING AND MY COUNTER WAS AT THE WRONG LEVEL (2026-09-14 15:10)
+
+The decompile thread read 289's table and asked the right question of
+it: BLIT_SKIP predicts 62.7% of groups transparent, so why does the
+blit write 71,677 of a possible 71,680? Answering that found the fault
+in my instrument, not in the flag.
+
+**FBB[0] was incremented 320 at the ROW commit**, above the per-group
+skip loop. So it counted every committed row as a full row of stores
+and could not see a single skipped group. **71,677 is the bytes the
+blit WOULD write with no group skipped -- an upper bound I reported as
+a measurement**, and 289's "the floor carries a complete framebuffer
+pass" rests on it.
+
+Counting at the group store instead:
+
+    row-level count (the 289 figure)   71,680 bytes/gen   WRONG
+    groups examined                    34,276 bytes/gen
+      of which SKIPPED                 22,095 bytes/gen   (64.5%)
+    ACTUAL FRAMEBUFFER BYTES WRITTEN   12,181 bytes/gen
+
+And the skip-rate meter that already existed (BSCNT, `bc[0]`/`bc[1]`,
+which my first grep missed because it reads through a local pointer):
+
+    groups examined per generation       926
+    groups TRANSPARENT                 71.6%   <- premise said 62.7%
+    groups SKIPPED                     69.9%
+
+**BLIT_SKIP is not saving 0.004%. It is skipping 69.9% of the groups it
+examines, and the transparency premise did not expire -- it improved,
+71.6% against a predicted 62.7%.** Both of the decompile thread's
+hypotheses are false, and they were only ever raised because of my
+number.
+
+**What this does to the budget.** The line does NOT write a full
+framebuffer pass per generation. It writes about 12 KB, a sixth of a
+screen. So:
+
+  - 289's "the 1.57 floor carries a complete framebuffer pass" is
+    RETRACTED. The floor carries a 12 KB pass, and the remaining
+    1.5-ish vints are not explained by framebuffer stores at all.
+  - The whole-row exit is doing most of the work before the group loop
+    is even reached: 926 groups examined per generation against 2,240
+    in a screen, so 59% of groups never come up.
+  - DIRECTFB's sizing inverts. The thread's rule was "unless compose
+    draws more than about 39 KB, DIRECTFB writes fewer framebuffer
+    bytes than the blit". The blit writes 12 KB. **DIRECTFB would have
+    to draw under 12 KB to win, and compose's drawn content is
+    12,181 bytes by this same count -- a wash at best, and it pays a
+    framebuffer clear on top.** DIRECTFB is not the lever 289 implied.
+
+**Third instrument error in one session, and the pattern is now
+explicit enough to name.** LOOP29 283 measured credited play and called
+it the attract. 284 scored a moving palette at a single instant. This
+one counted at the wrong level of a nested loop. Each time the code was
+right and the reading was wrong, and each time I reported before
+checking what the number could not see. The counter now keeps the
+row-level total in FBB[3] beside the true one, so the gap stays visible
+in every future run rather than being a comment.
