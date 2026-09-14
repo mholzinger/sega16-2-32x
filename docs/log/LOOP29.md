@@ -9064,3 +9064,62 @@ as an instruction-count ranking, never as a critical path.
 **And the slave law, from NOTES 80:** slave TIME is free (hidden, zero
 wait on the rig) but slave TRAFFIC is not (0.49 v/gen, one shared FB
 write path). Size every slave card in BYTES, never in time.
+
+## 295. THE BODY STAMPED ON HARDWARE: THE SHAPE IS PRESERVED AND NOTHING IS HIDING (2026-09-14)
+
+NOTES 85: every stamp either thread had placed lived in the V-ISR, whose
+whole pre-flip life is ~22 lines of a ~577-line generation. Under 4% of a
+generation had ever been instrumented and the rest was inferred by
+subtraction.
+
+`BODYCENSUS=1 BOOTFLIPRATE=1` (`rom/night/body.32x`). No new counters --
+DIAG's per-stage FRT accumulators are UNGATED in the shipping rom, the
+same situation `0x28C80` turned out to be in. Four of them ride
+TRIPCENSUS's transport to the rig, which has no memory dump:
+
+  tag 0 WINDOW span (DIAG[8]: entry -> launch; contains the blit and the
+  palette push) | tag 1 SHIP (DIAG[5]) | tag 2 MAPS DRAIN (DIAG[11]) |
+  tag 3 WHOLE GENERATION (NAT_WALL[0]) as denominator.
+
+**Known-answer check passed on all four tags** -- the channel word
+matched BODYS, which the master computed from DIAG itself, same run.
+
+Rig, attract, 36 shots (14 no-flood), medians, ticks/gen >> 8, a vint = 47:
+
+| stage | ares | % | rig | % | factor |
+|---|---|---|---|---|---|
+| window | 14.0 | 46.7 | 38.0 | 43.9 | **2.71x** |
+| ship | 8.0 | 26.7 | 16.0 | 18.5 | **2.00x** |
+| maps drain | 4.0 | 13.3 | 10.0 | 11.6 | **2.50x** |
+| residual | 4.0 | 13.3 | 22.5 | 26.0 | 5.62x |
+| GENERATION | 30.0 | 100 | 86.5 | 100 | **2.88x** |
+
+**I predicted the stamped stages would stay flat while the generation
+inflated, putting ~75% of a hardware generation in the residual. That is
+wrong and the opposite happened.** Every stage inflates, by roughly the
+same factor, and **the shape is preserved to within a few points.**
+
+**So there is no hidden stage.** The missing time is not concentrated
+anywhere the census can see; the whole generation is uniformly ~2.9x
+more expensive on hardware than ares prices it. That factor lands on
+**F0's independently measured 2.8x for the pipeline with compute
+removed** -- two unrelated measurements of the same tax.
+
+That is the signature of a broad memory-stall cost proportional to work
+done, not of a localised round trip. It also means **no re-timing card
+can win**: there is no stage to move out of the way, because every stage
+pays the same multiplier.
+
+**Caveats, and they matter here.** n is 5-6 per tag with wide
+scene-driven ranges (window 24-79, generation 51-114), so the factors
+are good to maybe +-0.5 and the residual -- a difference of noisy
+medians -- carries the largest error of the five. Its 5.62x should not
+be read as a real outlier against the others' 2.0-2.7 until it has more
+samples.
+
+**One thing this census does NOT cover, and it is 17% of the period.**
+`NAT_WALL[0]` is launch -> close, the generation's WALL. The rig's
+generation PERIOD is 64/28.8 = 2.22 v/gen (LOOP29 293) against a wall of
+1.84, so **0.38 v/gen sits between a close and the next launch** and no
+stamp in the tree touches it. That gap is now the cheapest unexamined
+thing left.
