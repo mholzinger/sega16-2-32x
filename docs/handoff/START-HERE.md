@@ -136,11 +136,11 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
-## THE LINE (STALE HEADING -- the current line is bldP, see "THE LINE" below)
+## THE LINE (STALE HEADING -- the current line is bldS, see "THE LINE" below)
 
 **`rom/night/vi39.32x`, md5 c93dbeab. Mike: playable, no obvious
 regressions** -- that was the line on 2026-09-12 and is now history.
-The current line is `rom/night/bldP.32x`, md5 9eb13b45; scroll to the
+The current line is `rom/night/bldS.32x`, md5 b1e44bef; scroll to the
 next "THE LINE" heading.
 
 **Read `docs/handoff/HANDOFF-20260912.md` before touching anything** --
@@ -198,7 +198,30 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## THE LINE: `rom/night/bldP.32x` (md5 9eb13b45), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT card P)
+## THE LINE: `rom/night/bldS.32x`, ON THE RIG, NAMED 2026-09-14 (card Q, the chevron gate)
+
+bldS = bldP + `GLOWPAGE=1`: the glow animator yields to the 68K whenever
+the CHEVRON PLANE is up -- any 4-bit quadrant of either plane's page
+select >= 10. Pages 10/11 carry the transformation and nothing else in
+a whole arcade run selects a page that high (LOOP-DECOMPILE 124).
+
+It fixes Mike's flat chevron. Measured in the true attract: without it
+NO frame of the scene shows a value the game ever asked for, at any
+lag; with it EVERY frame does, 0-2 frames late (LOOP29 285). The old
+gate asked `pscene_cur != 0`, which is palette-detected -- and the
+animator writes the very words the detector compares, so it never
+fired once in 5,400 frames.
+
+Gates: wall 1.03 -> 1.04, thirteen picture anchors within 0.005, three
+rig launches all level frames 0.00, rate 21 24 27 | 23 24 28 per 64
+(bldP 21 24 25 | 21 24 26).
+
+**USE `discover/inputs/attract.csv` (empty) TO MEASURE THE ATTRACT.**
+`play2.csv` coins at frame 300 and presses START at 420; six entries of
+LOOP29 measured credited play and called it the attract before this was
+caught (LOOP29 283).
+
+## THE PREVIOUS LINE: `rom/night/bldP.32x` (md5 9eb13b45), NAMED 2026-09-13 (card P)
 
 bldP = bldO + the SET-LIST UNION: `sh_src/pal_rounds_md.h` regenerated
 with `tools/bake_tilecram.py --union-scene-sets`. No code change.
@@ -252,7 +275,8 @@ scene cut the plane is missing art for ~16-23 vints (24 tiles a vint
 against 378-561 codes, LOOP-DECOMPILE 115). Diagnose before it is
 called cosmetic. Deferred by Mike's call until the wall crosses.
 
-Every card from here is one change against bldP. Previous lines:
+Every card from here is one change against bldS. Previous lines:
+bldP (9eb13b45, the set-list union),
 bldO (0f38332d, 1.02, card O, the masked text capture),
 bldJ (994b3c93, 1.09, named 2026-09-13, cards H/I/J),
 bldB (493d4984, 1.18, named 2026-09-12 20:15, "Behind the grass
