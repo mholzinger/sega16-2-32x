@@ -818,3 +818,49 @@ Card J is closed as no-gain on both instruments; the rig's wall is
 not the slave's sprite phase. Open question to the decompile thread
 (NOTES 44): what holds the FPGA's presented rate near 18/64
 regardless of load, and which 68K-side counter to read per 64 vints.
+
+---------------------------------------------------------------------
+## CARD O (builder, 2026-09-13 20:20): THE MASKED TEXT CAPTURE, CARRIED IN THE PACKET -- rom/night/bldO.32x
+
+    rom      rom/night/bldO.32x   md5 0f38332d      rate probe frO (bd139ce0)
+    base     bldJ (994b3c93, the line)
+    change   ONE flag: TEXTMASKPKT=1 (-DTEXTCAP_MASK on the SH-2,
+             -DTXT_MASK -DTXT_MASK_PKT on both, TXTMASK=1 to patch_game)
+    what     the master's pre-flip text capture copies only the 4-row
+             groups the game's text writers marked, instead of all 928
+             longwords of FB_TEXT. That is card L; what is new is the
+             CARRIER. Card L put the mask in COMM2's high byte, which
+             has four writers on the 68K side and three of them write
+             plain BANK_SHADOW over it (NOTES 60/62). The mask now has
+             its own word in the FB packet half -- FBX_TXM_MD 0x85E758 /
+             FBX_TXM_SH 0x2401E758, in the dead space between the
+             936-word arm and the publish word -- with ONE writer, a
+             0xC tag in bits 15-12, a 4-bit sequence in 11-8 and the 8
+             group marks in 7-0. An untagged read means FULL capture, so
+             the failure direction is slow-and-right, never fast-and-wrong.
+
+    ares     wall 1.09 -> 1.02; ships 2524 -> 2674 (38.6 -> 41.3 fps);
+             wedges 0; overrun 1397 -> 1212; holds 1271 -> 1125
+    picture  black share at thirteen attract anchors, bldO / bldJ on the
+             same script: .276/.275 .036/.038 .036/.037 .036/.037
+             .049/.048 .048/.048 .048/.049 .049/.048 .047/.048
+             .045/.048 .042/.046 .041/.042 .043/.042 -- within .003
+    rig      RATE 21 22 27 | 21 23 26 presented per 64 vints (two
+             launches) against the line's 18, and bldTCOFF's 31 ceiling
+             THREE LAUNCHES, level scenes: trees 0.00 fg 0.00 all 0.00
+             on every level frame of all three. The graveyard renders
+             complete: red logo, stone gravestones and crosses,
+             cypresses, grass, the wolf, and the full text layer.
+
+    THE TRAP, for whoever writes the next 68K-side FB access: the first
+    cut (card N, bldN a38ca463) put the mask write immediately AFTER
+    the FM raise. The 68K cannot reach the framebuffer at FM=1 and the
+    write is DROPPED with no error anywhere -- the master read an
+    untagged word every vint and took the full capture forever. Rig:
+    1 2 3 | 1 2 2 per 64. A second defect compounded it: flip_span runs
+    TWICE on a declining vint (LOOP29 266a) and the repeated sequence
+    forced a second full capture on top of the masked one. Card O writes
+    above the raise and reads a repeated sequence as "nothing new".
+
+    Mike's eye is owed. Ares wall is an instruction ranking only
+    (LOOP29 256a); the rig's rate is this card's real number.
