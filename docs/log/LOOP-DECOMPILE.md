@@ -5807,3 +5807,70 @@ coherent RAM"; that premise is TILE RAM's (entry 99's collision
 a polled comparison of the same region saw changes every few frames,
 and the same happened on 0x840000 for the palette (entry 117). Taps do
 not see these regions on this driver. Poll, or read the program.
+
+---------------------------------------------------------------------
+## 123. Mike's chevron defect on bldO, diagnosed from the arcade: the transform's chevron is a SEVEN-SHADE BLUE RAMP rotating one step a frame, and the sets that carry it are in no round's static table (2026-09-13)
+
+Mike on bldO: "the chevron in the beast transformation should flash two
+colours behind the flame. Instead we see a single blue." Also missing
+random black background tiles, grass shimmer, and slowdown on
+sprite-heavy scenes (gravestones, Neff throwing heads). The frame rate
+he describes as "crawling towards arcade", which is the win.
+
+**What the arcade actually does.** The attract's transformation screen
+runs at 0xFFF148 != 0 for 110 frames (f1054-1164 and again f4439-4549
+of a no-coin run). Snapshots every 8 frames through it, sampling the
+chevron band at x 20-120, y 20-70:
+
+    frame   the three commonest chevron colours (R,G,B)
+    0000    (0,0,206) (0,0,173) (0,0,189)
+    0001    (0,0,255) (0,0,156) (0,0,239)
+    0002    (0,0,222) (0,0,239) (0,0,206)
+    0003    (0,0,189) (0,0,206) (0,0,173)
+    0004    (0,0,156) (0,0,173) (0,0,255)
+    0005    (0,0,239) (0,0,255) (0,0,222)
+    0006    (0,0,206) (0,0,222) (0,0,189)
+    0007    = 0000 again
+
+**It is a seven-shade PURE-BLUE ramp (blue 156, 173, 189, 206, 222,
+239, 255) rotating one position every frame, period 7.** Red and green
+are zero throughout. That is what reads as "flashing two colours"
+behind the red flame at speed. Not two colours: seven, in motion.
+
+**Which sets carry it.** Sampling palette sets 17-23 across a 4,600
+frame run, only THREE change at all:
+
+    set 17, 18, 22, 23   8 distinct colour words each, every one held for
+                         the whole run -- static
+    set 19               9 distinct words, the blue-green byte walking
+                         (4900, 4A00, 4B00, 4C00, 4D00, 4F00)
+    sets 20 and 21       the ramp: 305F, 307F, 309F, 30BF... over 100F
+
+So the chevron is sets 19-21, exactly the cycler scripts at 0x1A70E
+and 0x1A78E (entry 93), and LOOP29 202's "pages 10 and 11 with sets
+19-21" is the same three.
+
+**And here is the port-side fact that matters.** In
+`sh_src/pal_rounds_md.h`, `mdr_s_line[round][19..21]` is ZERO for all
+five rounds -- the cycled sets are in no round's static table. Under
+MDS_REFUSE a zero means the cell is kept on the 32X FRAMEBUFFER layer,
+not the MD plane. So the chevron's colours do not come from the baked
+lines at all; they come from the palette DELTA pipeline, which is
+exactly where `palscene_bake.py` says the transform has to live ("every
+word that distinguishes the scene IS the flash animation... its span
+rides the delta pipeline").
+
+**Therefore the colour-line bake cannot fix this defect and must not be
+sold as fixing it.** A flat single blue means the per-frame delta for
+sets 20/21 is not arriving during the cutscene -- dropped, coalesced,
+or pinned by a scene detector that resolves the transform to a static
+anchor. That is a delta-path question on the builder's side, and it is
+a different card from the sets 22-36 coverage gap.
+
+**Not yet reproduced by me:** the random black background tiles and the
+grass shimmer. Eight rig captures of bldO across the attract show a
+complete graveyard, correct wall reliefs and correct text; the eye
+cutscene shows hard black dither around the iris that may or may not be
+the arcade's own. Both want a denser capture sweep or Mike's bldJ
+comparison, which he declined; neither is diagnosed here and neither
+should be attributed to card O without one.
