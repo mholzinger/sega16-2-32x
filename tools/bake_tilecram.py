@@ -28,6 +28,28 @@ import random
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _scene_sets():
+    """docs/audit/mdpen_scene_sets.txt -> {round: set(colour sets)}."""
+    import re
+    path = os.path.join(ROOT, 'docs', 'audit', 'mdpen_scene_sets.txt')
+    out = {}
+    if not os.path.exists(path):
+        return out
+    for ln in open(path):
+        m = re.match(r'round (\d+) scene (\d+)\s+BG sets ([\d,]*)\s*\|'
+                     r'\s*FG sets ([\d,]*)', ln)
+        if not m:
+            continue
+        got = set()
+        for g in (m.group(3), m.group(4)):
+            got |= {int(x) for x in g.split(',') if x != ''}
+        out.setdefault(int(m.group(1)), set()).update(got)
+    return out
+
+
+SCENE_SETS = _scene_sets()
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
 SCENES, TILES_N, SLOTS = 5, 20480, 16
@@ -171,6 +193,10 @@ def main():
                          'measured live off mdp_free_set (LOOP29 189). '
                          'Neither the viewport nor mdpen_bake\'s harvest '
                          'contains them, so they have to be named.')
+    ap.add_argument('--union-scene-sets', action='store_true',
+                    help="union docs/audit/mdpen_scene_sets.txt's per-round "
+                         'set lists into each round\'s worst-case viewport '
+                         '(NOTES 67; LOOP29 274 for why)')
     ap.add_argument('--emit-mds', metavar='OUT', default=None,
                     help='also write pal_scenes_md.h in the RUNTIME table '
                          'format, using --live-scene\'s pack for every '
@@ -252,6 +278,24 @@ def main():
             return frozenset(md(w16(rom, _b + p * 16 + 2 * k)) for k in range(1, 8))
 
         pal = worst_viewport(words, cols)
+        if a.union_scene_sets:
+            # NOTES 67 (Mike's call: "union the set lists blind, treat
+            # every set listed as reachable"). worst_viewport walks ONE
+            # tilemap over all 64 scroll positions, so it sees one AREA
+            # of a round; rounds 2 and 4 each visit a second area and
+            # their tables were missing every one of sets 22-36
+            # (LOOP29 274), which then fall past MDS_REFUSE to the
+            # dynamic path and can evict. The decompile thread's arcade
+            # census of all 20 sampled scenes is the other half.
+            # Colours come from the same live dumps as everything else
+            # -- verified present for 22-36 in every round.
+            extra = SCENE_SETS.get(s, set()) - set(pal)
+            drop = sorted(e for e in extra if not cols(e))
+            take = sorted(e for e in extra if cols(e))
+            pal = sorted(set(pal) | set(take))
+            print('  union: round %d += %d sets %s%s'
+                  % (s, len(take), take,
+                     ' (no colours, skipped: %s)' % drop if drop else ''))
         if a.also and s == a.live_scene:
             extra = [int(x) for x in a.also.split(',') if x.strip()]
             pal = sorted(set(pal) | {e for e in extra if len(cols(e)) > 0})
@@ -387,7 +431,15 @@ def main():
                      ' * over all 64 scroll positions, both planes.\n'
                      ' * Indexed by the GAME\'S ROUND (0-4), NOT by the\n'
                      ' * palette-detected scene -- see LOOP29 192 and\n'
-                     ' * LOOP-DECOMPILE 66. */\n')
+                     ' * LOOP-DECOMPILE 66.\n'
+                     ' * REGENERATE WITH (the union is NOT the default):\n'
+                     ' *   python3 tools/bake_tilecram.py \\\n'
+                     ' *       --live-dir discover/cram/wide \\\n'
+                     ' *       --emit-mds sh_src/pal_rounds_md.h \\\n'
+                     ' *       --union-scene-sets\n'
+                     ' * A set absent here is REFUSED an MD line and renders\n'
+                     ' * as BACKDROP (m_main.c 2357) -- black tiles, not a\n'
+                     ' * fallback. LOOP29 277. */\n')
             fh.write('#define MDROUND_N %d\n' % nsc)
             fh.write('static const uint16_t mdr_line_c[MDROUND_N][%d] = {\n'
                      % (LINES * SLOTS))

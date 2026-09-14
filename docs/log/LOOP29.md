@@ -7913,3 +7913,73 @@ ramp contributes permanent distance to the scene detector's
 static anchor. If that sum exceeds MDS_TOL the transform scene is never
 DETECTED at all -- which would be a different defect with the same
 symptom, and it is cheap to check once the scene can be entered.
+
+---------------------------------------------------------------------
+## 277. A REFUSED SET RENDERS AS BACKDROP, NOT AS A FALLBACK -- SO THE MISSING SETS 22-36 *ARE* MIKE'S BLACK TILES, AND THE UNION FIXES ROUND 2 (2026-09-13 23:20)
+
+274 said the sets missing from rounds 2 and 4 "fall past the static
+table to the dynamic path where it can evict". **That is wrong and the
+truth is worse.** Reading the gate (m_main.c 2351-2401): under
+MDS_REFUSE a set absent from the round's table is refused an MD line
+and RETURNS -- it never reaches `mdp_assign_set` at all, so it evicts
+nothing. What happens instead is in the comment at 2357:
+
+    "a zero there means the FB owns those cells. This build does not YET
+     draw them (MDBGALL clears BG/FG-cat0 rows to MD-through), so a
+     REFUSED SET RENDERS AS BACKDROP"
+
+Backdrop is black. So a set missing from its round's table is not
+degraded, it is INVISIBLE, and its cells are black tiles.
+
+**That is Mike's "background shows missing random black tiles",
+exactly, and it explains why no probe has ever seen it.** Round 0 --
+the attract, every picture gate in this log, all three of my bldO
+launches, the decompile thread's eight captures -- is FULLY COVERED by
+its table. The gap is rounds 2 and 4, which only play reaches:
+
+    round   sets pinned (before)   missing
+    0            30                none
+    1            15                none
+    2            16                0, 22-30, 33, 35, 36
+    3            14                none
+    4            19                22-30, 33-36
+
+**The union, per Mike's call in NOTES 67 (blind, every listed set
+reachable).** `tools/bake_tilecram.py` gains `--union-scene-sets`,
+which unions docs/audit/mdpen_scene_sets.txt's per-round lists into
+each round's worst-case viewport. `worst_viewport` walks ONE tilemap
+over all 64 scroll positions, so it sees one AREA of a round; the
+decompile thread's arcade census is the other half. Colours come from
+the same gated live dumps as everything else -- verified present for
+all of 22-36 in every round, so nothing is invented.
+
+    round   pinned before -> after   overflow after
+    0            30 -> 30            [0, 2, 102, 103]   (unchanged)
+    1            15 -> 15            [3]                (unchanged)
+    2            16 -> 26            [3, 33, 35, 36, 101]
+    3            14 -> 14            unchanged
+    4            19 -> 21            [22-30, 33, 34]
+
+Per-round table diff, all four arrays: **rounds 0, 1 and 3 are
+BYTE-IDENTICAL; round 2 gains sets 0 and 22-30; round 4 gains 35 and
+36; NOTHING IS LOST anywhere.** Strictly additive, so the change cannot
+regress anything the rig or ares can measure -- round 0's tables are
+the same bytes.
+
+Two things this does NOT do, said plainly:
+
+  - **Round 4 is still 11 sets short.** Its union is 32 palettes for 45
+    slots and the packer fits 21. That is 272's result arriving in the
+    shipping baker: round 4 visits two disjoint areas and needs TWO
+    tables plus a discriminator bit, which is a runtime change and is
+    not in this card.
+  - **No instrument we own can confirm the fix.** The rig runs the
+    attract, which is round 0, which is byte-identical. So the gates
+    here prove NO REGRESSION and nothing more; the fix itself is
+    verifiable only by playing rounds 2 and 4.
+
+Reproducibility check worth keeping: the baker WITHOUT the new flag
+regenerates the shipped `pal_rounds_md.h` byte-for-byte, so the tool
+and its inputs are the ones that produced the shipping table, and the
+union is the only delta. The regeneration command is now in the
+generated header, along with what a missing set costs.
