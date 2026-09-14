@@ -6432,3 +6432,53 @@ fault is further down. Clear means it is right and the question becomes
 who cleared it -- 0x1E62 sets it on every attract entry, and 0x06C0
 does `andib #1,0xFFF026`, so a patched or skipped 0x1E54 entry is the
 place to look.
+
+---------------------------------------------------------------------
+## 133. THE 60 Hz BAR, VERIFIED FROM THE GAME'S OWN MISSED-FRAME COUNTER: the arcade drops 1 frame in 55 seconds of play (2026-09-14)
+
+Mike: "do we ACTUALLY know that the arcade game is 60 Hz? Have we
+genuinely measured that?" The project has assumed it since the first
+loop and nobody had. The game keeps its own counter for it.
+
+**The instrument, in the game's IRQ4 handler:**
+
+    2AAC  (IRQ4 entry)
+    2AB0  tstb 0xFFF01E ; bne 0x2C7E        display gate
+    2AB8  tstb 0xFFF01C                     did the game consume last frame?
+    2ABC  beq 0x2AC6                        yes -> serve this one
+    2ABE  addqw #1,0xFFF144                 NO -> COUNT A MISSED FRAME
+    2AC2  braw 0x2C06
+    2AC6  addqb #1,0xFFF01C                 release the main loop
+
+0xFFF144 is the arcade's own dropped-frame count: every vint in which
+the 68000 had not finished the previous frame's pass. It is cleared at
+0x0930 (scene entry) and read at 0x0BE2. Nothing else touches it.
+
+**Measured, MAME, sampled every 300 display frames.** Credited play,
+walking and attacking, 55 seconds:
+
+    f1200  delta 0    300 game frames  60.0 Hz
+    f1500  delta 0    300              60.0
+    f1800  counter cleared at the round load
+    f2100  delta 1    299              59.8
+    f2400..f4500  delta 0 at every sample   60.0
+
+**One missed frame in 3,300 display frames of gameplay.** The attract is
+the same: zero at most samples, a burst of 17 across one scene
+transition, and a clear at each scene load.
+
+**So the bar is real and it is exactly 60.** The System 16B game logic
+runs one pass per display frame and the hardware sustains it with
+essentially no drops -- not 30 Hz logic on a 60 Hz display, which is
+what many boards of this era do, and which would have made our target
+wrong by a factor of two. The manual's "15.75 kHz / 60 Hz" monitor
+figure (HANDOFF-DISCOVERY) is the display; this is the LOGIC, measured.
+
+**What it means for the port.** 64 presented frames per 64 vints is the
+correct target and there is no cheaper honest bar hiding behind it. It
+also means the arcade itself has near-zero headroom at 60 -- the board
+is running the same 2,780-instruction pass we are, and finishing it
+every frame -- so any claim that "the arcade drops frames here too" is
+false for this game and must not be used to excuse ours. The only
+exception is the handful of frames at a scene load, which the game
+itself clears the counter across.
