@@ -7637,3 +7637,44 @@ set index separates them).
 round 0, the cutscenes and the ending are unsampled, and `MDSTATIC`'s
 existing anchors (`normal`, `boss_smoke`, `transform`) cover a scene
 class this table does not.
+
+---------------------------------------------------------------------
+## 273. THE GAMEGATE RELEASE SPLIT: ONE RELEASE A VINT, ~25 BY TOKEN AND ~37 BY FALLBACK -- THE GATE IS PACING CORRECTLY (2026-09-13 22:30)
+
+NOTES 64b asked whether the GAMEGATE fallback's 21-43 of 64 is a second
+mechanism pacing the game. NOTES 65 answered where to look: token
+releases are the delta of 0xFFA0F6 MINUS the delta of 0xFFA0F4, because
+the site at md_main.c 3475-3477 bumps both. Carried on echo-census tag
+5, which had read 0 ("no post") on every build measured (258, 268, 271).
+
+Card O's flags + ECHOCENSUS, 30 samples, per 64 vints:
+
+    OK        21 27 26          TOKEN releases   26 28 18 24 30
+    edge       7 10 10          fallback         35 38 37
+    nodraw     0 0 0 0 0        lateV            50-63
+    noship    26 0 24
+
+**TOKEN ~25 tracks OK ~25, and TOKEN + fallback ~62 is one release per
+vint.** So the gate does what LOOP29 141 designed it to do: the token
+fires on the vints that flipped, the fallback covers the vints that
+declined, and the game gets exactly one frame either way. The fallback
+being high is not a second mechanism -- it is the decline rate wearing
+a different hat, and it should fall with `noship` rather than needing
+its own card. NOTES 64b's suspicion is retired.
+
+**TWO PROBES WERE WASTED ON MY OWN BUG AND THE SHAPE IS WORTH KEEPING.**
+0xFFA0F6 is a **uint16** (md_main.c 3476 and 3761). I read it as
+`*(volatile uint8_t*)`, which on a big-endian 68K is the HIGH half --
+it ticks once per 256 releases, so its delta read 0. Subtracting the
+fallback's ~37 from that 0 in unsigned arithmetic wrapped to ~220 and
+the 6-bit census field clipped it to 63. The first reading therefore
+showed "TOKEN 63 saturated with fallback 37 in the same window", which
+sums past one release a vint and looked like a real anomaly in the
+gate. It was a width bug in the instrument. md_main.c 2715 was already
+reading the same counter correctly as uint16 two hundred lines above.
+
+The rule this earns: **a census that reads a counter someone else
+declared must take its width from the declaration, not from the field
+it is about to be packed into.** The saturating pack hid the wrap; a
+floor at 0 (now in the code) would have shown 0 instead of 63 and named
+the bug on the first run.

@@ -2802,19 +2802,20 @@ void shim_vblank(void) {
 			 * post" would have shown up as OK+edge+noship < 64
 			 * anyway. */
 			{
-				/* First cut carried (dF6 - dF4) and it SATURATED at
-				 * the 6-bit field's 63 while the fallback read 33-42
-				 * in the same windows -- together more than one
-				 * release a vint, which cannot be right for a gate
-				 * that is supposed to pace one game frame per
-				 * presented frame. So carry dF6 ITSELF at quarter
-				 * resolution (up to 252 in the same six bits) and let
-				 * the reader subtract tag 6. */
-				static uint8_t ec_tk_last;
-				uint8_t tk = *(volatile uint8_t*)0xFFA0F6;
-				uint8_t dtk = (uint8_t)(tk - ec_tk_last);
+				/* 0xFFA0F6 IS A UINT16 (bumped at 3476 and 3761).
+				 * Read as a byte it is the big-endian HIGH half and
+				 * ticks once per 256 releases, which read 0 and,
+				 * subtracted from the fallback's 37, wrapped to a
+				 * saturated 63. Both earlier cuts were that bug. */
+				static uint16_t ec_tk_last;
+				uint16_t tk = *(volatile uint16_t*)0xFFA0F6;
+				uint16_t dtk = (uint16_t)(tk - ec_tk_last);
 				ec_tk_last = tk;
-				ec_cnt[5] = (uint8_t)(dtk >> 2);
+				/* NOTES 65: TOKEN releases are dF6 MINUS dF4 -- the
+				 * site at 3475-3477 bumps both. Floor at 0 so a
+				 * window that straddles a reset cannot wrap. */
+				uint16_t fbd = ec_cnt[6];
+				ec_cnt[5] = (uint8_t)(dtk > fbd ? dtk - fbd : 0);
 			}
 			for (int k = 0; k < 8; k++) { ec_val[k] = ec_cnt[k] > 63 ? 63 : ec_cnt[k]; ec_cnt[k] = 0; }
 			ec_vc = 0;
