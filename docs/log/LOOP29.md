@@ -9274,3 +9274,56 @@ START-HERE's open list; I carried it from working notes across the
 2026-09-07 entry. Mike's recorded open items on bldS are the leftover
 text, the remaining black tiles, the attract not advancing past step
 0x08, and the shadow dither.
+
+## 299. THE ID/OD SPLIT: INSTRUCTION CACHING IS LOAD-BEARING, DATA CACHING IS NOT (2026-09-14)
+
+NOTES 89 corrected LOOP29 297's "the fetch test cannot be built". The
+SH7604 separates the streams in hardware and `mars.h` was simply missing
+the bits. Derived from the RTL, not copied:
+`srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101` declares `CCR_t`
+MSB-first -- `W[1:0], UNUSED, CP, TW, OD, ID, CE` -- so **OD = 0x04,
+ID = 0x02**. And `CACHE.sv:499` is the whole mechanism:
+
+    CACHE_UPDATE <= CBUS_ID ? ~CCR.ID : ~CCR.OD;
+
+A FILL happens on the instruction bus only while ID is clear, on the data
+bus only while OD is clear. **CE is untouched, so lookups keep working
+and the other stream keeps caching.** Two builds against the 0x11
+baseline, master-only (the stack-pointer guard from 297):
+
+    noI = 0x13 (CP|CE|ID)  instruction fills OFF, data caches normally
+    noD = 0x15 (CP|CE|OD)  data fills OFF, instructions cache normally
+
+**Rig result, and the contrast is the finding:**
+
+| build | GENERATION | ship | CCR readback |
+|---|---|---|---|
+| line | 86.5 | 16.0 | (0x11) |
+| **noI** fetch off | **0, 0, 0** (n=3) | 0 | **3 = CE\|ID** (n=2) |
+| **noD** data off | **63** (n=1) | 24 (n=1) | not sampled |
+
+**With instruction fills disabled the master completes NO generations.
+With data fills disabled it keeps running.** `GENERATION` reading 0 means
+no generation closed inside a 64-vint window -- so noI is not a 3x
+slowdown, it is past 30x, which is a wedge.
+
+**What this supports.** Instruction caching is not a marginal optimisation
+for the master; it is a requirement. Data caching is not. That is direct
+evidence for NOTES 87's fetch hypothesis as the mechanism behind 295's
+uniform ~2.9x, and it is the first evidence that discriminates -- 297's
+CACHEOFF killed both streams at once and could not.
+
+**What it still does NOT give: a factor.** noI crosses from "slower" to
+"not functioning", so the comparable-work condition fails again and the
+fetch term remains unsized. noD's ship 1.50x and generation 0.73x are
+n=1 each and uninterpretable (a generation wall getting SHORTER with a
+cache disabled is a scene difference, not a result).
+
+**Caveats.** noD's CCR readback never landed (n=0), so OD-set is proven
+from `.build_flags` (`-DCACHE_OFF_CCR=0x15`) and not on hardware. Both
+runs produced very few flood-visible frames -- 6 reads and 2 -- so
+everything except the GENERATION contrast is thin.
+
+**CP reads back clear.** The noI readback is 3, not 0x13: CP is a
+one-shot purge trigger and does not persist, so `CE|ID` is the correct
+confirmation that the write landed.
