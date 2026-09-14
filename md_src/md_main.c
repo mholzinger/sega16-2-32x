@@ -3513,16 +3513,21 @@ void shim_vblank(void) {
 				 * the post. */
 				r60_push();
 #endif
-				*(volatile uint16_t*)0xA15100 |= 0x8000;
-				#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
-				/* NOTES 63: the mask rides its OWN word in the FB
-				 * packet half, not COMM2's shared high byte. One
-				 * writer, tagged, and COMM2 goes back to carrying
-				 * nothing but the bank. The 68K is at FM=0 here (the
-				 * post is two lines below), so the FB is writable;
-				 * one word is ~0.05 lines. Every 8th vint forces the
-				 * mask full, so an ungated writer is stale for at
-				 * most 8 vints -- the same backstop card L had. */
+#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
+				/* NOTES 63 / LOOP29 270: the mask rides its OWN word in
+				 * the FB packet half, not COMM2's shared high byte. One
+				 * writer, tagged and sequenced, and COMM2 goes back to
+				 * carrying nothing but the bank.
+				 * IT MUST BE WRITTEN BEFORE THE FM RAISE BELOW. The 68K
+				 * cannot reach the framebuffer at FM=1 at all -- the
+				 * write is silently DROPPED, the master then reads an
+				 * untagged word and takes the safe path (full capture)
+				 * forever. Measured with it on the wrong side of the
+				 * raise: 1-3 presented frames per 64 vints against the
+				 * line's 18 (LOOP29 270). One word is ~0.05 lines.
+				 * Every 8th vint forces the mask full, so an ungated
+				 * writer is stale for at most 8 vints -- card L's
+				 * backstop, kept. */
 				{
 					static uint8_t txm_seq;
 					txm_seq = (uint8_t)((txm_seq + 1) & 0x0F);
@@ -3531,6 +3536,9 @@ void shim_vblank(void) {
 					              | txt_mask
 					              | (((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)));
 				}
+#endif
+				*(volatile uint16_t*)0xA15100 |= 0x8000;
+				#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
 				*mars_comm2 = BANK_SHADOW;
 #elif defined(TXT_MASK)
 				/* mask in the high byte; every 8th vint force it full */

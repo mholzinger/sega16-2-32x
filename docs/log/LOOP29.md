@@ -7453,3 +7453,73 @@ thrown away.
 instruction-side saving and it is step 1 of the real fold when the
 carrier exists. It is not a ship -- the glyphs are gone by
 construction, like TEXTCAPOFF before it.
+
+---------------------------------------------------------------------
+## 270. CARD N FAILED ON THE FM RAISE; CARD O PASSES -- 18 -> 21-27 PER 64 WITH A CLEAN RIG PICTURE (2026-09-13 20:20)
+
+Card L's mask was right and its CARRIER was wrong (NOTES 60/62). The
+carrier moves off COMM2's high byte -- four writers, three of them
+writing plain BANK_SHADOW over it -- onto **its own word in the FB
+packet half**, `FBX_TXM_MD` 0x85E758 / `FBX_TXM_SH` 0x2401E758
+(packet_fmt.h), in the dead space between the 936-word arm and the
+publish word at 0x7F8. One writer. Tagged 0xC in bits 15-12, a
+4-bit sequence in 11-8, the 8 group marks in 7-0. `TEXTMASKPKT=1`.
+
+**Card N (bldN a38ca463) failed, and the failure is worth writing down
+because it is silent by design.** I placed the mask write immediately
+AFTER `*(volatile uint16_t*)0xA15100 |= 0x8000` -- the FM raise. The
+68K cannot reach the framebuffer at FM=1 and the write is DROPPED with
+no error anywhere: the master then reads an untagged word every vint,
+takes the safe path (full 928-longword capture), and the build is the
+line plus a wasted FB access. The rig:
+
+    rom     presented per 64 vints (BOOTFLIPRATE, two launches)
+    bldJ    18
+    frN     1 2 3 1 2 2
+    frO     21 22 27 | 21 23 26
+
+1-3 per 64 is not "the line plus an access". A second defect compounded
+it: `flip_span` runs TWICE on a declining vint (266a), and the first
+version's sequence check treated the second call's REPEATED sequence as
+"unknown" and forced a full capture on top of the masked one. So a
+declining vint paid the capture twice.
+
+**Card O (bldO 0f38332d) fixes both** -- the write moves above the FM
+raise, and a repeated sequence now means "nothing new since the first
+call in this vint, capture nothing", with only an UNTAGGED word taking
+the full capture. Gates:
+
+    rom     ares wall  ships          wedges   rig picture   rig rate/64
+    bldB    1.18       --             --       clean         --
+    bldJ    1.09       2524 (38.6)    0        clean         18
+    bldL    1.07       --             --       BLACK SETS    27
+    bldN    1.10       2511 (38.4)    1        BLACK SETS    1-3
+    bldO    1.02       2674 (41.3)    0        CLEAN x3      21-27
+
+Picture gates (black share, thirteen attract anchors, bldO against
+bldJ on the same script): 0.276/0.275, 0.036/0.038, 0.036/0.037,
+0.036/0.037, 0.049/0.048, 0.048/0.048, 0.048/0.049, 0.049/0.048,
+0.047/0.048, 0.045/0.048, 0.042/0.046, 0.041/0.042, 0.043/0.042 --
+within 0.003 everywhere.
+
+Three rig launches, level scenes: `trees 0.00 fg 0.00 all 0.00` on
+every level frame of all three (the 0.43-1.00 entries are the
+between-scene blank and a fade, and bldTCOFF shows the same ones). The
+graveyard renders complete -- red ALTERED BEAST logo, stone gravestones
+and crosses, cypresses, grass, the wolf, the caped enemy, and the full
+text layer (50000, INSERT COIN, (c)SEGA 1988).
+
+**So card L's black sets were the COMM2 race, whole.** NOTES 62 argued
+the race explains wrong TEXT and that the black sets are eviction
+(LOOP-DECOMPILE 121). On this line the race explains both, and the
+mechanism is the one NOTES 60 proposed: a half-updated TEXT_U leaves
+incoherent text cells, and those cells claim and evict slots in the MD
+residency allocator the tiles share. Fix the coherence and the
+eviction stops, because nothing incoherent is claiming. The colour
+bake remains worth doing on its own merits -- it removes the pressure
+rather than the trigger -- but it is NOT a prerequisite for this card.
+
+**And the ablation's ceiling still stands above us:** bldTCOFF (no
+capture at all, stale text by construction) runs 31/64. Card O at
+21-27 pays the capture only for marked rows; the remaining gap is the
+rows that really are marked, which is what fold 5 removes.

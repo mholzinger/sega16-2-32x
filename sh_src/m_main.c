@@ -7518,12 +7518,20 @@ static int flip_span(void)
              * packet half. A word whose tag is wrong (never written,
              * or a bank the 68K has not posted into yet) means FULL
              * CAPTURE -- the picture is never traded for the rate. */
+            /* LOOP29 266a: flip_span runs TWICE on a declining vint --
+             * the ISR's own call and the body's fallback. The first
+             * call already copied this post's marked rows and the game
+             * is held between them, so a REPEATED sequence means
+             * "nothing new", not "unknown": capture nothing. Only an
+             * untagged word (the 68K's write never landed) is unknown,
+             * and that takes the full capture. */
             static uint8_t txm_last = 0xFF;
             uint16_t mw = *(volatile uint16_t *)FBX_TXM_SH;
             uint8_t sq = (uint8_t)((mw >> 8) & 0x0F);
-            uint8_t tm = ((mw & FBX_TXM_TAGM) == FBX_TXM_TAG && sq != txm_last)
-                         ? (uint8_t)mw : 0xFFu;
-            txm_last = sq;
+            uint8_t tm;
+            if ((mw & FBX_TXM_TAGM) != FBX_TXM_TAG) tm = 0xFFu;
+            else if (sq == txm_last)                tm = 0x00u;
+            else { tm = (uint8_t)mw; txm_last = sq; }
 #else
             uint8_t tm = (uint8_t)(MARS_SYS_COMM2 >> 8);
 #endif
