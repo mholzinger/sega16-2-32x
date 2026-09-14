@@ -7295,3 +7295,76 @@ Entry 142's isolation build tells us whether the 68K's WORK or its SPIN
 is what contends. T3 only pays if cross-bus traffic is the wall at all,
 and T2 only pays if the master's own stalls are. The build separates
 them. Neither should be built first.
+
+---------------------------------------------------------------------
+## 144. Mike's pipelining idea is already SHIPPING -- and that is the finding, because it means the latency era is over and every live card is now a traffic card (2026-09-14)
+
+Mike: *"if we can always generate two frames, then we send two and the
+next is ready the moment the sent/confirm byte is noticed... that way
+its just FAST FAST."*
+
+**It is built, it is named, and it is on the ship line.** m_main.c 1087
+declares `nat_gen_ready` -- *"closed generation awaiting its blit"* --
+and 1088-1097 describes exactly Mike's shape: under `BLIT_CHASE` *"the
+launch may open a generation over a READY one because the fence
+(SYNC[14]) orders the slave behind the blit."* The Makefile calls it the
+pipelining arc:
+
+    LAUNCHEARLY=1   step 1: launch before apply_cram/publish/ack instead
+                    of after. "Byte-identical picture; the compose gets
+                    the window tail back."  (Makefile 2158-2160)
+    BLITCHASE=1     step 2: post the slave's blit half before the
+                    pre-ack work, launch, THEN blit the master's half.
+                    (Makefile 2164-2166)
+
+Both are in `SHIP_COMMON` (Makefile 2745). Every build in this arc,
+including bldS, already generates over a ready generation.
+
+### Why that is worth an entry rather than a one-line "already done"
+
+It closes the loop on three separate measurements that have each looked
+like a puzzle:
+
+  * the master never waits for the slave (zero ticks, LOOP29 291);
+  * master idle is at most 0.34 v/gen in ares and zero on the rig
+    (entry 141);
+  * gens 28.8 against presented 27.8 -- 96.5% of launches present
+    (entry 140).
+
+Those are not three coincidences. **They are what a FULL pipeline looks
+like.** The overlap Mike is describing is already extracting every gap
+there was to extract, which is precisely why there is no idle left for a
+further stage to hide.
+
+**And that is the structural fact this project should now be run on:
+pipelining converts idle into work. We have no idle. So no further
+rearrangement of time can pay, at all, ever, until traffic comes down.**
+
+### The consequence for the card list
+
+Read the three live cards against it and they all say the same thing:
+
+    Card T   (STOP #$2000)     removes the 68K's ~91% MD-bus occupancy
+    Card T2  (SH2_CCTL_TW)     removes SDRAM accesses (2KB on-chip RAM)
+    Card T3  (invert capture)  removes 928 longwords of cross-bus read
+
+**Every live card removes traffic. Not one of them rearranges time.**
+That is the signature of a project that has finished its latency work,
+and it is the first time in this arc the card list has been coherent in
+that way. Entry 141 reached the same place by arithmetic (the wall is
+master-gated and 1.5-1.8 vints of it is memory stall); this reaches it
+by inventory.
+
+### The one stage that genuinely has not been tried, and why it still fails
+
+Triple buffering. We are NOT hardware-limited to two: the compose target
+is `sbuf` in SDRAM (entry 135), not a 32X framebuffer bank, so a third
+buffer is a memory question rather than a silicon one.
+
+It still does not pay. A third stage absorbs QUANTISATION loss -- a
+generation that finishes just past the 35.9-line flip window and waits a
+whole vint (LOOP28 107). Entry 140 measured that loss at **1 generation
+per 64 vints** (28.8 launched, 27.8 presented). There is nothing there to
+recover, and a third sbuf costs SDRAM traffic to clear and fill, which
+is the exact resource we are short of. **Triple buffering would make it
+worse.** Logged so nobody re-proposes it.
