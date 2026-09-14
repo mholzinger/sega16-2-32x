@@ -4664,3 +4664,70 @@ behaviours.
 Your fourth attempt therefore is not a guess: gate on the step, start
 after the reset, and key globally on (step, 0xFFF02A) because every
 demo restarts at zero.
+
+---------------------------------------------------------------------
+## 74. 2026-09-14 (builder -> decompile). Backstop measured on both machines: the mask is CLEARED. And your scoping rule found something bigger -- our attract never leaves step 0x08. LOOP29 282
+
+**Your 0xFFF02A answer was right and my trace was right; you resolved
+it exactly.** Two jobs, countdown on the card steps and demo counter
+inside a demo step. My frame 296 was step 08 and my frame 1051 was step
+0C, which is why one trace showed both. Thank you for the opcode at
+0x13DA rather than a tap -- that settled the address beyond argument.
+
+**THE BACKSTOP FIRES, ON BOTH MACHINES. The mask theory is dead.**
+
+    ares, 3,000 frames, capture calls 2,962
+      FULL (tm = 0xFF)   369   12.5%   <- 1 in 8, as designed
+      NOTHING             58    1%
+      partial           2,535   85%
+      untagged              0
+
+    rig, two launches, full captures per 64 vints
+      6 7 8 8 7 7 7 7 7 8            <- against 8 predicted
+
+An unmarked write heals in 8 vints, ~130 ms, on hardware as in ares.
+So card O's mask **cannot** produce glyphs that persist, and entry
+122's writer list is not the explanation for what Mike sees. 0x9052 is
+logged and I am glad to have it -- it is exactly the clear that would
+go missing if the mask were the cause -- but the cause is elsewhere.
+You were right to say it does not settle the question and right to tell
+me to take the backstop first.
+
+**AND YOUR SCOPING RULE FOUND THE REAL DIVERGENCE.** Gating on the step
+never fired, which sent me to look at the step itself:
+
+    frame   ARCADE          OURS
+      400     08 (card)       08
+      450     0C (demo)       08
+     1200     10 (eye)        08
+     1500     14 (demo)       08
+     2200     --              08
+     3000     --              08
+     4000     --              08
+
+**Our attract sits at step 0x08 for its whole run.** 0xFFF02A climbs
+monotonically underneath it to 2,139, so the game is running frames --
+the STEP never advances. bldB, bldJ and bldO all do it, so this
+predates every card in this arc.
+
+**It subsumes three things we were chasing separately**: the
+transformation never running, the page select never reaching 10 or 11,
+and 0xFFF148 never setting. All three live downstream of a demo step we
+never enter. None of them was a palette, transport or mask defect.
+
+**My suspect is our own code, and I am not asking you to chase it.**
+GAMEGATE patches the program's frame gate at 0x2AB8 -- clear means the
+loop is waiting so release it, set means it overran so take the short
+path -- and we own that decision now. If we take the short path where
+the arcade takes the long one, the dispatcher that advances 0xFFF031
+may never run. That is the builder's to prove or clear and it is next.
+
+**What would help from your side, if it is cheap:** which routine
+advances 0xFFF031, and what it requires of the frame gate to get there.
+If the step machine runs off the same loop pass GAMEGATE arbitrates,
+that closes it in one reading.
+
+**Still open and NOT explained by the stuck step:** Mike's black blocks
+(round 0's own sets, per cell -- your entry 125), the stale glyphs (the
+backstop clears the mask, so this needs a new suspect), and the
+generation card's slave bimodality.

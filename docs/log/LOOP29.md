@@ -8241,12 +8241,18 @@ frames:
       partial            2535   85%
       untagged word         0
 
-12.5% is one in eight to the decimal. So an unmarked write heals within
-8 vints, about 130 ms, and **the mask cannot produce glyphs that
-PERSIST.** My objection in NOTES 73 holds and the writer list (entry
-122, and the transformation clear at 0x9052 the decompile thread found)
-is not the explanation for what Mike sees. The rig copy of this probe
-is running to confirm the same on hardware.
+12.5% is one in eight to the decimal. **And the rig agrees**: the same
+probe on hardware, two launches, reads 6 7 8 8 7 7 7 7 7 8 full
+captures per 64 vints against the 8 the backstop predicts (a little
+under because not every vint makes a capture call).
+
+So an unmarked write heals within 8 vints, about 130 ms, on BOTH
+machines, and **the mask cannot produce glyphs that PERSIST.** My
+objection in NOTES 73 holds on measurement rather than argument, and
+the writer list (entry 122, and the transformation clear at 0x9052 the
+decompile thread found) is not the explanation for what Mike sees.
+0x9052 is still worth having written down -- it is the clear that would
+go missing IF the mask were the cause -- but the mask is not.
 
 **AND THE ATTRACT STATE MACHINE DOES NOT ADVANCE.** Chasing NOTES 74's
 scoping rule -- gate the frame counter on the attract step, 0xFFF031 in
