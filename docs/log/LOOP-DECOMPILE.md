@@ -7564,3 +7564,92 @@ patch was spent for nothing.
 Body stamps are pure instrumentation with no risk to the line, and they
 are the thing that tells us whether Card T is aimed at anything.
 Measure, then patch.
+
+---------------------------------------------------------------------
+## 147. CARD U, the DEADLINE FLIP: present on a fixed cadence and let the frame tear rather than drop it. We already have evidence of how partial presentation looks -- ROWDEFER is ON the ship line and its artifact is one of Mike's boxed defects (2026-09-14)
+
+Mike: *"do we have any sense of pushing frames without waiting for
+timing from the master?"*
+
+The idea: flip on a fixed 2-vint cadence unconditionally. If the
+generation is not finished, present what exists. Cadence locks, judder
+goes, and the cost is a tear instead of a dropped frame.
+
+This is the right shape for our situation and entry 144's rule does not
+forbid it -- it removes no traffic, but it does not try to: **it attacks
+VARIANCE, which entry (the PM readout) identified as the actual barrier
+to a locked 30, and which no card in this arc has touched.** Every card
+so far chased the mean.
+
+### We already ship a version of it, and it is documented as superseded
+
+`ROWDEFER=1` is in `SHIP_COMMON` (Makefile 2763). The Makefile's own
+note on it (2216-2225) reads:
+
+    "re-arm the row-defer ship gate (historical). It killed the purple
+     band on 2026-08-25, but the BG backstop then fixed the purple at
+     the ROOT, and the gate's cost surfaced in Mike's corpus 2026-08-26:
+     ~26 deferred rows/frame ship TWO-frame-stale -- the thin displaced
+     strips he boxed in frame 800. With the gate off: purple still 0
+     (backstop holds), BAD1 best-ever 160. Superseded; off by default."
+
+**So the flag is documented as superseded, with a measured cosmetic cost
+Mike himself boxed, and it is explicitly ON in the ship line.** The
+`ifndef` at 2223 means `ROWDEFER=1` suppresses `NO_ROW_DEFER`, so the
+gate is live. Either it was deliberately re-armed for a reason not
+written down, or it is a flag that survived a revert. **That is a
+question for the builder and it is worth asking regardless of Card U**,
+because it is a cosmetic cost we are paying against a root-cause fix
+that the note says already holds.
+
+### What ROWDEFER tells us about Card U, and it is encouraging
+
+ROWDEFER is partial presentation in the WORST possible shape:
+**~26 stale rows SCATTERED through the frame.** Scattered staleness
+reads as "displaced strips" -- obviously broken, and Mike caught it
+immediately in a still.
+
+Card U is partial presentation in the BEST possible shape: **one
+CONTIGUOUS boundary** at whatever row the blit reached. Everything above
+is current, everything below is exactly one frame old. On a 30 Hz
+decimated stream of a slow-walking game, one frame of staleness below a
+stationary seam is close to invisible -- and the seam is stationary
+because the same scene produces the same workload vint after vint.
+
+So ROWDEFER does not condemn Card U. It argues that if we do this, it
+must be **contiguous, not per-row.**
+
+And the rows below the seam are not garbage: `BLITSKIP` measured 69.9%
+of bytes skipped because they are unchanged, so an unfinished blit
+leaves content that is one frame stale, not undefined.
+
+### The constraint that decides whether it is buildable
+
+**If we flip mid-blit, the blit keeps writing into the bank that is now
+being DISPLAYED.** That turns a stationary seam into a moving tear,
+which is far worse than the dropped frame we are trying to avoid. So
+Card U needs the blit to be flip-aware: either it aborts at the flip, or
+it completes into the correct bank.
+
+The machinery may already be close. `BLIT_CHASE`'s SYNC[14] row fence
+already orders the slave behind the blit, and `nat_skip_run` already
+counts consecutive overrun windows. Whether there is a row watermark the
+ISR can read at flip time is the builder's to answer.
+
+### The number that decides whether it is WORTH building, and it is free
+
+Card U pays if overruns are small: a generation 10% past 2 vints tears
+near the bottom of the screen; one 50% past tears across the middle.
+
+**That distribution comes straight out of the body stamps already being
+run.** No new probe. When they land, the histogram of generation length
+against the 2-vint boundary answers it directly:
+
+    most overruns small  -> seam sits low, Card U is nearly free
+    most overruns large  -> seam crosses the action, not worth it
+    bimodal              -> the two populations tear in two places,
+                            which crawls, and it is not worth it
+
+Given the builder has measured bimodality on two separate quantities
+this arc, the third outcome is a live possibility and should not be
+assumed away.
