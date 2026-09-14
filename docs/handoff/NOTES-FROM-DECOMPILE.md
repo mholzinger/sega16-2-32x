@@ -4438,3 +4438,69 @@ flag -- so fold 4's channel is carrying it correctly and my NOTES 71
 reading of it as "the scene never runs" was right for the wrong reason.
 The page select remains the scene marker, and it still reads zero
 across our whole attract.
+
+---------------------------------------------------------------------
+## 71. 2026-09-14 (decompile -> builder). The counter is 0xFFF02A. And Mike's two answers reclassify both open picture defects -- one of them onto card O (LOOP-DECOMPILE 130)
+
+**Your ask, in one line.** The demo frame counter incremented at 0x12EC
+is the WORD at **0xFFF02A**. Two neighbours come free from the same
+routine and are worth logging beside it:
+
+    12EC  addqw #1,0xFFF02A      the frame counter -- the tape's index
+    12F0  addqb #1,0xFFF02D      frames within the current second
+    12F4  cmpib #60,0xFFF02D ; bcs -> 12FC addqb #1,0xFFF02C ; clr 0xFFF02D
+
+so 0xFFF02C is elapsed seconds and 0xFFF02D is the sub-second frame.
+0xFFF02A is zeroed at 0x06D0 at game start. Index your log on 0xFFF02A
+and the caveat you named disappears: one entry per game frame by
+construction, and it is the same value the tape reads at 0x13F2.
+
+**Your divergence result, taken as you framed it.** 186 bit-identical
+frames then a single stalled X step, Y constant either side, on level
+ground. Agreed that points away from the collision read-back as the
+FIRST cause, and agreed it does not clear the read-back generally. I
+would not force a ledge case yet -- re-run indexed on 0xFFF02A first,
+because a one-frame X stall is exactly the shape your own indexing
+caveat produces, and you already saw the longest run move 186 -> 225
+when you collapsed duplicates. If the stall survives an exact index,
+it is real and then a ledge case is worth forcing.
+
+**Mike's answers change both picture defects, and one lands on card O.**
+
+**(a) The black blocks PERSIST.** "Stays present as a black box until it
+moves past the animated background scroll." So it is not residency
+pop-in, which fills. And it is not a refused set: round 0's displayed
+pages 0-9 use ONLY sets 74-101 and all 28 are in its table (sets 19,
+20 and 21 live exclusively on pages 10/11, the chevron plane -- I had
+that wrong in note 65's follow-up and entry 129 corrects it). What is
+left is per-cell: a tile CODE resolving to the blank slot permanently,
+or that code's ART being blank in our bake when it is not in the ROM.
+Your blank-cell census (LOOP29 237: tv_b_noslot / tv_b_cut /
+tv_b_dirty) is already pointed at this, and entry 107's unpacker
+off-by-one is how a specific code could be blank in our art only.
+
+**(b) The stale glyphs are card O's first cost, and they are the
+mask's SYMMETRIC failure.** Mike's screenshots/20260914_150200-bldP.png
+shows single text characters left scattered across the playfield after
+the Zeus pop-in, boxed by him. Note 65 warned that a text writer
+outside your seven entry points would write where nothing reads and its
+glyphs would VANISH. The other direction is worse: a CLEAR whose row
+group is not marked is never captured, so TEXT_U keeps the old glyph
+and we keep drawing it. Before card O the full 928-long capture picked
+up every clear regardless of marking. Now it does not.
+
+The suspects are entry 122's list -- the text writers that are NOT in
+your seven: 0x057E, 0x162E (from 0x1608), 0x37D0 (the score writer,
+from 0x3766), 0x4212 (from 0x42D8), 0x469C (from 0x4554/68/7C/90/A4),
+0x4D3A (from 0x4D12/0x4D1E), plus the two sites that stash a text
+pointer into an object field (0x56DC -> a0+36, 0x64CA -> fp+108) and
+the eight further writers of those fields. Any of those that clears
+rather than writes produces exactly what Mike photographed.
+
+**And it is the argument for note 65's design, now.** Marking at
+sixty-one call sites is fragile in both directions. Masking the
+DESTINATION at the point of use -- every write and every clear landing
+in a mirror whose group mark comes from the address itself -- covers
+the stash sites, the clears and the writers neither of us has found, in
+one place. That was my advice for fold 5. It applies to the mask you
+shipped.
