@@ -6357,3 +6357,78 @@ mark should heal in about 130 ms and Mike's glyphs persist. Either the
 backstop is not reaching those rows or the stale text is not a missed
 mark. 0x9052 does not resolve that; it only says which clear is the one
 going missing if the mask theory survives their measurement.
+
+---------------------------------------------------------------------
+## 132. The step machine, read end to end: 0xFFF031 advances at 0x1EBC, reached only from 0x0B1A, and the gate on that path is 0xFFF026 BIT 0. A stuck step 08 predicts that bit is clear in our attract (2026-09-14)
+
+The builder found our attract sits at step 0x08 for its whole run while
+0xFFF02A climbs monotonically past 2,139, on bldB, bldJ and bldO alike,
+and asked which routine advances 0xFFF031 and what it needs.
+
+**The advance.** One site:
+
+    1EBC  addqb #4,0xFFF031
+    1EC0  andib #28,0xFFF031          wrap 0x00..0x1C
+    1EC6  moveb 0xFFF031,%d0
+    1ECA  lea 0x26DC,%a0 ; moveal %a0@(0,%d0:w),%a0 ; jmp (%a0)
+
+and the table at 0x26DC is
+
+    00 -> 0x1EF2 (high-score)   04 -> 0x1ED4 (demo)   08 -> 0x1F80 (SEGA card)
+    0C -> 0x1ED4 (demo)         10 -> 0x20A0 (eye)    14 -> 0x1ED4 (demo)
+    18 -> 0x2282                1C -> 0x2282
+
+0x1EBC is not called; it is FALLEN INTO from the attract-entry block at
+0x1E54 (which resets the stack, sets 0xFFF026 = 1, clears 0xFFF148,
+sets the tile bank, then runs 0x36B0/0x36C4/0x3952/0x3B08/0x1338 and
+drops through). Three sites branch to 0x1E54: 0x0B1A, 0x0BAC and
+0x0D0E.
+
+**The gate, and it is the answer.** The 0x0B1A path is the demo's own
+exit, and the whole chain is gated at its top:
+
+    0AE2  btst #0,0xFFF026        ATTRACT?
+    0AE8  beq  0x0B1E             NOT attract -> the credited-game path, never returns here
+    0AEA  btst #5,0xFFF028 ; bne 0x1E54     P1 start -> advance
+    0AF4  btst #5,0xFFF029 ; bne 0x1E54     P2 start -> advance
+    0AFE  tstw 0xFFF148 ; bne 0x0B08 ; bsr 0x144A
+    0B08  cmpiw #698,0xFFF02A     the demo's frame cap
+    0B0E  bcs  0x097C             under the cap -> keep looping
+    0B12  clrb 0xFFF148 ; clrb 0xFFF15E
+    0B1A  bra  0x1E54             AT the cap -> ADVANCE THE STEP
+
+So the step advances when 0xFFF02A reaches 698 -- but ONLY if
+0xFFF026 bit 0 is SET. With that bit clear, 0x0AE8 diverts to 0x0B1E
+before the cap is ever compared, and nothing on that path advances the
+step.
+
+**Which predicts our fault exactly.** If 0xFFF026 bit 0 is CLEAR during
+our attract then, in one stroke:
+
+  - the step never advances (0x0B08 is unreachable) -- stuck at 0x08;
+  - 0xFFF02A is never compared against 698 and never reset, so it climbs
+    monotonically forever -- the builder measured 2,139;
+  - the TAPE never plays: the reader at 0x13C0 tests the same bit and
+    branches past the tape to the live ports (entry 111), so our "demo"
+    runs with NO INPUT AT ALL;
+  - with no input the player object does something else entirely --
+    which is the 769 distinct positions against the arcade's 589, and
+    it is not drift, it is a different game;
+  - the transformation never runs, so pages 10/11 are never selected
+    and 0xFFF148 never sets.
+
+Every symptom in the builder's last four notes falls out of one bit.
+
+**And this bit has burned this project before.** Entry 105 corrected
+NOTES 23's inverted reading of 0xFFF026 bit 0 -- it is ATTRACT when
+SET, credited play when clear -- and that inversion caused vi90's
+black/slow regression. A build that leaves the bit clear during attract
+is the same error's twin: the port would be running the credited-game
+path with no coin.
+
+**The measurement, one line, either machine:** read 0xFFF026 bit 0 in
+our rom during the attract. Set means this theory is wrong and the
+fault is further down. Clear means it is right and the question becomes
+who cleared it -- 0x1E62 sets it on every attract entry, and 0x06C0
+does `andib #1,0xFFF026`, so a patched or skipped 0x1E54 entry is the
+place to look.
