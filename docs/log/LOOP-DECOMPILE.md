@@ -7833,3 +7833,115 @@ Mike's play pass as before, and if it holds, build step 2.
 The measurement work is not wasted -- the body stamps still tell us
 where the residual lives and the widened counter is still needed. But it
 is no longer the main line. **The main line is finishing the pivot.**
+
+---------------------------------------------------------------------
+## 150. THE 2.9x TAX IS THE PROJECT. It is uniform across every stage, it matches F0's independent 2.8x, and a uniform multiplier on WORK has one obvious candidate mechanism ares cannot model: INSTRUCTION FETCH, amplified by a full cache purge every window (2026-09-14)
+
+LOOP29's body stamps, and the builder's prediction was overturned by
+them -- which is the finding:
+
+    stage        ares    rig    factor
+    window       14.0    38.0   2.71x
+    ship          8.0    16.0   2.00x
+    maps drain    4.0    10.0   2.50x
+    residual      4.0    22.5   5.62x
+    GENERATION   30.0    86.5   2.88x
+
+**Every stage inflates by roughly the same factor and the shape is
+preserved. Nothing is hiding.** And it lands on card F0's independently
+measured 2.8x for the pipeline with compute removed -- two unrelated
+measurements of one tax.
+
+The builder's consequence is right and should be carried: **no re-timing
+card can win, because there is no stage to move out of the way when
+every stage pays the same multiplier.** That retires Card U's throughput
+case (its variance case survives) and it retires re-timing generally.
+
+### What a UNIFORM multiplier actually implicates
+
+The builder calls it *"a broad memory-stall cost proportional to work
+done."* True as far as it goes, but the uniformity is the clue and it
+narrows things further than that.
+
+These stages do very different memory work. `ship` is the blit -- almost
+pure writes. `maps drain` is almost pure reads. `window` is mixed
+compose. **If the tax were DATA traffic, stages of different data
+intensity would inflate differently. They do not -- 2.0x, 2.5x, 2.7x
+against a 2.9x whole.**
+
+The one cost that scales with *work* rather than with *data*, applies
+identically to a write loop and a read loop, and is charged at **exactly
+zero** by our reference instrument, is **INSTRUCTION FETCH.** ares
+charges SH-2 instruction cycles only; it does not charge fetching the
+instruction. On hardware every instruction is fetched, and a fetch that
+misses costs an SDRAM line fill.
+
+### And we purge the entire cache every window
+
+`cache_purge()` appears at **9 sites** in m_main.c, and the coherency
+design has it running at least once per window -- m_main.c 656-658 states
+it plainly: *"The slave purges its cache at every window start, the
+master's writes are write-through."*
+
+A full purge invalidates all 4KB. **Every instruction of the compose
+path is then a cold fetch until the loop re-warms, once per window, for
+the life of the frame.** That is a uniform multiplier on work, applied
+to read loops and write loops alike, invisible to ares -- which is
+precisely the shape of the measurement.
+
+**This is a hypothesis with a named mechanism, not an attribution.** It
+could also be SDRAM bandwidth that ares prices at zero, in which case
+the uniformity is coincidence. But it is the first candidate that
+explains why the factor does not vary with what the stage does.
+
+### The test, and it is cheap
+
+Two builds, no new instrument -- the body stamps already in the tree
+read it directly:
+
+  1. **Purge less.** The purges exist for coherency against data the
+     slave and 68K write. The tree already has the finer tool: shared
+     data read through the UNCACHED alias (0x26xxxxxx) and never
+     purged, with code and read-only art staying cached permanently.
+     C1_CACHED (m_main.c 651-659) is this argument already made in one
+     place. If the stage factors fall, it is fetch.
+  2. **If they do not fall, it is data bandwidth**, and the pivot is
+     the only lever left.
+
+### What this does to the standing cards
+
+  * **Card U's throughput case is dead.** Its variance case is not.
+  * **Card T's prediction sharpens into a discriminator.** If the tax is
+    MD-bus arbitration, taking the 68K off the bus moves EVERY stage
+    uniformly. **If the tax is SH-2 instruction fetch, Card T moves
+    NOTHING**, because fetch is SDRAM-side and the 68K is not on that
+    bus. One build now separates two hypotheses.
+  * **Card T2 flips sign and may be the strongest card in the set.**
+    I sized it as "2KB of scratchpad for cache_tag." If the tax is
+    fetch, the right tenant is not data at all -- it is **the compose
+    inner loop's CODE, in on-chip RAM that no purge can invalidate and
+    no fetch can miss.** That is a different and much larger card than
+    the one I wrote.
+  * **Entry 149's recommendation survives and is strengthened.** A 2.9x
+    tax multiplies whatever work exists, so removing 74% of the work
+    (the pivot) removes 74% of the tax with it. The two levers compose.
+
+### The arithmetic that puts 60 back in range
+
+    today                            2.22 v/gen
+    tax 2.9x -> 1.5x                ~1.15 v/gen
+    plus the pivot's work removal    below 1.00
+
+**That is the first credible path to the bar in this arc**, and it needs
+both levers, not either one.
+
+### Banked from the same report
+
+  * **17% of the period is unstamped**: NAT_WALL[0] is launch->close at
+    1.84 v/gen against a 2.22 period, so **0.38 v/gen sits between a
+    close and the next launch with no stamp on it.** Cheapest unexamined
+    thing in the tree and it should be closed before anything is sized.
+  * Sample honesty accepted: n=5-6, factors good to ~±0.5, and the
+    residual's 5.62x is a difference of noisy medians. **Not treating it
+    as a real outlier**, which also means the uniformity claim above
+    rests on the other three, and they agree.
