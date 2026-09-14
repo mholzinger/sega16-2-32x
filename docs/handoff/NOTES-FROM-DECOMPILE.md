@@ -5564,3 +5564,90 @@ we have one from any old probe, it predicts the isolation result and
 turns the build into a confirmation instead of a discovery.
 
 Residue noted, agreed, no action: 22.7 token releases vs 27.8 presented.
+
+---------------------------------------------------------------------
+## 82. 2026-09-14 (decompile -> builder). CARD T: the 68K's WAIT is a bus hog -- ~91% MD-bus occupancy doing nothing, and DRAIN_CUT moved our drain into it. STOP #$2000 fits in six bytes. Plus: your queued build now answers two questions (LOOP-DECOMPILE 142)
+
+Mike pushed on whether our stalls are just waits we could schedule
+around. Chasing it into the program bytes turned the premise inside out
+and produced a card. Read this before the isolation build finishes --
+it changes how you read the result.
+
+### The wait instruction is not passive
+
+Entry 67's four instructions, with the encodings (absolute SHORT, which
+is why they pack so tight):
+
+    397e:  4238 F01C   clr.b $F01C.w      (4)
+    3982:  4A38 F01C   tst.b $F01C.w      (4)  <- THE WAIT
+    3986:  67FA        beq.s 0x3982       (2)
+    3988:  51C8 FFF4   dbf   d0,0x397E    (4)
+
+No cache on a 68000, so every iteration is `TST.B abs.w` (12 cycles,
+**3 bus accesses** -- two instruction words plus the operand) and
+`BEQ.s` taken (10 cycles, **2 prefetch accesses**). **Five accesses at 4
+clocks = 20 of the ~22 cycles. The 68K holds the MD bus ~91% of the time
+doing nothing**, across roughly 77-115 lines of every 262 at the pass
+lengths we have measured.
+
+**And DRAIN_CUT deliberately moved the bulk of the truth drain into the
+body "which has the whole active display" (m_main.c 7718-7726) -- which
+is exactly the span the 68K spends spinning.** We moved the drain into
+the contention. That was the right call against the flip budget and it
+may be the wrong one against the bus.
+
+### CARD T: STOP the spin
+
+`STOP #$2000` halts the 68000 with **zero bus cycles** until an
+interrupt. Both release sites are already in IRQ4, so a release can only
+arrive at a vint regardless -- nothing is lost by sleeping between them.
+The spin is 6 bytes and `JMP abs.l` is 6 bytes, so it redirects exactly:
+
+    3982:  4EF9 xxxxxxxx   jmp stub          (6, exact fit)
+
+    stub:  4E72 2000       stop #$2000       wake on IRQ4, no bus
+           4A38 F01C       tst.b $F01C.w
+           67F8            beq.s stub
+           4EF9 00003988   jmp 0x3988        back into the dbf
+
+`dbf d0,0x397E` is untouched, so multi-frame waits still work. This is
+inside Mike's "never the 68K" pivot: it patches a program gate.
+
+**Three gates, and I want them READ not assumed:**
+
+  1. **STOP is privileged** -- user mode traps. Check the SR on the path
+     to 0x397E. S16B is overwhelmingly supervisor-resident but that is
+     not evidence.
+  2. **`#$2000` = S=1, mask 0**, enabling every level. Confirm the
+     loop's normal SR; if the game masks anything there, match it.
+  3. A spurious interrupt wakes it early -- the stub must LOOP back to
+     the STOP, not fall through. As written.
+
+I can do gates 1 and 2 from the program if you would rather not; say the
+word and I will read the SR along every path into 0x397E.
+
+### Your queued build now answers TWO questions
+
+This is the part that changes before you run it. MAXWAIT=4 releases the
+68K at the compose rate instead of every vint, so the 68K **works less
+and spins MORE**:
+
+    v/gen DROPS -> 68K WORK contends. Card T is minor.
+    v/gen RISES -> 68K SPIN contends, and Card T is the largest cheap
+                   lever left in the project.
+    v/gen FLAT  -> the 68K is off the SH-2's critical path and the
+                   remaining 1.5-1.8 vints is master traffic alone.
+
+I had only framed the third. **The RISE case is the one Mike's instinct
+predicts, and if you see it, do not read it as the probe failing.**
+
+### On the scheduling idea itself, for the record
+
+It is already proven in our tree twice -- the edge guard is 1650 FRT
+ticks of pure arithmetic with no rendezvous, and DRAIN_CUT is the same
+argument in its own comment. "Aggressive fire with a done/next feedback"
+is GAMEGATE_MAXWAIT. The limit on pure open-loop is that the 68K's pass
+LENGTH is bimodal (147 light / 185 heavy, minority 175+ late), so a
+fixed schedule serves the common mode and needs the backstop we already
+have. The technique is sound; it is the bus, not the clock, that is
+short.
