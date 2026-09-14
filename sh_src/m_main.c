@@ -1075,6 +1075,15 @@ static void hs_promote(void);
 #define HS_PROMOTE() ((void)0)
 #endif
 static uint8_t nat_gen_open;     /* a whole-frame compose is in flight */
+#ifdef BODY_CENSUS
+#if defined(PHASE_CENSUS)
+#error "BODY_CENSUS's BODYS shares PHASE_CENSUS's PH scratch - build them separately"
+#endif
+#if defined(TRIP_CENSUS)
+#error "BODY_CENSUS and TRIP_CENSUS both drive COMM6 - build them separately"
+#endif
+#define BODYS ((volatile uint32_t *)0x26028E68)
+#endif
 #ifdef TRIP_CENSUS
 #if defined(PHASE_CENSUS)
 #error "TRIP_CENSUS's TRIPS shares PHASE_CENSUS's PH scratch - build them separately"
@@ -8239,6 +8248,70 @@ void visr_vbi(void)
          * over COMM6 with bit 15 SET, which STAMP_CENSUS's reader
          * ignores and the 68K's GLOW_RATE reader claims. */
         MARS_SYS_COMM6 = (uint16_t)(0x8000 | gr_val);
+    }
+#endif
+#ifdef BODY_CENSUS
+    /* NOTES 85 / LOOP29 295: WHERE THE GENERATION'S BODY GOES, ON HARDWARE.
+     *
+     * Every stamp either thread has placed lives in the V-ISR, whose whole
+     * pre-flip life is ~22 lines of a ~577-line generation: under 4% of a
+     * generation has ever been instrumented and the rest was inferred by
+     * subtraction. This stamps the BODY.
+     *
+     * No new counters: DIAG's per-stage FRT accumulators are UNGATED in the
+     * shipping rom (diag_add, m_main.c ~1961), the same situation 0x28C80
+     * turned out to be in. This only carries them to the rig, because DIAG
+     * is SDRAM and the rig has no memory dump -- the value channel is its
+     * only instrument.
+     *
+     *   tag 0  the WINDOW span   DIAG[8]  (tw: window entry -> launch;
+     *                            contains the blit and the palette push)
+     *   tag 1  the SHIP          DIAG[5]  (the path to nat_shipped = 1)
+     *   tag 2  the MAPS DRAIN    DIAG[11] (mtask 2)
+     *   tag 3  the GENERATION    NAT_WALL[0] -- the denominator, so the
+     *                            RESIDUAL is tag3 - (tag0+tag1+tag2) and
+     *                            that residual is the thing being hunted.
+     *
+     * Units: master FRT ticks per generation >> 8, so a vint is 47 and a
+     * 2.2-vint generation is 104. Saturates at 127 = "at least 2.7 vints".
+     * ares says the shape is window 40%, ship 19%, drain 12%, unaccounted
+     * 19% -- but ares charges instruction cycles only, so that ranking
+     * cannot survive contact with the rig. That is the entire point.
+     *
+     * Transport is TRIP_CENSUS's, already validated twice: COMM6 tagged
+     * 0xA000 (NOT a bare bit 15, which the 68K's own 0xB101 announce
+     * satisfies), master cycles the tag, the 68K relays it verbatim. */
+    {
+        static uint32_t bc_prev[4];
+        static uint16_t bc_vc;
+        static uint8_t  bc_val[4];
+        if (++bc_vc >= 64) {
+            uint32_t cur[4] = { DIAG[8], DIAG[5], DIAG[11], NAT_WALL[0] };
+            uint32_t g = NAT_WALL[1] - bc_prev[0];    /* borrowed below */
+            (void)g;
+            static uint32_t bc_gprev;
+            uint32_t gens = NAT_WALL[1] - bc_gprev;
+            bc_gprev = NAT_WALL[1];
+            for (int k = 0; k < 4; k++) {
+                uint32_t d = cur[k] - bc_prev[k];
+                bc_prev[k] = cur[k];
+                uint32_t v = gens ? (d / gens) >> 8 : 0;
+                bc_val[k] = (uint8_t)(v > 127 ? 127 : v);
+            }
+            bc_vc = 0;
+            /* SANITY SLOT, audited-free PH scratch, probe-only and verified
+             * zero on the line: the four values as bytes plus the gen count,
+             * so ares can check the channel against DIAG itself with no
+             * symbol lookup -- the known-answer check before the number is
+             * used for anything. */
+            BODYS[0] = ((uint32_t)bc_val[0] << 24) | ((uint32_t)bc_val[1] << 16)
+                     | ((uint32_t)bc_val[2] << 8)  |  (uint32_t)bc_val[3];
+            BODYS[1] = gens;
+        }
+        {
+            uint8_t tag = (uint8_t)((bc_vc >> 4) & 3);
+            MARS_SYS_COMM6 = (uint16_t)(0xA000 | ((uint16_t)tag << 7) | bc_val[tag]);
+        }
     }
 #endif
 #ifdef TRIP_CENSUS

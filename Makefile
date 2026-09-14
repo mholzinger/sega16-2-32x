@@ -2615,6 +2615,25 @@ endif
 # self-gating loop, and the 2.47 v/gen is an equilibrium, not a cost.
 # Tags 3 and 1 have KNOWN answers (BOOTFLIPRATE, BOOTGAMERATE) -- check
 # them before the number sizes anything.
+# `make ... BOOTFLIPRATE=1 BODYCENSUS=1` = NOTES 85 / LOOP29 295: WHERE THE
+# GENERATION'S BODY GOES, ON HARDWARE. Every stamp either thread has placed
+# lives in the V-ISR -- ~22 lines of a ~577-line generation, under 4% of it --
+# and the rest was inferred by subtraction. DIAG's per-stage accumulators are
+# ungated in the shipping rom; this carries four of them to the rig, which has
+# no memory dump and only the value channel. Per 64 vints, master FRT ticks
+# per generation >> 8 (a vint = 47, a 2.2-vint generation = 104):
+#   tag 0 WINDOW span (DIAG[8]: entry -> launch, contains blit + palette push)
+#   tag 1 SHIP (DIAG[5])   2 MAPS DRAIN (DIAG[11])   3 WHOLE GENERATION
+# RESIDUAL = tag3 - (tag0+tag1+tag2) is what the card is hunting. ares says
+# window 40% / ship 19% / drain 12% / unaccounted 19%, but ares charges
+# instruction cycles only -- that ranking is what the rig is here to overturn.
+ifdef BODYCENSUS
+ifndef BOOTFLIPRATE
+$(error BODYCENSUS needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
+endif
+SHCCFLAGS += -DBODY_CENSUS
+MDCCFLAGS += -DBODY_CENSUS
+endif
 ifdef TRIPCENSUS
 ifndef BOOTFLIPRATE
 $(error TRIPCENSUS needs BOOTFLIPRATE=1 - it supplies the value-channel flood)

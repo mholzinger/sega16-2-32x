@@ -2121,7 +2121,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS)
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS) || defined(BODY_CENSUS)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2873,6 +2873,22 @@ void shim_vblank(void) {
 			uint8_t tag = (uint8_t)((st_vc >> 3) & 7);
 			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | st_val[tag]);
 		}
+	}
+#endif
+#ifdef BODY_CENSUS
+	/* NOTES 85 / LOOP29 295: the master's body split, relayed verbatim.
+	 * The master owns the accounting and the tag (it is the only side that
+	 * can see DIAG); this just moves its word onto the value channel.
+	 *   tag 0 window span  1 ship  2 maps drain  3 whole generation
+	 * in master FRT ticks per generation >> 8 (a vint = 47). RESIDUAL =
+	 * tag3 - (tag0 + tag1 + tag2) is the number the card exists to find.
+	 * A rejected read (the 68K's own 0xB101 announce, which HAS bit 15
+	 * set) keeps the last good word; the master re-posts every vint. */
+	{
+		static uint16_t bd_word = 0xA000;
+		uint16_t w = *mars_comm6;
+		if ((w & 0xF000u) == 0xA000u) { bd_word = w; *mars_comm6 = 0; }
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | (bd_word & 0x1FFu));
 	}
 #endif
 #ifdef TRIP_CENSUS
