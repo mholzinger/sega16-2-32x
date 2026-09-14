@@ -6740,3 +6740,72 @@ builder's fix is the right one: keep the naive total beside the true
 one so the gap is visible in every run. The general form: **a counter
 should be validated against a case whose answer is known before its
 number is allowed to size anything.**
+
+---------------------------------------------------------------------
+## 138. The master never waits for the slave: what that banks, and the circularity it exposes in "generation length" (2026-09-14)
+
+Mike, reading the builder's stamps: "if the master never waits for the
+slave then we ALREADY KNOW timing. This might be an answer we can
+solidly bank on." He is right, and it settles more than it looks.
+
+**The measurement.** Master's pre-flip stamps on the rig: slave-capture
+wait 0.0, every sample, mean and max. Post seen at 22.3 lines, at the
+guard also 22.3 -- the truth drain and the capture between them cost
+essentially nothing. The master's whole pre-flip life is: enter the
+ISR, wait ~22 lines for the 68K's post, flip. Bimodal, with a minority
+saturating at 175+ lines and losing the flip.
+
+**BANKABLE 1: the slave is not on the master's critical path.** The
+master never blocks on it. So the slave's 0.49 v/gen in the F0 census
+is NOT scheduling -- the master is never held up waiting for slave
+work to finish.
+
+**BANKABLE 2: therefore the slave's cost must be BUS CONTENTION, and
+that is consistent with the one other thing we know.** BLITSHIFT
+(moving rows between the two CPUs) was swept in August and did nothing:
+the Makefile's own header says the blit is FB-bus-bound and both SH-2s
+share the one write path, so moving rows "only relabels which CPU
+waits". Put the two together: the slave does not delay the master by
+handshake, and work moved between them does not help, but ablating the
+slave's work DID move the floor 2.06 -> 1.57. The only mechanism that
+satisfies all three is shared-bus contention -- the slave's traffic
+steals memory cycles from the master without either one waiting on the
+other.
+
+**And that determines which levers can work.** On a shared bus,
+redistributing work is worthless (proved) and reducing TOTAL traffic
+across both CPUs is the only thing that moves. Every future card should
+be sized in bytes-across-both-CPUs, not in per-CPU time. It also
+explains why ares is 2.8x optimistic on the same build: ares models two
+independent CPUs and charges neither for the other's traffic.
+
+**THE CIRCULARITY, and this is the part to check before anything is
+sized.** Under GAMEGATE the 68000 is released once per presented frame
+(or by the fallback after GAMEGATE_MAXWAIT). The game's pass ends by
+spinning on 0xFFF01C at 0x397E, so THE GAME ADVANCES ONLY WHEN WE
+RELEASE IT. A compose generation follows a game frame. So:
+
+    generations per second  <=  releases per second  <=  presented + fallbacks
+
+"The generation takes 2.4 vints" may therefore be partly a CONSEQUENCE
+of presenting at 26 of 64, not a cause of it. A loop that gates its own
+input rate cannot be measured as if the rate were independent.
+
+**The three-number check that settles it, all counters already
+existing, one rig session:** per 64 vints, count
+
+    generations LAUNCHED      (the master's chain start)
+    68K releases              0xFFA0F6 delta -- flips plus fallbacks
+    frames PRESENTED          BOOTFLIPRATE
+
+  - gens ~= releases > presented: we are producing frames nobody sees.
+    The wall is presentation, not production, and the compose numbers
+    have been measuring the wrong end.
+  - gens ~= presented < releases: the game is running ahead of the
+    pipeline and generations are being skipped or coalesced.
+  - all three equal: the loop is self-gating and every "wall" figure in
+    this log is a measurement of its own feedback, which would make the
+    2.47 not a cost but an equilibrium.
+
+The last case is the one that would invalidate the most prior work, so
+it is worth an hour before the protocol workstream sizes anything.
