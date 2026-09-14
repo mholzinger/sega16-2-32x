@@ -13996,6 +13996,9 @@ RAMCODE void m_main(void)
              * cat1+text inline via NOCAT1DEFER); the master's tail
              * runs as poll-gap chunks (nat_mtask). */
             if (k == 2) {
+#ifdef GLOW_PROBE
+                static uint16_t glow_pend_run;
+#endif
 #ifdef GLOW_ANIM
                 /* ONE ARCADE TICK per vint. Paused while the 68K is
                  * shipping glow blocks; resumes only after a clean
@@ -14025,10 +14028,31 @@ RAMCODE void m_main(void)
                  * (state s16_cand.bs1: PAL_SH wave 30DF.. vs game 100F).
                  * Play only in the normal scene; elsewhere hand the
                  * words back to the 68K. */
+#ifdef GLOW_PROBE
+                /* NOTES 67 / LOOP29 275: does the attract ever ENTER the
+                 * transform scene, and when it does, does the animator's
+                 * mask-OFF grant actually land? CEN[24] vints with
+                 * pscene_cur==0 (normal), [25] vints in any other scene,
+                 * [26] times the yield fired, [27] vints spent with a
+                 * grant still PENDING (COMM8 busy), [28] max pending run,
+                 * [34] vints the animator actually ticked.
+                 * These six slots are free and BELOW 64 -- CEN above 63
+                 * is unverified ground (the block's own header warns that
+                 * DIAG past 63 reads residue), and 40-46 are CSET_CENSUS. */
+                CEN[pscene_cur == 0 ? 24 : 25]++;
+                if (glow_post) {
+                    CEN[27]++;
+                    if (glow_pend_run + 1 > CEN[28]) CEN[28] = glow_pend_run + 1;
+                    glow_pend_run++;
+                } else glow_pend_run = 0;
+#endif
                 if (glow_on && pscene_cur != 0) {
                     glow_pause = 8;
                     glow_on = 0;
                     glow_post = 3;           /* grant the mask OFF */
+#ifdef GLOW_PROBE
+                    CEN[26]++;
+#endif
                 }
                 if (glow_pause)
                     glow_pause--;
@@ -14037,6 +14061,9 @@ RAMCODE void m_main(void)
                         && (glow_on = (uint8_t)glow_reseed()) != 0)
                         glow_post = 4;       /* grant the mask ON */
                 } else {
+#ifdef GLOW_PROBE
+                    CEN[34]++;
+#endif
                     glow_rp = (uint8_t)(glow_rp < 2 ? glow_rp + 5
                                                     : glow_rp - 2);
                     for (unsigned j = 0; j < 7; j++)

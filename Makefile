@@ -2522,6 +2522,15 @@ endif
 # animator (fade storms, heals); it re-seeds from live PAL_SH.
 # Needs PALSTATIC=1 (scene loads must pause/re-seed it) and
 # TILECLASS=1 (include site).
+# GLOWPROBE=1 = NOTES 67 / LOOP29 275. Counts, per run: vints in the
+# normal scene vs any other, times the glow animator YIELDED to the 68K
+# (the transform gate), vints a mask grant sat undelivered because COMM8
+# was busy, the longest such run, and vints the animator actually ticked.
+# Answers whether Mike's flat chevron is the animator yielding and the
+# 68K never being told to stop masking those blocks.
+ifdef GLOWPROBE
+SHCCFLAGS += -DGLOW_PROBE
+endif
 ifdef PALGLOW
 ifndef PALSTATIC
 $(error PALGLOW rides the PALSTATIC scene machinery - add PALSTATIC=1)
@@ -2640,7 +2649,14 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1
-SHIP_US = $(SHIP_COMMON) SPRBAKE=1 TILECLASS=1 TXTCLASS=1 MDSPR=1 PALSTATIC=1 PALGLOW=1 PENMATCH=1 MDSTATIC=1
+# NOGLOW=1 drops PALGLOW from the ship line: no 68K glow mask and no
+# SH-2 animator, so sets 19-21 are driven by the PALETTE DELTA PATH
+# alone. That is the state the animator hands them to in the transform
+# scene (m_main.c's scene gate), so this build measures the delta path's
+# ability to animate them WITHOUT needing to reach the cutscene -- which
+# the attract never does (LOOP29 275: 5 vints of 3903 outside the normal
+# scene, zero animator yields). Probe only.
+SHIP_US = $(SHIP_COMMON) SPRBAKE=1 TILECLASS=1 TXTCLASS=1 MDSPR=1 PALSTATIC=1 $(if $(NOGLOW),,PALGLOW=1) PENMATCH=1 MDSTATIC=1
 # JP ships on the SAME line: the census-derived tables are keyed on art
 # the two sets share byte-for-byte (SH-2 folds the JP code/bank layout
 # onto the US images), and the reduced "kit baseline" subset is an

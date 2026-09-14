@@ -7752,3 +7752,88 @@ second baker. It stays as the ANALYSIS tool that produced this: it
 answers "does a given set list pack into N lines" without touching the
 runtime, which is what found the round-4 split and this coverage gap.
 Relabelled accordingly; nothing includes its header.
+
+---------------------------------------------------------------------
+## 275. THE GENERATION CARD OPENS: THE GENERATION WAITS, IT DOES NOT COMPUTE -- ECHO IS 1.05 OF A 1.11 WALL (2026-09-13 23:00)
+
+Mike's call (NOTES 67): open the generation card now, colour work
+beside it. Opening measurement, PHASECENSUS on card O's flags (phO,
+md5 de21d519), attract, 4000 frames:
+
+    phase      v/gen   max     what it is
+    echo       1.05    2.34    master waiting on the 68K's post/echo
+    mtask      0.70    5.30    the master's own task
+    ship       0.65    4.98
+    flip       0.75    5.42
+    lag        0.01    5.43
+    gens 2513, flips 2465, 46% single-vint ship period
+
+**The single largest term in a 1.11-vint generation is 1.05 vints of
+WAITING FOR THE ECHO.** The generation is not compute-bound on the
+master's own work; it is bound on the handshake with the 68K. And the
+echo histogram is BIMODAL, not spread:
+
+    echo bins, 0.5..1.5 v in 0.125 steps:
+      495  280  229  154   35   29  477  814
+
+1,158 generations in the four fastest bins and 1,291 in the two
+slowest, with a near-empty middle. That is two populations -- echoes
+that arrive promptly and echoes that arrive a whole vint late -- and it
+matches the 46/54 single-vint/two-vint ship split exactly. So the
+generation card is not "make the compose faster"; it is "why does half
+the population wait an extra vint for the echo", and the answer is
+likely the same window arithmetic card O just moved.
+
+`ship` at 0.65 and `mtask` at 0.70 are the real work and together they
+are under one vint. There is no compute wall here to cut.
+
+---------------------------------------------------------------------
+## 275a. THE ATTRACT NEVER ENTERS THE TRANSFORM SCENE -- MIKE'S CHEVRON IS UNREACHABLE BY EVERY PROBE EITHER THREAD HAS RUN (2026-09-13 23:05)
+
+NOTES 67 relays Mike's bldO verdict: the transformation chevron shows a
+single flat blue. Before testing the delta path I checked whether any
+instrument we own can even SEE that scene. `GLOWPROBE=1` (new; counts on
+CEN slots 24-28 and 34, all below 64 where the block is verified),
+4000 attract frames:
+
+    CEN[24] vints with pscene_cur == 0 (normal)   3898
+    CEN[25] vints in any other scene                 5
+    CEN[26] times the glow animator YIELDED          0
+    CEN[27] vints a mask grant sat undelivered       1
+    CEN[34] vints the animator ticked             3517
+
+**Five vints out of 3,903 are outside the normal scene and the animator
+never yields once.** A blue-dominance scan of frames 1400-2400 finds no
+cutscene either (0.005-0.009 throughout). The transformation is a
+GAMEPLAY event -- it needs three orbs collected -- and the attract demo
+does not perform it.
+
+So Mike's chevron defect cannot be reproduced by the attract, which is
+what both threads have been probing: my three rig launches, the
+decompile thread's eight bldO captures, every picture gate in this log.
+That is the honest reason "your three launches and their zero black
+shares did not catch any of this" -- not that the metric was wrong for
+the chevron, but that the SCENE was never on screen.
+
+**The isolation that does not need the cutscene.** In the transform
+scene the animator hands sets 19-21 back to the 68K (m_main.c's scene
+gate, 2026-09-05, "Mike's floating head"): `glow_on = 0`, grant the
+mask OFF, delta pipeline rules those words. That end state -- no SH-2
+animator, no 68K mask -- is exactly what dropping `PALGLOW` produces,
+and it can be measured in the NORMAL scene where the attract lives.
+`NOGLOW=1` builds it (ngO, md5 6cdc1010).
+
+Control first, PAL_SH words 0x98-0x9F (set 19) on consecutive frames,
+one ares run per frame (the multi-dump trap), card O:
+
+    f3000  7FFF 4900 4A00 4B00 4C00 4D00 4E00 4F00
+    f3001  7FFF 4E00 4F00 4900 4A00 4B00 4C00 4D00   moved
+    f3002  7FFF 4C00 4D00 4E00 4F00 4900 4A00 4B00   moved
+    f3003  7FFF 4A00 4B00 4C00 4D00 4E00 4F00 4900   moved
+    f3004  7FFF 4F00 4900 4A00 4B00 4C00 4D00 4E00   moved
+
+The animator rotates the seven-shade ramp every single frame, five
+positions a step (`glow_rp < 2 ? +5 : -2` = -2 mod 7), which is the
+arcade's own period-7 rotation LOOP-DECOMPILE 123 measured. So the
+animator is right and the ramp data is right; the question is entirely
+what happens when it yields. ngO's sequence is running.
