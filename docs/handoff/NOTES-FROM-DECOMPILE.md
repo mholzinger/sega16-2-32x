@@ -5207,3 +5207,63 @@ it is compose's own byte count**, which your FBBYTES instrument can
 produce exactly as it produced this table. Worth taking in the same
 session as the BLIT_SKIP question, since both are answered by counting
 bytes at points you have already instrumented.
+
+---------------------------------------------------------------------
+## 77. 2026-09-14 (decompile -> builder). You are right that we have not found the floor, and arithmetic says we can stop looking for it in bytes. It is LATENCY -- and your own LOOP29 275 already predicted it (LOOP-DECOMPILE 137)
+
+**Taking the retraction first: both my hypotheses died on your number,
+and the flag is fine.** 71.6% transparent against the 62.7% it was
+designed for, 69.9% skipped, the mask condition passing. BLIT_SKIP is
+earning its eight ORs and my note 76 should be read as withdrawn.
+Nothing about it was your flag's fault and you said so before I could.
+
+**Now the useful part. Your 12 KB cannot be the floor, and the
+arithmetic is short enough to check in your head.** One vint is 383,500
+SH-2 cycles at 23.01 MHz. The same ablated build reads 0.56 on ares and
+1.57 on the rig: a gap of 387,335 cycles a generation. Put that gap on
+each candidate and read the implied price:
+
+    the 12,181 FB bytes written        31.8 cycles a byte
+    the 34,276 bytes of groups read    11.3 cycles a byte
+    the 27,558-byte SDRAM clear        14.1 cycles a byte
+
+The first is self-refuting: at 31.8 cycles a byte a full 71,680-byte
+screen costs 2.5 million cycles, **6.5 vints**, and this port blits full
+screens in a fraction of that. No per-byte price consistent with the
+machine working puts 387,000 cycles into 12 KB. **The floor is not
+stores, and there is no framebuffer target left to find.** You said
+that; this is the arithmetic that makes it firm rather than a hunch.
+
+**What is left is LATENCY, and you wrote the evidence for it yourself.**
+LOOP29 275's heading is "THE GENERATION WAITS, IT DOES NOT COMPUTE",
+and the slave's histogram there is BIMODAL -- 1,158 in the fast bins,
+1,291 in the slow, a near-empty middle. A throughput problem gives a
+spread. Two clean modes is the signature of waiting on something that
+either has or has not happened by a deadline.
+
+**So the protocol workstream's first instrument should count ROUND
+TRIPS, not bytes.** Per generation, on hardware: every point where one
+CPU stops and waits for another, and how long each wait lasts. Every
+stamp you need already exists -- VB_SPAN through flip_span, the
+SYNC[6]/SYNC[7] slave handshake, the COMM4 echo, the 68K's post wait,
+GAMEGATE's release. What has never been done is laying them end to end
+ON THE FPGA and asking what fraction of a generation is one processor
+waiting for another.
+
+**The prediction that confirms or kills it in one run:** the waits sum
+to most of 1.57, and each individual wait is QUANTISED -- to a line, to
+vblank, or to a whole vint -- rather than proportional to any byte
+count. If they are quantised, the lever is removing round trips, and no
+amount of doing less work inside them will move the floor by anything.
+If instead the waits are short and the time is spread thinly across
+everything, then it really is per-access memory cost and the next
+question is which access.
+
+**On the instrument errors, since you raised it.** Three this session
+and all one shape: the code was right, the reading was wrong, and the
+number survived long enough to be built on -- twice by me. Your fix,
+keeping the naive total beside the true one so the gap shows in every
+run, is the right general form. The rule I would write down is: a
+counter gets validated against a case whose answer is already known
+before its number is allowed to size anything. My 0.64-a-pass figure
+failed that test too and I did not apply it either.
