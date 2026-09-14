@@ -8301,3 +8301,85 @@ that decision now. If the short path is taken where the arcade takes
 the long one, the dispatcher that advances 0xFFF031 may simply never
 run. That is OUR code and squarely the builder's to prove or clear,
 and it is the next thing I will measure.
+
+---------------------------------------------------------------------
+## 283. RETRACTION: I MEASURED "THE ATTRACT" WITH A SCRIPT THAT COINS UP AND PRESSES START. EVERYTHING DOWNSTREAM OF THAT IS VOID (2026-09-14 12:20)
+
+`discover/inputs/play2.csv` -- the input script every ares run in this
+session used -- is a GAMEPLAY script. Its first four lines:
+
+    # coin
+    300,y,1
+    310,y,0
+    # start
+    420,start,1
+    430,start,0
+
+**It inserts a coin at frame 300 and presses START at frame 420.** So
+from frame ~430 onward every "attract" run in entries 275a, 278, 279,
+280, 281 and 282 was a CREDITED GAME, not the attract. The port was
+behaving correctly the entire time.
+
+Re-run with no input at all (`discover/inputs/attract.csv`, empty):
+
+    frame   bit0(0xFFF026)   step   counter
+      400         1           08     0060
+      500         1           08     FFFF   <- the card's countdown
+      700         1           0C     0067   <- demo, counting up
+     1200         1           0C     0161
+     1500         1           0C     025A
+     2000         1           14     0001
+
+The attract bit stays SET, the step advances 08 -> 0C -> 14, and
+0xFFF02A behaves exactly as LOOP-DECOMPILE described it -- countdown on
+the card step, +1 per frame inside a demo. And the chevron marker fires:
+
+    TRUE ATTRACT, 5400 frames
+      chevron plane up      120 vints
+      highest page quadrant  11
+      first at vint        1412
+      animator yields         1
+
+**WHAT IS RETRACTED:**
+
+  - **282's "our attract never leaves step 0x08"** -- FALSE. It
+    advances correctly. The step was stuck because I had started a
+    credited game at f420 and the game was in it.
+  - **279's "the transformation never runs, both markers read zero"**
+    -- FALSE. Both markers fire on the real attract.
+  - **275a's "the attract never enters the transform scene"** (5 vints
+    of 3,903, zero yields) -- VOID, measured in credited play.
+  - **280 and 281's divergence work** -- VOID, and worse than void: it
+    compared OUR CREDITED GAME against the ARCADE'S TAPE DEMO. The 769
+    distinct positions against 589 is not evidence of divergence, it is
+    two different activities. Every index attempt in 281 was chasing an
+    alignment between things that were never the same.
+  - **278's palette comparison at f900** -- the MEASUREMENT stands (the
+    game holds sets 20/21 steady and our animator paints its wave over
+    them) but it was taken in credited play, so the scene is not the
+    one it claims.
+
+**WHAT SURVIVES, and why:**
+
+  - **Card O's backstop (282)** -- the RIG half is untouched: the rig
+    takes no input, so 6 7 8 8 7 7 7 7 7 8 full captures per 64 vints
+    is the true attract and the backstop does fire. The ares half
+    (12.5%) was credited play, but the mechanism is per-vint and scene-
+    independent, and the rig agrees. The mask remains cleared as the
+    cause of persistent glyphs.
+  - **Card P's table union** -- a build-time table change, no input
+    dependence.
+  - **The generation card's phase split (275)** -- measured in credited
+    play, which is arguably the RIGHT scene for a speed number, but the
+    entry must say so and did not.
+
+**The lesson, and it is one this log has written before in another
+form.** LOOP29 166: "diffing a moving target needs the time axis, and I
+reached for the fix before I had it." This is the same error one level
+up -- I reached for the measurement before checking what the instrument
+was pointed at. Six entries of work rest on an input script I never
+opened, in a session that twice congratulated itself on checking the
+transport before blaming the game.
+
+**`discover/inputs/attract.csv` (empty) is now the attract script.**
+Any entry claiming to measure the attract must name the input file.
