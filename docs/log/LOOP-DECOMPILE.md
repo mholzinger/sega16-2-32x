@@ -7465,3 +7465,102 @@ and the sbuf work all live.
   * LOOP29 275 annotated as an instruction-count ranking and never a
     critical path. That is entry 141's rule and it is now in both logs.
   * The rig is back on bldS, the line, off the gw4 diagnostic.
+
+---------------------------------------------------------------------
+## 146. CARD T's gates, read off the program: privilege CLEARED, and the immediate in my own card was WRONG -- it is STOP #$2300, not #$2000. Also: the wait has 34 call sites, not 11 (2026-09-14)
+
+The builder said yes to the SR read. Done, off
+`srcref/alteredbeast/Disassembly/altered_beast.asm`.
+
+### Gate 1 -- privilege: CLEARED
+
+**Every write to SR in the entire program is `move #$2700,sr` or
+`move #$2300,sr`.** Sixteen sites, listed:
+
+    2700:  0x412  0x4A4  0x2E08  0x3372  0x3BEE  0x1B834
+    2300:  0x552  0x5C2  0x62E  0x1E5E  0x2E14  0x337E  0x3BFA  0x1AFE4
+
+Plus four `move sr,dN` READS (0xFB92, 0x1064A, 0x10FB6, 0x13EA4), which
+cannot change mode. There is **no `move <ea>,sr` with a computed value,
+and no `andi`/`ori`/`eori` to SR anywhere in the program.**
+
+Both written values have bit 13 set. The 68000 boots supervisor and
+**this program never leaves supervisor mode.** `STOP` is legal at
+0x3982. Gate 1 is closed by exhaustion, not by assumption.
+
+### Gate 2 -- the immediate: my card was wrong
+
+NOTES 82 specified `STOP #$2000`. That is mask 0, which enables every
+interrupt level. **The program's running state is `#$2300` -- mask 3 --
+which masks levels 1-3 deliberately and permits IRQ4 and above.**
+
+`#$2000` would hand the game three interrupt levels it spends sixteen
+instructions keeping masked. **The correct immediate is `STOP #$2300`.**
+It keeps S set (so no privilege violation), it keeps the game's own
+mask, and it still wakes on IRQ4, which is the only thing that needs to
+wake it.
+
+That is the whole value of reading a gate instead of assuming it.
+
+### Gate 2b -- can the wait be reached with interrupts OFF?
+
+`STOP` loads the immediate into SR, so the stub is self-correcting
+whatever the caller's SR was -- but that means it must never be reached
+from a deliberate interrupts-off region, or it would silently re-enable
+them. Checked exhaustively:
+
+  * The four `#$2700` critical sections in the running program are 12
+    bytes long (0x2E08->0x2E14, 0x3372->0x337E, 0x3BEE->0x3BFA) -- three
+    instructions, no room for a `jsr`.
+  * 0x412->0x552 is the boot disable; the lowest call site is 0x640.
+  * 0x1B834 disables and is a decompressor; **no call site lies in
+    0x1B800-0x1B9FF.**
+
+**None of the call sites lies inside an interrupts-off region.** Gate 2b
+closed.
+
+### Gate 3 -- spurious wake
+
+Unchanged and already correct: the stub must loop back to the STOP, not
+fall through. As written in NOTES 82.
+
+### CORRECTION: 34 call sites, not 11
+
+Entry 67 reported 11. The disassembly's xref list gives **34**:
+
+    0640 08D6 0904 0922 0946 0ADC 0B8E 0BA0 0C30 0C64 0C7C 0C8A 0CCE
+    0CFA 0D02 1620 1E7A 1F4E 1F6E 2024 203E 2050 207C 220C 2228 225A
+    468A 5DF6 90FE 923E 1A40E 1A480 1A4A8 1A4BC
+
+All of the form `jsr (countdown_a0_loops).l`. This is the game's
+**universal frame wait** -- boot, attract, and gameplay all funnel
+through it. That cuts both ways and both should be said: patching one
+routine covers every wait in the program, and patching one routine puts
+every wait in the program at risk.
+
+### The corrected stub
+
+    3982:  4EF9 xxxxxxxx   jmp stub               (6 bytes, exact fit)
+
+    stub:  4E72 2300       stop  #$2300           wake on IRQ4, no bus
+           4A38 F01C       tst.b $F01C.w
+           67F8            beq.s stub
+           4EF9 00003988   jmp   0x3988           back into the dbf
+
+One residue for the builder rather than for me: **`STOP` is an unusual
+instruction and the rig is an FPGA 68000 core, not a real one.** It is
+cycle-accurate by reputation and FX68K implements STOP, but no build of
+ours has ever executed one. It wants a smoke test before it wants a
+measurement.
+
+### On sequencing: body stamps first, and I would not reverse it
+
+Card T patches a routine with 34 call sites -- the largest blast radius
+of any card in the arc. Its payoff is also unknown until we know where
+the ~1.5 v/gen lives: if the body stamps put the time in the blit (SDRAM
+and FB writes, no MD-side reads at all) then Card T cannot help and the
+patch was spent for nothing.
+
+Body stamps are pure instrumentation with no risk to the line, and they
+are the thing that tells us whether Card T is aimed at anything.
+Measure, then patch.
