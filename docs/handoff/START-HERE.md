@@ -260,9 +260,18 @@ explained.
     path; three agreeing measurements, NOTES 78/80).
     Where the master's generation actually goes on hardware: ~0.69 v/gen
     of instructions against a 2.2-2.5 v/gen generation, so ~1.5 v/gen is
-    memory stall. Stores are excluded by arithmetic (NOTES 77) and at
-    most ~0.4 v/gen is 68K arbitration (the MAXWAIT=4 null, 294), so
-    **at least 1.1 v/gen is unexplained and that is the open question.**
+    memory stall. Stores are excluded by arithmetic (NOTES 77). The
+    68K-arbitration share is **UNKNOWN** -- the MAXWAIT=4 null that
+    claimed to bound it is RETRACTED (NOTES 85): it changed the 68K's
+    release rate, not its bus occupancy, and a cacheless 68000
+    saturates the bus spinning or working alike. **~1.5 v/gen of master
+    stall is unexplained and that is the open question.**
+    And note where to look: every stamp either thread has placed lives
+    in the V-ISR, whose whole pre-flip life is ~22 lines of a ~577-line
+    generation. **Under 4% of a generation has ever been instrumented**
+    -- the rest was inferred by subtraction. The next instrument is
+    BODY stamps (blit, tile cache fills, sbuf, cap_drain's second site
+    at m_main.c:13413), not another ISR stamp.
 
 **CHECKED AND NOT A DEFECT (2026-09-14):** the crystal-ball interlude
 renders magenta on purple, and so does the arcade (ref_016289). Ours is
