@@ -225,6 +225,36 @@ the tested rom IS the committed source. The tested md5 is kept as the
 line's identity rather than swapping in the clean rebuild, so the gate
 evidence and the rom keep the same name.
 
+**MIKE'S EYE: PASSED, 2026-09-14.** His words: "S passes for all intent
+and purposes." It fixed the black tiles that were consistently
+appearing in the TOP TWO THIRDS of the screen during gameplay -- a
+result nobody predicted from the chevron gate and which is not yet
+explained.
+
+**OPEN ON THIS LINE, from Mike's own pass:**
+  - leftover screen text after the transformation. The mask's 8-vint
+    backstop was MEASURED firing on both machines (12.5% full captures
+    on ares, 6-8 per 64 on the rig), so a missed mark cannot produce
+    glyphs that persist; the mask theory is dead. The unmarked clear at
+    0x9052 (LOOP-DECOMPILE 131) is the candidate only if it revives.
+  - SOME black tiles remain, fewer, and no longer in the upper screen.
+    They persist until they scroll off rather than filling in, so not
+    residency pop-in (LOOP-DECOMPILE 129/130).
+  - the attract never advances past step 0x08, so our demos never run
+    (LOOP-DECOMPILE 132 predicts 0xFFF026 bit 0 clear; one read settles it).
+  - the shadow renders as a column dither over MD-plane content (128).
+  - the generation is the wall: slave 1.05 against master 0.70, bimodal.
+
+**CHECKED AND NOT A DEFECT (2026-09-14):** the crystal-ball interlude
+renders magenta on purple, and so does the arcade (ref_016289). Ours is
+a later frame of the same fill animation.
+
+**THE BAR IS VERIFIED (LOOP-DECOMPILE 133):** the arcade's own
+missed-frame counter at 0xFFF144 reads ONE dropped frame in 3,300
+display frames of credited play. System 16B logic runs one pass per
+display frame, so 64 presented per 64 vints is the correct target and
+there is no cheaper honest bar behind it.
+
 **USE `discover/inputs/attract.csv` (empty) TO MEASURE THE ATTRACT.**
 `play2.csv` coins at frame 300 and presses START at 420; six entries of
 LOOP29 measured credited play and called it the attract before this was
