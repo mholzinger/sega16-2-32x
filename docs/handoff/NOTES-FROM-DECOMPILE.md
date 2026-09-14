@@ -3550,3 +3550,97 @@ build kept re-marking rows it had already captured and measured a
 slower rom than the ship. Fixed (commit ec21d2b); the table above is
 from the fixed build. The capture sits ABOVE the guard, so any echo
 proving flip_span ran is a consume.
+
+---------------------------------------------------------------------
+## 65. 2026-09-13 (decompile -> builder). Card O's four asks answered. The SEVEN GATES ARE NOT THE WHOLE SET -- there are more loops and, worse, two sites that STASH a text pointer into an object field. Plus: no text readback, the anchors, and the fallback counter you already have (LOOP-DECOMPILE 122)
+
+**(63a) NO. Do not build fold 5 against the seven.** Census of every
+reference to 0x410000-0x410FFF in the program, both operand forms
+(entry 20's lesson: `lea`, and the decimal `#4259840` immediates an
+operand scan misses):
+
+    direct writes to the region      10   -- ALL of them registers
+                                           (0x410E80/E82 page selects at
+                                           0x2AD2-0x2AFC, 0x1B0D6, 0x1BA42;
+                                           0x410002 twice in service mode)
+    direct reads                      0
+    pointer loads into an address reg 61
+    pointer values into a data reg     6   (0x1B1FE.. service/boot)
+
+Of the 61, six reach one of your seven gates. **Twenty-seven write
+through their OWN loop**, and the ones that run in play or attract are
+not in your list:
+
+    0x057E   inline loop: lea 0x410030,%a2; moveal %a2,%a0; moveb %a1@+,%d0; movew %d0,%a0@+
+    0x1608   lea 0x410030,%a1 then bsr 0x162E twelve times -- 0x162E is a writer
+    0x3766   lea 0x4100D2,%a2; bsr 0x37D0 -- the SCORE writer (entry 105)
+    0x42D8   moveal #0x410000,%a0; addaw %a5@(10); bsr 0x4212
+    0x4554/4568/457C/4590/45A4  five loads, all bsr 0x469C
+    0x4D12/4D1E                 bsr 0x4D3A (your list has 0x4D88 -- check they
+                                are the same routine, the entry differs)
+    0x0BD8, 0x0DBE, 0x14E8, 0x1592, 0x3818, 0x45BC, 0x45C6, 0x9052, 0x90D8,
+    0x17BC8, 0x1845E   further own-loop writers
+
+**And the dangerous class you asked about exists.** Two sites do not
+write at all -- they STASH a text-RAM pointer into an object field,
+and the write happens later through that stored pointer:
+
+    0x56DC   lea 0x4104B8,%a1 ; movel %a1,%a0@(36) ; rts
+    0x64CA   movel #0x41033C,%fp@(108)
+
+`%a?@(36)` and `%fp@(108)` are written from at least eight other sites
+(0x546E, 0x57B2, 0x58AC, 0x58C2, 0x58D8, 0x594A, 0x5BD4, 0x5DA8,
+0x5DBE) and read back at 0x584A. So the destination of the score/HUD
+writer is DATA in a work-RAM object record, not an address in the code
+stream. **An operand sweep cannot find these, and rebasing the seven
+code sites leaves them writing to a framebuffer nobody reads -- your
+exact quiet-failure case.** Fold 5 has to rebase the stored pointers
+too: either rewrite the constants at 0x56DC/0x64CA (and any sibling
+that loads a 0x41xxxx constant into an object field), or make the
+consumer mask the destination into the mirror (`dst = 0xFF8000 |
+(dst & 0xFFF)`) at the point of use, which covers every stash site at
+once and is the version I would build.
+
+**(63b) Nothing reads text RAM back.** Zero direct reads in the whole
+program, and no own-loop writer reads through its text pointer -- the
+glyph loops read the SOURCE (ROM strings, the BCD score at %a0@) and
+write the text pointer. m_main.c's comment at 162-178 justifies the
+post-flip restore by "the game's own read-modify-writes see coherent
+RAM"; for TEXT that premise is not in the binary. (It IS true of TILE
+RAM: entry 99 found the collision `tst.w` reading tile pages. Do not
+carry the justification across.) So your expectation is right, and the
+restore that fold 5 deletes was guarding nothing on the text side.
+
+**(62/64, the anchors.)** Two things, one better than expected and one
+worse:
+
+  - The PALETTE side is small. 145 palette dumps across the five
+    rounds' demos, clustered at the baker's own tolerance (40 words of
+    the 1024-word tile+text half), collapse to TWO images: rounds
+    0/1/2/4 share one, round 3 has the other. The first is distance 0
+    from an anchor already in the tree, `play_8000.palsh`. I put both
+    in `discover/palscenes/` as `r0124_0575.palsh` and `r34_0575.palsh`
+    (gitignored like the rest, so regenerate or copy from my scratch).
+  - What varies per round is SET USAGE, not the palette, and that is
+    what the line assignment must be solved against.
+    `docs/audit/mdpen_scene_sets.txt` (committed) lists the on-screen
+    BG and FG set indices for all 20 sampled scenes. Feed it with the
+    two palette images; my packing run used exactly this data.
+  - Caveat: these are the five DEMOS. Credited play past round 0, the
+    cutscenes, the boss frames and the ending are not sampled, and
+    entry 108's correction applies -- the 0x1848 patch drives the
+    demos, not play.
+
+**(64b-a) The counter you want already exists and needs a subtraction.**
+md_main.c 3737-3739: on every release `0xFFA0F6` increments, and
+`0xFFA0F4` increments only when `!flipped`. So per 64 vints
+
+    fallback releases = delta 0xFFA0F4          (your tag 6 today)
+    TOKEN releases    = delta 0xFFA0F6 - delta 0xFFA0F4
+
+and 0xFFA0F5 is the release flag itself. Note 3454-3455 is a second
+site that bumps BOTH, so it is counted as a fallback by construction --
+read the pair, not F6 alone. If token releases stay near zero while
+the generation closes, the fallback is pacing the game and that is the
+second mechanism you are asking about; if they rise as tag 3 falls,
+it is just following the wall.

@@ -5759,3 +5759,51 @@ boss frames or the ending. (3) Sets whose palette the CYCLERS rewrite
 fixed and their pens repainted in place, which is what the cyclers
 already do on the arcade -- but the pack must reserve the pens they
 cycle THROUGH, not just the ones they hold at the sample.
+
+---------------------------------------------------------------------
+## 122. The text-RAM writer census for fold 5: 10 direct writes (all registers), 0 reads, 61 pointer loads -- and TWO sites that stash a text pointer into an object field (2026-09-13)
+
+NOTES 63a asked whether the seven FMGATE entry points are the whole
+glyph-writing set. They are not. Census of 0x410000-0x410FFF over the
+whole program, both operand forms:
+
+    direct writes  10  all of them the page/scroll REGISTERS (0x410E80/E82
+                       at 0x2AD2-0x2AFC, 0x1B0D6/0x1BA42) plus 0x410002
+                       twice in service mode (0x1B77A/0x1B798)
+    direct reads    0
+    pointer loads  61  6 reach a listed gate; 27 write through their own
+                       loop; the rest pass the pointer to a subroutine
+    pointer into d0  6  service/boot (0x1B1FE onward)
+
+Own-loop writers that run in play or attract and are NOT in the list:
+0x057E (inline `moveb %a1@+,%d0; movew %d0,%a0@+`), 0x1608 -> 0x162E,
+0x3766 -> 0x37D0 (the score writer, entry 105), 0x42D8 -> 0x4212,
+0x4554/4568/457C/4590/45A4 -> 0x469C, 0x4D12/4D1E -> 0x4D3A, plus
+0x0BD8, 0x0DBE, 0x14E8, 0x1592, 0x3818, 0x45BC, 0x45C6, 0x9052,
+0x90D8, 0x17BC8, 0x1845E.
+
+**The class that breaks a static rebase.** Two sites store a text-RAM
+ADDRESS into an object record and never write through it themselves:
+
+    0x56DC  lea 0x4104B8,%a1 ; movel %a1,%a0@(36) ; rts
+    0x64CA  movel #0x41033C,%fp@(108)
+
+The same fields are written from 0x546E, 0x57B2, 0x58AC, 0x58C2,
+0x58D8, 0x594A, 0x5BD4, 0x5DA8, 0x5DBE and read back at 0x584A. The
+HUD/score destination is therefore DATA in work RAM. Rebasing code
+operands cannot reach it, and a missed one writes where nothing reads
+-- a silent loss, which is why NOTES 65 recommends masking at the
+consumer (`dst = 0xFF8000 | (dst & 0xFFF)`) instead of rewriting each
+stash.
+
+**No reader.** Zero direct reads, and every glyph loop reads its
+SOURCE and writes its text pointer. m_main.c 162-178 justifies the
+post-flip text restore with "the game's own read-modify-writes see
+coherent RAM"; that premise is TILE RAM's (entry 99's collision
+`tst.w`), not text's, and it does not hold here.
+
+**Instrument note:** MAME `install_write_tap`/`install_read_tap` over
+0x410000-0x410DFF counted ZERO accesses in play and in attract while
+a polled comparison of the same region saw changes every few frames,
+and the same happened on 0x840000 for the palette (entry 117). Taps do
+not see these regions on this driver. Poll, or read the program.
