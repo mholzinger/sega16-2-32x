@@ -2038,7 +2038,15 @@ static inline void diag_add(int slot, uint16_t t0)
 static inline void cache_purge(void)
 {
 #ifdef CACHE_OFF
-    /* NOTES 87, THE FETCH DISCRIMINATOR. The thread's hypothesis is that
+    /* NOTES 89 SUPERSEDES THE CE-CLEAR FORM. CACHE_OFF_CCR is now set by
+     * the Makefile to one of three values against the 0x11 baseline:
+     *   0x13 = CP|CE|ID  instruction fills OFF, data caches normally
+     *   0x15 = CP|CE|OD  data fills OFF, instructions cache normally
+     *   0x00 = the old CE-clear, which WEDGES the master (LOOP29 297)
+     * The first two separate fetch from data and neither kills the
+     * machine, because CE stays set and the other stream still fills.
+     *
+     * NOTES 87, THE FETCH DISCRIMINATOR. The thread's hypothesis is that
      * the uniform ~2.9x of LOOP29 295 is INSTRUCTION FETCH: ares charges
      * instruction cycles but not the fetch, and cache_purge() throws away
      * all 4KB at every window, so the path runs cold until it re-warms --
@@ -2076,7 +2084,7 @@ static inline void cache_purge(void)
         if ((sp_c & 0x000FFFFFu) >= 0x0003F800u)  /* the slave's stack */
             *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
         else
-            *(volatile uint8_t *)0xFFFFFE92 = 0;  /* CE clear: master cache off */
+            *(volatile uint8_t *)0xFFFFFE92 = (uint8_t)CACHE_OFF_CCR;
     }
 #else
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;

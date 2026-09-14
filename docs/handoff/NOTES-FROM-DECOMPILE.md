@@ -6124,3 +6124,96 @@ measurement and zero candidate builds for his eye since it passed. That
 is the right call while the tax was unexplained, but it should not be
 the steady state. If ID/OD resolves the tax, the next thing on the rig
 should be a build, not a probe.
+
+---------------------------------------------------------------------
+## 90. 2026-09-14 (decompile -> builder). CAT1MD STEP 2, DESIGNED. The moving boundary is not the defect -- the DIFFERENCE across it is, your own source names exactly when it occurs, and it can be eliminated at BAKE time and proved before the rom is built
+
+LOOP29 151 offered two fixes: one renderer per tile per scene, or two
+made pixel-identical. **The first gives back the saving and the second
+is already 95% built.** Here is the design.
+
+### Why "one renderer per tile per scene" cannot work
+
+An MD-rendered cat-1 tile has to be FB-rendered wherever a sprite must
+appear beneath it. Sprites reach almost everywhere in a scene, so a
+conservative per-scene assignment sends nearly every cat-1 tile back to
+the FB -- which is step 1, and step 1 is what we already ship. No saving.
+
+### The defect is the DIFFERENCE, not the motion
+
+If the two renderings of a tile were byte-identical, the boundary could
+sweep across the screen every frame and be invisible. The shimmer exists
+because they differ. **So fix the identity and the moving boundary stops
+being a defect -- step 2 keeps its per-frame sprite-row restriction
+exactly as designed.**
+
+### And your own source already names exactly when they differ
+
+m_main.c 4327-4333, the PENMATCH comment:
+
+    "Pure quantisation matches the MD WHENEVER THE LINE HOLDS THE PEN;
+     it differs only UNDER PEN EXHAUSTION."
+
+That is the whole residual, already written down. PENMATCH makes the FB
+paint with the MD's own quantised pens re-expanded through the DAC
+table, so the two renderers agree **except** where the set's pen is not
+resident on an MD line.
+
+### The design: bake an MD-ELIGIBILITY bit and claim only what cannot exhaust
+
+**A tile code is MD-ELIGIBLE for a round iff every pen it uses belongs
+to a colour set the round's baked MD line assignment holds.** Computed
+offline, one bit per tile code per round. Every input exists:
+
+    docs/audit/round_sets_definitive.txt   definitive per-round set
+                                           lists, every cell of every
+                                           page walked at f700
+    sh_src/pal_rounds_md.h                 per-round colour->line bake,
+                                           MDROUND_N 5, MDP_LINES 3 x 15
+                                           usable pens = 45
+    tools/mdpen_bake.py                    the existing bake driver
+
+Step 2 may drop an eligible tile from the FB pass. **An ineligible tile
+is FB-rendered for the whole round, exactly as today.** The saving is
+whatever fraction is eligible, and that fraction is a number the bake
+prints before anything is built -- so we know the payoff before spending
+a rig cycle.
+
+### The property that matters most: this is provable at BUILD time
+
+The bake can emit both renderings for every eligible tile code and
+**assert byte equality, failing the build on a mismatch.**
+
+That is worth stating plainly against the standing rule. Mike's
+2026-09-07 verdict established that **stills cannot accept temporal
+seams** -- and it was right. **But a build-time proof is not a still.**
+It settles the colour question before the rom exists, and leaves the
+play pass to judge motion and priority, which is what it is actually
+good at.
+
+### What the play pass still has to catch, stated honestly
+
+  1. **Priority.** An MD-rendered cat-1 tile cannot cover a sprite that
+     stayed in the 32X framebuffer. Where MDSPR has claimed the record
+     it is fine (plane A's priority bit beats MD sprites); where it has
+     not, the tile above must stay in the FB. **Under the eligibility
+     bake this is now free to decide per frame**, because both
+     renderings are identical -- the switch costs nothing visually. It
+     is a correctness term, not a shimmer term.
+  2. **Scroll alignment** between plane A and the FB compose. Step 1
+     ships, so it is solved, but step 2 exercises it across more of the
+     screen.
+  3. The 3 lines x 15 pens ceiling. If the eligible fraction comes back
+     small, the bake says so for free and the card is not worth
+     building -- which is the right way to find out.
+
+### Suggested order
+
+    1. Run the eligibility bake and PRINT THE FRACTION. No build.
+       If it is small, stop here; the card is dead for free.
+    2. Add the byte-equality assertion to the bake.
+    3. Build step 2 gated on the bit.
+    4. Mike's play pass, for motion and priority only.
+
+Step 1 costs an afternoon of tooling and answers whether steps 2-4 are
+worth anything at all.

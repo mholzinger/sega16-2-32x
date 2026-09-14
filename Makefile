@@ -2658,8 +2658,23 @@ endif
 # the pivot is the only lever left. DIAGNOSTIC ONLY, slow, never ships.
 # (PURGESTRESS was the first attempt and FAILED to move the variable: under
 # NAT_ALL_SLAVE there are ~1 body poll visits a generation to hook.)
+# `make ... BODYCENSUS=1 CACHEOFF=0x13|0x15` = NOTES 89, THE FETCH/DATA
+# SPLIT, and it is the test LOOP29 297 said could not be built. The SH7604
+# separates the two streams in hardware: CACHE.sv:499 fills the
+# instruction bus only while CCR.ID is clear and the data bus only while
+# CCR.OD is clear, with CE untouched, so lookups keep working and the
+# other stream keeps caching. Against the 0x11 baseline:
+#   CACHEOFF=0x13  (CP|CE|ID)  instruction fills OFF -> isolates FETCH
+#   CACHEOFF=0x15  (CP|CE|OD)  data fills OFF        -> isolates DATA
+# Stages inflate under 0x13 and not 0x15 = the uniform 2.9x is fetch, and
+# code placement is the lever. The reverse = data, and the pivot is it.
+# CACHEOFF=1 keeps the old CE-clear form, which WEDGES the master (297) --
+# it is kept only so that result stays reproducible. MASTER ONLY: the
+# guard in cache_purge() discriminates on the stack pointer, because
+# slave cache-off is a known-black state (mars_start.s:547).
+# DIAGNOSTIC ONLY, never ships.
 ifdef CACHEOFF
-SHCCFLAGS += -DCACHE_OFF
+SHCCFLAGS += -DCACHE_OFF -DCACHE_OFF_CCR=$(if $(filter 1,$(CACHEOFF)),0,$(CACHEOFF))
 endif
 ifdef BODYCENSUS
 ifndef BOOTFLIPRATE

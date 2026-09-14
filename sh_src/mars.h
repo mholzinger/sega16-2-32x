@@ -102,6 +102,19 @@ typedef volatile signed long int vint32;
 
 #define SH2_CCTL_CP         0x10
 #define SH2_CCTL_TW         0x08
+/* NOTES 89: the two REPLACEMENT-DISABLE bits, absent here until
+ * 2026-09-14 and the reason the fetch term looked untestable. Derived
+ * from srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101, whose
+ * packed CCR_t is MSB-first: W[1:0], UNUSED, CP, TW, OD, ID, CE.
+ * CACHE.sv:499 is the whole mechanism --
+ *     CACHE_UPDATE <= CBUS_ID ? ~CCR.ID : ~CCR.OD;
+ * a FILL happens on the instruction bus only while ID is clear and on
+ * the data bus only while OD is clear. CE is untouched either way, so
+ * LOOKUPS still work and the other stream still caches normally. That
+ * is the "comparable work" condition CACHEOFF violated: half the cache
+ * survives in each build and the machine stays alive. */
+#define SH2_CCTL_OD         0x04    /* data replacement disable */
+#define SH2_CCTL_ID         0x02    /* instruction replacement disable */
 #define SH2_CCTL_CE         0x01
 
 #define SH2_FRT_TIER        (*(volatile uint8_t *)0xFFFFFE10)
