@@ -182,6 +182,29 @@ _Static_assert((R60_LEN(1, 1, 1) & 3u) == 0 && (R60_LEN(0, 16, 40) & 3u) == 0
 #define FBX_PUB_MD     0x85E7F8uL         /* publish word, last in the half */
 #define FBX_PKT_SH     0x2401E000u        /* master view, uncached */
 #define FBX_PUB_SH     0x2401E7F8u
+/* TEXT ROW MASK, NOTES 63 / LOOP29 269. Card L carried the game's
+ * 4-row text-group mask in COMM2's HIGH BYTE, and COMM2 has four
+ * writers on the 68K side -- one ORs the mask in, three write plain
+ * BANK_SHADOW -- so a mask could be cleared before the master read it
+ * and the capture then left TEXT_U half-updated (NOTES 60/62). The
+ * carrier moves here: one word in the DEAD SPACE between the packet
+ * arm (936 words = bytes 0x000-0x74F) and the publish word (0x7F8),
+ * with exactly ONE writer, tagged so an unwritten or stale word is
+ * told from a real one and fails SAFE (full capture, right picture,
+ * slow) rather than silently partial. */
+#define FBX_TXM_MD     0x85E758uL         /* 68K view: word 940 */
+#define FBX_TXM_SH     0x2401E758u        /* master view, uncached */
+/* Word layout: bits 15-12 tag 0xC, bits 11-8 SEQUENCE (the 68K bumps it
+ * at every post), bits 7-0 the 8 group marks. The sequence is the
+ * staleness check the plain tag cannot give: a vint whose post never
+ * happened leaves LAST vint's word in place, and a mask that has
+ * already been consumed and cleared would then under-capture. The
+ * master takes the mask only when the tag is right AND the sequence
+ * moved; anything else is a full capture. */
+#define FBX_TXM_TAG    0xC000u            /* bits 15-12 */
+#define FBX_TXM_TAGM   0xF000u
+_Static_assert(0x758u >= R60_ARM * 2u && 0x758u < 0x7F8u,
+               "FBX text-mask word is not in the dead space");
 #define FBX_MAGIC      0xB600u            /* publish: 0xB6<<8 | sequence */
 #ifdef PAL_DELTA
 /* R60 layout v3 (PALDELTA) — the pal payload ships WORD DELTAS.

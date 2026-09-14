@@ -876,6 +876,18 @@ ifdef TEXTCAPMASK
 SHCCFLAGS += -DTEXTCAP_MASK
 MDCCFLAGS += -DTXT_MASK
 endif
+# TEXTMASKPKT=1 = NOTES 63 / LOOP29 269. TEXTCAPMASK's mask, carried in
+# its own word in the FB packet half (packet_fmt.h FBX_TXM_*) instead of
+# COMM2's high byte. COMM2 has FOUR writers on the 68K side and three of
+# them write plain BANK_SHADOW, so card L's mask could be cleared before
+# the master read it and the capture left TEXT_U half-updated (NOTES
+# 60/62). The new word has one writer, is tagged, and an untagged read
+# means FULL capture -- the failure direction is slow-and-right, never
+# fast-and-wrong. Needs FBXPORT (the packet half is the carrier).
+ifdef TEXTMASKPKT
+SHCCFLAGS += -DTEXTCAP_MASK -DTXT_MASK_PKT
+MDCCFLAGS += -DTXT_MASK -DTXT_MASK_PKT
+endif
 # TWOPOST=1 = LOOP29 149, the two-post protocol. The 68K posts BEFORE its
 # consumes (post A, ~5 lines), the master flips and then drops FM and
 # eats the post; the 68K does its VDP DMAs and the packet blast at FM=0
@@ -1670,8 +1682,34 @@ endif
 # ares verdict, exactly like FBSPR's staging. Requires FBSPR's audit
 # result (game code never runs with FM=1) - no new hazard.
 ifdef FBTEXT
+ifndef FOLD5
 SHCCFLAGS += -DFB_TEXT_READ
 MDCCFLAGS += -DFB_TEXT_READ
+endif
+endif
+# `make ship-us ... FOLD5=1` = NOTES 62/63, the text path. Takes the
+# game's text writes OFF the framebuffer and back onto the 0xFF8000 WRAM
+# mirror, where the r60 packet ships them like everything else. Negates
+# FBTEXT on BOTH sides (the -DFB_TEXT_READ above and the FBTEXT=... handed
+# to patch_game below, whose remap() then sends the whole 0x410000 text
+# page to 0xFF8000 instead of splitting glyphs to FB 0x85F000).
+#
+# What it removes, all three at once (LOOP29 266b-c, 268):
+#   - the master's 928-longword FB_TEXT -> TEXT_U snapshot inside the flip
+#     guard's window (~830 FRT ticks of the ~1650 budget; the ablation ran
+#     18 -> 31 presented frames per 64 vints);
+#   - the post-flip text RESTORE into the fresh draw bank (text is sparse,
+#     so an in-place FB copy needs one; a single WRAM copy does not);
+#   - COMM2's high-byte row mask from the text path entirely, which is the
+#     race card L died on (NOTES 62).
+# The DREQ text chunks and the 80-word regs/rowscroll prefix come back on
+# (they were killed by LOOP 20, and every #ifndef FB_TEXT_READ arm in
+# md_main.c/m_main.c is that path, intact). Full text refresh is 4 vints
+# at WIN_TWO's two 256-word chunks a packet; a dirty-group selector is
+# step 2, not step 1 -- step 1 is the transport, measured alone.
+ifdef FOLD5
+SHCCFLAGS += -DFOLD5_TEXT_WRAM
+MDCCFLAGS += -DFOLD5_TEXT_WRAM
 endif
 # `make ... MDHSCR=1` = LOOP-DECOMPILE 25. The game's two HORIZONTAL scroll
 # stores (0x2AD2 foreground, 0x2AEE background) are rewritten to thunks that
@@ -2719,7 +2757,7 @@ $(ROMDIR):
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
 md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
-	@GAME=$(GAME) MISSKEEP=$(MISSKEEP) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(FBTEXT) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK) PAL_APOST=$(PALAPOST) MISSKEEP=$(MISSKEEP) RELBANK=$(RELBANK) PASSCOUNT=$(PASSCOUNT) FRAMEDONE=$(FRAMEDONE) TAILCENSUS=$(TAILCENSUS) python3 tools/patch_game.py
+	@GAME=$(GAME) MISSKEEP=$(MISSKEEP) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(if $(FOLD5),,$(FBTEXT)) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK)$(TEXTMASKPKT) PAL_APOST=$(PALAPOST) MISSKEEP=$(MISSKEEP) RELBANK=$(RELBANK) PASSCOUNT=$(PASSCOUNT) FRAMEDONE=$(FRAMEDONE) TAILCENSUS=$(TAILCENSUS) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
 sh_src/game_high.bin: md_src/game_high.bin

@@ -3514,7 +3514,25 @@ void shim_vblank(void) {
 				r60_push();
 #endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
-				#ifdef TXT_MASK
+				#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
+				/* NOTES 63: the mask rides its OWN word in the FB
+				 * packet half, not COMM2's shared high byte. One
+				 * writer, tagged, and COMM2 goes back to carrying
+				 * nothing but the bank. The 68K is at FM=0 here (the
+				 * post is two lines below), so the FB is writable;
+				 * one word is ~0.05 lines. Every 8th vint forces the
+				 * mask full, so an ungated writer is stale for at
+				 * most 8 vints -- the same backstop card L had. */
+				{
+					static uint8_t txm_seq;
+					txm_seq = (uint8_t)((txm_seq + 1) & 0x0F);
+					*(volatile uint16_t*)FBX_TXM_MD = (uint16_t)(FBX_TXM_TAG
+					              | ((uint16_t)txm_seq << 8)
+					              | txt_mask
+					              | (((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)));
+				}
+				*mars_comm2 = BANK_SHADOW;
+#elif defined(TXT_MASK)
 				/* mask in the high byte; every 8th vint force it full */
 				*mars_comm2 = (uint16_t)(BANK_SHADOW
 				              | ((uint16_t)(txt_mask | ((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)) << 8));

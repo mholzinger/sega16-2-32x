@@ -7391,3 +7391,65 @@ Two details worth keeping:
 So the next cut is a generation cut, not a transport cut, and the
 transport's remaining cost (the text path) is what fold 5 removes
 rather than shrinks.
+
+---------------------------------------------------------------------
+## 269. FOLD 5 STEP 1 MEASURED: THE WALL GOES 1.09 -> 0.99, AND THE GLYPHS VANISH -- R60 HAS NO TEXT CARRIER (2026-09-13 20:10)
+
+Taking NOTES 62's order (fold 5, not the mask repair), the cheapest
+honest first cut: a `FOLD5=1` knob that negates FBTEXT on both sides --
+no `-DFB_TEXT_READ`, and `FBTEXT=` blanked for patch_game, whose
+`remap()` then sends the WHOLE 0x410000 text page to the 0xFF8000 WRAM
+mirror instead of splitting glyphs off to FB 0x85F000. Every
+`#ifndef FB_TEXT_READ` arm on both sides is the pre-LOOP-20 packet text
+path and is still in the tree, so this is one flag, not a rewrite.
+
+    rom    flags              ares wall   ships        _end
+    bldJ   the line              1.09     2524 (38.6)  --
+    bldM   + FOLD5=1             0.99     2614 (40.4)  06016e30
+
+**0.99 is the first build on this arc under one generation per vint**
+in ares's model, and it is the instruction side alone -- ares charges no
+SDRAM or uncached waits (LOOP29 254), so the 3,712-byte framebuffer
+read this removes is invisible to it. The number is real and it is also
+not the prize; the rig is.
+
+**And bldM's picture is wrong in exactly one way: no glyphs.** The
+attract's SEGA card (f300) draws its logo and its blue field correctly
+and is missing "INSERT COIN" and "(c)SEGA 1988"; the play scenes
+(f1800, f3200) are complete -- grass, gravestones, statues, zombies,
+palettes all right -- with no score, no timer, no HUD. Tiles, sprites,
+colour and scroll are untouched. Only the text layer is gone.
+
+**Cause, and it is structural, not a bug:** under R60 the legacy
+window/cadence push is dormant (`window_ok` stays 0), and the 256-word
+rotating text chunks live inside it. The R60 packet (packet_fmt.h, 22
+header words + optional 60-word rowscroll + palette + records + tail)
+carries the layer regs and the rowscroll table from the mirror and
+**nothing else of text**. So turning FBTEXT off moves the glyphs into a
+WRAM mirror that no transport reads. LOOP 20 killed the text chunks
+because FBTEXT made them redundant; FOLD5 needs them back, and they are
+not where they were.
+
+**What it would take, sized honestly.** The FBX packet is armed at 936
+words and a live packet is typically ~170 (22 + 60 rowscroll + a small
+pal section + ~20 records), so there is room for a text section most
+vints. What there is NOT room for is a PRESENCE BIT: the tag word is
+fully spent (bit 15 pal, bits 14-11 K, bit 10 rowscroll, bits 9-0 the
+exact length the harvest gate requires). A text section therefore needs
+a format revision on both sides plus new 4-word-burst alignment, and it
+needs a dirty-group selector so it ships what changed instead of 2048
+words. That is a card of its own, not a flag.
+
+**So the order inverts, and only the order.** NOTES 62's first
+instruction is "ship the rate first"; fold 5 was named as the means.
+The means has a gap. The rate can be shipped now by the smaller move --
+card L's mask with a carrier that cannot race -- and fold 5 proper
+(a text section in the R60 packet) then removes the capture entirely
+rather than shrinking it, exactly as 62 wants, on top of a line that is
+already fast. Both want the same dirty-group mask, so the work is not
+thrown away.
+
+`FOLD5=1` stays in the Makefile: it is the ablation that proves the
+instruction-side saving and it is step 1 of the real fold when the
+carrier exists. It is not a ship -- the glyphs are gone by
+construction, like TEXTCAPOFF before it.

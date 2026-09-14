@@ -7513,7 +7513,20 @@ static int flip_span(void)
          * marked (COMM2 high byte, posted by the shim). 128 longs per
          * group; group 7 is the last row (928 longs = 29 rows). */
         {
+#ifdef TXT_MASK_PKT
+            /* NOTES 63: read the mask from its own word in the FB
+             * packet half. A word whose tag is wrong (never written,
+             * or a bank the 68K has not posted into yet) means FULL
+             * CAPTURE -- the picture is never traded for the rate. */
+            static uint8_t txm_last = 0xFF;
+            uint16_t mw = *(volatile uint16_t *)FBX_TXM_SH;
+            uint8_t sq = (uint8_t)((mw >> 8) & 0x0F);
+            uint8_t tm = ((mw & FBX_TXM_TAGM) == FBX_TXM_TAG && sq != txm_last)
+                         ? (uint8_t)mw : 0xFFu;
+            txm_last = sq;
+#else
             uint8_t tm = (uint8_t)(MARS_SYS_COMM2 >> 8);
+#endif
             for (int g = 0; g < 8; g++) {
                 if (!(tm & (1u << g))) continue;
                 int lo = g * 128, hi = (lo + 128 > 928) ? 928 : lo + 128;
