@@ -8988,13 +8988,38 @@ measurable, and the arbitration-pressure card is dead before it was
 written.** The master's pre-flip reads cross to MD-side memory against a
 68K doing double passes; halving that traffic moved nothing.
 
-**The bound, which is the useful form of a null.** gens 28.8 -> 30.7
-is 2.22 -> 2.08 v/gen. The per-tag standard error is about 6 counts
-(scene-driven, not noise), so the 1-SE bound on the effect is roughly
-**+-0.4 v/gen**. Against ~1.5 v/gen of master memory stall (rig
-generation 2.2-2.5 less 0.687 of master instructions, stores excluded by
-arithmetic in NOTES 77), **at most a quarter of the stall is 68K
-arbitration and at least 1.1 v/gen is something else.**
+**RETRACTED THE SAME DAY (NOTES 85 / LOOP-DECOMPILE 145). The bound
+below is confounded and the arbitration hypothesis is UNTESTED.**
+
+~~gens 28.8 -> 30.7 is 2.22 -> 2.08 v/gen, per-tag SE about 6 counts, so
+the 1-SE bound is +-0.4 v/gen; at most a quarter of the stall is 68K
+arbitration.~~
+
+**Why it is void, and the error is mine.** The hypothesis is about the
+68K's BUS OCCUPANCY. MAXWAIT=4 changed its RELEASE RATE. Those are the
+same quantity only if an unreleased 68000 is off the bus, and **a 68000
+has no cache, so every instruction fetch is a bus cycle.** The wait loop
+at 0x3982 is `TST.B abs.w` (12 cycles, 3 accesses) + `BEQ.s` taken (10
+cycles, 2 accesses) = five accesses in ~22 cycles, **~91% occupancy**
+(NOTES 82). Game-pass code sits in the same band. So this build swapped
+68K WORK for 68K SPIN and **both saturate the bus** -- occupancy moved a
+few percent, if anything upward, since the spin is the tightest loop in
+the program. A flat result across a few percent is what a null reads
+when the variable was never varied.
+
+I built an ablation whose independent variable did not move and reported
+its null as a bound. The lesson is the arc's own rule turned one notch
+further: it is not enough to validate the COUNTER against a known
+answer -- the ABLATION has to be shown to move the quantity the
+hypothesis is about.
+
+**What the run does prove, and it stands:** the 68K's release rate does
+not cost compose. The game can advance its logic at 60 Hz for free, and
+`GAMEGATEWAIT=1` is not a tax.
+
+Card T (`STOP #$2000`) is the only clean test, because it takes
+occupancy from ~91% to ~0 instead of moving it between two saturating
+modes.
 
 **No per-word cost comes out of this.** There is no delta to divide by
 the drain+capture word count, so the number NOTES 81 wanted is still
@@ -9004,11 +9029,15 @@ fail:
 
   - `m_main.c:7720-7725` "this drain is 25.0 more at 9.23 pages a flip"
     (from LOOP-DECOMPILE 113) is 2.71 lines per 2 KB page, 5.3
-    milli-lines per longword. It is ARES-PRICED, and LOOP29 291
-    measured the same stage on the rig: post seen 22.3 lines, at the
-    guard also 22.3 -- the truth drain between those stamps costs
-    essentially nothing on hardware. 25.0 against ~0, same quantity,
-    two machines.
+    milli-lines per longword. I read the rig's ~0 against it as an
+    ares-vs-hardware gap; **NOTES 85 gives a simpler reading and it is
+    probably right.** `DRAINCUT` is NOT on the ship line, so
+    `cap_drain(13)` -- "ALL of it, correctness" -- is what runs, and
+    LOOP-DECOMPILE 115 measured the map needing 0-2 new tile codes a
+    vint, p90 zero. A full-budget drain with nothing pending costs
+    nothing. So 25.0 and ~0 are most likely a BUSY vint and a QUIET
+    one, not one quantity on two machines. Both are single-sample.
+    Settle it before either is used.
   - card J (a), 256b: 7,296 uncached reads per generation removed, rig
     unmoved (frJ 16/19/10/16/19 against frHI 21/22/8/16/17). An upper
     bound near 10 SH-2 cycles per read, but on SDRAM, not MD-side.
