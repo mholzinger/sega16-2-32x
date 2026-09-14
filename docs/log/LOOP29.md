@@ -9123,3 +9123,51 @@ generation PERIOD is 64/28.8 = 2.22 v/gen (LOOP29 293) against a wall of
 1.84, so **0.38 v/gen sits between a close and the next launch** and no
 stamp in the tree touches it. That gap is now the cheapest unexamined
 thing left.
+
+## 296. THE CLOSE-TO-LAUNCH GAP IS ~0.25 v/gen, NOT 0.38 -- AND 295's WINDOW ANCHOR REPRODUCES (2026-09-14)
+
+NOTES 87 put this first and it was right to. LOOP29 295 stamped the
+generation's WALL (`NAT_WALL[0]`, launch -> close) and I claimed 0.38
+v/gen sat between a close and the next launch, uncovered.
+
+**That 0.38 was mine and it was wrong.** I derived the PERIOD from one
+run's generation count (293's 28.8 per 64) and took the WALL median from
+a different run (295's 86.5). Mixing runs. `BODYGAP=1` stamps the launch
+and the close directly and reports gap, period and wall from the SAME
+accumulator set.
+
+Two anchors ride the tag set on purpose, so a drifted channel cannot
+pass as a measurement: tag 2 is the WALL (295 measured 86.5) and tag 3
+the WINDOW span (295 measured 38.0).
+
+Rig, attract, medians over two runs (ticks/gen >> 8, a vint = 47):
+
+| tag | n | median | range | v/gen |
+|---|---|---|---|---|
+| GAP close -> launch | 5 | 11-12.5 | **9-15** | **~0.25** |
+| WALL launch -> close | 7 | 104-106 | 81-117 | ~2.23 |
+| PERIOD launch -> launch | 6 | 99-114 | 75-127 | ~2.1-2.4 |
+| WINDOW (anchor) | 8 | 40.5 | 21-46 | vs 295's 38.0 |
+
+**The gap is about 0.25 v/gen, 10-13% of the period, not 17%.** And its
+range (9-15) is the TIGHTEST of any tag measured this arc -- every other
+tag has spanned 2-3x, this one spans 1.7x. It is a small, stable,
+load-independent cost and **there is no meaningful dead time between
+generations. The wall is the period.**
+
+**The window anchor reproduces**: 40.5 against 295's 38.0, inside the
+spread. 295's body split stands.
+
+**Where the identity does and does not close.** In the first run (n=1 on
+the gap) wall 104 + gap 9 = 113 against a period of 114 -- closes to one
+tick. In the second it does not (106 + 12 = 118 against 99), and the
+reason is visible in the data: one PERIOD sample read **127, the
+saturation value**, so that window's true period was past the cap and the
+median is pulled low. Tags are also sampled from different 64-vint
+windows. Read the first run's closure as the identity check and the
+second as a spread estimate.
+
+**Consequence.** There is nothing to find between generations. The ~2.9x
+of 295 is inside the wall, spread uniformly across its stages, and the
+next question is what that multiplier IS -- which is the cache-off
+discriminator, not another stamp.

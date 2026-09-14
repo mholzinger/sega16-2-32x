@@ -1075,6 +1075,59 @@ static void hs_promote(void);
 #define HS_PROMOTE() ((void)0)
 #endif
 static uint8_t nat_gen_open;     /* a whole-frame compose is in flight */
+#ifdef PURGE_STRESS
+/* SUPERSEDED IN THE SAME SESSION -- kept because the failure is the
+ * lesson. One purge per body poll visit was supposed to take the rate
+ * from ~1 a window to hundreds. PS[0] measured 1.0 per generation: under
+ * NAT_ALL_SLAVE the master's compose branch is compiled out and the maps
+ * drain finishes in a single visit, so there are almost no visits to hook.
+ * The independent variable did not move -- NOTES 85's failure, caught
+ * this time BEFORE the measurement, by the counter built to prove the
+ * move. Use CACHE_OFF below.
+ *
+ * (original rationale follows)
+ * NOTES 87, THE FETCH DISCRIMINATOR, AND IT IS SAFE BY CONSTRUCTION.
+ *
+ * The thread's hypothesis: the uniform ~2.9x is INSTRUCTION FETCH. ares
+ * charges instruction cycles but not the fetch; on hardware every
+ * instruction is fetched and cache_purge() invalidates all 4KB at every
+ * window, so the compose path runs cold until it re-warms -- a multiplier
+ * on WORK that is identical for a write loop and a read loop, which is
+ * exactly the signature LOOP29 295 measured.
+ *
+ * C1_CACHED is NOT this test: it moves cat1 mask reads between the cached
+ * and uncached alias, which is DATA traffic. And removing the existing
+ * purges would be a correctness change whose rendering differences would
+ * confound the timing.
+ *
+ * So move the variable the OTHER way. An EXTRA cache_purge can never be
+ * incorrect -- it only throws away valid lines -- so this build renders
+ * identically to the line and differs only in how cold the cache is.
+ * One purge per body poll visit takes the rate from ~1 per window to
+ * hundreds, and PS[0]/PS[1] count purges and visits so the independent
+ * variable is PROVEN to have moved (the lesson of NOTES 85).
+ *
+ *   stages inflate  -> instruction fetch is the tax, and the purge is a lever
+ *   stages hold     -> fetch is not it; the tax is data bandwidth ares
+ *                      prices at zero, and the pivot is the only lever left
+ *
+ * DIAGNOSTIC ONLY. Never ships. */
+#define PS ((volatile uint32_t *)0x26028E70)
+#define PURGE_STRESS_TICK() do { cache_purge(); PS[0]++; } while (0)
+#else
+#define PURGE_STRESS_TICK() ((void)0)
+#endif
+#ifdef BODY_GAP
+#define BODY_GAP_CLOSE() do { nat_close_t = frt(); nat_have_close = 1; } while (0)
+#define BODY_GAP_LAUNCH() do { \
+        uint16_t lt_ = frt(); \
+        if (nat_have_close)  nat_gap_sum += (uint16_t)(lt_ - nat_close_t); \
+        if (nat_have_launch) nat_per_sum += (uint16_t)(lt_ - nat_launch_t); \
+        nat_launch_t = lt_; nat_have_launch = 1; nat_have_close = 0; } while (0)
+#else
+#define BODY_GAP_CLOSE()  ((void)0)
+#define BODY_GAP_LAUNCH() ((void)0)
+#endif
 #ifdef BODY_CENSUS
 #if defined(PHASE_CENSUS)
 #error "BODY_CENSUS's BODYS shares PHASE_CENSUS's PH scratch - build them separately"
@@ -1083,6 +1136,15 @@ static uint8_t nat_gen_open;     /* a whole-frame compose is in flight */
 #error "BODY_CENSUS and TRIP_CENSUS both drive COMM6 - build them separately"
 #endif
 #define BODYS ((volatile uint32_t *)0x26028E68)
+#ifdef BODY_GAP
+/* NOTES 87: the census's own blind spot. NAT_WALL[0] is launch -> close,
+ * the generation's WALL; the rig's PERIOD (64 / gens, LOOP29 293) is
+ * longer. 0.38 v/gen sits between a close and the next launch and no
+ * stamp in the tree touches it. These two close that. */
+static uint16_t nat_close_t, nat_launch_t;
+static uint8_t  nat_have_close, nat_have_launch;
+static uint32_t nat_gap_sum, nat_per_sum;
+#endif
 #endif
 #ifdef TRIP_CENSUS
 #if defined(PHASE_CENSUS)
@@ -1225,6 +1287,7 @@ static int nat_ph_check(uint16_t pw);   /* ROM: pickup/echo stamps;
 #define NAT_CLOSE() do { \
         uint16_t wl_ = (uint16_t)(frt() - nat_t0); \
         NAT_WALL[0] += wl_; NAT_WALL[1]++; FBB_GEN(); \
+        BODY_GAP_CLOSE(); \
         if (wl_ > NAT_WALL[2]) NAT_WALL[2] = wl_; \
         nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); } while (0)
 /* the three close sites (gap poll, window entry, last-call) share this
@@ -1974,7 +2037,34 @@ static inline void diag_add(int slot, uint16_t t0)
 
 static inline void cache_purge(void)
 {
+#ifdef CACHE_OFF
+    /* NOTES 87, THE FETCH DISCRIMINATOR. The thread's hypothesis is that
+     * the uniform ~2.9x of LOOP29 295 is INSTRUCTION FETCH: ares charges
+     * instruction cycles but not the fetch, and cache_purge() throws away
+     * all 4KB at every window, so the path runs cold until it re-warms --
+     * a multiplier on WORK that is identical for a write loop and a read
+     * loop, which is the signature 295 measured.
+     *
+     * Adding purges was the first attempt and it failed to move the
+     * variable (see PURGE_STRESS). Disabling the cache outright moves it
+     * as far as it goes: EVERY fetch becomes an SDRAM round trip.
+     *
+     * It is SAFE. A disabled cache cannot be incoherent, so this renders
+     * identically to the line and differs only in fetch cost. Direction
+     * is the opposite of the eventual fix, which is the point -- it
+     * measures the SIZE of the fetch term rather than nudging it.
+     *
+     *   stages inflate a lot -> fetch is the tax and code placement is
+     *                           the lever (the thread's Card T2)
+     *   stages barely move   -> fetch is not it; the tax is data
+     *                           bandwidth ares prices at zero, and the
+     *                           pivot is the only lever left
+     *
+     * DIAGNOSTIC ONLY. Slow by construction. Never ships. */
+    *(volatile uint8_t *)0xFFFFFE92 = 0;          /* CE clear: cache off */
+#else
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
+#endif
 }
 
 /* Cache lookup during compose. Returns pixel pointer; on miss, queues the
@@ -8286,7 +8376,26 @@ void visr_vbi(void)
         static uint16_t bc_vc;
         static uint8_t  bc_val[4];
         if (++bc_vc >= 64) {
+#ifdef CACHE_OFF
+            /* NOTES 87: tag 2 carries the CCR READBACK instead of the maps
+             * drain (the smallest stage), because ares does not model the
+             * SH-2 cache and therefore CANNOT validate this build -- there
+             * is no known answer to check the channel against. Reading the
+             * register back is the only proof the independent variable
+             * moved, and NOTES 85 says a build without that proof is not a
+             * measurement. 0 = cache OFF (what this build wants), 17 =
+             * CP|CE = the line's value. */
+            uint32_t cur[4] = { DIAG[8], DIAG[5], 0, NAT_WALL[0] };
+#elif defined(BODY_GAP)
+            /* NOTES 87 tag set: 0 close->launch GAP, 1 launch->launch
+             * PERIOD, 2 launch->close WALL (must reproduce LOOP29 295's
+             * 86.5 -- the known-answer anchor), 3 the window span (must
+             * reproduce 38.0). Two anchors, so a drifted channel cannot
+             * pass as a measurement. */
+            uint32_t cur[4] = { nat_gap_sum, nat_per_sum, NAT_WALL[0], DIAG[8] };
+#else
             uint32_t cur[4] = { DIAG[8], DIAG[5], DIAG[11], NAT_WALL[0] };
+#endif
             uint32_t g = NAT_WALL[1] - bc_prev[0];    /* borrowed below */
             (void)g;
             static uint32_t bc_gprev;
@@ -8298,6 +8407,10 @@ void visr_vbi(void)
                 uint32_t v = gens ? (d / gens) >> 8 : 0;
                 bc_val[k] = (uint8_t)(v > 127 ? 127 : v);
             }
+#ifdef CACHE_OFF
+            /* absolute, not a delta: the register value itself */
+            bc_val[2] = (uint8_t)(*(volatile uint8_t *)0xFFFFFE92);
+#endif
             bc_vc = 0;
             /* SANITY SLOT, audited-free PH scratch, probe-only and verified
              * zero on the line: the four values as bytes plus the gen count,
@@ -9742,6 +9855,7 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
                                   * the bins against W1) */
 #endif
         nat_gen_open = 1;
+        BODY_GAP_LAUNCH();
 #ifdef TRIP_CENSUS
         trip_launch++;           /* NOTES 78: count LAUNCHES, not closes --
                                   * the decompile thread's question is how
@@ -11130,6 +11244,7 @@ RAMCODE void m_main(void)
                     }
                 }
                 diag_add(12, tq);
+                PURGE_STRESS_TICK();
                 continue;
             }
 #endif
@@ -11147,6 +11262,7 @@ RAMCODE void m_main(void)
                 }
 #endif
                 uint16_t tq = frt();
+                PURGE_STRESS_TICK();
 #ifdef MTASK_WHY
                 mt_drain_visits++;
                 uint16_t mt_t0 = frt();

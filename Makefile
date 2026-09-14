@@ -2627,6 +2627,40 @@ endif
 # RESIDUAL = tag3 - (tag0+tag1+tag2) is what the card is hunting. ares says
 # window 40% / ship 19% / drain 12% / unaccounted 19%, but ares charges
 # instruction cycles only -- that ranking is what the rig is here to overturn.
+# `make ... BODYCENSUS=1 BODYGAP=1` = NOTES 87: the census's own blind spot.
+# NAT_WALL[0] is the generation WALL (launch->close); the rig PERIOD is
+# longer and 0.38 v/gen sits in between with no stamp on it. Swaps the tag
+# set to: 0 close->launch GAP, 1 launch->launch PERIOD, 2 WALL (anchor:
+# must reproduce LOOP29 295's 86.5), 3 window span (anchor: must reproduce
+# 38.0). Two anchors, so a drifted channel cannot pass as a measurement.
+#
+# `make ... BODYCENSUS=1 PURGESTRESS=1` = NOTES 87, THE FETCH DISCRIMINATOR.
+# One extra cache_purge per body poll visit: ~1 purge a window becomes
+# hundreds. An extra purge can never be INCORRECT (it only discards valid
+# lines), so this renders identically to the line and differs only in how
+# cold the cache is -- unlike removing purges, which would confound timing
+# with rendering. Stages inflate = instruction fetch is the tax and the
+# purge is a lever; stages hold = the tax is data bandwidth and the pivot
+# is the only lever left. DIAGNOSTIC ONLY, never ships.
+ifdef BODYGAP
+SHCCFLAGS += -DBODY_GAP
+endif
+ifdef PURGESTRESS
+SHCCFLAGS += -DPURGE_STRESS
+endif
+# `make ... BODYCENSUS=1 CACHEOFF=1` = NOTES 87, THE FETCH DISCRIMINATOR.
+# Disables the master's cache so every instruction fetch is an SDRAM round
+# trip -- the largest possible move of the fetch term, in the opposite
+# direction to the eventual fix, which is what makes it a MEASUREMENT of
+# the term's size. A disabled cache cannot be incoherent, so it renders
+# identically to the line. Stages inflate a lot = fetch is the tax and code
+# placement is the lever; stages barely move = the tax is data bandwidth and
+# the pivot is the only lever left. DIAGNOSTIC ONLY, slow, never ships.
+# (PURGESTRESS was the first attempt and FAILED to move the variable: under
+# NAT_ALL_SLAVE there are ~1 body poll visits a generation to hook.)
+ifdef CACHEOFF
+SHCCFLAGS += -DCACHE_OFF
+endif
 ifdef BODYCENSUS
 ifndef BOOTFLIPRATE
 $(error BODYCENSUS needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
