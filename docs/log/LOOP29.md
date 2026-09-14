@@ -8455,3 +8455,49 @@ Both are latency, not override. And LOOP-DECOMPILE 125 stands separate:
 sets 19-21 are in every round's tilemap and in NO round's table, so
 their cells are refused and render as backdrop. The gate stops the
 animator painting over them; it does not give them a line.
+
+---------------------------------------------------------------------
+## 285. THE GATE IS A FIX. MY "2 OF 8" SCORE WAS MEASURING LAG AS ERROR (2026-09-14 12:40)
+
+284 scored the page-select gate at 2 of 8 chevron frames and called it
+insufficient. That score was wrong -- not the number, the METRIC.
+
+**Where the handover time goes.** GLOWPAGE + GLOWPROBE, true attract,
+the chevron's 110 vints split three ways:
+
+    animator still ON        1   0%
+    mask grant PENDING       0   0%
+    delta path owns them   109  99%
+
+So neither the gate nor the COMM8 grant is slow -- my NOTES 75b
+hypothesis about MDSPR taking the channel during a scene cut is WRONG
+and withdrawn. The delta path owns those words within a vint.
+
+**So why did six of eight frames differ? Because I compared frame N to
+frame N and the transport has latency.** Testing what we SHOW at frame
+N against what the game WANTED at N, N-1 and N-2:
+
+    bldR (gated)   lag 0: 3   lag 1: 2   lag 2: 1   NO MATCH: 0
+    bldP (no gate) lag 0: 0   lag 1: 0   lag 2: 0   NO MATCH: 6
+
+**Every frame of the gated build shows a value the game actually
+asked for, nought to two frames late. Not one frame of the ungated
+build shows a value the game EVER asked for, at any lag.** That is the
+difference between a transport delay and an override, and it is the
+whole question.
+
+The gate fixes the defect. What remains is 0-2 frames of pipeline lag
+in a palette that changes every frame or two -- the same class as set
+19's one-step phase offset (LOOP29 166), invisible at any presented
+rate we run, and not worth a card.
+
+**The method error, which is mine and is the third in this area.** I
+built a scorer that tested equality at a single instant on a quantity
+that moves every frame, exactly what LOOP29 166 wrote up as "diffing a
+moving target needs the time axis" -- and I wrote 284's score and
+NOTES 75b's retraction-of-a-retraction before running the lag test that
+was two commands away. The measurement was cheap; I reached for the
+verdict first. Twice in one session, on the same instrument class.
+
+**bldR is now a candidate for the line**, pending picture gates and
+three rig launches on the true attract.

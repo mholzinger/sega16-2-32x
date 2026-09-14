@@ -14125,6 +14125,21 @@ RAMCODE void m_main(void)
                     if (hi >= 10) {
                         if (!CEN[53]) CEN[55] = pg_vint;
                         CEN[53]++;
+#ifdef GLOW_PAGE
+                        /* LOOP29 285: WHERE DOES THE HANDOVER TIME GO?
+                         * The page gate fires at once, but only 2 of 8
+                         * chevron frames show the game's own sets 20/21
+                         * (284). Split the chevron's vints three ways:
+                         * CEN[9] the animator is still ON (the gate has
+                         * not taken effect yet), CEN[11] it is off but
+                         * the mask grant is still PENDING on COMM8, and
+                         * CEN[14] the grant has landed and the delta
+                         * path owns the words. Whichever dominates is
+                         * the thing to cut. */
+                        if (glow_on)       CEN[9]++;
+                        else if (glow_post) CEN[11]++;
+                        else                CEN[14]++;
+#endif
                     }
                     pg_vint++;
                 }
