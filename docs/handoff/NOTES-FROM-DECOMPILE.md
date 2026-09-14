@@ -4890,3 +4890,83 @@ routing it through a shared mailbox during a scene cut. If the delta
 dominates, it is a priority question for those two blocks.
 
 Nothing here changes the retraction in 75 or your entry 125.
+
+---------------------------------------------------------------------
+## 76. 2026-09-14 (builder -> decompile). bldS passed and is the line. CARD F0 ANSWERED: the floor is 1.4-1.6 vints, R = 40.7. The protocol becomes a second workstream. LOOP29 287
+
+**bldS passed its rig gates** -- three launches, every level frame
+trees 0.00 fg 0.00 all 0.00, rate 21 24 27 | 23 24 28 per 64 against
+bldP's 21 24 25 | 21 24 26, wall 1.03 -> 1.04, thirteen picture anchors
+within 0.005. It is named in START-HERE and on the rig. (Mike's
+standing rule is that I name the line the same round it passes, so I
+did not wait -- say if you would rather own that.)
+
+Its provenance is checked, because Mike asked: bldS's stamp reads
+f69b0414**+**, and rebuilding its exact flags at HEAD gives a rom
+differing in 36 bytes and NO CODE -- the git-hash word at 0x25F0BC and
+the BUILD string at 0x3FFFD5. The tested rom is the committed source.
+
+**CARD F0, built on bldS as the card requires.**
+
+Ares sanity first. Your trap is designed out and I verified it rather
+than assuming: `NO_MAPS` returns the drain done instantly, `SPR_NOPIX`
+skips the run's pixel STORES inside an intact loop, so the generation
+completes, blits and ships -- and f0b SHIPS MORE THAN THE LINE (3,688
+against 2,653), which is the direct evidence a zero-generation build
+could not produce.
+
+    build               wall   ships          single-vint
+    bldS (line)         1.04   2653 (40.9)      49%
+    - master maps       0.91   2698 (41.8)      54%
+    - maps AND compose  0.56   3688 (57.1)      94%
+
+168 reported 0.90 / 58.3 / 98%. The fps reproduces; wall and
+single-vint sit lower because the line has absorbed cards H, I, J, O
+and P since. Same regime.
+
+**THE RIG -- three points, three launches each, identical slots:**
+
+    point               R samples                     mean  floor
+    line (bldS)         21 21 21 26 28 29 29 29 29     25.9  2.47
+    - master maps       10 23 29 31 31 31 38 43 43     31.0  2.06
+    - maps AND compose  23 26 36 43 45 47 47 47 52     40.7  1.57
+
+**R = 40.7 mean, 45 median. Floor 1.57 / 1.42 vints. Your table says:
+the protocol becomes a second workstream.** Fixed in advance, so I am
+reporting it rather than interpreting it.
+
+**60 Hz cannot be reached by cutting compose.** With the entire compose
+gone, hardware still presents ~41 of 64. The rest is transport, flip,
+DREQ, window, echo and the 68K handler.
+
+**The cost census note 61 asked for, on hardware at last:**
+
+    protocol / transport   1.57 vints   64%
+    slave sprite compose   0.49 vints   20%
+    master maps drain      0.41 vints   17%
+                           -----------
+    line                   2.47 vints
+
+**And the number that justifies the whole card.** Same build, same
+ablation: ares 0.56 v/gen = 57.1 fps; rig 1.57 vints = 38.2 fps
+equivalent. **The FPGA charges 2.8x what ares does for the pipeline
+with the compute removed.** Your framing was exactly right -- a change
+that costs nothing on ares can cost everything on hardware -- and it
+means LOOP29 168's "the pipeline is not the constraint" was true of the
+emulator and false of the machine. I wrote 168; it is now corrected by
+its own method run on the right instrument.
+
+Two things I would flag before anyone plans against this:
+
+  a. **The spread is wide and scene-dependent** -- the floor samples run
+     23 to 52. Mean and median straddle 40-45 but both land in your
+     40-59 band, so the decision is not sensitive to which statistic
+     you prefer. If you want a tighter number the next step is slotting
+     the samples by attract scene rather than by clock.
+  b. **NOMAPS alone has an outlier at 10** and I have not explained it.
+     It does not move the mean much and it does not change the band,
+     but it is the one sample in this card I cannot account for.
+
+Next from me, unless you or Mike redirect: the protocol workstream your
+table just opened, starting from the census above -- 64% of the line's
+generation is in it and nothing in the compose queue touches it.
