@@ -8225,3 +8225,73 @@ would settle it from their side, and MAME lua taps are known to lie on
 S16B for protocol questions -- LOOP29's own rule), or I log the tape
 POINTER rather than any counter, which is the same question asked of
 the instruction that uses it.
+
+---------------------------------------------------------------------
+## 282. THE BACKSTOP WORKS. AND THE REAL DIVERGENCE IS FOUND: OUR ATTRACT NEVER LEAVES STEP 0x08 (2026-09-14 12:10)
+
+Two results, and the second one subsumes several open threads.
+
+**THE MASK BACKSTOP FIRES EXACTLY AS DESIGNED.** `MASKPROBE=1` counts
+what card O's mask actually resolves to per capture call. Ares, 3,000
+frames:
+
+    capture calls        2962
+      FULL (tm = 0xFF)    369   12%   <- the backstop; 1 in 8 predicted
+      NOTHING (tm = 0)     58    1%
+      partial            2535   85%
+      untagged word         0
+
+12.5% is one in eight to the decimal. So an unmarked write heals within
+8 vints, about 130 ms, and **the mask cannot produce glyphs that
+PERSIST.** My objection in NOTES 73 holds and the writer list (entry
+122, and the transformation clear at 0x9052 the decompile thread found)
+is not the explanation for what Mike sees. The rig copy of this probe
+is running to confirm the same on hardware.
+
+**AND THE ATTRACT STATE MACHINE DOES NOT ADVANCE.** Chasing NOTES 74's
+scoping rule -- gate the frame counter on the attract step, 0xFFF031 in
+{0x04, 0x0C, 0x14} -- the gate never fired, which sent me to look at
+the step itself:
+
+    frame   ARCADE step        OUR step
+      400      08 (card)          08
+      450      0C (demo)          08
+     1200      10 (eye)           08
+     1500      14 (demo)          08
+     2200      --                 08
+     3000      --                 08
+     4000      --                 08
+
+**Our attract sits at step 0x08 for its entire run** while the arcade
+walks 08 -> 0C -> 10 -> 14 -> 04. The counter at 0xFFF02A climbs
+monotonically to 0x085B (2,139) underneath it, so the game is running
+frames; it is the STEP VARIABLE that never moves.
+
+**This is long-standing, not a recent card's cost.** bldB, bldJ and
+bldO all read 08 at f1500 and f3000, so it predates cards H through P
+and every measurement in this log that assumed our attract mirrors the
+arcade's.
+
+**It subsumes three open items at once**, all of which were being
+chased as separate defects:
+
+  - the transformation never running (279) -- it lives in a demo step
+    we never enter;
+  - the page select never reaching 10 or 11 (279) -- same cause;
+  - 0xFFF148 never setting (278) -- same cause.
+
+None of those were palette, transport or mask defects. They are one
+state-machine divergence seen three ways.
+
+**What it does NOT explain**, and these stay open: Mike's black blocks
+(round 0's own sets, per cell -- entry 125), the stale glyphs (the
+backstop above rules out the mask), and the generation card's slave
+bimodality.
+
+**The suspect I would name, as a suspect.** GAMEGATE patches the
+program's own frame gate at 0x2AB8 -- "clear = the loop is waiting,
+release it; set = the loop overran, take the short path" -- and we own
+that decision now. If the short path is taken where the arcade takes
+the long one, the dispatcher that advances 0xFFF031 may simply never
+run. That is OUR code and squarely the builder's to prove or clear,
+and it is the next thing I will measure.

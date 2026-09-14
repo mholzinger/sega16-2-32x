@@ -2556,6 +2556,17 @@ endif
 # release, which happens exactly once per game frame -- so it lines up
 # with a MAME log of the arcade modulo a constant boot offset.
 # 2048 entries x 4 bytes; count at 0xFF4FFE. Probe only.
+# MASKPROBE=1 = NOTES 74. Counts what card O's text-capture mask
+# actually resolves to per call: full, nothing, partial, untagged.
+# Tests the BACKSTOP -- the 68K forces the mask full every 8th vint, so
+# full captures should be ~1 in 8 of all calls. Needs TEXTMASKPKT.
+ifdef MASKPROBE
+ifndef BOOTFLIPRATE
+$(error MASKPROBE needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
+endif
+SHCCFLAGS += -DMASK_PROBE
+MDCCFLAGS += -DGLOW_RATE
+endif
 ifdef OBJLOG
 MDCCFLAGS += -DOBJ_LOG
 endif

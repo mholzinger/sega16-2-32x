@@ -3795,15 +3795,31 @@ void shim_vblank(void) {
 							 * is exactly the shape the divergence took.
 							 * Writing log[ctr] makes a repeat overwrite
 							 * itself instead of consuming a slot. */
-							/* 0xFFF02A is zeroed at EVERY game start, so
-							 * the attract's successive demos reuse the
-							 * same indices and a naive log mixes them.
-							 * Capture ONE demo: stop for good the first
-							 * time the counter goes BACKWARDS. */
+							/* NOTES 74: 0xFFF02A has TWO JOBS -- a
+							 * countdown timer on the card steps and the
+							 * demo frame counter inside a demo step, and
+							 * it is re-zeroed at every game start. So
+							 * scope it: only demo steps (0xFFF031 in
+							 * {0x04, 0x0C, 0x14}), and only AFTER the
+							 * reset inside one, logging until the step
+							 * changes. That captures exactly one demo
+							 * instance with an index that is strictly
+							 * +1 per game frame, which is what both
+							 * earlier attempts lacked. */
 							static uint16_t ol_prev;
 							static uint8_t ol_state;   /* 0 wait, 1 log, 2 done */
+							uint8_t ol_st = *(volatile uint8_t*)0xFFF031;
+							uint8_t ol_demo = (ol_st == 0x04 || ol_st == 0x0C
+							                   || ol_st == 0x14);
 							uint16_t ol_c = *(volatile uint16_t*)0xFFF02A;
-							if (ol_c < ol_prev) ol_state++;
+							if (ol_state == 0) {
+								if (ol_demo && ol_c < ol_prev) {
+									ol_state = 1;         /* the reset inside a demo */
+									*(volatile uint16_t*)0xFF3FFC = ol_st;
+								}
+							} else if (ol_state == 1 && !ol_demo) {
+								ol_state = 2;             /* the step ended */
+							}
 							ol_prev = ol_c;
 							if (ol_state == 1 && ol_c < 2048) {
 								volatile uint16_t *lg =

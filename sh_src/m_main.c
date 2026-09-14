@@ -7532,6 +7532,32 @@ static int flip_span(void)
             if ((mw & FBX_TXM_TAGM) != FBX_TXM_TAG) tm = 0xFFu;
             else if (sq == txm_last)                tm = 0x00u;
             else { tm = (uint8_t)mw; txm_last = sq; }
+#ifdef MASK_PROBE
+            /* NOTES 74 / LOOP29 282: does card O's BACKSTOP actually
+             * fire? The 68K forces the mask FULL every 8th vint, so an
+             * unmarked write should heal within ~130 ms -- yet Mike's
+             * stale glyphs persist. Count what the master really takes:
+             * CEN[9] full captures (tm == 0xFF), CEN[11] nothing
+             * (tm == 0, the repeated-sequence path), CEN[14] partial,
+             * CEN[15] untagged words, CEN[16] capture calls in total.
+             * If CEN[9] is not about 1 in 8 of CEN[16] the backstop is
+             * not reaching the rows and the mask theory needs no writer
+             * list to be wrong. */
+            CEN[16]++;
+            if ((mw & FBX_TXM_TAGM) != FBX_TXM_TAG) CEN[15]++;
+            if (tm == 0xFFu)      CEN[9]++;
+            else if (tm == 0x00u) CEN[11]++;
+            else                  CEN[14]++;
+            {   /* and the same count on the value channel, so the RIG
+                 * can answer it too -- ares says the backstop fires,
+                 * and the rig is where Mike's glyphs persist. FULL
+                 * captures per 64 vints; the backstop predicts 8. */
+                static uint16_t mp_vc, mp_n, mp_val;
+                if (tm == 0xFFu) mp_n++;
+                if (++mp_vc >= 64) { mp_val = mp_n > 63 ? 63 : mp_n; mp_n = 0; mp_vc = 0; }
+                MARS_SYS_COMM6 = (uint16_t)(0x8000 | mp_val);
+            }
+#endif
 #else
             uint8_t tm = (uint8_t)(MARS_SYS_COMM2 >> 8);
 #endif
