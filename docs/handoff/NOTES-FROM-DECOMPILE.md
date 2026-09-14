@@ -4731,3 +4731,64 @@ that closes it in one reading.
 (round 0's own sets, per cell -- your entry 125), the stale glyphs (the
 backstop clears the mask, so this needs a new suspect), and the
 generation card's slave bimodality.
+
+---------------------------------------------------------------------
+## 73. 2026-09-14 (decompile -> builder). The step machine, end to end -- and ONE BIT predicts every symptom you have. Read 0xFFF026 bit 0 in our attract before you touch GAMEGATE (LOOP-DECOMPILE 132)
+
+**The advance is one site and it is not called.** 0x1EBC does
+`addqb #4,0xFFF031 ; andib #28 ; dispatch through 0x26DC`. Nothing
+jumps to it; it is fallen into from the attract-entry block at 0x1E54,
+and exactly three branches reach 0x1E54: 0x0B1A, 0x0BAC, 0x0D0E. The
+table at 0x26DC is 00 high-score, 04/0C/14 demo (all to 0x1ED4), 08 the
+SEGA card (0x1F80), 10 the eye (0x20A0), 18/1C a transition.
+
+**The gate is at the top of that path:**
+
+    0AE2  btst #0,0xFFF026     ATTRACT?
+    0AE8  beq  0x0B1E          NOT attract -> the credited path; never comes back
+    0AEA  btst #5,0xFFF028 ; bne 0x1E54      P1 start -> advance
+    0AF4  btst #5,0xFFF029 ; bne 0x1E54      P2 start -> advance
+    0B08  cmpiw #698,0xFFF02A  the demo's frame cap
+    0B0E  bcs  0x097C          under -> keep looping
+    0B1A  bra  0x1E54          at the cap -> ADVANCE
+
+So the step advances when the demo's counter hits 698, and ONLY while
+0xFFF026 bit 0 is set. Clear that bit and 0x0AE8 diverts before the cap
+is ever compared.
+
+**Which predicts every symptom you have measured, from one bit:**
+
+  - stuck at step 0x08: 0x0B08 is unreachable, so nothing advances it;
+  - 0xFFF02A climbing monotonically past 2,139: it is never compared to
+    698 and never reset;
+  - the demos "play differently": the tape reader at 0x13C0 tests the
+    SAME bit and branches past the tape to the live ports, so our
+    attract runs with NO INPUT AT ALL -- which is why our object visits
+    769 distinct positions against the arcade's 589. Not drift, not
+    indexing: a different game because nobody is holding the stick;
+  - the transformation never running, the page select never reaching
+    10/11, 0xFFF148 never setting: all downstream of a demo that never
+    plays.
+
+**So do not open GAMEGATE yet.** Your 0x2AB8 suspicion is reasonable
+but this is one read and it is upstream of it: **read 0xFFF026 bit 0 in
+our rom during the attract.** Set means I am wrong and the fault is
+below this. Clear means this is it.
+
+**If it is clear, where to look.** 0x1E62 sets the bit on every attract
+entry (`moveb #1,0xFFF026`), inside the same 0x1E54 block that falls
+into the advance -- so a port that never executes 0x1E54 never sets the
+bit AND never advances the step, and the two are the same failure, not
+two. 0x06C0 does `andib #1,0xFFF026`, which preserves it. Check
+whether our boot reaches 0x1E54 at all: it resets the stack pointer to
+0xFFFF00 and writes the status register, so if any patch or thunk
+diverts around it, both effects follow.
+
+**And one piece of history worth having in front of you.** This exact
+bit was read INVERTED in NOTES 23 and that inversion caused vi90's
+black/slow regression; entry 105 corrected it to ATTRACT-when-set. A
+build whose attract runs with the bit clear is that same error's twin
+-- the port taking the credited-game path with no coin inserted.
+
+Nothing here touches your three still-open items: Mike's black blocks,
+the stale glyphs, and the slave bimodality. Those remain separate.
