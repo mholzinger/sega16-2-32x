@@ -8039,3 +8039,114 @@ the complementary probe and **whichever one survives tells us which
 stream the machine can afford to lose.** That is a real answer either
 way, unlike CACHEOFF, which lost both streams at once and could separate
 nothing.
+
+---------------------------------------------------------------------
+## 152. THE MECHANISM, WITH A NUMBER: the hot compose path is 27,072 BYTES against a 4 KB cache -- 6.6x oversubscribed. That kills Card T2 arithmetically, explains the uniform tax, and means this renderer's whole optimisation history was conducted against an instrument that rewards the wrong thing (2026-09-14)
+
+The builder's T2 measurement: **half the cache costs 1.48x the
+generation** (n=4 properly sampled, three independent decodes converging
+1.47/1.46/1.48, CCR confirming TW|CE on 4 of 4). And **no instruction
+caching is a dead machine.**
+
+Both are prices. Neither is the mechanism. The mechanism is in the map
+file:
+
+    rom/s16.lst:16    __ramtext_size = 0x69c0 = 27,072 BYTES
+
+**The SDRAM-resident hot path is 27 KB. The SH7604 cache is 4 KB. The
+compose loop is 6.6x oversubscribed.**
+
+### That single number explains every result in this sub-arc
+
+  * **Why the tax is UNIFORM across stages** (entry 150's puzzle). Every
+    stage runs out of the same oversubscribed instruction stream, so
+    every stage pays the same miss rate regardless of whether its DATA
+    is reads or writes. The uniformity was never about data intensity;
+    it is about all stages sharing one thrashing I-stream.
+  * **Why halving the cache costs 48%.** 4 KB holds 15% of the path;
+    2 KB holds 7%. Both thrash; the smaller one thrashes worse.
+  * **Why ID=1 is a dead machine.** With no instruction refill at all,
+    27 KB is fetched from SDRAM continuously.
+  * **Why ares is 2.9x optimistic.** It charges instruction cycles and
+    not the fetch, and there are 27 KB of instructions to fetch.
+
+### It kills Card T2, arithmetically, with no rig cycle
+
+TW gives 2 KB of on-chip RAM. **2 KB covers 7.4% of a 27 KB hot path, at
+a measured cost of 48% of the generation.** There is no tenant that wins
+that trade. Card T2 is dead and I withdraw it.
+
+Note the shape of the error I made: I proposed T2 twice, first with the
+wrong tenant (data) and then with the right one (code), and never once
+asked how big the code was. **The footprint was one grep away in a file
+the build already emits.**
+
+### And it corrects my own mechanism from entry 150
+
+I attributed the tax to *"a full cache purge every window."* **The purge
+is close to a red herring.** A 27 KB path in a 4 KB cache thrashes
+whether or not anyone purges it -- the purge removes lines that were
+about to be evicted anyway. So "purge less", which the builder could not
+test through three attempts, would have bought little, and the failed
+attempts cost us nothing.
+
+**The footprint is the mechanism. Not the purge, not the coherency
+model, not the alias choice.**
+
+### The finding that matters most, and it is uncomfortable
+
+ares charges instruction COUNT and not instruction FETCH. **So for the
+entire optimisation history of this renderer, every specialisation that
+traded code SIZE for instruction COUNT measured as a win -- and on
+hardware was a loss.**
+
+The tree carries the fingerprints. m_main.c:691: *"ROM: a few hundred
+calls a generation; the inline form spilled .ramtext."* That decision,
+and every one like it, was made against the wrong cost model. And the
+repo already recorded the symptom without naming the cause -- memory
+`speed-gate-resolution-floor`: **"64 bytes of dead .data moves the
+level-1 ladder 18 points."** Tiny footprint changes moving the
+measurement hugely is the signature of a thrashing cache, and it has
+been sitting in the notes since before this arc.
+
+### The card this opens, and it is first-class
+
+**CODE SIZE IS A LEVER AND HAS NEVER BEEN TREATED AS ONE.** 27 KB to
+under 4 KB is not plausible, but the relevant target is not the whole
+path -- it is the INNER LOOP that runs per-tile and per-pixel. If the
+per-pixel and per-cell loops fit in 4 KB together, the outer path's
+misses amortise over a whole tile instead of over a pixel.
+
+Concretely, and every one of these is the reverse of a past decision:
+
+    de-specialise duplicated variants into one parameterised loop
+    stop unrolling loops whose bodies are memory-bound anyway
+    move cold setup out of RAMCODE back to cart ROM
+    measure every change in __ramtext_size, not in instruction count
+
+**And this is rankable OFFLINE for the first time in the project.**
+`__ramtext_size` is emitted by every build. A code-size ladder costs no
+rig cycles and no ares runs -- and given that ares actively misleads
+here, an offline proxy is not a compromise, it is a better instrument.
+
+### The pivot wins twice
+
+Entry 149 argued CAT1MD on work removal. **It also removes CODE:** every
+tile class the MD draws is a compose path the SH-2 no longer needs
+resident. The two levers were never independent.
+
+### FLAG on the instrument bug, and it reaches further than the builder said
+
+The sampler was `rm -rf`ing its own directory on every harness restart,
+so most runs decoded two or three shots of sixteen. The builder scopes
+the re-read to LOOP29 296-299.
+
+**LOOP29 295 -- the body stamps -- carries the same thin-n signature
+(n=5-6, "ranges wide"), and entry 150 built the uniform-tax hypothesis
+on the UNIFORMITY of those five factors.** Uniformity across noisy
+truncated medians is exactly what a truncated sample can manufacture.
+The 2.9x is load-bearing for entries 150, 151 and the ID/OD design, and
+it should be re-read with `--pull-only` before any of it sizes anything.
+
+The 27 KB figure does not depend on it -- that one is from the map file
+and needs no rig at all.
