@@ -2794,6 +2794,20 @@ void shim_vblank(void) {
 			uint8_t fb = *(volatile uint8_t*)0xFFA0F4;
 			ec_cnt[6] = (uint8_t)(fb - ec_fb_last);
 			ec_fb_last = fb;
+			/* NOTES 65: TOKEN releases are the delta of 0xFFA0F6
+			 * MINUS the delta of 0xFFA0F4 -- a second site bumps
+			 * both, so F6 alone over-counts. Tag 5 carried "no post"
+			 * and has read 0 on every build measured (258, 268, 271),
+			 * so it carries the token count instead; a non-zero "no
+			 * post" would have shown up as OK+edge+noship < 64
+			 * anyway. */
+			{
+				static uint8_t ec_tk_last;
+				uint8_t tk = *(volatile uint8_t*)0xFFA0F6;
+				uint8_t dtk = (uint8_t)(tk - ec_tk_last);
+				ec_tk_last = tk;
+				ec_cnt[5] = (uint8_t)(dtk - ec_cnt[6]);
+			}
 			for (int k = 0; k < 8; k++) { ec_val[k] = ec_cnt[k] > 63 ? 63 : ec_cnt[k]; ec_cnt[k] = 0; }
 			ec_vc = 0;
 		}

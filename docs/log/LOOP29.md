@@ -7573,3 +7573,67 @@ cleared only on the untagged decline echo 0xF1FF, so under ECHOCENSUS
 kept re-marking rows it had already captured, and measured a slower rom
 than the ship. The capture sits ABOVE the guard, so every echo that
 proves flip_span ran is a consume; all three tags now clear.
+
+---------------------------------------------------------------------
+## 272. THE COLOUR-LEVEL BAKE PACKS -- SEVEN (ROUND, AREA) TABLES, AND NOTE 65'S ANCHOR MAP HAS ROUND 4 ON THE WRONG SIDE (2026-09-13 22:20)
+
+NOTES 65 handed over the two palette anchors (`r0124_0575`,
+`r34_0575`, both now in discover/palscenes) and the on-screen set
+indices for all 20 sampled scenes (docs/audit/mdpen_scene_sets.txt).
+Measured against `tools/mdpen_bake.py`'s own partition search, at
+NLINES=3 / 15 pens, CONSERVATIVELY -- every listed set contributing all
+eight of its pens, because the set lists carry no pixel-usage mask, so
+every number below is an upper bound on the real demand.
+
+**First: round 4 belongs to `r34_0575`, not `r0124_0575`.** The note's
+prose says "rounds 0, 1, 2 and 4 share one, and round 3 has the other";
+the FILENAMES say 0/1/2 and 3/4, and the filenames are right:
+
+    round 4 scene 1 on r0124_0575:  14 sets, 42 colours -> NO PARTITION
+    round 4 scene 1 on r34_0575:    14 sets, 29 colours -> lines [15,14,10]
+
+29 is also what LOOP-DECOMPILE 121 reported for round 4 ("30"), so the
+note's own measurement agrees with the filename against its prose. With
+the filename map all 20 scenes pack; with the prose map two do not.
+Distances from play_8000: r0124_0575 = 0, r34_0575 = 530.
+
+**Per-scene (20 tables): all pack.** Worst line occupancy [15,14,10].
+
+**Per-round (5 tables): round 4 FAILS.** 27 sets, 46 colours against 45
+available, and still no partition at 43 when pixel 0 is excluded -- so
+it is a packing failure, not only a capacity one. Rounds 0-3 pack
+(round 2 at 39 -> [15,13,15], exactly full).
+
+The reason is structural and worth keeping: **rounds 2 and 4 each visit
+TWO disjoint set groups.** Grouping the 20 scenes by set signature gives
+six areas, and sets 22-36 are one area SHARED by round 2 scenes 2-3 and
+round 4 scenes 3-6 (the same section of level art reached in both).
+
+**Per (round, area): SEVEN tables, all pack.**
+
+    round 0 area 0 (scenes 1,2,3)    18 sets, 24 colours -> [13,15, 0]
+    round 1 area 0 (scene 1)         11 sets, 30 colours -> [14,12, 8]
+    round 2 area 0 (scene 1)         12 sets, 24 colours -> [15,11, 0]
+    round 2 area 1 (scenes 2,3)      13 sets, 23 colours -> [14,11, 0]
+    round 3 area 0 (scene 1)          9 sets, 20 colours -> [15,10, 0]
+    round 4 area 0 (scenes 1,2,7)    14 sets, 29 colours -> [15,14,10]
+    round 4 area 1 (scenes 3,4,5,6)  14 sets, 23 colours -> [14,11, 0]
+
+That is the honest granularity: a table must cover every scene the
+RUNTIME cannot tell apart, and the runtime's key is what it can see.
+
+**What the runtime can see decides the table count.** It already has the
+round (MD_ROUND, COMM10 bits 13-15, from the game's own 0xFFF142). On
+that key alone: rounds 0, 1, 3 have one area each and are free; round 2's
+two areas fit in ONE table (its union packs at 39); round 4's do not. So
+the shape is **five per-round tables plus one discriminator bit for round
+4** -- not a new scene-detection machine. The open question is where that
+bit comes from, and it is the decompile thread's to answer: a sub-scene
+variable in the game, or a set-demand test on the SH-2 side (round 4
+area 0 is sets 96-111, area 1 is sets 22-36 -- disjoint, so any one live
+set index separates them).
+
+**Caveat carried from NOTES 65:** these are the DEMOS only. Play past
+round 0, the cutscenes and the ending are unsampled, and `MDSTATIC`'s
+existing anchors (`normal`, `boss_smoke`, `transform`) cover a scene
+class this table does not.
