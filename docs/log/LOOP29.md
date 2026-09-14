@@ -7983,3 +7983,67 @@ regenerates the shipped `pal_rounds_md.h` byte-for-byte, so the tool
 and its inputs are the ones that produced the shipping table, and the
 union is the only delta. The regeneration command is now in the
 generated header, along with what a missing set costs.
+
+---------------------------------------------------------------------
+## 278. THE CHEVRON, REACHED AND MEASURED: THE ANIMATOR PAINTS ITS GRAVEYARD WAVE OVER THE TRANSFORMATION, AND BOTH GUARDS THAT SHOULD STOP IT FAIL (2026-09-14 10:45)
+
+**Correction to 275a and NOTES 68, which said the attract never enters
+the transform scene. It does.** NOTES 67 put it at ~17.6 s, demo step
+0x0C; it runs at roughly frames 860-960 of the attract. My scans looked
+at 1400-2400 and then 1500-2100 and a blue-dominance heuristic -- wrong
+range, and a detector too coarse for a small band. A contact sheet of
+900-1500 every 40 frames shows it immediately: Zeus's head, the orb,
+the transformation smoke. **All three hypotheses in 276 were tested
+without ever reaching the scene, and that conclusion's REASONING was
+sound but its premise was mine and it was false.**
+
+**What the scene actually shows.** The game's own palette (68K WRAM
+0xFF9000) against what we display (PAL_SH), one ares run per frame:
+
+    f900 set19  game  7FFF 4B00 4C00 4D00 4E00 4F00 4900 4A00
+                shown 7FFF 4900 4A00 4B00 4C00 4D00 4E00 4F00
+    f900 set20  game  0A00 307F 305F 100F 100F 100F 100F 100F
+                shown 0A00 30DF 30BF 309F 307F 305F 100F 100F
+    f901 set20  game  0A00 307F 305F 100F 100F 100F 100F 100F
+                shown 0A00 100F 100F 100F 100F 100F 100F 100F
+
+Set 19's ramp rotates in both -- ours at a different phase, which is
+LOOP29 166's known one-step offset. **Sets 20 and 21 are the defect:
+the game holds them steady at `307F 305F` plus flats for the whole
+scene, and we paint the ANIMATOR'S WAVE over them**, which swings
+between a five-shade gradient and all-`100F` and back. That is the
+"floating head" class the scene gate was added to stop in 2026-09-05,
+happening again.
+
+**Both guards that should stop it fail, and for different reasons.**
+
+  1. **The SH-2 scene gate asks the wrong question.** It tests
+     `pscene_cur != 0`, and `pscene_cur` is the PALETTE-DETECTED scene,
+     detected by comparing PAL_SH against static anchors. The animator
+     is itself writing PAL_SH sets 19-21 every vint, so PAL_SH never
+     matches the transform anchor. **The animator corrupts the evidence
+     its own gate depends on.** GLOWPROBE measured the consequence
+     directly: zero yields in 3,903 vints.
+  2. **The 68K program check cannot see it either.** It peeks three
+     sentinels in the game's mirror (md_main.c 1532-1546) and lifts the
+     mask when any is out of range: PAL[0x99] must be 0x49-0x4F with a
+     zero low byte, PAL[0xA1] must be 0x100F or 0x3..F, PAL[0xA6] must
+     be exactly 0x100F. At f900 the transformation's palette is
+     `4B00`, `307F`, `100F` -- **all three sentinels PASS.** The
+     transform's palette sits inside the ambient program's envelope, so
+     the check holds the mask on.
+
+**And the obvious third signal is not there.** `MD_STATE_CUT` (COMM14
+tag E, from 0xFFF148) reads 0x00 at f900: the demo's transformation is
+not a cutscene in the game's own bookkeeping, it is the demo player
+transforming. `GLOWCUT=1` builds the gate on it (bldQ, c341c4b2) and
+bldQ's palette is byte-identical to bldP's. Kept as a flag with that
+result in its comment rather than deleted -- the next person to reach
+for 0xFFF148 should find the measurement, not repeat it.
+
+**So the fix needs a signal none of the three existing ones provide:
+the player-object's transformation state.** That is the decompile
+thread's to name. Everything else is now in place -- the scene is
+reachable in ares, the comparison is one command
+(`scratchpad/palcmp.py`), and the yield path already works once
+something triggers it.

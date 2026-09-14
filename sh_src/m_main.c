@@ -14080,6 +14080,33 @@ RAMCODE void m_main(void)
                     glow_pend_run++;
                 } else glow_pend_run = 0;
 #endif
+#ifdef GLOW_CUT
+                /* LOOP29 278: THE SCENE GATE NEVER FIRED. It asks
+                 * `pscene_cur != 0`, and pscene_cur is the PALETTE-
+                 * DETECTED scene -- detected by comparing PAL_SH against
+                 * static anchors. The animator is itself writing PAL_SH
+                 * sets 19-21 every vint, so PAL_SH never matches the
+                 * transform anchor and the scene is never detected: the
+                 * animator corrupts the evidence its own gate needs.
+                 * Measured in the cutscene (ares f900-f901): the game
+                 * holds sets 20/21 at `0A00 307F 305F 100F...` and we
+                 * display the animator's wave, which swings to all-100F
+                 * and back -- the flat band Mike reported.
+                 * MD_STATE_CUT is the 68K's own cutscene bit (COMM14,
+                 * tag E, from 0xFFF148).
+                 * MEASURED A NO-OP AND KEPT AS A RECORD: 0xFFF148 reads
+                 * 0x00 at f900, inside the transformation. The demo's
+                 * transformation is not a "cutscene" in the game's own
+                 * bookkeeping -- it is the demo player transforming --
+                 * so this gate never fires and bldQ's palette is
+                 * identical to bldP's. A different signal is needed;
+                 * the decompile thread has the player-object state. */
+                if (glow_on && MD_STATE_CUT(md_state_word())) {
+                    glow_pause = 8;
+                    glow_on = 0;
+                    glow_post = 3;
+                } else
+#endif
                 if (glow_on && pscene_cur != 0) {
                     glow_pause = 8;
                     glow_on = 0;
@@ -14092,6 +14119,9 @@ RAMCODE void m_main(void)
                     glow_pause--;
                 else if (!glow_on) {
                     if (pscene_cur == 0
+#ifdef GLOW_CUT
+                        && !MD_STATE_CUT(md_state_word())
+#endif
                         && (glow_on = (uint8_t)glow_reseed()) != 0)
                         glow_post = 4;       /* grant the mask ON */
                 } else {

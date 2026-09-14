@@ -2542,6 +2542,17 @@ endif
 # ramp count. Built without it, the probe writes a word nothing paints
 # and every capture reads "unreadable" -- which is what the first cut
 # did (LOOP29 276).
+# GLOWCUT=1 = LOOP29 278. The glow animator's transform gate asks
+# `pscene_cur != 0` -- the PALETTE-DETECTED scene -- while the animator
+# is itself overwriting the very PAL_SH words the detector compares, so
+# the transform is never detected, the animator never yields, and it
+# paints its graveyard wave over the cutscene (the "floating head" class
+# the gate was added to stop). Gate on MD_STATE_CUT instead: the 68K's
+# own transformation bit on COMM14, independent of anything we paint.
+# Needs MDSTATE (the word) and PALGLOW (the animator).
+ifdef GLOWCUT
+SHCCFLAGS += -DGLOW_CUT
+endif
 ifdef GLOWRATE
 ifndef BOOTFLIPRATE
 $(error GLOWRATE needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
