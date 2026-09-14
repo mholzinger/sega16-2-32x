@@ -6197,3 +6197,50 @@ bandwidth the generation card is trying to recover.
 (1) is free and should be tested first: if Mike reads a uniform veil as
 acceptable where a stripe is not, the defect stops being a blocker
 without anyone paying for it.
+
+---------------------------------------------------------------------
+## 129. CORRECTION to 125: sets 19/20/21 live ONLY on the chevron pages, so they are NOT Mike's black tiles in the level. The level's black is tile RESIDENCY (2026-09-14)
+
+Entry 125 said sets 19, 20 and 21 are in every round's tilemap and no
+round's table, and concluded they are Mike's remaining black squares.
+The first half is true and the second half is wrong. Per-page breakdown
+of round 0's loaded tilemap:
+
+    pages 0-4 (FG)   74-91          pages 5-9 (BG)   74-101
+    page 10          sets 20, 21
+    page 11          set 19
+
+Sets 19/20/21 exist ONLY on pages 10 and 11 -- the chevron plane, which
+is displayed only while the transformation runs (126: page selects
+0xAAAA/0xBBBB for 110 frames). In the ordinary level view the displayed
+pages are 0-9 and every set they use, 74-101, IS in round 0's table.
+
+**So the black blocks in Mike's graveyard and boss-fight shots have a
+different cause, and the reserved-line card for 19/20/21 will not fix
+them.** It remains the right fix for the CHEVRON -- that is what those
+three sets are -- but it must not be sold as the fix for the level.
+
+**What the level's black most likely is.** Mike: "more visible after
+screen transitions -- the wolf transformation, the Neff smoke transform
+where the background changes colour, and level 2." A cell whose tile is
+not yet resident in the MD cache renders as the reserved blank slot,
+which is backdrop, which is black. The batch that fills the cache is
+MD_BATCH = 24 tiles a vint, and entry 115 measured a scene cut asking
+for 378-561 new codes at once. 378 at 24 a vint is 16 vints of visible
+holes at best, and on the rig only about 26 vints in 64 present, so the
+window is longer in wall time. Black rectangles appearing after every
+transition and filling in is exactly what that looks like.
+
+**The distinguishing test, and it is Mike's eye not a probe:** does a
+black block FILL IN after a second or so, or does it persist? Pop-in
+fills. A refused set never fills. His shots are single frames and
+cannot tell the two apart, which is why this correction was needed --
+125 read a still and assumed the persistent case.
+
+**Also checked, and it holds:** the text layer is present and correct
+in every one of the play shots examined -- the score, the second score,
+PUSH 2P START, CREDITS 5 and the lives icon -- in the graveyard, at the
+boss and in level 2. Whatever Mike is seeing about text being "present
+in memory until the transformation" is not visible as a missing or
+garbled glyph in these frames, and needs one more sentence from him
+before anyone chases it.
