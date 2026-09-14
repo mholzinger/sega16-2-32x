@@ -8826,3 +8826,57 @@ six. The zero for the slave wait is four samples and the saturated
 guard max is six, so those two are the solid ones; the 22.3-line means
 are a single reading each and want a longer run before anything is
 sized against them.
+
+## 292. THE SLAVE'S BUSY TIME AGAINST ITS ECHO: A FIXED 0.245 v/gen THAT IS NOT COMPUTE (2026-09-14)
+
+Mike asked for CHAIN_METER [6]/[7] -- the slave's busy ticks against its
+1.05 v/gen echo. The first answer that came back was **busy 0 ticks
+against 3817 links**, and it is retracted in full: it was a collision,
+not a measurement.
+
+**Why it was void.** CHAIN_METER accumulates at `0x2603A7D8`. That is
+also `SPRLATE`'s lean base (`sh_src/m_main.c` ~915) -- and the shipping
+line carries `-DSPR_LATE`. Worse, the two use opposite aliases of the
+same SDRAM: SPRLATE writes CACHED `0x0603A7D8` from the master, the
+meter wrote UNCACHED `0x2603A7D8` from the slave, so master writebacks
+silently reverted the slave's sums. The `3817` was `SPRLATE[7]`, never a
+link count. The second meter at `0x3A790[6]/[7]` shares the boot
+benchmark's block for the same reason.
+
+Relocated to the audited-free PH scratch (`0x28E40`), verified zero
+across a 4000-frame attract on the line **before** use. On the repaired
+meter the metered branch reads **links 0** -- the master-relaunched chain
+never runs on this build; every slave command is a `0x3000` window
+command.
+
+**The number Mike wanted was already in the shipping rom.**
+`0x26028C80[0]` (`s_main.c` ~363) sums `frt_s()` across EVERY slave
+command, window and chain both, and is UNGATED. No probe build needed.
+The slave never sets FRT TCR, so its tick is phi/8 = 48,208/vint, 4x the
+master's 12,052 (`s_main.c` ~279).
+
+Same build (`phS` = the line + PHASECENSUS), same run, 4000 frames:
+
+| input   | gens | master ECHO wait | slave BUSY | not compute |
+|---------|------|------------------|------------|-------------|
+| attract | 2729 | 0.822 v/gen      | 0.580 v/gen (39.6% of wall) | **+0.243** (29% of the echo) |
+| play2   | 2559 | 1.027 v/gen      | 0.781 v/gen (50.0% of wall) | **+0.246** (24% of the echo) |
+
+**The compute term scales with load and the gap does not.** Slave busy
+rises 0.580 -> 0.781 (+35%) from attract to credited play; the
+non-compute remainder is 0.243 and 0.246 -- the same number twice, to
+three figures, across a 35% change in the work being done.
+
+That is a FIXED ROUND-TRIP LATENCY of about **0.245 v/gen** in the slave
+chain, and it is the decompile thread's latency prediction measured
+rather than argued. It is also consistent with NOTES 78's contention
+reading without contradicting it: contention explains why moving work
+between the CPUs cannot help, and this explains why doing less work
+inside the chain cannot close the last quarter of the echo either.
+
+**What it does NOT say.** These are ares numbers, so they charge
+instructions only -- the FPGA charges 2.8x for the pipeline with compute
+removed (F0). The compute half of the echo is understated here and the
+latency half may be understated differently. The ranking (fixed latency
+exists, and is invariant to load) is what this run supports; the
+magnitude wants the rig.
