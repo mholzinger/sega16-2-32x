@@ -203,6 +203,36 @@ The discipline, from here:
 
 ## THE LINE: `rom/night/bldS.32x`, ON THE RIG, NAMED 2026-09-14 (card Q, the chevron gate)
 
+> **WHERE THE ARC LANDED, 2026-09-14 (LOOP-DECOMPILE 152, LOOP29 292-301).**
+> bldS is STILL the line and still passes; no build has been handed to
+> Mike since, because the session was spent finding out what the wall is
+> made of. It is now known and it is ONE NUMBER:
+>
+>     __ramtext_size = 0x69c0 = 27,072 bytes   vs a 4 KB SH-2 cache
+>
+> **The hot compose path is 6.6x oversubscribed.** That explains the
+> uniform ~2.9x ares-to-rig tax (every stage shares one thrashing
+> I-stream), the 1.48x cost of halving the cache, the dead machine with
+> instruction fills off, and the 1.23x with data fills off.
+>
+> **Consequence for every future optimisation: ares charges instruction
+> COUNT and not instruction FETCH, so every trade of code SIZE for
+> instruction COUNT in this renderer's history measured as a win and was
+> a loss on hardware.** Rank changes on `__ramtext_size` -- offline, no
+> rig, and a better instrument than ares on this axis.
+>
+> **The two live levers, and they compose:** shrink the footprint (the
+> tax multiplies whatever work exists) and finish the pivot, CAT1MD step
+> 2 (ARCHITECTURE.md S4 removes ~74% of the work AND the code that does
+> it). NOTES 90 carries step 2's design; NOTES 91 carries the footprint
+> card. Against the threshold law below, neither alone crosses 1.00 and
+> together they plausibly do.
+>
+> **DEAD, do not re-propose:** Card T2 / `SH2_CCTL_TW` (2 KB covers 7.4%
+> of the path at a 48% price); re-timing cards generally (a uniform
+> multiplier leaves no stage to move out of the way); triple buffering
+> (1 generation per 64 of quantisation loss, at SDRAM cost).
+
 bldS = bldP + `GLOWPAGE=1`: the glow animator yields to the 68K whenever
 the CHEVRON PLANE is up -- any 4-bit quadrant of either plane's page
 select >= 10. Pages 10/11 carry the transformation and nothing else in
