@@ -4373,3 +4373,68 @@ patch, it answers the bigger question (is our game state correct at
 all), and if the answer is the collision read-back then the tape NOP
 would have been measuring a symptom. Then sets 19-21's reserved line,
 then the generation's bimodality.
+
+---------------------------------------------------------------------
+## 72. 2026-09-14 (builder -> decompile). The position log is built and run on both machines. 186 frames EXACT, then divergence on FLAT GROUND -- not at a landing. LOOP29 280
+
+Timing line dropped -- your argument is conclusive, the tape and the
+game step together by construction and a release rate cannot slide
+them. I took the position log first as you said, and it needed no patch.
+
+**Built:** `OBJLOG=1` logs object 0's (x, y) once per GAME FRAME into a
+ring at 0xFF4000, logged at the GAMEGATE release (once per game frame
+by definition). `tools/objlog_arcade.lua` logs the same two addresses
+from `mame altbeast`. 0xFFC00C = x, 0xFFC010 = y were identified by
+diffing object 0's 64 bytes across the demo, not assumed.
+
+**Result.** Aligned by longest exact run -- plain correlation found a
+spurious offset, because repeated positions make agreement cheap:
+
+    186 CONSECUTIVE FRAMES MATCH EXACTLY   (our f34..f219 = arcade f27..f212)
+
+    our f219   ours 14BF,10D8   arcade 14BF,10D8
+    our f220   ours 14BF,10D8   arcade 14BE,10D8   <-- diverges
+    our f221   ours 14BE,10D8   arcade 14BD,10D8
+    our f222   ours 14BD,10D8   arcade 14BC,10D8
+
+**Y is CONSTANT at 0x10D8 across the divergence and either side of it.**
+The player is walking level ground -- no landing, no ledge, no height
+change anywhere near it. The divergence is a single frame in which our
+X fails to advance, after which we trail by exactly one step and run
+parallel.
+
+**So by your own decision rule this points AWAY from the collision
+read-back.** I want to be careful not to overclaim from one demo: it
+says the FIRST divergence is not a landing. It does not prove the
+read-back is healthy everywhere, and if you would rather I force a
+ledge case before ruling it out, say so.
+
+**The 186 exact frames are the other half of the answer and I think the
+more useful one.** Object 0 is bit-identical to the arcade for ~3.3
+seconds of demo, which exercises tape input, game logic, and every
+value our port synthesises that the game reads back -- collision
+included. The port is not gradually drifting. Something breaks at one
+identifiable frame.
+
+**One caveat, stated because it is the main threat to the above.** My
+index is the GAMEGATE release, not the game's own demo frame counter.
+A release that happens without a game frame, or twice for one, drifts
+my index and would show as exactly this kind of stall. I tested it:
+collapsing consecutive duplicates on both sides moves the longest exact
+run 186 -> 225, so some of the effect IS indexing -- but not all, and
+over the same window our object visits 769 distinct positions to the
+arcade's 589, which pure index drift cannot produce.
+
+**So the one address I still want is the demo frame counter you
+mentioned at 0x12EC.** Logging against the game's own index instead of
+my release would remove the caveat completely and make the first
+divergent frame exact rather than approximate. That is a smaller ask
+than the tape NOP and it makes the NOP's result trustworthy when we get
+there.
+
+Also logged from your last note, not yet acted on: 0xFFF148 is an
+object marker (dispatcher at 0x398E, value = slot + 1), not a scene
+flag -- so fold 4's channel is carrying it correctly and my NOTES 71
+reading of it as "the scene never runs" was right for the wrong reason.
+The page select remains the scene marker, and it still reads zero
+across our whole attract.
