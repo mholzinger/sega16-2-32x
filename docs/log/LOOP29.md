@@ -9349,7 +9349,7 @@ noI which returned broken or absent 32X layers.
 |---|---|---|---|
 | line | (0x11) | 86.5 | -- |
 | **tw** 0x19 | **9 = TW\|CE** | **127, 127 SATURATED** | **>= 1.47x** |
-| **tw9** 0x19, >>9 | **9 = TW\|CE** | **59 -> 118** | **1.36x** |
+| **tw9** 0x19, >>9 | **9 = TW\|CE** (n=2) | **63 -> 126** (n=3) | **1.46x** |
 
 The first TW run read a flat **127 twice -- my own saturation value**,
 which the card's own comment calls a fault condition. Here it was not a
@@ -9357,9 +9357,15 @@ fault: the generation genuinely passed the 2.7-vint ceiling. `BODYSHIFT=9`
 doubles the ceiling to 5.4 vints (a >>9 reading times two compares
 directly against a >>8 baseline) and the number came back unsaturated.
 
-**So halving the master's cache costs about 1.36-1.47x on the generation
+**So halving the master's cache costs about 1.46x on the generation
 wall**, on a machine doing correct work. That is the first graded point
 on the fetch curve and the first number this sub-arc has produced.
+
+**Corrected within the session, and the correction matters.** I first
+reported 1.36x from a partial decode of 3 files taken while the run was
+still going. Decoding all 10 of tw9's screenshots gives GENERATION n=3,
+median 63 -> **126 -> 1.46x**, which AGREES with the saturated run's
+>=1.47x instead of sitting oddly below it. The two runs converge.
 
 **Shape of the curve, and why it points at fetch.** Half the cache costs
 ~1.4x; NO instruction caching does not cost 3x, it stops the master
@@ -9367,13 +9373,19 @@ completing generations at all (299). A steeply superlinear response to
 cache size is what a fetch-bound loop looks like, and it is consistent
 with 295's uniform ~2.9x ares-to-rig gap being largely fetch.
 
-**Thin, and stated as such.** The 1.36x is n=1; the >=1.47x is n=2. They
-disagree slightly (2.51 vints against >2.7), which is scene, not
-contradiction. Direction and order of magnitude are what this supports.
+**Thin, and stated as such.** 1.46x is n=3 and >=1.47x is n=2. Direction
+and order of magnitude are what this supports.
 
-**Instrument note that cost several runs.** The rig sampler was
-restarting rather than running to completion, so runs that look like "the
-build produced few frames" were partly the sampler. The wedge conclusions
+**Instrument bug found, and it was mine.** FOUR stray `rig_value.py`
+processes from earlier cards were still running and still shooting the
+rig, competing for its ~1-per-6-second screenshot limit and writing into
+the same `/tmp/rigval`. That is why several runs look like "the build
+produced few frames". **No result was contaminated**, and MiSTer's own
+naming proves it: it names each screenshot after the loaded rom, and
+re-decoding with a rom filter gives `bldS: 24 files, 0 decoded` -- the
+shipping line carries no CRAM flood, so the 40% coverage floor rejected
+every one of its frames. `tools/rig_value.py` now takes `--rom` so the
+filter is structural rather than lucky. The wedge conclusions
 in 299 do NOT rest on read counts -- they rest on GENERATION reading 0
 directly (n=3) and on the screenshots, where noI's 32X layer is visibly
 broken and tw's is visibly correct.

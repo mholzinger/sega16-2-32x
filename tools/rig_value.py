@@ -28,8 +28,14 @@ def sh(c): return subprocess.run(["ssh",HOST,c],capture_output=True,text=True).s
 def shoot():
     sh("echo screenshot > /dev/MiSTer_cmd")
 
-def newest():
-    return sh(f"ls -t {SHOTS}/*.png 2>/dev/null | head -1")
+def newest(rom=None):
+    """MiSTer names each screenshot after the loaded rom, which is the only
+    defence against CROSS-ROM CONTAMINATION -- and it is needed. Stray
+    samplers from earlier runs kept shooting this rig after a new rom was
+    pushed, so /tmp/rigval ended up holding files from two builds at once.
+    Pass --rom to accept only that build's shots."""
+    pat = f"{SHOTS}/*-{rom}.png" if rom else f"{SHOTS}/*.png"
+    return sh(f"ls -t {pat} 2>/dev/null | head -1")
 
 def fetch(remote, local):
     subprocess.run(["scp","-q",f"{HOST}:{remote}",local],check=True)
@@ -63,6 +69,7 @@ ap.add_argument("--gap",type=float,default=8.0)
 ap.add_argument("--layout",choices=["raw","trip","census"],default="raw")
 ap.add_argument("--tmp",default="/tmp/rigval")
 ap.add_argument("--floor",type=float,default=0.40)
+ap.add_argument("--rom",help="accept only screenshots named for this rom (MiSTer names them after the loaded game) -- use it whenever a previous sampler might still be running")
 a=ap.parse_args()
 os.makedirs(a.tmp,exist_ok=True)
 
@@ -70,7 +77,7 @@ seen=collections.defaultdict(list); last=None
 for i in range(a.n):
     if i: time.sleep(a.gap)
     shoot(); time.sleep(1.2)
-    rp=newest()
+    rp=newest(a.rom)
     if rp==last:
         print(f"  {i:2d} STALE (rig returned the same file) -- widen --gap"); continue
     last=rp
