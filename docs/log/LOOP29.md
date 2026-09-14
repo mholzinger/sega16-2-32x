@@ -9327,3 +9327,53 @@ everything except the GENERATION contrast is thin.
 **CP reads back clear.** The noI readback is 3, not 0x13: CP is a
 one-shot purge trigger and does not persist, so `CE|ID` is the correct
 confirmation that the write landed.
+
+## 300. HALF THE CACHE COSTS ~1.4x THE GENERATION -- THE FIRST GRADED POINT ON THE FETCH CURVE (2026-09-14)
+
+LOOP29 299 discriminated (instruction fills off wedges the master, data
+fills off does not) but could not size anything, because noI crossed from
+"slower" to "not functioning". TW is the graded lever.
+
+Verified in the RTL before building, after 297's assumption cost a run:
+`CACHE.sv:74-89`, `WayFromLRU(lru, two_way)` returns only `4'b0100` or
+`4'b1000` when `two_way` is set -- replacement never selects ways 0 and
+1. So **TW halves the replaceable cache (4-way 4KB -> 2-way 2KB) while
+fills keep happening**, which is the degradation-without-death the arc
+needed. `CACHEOFF=0x19` (CP|TW|CE), master only.
+
+**The machine stays alive and renders correctly** -- the title screen
+comes back complete, beast sprites, logo and all, unlike CACHEOFF and
+noI which returned broken or absent 32X layers.
+
+| build | CCR readback | GENERATION | vs line |
+|---|---|---|---|
+| line | (0x11) | 86.5 | -- |
+| **tw** 0x19 | **9 = TW\|CE** | **127, 127 SATURATED** | **>= 1.47x** |
+| **tw9** 0x19, >>9 | **9 = TW\|CE** | **59 -> 118** | **1.36x** |
+
+The first TW run read a flat **127 twice -- my own saturation value**,
+which the card's own comment calls a fault condition. Here it was not a
+fault: the generation genuinely passed the 2.7-vint ceiling. `BODYSHIFT=9`
+doubles the ceiling to 5.4 vints (a >>9 reading times two compares
+directly against a >>8 baseline) and the number came back unsaturated.
+
+**So halving the master's cache costs about 1.36-1.47x on the generation
+wall**, on a machine doing correct work. That is the first graded point
+on the fetch curve and the first number this sub-arc has produced.
+
+**Shape of the curve, and why it points at fetch.** Half the cache costs
+~1.4x; NO instruction caching does not cost 3x, it stops the master
+completing generations at all (299). A steeply superlinear response to
+cache size is what a fetch-bound loop looks like, and it is consistent
+with 295's uniform ~2.9x ares-to-rig gap being largely fetch.
+
+**Thin, and stated as such.** The 1.36x is n=1; the >=1.47x is n=2. They
+disagree slightly (2.51 vints against >2.7), which is scene, not
+contradiction. Direction and order of magnitude are what this supports.
+
+**Instrument note that cost several runs.** The rig sampler was
+restarting rather than running to completion, so runs that look like "the
+build produced few frames" were partly the sampler. The wedge conclusions
+in 299 do NOT rest on read counts -- they rest on GENERATION reading 0
+directly (n=3) and on the screenshots, where noI's 32X layer is visibly
+broken and tw's is visibly correct.

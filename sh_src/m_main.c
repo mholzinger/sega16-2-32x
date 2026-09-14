@@ -1135,6 +1135,9 @@ static uint8_t nat_gen_open;     /* a whole-frame compose is in flight */
 #if defined(TRIP_CENSUS)
 #error "BODY_CENSUS and TRIP_CENSUS both drive COMM6 - build them separately"
 #endif
+#ifndef BODY_SHIFT
+#define BODY_SHIFT 8
+#endif
 #define BODYS ((volatile uint32_t *)0x26028E68)
 #ifdef BODY_GAP
 /* NOTES 87: the census's own blind spot. NAT_WALL[0] is launch -> close,
@@ -8386,8 +8389,12 @@ void visr_vbi(void)
      *                            RESIDUAL is tag3 - (tag0+tag1+tag2) and
      *                            that residual is the thing being hunted.
      *
-     * Units: master FRT ticks per generation >> 8, so a vint is 47 and a
-     * 2.2-vint generation is 104. Saturates at 127 = "at least 2.7 vints".
+     * Units: master FRT ticks per generation >> BODY_SHIFT (default 8),
+     * so a vint is 47 and a 2.2-vint generation is 104, saturating at 127
+     * = 2.7 vints. BODYSHIFT=9 halves the resolution and doubles the
+     * ceiling to 5.4 vints -- needed once the half-cache build (NOTES 89)
+     * pushed the generation PAST the cap and read a flat 127. A >>9
+     * reading times two is directly comparable to a >>8 baseline.
      * ares says the shape is window 40%, ship 19%, drain 12%, unaccounted
      * 19% -- but ares charges instruction cycles only, so that ranking
      * cannot survive contact with the rig. That is the entire point.
@@ -8428,7 +8435,7 @@ void visr_vbi(void)
             for (int k = 0; k < 4; k++) {
                 uint32_t d = cur[k] - bc_prev[k];
                 bc_prev[k] = cur[k];
-                uint32_t v = gens ? (d / gens) >> 8 : 0;
+                uint32_t v = gens ? (d / gens) >> BODY_SHIFT : 0;
                 bc_val[k] = (uint8_t)(v > 127 ? 127 : v);
             }
 #ifdef CACHE_OFF

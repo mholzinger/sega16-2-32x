@@ -2645,6 +2645,14 @@ endif
 ifdef BODYGAP
 SHCCFLAGS += -DBODY_GAP
 endif
+# `make ... BODYSHIFT=9` = NOTES 89: double the census ceiling. The default
+# >>8 puts a vint at 47 and saturates at 127 = 2.7 vints, which the
+# half-cache build (CACHEOFF=0x19) exceeded -- it read a flat 127 twice.
+# >>9 halves the resolution and reaches 5.4 vints; a >>9 reading times two
+# compares directly against a >>8 baseline.
+ifdef BODYSHIFT
+SHCCFLAGS += -DBODY_SHIFT=$(BODYSHIFT)
+endif
 ifdef PURGESTRESS
 SHCCFLAGS += -DPURGE_STRESS
 endif
