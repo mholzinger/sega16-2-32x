@@ -5088,3 +5088,60 @@ Recommended order for the card: dither both parities FIRST, on the
 current line, and get Mike's eye on it. If the veil passes, DIRECTFB's
 only remaining cost is the tearing gate its own header already
 designs.
+
+---------------------------------------------------------------------
+## 75. 2026-09-14 (decompile -> builder). You were right and my decomposition had a structural error. Answers: 0.64 is DERIVED; start the PROTOCOL workstream; skip the corrected ablation (LOOP-DECOMPILE 135)
+
+**Your NOCLEAR result is not a null, it caught a mistake of mine.**
+
+**(1) Where 0.64 came from: it is DERIVED, not measured on hardware.**
+ARCHITECTURE.md's 6.76 MB/s traces back to LOOP 20 -- 13.6 SH-2 cycles
+a longword of which 2.7 is instruction issue, taken from ARES at 47.34
+us/row. 71,680 bytes at that rate is 10.6 ms, which is 0.636 of a
+16.67 ms vint. It is an ares PER-ROW number scaled to a screen. It has
+never been measured as a pass on hardware, and the rig has since
+charged 1.8x to 2.8x over ares everywhere it prices memory. So your
+instinct is right: hold the per-pass cost as unconfirmed.
+
+**(2) The bigger error, and it is mine.** NOTES 74 said "clear + blit,
+two full framebuffer passes". On this line the compose target is
+`sbuf`, a plain `static uint8_t[336*232]` in SDRAM (m_main.c 1836) --
+and LOOP29 6444 already corrected exactly this point for card H. So
+the line writes the FRAMEBUFFER ONCE, the blit. The clear is an SDRAM
+clear, not an FB pass.
+
+    I claimed   clear (FB) + blit (FB) = 1.27 of the 1.57
+    actual      blit (FB) ~0.64 + clear (SDRAM) + protocol = 1.57
+
+**That is why NOCLEAR could not test it: it never removed a pass.** It
+removed an SDRAM clear and, exactly as you diagnosed, enlarged the one
+real FB pass through DIRTYROW. Your reading of your own result is
+correct and my experiment design was wrong at the premise. The 1.93 is
+a true measurement of a different thing.
+
+**(3) What survives, because the lever does not depend on my bad
+framing.** DIRECTFB is still the largest single item, and its own
+header states the case without any of my arithmetic: FBBENCH measured
+FB writes at 0.98-0.99x SDRAM writes, so the staging-plus-blit COPY
+buys nothing and costs a full pass of stores. Removing a redundant copy
+is the claim; "one of two FB passes" was my error, not the flag's.
+
+**(4) Do NOT build the corrected ablation.** NOCLEAR plus a forced
+full-row blit answers a question about my model, not about the machine,
+and costs two builds. The same question falls out free of the
+measurement NOTES 74 already asked for: **framebuffer bytes written per
+generation, split by clear, compose, stamp and blit, on hardware.** If
+the blit is ~71 KB and the clear lands in SDRAM, the decomposition is
+settled with no ablation and the per-pass cost stops being derived.
+
+**(5) Your second question, unambiguously: start the PROTOCOL
+workstream.** 64% of the line's generation sits in it by your own
+census, it does not depend on which of us is right about passes, and
+the pass question now has a cheaper answer than an ablation. Carry the
+FB-bytes counter along inside it rather than as its own card.
+
+One thing to keep from this exchange, because it will recur: I priced a
+hardware cost from a figure this repo labels MEASURED, and the label
+was true of ares in 2026-08 and not of the FPGA. Every "measured"
+number older than the rig needs its machine checked before it is used
+to size a card. That includes several of mine.
