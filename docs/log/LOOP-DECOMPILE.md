@@ -6680,3 +6680,63 @@ on top of deleting all of compose's sbuf writes and all of the blit's
 sbuf reads. **The number that sizes it is compose's own byte count**,
 which the FBBYTES instrument can produce the same way it produced this
 table.
+
+---------------------------------------------------------------------
+## 137. The floor is NOT bytes, by arithmetic: 12 KB cannot be 1.5 vints at any plausible price. It is LATENCY, and the instrument should count round trips (2026-09-14)
+
+The builder retracted their own 71,677 figure -- the counter sat above
+the per-group skip loop and reported an upper bound as a measurement.
+Counting at the group store: 926 groups examined a generation, 71.6%
+transparent (better than the 62.7% BLIT_SKIP was designed against),
+69.9% skipped, **12,181 framebuffer bytes actually written**. Both of
+entry 136's hypotheses are dead and the flag is earning its ORs. My
+question was right to ask and its premise came from their bad number,
+which they say plainly.
+
+**So what is the 1.57?** One vint is 383,500 SH-2 cycles at 23.01 MHz.
+The same ablated build reads 0.56 on ares and 1.57 on the rig, a gap of
+387,335 cycles a generation. Attribute that gap to each candidate and
+read the implied price:
+
+    if it were the 12,181 FB bytes written        31.8 cycles a byte
+    if it were the 34,276 bytes of groups read    11.3 cycles a byte
+    if it were the 27,558-byte SDRAM clear        14.1 cycles a byte
+
+**All three are implausible, and the first is self-refuting.** At 31.8
+cycles a byte a full 71,680-byte screen would cost 2.5 million cycles,
+6.5 vints -- and this port demonstrably blits full screens in far less
+than that. No per-byte price consistent with the machine working can
+put 387,000 cycles into 12 KB. The floor is not stores.
+
+**Which leaves latency, and the log already said so in a different
+context.** LOOP29 275's own heading is "THE GENERATION WAITS, IT DOES
+NOT COMPUTE", and the slave's histogram there is bimodal -- two
+populations, not a spread, which is the signature of waiting on
+something that either has or has not happened by a deadline. A
+throughput model predicts a spread. A round-trip model predicts exactly
+two modes.
+
+**So the protocol workstream's instrument should count ROUND TRIPS, not
+bytes.** Per generation, on hardware: how many times does a CPU stop
+and wait for another, and how long is each wait. The stamps already
+exist -- FRT stamps through flip_span (VB_SPAN), the SYNC[6]/SYNC[7]
+slave handshake, the COMM4 echo, the 68K's post wait, GAMEGATE's
+release. Nobody has ever laid them end to end on the FPGA and asked
+"how much of a generation is one CPU waiting for another".
+
+The prediction that would confirm it: the waits sum to most of 1.57,
+and each individual wait is quantised -- to a line, to vblank, or to a
+vint -- rather than proportional to any byte count. If the waits are
+quantised, the lever is REMOVING ROUND TRIPS, and no amount of doing
+less work inside them will move the floor.
+
+**And a method note, because this is the session's third instrument
+error and they are all one shape.** LOOP29 283 measured credited play
+and called it the attract. 284 scored a moving palette at one instant.
+290 counted at the wrong level of a nested loop. In every case the CODE
+was right and the READING was wrong, and in every case the number
+survived long enough to be built on -- including by me, twice. The
+builder's fix is the right one: keep the naive total beside the true
+one so the gap is visible in every run. The general form: **a counter
+should be validated against a case whose answer is known before its
+number is allowed to size anything.**
