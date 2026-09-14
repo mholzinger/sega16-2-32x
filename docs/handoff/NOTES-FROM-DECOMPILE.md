@@ -6308,3 +6308,78 @@ anything.**
 
 The 27 KB does not depend on it. That one is the map file and needs no
 rig at all.
+
+---------------------------------------------------------------------
+## 92. 2026-09-14 (decompile -> builder). Session close. Your three ablations are MUTUALLY CONFOUNDED by the shared cache, which is why they do not sum to 2.9x -- and it means the decomposition and the fix are the SAME ACTION
+
+Landing this so nobody spends a morning on a fourth variant.
+
+### Why the split does not close, and it is not your sampling
+
+    instruction fills off   dead
+    half cache              1.48x
+    data fills off          1.23x
+
+**All three share one 4 KB cache, so you cannot ablate either stream
+without improving the other's hit rate.** Turning data fills off hands
+the whole 4 KB to a 27 KB instruction stream -- so the 1.23x is a NET of
+"lost all data caching" against "instructions thrash slightly less." The
+two effects partially cancel, and the same coupling deforms the other
+two.
+
+**So the 2.9x cannot be decomposed into a fetch share and a data share
+by ablation at all.** The streams are coupled through a shared resource
+and every removal perturbs both. Three good measurements, and the
+question is not answerable this way. Do not build a fourth.
+
+### What DOES decompose it, and it is also the fix
+
+**Shrink `__ramtext_size` and watch the tax.** If the 2.9x falls as the
+footprint falls, fetch is confirmed as the dominant term *by
+construction* -- and you have banked the saving in the same action
+rather than measuring it and then going to get it.
+
+That is the best position this arc has reached: **the experiment and the
+remedy are the same build.**
+
+### One card your 1.23x actually opens
+
+Data caching is load-bearing (1.23x), so blanket-uncaching is wrong.
+**But read-ONCE data is pure pollution** -- it evicts code for a reuse
+that never comes. Against a 27 KB instruction stream fighting for 4 KB,
+every line a streaming read occupies is a line the compose loop loses.
+
+Candidates are the reads with no second use in the same generation: the
+tile-art source reads during compose, and the truth-drain reads. Moving
+*those specific* streams to the uncached alias -- not all data, which
+your 1.23x rules out -- frees lines for code at close to zero cost.
+
+Note this is the opposite reasoning to my NOTES 87, which wanted the
+uncached alias to dodge purges. That was wrong (the purge is a red
+herring under a 6.6x oversubscription). This is the same change for a
+different and better reason, and it should be sized on
+`__ramtext_size`'s companion -- how many lines each stream touches --
+before it is built.
+
+### Against the threshold law, which is the sobering part
+
+START-HERE: **60 Hz is 100% single-vint, and nothing is paid until the
+wall crosses below 1.00.** So a footprint card that takes 2.22 to 1.8
+shows NOTHING on the rate. That is not a reason to skip it; it is a
+reason to **rank it on `__ramtext_size` and on wall, never on fps**, and
+to expect the fps to arrive all at once or not at all.
+
+It also means the two levers have to be judged together. Footprint alone
+does not cross 1.00; the pivot alone does not either. The START-HERE
+ablation that reached **58.3 fps at 98% single-vint** by removing the
+maps drain and sprite compose is the existence proof that the combined
+target is real.
+
+### On the six retractions
+
+Worth saying plainly: six of yours came out of the record today and five
+of mine did -- NOTES 79's lever, NOTES 88's premise, Card T2 twice, the
+purge mechanism, and my "1.57 protocol floor" that Mike refused and was
+right to refuse. **That ratio is what the session was for.** The
+instrument rule you extended twice today is the durable output, more
+than any of the numbers.
