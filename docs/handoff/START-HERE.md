@@ -136,11 +136,11 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
-## THE LINE (STALE HEADING -- the current line is bldJ, see "THE LINE" below)
+## THE LINE (STALE HEADING -- the current line is bldO, see "THE LINE" below)
 
 **`rom/night/vi39.32x`, md5 c93dbeab. Mike: playable, no obvious
 regressions** -- that was the line on 2026-09-12 and is now history.
-The current line is `rom/night/bldJ.32x`, md5 994b3c93; scroll to the
+The current line is `rom/night/bldO.32x`, md5 0f38332d; scroll to the
 next "THE LINE" heading.
 
 **Read `docs/handoff/HANDOFF-20260912.md` before touching anything** --
@@ -198,7 +198,24 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## THE LINE: `rom/night/bldJ.32x` (md5 994b3c93), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT cards H, I, J)
+## THE LINE: `rom/night/bldO.32x` (md5 0f38332d), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT card O)
+
+bldO = bldJ + `TEXTMASKPKT=1` (card O): the master's pre-flip text
+capture copies only the 4-row groups the game's text writers marked,
+and the mask reaches it in ITS OWN WORD in the FB packet half
+(FBX_TXM_*, packet_fmt.h) rather than in COMM2's shared high byte.
+
+**THIS IS THE FIRST CARD SINCE bldB TO MOVE THE RIG.** Presented
+frames per 64 vints: 21 22 27 | 21 23 26 on two launches, against the
+18 that bldB, bldH, bldHI and bldJ all read. Ares wall 1.09 -> 1.02,
+ships 2524 -> 2674. Three rig launches read trees 0.00 fg 0.00 all
+0.00 on every level frame and the graveyard renders complete. Picture
+gates track bldJ within 0.003 at all thirteen attract anchors.
+
+**Mike's eye is owed on bldO.** The wall this card cuts is the
+928-longword framebuffer text snapshot inside the flip guard's window
+(LOOP29 266b-c); the ceiling is bldTCOFF's 31/64, which is the same
+build with no capture at all.
 
 bldJ = bldB + `C1STAMP=1` (card H, the stamp) + `SCANMEMO=1` (card I)
 + card J's two flags (longword run copies, the per-chain record list).
@@ -217,7 +234,8 @@ scene cut the plane is missing art for ~16-23 vints (24 tiles a vint
 against 378-561 codes, LOOP-DECOMPILE 115). Diagnose before it is
 called cosmetic. Deferred by Mike's call until the wall crosses.
 
-Every card from here is one change against bldJ. Previous lines:
+Every card from here is one change against bldO. Previous lines:
+bldJ (994b3c93, 1.09, named 2026-09-13, cards H/I/J),
 bldB (493d4984, 1.18, named 2026-09-12 20:15, "Behind the grass
 stellar lockdown on the progress"), vi70 (fadafb08, wall 1.48/18%,
 cat-1 in the framebuffer).
@@ -300,14 +318,20 @@ flags + `C1PUNCH=1`, md5 85116f58. Builds are lettered from here with a
 card in PLAN-SINGLE-VINT (Build A = c1p95c, passed). Build B = fold 2
 (`SETCOLS=1`) on c1p95c's flags, measured on that line before it counts.
 
-**THE LINE IS bldJ (2026-09-13, cards H/I/J):** bldB + `C1STAMP=1` +
-`SCANMEMO=1` + card J's two flags, md5 994b3c93, wall 1.09. It is what
-the rig runs. (bldB, c1p95c + `SETCOLS=1`, md5 493d4984, folds 1/2/4,
-is the previous line.) Next card is NOT on the compose side: the rig
-declines ~40 of 64 flips at the vblank edge guard and no compose card
-has ever moved that (LOOP29 257-265, NOTES 46-57). The lever is
-cram_flush_pen -- cart-ROM resident and reading a 32X register per
-entry (NOTES 57, cut c), then the repaint policy.
+**THE LINE IS bldO (2026-09-13, card O):** bldJ + `TEXTMASKPKT=1`,
+md5 0f38332d, wall 1.02, rig 21-27 presented per 64 vints against the
+18 every build from bldB to bldJ read. It is what the rig runs.
+(bldJ, md5 994b3c93, wall 1.09, cards H/I/J, is the previous line;
+bldB, c1p95c + `SETCOLS=1`, md5 493d4984, folds 1/2/4, before that.)
+
+The wall that stood at 18/64 from bldB through bldJ was the master's
+928-longword FB_TEXT -> TEXT_U snapshot INSIDE the flip guard's window
+(LOOP29 266b-c). It was NOT cram_flush_pen -- that call is not compiled
+on this line at all, and LOOP29 263's claim was retracted in 266.
+Card O masks the snapshot to the marked rows. The remaining gap to
+bldTCOFF's 31/64 (no capture at all) is the rows that really are
+marked, and fold 5 -- text off the framebuffer entirely, shipped from
+the WRAM mirror -- is what removes those (LOOP29 269, NOTES 63).
 
 **LANDING RULE (2026-09-13):** a rig black share counts only across THREE
 launches -- the same rom read a fifth black at one launch and clean at
