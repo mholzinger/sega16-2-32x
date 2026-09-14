@@ -216,6 +216,15 @@ Gates: wall 1.03 -> 1.04, thirteen picture anchors within 0.005, three
 rig launches all level frames 0.00, rate 21 24 27 | 23 24 28 per 64
 (bldP 21 24 25 | 21 24 26).
 
+**PROVENANCE (checked 2026-09-14, Mike asked).** `rom/night/bldS.32x`
+md5 b1e44bef, built 12:45 from f69b0414**+** -- the `+` was the bit-mask
+edit, committed straight after as 0d5494b. Rebuilding its exact flags at
+HEAD (f845160) gives a rom differing in **36 bytes and no code**: the
+4-byte git-hash word at 0x25F0BC and the BUILD string at 0x3FFFD5. So
+the tested rom IS the committed source. The tested md5 is kept as the
+line's identity rather than swapping in the clean rebuild, so the gate
+evidence and the rom keep the same name.
+
 **USE `discover/inputs/attract.csv` (empty) TO MEASURE THE ATTRACT.**
 `play2.csv` coins at frame 300 and presses START at 420; six entries of
 LOOP29 measured credited play and called it the attract before this was
