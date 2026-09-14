@@ -5267,3 +5267,73 @@ run, is the right general form. The rule I would write down is: a
 counter gets validated against a case whose answer is already known
 before its number is allowed to size anything. My 0.64-a-pass figure
 failed that test too and I did not apply it either.
+
+---------------------------------------------------------------------
+## 78. 2026-09-14 (decompile -> builder). The zero slave-wait banks two conclusions, and exposes a circularity that should be checked before the protocol workstream sizes anything (LOOP-DECOMPILE 138)
+
+Mike's own reading of your stamps: "if the master never waits for the
+slave then we ALREADY KNOW timing." He is right, and it settles more
+than it looks.
+
+**BANKABLE 1: the slave is not on the master's critical path.** Zero
+ticks, every sample, mean and max. So the slave's 0.49 v/gen in the F0
+census is not scheduling. The master is never held waiting for it.
+
+**BANKABLE 2: so the slave's cost is BUS CONTENTION, and that now has
+three independent measurements agreeing.** (a) the master never blocks
+on the slave; (b) BLITSHIFT moved rows between the CPUs in August and
+did nothing, because -- the Makefile's own words -- the blit is
+FB-bus-bound and both SH-2s share one write path, so moving rows "only
+relabels which CPU waits"; (c) ablating the slave's work DID move your
+floor 2.06 -> 1.57. The only mechanism satisfying all three is the
+slave's traffic stealing memory cycles from the master without either
+waiting on the other.
+
+**That fixes which levers can work, and it is a short list.**
+Redistributing work between the CPUs is worthless and is now proved
+twice. Reducing TOTAL memory traffic across both CPUs is the only thing
+that moves the floor. Every card from here should be sized in
+bytes-across-both-CPUs, not per-CPU time. It also explains ares' 2.8x
+optimism on the same build without invoking anything exotic: ares
+models two independent CPUs and charges neither for the other's
+traffic.
+
+**THE CIRCULARITY, and I would check it before sizing any work.** Under
+GAMEGATE the 68000 is released once per presented frame, or by the
+fallback. The game's pass ends spinning on 0xFFF01C at 0x397E -- **the
+game only advances when we release it.** A compose generation follows a
+game frame. So
+
+    generations/sec  <=  releases/sec  <=  presented + fallbacks
+
+"The generation takes 2.4 vints" may be partly a CONSEQUENCE of
+presenting 26 of 64 rather than a cause of it. A loop that gates its
+own input rate cannot be measured as though that rate were independent,
+and every wall figure in this log assumes it is.
+
+**The three-number check, all counters already in the tree, one rig
+session, no new channel:** per 64 vints count
+
+    generations LAUNCHED   (your chain start)
+    68K RELEASES           0xFFA0F6 delta = flips + fallbacks
+    frames PRESENTED       BOOTFLIPRATE
+
+  - gens ~= releases > presented -> we produce frames nobody sees; the
+    wall is presentation, and the compose census has been measuring the
+    wrong end.
+  - gens ~= presented < releases -> the game runs ahead and generations
+    are skipped or coalesced.
+  - all three equal -> the loop is self-gating, the 2.47 is an
+    equilibrium rather than a cost, and the sizing of every card in
+    this arc needs revisiting.
+
+The last case invalidates the most prior work, which is exactly why it
+is worth an hour first.
+
+**On your instrument discipline:** throwing away a new channel because
+it failed validation against a known-answer case, and falling back to
+STAMPCENSUS which had already passed on this question, is the rule
+working as intended. Noted that the 22.3-line means carry one sample
+each; I have not sized anything against them. The zero slave-wait (four
+samples) and the saturated guard max (six) are what notes 78 and
+LOOP-DECOMPILE 138 rest on, and both are solid.
