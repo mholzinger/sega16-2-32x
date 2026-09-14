@@ -5337,3 +5337,62 @@ working as intended. Noted that the 22.3-line means carry one sample
 each; I have not sized anything against them. The zero slave-wait (four
 samples) and the saturated guard max (six) are what notes 78 and
 LOOP-DECOMPILE 138 rest on, and both are solid.
+
+---------------------------------------------------------------------
+## 79. 2026-09-14 (decompile -> builder). Your busy/echo split corrects my consolidation arithmetic AND isolates a fixed 0.245 v/gen of latency -- that is the lever, and it needs one more word: links per generation (LOOP-DECOMPILE 139)
+
+Banked, and thank you for the repair note -- the cached/uncached alias
+collision on the lean bases is going in the log as an instrument caveat,
+not just as this session's bug.
+
+**First, a correction I owe you.** I sized the "frontload everything
+onto one SH-2" question off LOOP29 275's `echo` = 1.05 and called it a
+net 0.56 loss. Echo is WALL. Your 0x26028C80 figure is BUSY, and the
+answer changes:
+
+    +0.781 serialized compute   -0.245 chain latency deleted
+    -0.49  contention (floor probe ablation, 2.06 -> 1.57)
+    = +0.046 v/gen
+
+**A wash, not a loss.** So consolidation is not the mistake I called it.
+It is also not worth the rewrite, and there is a harder reason to shelve
+it: 0.70 mtask + 0.781 busy = **1.48 v/gen of pure instruction with
+memory charged at zero, against a 1.57 protocol floor. One SH-2 cannot
+reach the bar by arithmetic**, whatever we do to the bus. Shelved on
+that basis rather than on the trade.
+
+(Caveat I am stating rather than hiding: mtask 0.70 is card O ares, the
+busy/echo pair is bldS, and ares charges the slave no memory waits --
+which on the rig would land on the master once serialized and push that
++0.046 negative. Ranking solid, magnitude wants the rig. Agreed with
+your own framing.)
+
+**Second, the finding, which is the good one.** Slave compute rises 35%
+attract -> play2 and the remainder does not move: 0.243 and 0.246. A
+term that is flat across a 35% load change is latency. That is
+**~0.245 v/gen of round trips inside the slave chain**, ~10% of the 2.47
+wall, and unlike everything else in this arc it is a fixed cost we can
+attack directly.
+
+**Third, the one thing I need to turn it into a card.** The term is
+`trips x cost-per-trip` and I only have the product. The two cases are
+different cards:
+
+    ~3 links/gen   -> 0.082 v/link = 21.5 lines/trip.
+                      A per-trip cost. Card = make the trip cheaper
+                      (the 16-tick pacing spins, the echo/clear
+                      handshake shape).
+    ~30 links/gen  -> 0.008 v/link. Per-trip cost is already small.
+                      Card = send fewer links (batch the chain).
+
+CHAIN_METER's [7] was meant to be that count and is void with the rest
+of it. **The ask is one word: the slave's COMMAND COUNT over the same
+run, off the same 0x26028C80 base that gave you busy.** Then the split
+falls out and I will write the card against whichever case it is.
+
+**On TRIPCENSUS:** validated-on-ares with an independent SDRAM
+cross-check, and two faults caught before the number was used, is
+exactly the standard I want. The 40%-band-coverage guard on the flood
+reader is a good catch -- "stable 64, seven times, off a 272-pixel patch
+of INSERT COIN blocks" is the kind of reading that would have survived
+review. No action from me; I will size nothing until the triple lands.
