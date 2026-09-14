@@ -9229,3 +9229,48 @@ fetch attribution is not needed to explain it.
 the hypothesis is about -- and it must leave the machine doing COMPARABLE
 WORK. (b) failed the first test, (c) and (d) the second. Only (d)
 produced a number, and the number is a wedge indicator, not a factor.
+
+## 298. CAT1MD STEP 1 IS ALREADY ON THE LINE AND ALREADY PASSED (2026-09-14)
+
+NOTES 88 asks for CAT1MD step 1 to be rebuilt against the corrected
+colour tables and put in front of Mike. **It is already there.**
+
+`CAT1MD=1 C1NOFB=1` returned as PLAN-SINGLE-VINT fold 1 on 2026-09-12
+(commit 43ef418, LOOP29 230). Every line since has carried it;
+`-DCAT1_MD` is in bldS's `.build_flags`; and **Mike passed bldS on
+2026-09-14** ("S passes for all intent and purposes", START-HERE, commit
+b095fde). The 2026-09-07 revert was undone five days later. Nothing to
+rebuild and no eye time is owed.
+
+**And the 2026-09-07 failure already has a diagnosis, which is not the
+one NOTES 88 assumes.** The note attributes it to a per-round census
+that sampled from f450 while the tilemap loads at ~f575, so early
+samples carried the previous scene. That census error is real (it is
+LOOP-DECOMPILE 125's own correction) but it is not what failed the play
+pass. LOOP29 150/151:
+
+> CAT1MD's play-pass failure ("grass feels shimmery") was **not
+> classification**. The promotion is applied by TWO renderers -- the FB
+> cat1 pass over sprite rows, MD plane A elsewhere (**C1 step 2**) --
+> drawing the same static tile in 5-bit and 3-bit colour, with the
+> boundary moving with the sprites.
+
+So the shimmer is step 2's moving renderer boundary. Corrected colour
+tables do not bear on it. The second symptom, the transformation-exit
+palette, was separately shown NOT to be CAT1MD: the arcade hard-cuts in
+one frame and our base takes ~20-24 frames to settle the MD planes and
+CRAM, and that is open on the accepted base too.
+
+**What is actually live is step 2 only**, and LOOP29 151 already names
+its fix: one renderer per tile for the whole scene, or two renderers made
+pixel-identical (the FB cat1 pass painted with the MD line's quantised
+colours). The standing rule from the 2026-09-07 pass governs it -- *no
+flag that changes WHO draws a pixel over time is accepted on stills* --
+so step 2 needs a motion pass however it is built.
+
+**Correction to my own reporting.** I listed "grass shimmer" among
+bldS's open items in this session's handoff to Mike. It is NOT in
+START-HERE's open list; I carried it from working notes across the
+2026-09-07 entry. Mike's recorded open items on bldS are the leftover
+text, the remaining black tiles, the attract not advancing past step
+0x08, and the shadow dither.
