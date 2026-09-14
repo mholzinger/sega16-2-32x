@@ -14168,14 +14168,17 @@ RAMCODE void m_main(void)
                  * The regs are text words 0x740 FG / 0x741 BG and
                  * latch_layer_regs already reads them every vint. */
                 {
+                    /* "any nibble >= 10" without a loop: a nibble is
+                     * 10..15 exactly when bit 3 is set AND bit 2 or bit
+                     * 1 is. Shifting left by 1 and 2 brings those into
+                     * bit 3, so one mask per word answers all four
+                     * nibbles. (The looped form cost 0.07 v/gen on the
+                     * ares wall for a gate that never fires in play --
+                     * LOOP29 286.) */
                     uint16_t gp_f = TEXT_C[0x740], gp_b = TEXT_C[0x741];
-                    unsigned gp_hi = 0;
-                    for (int gq = 0; gq < 16; gq += 4) {
-                        unsigned a = (gp_f >> gq) & 0xF, b = (gp_b >> gq) & 0xF;
-                        if (a > gp_hi) gp_hi = a;
-                        if (b > gp_hi) gp_hi = b;
-                    }
-                    glow_chev = (gp_hi >= 10);
+                    uint16_t gp_a = (uint16_t)(gp_f & ((gp_f << 1) | (gp_f << 2)) & 0x8888u);
+                    uint16_t gp_c = (uint16_t)(gp_b & ((gp_b << 1) | (gp_b << 2)) & 0x8888u);
+                    glow_chev = (uint8_t)((gp_a | gp_c) != 0);
                 }
                 if (glow_on && glow_chev) {
                     glow_pause = 8;

@@ -8501,3 +8501,41 @@ verdict first. Twice in one session, on the same instrument class.
 
 **bldR is now a candidate for the line**, pending picture gates and
 three rig launches on the true attract.
+
+---------------------------------------------------------------------
+## 286. THE GATE'S LOOP COST 0.07 v/gen FOR A TEST THAT NEVER FIRES; A BIT TRICK MAKES IT FREE (2026-09-14 12:50)
+
+bldR (the gate as first written) read wall 1.10 against bldP's 1.03 --
+reproducible, twice each. Two checks before believing it was real work:
+
+  - **the gate never fires in the scene nat_score measures.** Credited
+    play, 4,000 frames: 0 chevron vints, 0 yields, highest page
+    quadrant 7. So it is pure overhead there.
+  - **layout is not the explanation.** bldP + `LAYOUTPROBE=1` (64 bytes
+    of unreferenced .data, the LOOP28 88 control) reads 1.02 against
+    1.03 -- layout moves this build by 0.01, not 0.07.
+
+So a four-iteration loop extracting eight nibbles per vint really was
+costing ~0.07 v/gen. Replaced with one mask per word: **a nibble is
+10..15 exactly when bit 3 is set AND bit 2 or bit 1 is**, and shifting
+left by 1 and 2 brings those into bit 3, so
+
+    w & ((w << 1) | (w << 2)) & 0x8888
+
+answers all four nibbles at once. Verified EXHAUSTIVELY against the
+loop over all 65,536 values: zero disagreements.
+
+    build   wall   chevron lag test (6 frames)
+    bldP    1.03   lag0 0  lag1 0  lag2 0  NO MATCH 6
+    bldR    1.10   lag0 3  lag1 2  lag2 1  no match 0
+    bldS    1.04   lag0 2  lag1 2  lag2 2  no match 0
+
+**bldS gates identically at a seventh of the cost.**
+
+And bldR's rig run passed regardless -- three launches, every level
+frame trees 0.00 fg 0.00 all 0.00, rate 21 23 27 | 22 22 27 per 64
+against bldP's 21 24 25 | 21 24 26. So the 0.07 was real on the ares
+instruction ranking and invisible on hardware, which is the expected
+relationship (LOOP29 256a) and not a reason to have shipped it.
+
+bldS is the candidate; its rig gates are running.
