@@ -950,3 +950,67 @@ against card O's 21-27.
     refused (22-30, 33, 34). Its two areas are disjoint and need TWO
     tables plus one discriminator bit -- a runtime change, not this card.
     Round 2 now fits all but [3, 33, 35, 36, 101].
+
+---------------------------------------------------------------------
+## CARD F0 -- THE HARDWARE PROTOCOL FLOOR (decompile thread, approved by Mike 2026-09-14)
+
+**The question.** Every generation number this project has is from ares,
+which prices SH-2 instructions and not memory. The rig presents ~26
+frames per 64 vints, which is 2.4 vints a generation against an ares
+wall of 1.02. Nobody has ever measured what the FPGA charges for the
+PIPELINE ALONE -- the transport, the window, the echo chain, the flip,
+the 68K handler -- with the compose taken out.
+
+On ares that floor is known (LOOP29 168): ablating the master's maps
+drain AND the slave's sprite compose gives 0.90 v/gen, 98% single-vint,
+3,808 ships, 58.3 fps. On hardware it is unmeasured.
+
+**Why it is worth a card before any more compose work.** If the FPGA's
+floor is under 1.00 the remaining plan is a grind with a known end and
+the estimate of 10-18 cards holds. If it is 1.8 or worse, 60 Hz is
+unreachable without a structural change and the honest target becomes
+40-45 fps -- which Mike wants to know before planning levels 2-5 and
+the sound thread around it. Two hours of work, two days of consequence.
+
+**Build.** The LOOP29 168 stack on card P's flags: `NOMAPS=1` plus the
+slave sprite-compose ablation, with `BOOTFLIPRATE=1`. Renders wrong by
+construction; NEVER SHIP; the ONLY meaningful output is the rig's
+presented rate.
+
+**The trap that would void the result, and it must be designed out.**
+An ablated compose may produce no finished generation, and the flip
+path declines with `!nat_shipped` when nothing was blitted into the
+hidden bank (the tag-3 decline, NOTES 64b). A build that composes
+nothing would then read ZERO presented frames and look like a floor of
+infinity. **The ablation must still blit and still ship** -- it is the
+compose CONTENT that is removed, not the generation's completion. Sanity
+check before the rig: the same build must read ~58 fps and ~98%
+single-vint on ares, matching LOOP29 168. If ares does not reproduce
+168's numbers, the ablation is wrong and the rig run is meaningless.
+
+**Measure.** Exactly as the line is measured, so the numbers are
+comparable: BOOTFLIPRATE presented frames per 64 vints, three launches,
+the same time slots as card O and card P.
+
+**Read the answer, and these thresholds are fixed in advance.** With R
+presented frames per 64 vints, the floor is 64/R vints a generation:
+
+    R >= 60       floor <= 1.07   60 Hz is reachable; the rest is compose work.
+                                  The 10-18 card estimate stands.
+    R  40..59     floor 1.1-1.6   60 needs the floor cut as well as the compose.
+                                  Re-plan: the protocol becomes a second workstream.
+    R  30..39     floor 1.6-2.1   60 is out of reach on this architecture.
+                                  Honest target 30-45 fps; tell Mike before
+                                  levels 2-5 and the sound thread are planned.
+    R  < 30       floor > 2.1     the pipeline itself is the whole problem and
+                                  no compose card can matter. Stop the
+                                  generation card and re-open the transport.
+
+**A second point on the curve, free with the same build list.** Run
+`NOMAPS=1` ALONE as well (master drain ablated, slave compose intact).
+Three numbers -- line, NOMAPS, NOMAPS+compose -- split the rig's 2.4
+vints into master, slave and protocol, which is the hardware cost
+census NOTES 61 asked for and never got. It is the same rig session.
+
+**Gate.** None. This build never ships and has no picture. The result
+is a number and a decision.
