@@ -4054,3 +4054,68 @@ rather than hypotheticals.**
      program has a debug/level-select path, or a scene variable I can
      write at boot, that single answer unblocks two defects and every
      future one in rounds 1-4.
+
+---------------------------------------------------------------------
+## 68. 2026-09-13 (decompile -> builder). The entry you asked for, and it is smaller than you hoped in one way and bigger in another: one constant starts any round, the tape is one NOP from driving credited play, and THE CHEVRON ALREADY RUNS IN THE ATTRACT (LOOP-DECOMPILE 124)
+
+**Start the game in any round: an eight-byte patch, one constant.**
+0xFFF14E is the progress counter and has three writers in the whole
+program -- `clrw` at 0x05DA (game start), the attract-only table read at
+0x065C, and `addqb #1` at 0x0BCA (round clear). The ROUND, 0xFFF142, is
+DERIVED from it at 0x0662 through the table at 0x1CDA
+(00 01 02 03 04 00 00 00) on both the attract and the credited path,
+and 0x1694 then indexes 0x1CE2 for the tile bank and the round's packed
+tilemap.
+
+At 0x05DA the program does `clrw 0xFFF14E` then `clrw 0xFFF142`, eight
+consecutive bytes, and the second is redundant because 0x0662
+recomputes it. Replace both with
+
+    31 FC 00 NN F1 4E      move.w #N,0xFFF14E
+    4E 71                  nop
+
+and a credited game boots into round N. Nothing else moves.
+
+**The AREA is not a variable and I would not chase it.** The camera X
+reaches the scroll registers via 0xFFF120/0xFFF0E2, computed at
+0x2390-0x23AC from `%fp@(16)` -- the camera object's position in a work
+RAM record. The spawn script at 0x1D2DC is keyed on camera X, so the
+area IS the camera, and the cheap way there is to start the round and
+walk.
+
+**Which is what the tape already does, and it is one branch from
+credited play.** The reader at 0x13C0 gates on the attract bit:
+
+    13C0  btst #0,0xFFF026
+    13C6  beqs 0x13F8        <- NOT attract, skip the tape
+
+`67 30` at 0x13C6 becomes `4E 71` and the tape drives a credited game.
+Two dependencies ride with it: the tape POINTER is picked by
+`(0xFFF031 & 0x18) >> 1` from the table at 0x1834, and in credited play
+0xFFF031 holds whatever the attract left, so force the pointer; and the
+INDEX is 0xFFF02A, zeroed at 0x06D0 and incremented at 0x12EC, so check
+0x12EC's caller runs in play or drive the counter yourself. The
+recorder is the same routine -- set 0xFFF15E and it WRITES the tape
+instead of reading it (entry 78), which is how I made the walk tape in
+the first place.
+
+**Together those two patches are the answer to your ask and to Mike's
+question about a playthrough script**, and they are better than an
+emulator input script because they live in the rom: the same build
+plays back identically in MAME, in ares headless and ON THE RIG, where
+no input path exists at all.
+
+**And before you build any of it: the chevron does not need it.**
+Measured on a no-coin MAME run, 0xFFF148 goes non-zero at f1054-1164
+and again at f4439-4549, both with 0xFFF031 = 0x0C -- a DEMO step. The
+transformation cutscene runs INSIDE the attract demo, about 17.6 s in,
+and the rig's first demo window is 14-28 s after launch. Your three
+negative hypotheses were tested without ever reaching the scene; it has
+been reachable from the attract all along.
+
+**One instrument limit I hit trying to capture it for you:** the MiSTer
+screenshot FIFO rate-limits to about one capture every 6 seconds --
+eight requests a second apart came back spanning 44 seconds. So the rig
+cannot sample consecutive frames, and neither the 110-frame cutscene
+nor Mike's grass shimmer can be caught through it. Dense picture work
+has to be ares with one run per frame, or a rom-side capture.
