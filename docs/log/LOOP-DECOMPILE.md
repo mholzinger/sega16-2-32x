@@ -7945,3 +7945,97 @@ both levers, not either one.
     residual's 5.62x is a difference of noisy medians. **Not treating it
     as a real outlier**, which also means the uniformity claim above
     rests on the other three, and they agree.
+
+---------------------------------------------------------------------
+## 151. The fetch/data split HAS a live-machine test: the SH7604 CCR carries ID and OD bits that disable instruction-fill and data-fill SEPARATELY while leaving hits working. Derived from the RTL. And NOTES 88 withdrawn -- CAT1MD step 1 already ships (2026-09-14)
+
+### First, withdraw NOTES 88
+
+The builder: CAT1MD step 1 is already on the line (fold 1, commit
+43ef418, 2026-09-12), `-DCAT1_MD` is in bldS's flags, and **Mike passed
+bldS on 2026-09-14.** Nothing to rebuild. My premise was wrong.
+
+And my diagnosis of the 2026-09-07 shimmer was wrong too: LOOP29 150/151
+put it on **step 2's moving renderer boundary** -- FB cat1 over sprite
+rows, MD plane A elsewhere, the same tile rendered in 5-bit and 3-bit
+with the boundary tracking the sprites. **Corrected colour tables do not
+touch that.** The transform palette was cleared separately and is fine
+on the accepted base.
+
+So the live question is step 2 only, and LOOP29 151 already names the
+fix: one renderer per tile per scene, or two made pixel-identical. That
+is a design item, not a data problem.
+
+### Second, the gap: closed, nothing there
+
+BODYGAP: close->launch **0.25 v/gen, 10-13% of period**, n=5, range
+9-15 -- the tightest spread of any tag this arc. Wall ~2.23 against a
+period of 2.1-2.4. **The wall IS the period; there is no dead time
+between generations.** The builder's earlier 0.38 mixed a gen count from
+one run with a median from another. Closed.
+
+### Third, and this is the contribution: the fetch test exists
+
+The builder's position after three failed attempts: *"the only direction
+that leaves the machine alive is adding cached traffic."* Their extended
+rule is right -- an ablation must move the hypothesis's quantity AND
+leave the machine doing comparable work -- and CACHEOFF failed the
+second half so hard that the master could not close a generation at all.
+
+**But removing the cache is not the only way to move instruction fetch,
+because the SH7604 separates the two streams in hardware.**
+
+From the RTL, `srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101`,
+the CCR bitfield is packed MSB-first:
+
+    bits 7-6  W    way specification
+    bit  5    UNUSED
+    bit  4    CP   cache purge          0x10   (matches mars.h)
+    bit  3    TW   two-way mode         0x08   (matches mars.h)
+    bit  2    OD   data replacement disable      0x04  -- NOT in mars.h
+    bit  1    ID   instruction replacement disable 0x02 -- NOT in mars.h
+    bit  0    CE   cache enable         0x01   (matches mars.h)
+
+And `CACHE.sv:499` is the whole mechanism in one line:
+
+    CACHE_UPDATE <= CBUS_ID ? ~CCR.ID : ~CCR.OD;
+
+**An instruction access fills the cache only when ID is clear; a data
+access fills it only when OD is clear.** CE is untouched, so `CACHE.sv:
+522` still services HITS (`CACHE_AREA && HIT && CCR.CE`). Half the cache
+keeps working in each build, which is exactly the "comparable work"
+condition CACHEOFF violated.
+
+### The two builds
+
+    CCR = CP|ID|CE = 0x13   instructions never refill, DATA still cached
+    CCR = CP|OD|CE = 0x15   data never refills, INSTRUCTIONS still cached
+
+Read the body stamps against the 0x11 baseline:
+
+    ID severe, OD mild   -> the 2.9x is FETCH. Card T2's new form (the
+                            compose inner loop in on-chip RAM) is the
+                            card, and Card T moves nothing.
+    OD severe, ID mild   -> it is DATA. The pivot is the only lever.
+    both severe          -> both, and the ratio gives the split.
+
+**IMPLEMENTATION TRAP, and it is the exact class that killed
+PURGESTRESS:** `cache_purge()` (m_main.c 1968) rewrites CCR as
+`CP | CE` every window, and `mars_start.s` 429 boots it as `0x11`.
+**Either site left alone silently clears ID/OD and the variable does not
+move.** Both must carry the bit, and CCR should be read back and
+reported the way CACHEOFF v2 did (CCR reads 0 was the thing that proved
+that ablation honest).
+
+`mars.h` 103-105 defines CP, TW and CE and **does not define OD or ID**
+-- they need adding, and the RTL above is the citation.
+
+### Honest caveat
+
+ID=1 may prove as severe as CACHEOFF: with no instruction refill ever,
+the compose path runs from SDRAM permanently. If it kills the generation
+the same way, the pair still forces an attribution -- because OD=1 is
+the complementary probe and **whichever one survives tells us which
+stream the machine can afford to lose.** That is a real answer either
+way, unlike CACHEOFF, which lost both streams at once and could separate
+nothing.
