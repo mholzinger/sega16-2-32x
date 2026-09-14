@@ -70,10 +70,36 @@ ap.add_argument("--layout",choices=["raw","trip","census"],default="raw")
 ap.add_argument("--tmp",default="/tmp/rigval")
 ap.add_argument("--floor",type=float,default=0.40)
 ap.add_argument("--rom",help="accept only screenshots named for this rom (MiSTer names them after the loaded game) -- use it whenever a previous sampler might still be running")
+ap.add_argument("--pull-only",action="store_true",
+    help="DO NOT SAMPLE: scp every screenshot the rig already holds for --rom "
+         "and decode those. USE THIS. A long sampling run is unreliable here "
+         "because the harness restarts background tasks, and each restart wipes "
+         "the local directory -- every thin run in the 2026-09-14 session was "
+         "that, not the rig. The rig keeps the shots itself, named by rom, so "
+         "pulling afterwards is both complete and immune to the restart.")
 a=ap.parse_args()
 os.makedirs(a.tmp,exist_ok=True)
 
 seen=collections.defaultdict(list); last=None
+if a.pull_only:
+    if not a.rom: sys.exit("--pull-only needs --rom")
+    subprocess.run(["scp","-q",f"{HOST}:{SHOTS}/*-{a.rom}.png",a.tmp],check=False)
+    import glob as _g
+    for lp in sorted(_g.glob(os.path.join(a.tmp,f"*-{a.rom}.png"))):
+        dec=decode(lp,a.floor)
+        if dec is None: print(f"  {os.path.basename(lp)}  no flood"); continue
+        d9,rgb,frac=dec
+        if a.layout=="trip":
+            t,v=(d9>>7)&3, d9&127
+            print(f"  {os.path.basename(lp)}  d9={d9:03X} cover={frac:.0%}  tag {t} ({TRIP[t]}) = {v}")
+            seen[TRIP[t]].append(v)
+        else:
+            t,v=(d9>>7)&3, d9&127
+            print(f"  {os.path.basename(lp)}  d9={d9:03X} cover={frac:.0%}  tag {t} = {v}")
+            seen[t].append(v)
+    for k,v in seen.items():
+        print(f"    {str(k):12s} n={len(v):2d}  {sorted(v)}")
+    sys.exit(0)
 for i in range(a.n):
     if i: time.sleep(a.gap)
     shoot(); time.sleep(1.2)

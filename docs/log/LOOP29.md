@@ -9349,7 +9349,7 @@ noI which returned broken or absent 32X layers.
 |---|---|---|---|
 | line | (0x11) | 86.5 | -- |
 | **tw** 0x19 | **9 = TW\|CE** | **127, 127 SATURATED** | **>= 1.47x** |
-| **tw9** 0x19, >>9 | **9 = TW\|CE** (n=2) | **63 -> 126** (n=3) | **1.46x** |
+| **tw9** 0x19, >>9 | **9 = TW\|CE** (n=4/4) | **64 -> 128** (n=4, range 59-70) | **1.48x** |
 
 The first TW run read a flat **127 twice -- my own saturation value**,
 which the card's own comment calls a fault condition. Here it was not a
@@ -9361,11 +9361,26 @@ directly against a >>8 baseline) and the number came back unsaturated.
 wall**, on a machine doing correct work. That is the first graded point
 on the fetch curve and the first number this sub-arc has produced.
 
-**Corrected within the session, and the correction matters.** I first
-reported 1.36x from a partial decode of 3 files taken while the run was
-still going. Decoding all 10 of tw9's screenshots gives GENERATION n=3,
-median 63 -> **126 -> 1.46x**, which AGREES with the saturated run's
->=1.47x instead of sitting oddly below it. The two runs converge.
+**Corrected twice within the session, and it settled.** 1.36x came from a
+partial decode of 3 files taken mid-run; 1.46x from 10 files; and pulling
+ALL SIXTEEN shots the rig itself holds gives GENERATION n=4, median 64
+-> **128 -> 1.48x**, range 59-70, with the CCR readback confirming TW|CE
+on 4 of 4. **Three independent readings converge on ~1.47x** (>=1.47,
+1.46, 1.48).
+
+**THE INSTRUMENT BUG, and it explains every thin run in this session.**
+It was not the stray samplers (though four of those existed too). **The
+harness RESTARTS long background tasks**, and `rig_value.py` runs began
+with `rm -rf /tmp/rigval` -- so each restart wiped the accumulated
+screenshots and began again, and only the first two or three shots ever
+survived to be decoded. The rig was fine throughout: it had 16 tw9 shots
+when the local directory had 1.
+
+The fix is to stop sampling into a directory that can be wiped. **The
+MiSTer keeps every screenshot itself, named after the loaded rom**, so
+`tools/rig_value.py --rom X --pull-only` scp's the whole set afterwards
+and decodes it -- complete, rom-filtered, and immune to the restart. Use
+that from now on; treat any `-n` sampling run's count as a lower bound.
 
 **Shape of the curve, and why it points at fetch.** Half the cache costs
 ~1.4x; NO instruction caching does not cost 3x, it stops the master
