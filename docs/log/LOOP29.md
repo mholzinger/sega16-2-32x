@@ -8613,3 +8613,38 @@ correct bar and there is no cheaper honest one behind it.
 
 No gate, no picture, no ship -- f0a and f0b render wrong by
 construction and exist only for this number.
+
+---------------------------------------------------------------------
+## 288. NOCLEAR MAKES THE FLOOR WORSE, NOT BETTER -- IT CANNOT TEST THE PASS DECOMPOSITION WHILE DIRTYROW IS ON (2026-09-14 13:35)
+
+The decompile thread decomposed 287's 1.57-vint floor as one screen
+pass 0.64, clear plus blit 1.27, residual for transport/window/flip/68K
+0.30 -- i.e. the floor is framebuffer PASSES, not protocol. `NOCLEAR`
+removes one of the two passes, so it is a sharp test: if a pass is
+0.64, the floor should go 1.57 -> 0.93 and R should rise 41 -> ~64.
+
+    point                        R samples                    mean  floor
+    168 stack (f0b)              23 26 36 43 45 47 47 47 52   40.7  1.57
+    168 stack + NOCLEAR (f0c)    26 31 33 34 34 35 35 35 36   33.2  1.93
+
+**R FELL to 33.2 and the floor got WORSE by 0.36 vints.** Ares moved
+the other way (wall 0.56 -> 0.63) and f0c still ships (3,768, more than
+f0b), so the F0 trap is not the explanation and the build is valid.
+
+**The suspect, and it is a flag interaction rather than a hardware
+surprise.** The line carries `DIRTYROW` -- the dirty-row blit, which
+skips rows unchanged since that bank's last blit. The clear makes rows
+uniform. Without it last frame's pixels persist, MORE rows compare as
+changed, and the blit writes more. So NOCLEAR removes one pass and
+ENLARGES the other, which is not the experiment the decomposition
+needs.
+
+**So this does NOT falsify the 0.64-per-pass figure.** It says NOCLEAR
+cannot test it on this line. A valid version ablates the clear AND
+forces a full-row blit, so the pass count actually drops by one; then
+the floor should move by one pass or the decomposition is wrong.
+
+Recorded rather than retried immediately: the protocol workstream the
+F0 table opened does not depend on which of these two is right, and
+the rig time is better spent there unless the decompile thread wants
+the corrected ablation first.
