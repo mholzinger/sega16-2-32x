@@ -6611,3 +6611,72 @@ ablating anything, and the per-pass cost stops being derived.
 protocol workstream.** 64% of the line's generation sits in it on their
 own census, it does not depend on which of us is right about passes,
 and the pass question now has a cheaper answer than an ablation.
+
+---------------------------------------------------------------------
+## 136. The FB-byte count confirms one pass AND exposes a dead flag: BLIT_SKIP saves 3 bytes of 71,680 against a design that predicted 62.7% (2026-09-14)
+
+The builder's FBBYTES counter, at the blit's row commit with every skip
+test above the line:
+
+    build          gens   FB bytes/gen   SDRAM clear/gen
+    line (bldS)    2788      71,677          32,714
+    F0 floor       3646      71,675          27,558
+    a full screen               71,680
+
+**Three confirmations and one surprise.**
+
+  1. One framebuffer pass, exactly. 71,677 of 71,680. Entry 135's
+     correction is settled by counting, with no ablation.
+  2. The clear is SDRAM, 32,714 bytes into sbuf, because DIRECT_FB is
+     not in the shipping flags. It was never a framebuffer pass.
+  3. The F0 FLOOR BUILD WRITES THE SAME 71,675. The 1.57-vint floor does
+     not sit beside a pass; it CARRIES one. So the pass costs at most
+     1.57 and the protocol's share is whatever is left inside it. The
+     per-pass cost is now bounded by measurement instead of derived
+     from an August ares per-row figure.
+
+**The surprise, and it is worth more than the confirmation.**
+`BLIT_SKIP` is in the shipping flags. Its design skips the eight stores
+of a 32-pixel group when the group is entirely transparent AND the
+target bank already holds zero there, and its own header justifies it
+with "ares measured 62.7% of groups entirely transparent after MDBGALL
+moved the background to the MD plane". It is saving THREE BYTES of
+71,680 -- 0.004% against a predicted 62.7%.
+
+So one of these is true, and each is cheap to tell apart:
+
+  a. the transparency premise expired. The background went to the MD
+     plane, but the compose fills sbuf anyway (m_main.c 599 says sbuf
+     is "EXPLICITLY ZEROED every row every" generation, and the clear
+     count of 32,714 is consistent with a partial fill), so groups are
+     no longer transparent by the time the blit sees them;
+  b. the SECOND condition never passes. The skip also requires the
+     target bank to already hold zero there, tracked in a per-bank
+     per-row mask at 0x3A300. If that mask is conservative, or is
+     invalidated every flip, the group is transparent and the skip is
+     still refused every time.
+
+**Why it matters at this moment.** If 62.7% of groups really are
+transparent, the blit is writing ~45 KB a generation that changes
+nothing. Against a floor that CONTAINS the pass, that is the largest
+single identified quantity left, and it needs no new subsystem -- the
+code, the mask and the gating protocol are all already written and
+shipping. It is also the cheapest possible test of what an FB byte
+actually costs on hardware, which is the number the whole protocol
+workstream now hangs on.
+
+**And a flag that saves 0.004% is not free.** It ORs eight longs per
+group across 2,240 groups a screen. On the line it is pure cost. Either
+it starts paying or it comes off.
+
+**DIRECTFB, reframed by the same count.** It is not "remove one of two
+passes" -- entry 135 already retracted that. What it removes is writing
+every pixel TWICE, once to sbuf in SDRAM and once to the framebuffer,
+and replaces the blit's unconditional 71,677 bytes with compose's
+actually-drawn pixels plus a clear that becomes FB writes (32,714 today
+in SDRAM). Unless compose draws more than ~39 KB of pixels a
+generation, DIRECTFB writes FEWER framebuffer bytes than the blit does,
+on top of deleting all of compose's sbuf writes and all of the blit's
+sbuf reads. **The number that sizes it is compose's own byte count**,
+which the FBBYTES instrument can produce the same way it produced this
+table.
