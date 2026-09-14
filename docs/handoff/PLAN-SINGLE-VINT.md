@@ -864,3 +864,45 @@ regardless of load, and which 68K-side counter to read per 64 vints.
 
     Mike's eye is owed. Ares wall is an instruction ranking only
     (LOOP29 256a); the rig's rate is this card's real number.
+
+---------------------------------------------------------------------
+## FOLD 5 REDESIGNED (2026-09-13 22:20, NOTES 65 / LOOP-DECOMPILE 122)
+
+**DO NOT BUILD FOLD 5 AS NOTES 63 SPECIFIED IT.** That design rebased
+the game's text writes by rewriting the destination ADDRESS at each of
+the seven FMGATE entry points. The decompile thread's census of the
+whole text region says those seven are not the set:
+
+  - 61 pointer loads reach text RAM; only SIX land on a listed gate.
+  - 27 write through their own loop, and the ones live in play or
+    attract are not in the list: 0x057E inline, 0x1608 into 0x162E,
+    0x3766 into the score writer at 0x37D0, 0x42D8 into 0x4212, five
+    loads into 0x469C, and 0x4D12/0x4D1E into 0x4D3A -- not the
+    0x4D88 the gate list carries.
+  - **Two sites STASH a text pointer into an object field and never
+    write through it**: 0x56DC into a0+36, 0x64CA into fp+108. Those
+    fields are written from eight more sites and read back at 0x584A.
+    The score and HUD destination is therefore DATA IN WORK RAM, not an
+    address in the code stream, and no operand sweep can find it.
+
+That last one is exactly the quiet-failure class NOTES 63 asked about:
+a missed writer does not crash, it writes into a framebuffer region
+nothing reads any more and its glyphs simply stop appearing.
+
+**The design that replaces it: rebase at the CONSUMER, not the
+operand.** Mask the destination into the mirror at the point of use --
+the few places that actually perform the store -- so a pointer's
+provenance stops mattering and every stash is covered at once.
+
+**Two things this also settles.** Nothing reads text RAM back (zero
+direct reads; every glyph loop reads its source and writes its text
+pointer), so the post-flip text RESTORE fold 5 deletes was guarding
+nothing: the comment justifying it cites read-modify-writes, which is
+TILE RAM's premise, carried over to text by copy. And the 10 direct
+text writes are all page and scroll registers, which already go to the
+0xFF8000 mirror under the K2FREE split.
+
+Still true from LOOP29 269: the R60 packet has no text section and its
+tag word has no spare presence bit, so fold 5 remains a packet-format
+card on top of the consumer rebase. Its prize is bldTCOFF's 31/64
+against card O's 21-27.
