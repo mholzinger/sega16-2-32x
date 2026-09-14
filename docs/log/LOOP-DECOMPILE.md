@@ -7107,3 +7107,107 @@ isolation build gives it indirectly and should be read that way.
 
 Residue banked: 22.7 token releases against 27.8 presented -- five flips
 per 64 vints present without producing a token release.
+
+---------------------------------------------------------------------
+## 142. Mike's instinct, read against the bytes: the 68K's WAIT is not free. The spin at 0x3982 holds the MD bus ~91% of the time doing nothing, and STOP #$2000 fits in six bytes (2026-09-14)
+
+Mike: *"I genuinely think we can start our own timing sequence if we
+know the sequence we're waiting on... if our stall is simply waits. Like
+CMON. this hardware is predictable"* and *"or at least an aggressive
+fire with a feedback call that says done/next."*
+
+Two answers. The first is that we already do this and it works. The
+second is that reading the wait instruction turns his premise inside
+out, and it is the better finding.
+
+### The part that is already proven in our own tree
+
+Open-loop timing, no handshake, is in the code twice:
+
+  * the vblank **edge guard** is 1650 FRT ticks (~36 lines) of pure
+    arithmetic -- no rendezvous with anything;
+  * **DRAIN_CUT** (m_main.c 7718-7726) already argues Mike's exact case
+    in its own comment: the drain *"cannot be shortened into the budget,
+    so it does not belong in the flip path at all: take DRAIN_CUT pages
+    here and leave the rest to the body, which has the whole active
+    display."*
+
+And "aggressive fire with a done/next feedback" is `GAMEGATE_MAXWAIT`:
+fire on schedule, backstop the exception. The limit on pure open-loop is
+the 68K's pass LENGTH, which is bimodal (147 lines light / 185 heavy,
+with a minority arriving 175+ lines late, LOOP29 291) -- so a fixed
+schedule serves the common mode and needs a backstop for the rare one,
+which is what we have.
+
+### The part that inverts the premise
+
+The premise is "our stall is waits, and waits are schedulable." Reading
+the wait says the waits are not the passive thing that word implies.
+Entry 67 has the four instructions, and the addressing is absolute
+SHORT, which is why they pack into ten bytes:
+
+    397e:  4238 F01C   clr.b $F01C.w      (4)  discard any pending release
+    3982:  4A38 F01C   tst.b $F01C.w      (4)  <- THE WAIT
+    3986:  67FA        beq.s 0x3982       (2)
+    3988:  51C8 FFF4   dbf   d0,0x397E    (4)
+    398c:  4E75        rts
+
+**That two-instruction loop is a bus hog.** On a 68000 with no cache,
+every iteration is `TST.B abs.w` (12 cycles, 3 bus accesses -- two
+instruction words and the operand) plus `BEQ.s` taken (10 cycles, 2
+prefetch accesses). **Five bus accesses at 4 clocks minimum = 20 of the
+~22 cycles. The 68K holds the MD bus ~91% of the time while doing
+nothing at all**, for the whole span between finishing its pass and the
+next release -- roughly 77-115 lines of every 262 at the measured pass
+lengths.
+
+Every master read that crosses to MD-side memory arbitrates against
+that. And under DRAIN_CUT the bulk of the truth drain was deliberately
+moved into the body -- which is exactly the span the 68K spends
+spinning. **We moved the drain into the contention.**
+
+### The patch, and it fits exactly
+
+`STOP #$2000` halts the 68000 with **zero bus cycles** until an
+interrupt. Both release sites already live in IRQ4, so a release can
+only arrive at a vint anyway -- nothing is lost by sleeping between
+them. The spin is 6 bytes at 0x3982-0x3987 and `JMP abs.l` is 6 bytes,
+so it redirects cleanly to a stub in free ROM:
+
+    3982:  4EF9 xxxxxxxx   jmp stub          (6, exact fit)
+
+    stub:  4E72 2000       stop #$2000       wake on IRQ4, no bus
+           4A38 F01C       tst.b $F01C.w
+           67F8            beq.s stub
+           4EF9 00003988   jmp 0x3988        back into the dbf
+
+`dbf d0,0x397E` still runs, so the multi-frame waits (`moveq #N`) are
+unaffected. This is squarely inside Mike's 2026-09-10 "never the 68K"
+pivot -- it patches a program gate, which is the sanctioned lever.
+
+**Three gates before anyone builds it:**
+
+  1. **STOP is privileged.** If the main loop runs in user mode it traps
+     instead. S16B games are overwhelmingly supervisor-resident but this
+     must be READ, not assumed -- check the SR along the path to 0x397E.
+  2. **`#$2000` sets S=1, mask 0.** That enables every level. Confirm
+     the loop's normal SR: if the game deliberately masks anything at
+     0x3982, the immediate must match it, not clear it.
+  3. A spurious interrupt wakes the STOP early, the `tst` fails, and it
+     re-sleeps. Harmless, but it means the stub must loop, not fall
+     through -- as written above.
+
+### The disambiguation, which costs nothing because the build is queued
+
+Entry 140's isolation build (MAXWAIT=4, 68K released at the compose rate
+instead of every vint) now answers TWO questions, because halving the
+releases makes the 68K **work less and spin MORE**:
+
+    v/gen DROPS -> the 68K's WORK is what contends. STOP is a minor card.
+    v/gen RISES -> the 68K's SPIN is what contends, and STOP is the
+                   largest cheap lever left in the project.
+    v/gen FLAT  -> the 68K is off the SH-2's critical path entirely and
+                   the remaining 1.5-1.8 vints is master traffic alone.
+
+That third outcome was the only one I had framed. The rise case is new
+and it is the one Mike's instinct predicts.
