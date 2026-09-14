@@ -6482,3 +6482,76 @@ every frame -- so any claim that "the arcade drops frames here too" is
 false for this game and must not be used to excuse ours. The only
 exception is the handful of frames at a scene load, which the game
 itself clears the counter across.
+
+---------------------------------------------------------------------
+## 134. CARD F0's ANSWER DECOMPOSED: the 1.57-vint floor is FRAMEBUFFER PASSES, and ARCHITECTURE.md predicted it on day one (2026-09-14)
+
+The floor probe: with the entire compose ablated the rig still presents
+~41 of 64, a floor of 1.57 vints. Census on hardware at last --
+protocol 1.57 (64%), slave compose 0.49 (20%), master maps 0.41 (17%).
+Same build: ares 0.56 v/gen, rig 1.57. The FPGA charges 2.8x for the
+pipeline with the compute removed.
+
+**The floor is not mysterious. It is bandwidth, and this repo wrote the
+law down before any of this work started.** ARCHITECTURE.md section 1:
+
+    32X framebuffer write bandwidth   6.76 MB/s MEASURED
+    one 320x224 8bpp pass             71,680 bytes
+    budget at 60 Hz                   ~1.6 screen passes a frame
+    "The blit alone is one full pass."
+    "Any proposal that does not change the number of screen passes
+     cannot change the framerate."
+
+Arithmetic against the measured floor:
+
+    one vint at 6.76 MB/s        112,700 bytes
+    one screen pass              71,680 bytes = 0.636 vints
+    clear + blit = two passes    1.27 vints
+    measured floor                1.57 vints
+    residual for transport, window, flip, 68K handler   0.30
+
+Two full framebuffer passes plus a third of a vint of protocol is 1.57.
+That is the floor, to within the spread of the samples.
+
+**So the correct reading of card F0 is not "the protocol is expensive".
+It is "we write the screen twice and the hardware affords 1.6 passes".**
+The compose work of the last two weeks has been optimising the 0.6 of a
+pass that is left after the two mandatory ones. That is why cutting the
+whole compose still leaves 41 of 64: the compose was never the thing.
+
+**The lever the repo already built and never shipped.** `DIRECTFB`
+makes the compose write straight into the framebuffer back bank, which
+makes `blit_half`'s row loop inert -- it removes ONE FULL PASS. Its
+Makefile header describes the whole design (clears become FB-row
+long-fills, the bank needs no plumbing because 0x04000000 maps the
+draw bank by hardware, the flip gates on "this interval actually
+composed"). It has never been in the shipping flags: LOOP29 3033 and
+6444 both record the DIRECT_FB arm as dead code on the line.
+
+    floor today                  1.57  (clear + blit + protocol)
+    blit removed by DIRECTFB    ~0.93  crosses 1.00
+    clear also folded in        ~0.30 + the compose
+
+**What it costs, honestly, because it is not free.** Composing into the
+displayed-side bank means no read-back: the `urow` read that makes the
+shadow exact is gone (entry 128 -- under DIRECT_FB the shadow already
+falls to the odd-column dither by construction), and any compose
+decision that reads its own destination has to go. The repo's
+READ-FREE COMPOSE work (m_main.c 5276) was done for exactly this
+reason. And tearing: composing into a bank the display is scanning
+needs the flip gate the header describes.
+
+**What I would ask for before the card.** One measurement, and the
+existing counters can give it: FRAMEBUFFER BYTES WRITTEN PER
+GENERATION, split by clear, compose, stamp and blit, on hardware. If
+clear and blit really are ~143 KB of the total then DIRECTFB is worth
+0.64 vints and is the single largest lever left in the project. If they
+are not, this arithmetic is wrong and I want to know before anyone
+spends a week on it.
+
+**And a correction to keep the record straight.** LOOP29 252 priced the
+stamp's cost as "the 32X FB write floor"; LOOP29 6444 already corrected
+that to SDRAM write-through stores, because the compose target on this
+line is sbuf in SDRAM, not the framebuffer. That correction is what
+makes this entry's arithmetic work: the two FB passes are the CLEAR and
+the BLIT, and nothing else on the line writes the framebuffer in bulk.
