@@ -7211,3 +7211,87 @@ releases makes the 68K **work less and spin MORE**:
 
 That third outcome was the only one I had framed. The rise case is new
 and it is the one Mike's instinct predicts.
+
+---------------------------------------------------------------------
+## 143. Mike's cache idea, checked: we have 2KB of zero-wait on-chip RAM we have NEVER enabled, and the 68K already has the cheap path -- we just never moved the capture onto it (2026-09-14)
+
+Mike: *"if we Have a CACHE we can fill, thats even better because we can
+fill a cache, and the CPU on the 68K can drain it by sending all the
+work to the VDP."*
+
+The 68K half of that is wrong as stated -- a 68000 has no cache, and MD
+VDP DMA moves data into VRAM, which is not where our problem is. But
+both halves point at something real and I checked both.
+
+### CARD T2: the TW bit, defined and never used
+
+`sh_src/mars.h:104` defines `SH2_CCTL_TW = 0x08` and **nothing in the
+tree ever sets it.** Boot writes CCR = 0x11 (`mars_start.s` 428-430,
+`mov #0x11`) = purge + enable, and `cache_purge()` (m_main.c 1966-1968)
+rewrites the same `CP | CE`. So we run the SH7604 cache in plain 4-way
+mode.
+
+On the SH7604, **TW switches two of the four ways into 2KB of on-chip
+RAM at 0xC0000000, zero wait states**, leaving 2KB as a 2-way cache.
+That is 2KB of guaranteed-no-stall memory per SH-2 that this project has
+never touched -- and the master's problem, by entry 141, is that
+1.5-1.8 vints of every generation is memory stall.
+
+The obvious tenant is already sized and already hot:
+
+    cache_tag   1KB   (m_main.c 337, CSETS*NWAYS words) at 0x0603A800 -- SDRAM
+    cache_rot   128B  (m_main.c 506) at 0x06028880 -- SDRAM
+
+Both are read and written all through compose, both are pure
+bookkeeping, and both currently occupy real cache lines that the tile
+data wants. 1.1KB of the 2KB, with room left.
+
+**The trade is real and must be measured, not argued:** the cache drops
+4KB -> 2KB, which could cost the compose inner loops more than the
+scratchpad saves. **ares cannot rank this** -- it models no data cache
+at all (memory: ares charges instruction cycles only), so an ares
+A/B would show the pointer change and none of the effect. **Rig only.**
+
+### CARD T3: invert the text capture onto the path the 68K already has
+
+The 68K cannot cache, but it does not need to. The repo already measured
+its cheap path: **a 68K word into the DREQ FIFO costs ~2.4 lines on
+hardware; into the FB, ~0.1** (md_main.c 3556-3561). That is a 24x gap
+and `FB_XPORT` already ships on it -- the packet goes 68K -> FB at FM=0
+before the post, and the MiSTer base is built with FBXPORT=1.
+
+**So the producer already has a cheap write path. What has never been
+moved onto it is the CAPTURE.** Today the master READS 928 longwords of
+MD text RAM across the bus every generation, arbitrating against a 68K
+that (entry 142) holds that bus ~91% of the time spinning. Card O masked
+those reads and produced the largest hardware movement of the arc,
+18 -> 21-27 presented per 64.
+
+But entry 118 measured the thing that makes the mask look timid: **the
+game changes ZERO text words on 89-96% of frames.** So if the 68K writes
+its changed text words into the FB during its own pass, at 0.1 lines a
+word, then on nine frames in ten it writes nothing and **the master
+reads nothing at all** -- not a mask, not a compare, nothing. The
+cross-bus read disappears rather than shrinking.
+
+That is strictly better than the mask, and on the same transport that
+already carries the packet.
+
+Unknowns to settle before it is a card rather than an idea:
+
+  1. **Does the 68K have FM=0 time to do it?** The push already sits at
+     FM=0 before the post; the text writes would extend that span.
+  2. **Ordering.** The 68K's text writes happen throughout its pass; the
+     FB push is one point in it. Either the game's text writers are
+     patched to write both places, or the pass tail diffs and emits --
+     and entry 122's writer census (two pointer-stash sites) is what
+     decides which.
+  3. 68K FB writes are dropped at FM=1 (memory: flip-latch-fm-hold), so
+     the emit window is hard-bounded.
+
+### Why both of these sit behind the queued build
+
+Entry 142's isolation build tells us whether the 68K's WORK or its SPIN
+is what contends. T3 only pays if cross-bus traffic is the wall at all,
+and T2 only pays if the master's own stalls are. The build separates
+them. Neither should be built first.
