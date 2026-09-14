@@ -9380,12 +9380,23 @@ and order of magnitude are what this supports.
 processes from earlier cards were still running and still shooting the
 rig, competing for its ~1-per-6-second screenshot limit and writing into
 the same `/tmp/rigval`. That is why several runs look like "the build
-produced few frames". **No result was contaminated**, and MiSTer's own
+produced few frames". **This card's result is PROVEN uncontaminated**;
+299's is only argued. The proof here is MiSTer's own
 naming proves it: it names each screenshot after the loaded rom, and
 re-decoding with a rom filter gives `bldS: 24 files, 0 decoded` -- the
 shipping line carries no CRAM flood, so the 40% coverage floor rejected
 every one of its frames. `tools/rig_value.py` now takes `--rom` so the
-filter is structural rather than lucky. The wedge conclusions
+filter is structural rather than lucky.
+
+**What is NOT proven, and the distinction is worth keeping.** LOOP29
+299's noI/noD screenshots were deleted by the next run's `rm -rf`, so
+they cannot be re-decoded with a rom filter. The argument that they are
+clean is sound but it is an argument, not a check: a stray sampler
+shooting the rig while noI was loaded produces noI frames, and a stale
+`ls -t` is guarded by the sampler's own repeat-path test. Treat 299's
+GENERATION contrast (0 for noI, running for noD) as resting on that
+argument plus the screenshots, and re-run it with `--rom` before anything
+is sized against it. The wedge conclusions
 in 299 do NOT rest on read counts -- they rest on GENERATION reading 0
 directly (n=3) and on the screenshots, where noI's 32X layer is visibly
 broken and tw's is visibly correct.
