@@ -9491,3 +9491,54 @@ Every "thin sample" caveat in this arc was my instrument, not the rig,
 and I attributed it to the rig four times. **The rig keeps its own
 screenshots, named by rom. Pull them afterwards; never trust a sampling
 run's read count.** `tools/rig_value.py --rom X --pull-only` does this.
+
+## 302. NOTES 90/91's FREE FIRST MOVES, BOTH DONE (2026-09-14)
+
+### 91, the footprint card: it is ONE function, not five
+
+`__ramtext` on the line is **26,864 bytes = 26.2 KB against a 4 KB
+cache, 6.6x oversubscribed** -- the thread's figure, confirmed. But
+`nm --size-sort` does not give five candidates. It gives **ten functions
+total**, and one of them is most of it:
+
+| bytes | cum | symbol | cache-fulls |
+|---|---|---|---|
+| **18,552** | **69.1%** | **`_m_main`** | **4.53** |
+| 4,836 | 87.1% | `_compose_pass` | 1.18 |
+| 1,620 | 93.1% | `_slave_concurrent_k` | 0.40 |
+| 740 | 95.8% | `_s_main` | |
+| 532 | 97.8% | `_blit_half` | |
+| 336 | 99.1% | `_cap_drain` | |
+
+**`_m_main` alone is four and a half cache-fulls.** LTO has inlined the
+V-ISR, the body poll loop, the window, the launch and every census block
+into one symbol, and that symbol evicts `_compose_pass` -- the actual
+inner loop, and the one thing that should stay resident -- on every pass
+through it.
+
+So NOTES 91's card is not "shrink the top five". It is **split
+`_m_main`**: most of its 18.5 KB runs once a vint or once a generation,
+and it shares cache lines with the part that runs per pixel. Moving the
+cold half out of `.ramtext` shrinks the hot footprint without deleting
+any work. Ranking stays on `__ramtext_size` and wall, never on fps --
+the threshold law means 2.22 -> 1.8 shows nothing on the rate.
+
+### 90, CAT1MD step 2's eligibility: the card LIVES
+
+`tools/bake_cat1map.py --stats`, cat-1 share of all tiles per scene:
+
+    scene 0  11.3%   scene 1  43.8%   scene 2  35.9%
+    scene 3   6.2%   scene 4  17.2%
+
+Not small. Scene 1 is 8,960 cat-1 tiles and scene 2 is 7,360, which is
+consistent with the Makefile's 0.44 v/gen price for step 2 and with
+LOOP29 150's warning that every compose figure in this log was measured
+on level 1, the cheapest cat1 scene but one.
+
+**A stale claim found while running it, flagged not chased.**
+`tools/bake_cat1vis.py`'s own docstring says occlusion removes *"50% of
+all cat1 cells across the five scenes, 83% in scene 2"*. The bake as it
+runs today reports **10% overall and 17% in scene 2** -- 23,432 cat1
+cells, 21,059 still visible. One of the two is wrong and the docstring
+cites LOOP-DECOMPILE 57/58. Settle it before anything is sized on
+occlusion; the step-2 card does not depend on it.
