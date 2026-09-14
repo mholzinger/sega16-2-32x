@@ -7761,31 +7761,42 @@ beside it. Opening measurement, PHASECENSUS on card O's flags (phO,
 md5 de21d519), attract, 4000 frames:
 
     phase      v/gen   max     what it is
-    echo       1.05    2.34    master waiting on the 68K's post/echo
-    mtask      0.70    5.30    the master's own task
+    echo       1.05    2.34    the SLAVE's compose, to its SYNC[1] echo
+    mtask      0.70    5.30    the MASTER's own half of the compose
     ship       0.65    4.98
     flip       0.75    5.42
-    lag        0.01    5.43
+    lag        0.01    5.43    wall - max(echo, mtask)
     gens 2513, flips 2465, 46% single-vint ship period
 
-**The single largest term in a 1.11-vint generation is 1.05 vints of
-WAITING FOR THE ECHO.** The generation is not compute-bound on the
-master's own work; it is bound on the handshake with the 68K. And the
-echo histogram is BIMODAL, not spread:
+CORRECTION to this entry's first cut, which called `echo` the 68K
+handshake: `SYNC[1]` is the SLAVE's echo (s_main.c 376-382), so this is
+the slave's half of the compose. The two halves run CONCURRENTLY and
+`lag` is what the accounting itself says: wall = max(echo, mtask) + lag,
+and 1.05 + 0.01 is the 1.06 that reads out as a 1.11 wall.
+
+**So the generation's critical path is the SLAVE, at 1.05 v/gen against
+the master's 0.70.** The slave is half again slower than the master and
+the master idles for 0.35 of every generation. And the slave's histogram
+is BIMODAL, not spread:
 
     echo bins, 0.5..1.5 v in 0.125 steps:
       495  280  229  154   35   29  477  814
 
 1,158 generations in the four fastest bins and 1,291 in the two
-slowest, with a near-empty middle. That is two populations -- echoes
-that arrive promptly and echoes that arrive a whole vint late -- and it
-matches the 46/54 single-vint/two-vint ship split exactly. So the
-generation card is not "make the compose faster"; it is "why does half
-the population wait an extra vint for the echo", and the answer is
-likely the same window arithmetic card O just moved.
+slowest, with a near-empty middle. Two populations -- slave composes
+that close promptly and slave composes that take a whole extra vint --
+matching the 46/54 single-vint/two-vint ship split exactly.
 
-`ship` at 0.65 and `mtask` at 0.70 are the real work and together they
-are under one vint. There is no compute wall here to cut.
+**Two candidate cards, and the obvious one is already dead.** Moving
+rows from the slave to the master is `BLITSHIFT`, and the Makefile's own
+header retires it: swept 24/48/72 on 2026-08-24, the 68K handler mean
+did not move and flips got WORSE, because the blit is FB-BUS-bound and
+both SH-2s share the one write path -- moving rows only relabels which
+CPU waits. Do not re-sweep it. So the card is either (a) why the slave's
+population splits in two, which is a scheduling question and not a
+throughput one, or (b) fewer FB words written, which is the same lever
+the Makefile names (dirty-row blit, cap_drain's reads out of the
+window). (a) is the cheaper question and it is where I will start.
 
 ---------------------------------------------------------------------
 ## 275a. THE ATTRACT NEVER ENTERS THE TRANSFORM SCENE -- MIKE'S CHEVRON IS UNREACHABLE BY EVERY PROBE EITHER THREAD HAS RUN (2026-09-13 23:05)
