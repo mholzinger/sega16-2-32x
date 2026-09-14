@@ -2560,6 +2560,15 @@ endif
 # actually resolves to per call: full, nothing, partial, untagged.
 # Tests the BACKSTOP -- the 68K forces the mask full every 8th vint, so
 # full captures should be ~1 in 8 of all calls. Needs TEXTMASKPKT.
+# FBBYTES=1 = NOTES 77 / LOOP29 289, the protocol workstream's first
+# instrument. Counts FRAMEBUFFER bytes written per generation, measured
+# where the write happens rather than derived from a per-row figure.
+# FBB[0] blit bytes (the only FB write pass on this line), FBB[1]
+# generations, FBB[2] sbuf bytes cleared (SDRAM, for contrast -- the
+# clear is NOT a framebuffer pass because DIRECT_FB is not shipped).
+ifdef FBBYTES
+SHCCFLAGS += -DFB_BYTES
+endif
 ifdef MASKPROBE
 ifndef BOOTFLIPRATE
 $(error MASKPROBE needs BOOTFLIPRATE=1 - it supplies the value-channel flood)

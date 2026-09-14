@@ -78,6 +78,15 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  * same must-be-1 sanity count in every census build — check it before
  * believing any other slot. */
 #define CEN ((volatile uint32_t *)0x2602FF00)
+#ifdef FB_BYTES
+/* NOTES 77 / LOOP29 289. [0] framebuffer bytes written by the blit,
+ * [1] generations, [2] sbuf bytes cleared (SDRAM, for contrast).
+ * Slots above CEN's used range and below 0x26030000. */
+#define FBB ((volatile uint32_t *)0x2602FE00)
+#define FBB_GEN() (FBB[1]++)
+#else
+#define FBB_GEN() ((void)0)
+#endif
 #if defined(STAMP_CENSUS) || defined(STAMP2_CENSUS) || defined(STAMP3_CENSUS) || defined(STAMP4_CENSUS) || defined(STAMP5_CENSUS) || defined(STAMP6_CENSUS)
 static uint16_t stc_t[4];
 #endif
@@ -1184,7 +1193,7 @@ static void st_m(unsigned ev);                   /* ROM */
 static void nat_ph_close(void);
 static void nat_ph_ship(uint16_t tv);
 static void nat_ph_flip(void);
-#define NAT_CLOSE() do { nat_ph_close(); \
+#define NAT_CLOSE() do { nat_ph_close(); FBB_GEN(); \
         nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); } while (0)
 #define PHP (*(volatile uint32_t *)0x26028E7C)   /* sum launch->slave
                                                     * pickup (SYNC[13]) */
@@ -1197,7 +1206,7 @@ static int nat_ph_check(uint16_t pw);   /* ROM: pickup/echo stamps;
 #define st_s(ev) ((void)0)                       /* slave pass stamps: off */
 #define NAT_CLOSE() do { \
         uint16_t wl_ = (uint16_t)(frt() - nat_t0); \
-        NAT_WALL[0] += wl_; NAT_WALL[1]++; \
+        NAT_WALL[0] += wl_; NAT_WALL[1]++; FBB_GEN(); \
         if (wl_ > NAT_WALL[2]) NAT_WALL[2] = wl_; \
         nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); } while (0)
 /* the three close sites (gap poll, window entry, last-call) share this
@@ -6742,6 +6751,17 @@ RAMCODE static void blit_half(int ylo, int yhi)
         }
 #endif
         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+#ifdef FB_BYTES
+        /* NOTES 77: FRAMEBUFFER BYTES PER GENERATION, ON HARDWARE.
+         * Every skip test is above this line, so a row counted here is
+         * a row actually written to the framebuffer. 320 bytes a row.
+         * This is the ONLY framebuffer write pass on this line: the
+         * clear goes to sbuf (SDRAM) because DIRECT_FB is not in the
+         * shipping flags, and the compose and stamp write sbuf too.
+         * If this reads ~71,680 a generation the decomposition is
+         * settled without an ablation. */
+        FBB[0] += 320u;
+#endif
 #ifdef MD_PAYOFF
         /* PIVOT PAYOFF PROBE. Costs a full extra read pass over every
          * row, so it INFLATES the blit -- never measure blit time with
@@ -8934,6 +8954,9 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
 #else
             for (int x = 0; x < SBUF_W; x += 4)
                 *(uint32_t *)(d + x) = 0;
+#ifdef FB_BYTES
+            FBB[2] += SBUF_W;            /* SDRAM, not the framebuffer */
+#endif
 #endif
 #endif
         }

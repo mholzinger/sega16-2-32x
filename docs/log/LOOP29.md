@@ -8648,3 +8648,58 @@ Recorded rather than retried immediately: the protocol workstream the
 F0 table opened does not depend on which of these two is right, and
 the rig time is better spent there unless the decompile thread wants
 the corrected ablation first.
+
+---------------------------------------------------------------------
+## 289. THE PASS DECOMPOSITION, SETTLED BY COUNTING INSTEAD OF ABLATING: ONE FB PASS OF 71,677 BYTES, AND THE FLOOR CARRIES IT WHOLE (2026-09-14 14:50)
+
+The decompile thread withdrew its own "clear plus blit = two
+framebuffer passes" and asked for the measurement note 74 wanted
+instead: framebuffer bytes per generation, on the real code path, no
+ablation. `FBBYTES=1` counts at the blit's row commit -- every skip
+test is above that line, so a counted row is a row actually written.
+
+    build            gens   FB bytes/gen   SDRAM clear/gen
+    line (bldS)      2788      71,677          32,714
+    F0 floor (f0b)   3646      71,675          27,558
+    a full screen              71,680
+
+**The line writes the framebuffer EXACTLY ONCE per generation** --
+71,677 of a possible 71,680, so the dirty-row skip saves essentially
+nothing in practice. And **the clear is SDRAM**, 32,714 bytes a
+generation into sbuf, because `DIRECT_FB` is not in the shipping flags.
+The decompile thread's correction to itself is confirmed: one pass, not
+two, and the clear was never one of them.
+
+**The part that is new, and it matters more than the confirmation.**
+The F0 floor build writes the SAME 71,675 bytes. So the 1.57-vint
+hardware floor is not "a small residue plus protocol" -- **it carries a
+complete framebuffer pass**. The ablations removed compose CONTENT, as
+the card required, and the blit still ships every row.
+
+That fixes the shape of the remaining budget:
+
+    measured floor                        1.57 vints
+      of which: one full FB pass of 71,677 bytes
+      plus:     transport, window, flip, 68K handler
+
+and it means the per-pass cost is now bounded by measurement rather
+than derived: the pass cannot cost MORE than 1.57, and whatever the
+protocol costs comes out of the same 1.57. The old 0.64 figure was an
+ares per-row number (13.6 SH-2 cycles a longword at 47.34 us a row,
+LOOP 20) stretched to a pass, on a machine that charges 1.8-2.8x ares
+wherever it prices memory.
+
+**So the protocol workstream's first target is not protocol.** The
+largest single identified item inside the floor is one 71,677-byte
+framebuffer pass that exists only because compose writes sbuf and the
+blit copies sbuf to the framebuffer. DIRECT_FB's own header already
+makes the case -- FBBENCH measured framebuffer writes at 0.98-0.99 of
+SDRAM writes, so the staging-plus-blit copy buys nothing and costs a
+full pass of stores.
+
+**Method note, kept because the thread asked for it to be kept.** The
+0.64 came from a figure this repo labels MEASURED, and the label was
+true of ares in August and not of the FPGA. Every "measured" number
+older than the rig needs its machine checked before it sizes a card.
+LOOP29 168's protocol floor, which I wrote, is the same class of error
+and 287 corrected it.
