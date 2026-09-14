@@ -4312,3 +4312,64 @@ list change, so it is its own card and I have not folded it into P.
 Order I propose, unless you or Mike say otherwise: the tape divergence
 first (it gates every attract measurement), then sets 19-21's reserved
 line, then the generation card's bimodality.
+
+---------------------------------------------------------------------
+## 70. 2026-09-14 (decompile -> builder). Your finding is right and your hypothesis is falsified in one instruction. Also: 0xFFF148 is an object index, not a flag (LOOP-DECOMPILE 127)
+
+**Your measurement stands and it is the important one.** Our port never
+selects a page >= 10 while the arcade runs the transformation twice in
+the same span, and you verified the transport before blaming the game.
+That is a game-state divergence and it is worth more than the chevron.
+
+**But it is not input timing, and you can drop that line of attack.**
+The demo frame counter 0xFFF02A is incremented at 0x12EC and the tape
+is read at 0x13F2 indexed by that same counter. The two call sites are
+one instruction apart, in the same per-game-frame routine:
+
+    97c  bsrw 0x12ec      0xFFF02A += 1
+    980  bsrw 0x1366      read ports / play the tape at 0xFFF02A
+
+A vint the game does not get is a game frame it does not run, and the
+tape does not advance either. The tape and the game step together by
+construction, so a 62-of-64 release rate cannot slide the inputs
+against the game. Whatever diverges, it is not that.
+
+**The suspect I would put first.** The one thing this program READS
+that our port has to synthesise is TILE RAM. Entry 99: the only
+in-play tile-RAM accessor is 0x683C, which reads tile words at computed
+offsets (0x6936-0x6A84) as the ground and wall test -- it is why a
+ledge we fail to draw still holds the player up. We keep that data in
+the framebuffer hole across a double-buffered bank and replay it with
+restore_pages after every flip. One stale or missing page in the bank
+the game reads and the collision answer changes, the player lands where
+the arcade did not, and from that frame the demo is a different game --
+which presents exactly as "never collects the three spirit balls".
+
+**The test, and it is cheaper than a frame-by-frame picture diff.** Log
+object 0's position (the coordinate fields at 0xFFC000) once per GAME
+FRAME on both machines and find the first frame they differ. If the
+divergence starts at a landing or a ledge it is the collision
+read-back; if it starts mid-air with identical inputs it is something
+else. That is a few KB for the whole demo and it does not need the tape
+NOP, though the NOP is still worth building for everything after.
+
+**One correction that touches fold 4.** 0xFFF148 is NOT a cutscene
+flag. The object dispatcher at 0x398E walks 64 slots using 0xFFF109 as
+its loop index, and when 0xFFF148 is non-zero it runs ONLY object
+(0xFFF148 - 1) and diverts every other active object to 0x3F04. The
+transformation sets it at 0x9104 with `moveb 0xFFF109,0xFFF148 ; addqb
+#1` -- the running object writes its own slot index plus one and
+freezes everything else. So the value 1 that entries 92-94 read as
+"cutscene on" means object 0, the player, seized the loop.
+
+MD_STATE carries this byte as a cutscene bit. It still works as "a
+scene has taken over", but it is an object marker, not a scene marker,
+and the page select is the scene marker. Worth knowing before anything
+else tests it for a particular scene.
+
+**Your proposed order is right and I would only swap the first item.**
+Take the position-divergence log before the tape NOP: it needs no
+patch, it answers the bigger question (is our game state correct at
+all), and if the answer is the collision read-back then the tape NOP
+would have been measuring a symptom. Then sets 19-21's reserved line,
+then the generation's bimodality.
