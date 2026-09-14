@@ -8539,3 +8539,77 @@ instruction ranking and invisible on hardware, which is the expected
 relationship (LOOP29 256a) and not a reason to have shipped it.
 
 bldS is the candidate; its rig gates are running.
+
+---------------------------------------------------------------------
+## 287. CARD F0: THE HARDWARE PROTOCOL FLOOR IS 1.4-1.6 VINTS. 60 Hz IS NOT REACHABLE BY COMPOSE CUTS (2026-09-14 13:15)
+
+Built on bldS (b1e44bef), the line at the time, per the card's own rule
+that a floor measured against a superseded base is not comparable.
+
+**Ares sanity first, because a wrong ablation voids the rig run.** The
+trap named in the card is that an ablated compose might finish no
+generation, flip on nothing-shipped, read zero and look like an
+infinite floor. It is designed out: `NO_MAPS` returns the drain "done"
+instantly and `SPR_NOPIX` skips the run's pixel STORES inside an
+otherwise intact loop, so the generation still completes, blits and
+ships. The evidence is direct -- f0b SHIPS MORE than the line does:
+
+    build                  wall   ships          single-vint
+    bldS (line)            1.04   2653 (40.9fps)   49%
+    - master maps          0.91   2698 (41.8fps)   54%
+    - maps AND compose     0.56   3688 (57.1fps)   94%
+
+Against LOOP29 168's 0.90 / 58.3 fps / 98%. The fps reproduces; the
+wall is lower and single-vint slightly under because the line has
+absorbed cards H, I, J, O and P since 168. Same regime, so the run
+stands.
+
+**THE RIG. Three points, three launches each, identical time slots,
+presented frames per 64 vints:**
+
+    point                  R samples                        mean  floor
+    line (bldS)            21 21 21 26 28 29 29 29 29        25.9  2.47
+    - master maps          10 23 29 31 31 31 38 43 43        31.0  2.06
+    - maps AND compose     23 26 36 43 45 47 47 47 52        40.7  1.57
+
+**THE FLOOR IS R = 40.7 MEAN, 45 MEDIAN -> 1.57 / 1.42 VINTS.**
+
+By the card's pre-fixed table, R in 40..59 means: **the protocol becomes
+a second workstream.** That is the answer and it was fixed before the
+measurement, so it is not up for argument now.
+
+**What it means, stated plainly. 60 Hz cannot be reached by cutting
+compose.** With the ENTIRE compose removed -- no map drain, no sprite
+pixels -- real hardware still presents about 41 of 64 vints. The
+remaining 1.4-1.6 vints are transport, flip, DREQ, window, echo chain
+and the 68K handler, and no amount of compose work touches them.
+
+**The hardware cost census NOTES 61 asked for and never got:**
+
+    protocol / transport     1.57 vints   64%
+    slave sprite compose     0.49 vints   20%
+    master maps drain        0.41 vints   17%
+                             ----------
+    line                     2.47 vints
+
+**And the ares-versus-hardware gap is the whole point of the card.**
+Same build, same ablation:
+
+    ares   wall 0.56 v/gen   =  57.1 fps
+    rig    1.57 vints/gen    =  38.2 fps equivalent
+
+**The FPGA charges 2.8x what ares does for the pipeline with the
+compute taken out.** Every generation number this project owns is from
+an instrument that prices instructions and not memory, and at the floor
+that instrument is wrong by a factor of nearly three. LOOP29 168's "the
+protocol floor is 0.45 to 0.90 vints. The pipeline is not the
+constraint" was true of ares and false of the machine.
+
+**The target is not in doubt.** LOOP-DECOMPILE 133: the arcade's own
+dropped-frame counter (0xFFF144, incremented by the handler at 0x2AB8)
+reads ONE dropped frame in 3,300 over 55 seconds of credited play, and
+zero in every five-second sample after the round load. 64 of 64 is the
+correct bar and there is no cheaper honest one behind it.
+
+No gate, no picture, no ship -- f0a and f0b render wrong by
+construction and exist only for this number.
