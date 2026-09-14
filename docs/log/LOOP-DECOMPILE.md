@@ -6299,3 +6299,61 @@ the point of use -- so every write and every clear, wherever it comes
 from, lands in a mirror whose group mark is derived from the address
 itself -- covers the stash sites and the clears in one place. That was
 the advice for fold 5; it applies to the mask today.
+
+---------------------------------------------------------------------
+## 131. 0xFFF02A is DUAL-PURPOSE: a countdown timer on the card steps and the demo frame counter on the demo steps. And 0x9052 is an unmarked full-playfield text clear that runs only during the transformation (2026-09-14)
+
+**The counter, resolved.** The builder traced 0xFFF02A counting DOWN at
+frame 296 and UP at 1051 and concluded it is not a frame counter. Both
+readings are right and so is mine; the variable has two jobs. Measured
+per attract step over 5,000 frames:
+
+    step 08 (SEGA card)   f400-446    42 -> 0 -> 65535   COUNTDOWN
+    step 0C (demo)        f447-1167   reset to 0 at f451, then UP to 698
+    step 10 (eye)         f1168-1480  held at 698
+    step 14 (demo)        f1481-2098  reset to 0 at f1485, then UP
+    step 1C, 00           timers again (180 -> ...)
+    step 04 (demo)        f2685-3403  reset to 0 at f2689, then UP
+
+Inside a DEMO step the only decrease in the whole run is the reset at
+the step's start, three to four frames in. Between resets it is strictly
++1 a game frame. The writers agree: `addqw #1` at 0x12EC is the demo's,
+and `movew #180` / `#240` at 0x1F40, 0x2008, 0x2056 with `subqw #1` at
+0x1F74, 0x2048, 0x2094 are the card steps' timer.
+
+**So the tape index is 0xFFF02A and it is valid only while the step is a
+demo.** The tape read at 0x13DA does `movew 0xFFF02A,%d2; muluw #3,%d2`
+and the pointer itself comes from 0x1834 indexed by `(0xFFF031 & 0x18)
+>> 1`, so the game already scopes both to the step. A log that wants a
+global index needs (step, 0xFFF02A) or a demo sequence number, because
+each demo restarts at 0 -- which is exactly the collision the builder
+hit on their second attempt.
+
+Demo steps are 0x04, 0x0C and 0x14 in 0xFFF031; 0x00 is the high-score
+table, 0x08 the SEGA card, 0x10 the eye and 0x1C a transition.
+
+**Separately, for the stale glyphs, a routine neither of us had.** At
+0x0988 the per-frame path chooses its text clear on 0xFFF148:
+
+    0988  tstw 0xFFF148
+    098c  bne 0x996
+    098e  jsr 0x3AAE        the ordinary clear (in the builder's seven)
+    0994  bra 0x99c
+    0996  jsr 0x9052        the TRANSFORMATION clear (in nobody's list)
+
+and 0x9052 is `lea 0x410230,%a0` then twenty rows of twenty longs with a
+128-byte stride: rows 4 to 23, columns 24 to 63 -- the ENTIRE visible
+playfield text area, cleared every frame for as long as an object holds
+the loop.
+
+So during the Zeus pop-in the game stops using its normal clear and
+uses this one, and this one is not among the seven sites card O marks.
+That is precisely "screen text that should have been cleared after the
+Zeus pop-in" and it is unmarked by construction.
+
+**The builder's objection to the mask theory still stands and is worth
+keeping.** The mask forces a full capture every 8th vint, so a missed
+mark should heal in about 130 ms and Mike's glyphs persist. Either the
+backstop is not reaching those rows or the stale text is not a missed
+mark. 0x9052 does not resolve that; it only says which clear is the one
+going missing if the mask theory survives their measurement.
