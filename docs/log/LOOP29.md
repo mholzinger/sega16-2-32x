@@ -8114,3 +8114,62 @@ which would let us run the SAME tape deterministically and compare
 where the two diverge. Worth doing before any more chevron work, since
 every chevron measurement in our attract is measuring a game state the
 arcade never reaches.
+
+---------------------------------------------------------------------
+## 280. THE POSITION LOG: OUR DEMO MATCHES THE ARCADE EXACTLY FOR ~200 FRAMES, THEN DIVERGES ON FLAT GROUND -- NOT AT A LANDING (2026-09-14 11:25)
+
+NOTES 72's test, built on both machines and needing no patch.
+
+**Instruments.** `OBJLOG=1` logs object 0's (x, y) once per GAME FRAME
+into a ring at 0xFF4000 (2048 entries x 4 bytes, in the gap LOOP28 84
+audited as never written after boot; count at 0xFF3FFE, BELOW the ring
+-- the first cut put it at 0xFF4FFE, which is entry 1023's y word, and
+clobbered it). Logged at the GAMEGATE release, which is by definition
+once per game frame. `tools/objlog_arcade.lua` logs the same two
+addresses from `mame altbeast` once per frame.
+
+0xFFC00C = x and 0xFFC010 = y were IDENTIFIED, not assumed: diffing
+object 0's 64 bytes across the demo leaves those two plus their mirrors
+at 0x28/0x2A as the only position-shaped words, and the arcade reads
+the same shape at the same addresses.
+
+**Result, aligned by longest exact run (correlation alone found a
+spurious offset -- repeated values make agreement cheap):**
+
+    offset -7:  186 consecutive frames match EXACTLY
+                our f34..f219  ==  arcade f27..f212
+    then
+      our f219  ours 14BF,10D8   arcade 14BF,10D8
+      our f220  ours 14BF,10D8   arcade 14BE,10D8   <-- diverges
+      our f221  ours 14BE,10D8   arcade 14BD,10D8
+      our f222  ours 14BD,10D8   arcade 14BC,10D8
+
+**The divergence is a one-frame X stall with Y CONSTANT at 0x10D8
+throughout.** The player is walking level ground. There is no landing,
+no ledge, no change in height at or near the divergence. By NOTES 72's
+own decision rule -- "if divergence starts at a landing or a ledge it
+is the read-back; if it starts mid-air with identical inputs it is
+something else" -- **this points away from the collision read-back.**
+
+After it, ours trails by exactly one X step and runs parallel.
+
+**Two hundred frames of EXACT agreement is itself the useful half.**
+Object 0's position is bit-identical to the arcade's for ~3.3 seconds
+of demo, which means the whole chain -- tape input, game logic, and
+every value our port synthesises that the game reads back, collision
+included -- is correct over that span. Whatever breaks does so at one
+identifiable frame and not gradually.
+
+**The caveat, and it is the main threat to the conclusion.** My index is
+the GAMEGATE release, not the game's own demo frame counter. If a
+release ever happens without a game frame, or twice for one, my index
+drifts and a stall would be an artifact of the logger rather than the
+game. I tested for that by collapsing consecutive duplicates on both
+sides: the longest exact run goes 186 -> 225, so some of it IS
+indexing, but not all -- and over the same window our object visits 769
+distinct positions to the arcade's 589, which a pure indexing artifact
+cannot produce. The motion differs, not only the sampling.
+
+Removing the caveat entirely needs the game's own demo frame counter
+(incremented at 0x12EC per NOTES 72) as the log index. That address is
+the one thing this test still wants.

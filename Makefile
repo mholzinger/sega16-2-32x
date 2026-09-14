@@ -2550,6 +2550,15 @@ endif
 # the gate was added to stop). Gate on MD_STATE_CUT instead: the 68K's
 # own transformation bit on COMM14, independent of anything we paint.
 # Needs MDSTATE (the word) and PALGLOW (the animator).
+# OBJLOG=1 = NOTES 72. Logs object 0's (x, y) once per GAME FRAME into
+# a ring at 0xFF4000, to find the first frame where our demo diverges
+# from the arcade's. Indexed by game frame -- logged at the GAMEGATE
+# release, which happens exactly once per game frame -- so it lines up
+# with a MAME log of the arcade modulo a constant boot offset.
+# 2048 entries x 4 bytes; count at 0xFF4FFE. Probe only.
+ifdef OBJLOG
+MDCCFLAGS += -DOBJ_LOG
+endif
 ifdef GLOWCUT
 SHCCFLAGS += -DGLOW_CUT
 endif

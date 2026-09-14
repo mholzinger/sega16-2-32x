@@ -3769,6 +3769,36 @@ void shim_vblank(void) {
 					                              * and restored (the ISR writes both) */
 					uint8_t flipped = (c4 == 0xF102 || c4 == 0xF103 || c4 == 0xF104);
 					if (flipped || ++gg_wait >= GAMEGATE_MAXWAIT) {
+#ifdef OBJ_LOG
+						/* NOTES 72 / LOOP29 280: object 0's position,
+						 * ONE ENTRY PER GAME FRAME, so the index is the
+						 * game's own frame number and lines up with a
+						 * MAME log of the arcade frame-for-frame (modulo
+						 * a constant boot offset). Logged at the RELEASE,
+						 * which is by definition once per game frame --
+						 * a vint the game does not get is a frame it does
+						 * not run, and it must not consume an index.
+						 * 0xFFC00C = x, 0xFFC010 = y (identified by
+						 * diffing object 0 across the demo, not assumed).
+						 * Ring at 0xFF4000, 2048 entries of 4 bytes, in
+						 * the gap LOOP28 84 audited as never written
+						 * after boot (__bss_end <= 0xFF2200, PAL_SHADOW
+						 * at 0xFF6000). Stops at the end; no wrap, so a
+						 * short run reads clean. */
+						{
+							static uint16_t ol_i;
+							if (ol_i < 2048) {
+								volatile uint16_t *lg =
+									(volatile uint16_t*)(0xFF4000u + ol_i * 4u);
+								lg[0] = *(volatile uint16_t*)0xFFC00C;
+								lg[1] = *(volatile uint16_t*)0xFFC010;
+								ol_i++;
+								/* count sits BELOW the ring: 0xFF4FFE is entry
+								 * 1023's y word and the first cut clobbered it */
+								*(volatile uint16_t*)0xFF3FFE = ol_i;
+							}
+						}
+#endif
 						if (!flipped) (*(volatile uint8_t*)0xFFA0F4)++;
 						*(volatile uint8_t*)0xFFA0F5 = 1;
 						(*(volatile uint16_t*)0xFFA0F6)++;
