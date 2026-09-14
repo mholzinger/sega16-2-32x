@@ -2826,6 +2826,18 @@ void shim_vblank(void) {
 		}
 	}
 #endif
+#ifdef GLOW_RATE
+	/* NOTES 67 / LOOP29 276: the master counts, per 64 vints, the vints
+	 * in which the chevron ramp's words changed, and hands it over COMM6
+	 * with bit 15 SET. Post it on the value channel. A live ramp reads
+	 * near the push rate; Mike's flat chevron would read 0. */
+	{
+		static uint8_t gr_val;
+		uint16_t w = *mars_comm6;
+		if (w & 0x8000) { gr_val = (uint8_t)(w & 63); *mars_comm6 = 0; }
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | 0x80 | gr_val);
+	}
+#endif
 #ifdef STAMP_CENSUS
 	/* NOTES 47 / LOOP29 259: the master's four pre-flip stamps (FRT ticks
 	 * from ISR entry: post seen, after the truth drain, after the slave

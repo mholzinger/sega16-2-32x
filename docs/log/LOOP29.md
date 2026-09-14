@@ -7848,3 +7848,68 @@ positions a step (`glow_rp < 2 ? +5 : -2` = -2 mod 7), which is the
 arcade's own period-7 rotation LOOP-DECOMPILE 123 measured. So the
 animator is right and the ramp data is right; the question is entirely
 what happens when it yields. ngO's sequence is running.
+
+---------------------------------------------------------------------
+## 276. THE CHEVRON IS NOT THE DELTA PATH: IT ANIMATES AT 63 OF 64 VINTS ON HARDWARE WITHOUT THE ANIMATOR (2026-09-13 23:15)
+
+NOTES 67 ordered three tests of the palette delta path for Mike's flat
+chevron. All three are now answered and none of them is the defect.
+
+**The instrument.** The rig's screenshot channel samples at ~0.5 Hz and
+the attract is a moving demo, so it cannot see a per-vint palette
+rotation -- two attempts at a screenshot-diff test failed, the first by
+counting scene changes as animation, the second by gating on a
+"quiet outside the band" threshold no live demo passes. Replaced with a
+counter: `GLOWRATE=1` has the master count, per 64 vints, the vints in
+which set 19's words (PAL_SH 0x98-0x9F, the ramp) differ from the vint
+before, handed over COMM6 bit 15 and posted on the value channel.
+(It needs BOOTFLIPRATE for the CRAM flood; built without it the probe
+writes a word nothing paints and every capture reads unreadable. The
+Makefile now errors instead.)
+
+**The measurement**, two rig launches, changes per 64 vints:
+
+    grA2  animator ON  (control)        63 63 63 63 63 63 63 47
+    grD2  delta path alone (NOGLOW)     63 63 63 63 62 61 63 17
+
+`NOGLOW=1` drops PALGLOW, so there is no SH-2 animator and no 68K glow
+mask: sets 19-21 are driven by the palette delta path alone, which is
+exactly the state m_main.c's scene gate hands them to in the transform
+scene. **The delta path delivers a changed ramp on 61-63 of every 64
+vints on real hardware.** In ares the same build rotates the ramp
+correctly every frame with the arcade's period-7 step (275a).
+
+So NOTES 67's hypothesis (b), delta coalescing several rotations into
+one push, is FALSE -- nothing is being coalesced. Its (c), the cycled
+blocks not marked dirty during the cut, is FALSE in the normal scene
+and was already false in ares per LOOP29 166. And its (a), "the scene
+detector resolving the transform to a static anchor and pinning the
+palette", is not what the code does: the install path (m_main.c 6378)
+reads `pscene_pal[]` only to compute a DISTANCE for detection and calls
+`mds_install`, which writes the MD pen tables and never the palette
+image. Sets 19-21 are refused into no MD table at all (NOTES 67), so
+they are FB-layer cells the install does not touch.
+
+**What that leaves, and it is a blocker rather than a hypothesis.** The
+defect is specific to the transform scene, and no instrument either
+thread owns can reach that scene: the attract never performs a
+transformation (275a: 5 vints of 3,903 outside the normal scene, zero
+animator yields), so the rig probe, the picture gates, my three
+launches and the decompile thread's eight captures are all blind to it
+by construction. Mike reached it by playing.
+
+Getting it under an instrument needs one of: an input tape that plays
+to a transformation (tools/tape_patch.py carries 768 frames = 12.8 s,
+which is likely too short), a patched entry that starts the game in the
+transform state, or Mike reproducing it while a probe build is on the
+rig. **Until then the chevron should not be guessed at further** -- three
+of three named hypotheses have now cost rig time and returned negative,
+and a fourth guess without the scene on an instrument would be the
+method error LOOP29 166 already wrote up.
+
+One observation worth keeping for whoever does reach it: the rotating
+ramp contributes permanent distance to the scene detector's
+`dist` sum over PAL_SH[0..1023], because those words never match a
+static anchor. If that sum exceeds MDS_TOL the transform scene is never
+DETECTED at all -- which would be a different defect with the same
+symptom, and it is cheap to check once the scene can be entered.

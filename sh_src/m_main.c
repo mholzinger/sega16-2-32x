@@ -8131,6 +8131,40 @@ void visr_vbi(void)
     uint16_t t0 = frt();
 #ifdef K2_FREE
     visr_t0 = t0;
+#ifdef GLOW_RATE
+    /* NOTES 67 / LOOP29 276: DOES THE CHEVRON'S RAMP MOVE ON HARDWARE?
+     * Mike reports a single flat blue where the arcade rotates a
+     * seven-shade ramp. In ares the delta path animates it correctly
+     * (275a), the rig's screenshot channel samples far too slowly to
+     * see a per-vint rotation, and the scene itself is gameplay-only.
+     * So count it instead: per 64 vints, the number of vints in which
+     * set 19's words (PAL_SH 0x98-0x9F, the ramp) DIFFER from the vint
+     * before. A live ramp reads near the push rate; a frozen one reads
+     * 0. Carried on the value channel like BOOTFLIPRATE, and readable
+     * with the animator off (NOGLOW), which is the state the animator
+     * hands these words to in the transform scene. */
+    {
+        static uint16_t gr_prev[8], gr_n, gr_vc, gr_val;
+        static uint8_t gr_init;
+        int diff = 0;
+        for (int i = 0; i < 8; i++) {
+            uint16_t w = PAL_SH[0x98 + i];
+            if (gr_init && w != gr_prev[i]) diff = 1;
+            gr_prev[i] = w;
+        }
+        gr_init = 1;
+        if (diff) gr_n++;
+        if (++gr_vc >= 64) {
+            gr_val = gr_n > 63 ? 63 : gr_n;
+            gr_n = 0;
+            gr_vc = 0;
+        }
+        /* The value channel is 68K-side (0xFFA18A); hand the count
+         * over COMM6 with bit 15 SET, which STAMP_CENSUS's reader
+         * ignores and the 68K's GLOW_RATE reader claims. */
+        MARS_SYS_COMM6 = (uint16_t)(0x8000 | gr_val);
+    }
+#endif
 #ifdef STAMP6_CENSUS
     s6_first = 1;                        /* 266a: arm for this vint's first flip_span */
 #endif

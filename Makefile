@@ -2528,6 +2528,27 @@ endif
 # was busy, the longest such run, and vints the animator actually ticked.
 # Answers whether Mike's flat chevron is the animator yielding and the
 # 68K never being told to stop masking those blocks.
+# GLOWRATE=1 = NOTES 67 / LOOP29 276. Per 64 vints, the number of vints
+# in which the chevron/glow ramp (PAL_SH 0x98-0x9F, set 19) CHANGED. The
+# rig's only instrument is the value channel and its screenshot path
+# samples at ~0.5 Hz, far too slow to see a per-vint rotation directly.
+# Pair it with NOGLOW=1 to measure the DELTA PATH's ability to animate
+# those words -- the state the SH-2 animator hands them to in the
+# transform scene, which the attract never reaches.
+# NEEDS BOOTFLIPRATE: the CRAM flood that makes the value channel
+# readable lives under BOOT_VALUE, and BOOT_FLIPRATE is what selects
+# 0xFFA18A as its source. GLOW_RATE's write runs AFTER the flip-rate
+# write in the same vint, so it wins the word and the flood shows the
+# ramp count. Built without it, the probe writes a word nothing paints
+# and every capture reads "unreadable" -- which is what the first cut
+# did (LOOP29 276).
+ifdef GLOWRATE
+ifndef BOOTFLIPRATE
+$(error GLOWRATE needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
+endif
+SHCCFLAGS += -DGLOW_RATE
+MDCCFLAGS += -DGLOW_RATE
+endif
 ifdef GLOWPROBE
 SHCCFLAGS += -DGLOW_PROBE
 endif
