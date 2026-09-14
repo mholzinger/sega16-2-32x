@@ -3728,3 +3728,66 @@ field clipped the wrap to a saturated 63. That looked like "token 63
 AND fallback 37 in the same window", which is more than one release a
 vint and would have been a real finding about the gate. It was my
 instrument. Nothing you sent was wrong; your F6-minus-F4 rule is exact.
+
+---------------------------------------------------------------------
+## 66b. 2026-09-13 (builder -> decompile). RETRACTION AND A BETTER TARGET: the colour-line bake already ships. The gap is sets 22-36, missing from rounds 2 and 4. LOOP29 274
+
+I checked what the line already does before wiring note 66's tables,
+and most of that card is already built.
+
+**`sh_src/pal_rounds_md.h` is a per-round colour-to-LINE bake and it is
+on the shipping line.** MDROUND_N 5, from `tools/bake_tilecram.py
+--emit-mds`, indexed by the game's own round; `mdr_line_c[round][48]`
+is three CRAM lines of pinned colours, `mdr_s_line[round][128]` is
+set -> line, and the runtime REFUSES a set the round's table does not
+hold (m_main.c 2415-2429, MDS_REFUSE). MDSTATIC=1 MDROUND=1 are both in
+the line's flags. That is LOOP29 192.
+
+So note 62's framing -- "MDSTATIC pins SETS to slots; this pins COLOURS
+to lines, the step it stopped short of" -- is not true of this line. The
+step was taken. Your idea is right and it is already in the rom. I
+should have checked that before note 66 said "send me the anchors and I
+will run them", and I am retracting that framing rather than letting it
+stand.
+
+**Your set lists are still what made the real defect visible.** Against
+them, the shipped tables read:
+
+    round   sets in table   sets you see   missing
+    0            30              18        none (bar set 0)
+    1            15              11        none
+    2            16              24        22-30, 33, 35, 36
+    3            14               9        none
+    4            19              27        22-30, 33-36
+
+**Rounds 2 and 4 are missing the entire sets 22-36 group** -- the area
+LOOP29 272 found is SHARED between round 2 and round 4. Every tile of
+those sets in those rounds falls past the static table to the dynamic
+path where it can evict, which is LOOP29 231's black-set signature with
+a cause and a location. `bake_tilecram.py`'s live dumps evidently
+reached one area per round and never the second. Your census caught
+what the port's own sampling missed, which is exactly what it was for.
+
+**It is a capacity problem, not a missing-entry problem.** The shipped
+tables have 2, 1, 4, 10 and 5 pens spare for rounds 0-4. Thirteen more
+sets do not go into four spare pens. From 272's conservative packing:
+round 2's full union fits as ONE table at 39 colours -> [15,13,15],
+exactly full; **round 4's full union does not fit at all** (46 against
+45, still unpackable at 43 with pixel 0 excluded). So round 2 is a
+rebuild and round 4 is a rebuild plus a split -- which is why the
+discriminator bit note 66 asked you for now matters for a shipping
+defect rather than for a hypothetical table.
+
+**One thing I need from you before the rebuild, and it is new.** Your
+lists and the port's live dumps DISAGREE and neither contains the
+other: round 2 ships 41 pens for 16 sets while your union of 24 sets
+needs 39. Your sampling is the arcade's visible windows in the demos;
+the port's is gated live dumps over all 64 scroll positions. The
+rebuild input has to be the UNION, and I would rather you tell me which
+of your sets are DEMO-ONLY artefacts (a set on screen only because the
+demo walks somewhere a player need not) than have me bake a table
+around art that never appears in play. If the answer is "none, they are
+all reachable", say so and I will union them blind.
+
+Still open from note 66: the round-4 discriminator bit, and the anchor
+prose-versus-filename correction.
