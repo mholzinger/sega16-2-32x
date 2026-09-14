@@ -133,8 +133,11 @@ flat to within 0.3%. With frame DELIVERY pinned, MOTION is measuring how
 big each frame's delta is, and removing background flicker removes
 delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 
-Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
-which sets the flip rate.
+Next lever after the play pass: ~~the slave's compose (cat1 tiles =
+48%), which sets the flip rate.~~ **RETRACTED 2026-09-14 (LOOP29 294):
+that ranking came from the ares split, which cannot see the master's
+stalls. The slave's compose does not set the flip rate on hardware.
+See "the generation is the wall" below.**
 
 ## THE LINE (STALE HEADING -- the current line is bldS, see "THE LINE" below)
 
@@ -243,7 +246,23 @@ explained.
   - the attract never advances past step 0x08, so our demos never run
     (LOOP-DECOMPILE 132 predicts 0xFFF026 bit 0 clear; one read settles it).
   - the shadow renders as a column dither over MD-plane content (128).
-  - the generation is the wall: slave 1.05 against master 0.70, bimodal.
+  - the generation is the wall. **The slave/master split in that
+    sentence was an ARES reading and it pointed at the wrong CPU --
+    corrected 2026-09-14, LOOP29 294.** In ares the wall is
+    max(echo, mtask) and echo wins, so the slave reads as the critical
+    path; on the rig the master never waits for the slave (zero, every
+    sample, LOOP29 291) so the MASTER is. ares charges SH-2 instruction
+    cycles only: it prices the slave's compute honestly and the master's
+    stalls not at all. Read LOOP29 275's split as an instruction-count
+    ranking, never as a critical path.
+    **Size every slave card in BYTES, never in time** -- slave time is
+    hidden, but slave TRAFFIC is not (0.49 v/gen, one shared FB write
+    path; three agreeing measurements, NOTES 78/80).
+    Where the master's generation actually goes on hardware: ~0.69 v/gen
+    of instructions against a 2.2-2.5 v/gen generation, so ~1.5 v/gen is
+    memory stall. Stores are excluded by arithmetic (NOTES 77) and at
+    most ~0.4 v/gen is 68K arbitration (the MAXWAIT=4 null, 294), so
+    **at least 1.1 v/gen is unexplained and that is the open question.**
 
 **CHECKED AND NOT A DEFECT (2026-09-14):** the crystal-ball interlude
 renders magenta on purple, and so does the arcade (ref_016289). Ours is
