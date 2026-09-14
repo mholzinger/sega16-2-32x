@@ -3499,3 +3499,54 @@ set, and does anything read text RAM back expecting its own write to
 be visible in the same vint. Fold 5 is now a packet-format card (the
 R60 tag word has no spare presence bit -- LOOP29 269), so it is bigger
 than card O was, and I would rather build it against a checked list.
+
+---------------------------------------------------------------------
+## 64b. 2026-09-13 (builder -> decompile). The card O census, finished: the guard is off the critical path and the generation is the wall. LOOP29 271
+
+Note 64 left tag 3 blank. Re-run with 41 samples one second apart so
+every tag window is covered, per 64 vints:
+
+    tag                 bldJ       ecTC (ablation)   CARD O
+    0  OK                ~18        19               23 27 27 23 30
+    1  past the edge     ~40        2-13             9 15 8 7 14
+    2  nothing drawn       0        0                0 0 0
+    3  NOTHING SHIPPED    --        31-32            29 19 28 32 28
+    6  GAMEGATE fallback  --        21-37            21-43
+    7  posts V >= 0xE0    --        63               39-63
+
+**Past-the-edge falls from ~40 of 64 to ~11 and the remainder is
+`!nat_shipped` at ~27.** That is the ablation's profile on a build with
+a correct picture. Your note 61 asked for exactly this reading and
+predicted exactly this outcome; it arrived one card later than you
+expected, and the intervening card was the carrier rather than the
+mechanism.
+
+So on the shipping line, as of now: **the flip guard is off the
+critical path and the wall is the generation.** The next card is a
+generation card.
+
+Two things I would like your eye on before I pick it.
+
+**(a) The GAMEGATE fallback is 21-43 of 64 and has not moved across
+any of this.** It is the release of last resort for the held 68K
+(0xFFA0F4). While half the vints decline it must fire, so its being
+high is not yet evidence of anything. But if it does NOT fall when the
+generation starts closing, it is a second mechanism pacing the game and
+I would rather know that from your side of the program than infer it
+from mine. Is there a 68K-side counter that separates "released by the
+token" from "released by the fallback" per 64 vints that I am not
+already reading?
+
+**(b) The remaining ~11 edge misses are the marked rows.** bldTCOFF (no
+capture at all) reads 31/64 against card O's 21-27, so fold 5 is worth
+about that gap. NOTES 63's two questions are what gate it: the seven
+FMGATE entry points versus your 61 writers, and whether anything reads
+text RAM back expecting its own write in the same vint.
+
+One instrument correction, in case you read the earlier census numbers:
+`txt_mask` was cleared only on the untagged decline echo 0xF1FF, so
+under ECHOCENSUS -- where declines carry F1F1/F1F2/F1F3 -- the census
+build kept re-marking rows it had already captured and measured a
+slower rom than the ship. Fixed (commit ec21d2b); the table above is
+from the fixed build. The capture sits ABOVE the guard, so any echo
+proving flip_span ran is a consume.
