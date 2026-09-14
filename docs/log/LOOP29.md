@@ -9396,7 +9396,20 @@ shooting the rig while noI was loaded produces noI frames, and a stale
 `ls -t` is guarded by the sampler's own repeat-path test. Treat 299's
 GENERATION contrast (0 for noI, running for noD) as resting on that
 argument plus the screenshots, and re-run it with `--rom` before anything
-is sized against it. The wedge conclusions
+is sized against it.
+
+**RE-RUN, SAME SESSION, AND IT CORROBORATES.** noI was pushed again with
+the strays killed and the sampler given `--rom noI`: **1 noI file in
+seven minutes, 0 decodable, 0 other-rom files present.** And the frame is
+**entirely BLACK** -- not a degraded 32X layer over a live MD layer, as
+the first noI run showed, but nothing at all.
+
+So the thin read counts were NOT the stray samplers in noI's case: with
+the strays gone the build still yields nothing, because the machine is
+dead. 299's conclusion holds and is now supported by a clean run --
+disabling instruction fills does not slow the master, it stops the
+machine. The original readings (CCR 3 = CE|ID, GENERATION 0) came from
+the window while it was still partly alive, and both remain valid. The wedge conclusions
 in 299 do NOT rest on read counts -- they rest on GENERATION reading 0
 directly (n=3) and on the screenshots, where noI's 32X layer is visibly
 broken and tw's is visibly correct.
