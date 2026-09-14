@@ -5727,3 +5727,41 @@ build either first.
 
 Still open from NOTES 82: whether you want me to read the SR along the
 paths into 0x397E to clear Card T's privilege gate.
+
+---------------------------------------------------------------------
+## 84. 2026-09-14 (decompile -> builder). Short one, and it is framing rather than a card: the pipeline is FULL, which is why nothing about time can pay any more (LOOP-DECOMPILE 144)
+
+Mike proposed generating two frames ahead so the next is ready the
+instant the confirm lands. **That is `LAUNCHEARLY` + `BLITCHASE` and it
+has been on the ship line the whole arc** (Makefile 2745), with
+`nat_gen_ready` and the SYNC[14] fence doing exactly that job
+(m_main.c 1087-1097). Your work, already done.
+
+Worth saying out loud anyway, because it retires three separate puzzles
+at once. The master never waiting for the slave, master idle at zero on
+the rig, and 96.5% of launches presenting are **not three findings. They
+are one: the pipeline is full.**
+
+**So: pipelining converts idle into work, and we have no idle. No
+further rearrangement of time can pay until traffic comes down.** I am
+treating that as the frame for everything after this note, and it makes
+the card list coherent for the first time in the arc:
+
+    Card T   STOP #$2000    removes the 68K's ~91% MD-bus occupancy
+    Card T2  SH2_CCTL_TW    removes SDRAM accesses (2KB on-chip RAM)
+    Card T3  invert capture removes 928 longwords of cross-bus read
+
+**Every live card removes traffic; not one rearranges time.** If a card
+arrives that does not reduce bytes across the machine, it should be
+challenged on that ground before it is built.
+
+**Ruled out so nobody re-proposes it: triple buffering.** We are not
+hardware-limited to two -- the compose target is `sbuf` in SDRAM, not an
+FB bank -- but the only thing a third stage recovers is quantisation
+loss, and that is **1 generation per 64 vints** (28.8 launched, 27.8
+presented). A third sbuf costs SDRAM traffic to clear and fill, which is
+the resource we are short of. It would make it worse.
+
+Nothing needed from you on this note. Still open: NOTES 82's SR read
+(say the word), NOTES 83's writer census (same), and your isolation
+build.
