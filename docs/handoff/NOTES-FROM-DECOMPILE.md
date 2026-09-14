@@ -4185,3 +4185,56 @@ now the reason dense picture work stays in ares, one run per frame, as
 you say. The round entry is still worth building for the sets 22-36
 verification, since card P's fix is in rounds 2 and 4 and no attract
 probe can confirm it -- but it is no longer blocking the chevron.
+
+---------------------------------------------------------------------
+## 69. 2026-09-14 (decompile -> builder). The gate you want is not a player byte: it is the PAGE SELECT, you already receive it every vint, and it cannot be corrupted by the animator (LOOP-DECOMPILE 126)
+
+**Measured on the arcade, frames 400-5400.** The chevron plane is
+pages 10 and 11, and while it is up the page-select registers read
+FG = 0xAAAA, BG = 0xBBBB. Nothing else in the run selects a page >= 10.
+
+    CHEV ON   f=1056  fg=AAAA bg=BBBB  0xFFF148 = 1
+    CHEV OFF  f=1165  fg=0000 bg=0000  0xFFF148 = 0
+    CHEV ON   f=4441  fg=AAAA bg=BBBB  0xFFF148 = 1
+    CHEV OFF  f=4550  fg=0000 bg=0000  0xFFF148 = 0
+
+0xFFF148 reads 1 on exactly 220 frames of the run = 110 + 110, the two
+windows to the frame, and takes no other value. Both markers are exact.
+
+**Gate on the page select, not on 0xFFF148, and here is why it fixes
+your three failures at once.** The S16 keeps its layer registers at
+text words 0x740-0x7FF, they ride the text capture, and
+`latch_layer_regs` already reads them from TEXT_C every vint. So the
+master has this number in hand today:
+
+    cut := any 4-bit quadrant of the FG or BG page select is >= 10
+
+  - It is not palette-derived, so the glow animator cannot corrupt the
+    evidence -- that is what killed the `pscene_cur` gate.
+  - It is not a 68K program peek, so it cannot be fooled by the
+    transform's palette sitting inside the ambient envelope.
+  - It needs no new channel, so it does not depend on MD_STATE's cut
+    bit, which is where your third attempt went.
+
+**On that third attempt, a discrepancy you should chase separately.**
+You measured 0xFFF148 = 0 during the scene. On the arcade it is 1 for
+every one of the 110 frames. Your frame numbers are ares frames of our
+rom and mine are MAME frames of the arcade, so ~860-960 against
+1056-1164 is boot timing and not a disagreement about where the scene
+is. But if you sampled inside the window and still read 0, MD_STATE's
+cut bit is not carrying the byte, and fold 4 built that channel for
+exactly this. Worth knowing whether or not you use it for the gate.
+
+**And there is no separate player-transformation byte to find.** In
+this game the transformation IS the full-screen scene: three spirit
+balls, the cut to the chevron plane with the head rising, the scene
+ends. Pages 10/11 and 0xFFF148 mark the whole of it, and the sprite
+that rises is drawn inside it.
+
+**One thing the gate does not fix, from entry 125.** Sets 19, 20 and 21
+are in EVERY round's tilemap and in NO round's table, so every cell
+they draw is refused and renders as backdrop. That is Mike's remaining
+black squares and it is the same three sets. A gate stops the animator
+painting over them; it does not put them in a table. They need a line
+with pens reserved for the whole cycle and their values repainted from
+the delta each frame -- not a snapshot, and not exclusion.

@@ -6011,3 +6011,56 @@ delta pipeline -- not a fixed snapshot, and not exclusion. Seven pens
 for the ramp plus set 19's six is inside one 15-pen line if they share,
 which the packing run can answer once someone asks it the right
 question.
+
+---------------------------------------------------------------------
+## 126. The transformation gate, exactly: the chevron plane is pages 10/11 with page selects 0xAAAA/0xBBBB, and 0xFFF148 matches it to the frame. The SH-2 already receives both (2026-09-14)
+
+NOTES 69 asked which byte marks the player object mid-transformation.
+The scene does not need a player byte; it has two exact markers and the
+SH-2 already gets one of them every vint.
+
+**Measured, arcade, no-coin run, frames 400-5400.** A gate on "any page
+quadrant >= 10 in either plane's page-select register":
+
+    CHEV ON   f=1056   fg=AAAA bg=BBBB   0xFFF148 = 1
+    CHEV OFF  f=1165   fg=0000 bg=0000   0xFFF148 = 0
+    CHEV ON   f=4441   fg=AAAA bg=BBBB   0xFFF148 = 1
+    CHEV OFF  f=4550   fg=0000 bg=0000   0xFFF148 = 0
+
+    0xFFF148 over the whole run: value 1 on 220 frames, value 0 on 4,781
+
+220 = 110 + 110, the two windows to the frame. Nothing else in the run
+selects a page >= 10, and 0xFFF148 takes no value but 0 and 1. So both
+markers are exact and they agree.
+
+**The page select is the better gate, and it is already in the
+pipeline.** 0xFFF148 is a WRAM byte the SH-2 cannot read; it reaches
+the master only through MD_STATE's word on COMM14 (fold 4), which is
+one more link to be wrong. The page-select REGISTER rides the text
+capture -- the S16 keeps its layer regs at text words 0x740-0x7FF and
+`latch_layer_regs` already reads them out of TEXT_C every vint
+(m_main.c, and BUSES.md section 2). So the master can gate on
+
+    (any 4-bit quadrant of the FG or BG page select) >= 10
+
+with no new channel, no new byte, no detector, and -- the property
+that matters here -- nothing palette-derived, so the glow animator
+cannot corrupt the evidence the gate depends on, which is what killed
+the pscene_cur gate.
+
+**And a discrepancy worth the builder's time.** They report 0xFFF148 =
+0 during the scene in our rom. On the arcade it is 1 for exactly the
+110 frames the chevron is up. Either their sample was outside the
+window (their frame numbers are ares frames of our rom, not MAME
+frames of the arcade -- their ~860-960 against this run's 1056-1164 is
+a boot-timing difference, not a disagreement about the scene), or
+MD_STATE's cut bit is not carrying the byte. Fold 4 built that channel
+for exactly this purpose, so if it reads 0 while the game's byte reads
+1, that is a defect in the state word and it is worth knowing
+independently of the chevron.
+
+**There is no separate "player mid-transformation" state to find.** In
+this game the transformation IS this full-screen scene: the player
+collects three spirit balls, the picture cuts to the chevron plane with
+the head rising, and the scene ends. Pages 10/11 and 0xFFF148 mark the
+whole of it.
