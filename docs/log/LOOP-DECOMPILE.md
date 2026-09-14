@@ -7368,3 +7368,100 @@ per 64 vints** (28.8 launched, 27.8 presented). There is nothing there to
 recover, and a third sbuf costs SDRAM traffic to clear and fill, which
 is the exact resource we are short of. **Triple buffering would make it
 worse.** Logged so nobody re-proposes it.
+
+---------------------------------------------------------------------
+## 145. The MAXWAIT=4 null does NOT retire the 68K, because the independent variable never moved: a cacheless 68000 holds the MD bus at ~91% whether it is WORKING or SPINNING. And the whole generation is outside the stamped region (2026-09-14)
+
+LOOP29 294: the flag is `GAMEGATEWAIT` (`-DGAMEGATE_MAXWAIT=1`,
+GATE_FREE not compiled), so entry 140's 36.2 prediction landed on the
+measured 34.1 and the counter's label was the only thing wrong. Good.
+
+The ablation: MAXWAIT=4, rig, attract, 40 shots each.
+
+    per 64 vints        line (MAXWAIT=1)   ablation (MAXWAIT=4)
+    generations             28.8               30.7
+    68K releases            56.8               26.7
+    GAMEGATE fallbacks      34.1                0.2
+    frames presented        27.8               26.0
+
+The flag worked -- fallbacks collapsed, the 68K's advance rate halved --
+and the compose rate did not move. The builder's conclusion: *"The 68K is
+free. The arbitration-pressure card is dead before it was written."*
+
+**That conclusion does not follow, and the reason is the same instrument
+fault this session has caught four times: the variable that was changed
+is not the variable in the hypothesis.**
+
+### The confound
+
+The hypothesis is that the master's cross-bus reads arbitrate against
+the 68K's **bus occupancy**. MAXWAIT=4 changed the 68K's **release
+rate**. Those are only the same quantity if a released 68K uses the bus
+and an unreleased one does not.
+
+**It does not work that way, and entry 142 has the arithmetic.** The
+68000 has no cache, so every instruction fetch is a bus cycle. The wait
+loop at 0x3982 is `TST.B abs.w` (12 cycles, 3 accesses) plus `BEQ.s`
+taken (10 cycles, 2 accesses) -- **five accesses in ~22 cycles, ~91%
+occupancy.** Game-pass code is a mix of register and memory work and
+sits in the same band, plausibly a little lower where an instruction has
+internal cycles to burn.
+
+So halving the releases did not halve the 68K's bus occupancy. **It
+swapped 68K work for 68K spin, and both saturate.** If anything the
+ablation raised occupancy slightly, since the spin is the tightest loop
+in the program. The independent variable moved by a few percent, not by
+half, and a flat result across a few percent is exactly what a null
+measures when nothing was varied.
+
+**Consequence: the null is real but it bounds the wrong thing.** It
+bounds the effect of the 68K's RELEASE RATE on compose, and that is
+genuinely zero and worth banking -- the game can advance at 60 Hz for
+free, which retires any worry that GAMEGATEWAIT=1 is costing us. It does
+not bound arbitration at all, and the builder's "at most a quarter of
+the stall is 68K arbitration" inherits the same fault.
+
+**Card T survives, and it is now the ONLY clean test of the hypothesis**,
+because `STOP #$2000` is the one change that takes 68K occupancy from
+~91% to ~0 rather than moving it between two saturating modes.
+
+### The second thing, which may be larger
+
+The builder notes the drain stage costs 25.0 lines in ares and
+essentially ZERO on the rig (LOOP29 291: post seen 22.3, at the guard
+22.3, the drain sitting between them) and offers it as an instrument
+gap. It may not be one. `DRAINCUT` is **not** on the ship line, so
+m_main.c:7728's `cap_drain(13)` -- *"ALL of it -- correctness"* -- is
+what runs, and entry 115 measured the map needing **0-2 new tile codes a
+vint, p90 zero.** A full-budget drain with nothing pending costs nothing.
+So "~0 on the rig" and "25.0 in ares at 9.23 pages a flip" are probably
+not the same condition measured twice; they are a quiet vint and a busy
+one. Neither number should be used until that is settled, and the rig
+stamps are one sample each by the builder's own caveat.
+
+### Where the missing time actually is, and it is not subtle
+
+Everything either thread has stamped lives inside the V-ISR, and LOOP29
+291 puts the master's whole pre-flip life at ~22 lines. **A generation is
+2.2 vints = ~577 lines. The stamped region is under 4% of it.**
+
+We have spent this arc decomposing the 4% and inferring the 96% by
+subtraction. The ~1.1 v/gen that entry 141 could not name is not hiding
+-- it is in the part of the generation nobody has ever instrumented.
+
+**That is the next instrument, and it needs no new channel:** the same
+STAMP_CENSUS technique the builder has already validated twice, applied
+to the BODY -- the compose path between windows, where `cap_drain` has a
+second site at m_main.c:13413 and where the blit, the tile cache fills
+and the sbuf work all live.
+
+### Banked without argument
+
+  * The 68K's release rate does not cost compose. The game can run its
+    logic at 60 Hz for free. GAMEGATEWAIT=1 is not a tax.
+  * Tearing is untouched by this build -- it changed the writer's rate,
+    which is the confound and not the control. Correct, and it means the
+    staging-vs-drain race is still open.
+  * LOOP29 275 annotated as an instruction-count ranking and never a
+    critical path. That is entry 141's rule and it is now in both logs.
+  * The rig is back on bldS, the line, off the gw4 diagnostic.
