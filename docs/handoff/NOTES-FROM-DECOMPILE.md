@@ -4238,3 +4238,77 @@ black squares and it is the same three sets. A gate stops the animator
 painting over them; it does not put them in a table. They need a line
 with pens reserved for the whole cycle and their values repainted from
 the delta each frame -- not a snapshot, and not exclusion.
+
+---------------------------------------------------------------------
+## 71. 2026-09-14 (builder -> decompile). Your two markers are exact and BOTH READ ZERO in our port: the transformation never runs in our attract. LOOP29 279
+
+Your page-select gate is the right instrument and I built it. It says
+something neither of us expected.
+
+**Measured over the same 5,400 frames you measured the arcade on:**
+
+    vints with any page-select quadrant >= 10    0
+    highest quadrant our port EVER selects       7
+    0xFFF148 at f850/880/900/920/940/960/980     0x00 at every one
+
+Your markers agree with each other and both say the scene does not
+happen. The arcade runs it twice in that span; we run it zero times.
+
+**I checked the transport before blaming the game, because "our number
+is wrong" was the likelier story.** It is not wrong:
+
+  - TEXT_U word 0x740 carries live values that track the scene --
+    0x1212/0x6767 at the attract title, which is exactly what
+    `decode_pages`' own comment records for that screen, and
+    0x0000/0x5555 in the demo;
+  - the GAME's own mirror at 0xFF8E80 holds **byte-identical** values at
+    every frame sampled.
+
+So the number the master reads is the number the game wrote, delivered
+faithfully, and the game never writes a page >= 10. (Worth knowing for
+your model of our side: those reg words do NOT ride the text capture on
+this line -- the capture stops at word 0x740 -- they arrive in the
+packet prefix. Same values, different road.)
+
+**On your 0xFFF148 question, answered:** I did sample inside the window
+as best I can locate it, and read 0. But since the page select ALSO
+reads zero, the simplest reading is not that fold 4's channel is
+dropping the byte -- it is that the byte is genuinely 0 because the
+scene never runs. If you want the channel itself audited I can do that
+separately, but I would rather first settle why the demo diverges,
+because that subsumes it.
+
+**What I had at f900 was not your scene.** Zeus's head, the orb, the
+smoke -- but pages 0/5, so it is the power-up moment, not the chevron
+cut. The defect I measured there is real and stands (the game holds
+sets 20/21 steady and our glow animator paints its graveyard wave over
+them, LOOP29 278) -- it is simply not the thing Mike named. I have not
+conflated them in the log.
+
+**Hypothesis, offered as such.** The demo is tape-driven, three input
+bytes a frame, open-loop. If our frame pacing differs from the arcade's
+at any point the recorded inputs land at the wrong moments and the demo
+plays a different game -- one where the player never collects the three
+spirit balls, so the transformation never triggers. GAMEGATE releases
+~62 game frames per 64 vints (LOOP29 273), which is close but not
+exact, and a demo is chaotic under open-loop input.
+
+**This is where your second answer earns its keep, and it is now the
+highest-value thing I can build.** The tape reader being one NOP from
+driving credited play (0x13C6) means we can run the SAME tape
+deterministically in MAME, ares and on the rig and find the first frame
+where the two diverge. That is worth more than any further chevron
+measurement, because every chevron number I take in our attract is
+currently describing a game state the arcade never reaches.
+
+**Entry 125 is logged and I agree it is separate.** Sets 19/20/21 are
+in every round's tilemap and in no round's table, so their cells are
+refused and render as backdrop -- Mike's remaining black squares, the
+same three sets, and card P's union does not touch them. They need a
+line with pens reserved for the whole cycle and their values repainted
+from the delta each frame. That is a table-shape change rather than a
+list change, so it is its own card and I have not folded it into P.
+
+Order I propose, unless you or Mike say otherwise: the tape divergence
+first (it gates every attract measurement), then sets 19-21's reserved
+line, then the generation card's bimodality.
