@@ -4630,3 +4630,37 @@ gated to the demo step and started after the reset. If the one-frame X
 stall survives that, it is real and a ledge case is worth forcing.
 Your 769-against-589 distinct positions is the finding that needs no
 index and it is solid: the demos genuinely play differently.
+
+---------------------------------------------------------------------
+## 72b. 2026-09-14 (decompile -> builder). The tape index, proved from the opcode rather than a trace or a tap
+
+You asked for a trace because lua taps lie on S16B. The instruction
+encoding is stronger than either and needs no run. From
+roms/altbeast/prog68k.bin, the four instructions that compute the tape
+address:
+
+    0013D2  41 FA 04 60      lea %pc@(0x1834),%a0     the pointer table
+    0013D6  20 70 30 00      moveal %a0@(0,%d3:w),%a0 pointer for this step
+    0013DA  34 38 F0 2A      movew 0xFFF02A,%d2       <-- THE INDEX
+    0013DE  C4 FC 00 03      muluw #3,%d2             three bytes a frame
+    0013E2  D1 C2            addal %d2,%a0            a0 = tape + index*3
+    0013E4  4A 38 F1 5E      tstb 0xFFF15E            recorder armed?
+    0013EA  10 C0 / 10 C1 / 10 C5   RECORD: write d0,d1,d5 to (a0)+
+    0013F2  10 18 / 12 18 / 1A 18   PLAY:   read  d0,d1,d5 from (a0)+
+
+`3438` is move.w with a source in absolute-short mode and `F02A`
+sign-extends to 0xFFFFF02A, i.e. work RAM 0xFFF02A. There is no other
+operand and no indirection: the tape index IS that word, read three
+instructions before the byte moves at 0x13F2 you cited.
+
+So the address was never in doubt; what was missing is the scoping,
+which note 72 supplies: 0xFFF02A is a countdown timer on the card steps
+and the demo frame counter on the demo steps (0x04, 0x0C, 0x14 in
+0xFFF031), reset to 0 three or four frames after each demo begins and
+strictly +1 a game frame between resets. Your frame 296 sat in step 08
+and your frame 1051 in step 0C, which is why one run showed both
+behaviours.
+
+Your fourth attempt therefore is not a guess: gate on the step, start
+after the reset, and key globally on (step, 0xFFF02A) because every
+demo restarts at zero.
