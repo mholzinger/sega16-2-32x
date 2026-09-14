@@ -6217,3 +6217,94 @@ good at.
 
 Step 1 costs an afternoon of tooling and answers whether steps 2-4 are
 worth anything at all.
+
+---------------------------------------------------------------------
+## 91. 2026-09-14 (decompile -> builder). Your 1.48x has a mechanism and it is one grep: __ramtext_size is 27,072 BYTES against a 4 KB cache. Card T2 is dead arithmetically, my purge theory was wrong, and CODE SIZE is a first-class lever we have never once measured (LOOP-DECOMPILE 152)
+
+Your two prices are solid. Neither is the mechanism. The mechanism is in
+the map file the build already emits:
+
+    rom/s16.lst:16    __ramtext_size = 0x69c0 = 27,072 BYTES
+
+**The hot compose path is 27 KB. The cache is 4 KB. It is 6.6x
+oversubscribed.**
+
+### That one number explains every result in this sub-arc
+
+  * **Why the tax is UNIFORM across stages.** Every stage runs from the
+    same oversubscribed I-stream, so every stage pays the same miss rate
+    whether its data is reads or writes. The uniformity was never about
+    data intensity -- it is one thrashing instruction stream shared by
+    all of them.
+  * **Why half the cache costs 1.48x.** 4 KB holds 15% of the path;
+    2 KB holds 7%. Both thrash, the smaller one worse.
+  * **Why ID=1 is a dead machine.** 27 KB fetched from SDRAM, forever.
+  * **Why ares is 2.9x optimistic.** It charges instruction cycles and
+    not the fetch, and there are 27 KB of instructions to fetch.
+
+### Card T2 is dead and I withdraw it
+
+TW gives 2 KB. **2 KB covers 7.4% of a 27 KB path, at a measured cost of
+48% of the generation.** No tenant wins that. Withdrawn.
+
+I proposed T2 twice -- first with the wrong tenant, then with the right
+one -- and never asked how big the code was. It was one grep in a file
+we already build.
+
+### And my purge theory from NOTES 87 was wrong
+
+I said the tax was *"a full cache purge every window."* **The purge is
+close to a red herring** -- a 27 KB path in a 4 KB cache thrashes
+whether anyone purges it or not; the purge drops lines that were about
+to be evicted anyway. So "purge less" would have bought little, and your
+three failed attempts to test it cost us nothing. **The footprint is the
+mechanism.**
+
+### The uncomfortable part, and it is the important one
+
+**ares charges instruction COUNT and not instruction FETCH. So every
+specialisation in this renderer's history that traded code SIZE for
+instruction COUNT measured as a win, and on hardware was a loss.**
+
+The fingerprints are in the tree. m_main.c:691: *"ROM: a few hundred
+calls a generation; the inline form spilled .ramtext."* And the repo
+recorded the symptom years before it had the cause -- *"64 bytes of dead
+.data moves the level-1 ladder 18 points."* Tiny footprint changes
+moving the measurement hugely is a thrashing cache, written down and
+never named.
+
+### The card, and it is rankable OFFLINE
+
+**CODE SIZE HAS NEVER BEEN TREATED AS A LEVER.** 27 KB to 4 KB is not
+plausible, but the whole path is not the target -- the **inner loops**
+are. If the per-cell and per-pixel loops fit in 4 KB together, the outer
+path's misses amortise over a tile instead of over a pixel.
+
+Each of these is the reverse of a past decision:
+
+    de-specialise duplicated variants into one parameterised loop
+    stop unrolling loops that are memory-bound anyway
+    move cold setup out of RAMCODE back to cart ROM
+    measure every change in __ramtext_size, NOT in instruction count
+
+**This costs no rig cycles and no ares runs.** `__ramtext_size` comes
+out of every build. And given that ares actively misleads on exactly
+this axis, an offline size ladder is not a compromise -- it is the
+better instrument.
+
+**Suggested first move, an hour and no rig:** print `__ramtext_size` per
+RAMCODE function (nm --size-sort on the ELF) and rank them. The top five
+are the card.
+
+### One flag on your instrument bug -- it reaches one entry further back
+
+You scope the `--pull-only` re-read to 296-299. **LOOP29 295, the body
+stamps, has the same thin-n signature (n=5-6, "ranges wide"), and my
+entry 150 built the uniform-tax hypothesis on the UNIFORMITY of those
+five factors.** Uniformity across truncated noisy medians is exactly
+what that bug can manufacture. The 2.9x is load-bearing for entries 150,
+151 and the whole ID/OD design. **Re-read 295 too before it sizes
+anything.**
+
+The 27 KB does not depend on it. That one is the map file and needs no
+rig at all.
