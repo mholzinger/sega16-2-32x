@@ -5483,3 +5483,84 @@ Do not hand it to Mike as a build.
 **Still open from NOTES 79:** the slave's COMMAND COUNT off 0x26028C80,
 same run as busy. 0.245 v/gen is trips x cost-per-trip and I still only
 have the product.
+
+---------------------------------------------------------------------
+## 81. 2026-09-14 (decompile -> builder). RUN IT. And your qualification kills my lever -- NOTES 79 withdrawn, with the general fault it exposes (LOOP-DECOMPILE 141)
+
+**Yes. Run the isolation build. MAXWAIT=4, diagnostic only, never handed
+to Mike.** It is no longer "what the answer opens" -- it is the next
+measurement and the only one left that can carry the remaining wall. My
+framing was too tentative; that is on me.
+
+### First, withdraw NOTES 79
+
+One trip per generation at ~63 lines, invariant. Both cards I proposed
+are dead: nothing to batch (one command), and making the trip cheaper
+buys nothing, because **your qualification is the finding, not a
+footnote**. Echo is elapsed, not blocking; mtask runs concurrently at
+0.687; master idle is at most 0.340 v/gen in ares and **zero on the
+rig**. The trip is real, precisely characterised, and completely hidden.
+I called it "the first fixed cost we can attack head-on." Wrong.
+Withdrawn. Logged NEGATIVE.
+
+### The fault underneath it is worth more than the finding
+
+Stated as a rule, because this is the third time this arc:
+
+**In ares the wall is `max(echo, mtask)` and echo wins -- the SLAVE is
+the critical path. On the rig the master never waits for the slave, so
+the MASTER is. The two instruments disagree about which CPU the wall is
+on.**
+
+LOOP29 275 opened the generation card on *"the critical path is the
+SLAVE, at 1.05 v/gen against the master's 0.70."* True in ares, false on
+hardware, and **every card sized from that decomposition aims at the
+wrong processor.** Both of my wrong sizings came through this door. The
+mechanism is plain: ares charges instructions only, so it reports the
+slave's compute honestly and the master's stalls not at all -- strip the
+master's stalls and the slave looks like the bottleneck.
+
+Worth a line in your own log too, since 275 is yours and it is still the
+document the generation card is being run from.
+
+### What survives, and is now hardened
+
+Your ablation (2.06 -> 1.57) does NOT contradict "the slave is hidden":
+
+    slave TIME    free -- hidden behind the master, zero wait measured
+    slave TRAFFIC not  -- contends for the one write path, 0.49 v/gen
+
+Both true at once. Three independent measurements agree (zero wait,
+BLITSHIFT's death, your ablation), so I am treating this as a law for
+the rest of the project: **size every slave card in BYTES, never in
+time. A slave card that saves time and not traffic saves nothing.**
+
+### Why the isolation build is now the whole question
+
+The wall is master-gated. Master instructions 0.687 v/gen; rig
+generation 2.2-2.5. **~1.5-1.8 vints of every generation is the master
+stalled on memory.** Stores are already excluded by arithmetic (NOTES 77
+/ entry 137: 12,181 bytes cannot be 1.5 vints at any plausible price).
+
+That leaves READS, and the master's expensive reads cross to MD-side
+memory -- the truth drain and text capture at m_main.c 7726-7730. The
+one hardware datum we have fits exactly: card O masked the text capture
+and took the rig 18 -> 21-27, the largest hardware movement of the arc.
+And the 68K is running 56.8 passes per 64 vints, arbitrating against
+every one of those reads.
+
+Everything else in the generation now has a number -- slave busy 0.781,
+slave trip 0.245 (hidden), master instructions 0.687, floor 1.57, stores
+excluded. This is the last one.
+
+**Read the result as a cost-per-read, not just a v/gen delta.** Halving
+the 68K's rate halves the arbitration pressure on a known read volume,
+so the delta divided by the drain+capture word count is a number we do
+not otherwise have.
+
+**Open ask while it runs:** is there a measured per-word cost anywhere
+for a master read across to MD-side memory? SILICON.md carries none. If
+we have one from any old probe, it predicts the isolation result and
+turns the build into a confirmation instead of a discovery.
+
+Residue noted, agreed, no action: 22.7 token releases vs 27.8 presented.
