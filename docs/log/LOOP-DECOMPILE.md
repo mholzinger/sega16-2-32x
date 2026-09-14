@@ -6809,3 +6809,96 @@ existing, one rig session:** per 64 vints, count
 
 The last case is the one that would invalidate the most prior work, so
 it is worth an hour before the protocol workstream sizes anything.
+
+---------------------------------------------------------------------
+## 139. The slave's echo splits: 0.58-0.78 v/gen of COMPUTE and a FIXED 0.245 v/gen of latency. Consolidating onto one SH-2 goes from "clearly worse" to "a wash", and the fixed term is the lever (2026-09-14)
+
+Mike asked the obvious question: if the bus is the bottleneck and the
+SH-2 is not, why not frontload everything onto one CPU? I answered with
+the ares phase split (LOOP29 275: echo 1.05, mtask 0.70) and said the
+trade was +1.05 serialized against -0.49 contention saved, a net 0.56
+loss. **That used ECHO, which is WALL, not busy.** The builder has now
+split it.
+
+CHAIN_METER could not answer it: its base 0x2603A7D8 collides with
+SPRLATE's lean base and the line carries -DSPR_LATE, so the master's
+cached-alias writebacks reverted the slave's uncached sums. The first
+read -- "busy 0 against 3817 links" -- was SPRLATE[7] misread as a link
+count. Logged as an instrument caveat: **the lean-counter bases are not
+private, and a cached/uncached alias pair silently loses the writer that
+uses the uncached one.**
+
+The real number was already in the shipping rom and is ungated:
+0x26028C80[0] sums the slave's FRT across every command, window and
+chain both, measurable on bldS with no probe build. Slave tick = phi/8
+= 48,208/vint (the slave never sets TCR).
+
+    input     master ECHO wait   slave BUSY          remainder
+    attract   0.822 v/gen        0.580 (39.6% wall)  +0.243
+    play2     1.027 v/gen        0.781 (50.0% wall)  +0.246
+
+**Slave compute rises 35% from attract to credited play; the remainder
+does not move.** 0.243 and 0.246 across a 35% load change is a fixed
+term, and a fixed term under varying load is latency, not work. So
+LOOP-DECOMPILE 137's prediction now has a number on it: **~0.245 v/gen
+of round-trip latency inside the slave chain.**
+
+### What this does to the consolidation question
+
+Pure ares, both arms in the same instrument (no memory cost charged):
+
+    now (concurrent)   wall = max(mtask 0.70, echo 1.027) = 1.027
+    consolidated       wall = 0.70 + 0.781 (busy only)    = 1.48
+
+So in ares, serializing is 0.46 worse -- but consolidation also deletes
+the chain, and with it the 0.245, and the rig's slave-contention term
+that the floor probe ablated at 0.49 (2.06 -> 1.57):
+
+    +0.781 serialized   -0.245 chain latency   -0.49 contention
+    = +0.046 v/gen
+
+**A wash, well inside the error bars.** My "net 0.56 worse" was wrong
+because it charged ECHO instead of BUSY. The corrected answer is that
+frontloading onto one SH-2 is neither the win nor the loss I called it
+-- it is roughly neutral, and it is therefore not worth the rewrite.
+
+**The conclusion that survives either way:** 0.70 + 0.781 = 1.48 v/gen
+of pure instruction with memory free, against a 1.57 protocol floor.
+**One SH-2 cannot reach 60 Hz by arithmetic**, whatever the bus does.
+That kills consolidation as a path to the bar and leaves it as a
+possible tidy-up only.
+
+CAVEAT, stated because it is the weak part: mtask 0.70 is card O's ares
+figure, the busy/echo pair is bldS. Mixing an ares compute term with a
+rig contention term is apples to oranges; ares does not charge the
+slave's memory waits, which on the rig would land on the master once
+serialized and push the +0.046 negative. The ranking is solid, the
+magnitude wants the rig.
+
+### The lever the split exposes
+
+0.245 v/gen is ~10% of the 2.47 wall and it is pure round trips. The
+number that makes it actionable is the one we do not have: **links per
+generation.** The term is trips x cost-per-trip and we can only attack
+it if we know the split. Three links a chain (the R2 close at
+s_main.c:371-372 implies R0/R1/R2) would put it at 0.082 v/link = 21.5
+lines; thirty links would make it a per-trip cost too small to chase and
+a COUNT problem instead. Those are different cards.
+
+CHAIN_METER's [7] was meant to be that count and is void. The ask is one
+word: the slave's command count over the same run, against the same
+0x26028C80 base that produced the busy figure.
+
+### Instrument note banked from the same session
+
+TRIPCENSUS (the gens/releases/presented triple that NOTES 78 asked for)
+validated on ares -- channel tag 0 reads 64 against an independent SDRAM
+counter reading 64 in the same run -- after two faults were caught
+pre-use: a bare bit-15 COMM6 reader that the 68K's own 0xB101 announce
+satisfies, and a 6-bit value that saturated both gens and releases at a
+flat 63. A third trap on the rig: **the flood paints MD palette lines
+0-1 only**, so on the title screen it covers a few sprites and a naive
+reader returned a stable "presented = 64" seven times off a 272-pixel
+patch of the INSERT COIN blocks. The reader now requires 40% band
+coverage or reports nothing. Rig session in flight; the triple is NOT
+yet in.
