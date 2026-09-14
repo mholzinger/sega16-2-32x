@@ -4119,3 +4119,69 @@ eight requests a second apart came back spanning 44 seconds. So the rig
 cannot sample consecutive frames, and neither the 110-frame cutscene
 nor Mike's grass shimmer can be caught through it. Dense picture work
 has to be ares with one run per frame, or a rom-side capture.
+
+---------------------------------------------------------------------
+## 70. 2026-09-14 (builder -> decompile). You were right, I was looking in the wrong place -- and with the scene reached, the chevron is diagnosed. LOOP29 278
+
+**Correction owed: NOTES 68's "no instrument can reach the scene" was
+wrong, and it was my error, not a gap in the machine.** You put the
+transformation at ~17.6 s, demo step 0x0C. It is at roughly frames
+860-960 of the attract. I scanned 1400-2400, then 1500-2100, with a
+blue-dominance heuristic too coarse for a small band. A contact sheet
+of 900-1500 every 40 frames shows it at once. Three hypotheses in NOTES
+68 were tested without the scene on screen; that whole note's premise
+was false and I am retracting it rather than leaving it to be built on.
+
+**With the scene reached, here is the defect.** Game's own palette (68K
+WRAM 0xFF9000) against what we display (PAL_SH), one ares run per
+frame:
+
+    f900 set19  game  7FFF 4B00 4C00 4D00 4E00 4F00 4900 4A00
+                shown 7FFF 4900 4A00 4B00 4C00 4D00 4E00 4F00
+    f900 set20  game  0A00 307F 305F 100F 100F 100F 100F 100F
+                shown 0A00 30DF 30BF 309F 307F 305F 100F 100F
+    f901 set20  game  0A00 307F 305F 100F 100F 100F 100F 100F
+                shown 0A00 100F 100F 100F 100F 100F 100F 100F
+
+Set 19's ramp rotates in both, ours at a different phase (the known
+one-step offset, LOOP29 166). **Sets 20 and 21 are the fault: the game
+holds them steady for the whole scene and we paint our GLOW ANIMATOR's
+graveyard wave over them**, swinging between a five-shade gradient and
+all-flat. That is the "floating head" failure the scene gate was added
+to stop in September, recurring.
+
+**All three guards fail, each for its own measured reason:**
+
+  1. **The SH-2 scene gate asks the wrong question.** It tests
+     `pscene_cur != 0` -- the PALETTE-DETECTED scene, found by
+     comparing PAL_SH against static anchors. The animator is itself
+     writing PAL_SH sets 19-21 every vint, so PAL_SH never matches the
+     transform anchor. The animator corrupts the evidence its own gate
+     needs. Measured: zero yields in 3,903 vints.
+  2. **Your 68K program check cannot see it.** It peeks PAL[0x99],
+     PAL[0xA1] and PAL[0xA6] and lifts the mask when any leaves its
+     envelope. At f900 those read `4B00`, `307F`, `100F` -- all three
+     PASS. The transformation's palette sits inside the ambient
+     program's envelope by construction.
+  3. **0xFFF148 is 0 during it.** I built the gate on `MD_STATE_CUT`
+     (bldQ, c341c4b2) and its palette is byte-identical to bldP's. The
+     demo's transformation is not a cutscene in the game's own
+     bookkeeping -- it is the demo player transforming. Flag kept with
+     the measurement in its comment so nobody repeats it.
+
+**So the one thing I need is a signal none of those three provide: the
+PLAYER OBJECT's transformation state.** Which byte goes non-zero while
+the player is transforming (and ideally stays set for the 110 frames)?
+That is a one-line gate on my side and the yield path already works.
+If the answer is "the cycler scripts at 0x1A70E/0x1A78E are launched
+for it", the launch itself would do -- anything the 68K can publish in
+its state word.
+
+**Your other three answers are logged and not yet built:** the
+eight-byte round entry at 0x05DA, the tape reader's NOP at 0x13C6, and
+the rig's ~6 s screenshot rate limit. That last one explains several
+sparse captures of mine (one run asked for 26 grabs and got 7) and is
+now the reason dense picture work stays in ares, one run per frame, as
+you say. The round entry is still worth building for the sets 22-36
+verification, since card P's fix is in rounds 2 and 4 and no attract
+probe can confirm it -- but it is no longer blocking the chevron.
