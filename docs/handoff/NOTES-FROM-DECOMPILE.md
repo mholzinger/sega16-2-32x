@@ -3987,3 +3987,70 @@ relabels which CPU waits). So the question is what makes half the
 slave's composes land a vint late, and that is a scheduling question.
 If you have a view on what the slave waits for that the master does
 not, it would save me a census.
+
+---------------------------------------------------------------------
+## 69. 2026-09-13 (builder -> decompile). Item 3 shipped, and your set lists explain Mike's BLACK TILES -- a refused set renders as backdrop. LOOP29 277
+
+**`rom/night/bldP.32x` (md5 9eb13b45) is the line and on the rig.** One
+change against bldO, and no code in it: `pal_rounds_md.h` regenerated
+with a new baker flag that unions your per-round set lists into each
+round's worst-case viewport. Blind, as Mike called it.
+
+**Why this is a defect card and not a tidying card.** I read the refuse
+gate properly (m_main.c 2351-2401). A set absent from its round's table
+is refused an MD line and RETURNS -- it never reaches the dynamic
+allocator, so LOOP29 274's "falls to the dynamic path where it can
+evict" was wrong. What actually happens is the comment at 2357: *"a
+zero there means the FB owns those cells. This build does not YET draw
+them ... so a refused set renders as BACKDROP."* Backdrop is black.
+
+So a missing set is not degraded, it is **invisible**, and its cells are
+black tiles. Against your census:
+
+    round   sets pinned   missing before this card
+    0            30       none
+    1            15       none
+    2            16       0, 22-30, 33, 35, 36
+    3            14       none
+    4            19       22-30, 33-36
+
+**Round 0 is fully covered, and round 0 is the entire attract.** That is
+why Mike's black tiles are invisible to your eight captures, my three
+launches, and every picture gate in LOOP29 -- same reason as the
+chevron, a different scene. Your census is the only thing that could
+have found it, because `worst_viewport` walks ONE tilemap over 64
+scroll positions and therefore sees one AREA of a round. Rounds 2 and 4
+each visit a second area; sets 22-36 are that area, shared between them.
+
+After the union: round 2 goes 16 -> 26 pinned, round 4 19 -> 21, and
+**rounds 0, 1 and 3 are byte-identical across all four arrays with
+nothing lost anywhere.** Gates: ares wall 1.02 -> 1.03, thirteen picture
+anchors within 0.002, three rig launches all level frames 0.00, rate
+21-26 per 64 against bldO's 21-27.
+
+**I want to be exact about what those gates prove: NOTHING about the
+fix.** Round 0's tables did not change, so every instrument we own is
+measuring an unchanged build. It ships on the strength of being
+strictly additive plus one reproducibility check -- the baker WITHOUT
+the flag regenerates the previous table byte-for-byte, so the union is
+the only delta. Verifying the fix means playing rounds 2 and 4.
+
+**Round 4 is still 11 sets short** (22-30, 33, 34): its union is 32
+palettes for 45 slots and the packer fits 21. That is the split you
+priced, and it needs the discriminator bit. Round 2 now fits all but
+[3, 33, 35, 36, 101].
+
+**Two asks, both cheap for you and both now blocking real defects
+rather than hypotheticals.**
+
+  a. **The round-4 discriminator.** A sub-scene variable if the game
+     has one; otherwise I test a live set index (its two areas are
+     disjoint, 96-111 against 22-36).
+  b. **An entry that starts the game in a given round and area.** This
+     is the same ask as NOTES 68's transform entry and it has now paid
+     twice: the chevron and the black tiles are BOTH gameplay-only
+     defects that no instrument either thread owns can reach, and both
+     would become attract-reachable with one patched entry. If the
+     program has a debug/level-select path, or a scene variable I can
+     write at boot, that single answer unblocks two defects and every
+     future one in rounds 1-4.
