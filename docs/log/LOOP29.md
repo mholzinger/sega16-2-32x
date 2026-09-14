@@ -8764,3 +8764,65 @@ right and the reading was wrong, and each time I reported before
 checking what the number could not see. The counter now keeps the
 row-level total in FBB[3] beside the true one, so the gap stays visible
 in every future run rather than being a comment.
+
+---------------------------------------------------------------------
+## 291. THE WAITS ON HARDWARE: THE MASTER NEVER WAITS FOR THE SLAVE, AND THE ONE WAIT THAT EXISTS IS QUANTISED TO THE POST (2026-09-14 15:45)
+
+The decompile thread's arithmetic killed the store hypothesis: the
+ares-to-rig gap is 387,335 cycles a generation, and at 12,181 bytes
+written that is 31.8 cycles a byte, which would make a full screen six
+and a half vints. So the floor is latency, and the instrument counts
+round trips rather than bytes.
+
+**I built a new per-generation phase reporter for this and THREW IT
+AWAY.** Validated against the ares dump -- the rule the thread wrote
+down this session -- it failed twice: the 9-bit value path is gated to
+a list of census flags that did not include it, truncating the tag; and
+with that fixed it collided with the master's own 0xB101 announce,
+which already owns COMM6. Four instrument faults in one session is
+enough. Reverted, and used STAMP_CENSUS instead -- the channel LOOP29
+259/266 already validated on this exact question.
+
+**Three launches, the line's flags, 128-tick units (one line = 46
+ticks = 0.36 units; the edge guard is 1650 = 12.9):**
+
+    stamp                       samples              mean   lines
+    post seen                   [8]                   8.0   22.3
+    after the slave-capture wait[0, 0, 0, 0]          0.0    0.0
+    at the guard                [8]                   8.0   22.3
+    post MAX                    [37,18,25,39,27]     29.2   81.3
+    drain MAX                   [30,63,63,63]        54.8  152.3
+    guard MAX                   [63,63,63,33,63,44]  54.8  152.6
+
+**THE MASTER NEVER WAITS FOR THE SLAVE. Zero ticks, every sample,
+mean and max.** That is the headline and it contradicts the shape of
+LOOP29 275's ares phase split, where `echo` -- the slave's compose --
+is the largest term at 1.05 v/gen. On hardware that wait does not
+exist. The slave is always already done.
+
+**The one wait that does exist is the master waiting for the 68K's
+POST, and it is quantised.** Post seen at 22.3 lines mean; at the guard
+also 22.3, so the truth drain and the slave capture between them cost
+essentially nothing. The master's whole pre-flip life is: enter the
+ISR, wait ~22 lines for the 68K, flip.
+
+**And it is bimodal exactly as 275 predicted, but on this stamp rather
+than the slave's.** Mean 8 units against a max of 63 (saturated, so
+>= 175 lines). Typical vints reach the guard at 22 lines, comfortably
+inside the 38-line budget; a minority arrive 175+ lines late and lose
+the flip. Two populations, not a spread -- which is the signature of
+waiting on a deadline, not of doing work.
+
+**So the thread's prediction is confirmed on its own terms:** the waits
+are quantised to the 68K's post position in the frame (LOOP29 264b put
+that at line 238-249), not proportional to any byte count. The lever is
+removing or re-timing a round trip, and no amount of doing less work
+inside it moves the floor.
+
+**Caveat on sampling, stated because it is the weak part.** The rig
+rate-limits screenshots to about one per six seconds, so several tags
+carry ONE sample (post seen, at the guard) and none carries more than
+six. The zero for the slave wait is four samples and the saturated
+guard max is six, so those two are the solid ones; the 22.3-line means
+are a single reading each and want a longer run before anything is
+sized against them.
