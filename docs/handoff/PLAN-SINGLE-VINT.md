@@ -906,3 +906,47 @@ Still true from LOOP29 269: the R60 packet has no text section and its
 tag word has no spare presence bit, so fold 5 remains a packet-format
 card on top of the consumer rebase. Its prize is bldTCOFF's 31/64
 against card O's 21-27.
+
+---------------------------------------------------------------------
+## CARD P (builder, 2026-09-13 23:25): THE SET-LIST UNION -- rom/night/bldP.32x
+
+    rom      rom/night/bldP.32x   md5 9eb13b45      rate probe frP (e723ae37)
+    base     bldO (0f38332d, the line)
+    change   sh_src/pal_rounds_md.h regenerated with a new baker flag:
+             tools/bake_tilecram.py --union-scene-sets, which unions
+             docs/audit/mdpen_scene_sets.txt's per-round set lists into
+             each round's worst-case viewport. No SH-2 or 68K code change.
+    why      a set absent from its round's table is REFUSED an MD line
+             and renders as BACKDROP -- black, not degraded (m_main.c
+             2357, LOOP29 277). Rounds 2 and 4 were missing every one of
+             sets 22-36, which is Mike's "background shows missing random
+             black tiles" (NOTES 67). worst_viewport walks ONE tilemap
+             over 64 scroll positions so it sees one AREA of a round; the
+             decompile thread's arcade census is the other half. Mike's
+             call (NOTES 67): union blind, every listed set reachable.
+
+    table    round   pinned before -> after   lost
+             0            30 -> 30            none (BYTE-IDENTICAL)
+             1            15 -> 15            none (BYTE-IDENTICAL)
+             2            16 -> 26            none
+             3            14 -> 14            none (BYTE-IDENTICAL)
+             4            19 -> 21            none
+             strictly additive across all four arrays
+
+    ares     wall 1.02 -> 1.03; ships 2674 -> 2646; wedges 0
+    picture  thirteen attract anchors vs bldO: within 0.002 everywhere
+    rig      three launches, every level frame trees 0.00 fg 0.00 all 0.00
+             rate 21 24 25 | 21 24 26 per 64 (bldO 21 22 27 | 21 23 26)
+
+    WHAT THE GATES DO AND DO NOT PROVE. Round 0's tables are byte-
+    identical, and round 0 is the whole attract -- so every gate above is
+    a NO-REGRESSION result and none of them touches the fix. The fix is
+    in rounds 2 and 4 and is verifiable only by PLAYING them. Shipped on
+    the strength of being strictly additive: no set lost anywhere, and
+    the baker without the flag reproduces the previous table byte-for-
+    byte, so the union is the only delta.
+
+    STILL SHORT: round 4 fits 21 of its 32 union palettes and 11 stay
+    refused (22-30, 33, 34). Its two areas are disjoint and need TWO
+    tables plus one discriminator bit -- a runtime change, not this card.
+    Round 2 now fits all but [3, 33, 35, 36, 101].

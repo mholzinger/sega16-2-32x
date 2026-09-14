@@ -136,11 +136,11 @@ delta. Rank on isr-flips, tiles-destroyed, and the arcade pixel diff.
 Next lever after the play pass: the slave's compose (cat1 tiles = 48%),
 which sets the flip rate.
 
-## THE LINE (STALE HEADING -- the current line is bldO, see "THE LINE" below)
+## THE LINE (STALE HEADING -- the current line is bldP, see "THE LINE" below)
 
 **`rom/night/vi39.32x`, md5 c93dbeab. Mike: playable, no obvious
 regressions** -- that was the line on 2026-09-12 and is now history.
-The current line is `rom/night/bldO.32x`, md5 0f38332d; scroll to the
+The current line is `rom/night/bldP.32x`, md5 9eb13b45; scroll to the
 next "THE LINE" heading.
 
 **Read `docs/handoff/HANDOFF-20260912.md` before touching anything** --
@@ -198,7 +198,25 @@ The discipline, from here:
     `SPROBE`, `C1NOFB`, `RELBANK`, `GENSKIP`) says so in the same
     sentence as its number.
 
-## THE LINE: `rom/night/bldO.32x` (md5 0f38332d), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT card O)
+## THE LINE: `rom/night/bldP.32x` (md5 9eb13b45), ON THE RIG, NAMED 2026-09-13 (PLAN-SINGLE-VINT card P)
+
+bldP = bldO + the SET-LIST UNION: `sh_src/pal_rounds_md.h` regenerated
+with `tools/bake_tilecram.py --union-scene-sets`. No code change.
+
+**A set absent from its round's table renders as BACKDROP -- black, not
+degraded (m_main.c 2357).** Rounds 2 and 4 were missing every one of
+sets 22-36, which is Mike's "missing random black tiles". The union
+folds the decompile thread's arcade set census into each round's
+worst-case viewport. Strictly additive: rounds 0, 1 and 3 byte-
+identical, round 2 gains sets 0 and 22-30, round 4 gains 35 and 36,
+nothing lost anywhere.
+
+**Its gates prove NO REGRESSION and nothing more.** Round 0 is the whole
+attract and its tables did not change, so the fix itself is verifiable
+only by playing rounds 2 and 4. Round 4 is still 11 sets short and needs
+a two-table split plus one discriminator bit.
+
+## THE PREVIOUS LINE: `rom/night/bldO.32x` (md5 0f38332d), NAMED 2026-09-13 (card O)
 
 bldO = bldJ + `TEXTMASKPKT=1` (card O): the master's pre-flip text
 capture copies only the 4-row groups the game's text writers marked,
@@ -234,7 +252,8 @@ scene cut the plane is missing art for ~16-23 vints (24 tiles a vint
 against 378-561 codes, LOOP-DECOMPILE 115). Diagnose before it is
 called cosmetic. Deferred by Mike's call until the wall crosses.
 
-Every card from here is one change against bldO. Previous lines:
+Every card from here is one change against bldP. Previous lines:
+bldO (0f38332d, 1.02, card O, the masked text capture),
 bldJ (994b3c93, 1.09, named 2026-09-13, cards H/I/J),
 bldB (493d4984, 1.18, named 2026-09-12 20:15, "Behind the grass
 stellar lockdown on the progress"), vi70 (fadafb08, wall 1.48/18%,
