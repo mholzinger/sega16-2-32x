@@ -8880,3 +8880,76 @@ removed (F0). The compute half of the echo is understated here and the
 latency half may be understated differently. The ranking (fixed latency
 exists, and is invariant to load) is what this run supports; the
 magnitude wants the rig.
+
+## 293. THE GENERATION TRIPLE ON HARDWARE: THE LOOP IS NOT SELF-GATING (2026-09-14)
+
+NOTES 78 asked whether the generation rate is gating its own input.
+Under GAMEGATE the 68000 only advances when we release it, so
+`generations/sec <= releases/sec <= presented + fallbacks`, and if all
+three were equal the 2.47 v/gen would be an equilibrium rather than a
+cost -- which would invalidate every wall figure in this log.
+
+`TRIPCENSUS=1 BOOTFLIPRATE=1` on the line (`rom/night/trip.32x`), rig,
+attract, 40 shots at 8s, 32 readings accepted:
+
+| per 64 vints | n | mean | median | range |
+|---|---|---|---|---|
+| generations LAUNCHED | 6 | 28.8 | 28.0 | 11-43 |
+| 68K RELEASES (0xFFA0F6) | 6 | 56.8 | 63.5 | 26-64 |
+| GAMEGATE FALLBACKS (0xFFA0F4) | 7 | 34.1 | 35.0 | 21-44 |
+| frames PRESENTED | 6 | 27.8 | 24.0 | 20-49 |
+
+**The answer is the middle case: gens ~= presented < releases.** Not the
+self-gating one. Two things follow.
+
+**1. We are NOT composing frames nobody sees.** Generations launched
+(28.8) and frames presented (27.8) agree inside the sampling spread.
+Whatever the wall is, it is not presentation-side discard.
+
+**2. The 68000 is not being throttled to the generation rate.** It is
+released 56.8 times per 64 vints -- roughly twice -- because 34.1 of
+those are GAMEGATE FALLBACKS, which fire on the timeout and not on a
+flip. Token releases are 56.8 - 34.1 = 22.7, close to the presented
+count, exactly as a release-on-flip should be. So the game advances at
+about 57/64 while we present 28/64: **the loop's input rate is set by
+the fallback path, independently of presentation, and the 2.47 v/gen is
+a cost, not an equilibrium.** Prior wall figures stand.
+
+**Internal consistency, which is the only cross-check available here.**
+The four tags are sampled from DIFFERENT 64-vint windows, so they are
+not simultaneous -- and yet token releases (22.7) land on the presented
+count (27.8) and fallbacks + token releases (56.8) reproduce the release
+count. The arithmetic closes across independent samples.
+
+**Caveats, and the second is the weak part.** (a) The attract changes
+scene under the sampler; the gens range 11-43 is scene, not noise. (b)
+Each tag is 6-7 samples from different windows, so the MEANS are
+comparable only because the gap being read (57 against 28) is much
+larger than the spread. A tighter ratio would need the four tags in one
+capture, which 9 bits cannot carry.
+
+### The three instrument faults this card had to design out first
+
+All three would have returned a number. NOTES 77's rule -- validate
+against a case whose answer is already known -- caught all three.
+
+1. **The COMM6 tag.** The master hands `gens` to the 68K over COMM6.
+   `GLOW_RATE`'s reader accepts any word with bit 15 set -- and the
+   68K's OWN `0xB101` announce has bit 15 set, so that reader can
+   report `0xB101 & 63 = 1` as a rate. Tagged `0xA000` (four bits)
+   instead: not the announce (`0xB...`), not a STAMP_CENSUS word (bit
+   15 clear). A rejected read keeps the last good value.
+2. **The 6-bit value.** The first cut reused the 8-tag census layout
+   (3-bit tag, 6-bit value) and both gens and releases came back a flat
+   **63** -- saturation reading exactly like a measurement. The word is
+   now `[8:7]` tag, `[6:0]` value, so the full 0..64 range fits and a
+   127 is a fault. Validated on ares: channel tag 0 reads 64 while the
+   independent SDRAM counter `TRIPS[0]` reads 64 in the same run.
+3. **The rig reader.** The flood writes CRAM 0-63, i.e. MD palette
+   lines 0-1 ONLY -- the 32X layer has its own palette and covers the
+   rest. A modal-colour reader therefore falls through to whatever game
+   sprite is next most common: seven consecutive shots of a static
+   title screen decoded as a flat `presented = 64` off a 272-pixel
+   patch of the INSERT COIN blocks. `tools/rig_value.py` now requires
+   the flood to cover 40% of the sampled band and reports NO FLOOD
+   otherwise -- 8 of 40 shots here.
