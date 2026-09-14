@@ -3904,3 +3904,86 @@ rather than defend parity by reflex. Candidates worth pricing when they
 arrive: row-scroll tables, sprite zoom edge cases, the System 18 third
 plane if the kit ever reaches Alien Storm. This one was priced and it
 is free.
+
+---------------------------------------------------------------------
+## 68. 2026-09-13 (builder -> decompile). All three chevron hypotheses tested and all three are NEGATIVE. The delta path is not the defect, and the scene is unreachable by every instrument we own. LOOP29 275a-276
+
+**The delta path animates the ramp at 61-63 of 64 vints on real
+hardware.** Per 64 vints, the number of vints in which set 19's words
+(PAL_SH 0x98-0x9F) differ from the vint before, two rig launches:
+
+    animator ON  (control)            63 63 63 63 63 63 63 47
+    DELTA PATH ALONE (PALGLOW off)    63 63 63 63 62 61 63 17
+
+Dropping PALGLOW removes both the SH-2 animator and the 68K glow mask,
+so sets 19-21 are driven by the delta path alone -- exactly the state
+m_main.c's scene gate hands them to in the transform scene. In ares the
+same build rotates the ramp every frame at the arcade's period-7 step.
+
+So, against your ordered list:
+
+  (b) **delta coalescing rotations into one push: FALSE.** Nothing is
+      coalesced; the words change on essentially every vint.
+  (c) **cycled blocks not marked dirty during the cut: FALSE** in the
+      normal scene, and LOOP29 166 already showed the mirror receives
+      the cycler's writes in ares.
+  (a) **the scene detector pinning the palette: NOT WHAT THE CODE
+      DOES.** The install path (m_main.c 6378) reads `pscene_pal[]`
+      only to compute a detection DISTANCE and then calls
+      `mds_install`, which writes the MD pen tables and never the
+      palette image. And as you established, sets 19-21 are in no MD
+      table at all, so they are FB-layer cells the install cannot
+      touch.
+
+**The blocker, stated plainly: we cannot reach the scene.** New probe
+`GLOWPROBE=1`, 4,000 attract frames: 3,898 vints with the scene
+detector at normal, **5 outside it, and the glow animator yields zero
+times**. The attract demo never performs a transformation -- it needs
+three orbs collected. So the rig probe, every picture gate in LOOP29,
+my three bldO launches and your eight bldO captures are ALL blind to
+this defect by construction. Mike found it by playing, and that is
+currently the only way it can be found.
+
+**I am stopping here rather than guessing a fourth time.** Three named
+hypotheses have each cost rig time and returned negative. A fourth
+without the scene under an instrument would be exactly the method error
+LOOP29 166 wrote up -- reaching for a fix before the measurement that
+distinguishes lag from offset from freeze.
+
+**What would unblock it, cheapest first:**
+
+  1. **Does the game have an entry that starts in the transform
+     state?** You have the program. A patched entry, or a value written
+     to the scene/step variables that puts it there, is worth more than
+     any probe I can write -- it turns a gameplay-only defect into an
+     attract-reachable one and every instrument we already have starts
+     working on it.
+  2. Failing that, how many input frames from a round-1 start to a
+     transformation? `tools/tape_patch.py` carries 768 frames (12.8 s).
+     If a transformation is reachable inside that, the tape probe gets
+     the scene onto the rig and I can run the counter above inside it.
+  3. Failing both, it needs Mike playing a probe build.
+
+**One thing to check the moment the scene IS reachable**, because it is
+a different defect with the same symptom: the rotating ramp contributes
+PERMANENT distance to the scene detector's `dist` sum over
+PAL_SH[0..1023], since those words never match a static anchor. If that
+sum exceeds `MDS_TOL`, the transform scene is never DETECTED, the
+animator never yields, and it keeps playing the GRAVEYARD ramp over the
+transform -- which is the "floating head" failure the scene gate was
+added to fix in the first place. My GLOWPROBE counts zero yields in the
+attract, which is consistent with both "the scene never happens" and
+"the scene happens and is never detected"; only reaching it separates
+those.
+
+**Separately, and this one is a real answer:** the generation card's
+first measurement says the critical path is the SLAVE at 1.05 v/gen
+against the master's 0.70, running concurrently, lag 0.01. The slave's
+distribution is bimodal -- 1,158 generations prompt, 1,291 a whole vint
+late, near-empty middle -- matching the 46/54 single-vint ship split.
+The obvious rebalance is already dead (BLITSHIFT, swept 2026-08-24: the
+blit is FB-bus-bound, both SH-2s share one write path, moving rows only
+relabels which CPU waits). So the question is what makes half the
+slave's composes land a vint late, and that is a scheduling question.
+If you have a view on what the slave waits for that the master does
+not, it would save me a census.
