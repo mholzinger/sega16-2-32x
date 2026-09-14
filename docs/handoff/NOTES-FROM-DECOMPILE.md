@@ -3791,3 +3791,73 @@ all reachable", say so and I will union them blind.
 
 Still open from note 66: the round-4 discriminator bit, and the anchor
 prose-versus-filename correction.
+
+---------------------------------------------------------------------
+## 67. 2026-09-13 (decompile -> builder). Mike's calls, and a diagnosis that RE-ORDERS your queue: the chevron defect is the palette DELTA path, not the line bake. LOOP-DECOMPILE 123
+
+**Mike's decisions, both asked and answered.**
+
+  1. **Both, generation first.** Open the generation card now. The
+     colour work runs beside it, not instead of it.
+  2. **Assume all reachable.** Union my set lists blind; do not wait on
+     a demo-only filter. That forces the round-4 split, which you had
+     already priced. Your 66b question is closed: treat every set I
+     listed as reachable.
+  3. **He played bldO and it is NOT clean.** Details below. Your three
+     launches and their 0.00 black shares did not catch these, because
+     none of them is a black-share defect.
+
+**What he reports, in his words:** the chevron in the transformation
+should flash two colours behind the flame and shows a single blue;
+background colours show missing random black tiles; the grass shimmers;
+slowdown on sprite-heavy scenes (gravestones, Neff throwing heads).
+And, separately: "the framerate is crawling towards arcade, that's the
+win I see as our work crawling to the finish line."
+
+**The chevron, diagnosed from the arcade (123), and it changes what the
+colour card can claim.** The transformation's chevron is not two
+colours. It is a SEVEN-SHADE PURE-BLUE RAMP -- blue channel 156, 173,
+189, 206, 222, 239, 255, red and green zero -- rotating one position
+every frame, period 7. Measured on snapshots every 8 frames through the
+110-frame cutscene at 0xFFF148 != 0. The sets that carry it are 19, 20
+and 21: over a 4,600-frame run those are the ONLY sets in 17-23 whose
+palette words change at all, and they are the cycler scripts at
+0x1A70E/0x1A78E (entry 93).
+
+**Now the part for you.** `mdr_s_line[round][19]`, `[20]` and `[21]`
+are ZERO in all five rounds of `pal_rounds_md.h`. Under MDS_REFUSE a
+zero keeps the cell on the 32X FRAMEBUFFER layer. So the chevron's
+colours never touch the baked MD lines -- they come entirely from the
+palette DELTA pipeline, which is where `palscene_bake.py` deliberately
+put the transform ("every word that distinguishes the scene IS the
+flash animation... its span rides the delta pipeline").
+
+**So: the colour-line bake cannot fix the chevron, and the sets 22-36
+rebuild is a different defect from the one Mike is looking at.** A flat
+single blue means the per-frame delta for sets 20/21 is not arriving
+during the cutscene. Three candidates, in the order I would test them:
+the scene detector resolving the transform to a static anchor and
+pinning the palette; the delta coalescing several vints of cycler
+rotation into one push, which at a 26-of-64 present rate would land one
+phase and hold it; or the cycled blocks simply not being marked dirty
+in the packet during the cut. `tools/pal_fm_census.lua` and the
+LOST-PUSH line in state_health already look at this path.
+
+**On the other two, I am not claiming a diagnosis.** I launched bldO
+and took eight captures across the attract: complete graveyard, correct
+wall reliefs, correct text, and the automatic tile-corruption metric
+that cleared all 86 earlier captures (entry 119) is clean on these too.
+The eye cutscene shows hard black dither around the iris which I have
+not checked against the arcade. So the random black tiles and the grass
+shimmer are real to Mike and invisible to every instrument either of us
+has pointed at them, which is itself worth knowing: they want a
+DENSE capture sweep (consecutive frames, not one every 6 seconds) to
+catch an alternating defect, since "shimmer" by definition does not
+survive sampling.
+
+**Order I would take, given Mike's "generation first":**
+  1. the generation card, as he said;
+  2. the chevron's delta path -- it is a one-scene defect with a named
+     mechanism and it is the thing he actually looked at;
+  3. the sets 22-36 rebuild plus the round-4 split, union blind;
+  4. fold 5, which still wants the consumer-side rebase from note 65.
