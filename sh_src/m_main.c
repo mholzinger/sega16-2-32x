@@ -14074,6 +14074,31 @@ RAMCODE void m_main(void)
                  * is unverified ground (the block's own header warns that
                  * DIAG past 63 reads residue), and 40-46 are CSET_CENSUS. */
                 CEN[pscene_cur == 0 ? 24 : 25]++;
+                {   /* LOOP-DECOMPILE 124 / NOTES 71: the chevron plane is
+                     * pages 10 and 11 and NOTHING else in a whole arcade
+                     * run selects a page >= 10, so "any quadrant of
+                     * either plane's page select >= 10" marks the
+                     * transformation exactly. The regs are text words
+                     * 0x740 (FG) and 0x741 (BG) and latch_layer_regs
+                     * already reads them every vint.
+                     * CEN[53] vints with the chevron plane up,
+                     * [54] the highest quadrant ever seen,
+                     * [55] the vint index of the FIRST such vint. */
+                    static uint32_t pg_vint;
+                    uint16_t pf = TEXT_C[0x740], pb = TEXT_C[0x741];
+                    unsigned hi = 0;
+                    for (int q = 0; q < 16; q += 4) {
+                        unsigned a = (pf >> q) & 0xF, b = (pb >> q) & 0xF;
+                        if (a > hi) hi = a;
+                        if (b > hi) hi = b;
+                    }
+                    if (hi > CEN[54]) CEN[54] = hi;
+                    if (hi >= 10) {
+                        if (!CEN[53]) CEN[55] = pg_vint;
+                        CEN[53]++;
+                    }
+                    pg_vint++;
+                }
                 if (glow_post) {
                     CEN[27]++;
                     if (glow_pend_run + 1 > CEN[28]) CEN[28] = glow_pend_run + 1;

@@ -8047,3 +8047,70 @@ thread's to name. Everything else is now in place -- the scene is
 reachable in ares, the comparison is one command
 (`scratchpad/palcmp.py`), and the yield path already works once
 something triggers it.
+
+---------------------------------------------------------------------
+## 279. THE TRANSFORMATION SCENE DOES NOT RUN IN OUR ATTRACT AT ALL -- BOTH OF THE ARCADE'S EXACT MARKERS READ ZERO (2026-09-14 11:00)
+
+LOOP-DECOMPILE 124 / NOTES 71 handed over two markers, each measured
+exact on the arcade across frames 400-5400:
+
+  - the chevron plane is pages 10 and 11, and NOTHING else in the whole
+    run selects a page >= 10, so "any 4-bit quadrant of either plane's
+    page select >= 10" marks the scene;
+  - 0xFFF148 reads 1 on exactly 220 frames, which is the two windows
+    (1056-1164 and 4441-4549) to the frame.
+
+**Both read ZERO in our port, over the same span.**
+
+The page select, measured by latching it on the master (the regs are
+text words 0x740 FG / 0x741 BG, which `latch_layer_regs` already reads
+every vint), one ares run over 5,400 frames:
+
+    vints with the chevron plane up   0
+    highest quadrant ever seen        7
+    vints in 5,285                    5,285
+
+And 0xFFF148 sampled at 850, 880, 900, 920, 940, 960, 980 reads 0x00 at
+every one.
+
+**The transport is not the reason.** I checked the chain before
+blaming the game. TEXT_U word 0x740 carries live values that track the
+scene -- 0x1212/0x6767 at the title (which is exactly what
+`decode_pages`' own comment records for the attract title), 0x0000/
+0x5555 in the demo -- and the game's own mirror at 0xFF8E80 holds
+**byte-identical** values at every frame sampled. So the number the
+master sees is the number the game wrote, and the game never writes a
+page >= 10.
+
+**So our attract demo diverges from the arcade's.** The arcade performs
+the transformation twice in 5,400 frames; ours performs it zero times.
+That is a different and larger defect than the palette one 278 chased,
+and it explains the shape of Mike's report: he sees the chevron in
+PLAY, where he drives the game himself, and no attract probe has ever
+seen it because our attract does not reach it.
+
+**What 278 found is still real but is NOT the chevron.** The scene I
+reached at ares f900 -- Zeus's head, the orb, the smoke -- runs on
+pages 0/5, so it is the power-up moment and not the chevron cut. The
+measured defect there stands on its own: during it the game holds sets
+20/21 steady and our glow animator paints its graveyard wave over them.
+That is a fidelity defect at a real scene; it is just not the scene
+Mike named.
+
+**The likely mechanism, stated as a hypothesis and not a finding.** The
+demo is tape-driven (0xFFF026 bit 0 = attract, three input bytes a
+frame from the table at 0x1834). Tape playback is frame-locked, so if
+our game's frame pacing differs from the arcade's at any point the
+recorded inputs land at the wrong moments and the demo plays a
+different game -- one where the player never collects the three spirit
+balls, so the transformation never triggers. GAMEGATE releases one game
+frame per vint (LOOP29 273: token ~25 + fallback ~37 = ~62 of 64), so
+the rate is close but not exact, and a demo is a chaotic system driven
+open-loop.
+
+That is testable with the decompile thread's own second answer: the
+tape reader is one NOP from driving credited play (branch at 0x13C6),
+which would let us run the SAME tape deterministically and compare
+where the two diverge. Worth doing before any more chevron work, since
+every chevron measurement in our attract is measuring a game state the
+arcade never reaches.
