@@ -8414,6 +8414,26 @@ window, bldP shows the game's own sets 20/21 on ZERO of them.
 select**: it yields whenever any 4-bit quadrant of either plane's page
 select is >= 10. At f1510 sets 20 and 21 now match the game EXACTLY.
 
+**But the scored result is 2 of 8, not 8 of 8, and the gate alone does
+NOT fix the scene.** Same eight chevron frames, same script:
+
+    bldP  sets 20/21 correct on 0 of 8
+    bldR  sets 20/21 correct on 2 of 8
+
+So the gate fires and the override stops, but on six of eight frames we
+still show the wrong words -- now because the handover is SLOW rather
+than because the animator is fighting it. After the yield the 68K must
+be told to stop masking those blocks (glow_post = 3 -> COMM8 0xBAD3,
+which retries when the channel is busy) and the delta path must then
+ship them. The chevron lasts ~120 vints; if the grant costs several and
+the delta ships a couple of blocks a vint, a partial catch-up is
+exactly what 2 of 8 looks like.
+
+**That is the next measurement, not the next guess:** how many vints
+pass between the gate firing and glow_live going 0 on the 68K, and how
+many more before sets 20/21 are current. The gate is necessary and
+proven; sufficiency is unmeasured and on this evidence unlikely.
+
 That gate fixes all three failures of the old one at once, and each for
 a reason 278 measured:
 
@@ -8426,7 +8446,8 @@ a reason 278 measured:
     and 0xFFF148 turns out to be an OBJECT marker anyway (dispatcher at
     0x398E, value = slot + 1), not a scene flag.
 
-**What is NOT fixed by it, and should not be claimed.** Set 19's ramp
+**What is NOT fixed by it, and should not be claimed.** Six of eight
+chevron frames still wrong (above). Set 19's ramp
 is still one rotation step out of phase (the known LOOP29 166 offset),
 and one frame after a change the delta path still lags by a frame --
 f1511 shows the game at 100F while we still hold the previous wave.
