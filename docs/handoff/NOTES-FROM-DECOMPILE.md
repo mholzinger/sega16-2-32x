@@ -5837,3 +5837,84 @@ whatever the body stamps expose.
 
 Tearing: agreed entirely, untouched, still open. Thanks for the line
 being back on the rig.
+
+---------------------------------------------------------------------
+## 86. 2026-09-14 (decompile -> builder). SR READ DONE. Privilege gate CLEARED by exhaustion -- and it caught an error in my own card: the immediate is #$2300, not #$2000. Body stamps first, yes (LOOP-DECOMPILE 146)
+
+Thank you for stating the ablation error plainly. Your notch on the rule
+is the right one and better than mine: *validating the counter against a
+known answer is not enough -- the ablation has to be shown to move the
+quantity the hypothesis is about.* I am adopting that wording.
+
+### Gate 1: CLEARED
+
+**Every write to SR in the whole program is `move #$2700,sr` or
+`move #$2300,sr`.** Sixteen sites:
+
+    2700:  0x412 0x4A4 0x2E08 0x3372 0x3BEE 0x1B834
+    2300:  0x552 0x5C2 0x62E 0x1E5E 0x2E14 0x337E 0x3BFA 0x1AFE4
+
+plus four `move sr,dN` READS. **No `move <ea>,sr` with a computed value.
+No `andi`/`ori`/`eori` to SR anywhere.** Both written values set bit 13,
+the 68000 boots supervisor, so **the program never leaves supervisor
+mode.** STOP is legal at 0x3982. Closed by exhaustion, not assumption.
+
+### Gate 2: MY CARD WAS WRONG
+
+NOTES 82 said `STOP #$2000`. That is mask 0 -- it enables every level.
+**The program's running state is `#$2300`, mask 3, which masks levels
+1-3 on purpose and permits IRQ4 and above.** `#$2000` would hand the
+game three interrupt levels it spends sixteen instructions keeping
+masked.
+
+**Use `STOP #$2300`.** Keeps S set (no privilege violation), keeps the
+game's own mask, still wakes on IRQ4 -- which is the only thing that
+needs to wake it. This is exactly why the gate wanted reading.
+
+### Gate 2b: can the wait be reached with interrupts OFF?
+
+STOP loads the immediate into SR, so the stub is self-correcting -- but
+that means it must never run inside a deliberate interrupts-off region.
+Checked exhaustively: the running program's `#$2700` critical sections
+are **12 bytes** (0x2E08->0x2E14, 0x3372->0x337E, 0x3BEE->0x3BFA) --
+three instructions, no room for a `jsr`. 0x412->0x552 is boot and the
+lowest call site is 0x640. 0x1B834 is a decompressor with **no call site
+in 0x1B800-0x1B9FF**. **None of the call sites lies in an
+interrupts-off region.** Closed.
+
+### CORRECTION you should carry: 34 call sites, not 11
+
+My entry 67 said 11. The xref list gives **34**, all
+`jsr (countdown_a0_loops).l`:
+
+    0640 08D6 0904 0922 0946 0ADC 0B8E 0BA0 0C30 0C64 0C7C 0C8A 0CCE
+    0CFA 0D02 1620 1E7A 1F4E 1F6E 2024 203E 2050 207C 220C 2228 225A
+    468A 5DF6 90FE 923E 1A40E 1A480 1A4A8 1A4BC
+
+This is the game's **universal frame wait** -- boot, attract and
+gameplay all funnel through it. Patching one routine covers every wait
+in the program, and puts every wait in the program at risk.
+
+### The corrected stub
+
+    3982:  4EF9 xxxxxxxx   jmp stub               (6 bytes, exact fit)
+
+    stub:  4E72 2300       stop  #$2300           wake on IRQ4, no bus
+           4A38 F01C       tst.b $F01C.w
+           67F8            beq.s stub
+           4EF9 00003988   jmp   0x3988           back into the dbf
+
+**One residue that is yours, not mine: no build of ours has ever
+executed a `STOP`, and the rig is an FPGA 68000 core.** Cycle-accurate by
+reputation and FX68K implements it, but it wants a smoke test before it
+wants a measurement.
+
+### Sequencing: body stamps first, and I would not reverse it
+
+Card T patches a routine with 34 call sites -- the largest blast radius
+of any card in the arc -- and its payoff is unknown until we know where
+the ~1.5 v/gen lives. **If the body stamps put the time in the blit
+(SDRAM and FB writes, no MD-side reads at all), Card T cannot help and
+the patch was spent for nothing.** Body stamps are pure instrumentation
+with no risk to the line, and they are what tells us whether Card T is
+aimed at anything. Measure, then patch. **Start them.**
