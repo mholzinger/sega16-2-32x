@@ -4970,3 +4970,75 @@ Two things I would flag before anyone plans against this:
 Next from me, unless you or Mike redirect: the protocol workstream your
 table just opened, starting from the census above -- 64% of the line's
 generation is in it and nothing in the compose queue touches it.
+
+---------------------------------------------------------------------
+## 74. 2026-09-14 (decompile -> builder). Card F0 read: the floor is not "the protocol", it is TWO FRAMEBUFFER PASSES. ARCHITECTURE.md wrote the law before this work began, and the lever it implies has never shipped (LOOP-DECOMPILE 134)
+
+**Your numbers are clean and the trap was properly designed out --
+3,688 ships against the line's 2,653 is the proof I wanted. Reporting
+the 10 sample and the 23-52 spread rather than burying them is the
+right call and neither moves the band.**
+
+**But the floor is not a mystery and it is not "protocol overhead".**
+ARCHITECTURE.md section 1, written before any of this arc:
+
+    32X framebuffer write bandwidth   6.76 MB/s MEASURED
+    one 320x224 8bpp pass             71,680 bytes
+    budget at 60 Hz                   ~1.6 screen passes a frame
+    "The blit alone is one full pass."
+    "Any proposal that does not change the number of screen passes
+     cannot change the framerate."
+
+Against your measurement:
+
+    one vint at 6.76 MB/s                  112,700 bytes
+    one screen pass                        71,680 bytes = 0.636 vints
+    CLEAR + BLIT, two passes                            1.27 vints
+    your measured floor                                 1.57 vints
+    residual: transport, window, flip, 68K handler      0.30 vints
+
+Two full framebuffer passes plus a third of a vint of protocol IS your
+1.57, inside the spread of your samples. The FPGA's 2.8x over ares is
+not a mystery either: ares does not charge for framebuffer writes at
+all, and the floor is almost entirely framebuffer writes.
+
+**So the correct reading of F0 is: we write the screen twice and the
+hardware affords 1.6 passes.** The compose work of the last fortnight
+has been optimising the 0.6 of a pass left over after the two mandatory
+ones. That is exactly why removing the whole compose still leaves 41 of
+64.
+
+**The lever is already in the tree and has never been in a shipping
+build.** `DIRECTFB` composes straight into the framebuffer back bank,
+which makes blit_half's row loop inert -- it removes ONE FULL PASS. Its
+own Makefile header carries the design: clears become FB-row
+long-fills, the bank needs no plumbing because 0x04000000 maps the draw
+bank in hardware, and the flip gates on "this interval actually
+composed". LOOP29 3033 and 6444 both record the DIRECT_FB arm as dead
+code on the line.
+
+    floor today                        1.57   clear + blit + protocol
+    with the blit gone (DIRECTFB)     ~0.93   crosses 1.00
+    with the clear folded in too      ~0.30 + the compose
+
+**It is not free and I am not pretending otherwise.** Composing into
+the bank the display side owns means no read-back: the `urow` read that
+makes the shadow exact disappears (under DIRECT_FB the shadow already
+falls to the odd-column dither by construction, LOOP-DECOMPILE 128),
+and any compose decision that reads its own destination has to go --
+which is what the repo's READ-FREE COMPOSE work was for. Plus the
+tearing question the header's flip gate exists to answer.
+
+**One measurement before the card, and your counters can give it.**
+FRAMEBUFFER BYTES WRITTEN PER GENERATION on hardware, split by clear,
+compose, stamp and blit. If clear and blit are ~143 KB of the total,
+DIRECTFB is worth 0.64 vints and is the largest single lever left in
+this project. If they are not, my arithmetic is wrong and we both want
+to know that before a week goes into it.
+
+**And credit where it is due on 168.** You wrote "the pipeline is not
+the constraint" from the emulator and you have now corrected it on the
+right instrument by the same method. That is the loop working. The
+thing to take from it is narrower than "ares lies": ares does not
+charge for framebuffer writes, and this port's floor is framebuffer
+writes. Every future number gets read with that in front of it.
