@@ -5941,3 +5941,73 @@ cannot capture consecutive frames, and neither a 110-frame cutscene nor
 an alternating shimmer can be sampled through it. Dense picture work
 has to be ares (one run per frame, LOOP29 257's trap) or a rom-side
 capture.
+
+---------------------------------------------------------------------
+## 125. CORRECTION to entry 121 and NOTES 62/65: my per-round set lists were sampled during the SCENE LOAD and carried the previous scene's tile RAM. The definitive lists, and the one thing every round's table is missing (2026-09-14)
+
+Mike on bldP: "much better, still black squares, but typically in the
+bottom grass sprite layer or background layer; more visible after
+screen transitions -- wolf transformation, Neff smoke transform where
+the background changes colour, and level 2."
+
+**My census was wrong and card P was built on it.** Entry 121 walked
+the visible windows every 25 frames from f450. The round's tilemap is
+not loaded until roughly f575, so every sample before that read the
+PREVIOUS scene. That is where "round 2 uses sets 22-36" came from --
+those are the intro/SEGA-card screen's sets, not round 2's.
+
+**The definitive method and the definitive lists.** Force the round,
+wait for the load, then walk EVERY cell of EVERY tilemap page 0-11
+(not the visible window, which only shows where the camera happens to
+be) and collect every colour set whose tile code is non-zero:
+
+    round 0   31 sets   19, 20, 21 + 74-101
+    round 1   13 sets   19, 20, 21 + 64-73
+    round 2   15 sets   19, 20, 21 + 102-113
+    round 3   12 sets   19, 20, 21 + 64-72
+    round 4   19 sets   19, 20, 21 + 96-111
+
+Cross-checked against the visible window at f700: round 2's window
+shows 102-113 and no set below 100, round 4's shows 96-111. Written to
+`docs/audit/round_sets_definitive.txt`; `docs/audit/mdpen_scene_sets.txt`
+is superseded and should not be fed to any baker.
+
+**Against the shipped table (HEAD, after card P):**
+
+    round   true   in table   PHANTOM (in the table, never in the map)   MISSING
+      0      31       30      72, 73                                      19, 20, 21
+      1      13       15      0, 1, 2, 74, 75                             19, 20, 21
+      2      15       26      0, 1, 2, 22-30, 33, 35, 36                  19, 20, 21
+      3      12       14      0, 2, 3, 74, 75                             19, 20, 21
+      4      19       21      0, 1, 3, 35, 36                             19, 20, 21
+
+**Two findings, and the second is the important one.**
+
+  1. Round 2's table carries ELEVEN phantom sets from my bad census.
+     They cost pens in a table the builder measured as having four
+     spare, so they may have displaced real art. Rounds 1, 3 and 4 have
+     two to five phantoms each, smaller but the same shape.
+
+  2. **SETS 19, 20 AND 21 ARE IN EVERY ROUND'S TILEMAP AND IN NO
+     ROUND'S TABLE.** They are the cycler sets -- the chevron plane,
+     pages 10 and 11 (entry 93, LOOP29 202, entry 123). A set absent
+     from its round's table is refused and renders as backdrop
+     (LOOP29 277), so every cell drawn in 19, 20 or 21 is BLACK.
+
+That is one mechanism under both of Mike's remaining complaints. It is
+why the black is worst "after screen transitions -- the wolf
+transformation, the Neff smoke transform where the background changes
+colour": those are exactly the scenes the cycler plane draws. And it
+sits with entry 121's own caveat 3, which said a cycled set's line can
+be fixed but its pens must be reserved for the colours it cycles
+THROUGH. Nobody acted on that, and the sets were left out of the tables
+entirely instead.
+
+**What a fix has to respect.** A static pen map cannot hold a rotating
+ramp. Sets 20 and 21 walk seven blue shades and set 19 walks six
+(entry 123). So these three sets need a LINE with pens reserved for
+their whole cycle and the pen VALUES repainted each frame from the
+delta pipeline -- not a fixed snapshot, and not exclusion. Seven pens
+for the ramp plus set 19's six is inside one 15-pen line if they share,
+which the packing run can answer once someone asks it the right
+question.
