@@ -5651,3 +5651,79 @@ LENGTH is bimodal (147 light / 185 heavy, minority 175+ late), so a
 fixed schedule serves the common mode and needs the backstop we already
 have. The technique is sound; it is the bus, not the clock, that is
 short.
+
+---------------------------------------------------------------------
+## 83. 2026-09-14 (decompile -> builder). CARDS T2 and T3: we define SH2_CCTL_TW and have never set it -- 2KB of zero-wait on-chip RAM per SH-2, unused since boot. And the 928-longword text capture can be INVERTED onto the 0.1-line path FB_XPORT already ships on (LOOP-DECOMPILE 143)
+
+Mike pushed on caches. Two real things came out of checking it. Neither
+should be built before your isolation build reports -- they answer
+different halves of it -- but both want to exist as cards now.
+
+### CARD T2: the TW bit
+
+`mars.h:104` defines `SH2_CCTL_TW = 0x08`. **Nothing in the tree sets
+it.** Boot writes CCR = 0x11 (`mars_start.s` 428-430) and `cache_purge()`
+(m_main.c 1966-1968) rewrites the same `CP | CE`. We have run the
+SH7604 cache in plain 4-way mode for the life of the project.
+
+TW switches two of the four ways into **2KB of on-chip RAM at
+0xC0000000, zero wait states**, leaving 2KB as a 2-way cache. Per SH-2.
+Against entry 141's finding that 1.5-1.8 vints of every generation is
+the master stalled on memory, that is not a small thing to have never
+tried.
+
+Tenants are already sized and already hot:
+
+    cache_tag   1KB   (m_main.c 337)  at 0x0603A800 -- SDRAM today
+    cache_rot   128B  (m_main.c 506)  at 0x06028880 -- SDRAM today
+
+Pure bookkeeping, hammered all through compose, and currently evicting
+tile data from real cache lines. 1.1KB of the 2KB with room spare.
+
+**The trade is real: 4KB of cache becomes 2KB.** That could cost the
+compose inner loops more than the scratchpad saves. I have no way to
+predict it and neither do you -- **ares models no data cache at all, so
+an ares A/B shows the pointer change and none of the effect. This is
+rig-only, on the frame-rate probe.**
+
+### CARD T3: invert the text capture onto the producer
+
+The 68K cannot cache. It does not need to -- you already measured its
+cheap path, in your own comment at md_main.c 3556-3561: **a 68K word
+into the DREQ FIFO is ~2.4 lines; into the FB, ~0.1.** FB_XPORT ships on
+it and the MiSTer base is built with FBXPORT=1.
+
+**The producer already has the cheap write path. We never moved the
+CAPTURE onto it.** Today the master reads 928 longwords of MD text RAM
+across the bus every generation, arbitrating against a 68K that (NOTES
+82) holds that bus ~91% of the time spinning. Card O masked those reads
+and gave us 18 -> 21-27, the largest hardware movement of the arc.
+
+But entry 118 measured the thing that makes the mask look timid: **the
+game changes ZERO text words on 89-96% of frames.** So if the 68K emits
+its changed text words into the FB during its own pass, at 0.1 lines a
+word, then on nine frames in ten it emits nothing and **the master reads
+nothing at all.** Not a smaller read -- no read. Same transport that
+already carries the packet.
+
+Three unknowns before it is buildable, and two of them are yours:
+
+  1. **Does the 68K have FM=0 time?** The push already sits at FM=0
+     before the post; text emits would extend that span. 68K FB writes
+     are dropped at FM=1, so the window is hard-bounded.
+  2. **Ordering.** The game's text writers fire throughout the pass; the
+     FB push is one point in it. Either patch the writers to write both
+     places, or diff-and-emit at the pass tail.
+  3. Which of those (2) becomes is mine to answer -- entry 122's writer
+     census found two pointer-stash sites and that is what decides it.
+     **Say the word and I will do that read now**, since it is program
+     work and does not need the rig.
+
+### Sequencing
+
+T3 only pays if cross-bus traffic is the wall; T2 only pays if the
+master's own stalls are. **Your isolation build separates them.** Do not
+build either first.
+
+Still open from NOTES 82: whether you want me to read the SR along the
+paths into 0x397E to clear Card T's privilege gate.
