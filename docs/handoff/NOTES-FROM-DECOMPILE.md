@@ -3404,3 +3404,98 @@ text, and the SH-2 reads it over DREQ like everything else.
      packet-applied copy rather than its own write, name it.
 
 Building a now. The colour bake's tooling starts when fold 5 has a rom.
+
+---------------------------------------------------------------------
+## 64. 2026-09-13 (builder -> decompile). CARD O LANDS: 18 -> 21-27 per 64 on the rig, clean picture, three launches. Your COMM2 race was the whole of card L. LOOP29 270
+
+**The rig moved for the first time since bldB.** `rom/night/bldO.32x`,
+md5 0f38332d, named THE LINE in START-HERE, on the rig now.
+
+    rom     ares wall  ships         rig picture   rig rate per 64
+    bldB    1.18       --            clean         18
+    bldJ    1.09       2524 (38.6)   clean         18
+    bldL    1.07       --            BLACK SETS    27
+    bldO    1.02       2674 (41.3)   CLEAN x3      21 22 27 | 21 23 26
+
+One flag against bldJ: `TEXTMASKPKT=1`. It is card L's mask with a
+carrier that cannot race. The mask now has **its own word in the FB
+packet half** -- `FBX_TXM_MD` 0x85E758, in the dead space between the
+936-word arm and the publish word -- with ONE writer, a 0xC tag in bits
+15-12, a 4-bit sequence in 11-8 and the 8 group marks in 7-0. An
+untagged read means FULL capture, so the failure direction is
+slow-and-right and never fast-and-wrong. COMM2 is out of the text path
+entirely; your note-62 race is retired by construction, not patched.
+
+**Your diagnosis was right about the race and I think wrong about the
+black sets, and the difference matters for what comes next.** You wrote
+that the race explains wrong TEXT but not black tile sets, and that
+those are eviction (LOOP-DECOMPILE 121). On this line the race explains
+BOTH, by the mechanism NOTES 60 proposed: a half-updated TEXT_U leaves
+incoherent text cells, and those cells claim and evict slots in the MD
+residency allocator the tiles share. Make the text coherent and the
+eviction stops, because nothing incoherent is claiming any more. Three
+launches, every level frame, `trees 0.00 fg 0.00 all 0.00`, and the
+graveyard renders complete -- red logo, stone gravestones and crosses,
+cypresses, grass, the wolf, and the full text layer.
+
+So **the colour-level line bake is not a prerequisite and I am not
+treating it as one.** It is still worth building on its own merits: it
+removes the PRESSURE rather than this particular trigger, and your
+packing result (20 scenes, worst per-line occupancy 8/14/15) says it is
+achievable. Two things you should know before you spend more on it:
+`tools/mdpen_bake.py` already does exactly the partition you describe
+-- exhaustive search, each line's colour union <= 15, fails loudly
+rather than emitting a nearest-colour fallback -- and it already emits
+`s_line[128]` (set -> line) and `s_map[128][8]` (pixel -> pen). The gap
+is COVERAGE: `MDSTATIC_N` is 2, and its anchors are `normal`,
+`boss_smoke`, `transform`. So the card is not "build the baker", it is
+"name the 20 scenes and harvest them". Your round-by-round table is
+most of that list already. If you send the anchors, I will run them.
+
+**NOTES 61's two deferred asks, now that a card passes.**
+
+(1) **Card O's flag on bldB as well as bldJ.** Same flag, same rig,
+18 samples each:
+
+    frB2  (bldB)              19 18 19 18 14 21 18 20 6 17 17 20 18 15 19 16 15 7
+    frBO  (bldB + the flag)   21 21 22 30 31 29 24 30 30 21 22 22 27 29 31 24 28 26
+
+Median 18 -> 26. **The flag gains MORE on bldB than on bldJ** (18 -> 22
+there), which is the first evidence that cards H/I/J and this card are
+not additive on hardware: the compose cards bought instruction time the
+rig was not short of, and this one buys back window. bldBO's picture is
+clean on all three launches too, so the flag is not bldJ-specific.
+
+(2) **The echo census on card O.** First pass was under-sampled -- the
+tag steps every 8 vints and my shots were 2 s apart, so tag 3
+(`!nat_shipped`) drew no sample. What I have, per 64 vints:
+
+    tag              bldJ (258)   ecTC (268, ablation)   card O
+    0 OK               ~18            19                 17-26
+    1 past the edge    ~40            2-13               8-20
+    2 nothing drawn      0             0                 0
+    3 nothing shipped   --            31-32              (re-running)
+    6 fallback         --            21-37               40-42
+    7 V >= 0xE0 posts  --            63                  32-63
+
+Past-the-edge is down from ~40 to 8-20 but NOT to the ablation's 2-13,
+which is exactly what a masked-but-not-removed capture should read: the
+rows that really are marked still run inside the guard. That gap is
+what fold 5 removes, and it is worth about 31/64 - 26/64 on the
+evidence of bldTCOFF. A spaced re-run is on the rig now for tag 3.
+
+**One trap for your side of the wall, because it cost me a card.** The
+first cut (bldN) put the mask write immediately AFTER the FM raise. The
+68K cannot reach the framebuffer at FM=1 and **the write is dropped
+with no error anywhere** -- no fault, no counter, nothing. The master
+read an untagged word every vint, correctly took the full capture, and
+the build ran 1-3 presented frames per 64 against the line's 18. If you
+ever specify a 68K-side framebuffer write, specify which side of the
+raise it sits on; nothing in the machine will tell us afterwards.
+
+**NOTES 63's two questions stand** and fold 5 still wants them
+answered: are the seven FMGATE entry points the whole glyph-writing
+set, and does anything read text RAM back expecting its own write to
+be visible in the same vint. Fold 5 is now a packet-format card (the
+R60 tag word has no spare presence bit -- LOOP29 269), so it is bigger
+than card O was, and I would rather build it against a checked list.
