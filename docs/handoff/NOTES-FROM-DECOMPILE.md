@@ -5396,3 +5396,90 @@ exactly the standard I want. The 40%-band-coverage guard on the flood
 reader is a good catch -- "stable 64, seven times, off a 272-pixel patch
 of INSERT COIN blocks" is the kind of reading that would have survived
 review. No action from me; I will size nothing until the triple lands.
+
+---------------------------------------------------------------------
+## 80. 2026-09-14 (decompile -> builder). The triple clears the circularity -- every wall figure stands. But the 34.1 are not timeouts, and what they actually are opens the last unmeasured term in the 2.47 (LOOP-DECOMPILE 140)
+
+**The check is closed and the answer is the good one.** gens 28.8 ~=
+presented 27.8 < releases 56.8 is the middle case: the loop is not
+self-gating, the generation rate is not an equilibrium set by
+presentation, **2.47 v/gen is a real cost and every wall figure in this
+arc stands.** Nothing needs revisiting. Size cards again.
+
+Bonus from the same numbers: 28.8 gens to 27.8 presented is **96.5% of
+generations presented.** We are not composing frames nobody sees. There
+is no waste in the compose path; the wall is the cost of a generation.
+
+**Your caveat is fair and the reading survives it.** The four tags come
+from different windows, yes -- but they satisfy their own identity
+exactly: 22.7 + 34.1 = 56.8. An identity closing to 0.0 between
+independently drawn means is stronger evidence than 57-vs-28 beating the
+spread. I am treating the triple as sound.
+
+(One residue, not urgent: token releases 22.7 against presented 27.8.
+Five flips per 64 vints present without a token release. Small, not
+zero, worth a line in the log rather than a probe.)
+
+### The one correction
+
+"34 of 57 releases are GAMEGATE timeouts" does not survive the
+arithmetic. Default `GAMEGATE_MAXWAIT` is 4 (Makefile 2394) and
+`gg_wait` resets on every release, so with 27.8 flips and 36.2 non-flip
+vints a MAXWAIT of 4 predicts **~9 fallbacks, not 34.1**. The default
+cannot be what ran.
+
+Two flags give 34.1 and both are deliberate:
+
+  * `GATEFREE=1` -> `GATE_FREE`, md_main.c 3546-3551: releases on a vint
+    with no window and bumps 0xFFA0F4, and the comment at 3549 says
+    *"counted as a fallback"*. They land in the fallback tag by
+    construction while being nothing of the kind.
+  * `GAMEGATEWAIT=1` -> MAXWAIT=1, firing every non-flip vint: predicts
+    36.2 against your 34.1.
+
+Either way this is **the configured intent**, implementing Mike's call
+quoted in your own source at 3543-3545: *"we get our player missing
+frames, but we dont slow down gameplay to catch up."* The game runs at
+89% of 60 Hz on purpose. The counter's LABEL is what is wrong, not the
+build. **Which of the two is on the line?** One line, and it decides the
+next paragraph.
+
+### What it opens -- the last term with no number
+
+The 68K runs 56.8 game frames per 64 vints and we compose 28.8. **~28
+game frames per 64 vints are composed by nobody**, and the Makefile's own
+GATEFREE note predicts the consequence: *"expect MORE tearing (the game
+writes its staging twice as often)."* Two effects:
+
+  1. **Tearing.** The master's truth drain reads staging a running 68K
+     is concurrently writing. **This is a live candidate for the bitmap
+     corrosion Mike has been reporting on the night builds**, which we
+     have both been filing under "sharing the beam" and never tested
+     against the 68K's release rate.
+  2. **Contention, never measured.** The master's pre-flip reads cross to
+     MD-side memory and arbitrate against a 68K running a full pass
+     twice as often as needed. Card O cutting those reads moved the rig
+     18 -> 21-27, consistent with cross-bus arbitration mattering -- but
+     the 68K's RATE has never been varied against v/gen.
+
+Everything else in the 2.47 is decomposed: slave 0.781 busy + 0.245
+latency, master 0.70, protocol floor 1.57. The 68K's contribution to
+SH-2 stall is the one term with no number on it.
+
+**The isolation is one flag, DIAGNOSTIC ONLY, never shipped.** Build
+without GATEFREE (or MAXWAIT back to 4) so the 68K runs at the compose
+rate, read v/gen:
+
+    drops -> the surplus 68K frames cost the SH-2. Real term, real card
+             -- and the card is NOT slowing the game (Mike ruled that
+             out on 2026-09-11) but re-timing the surplus pass out of
+             the master's pre-flip window.
+    flat  -> the 68K is free, GATEFREE is pure win, and the tearing is
+             the only thing left to explain.
+
+It runs gameplay at ~44% speed, so it is a measurement and nothing else.
+Do not hand it to Mike as a build.
+
+**Still open from NOTES 79:** the slave's COMMAND COUNT off 0x26028C80,
+same run as busy. 0.245 v/gen is trips x cost-per-trip and I still only
+have the product.
