@@ -9428,3 +9428,66 @@ the window while it was still partly alive, and both remain valid. The wedge con
 in 299 do NOT rest on read counts -- they rest on GENERATION reading 0
 directly (n=3) and on the screenshots, where noI's 32X layer is visibly
 broken and tw's is visibly correct.
+
+## 301. EVERY CARD OF THIS ARC RE-READ AT FULL SAMPLE COUNT -- ONE CONCLUSION CORRECTED (2026-09-14)
+
+LOOP29 300 found that the harness restarts long background tasks and that
+`rig_value.py` wiped its local directory on each restart, so every run in
+this arc decoded only its first few shots. **The MiSTer had kept all of
+them.** Pulling the rig's own rom-named sets costs no rig time:
+
+    trip 56 shots (33 decoded, was 32)      body 36 (22, was 22)
+    bgap 50 shots (39 decoded, was  8)      noI  10 ( 9, was  6)
+    noD  14 shots (13 decoded, was  2)      tw9  16 (16, was  4)
+
+`bgap` and `noD` were the badly starved ones.
+
+### The correction: DATA caching is not free, and 299 overstated it
+
+299 concluded "instruction caching is load-bearing, data caching is not",
+on `noD` n=1. At n=4:
+
+| build | CCR (n=4) | GENERATION | vs line 86.5 | window |
+|---|---|---|---|---|
+| **noI** fetch off | **3 = CE\|ID** | **0** (n=3) | machine dead | n=0 |
+| **noD** data off | **5 = OD\|CE** | **106** (n=4, 63-127) | **1.23x** | **127 SATURATED** (n=3) |
+| **tw9** half cache | **9 = TW\|CE** | 64 -> 128 (n=4) | **1.48x** | 22.5 -> 45 |
+
+**Disabling data fills costs 1.23x on the generation and SATURATES the
+window stamp.** It is not free; it is survivable. The honest statement is
+a ranking, not a dichotomy:
+
+    instruction fills off  -> machine stops
+    half the cache         -> 1.48x
+    data fills off         -> 1.23x
+
+Instruction fetch dominates, but data caching carries real cost too, and
+295's uniform ~2.9x is not purely a fetch term. That is a weaker claim
+than 299 made and it is the one the data supports.
+
+**And the caveat 299 flagged is now closed.** I noted there that noD's
+OD-set was proven only from `.build_flags` and never on hardware, because
+the CCR readback never landed. At full sample count it lands **four times
+out of four, reading 5 = OD|CE.** Both discriminator builds are now
+confirmed on the rig.
+
+### What the re-read did NOT change
+
+**296's gap** firms up rather than moves: GAP n=9 (was 5), median 14,
+range 9-15 -- **14.1% of the period**, at the top of the 10-13% I quoted.
+WALL n=11, median 105. And the window anchor now reproduces **exactly**:
+bgap's window reads 38.0 at n=11 against body's 38.0 at n=5.
+
+**293's triple** holds: gens 26 (n=9), releases 63 (n=9), fallbacks 35
+(n=8), presented 24 (n=7). Still gens ~= presented < releases, so the
+loop is not self-gating and the wall figures stand.
+
+**295's body split** holds unchanged -- it was the one card the restart
+did not starve.
+
+### The rule
+
+Every "thin sample" caveat in this arc was my instrument, not the rig,
+and I attributed it to the rig four times. **The rig keeps its own
+screenshots, named by rom. Pull them afterwards; never trust a sampling
+run's read count.** `tools/rig_value.py --rom X --pull-only` does this.
