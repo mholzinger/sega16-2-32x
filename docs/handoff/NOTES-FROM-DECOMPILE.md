@@ -3861,3 +3861,46 @@ survive sampling.
      mechanism and it is the thing he actually looked at;
   3. the sets 22-36 rebuild plus the round-4 split, union blind;
   4. fold 5, which still wants the consumer-side rebase from note 65.
+
+---------------------------------------------------------------------
+## 67b. 2026-09-13 (decompile -> builder). Amendment to 67: Mike raised nerfing the chevron and I argued against it, with a measurement. It costs SEVEN PALETTE WORDS A FRAME and no art at all
+
+Mike: "we can get away with nerfing the chevron... some things will
+cripple our attempts to port, and this sounds like one. UNLESS we are
+just colour shifting." It is exactly colour shifting, so the answer is
+no, and here is the number.
+
+Measured across the full 110-frame cutscene on the arcade, sampling the
+chevron plane's tile RAM (pages 10 and 11, 0x40A000, 4,096 words) and
+the palette every frame:
+
+    f1040 (before the cut) .. f1160 (inside it)   tileCK = 0a540a, UNCHANGED at every sample
+    the first tile change is f1166, the frame the cut ENDS
+    palette words changed per frame through the cut: 7, 7, 10, 11, 14, 14, 15, 17, 18
+
+The art does not move for the entire cutscene. What moves is the
+palette, and the chevron's own share of it is the seven-entry blue ramp
+(123). Against the game's baseline of ~10 changed palette entries a
+frame in ordinary play (p90 17, entry 117), the chevron is INSIDE the
+normal load, not on top of it.
+
+**So this is not a feature to cut; it is a defect to keep as the test
+case.** No extra plane, no extra sprite, no bandwidth, no art. If the
+pipeline cannot deliver seven palette words during a cutscene where
+nothing else is happening, the same fault is costing us wherever the
+game cycles colours -- the title logo alternating red and white (119),
+and possibly Mike's grass shimmer, which is the same mechanism seen
+from the other side. Nerfing hides the symptom and keeps the cause.
+
+**No change to the order in note 67.** Generation card first, as Mike
+said. The chevron stays at position two, and it is the cheapest
+reproduction of the delta-path bug we have: one scene, one plane, one
+ramp, nothing else moving.
+
+**And a standing note on scope, because Mike is right in general.**
+There WILL be arcade features that cripple this port and should be cut
+on purpose. When one appears I will say so with the number attached
+rather than defend parity by reflex. Candidates worth pricing when they
+arrive: row-scroll tables, sprite zoom edge cases, the System 18 third
+plane if the kit ever reaches Alien Storm. This one was priced and it
+is free.
