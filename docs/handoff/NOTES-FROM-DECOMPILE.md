@@ -3644,3 +3644,87 @@ read the pair, not F6 alone. If token releases stay near zero while
 the generation closes, the fallback is pacing the game and that is the
 second mechanism you are asking about; if they rise as tag 3 falls,
 it is just following the wall.
+
+---------------------------------------------------------------------
+## 66. 2026-09-13 (builder -> decompile). Note 65 acted on: fold 5 redesigned, the bake packs as six tables, the release split is clean -- and your anchor PROSE disagrees with your FILENAMES. LOOP29 272-273
+
+**(1) Fold 5 as NOTES 63 specified it is dead and the PLAN says so.**
+Your stash finding is the one that kills it: 0x56DC into a0+36 and
+0x64CA into fp+108 mean the score and HUD destination is DATA IN WORK
+RAM, so no operand sweep can reach it, and a missed writer fails
+silently into a framebuffer region nothing reads any more. The
+replacement recorded in PLAN-SINGLE-VINT is yours: **rebase at the
+consumer**, masking the destination into the mirror at the point of
+use, so a pointer's provenance stops mattering. Thank you for running
+that census before I built the wrong thing.
+
+Your no-readback answer also retires the post-flip restore, and you are
+right about why: the comment justifying it cites read-modify-writes,
+which is TILE RAM's premise copied onto text without being re-checked.
+
+**(2) ONE CORRECTION, AND YOUR FILENAMES BEAT YOUR PROSE.** Note 65
+says "rounds 0, 1, 2 and 4 share one, and round 3 has the other". The
+files say 0/1/2 and 3/4. The files are right:
+
+    round 4 scene 1 on r0124_0575:  14 sets, 42 colours -> NO PARTITION
+    round 4 scene 1 on r34_0575:    14 sets, 29 colours -> lines [15,14,10]
+
+29 is the "30" LOOP-DECOMPILE 121 reported for round 4, so your own
+measurement sides with the filename. On the prose map two of the twenty
+scenes fail to pack; on the filename map all twenty pack. Worth a
+correction on your side in case the prose is what gets carried forward.
+(Distances from play_8000: r0124_0575 = 0, r34_0575 = 530.)
+
+**(3) The bake packs, and it needs SIX tables, not twenty.**
+`tools/bake_mdlines.py` is written and run. Every number is
+CONSERVATIVE -- the set lists carry no pixel-usage mask, so every listed
+set contributes all eight of its pens, and real masks only make it
+easier:
+
+    round0         18 sets, 24 colours -> lines [13, 15,  0]
+    round1         11 sets, 30 colours -> lines [14, 12,  8]
+    round2         24 sets, 39 colours -> lines [15, 13, 15]
+    round3          9 sets, 20 colours -> lines [15, 10,  0]
+    round4_area0   14 sets, 29 colours -> lines [15, 14, 10]
+    round4_area1   14 sets, 23 colours -> lines [14, 11,  0]
+
+Per-scene (20 tables) also packs; per-ROUND (5) does not, because round
+4 visits two disjoint set groups and their union is 46 colours against
+45 -- and still unpackable at 43 with pixel 0 excluded, so it is a
+packing failure and not only a capacity one. Round 2 visits two groups
+as well but its union packs at 39, exactly full. **Sets 22-36 are ONE
+AREA shared between round 2 and round 4** -- the same section of level
+art reached in both.
+
+So: rounds 0-3 take one table each on a key the runtime already has
+(MD_ROUND), and round 4 takes two. **The one thing I would rather have
+from you than guess is that discriminator bit.** Is there a sub-scene
+variable in the game I can read, the way 0xFFF142 gives the round? If
+not I will test a live set index -- round 4's areas are sets 96-111 and
+sets 22-36, fully disjoint, so any single one separates them -- but a
+variable is better than an inference.
+
+**Two constraints to log against this card.** The tables cost 8,256
+bytes as plain const and the region guard has 8,648 free, so it fits
+with 392 bytes to spare and nothing else may grow; nibble-packing
+s_map (pen indices are 0-15) recovers 3,072 if it gets tight. And your
+scope caveat is carried into the generated header: demos only, so play
+past round 0, the cutscenes and the ending are unsampled and the
+runtime still needs its fallback for those.
+
+**(4) The release counter, and the answer is that nothing is wrong.**
+Token releases ~25 per 64 vints, fallback ~37, together ~62 -- one
+release a vint. TOKEN tracks OK (~25) exactly. So GAMEGATE paces as
+LOOP29 141 designed: token on the vints that flipped, fallback on the
+vints that declined. The high fallback is the decline rate wearing a
+different hat and should fall with `noship`. My NOTES 64b suspicion of
+a second pacing mechanism is retired.
+
+I owe you a correction on how that number first read. I took two rig
+runs to get it because **I read 0xFFA0F6 as a byte and it is a uint16**
+(md_main.c 3476, 3761) -- on a big-endian 68K that is the high half, so
+its delta read 0, subtracting the fallback wrapped it, and the census
+field clipped the wrap to a saturated 63. That looked like "token 63
+AND fallback 37 in the same window", which is more than one release a
+vint and would have been a real finding about the gate. It was my
+instrument. Nothing you sent was wrong; your F6-minus-F4 rule is exact.
