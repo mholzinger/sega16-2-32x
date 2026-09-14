@@ -7523,3 +7523,53 @@ rather than the trigger -- but it is NOT a prerequisite for this card.
 capture at all, stale text by construction) runs 31/64. Card O at
 21-27 pays the capture only for marked rows; the remaining gap is the
 rows that really are marked, which is what fold 5 removes.
+
+---------------------------------------------------------------------
+## 271. THE ECHO CENSUS ON CARD O: THE FLIP GUARD IS OFF THE CRITICAL PATH; THE GENERATION IS THE WALL ON THE SHIPPING LINE (2026-09-13 20:35)
+
+ecO2 (bldO's flags + ECHOCENSUS + BOOTFLIPRATE, md5 58ee29be), 41
+samples spaced one second apart so every one of the eight tag windows
+is covered -- the first pass took shots two seconds apart and tag 3
+drew none, which is why 270's note called it "re-running". Per 64
+vints, 68K-side (md_main.c 2770):
+
+    tag                 bldJ (258)   ecTC (268)   CARD O (this)
+    0  OK                  ~18        19          23 27 27 23 30
+    1  past the edge       ~40        2-13        9 15 8 7 14
+    2  nothing drawn         0        0           0 0 0
+    3  NOTHING SHIPPED      --        31-32       29 19 28 32 28
+    4  posted, no echo      --        --          0 0 6 0 0
+    5  no post               0        0           0 0 0 2 0
+    6  GAMEGATE fallback    --        21-37       21-43
+    7  posts with V>=0xE0   --        63          39-63
+
+**Past-the-edge declines fall from ~40 of 64 to ~11, and what is left
+is `!nat_shipped` at ~27.** That is the ablation's profile arriving on
+a build with a CORRECT PICTURE. Card O has taken the flip guard off
+the critical path: the master now reaches the guard in time on most
+vints and finds no closed generation to show.
+
+So the statement in 268 -- made on a build whose text was stale by
+construction and which could never ship -- now holds on the line:
+**the wall is the generation.** NOTES 61 predicted this one card
+earlier than it arrived; the intervening card was the carrier.
+
+Two numbers to keep for the next card:
+
+  - **~11 of 64 still miss the edge.** The ablation's floor is 2-13,
+    so the marked rows that really do get captured cost roughly what
+    is left. Fold 5 (text off the framebuffer entirely, LOOP29 269)
+    is what removes them, and bldTCOFF's 31/64 against card O's 21-27
+    is the size of that prize.
+  - **The GAMEGATE fallback is 21-43 of 64 and has not moved.** It is
+    the release of last resort for the held 68K, and while half the
+    vints decline it has to fire. It should fall on its own when the
+    generation closes every vint; if it does not, it is a second
+    mechanism and worth its own probe.
+
+Instrument fix made while running this (commit ec21d2b): `txt_mask` was
+cleared only on the untagged decline echo 0xF1FF, so under ECHOCENSUS
+-- where declines are tagged F1F1/F1F2/F1F3 -- the census build alone
+kept re-marking rows it had already captured, and measured a slower rom
+than the ship. The capture sits ABOVE the guard, so every echo that
+proves flip_span ran is a consume; all three tags now clear.
