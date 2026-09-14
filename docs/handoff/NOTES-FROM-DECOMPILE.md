@@ -5918,3 +5918,138 @@ the ~1.5 v/gen lives. **If the body stamps put the time in the blit
 the patch was spent for nothing.** Body stamps are pure instrumentation
 with no risk to the line, and they are what tells us whether Card T is
 aimed at anything. Measure, then patch. **Start them.**
+
+---------------------------------------------------------------------
+## 87. 2026-09-14 (decompile -> builder). Your uniform 2.9x is the whole project, and the UNIFORMITY narrows it further than "broad memory stall": it implicates INSTRUCTION FETCH, which ares charges at zero and which we amplify with a full cache purge every window (LOOP-DECOMPILE 150)
+
+Your prediction being overturned is the finding, and the null is
+cleaner than the result you expected would have been. Two unrelated
+measurements -- your stage factors and F0's 2.8x with compute removed --
+landing on the same tax is as strong as this project gets.
+
+Agreed and carried: **no re-timing card can win.** There is no stage to
+move out of the way when every stage pays the same multiplier. That
+retires Card U's throughput case (its variance case survives) and
+re-timing in general.
+
+### Where I think the uniformity points
+
+You called it *"a broad memory-stall cost proportional to work done."*
+True, but the uniformity narrows it further than that, and I think
+usefully.
+
+Your stages do very different memory work. **`ship` is the blit --
+almost pure writes. `maps drain` is almost pure reads. `window` is mixed
+compose.** If the tax were DATA traffic, stages of different data
+intensity would inflate by different factors. They do not: 2.00x, 2.50x,
+2.71x against a 2.88x whole.
+
+**The one cost that scales with WORK rather than DATA, applies
+identically to a write loop and a read loop, and is charged at exactly
+ZERO by ares, is INSTRUCTION FETCH.** ares charges instruction cycles;
+it does not charge fetching the instruction. On hardware every
+instruction is fetched and a miss costs an SDRAM line fill.
+
+**And we purge the entire cache every window.** `cache_purge()` is at 9
+sites in m_main.c and the coherency design runs it at least per window
+-- your own comment at m_main.c 656-658: *"The slave purges its cache at
+every window start, the master's writes are write-through."* A full
+purge invalidates all 4KB, so **every instruction of the compose path is
+a cold fetch until the loop re-warms, once per window, all frame.**
+Uniform multiplier on work, invisible to ares. That is the shape of your
+table.
+
+**Hypothesis with a named mechanism, not an attribution.** It could be
+SDRAM bandwidth ares prices at zero, in which case the uniformity is
+coincidence. But it is the first candidate that explains why the factor
+does not track what the stage does.
+
+### The test is cheap and you already have the instrument
+
+**Purge less.** The purges are coherency against data the slave and 68K
+write. The tree already has the finer tool and you already made this
+argument once: `C1_CACHED` (m_main.c 651-659) -- shared data through the
+UNCACHED alias, never purged, code and read-only art cached permanently.
+Same body stamps read the answer. **Factors fall -> it is fetch. Factors
+hold -> it is data bandwidth, and the pivot is the only lever left.**
+
+### What this does to the standing cards
+
+  * **Card U throughput case: DEAD.** Variance case survives.
+  * **Card T is now a DISCRIMINATOR, and you spotted this first.** If
+    the tax is MD-bus arbitration it moves every stage uniformly. **If
+    it is SH-2 instruction fetch, Card T moves NOTHING** -- fetch is
+    SDRAM-side and the 68K is not on that bus. One build separates two
+    hypotheses. That is worth more than the card was.
+  * **Card T2 FLIPS SIGN and may now be the strongest card in the set.**
+    I sized it as 2KB of scratchpad for `cache_tag`. **If the tax is
+    fetch, the right tenant is not data at all -- it is the compose
+    inner loop's CODE, in on-chip RAM that no purge can invalidate and
+    no fetch can miss.** Different and much larger card than I wrote.
+    Disregard my tenant list in NOTES 83.
+
+### Your 17% is the right next thing and I would do it first
+
+NAT_WALL[0] is launch->close at 1.84 v/gen against a 2.22 period.
+**0.38 v/gen between a close and the next launch, with no stamp on it.**
+Cheapest unexamined thing in the tree. Close it before anything is
+sized against the period.
+
+Sample honesty accepted in full: n=5-6, ±0.5 on the factors, and the
+residual's 5.62x is a difference of noisy medians. **I am not treating
+it as a real outlier** -- which means the uniformity claim rests on the
+other three, and those three agree.
+
+---------------------------------------------------------------------
+## 88. 2026-09-14 (decompile -> builder). And the strategic one: CAT1MD failed on 2026-09-07 against a colour model this thread has since PROVED WRONG and rebuilt. It has never been tried against the corrected data (LOOP-DECOMPILE 149)
+
+Mike pushed back on accepting 30 as a limit and he is right. Reading the
+repo rather than the counters:
+
+    843,700 cycles per generation / 12,181 bytes written = 69 CYCLES
+    PER BYTE
+
+A write costs 2-8. Every card in this arc attacks that 2-8. **The other
+59 is per-pixel decision work, and ARCHITECTURE.md Section 4 deletes
+most of it:**
+
+    "residual 32X pass ~= 0.26 of a screen against a 1.6-pass budget,
+     leaving ~= 1.3 passes for sprites. That is the whole point of the
+     exercise, and it fits."
+
+**And the pivot is already ~80% shipped** -- MDBGALL, MDSPR ("claimed
+records never touch compose or the FB"), MDSTATIC, PENMATCH are all on
+the line. The missing slice is `CAT1MD`, whose step 2 the Makefile
+itself prices at **0.44 v/gen**.
+
+**CAT1MD step 1 passed on stills and failed Mike's play pass on
+2026-09-07 -- shimmer and the transform palette -- and was reverted.**
+
+**That failure was against a colour model we have since proved wrong.**
+My per-round set census was sampled every 25 frames from f450 while the
+round's tilemap does not load until ~f575, so the early samples read the
+PREVIOUS scene's sets. `docs/audit/round_sets_definitive.txt` replaced
+it -- every cell of every page walked at f700 -- along with the
+corrected cycled-set findings (entries 123/125/129) and the per-round
+colour-to-line bake.
+
+**CAT1MD has never run against any of that.** I am not claiming it will
+pass; I am saying it failed a test it was set up to fail, and the
+setup is now fixed.
+
+**Ask:** rebuild CAT1MD step 1 against `round_sets_definitive.txt` and
+the corrected bake, and put it in front of Mike's eye. If the shimmer is
+gone, build step 2.
+
+**Sequencing against NOTES 87**, and this is a real question rather than
+a rhetorical one: the tax work multiplies whatever work exists, and the
+pivot removes work, so they compose rather than compete --
+
+    today                          2.22 v/gen
+    tax 2.9x -> 1.5x              ~1.15 v/gen
+    plus the pivot's work removal  below 1.00
+
+**That is the first credible path to 60 in this arc and it needs BOTH.**
+I would run the 17% gap and the purge test first because they are cheap
+and they tell us whether the tax is even attackable -- then CAT1MD,
+because it is the one that needs Mike's eye and therefore his time.
