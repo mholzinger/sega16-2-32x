@@ -7653,3 +7653,90 @@ against the 2-vint boundary answers it directly:
 Given the builder has measured bimodality on two separate quantities
 this arc, the third outcome is a live possibility and should not be
 assumed away.
+
+---------------------------------------------------------------------
+## 148. RETRACTION: I called 1.57 a "protocol floor" and treated it as a law. It is an UNDECOMPOSED RESIDUAL, and the one distribution we have says the wall may be a rare catastrophic stall rather than a throughput ceiling (2026-09-14)
+
+Mike: *"I'm VERY hesitant to accept 30 as our limit just because we have
+inefficiency in our architecture."*
+
+He is right and my PM readout was wrong in a way worth writing down.
+
+### What I did wrong
+
+I reported card F0's 1.57 v/gen as a "protocol floor" and derived a
+~38 fps ceiling from it, then built a two-project plan on that ceiling.
+**1.57 is a measured residual that nobody has ever decomposed.** It is
+what was left when compose was ablated. Nothing about it has been
+attributed to a mechanism.
+
+A residual you cannot explain is not a limit. It is a bug you have not
+found yet. Treating it as a law was the same error I have been
+correcting in the builder all session -- accepting a number without
+checking what quantity it measures.
+
+### There is no hardware law here at all
+
+Worth stating because it is the actual physics and it is easy to lose:
+**the 32X VDP scans the framebuffer out continuously whether we touch it
+or not, and a flip is ONE register write.** The hardware imposes no
+per-frame cost on presentation. Every one of our 2.2 vints is our own
+software. There is no silicon reason 60 is unreachable.
+
+### And the one distribution we have points at a rare stall, not a ceiling
+
+LOOP29 291, the master's pre-flip stamps:
+
+    post seen        mean 22.3 lines
+    at the guard     mean 22.3 lines     (drain + capture ~free)
+    guard MAX        [63,63,63,33,63,44] -- 63 is SATURATED, >= 175 lines
+
+The edge guard's budget is 1650 FRT ticks = ~36 lines. **A typical vint
+reaches the flip point at 22 lines, comfortably inside a 36-line budget.
+The maximum saturates the counter at 175+ lines -- five times over, and
+we do not know how far because it pegged.**
+
+The builder's own reading: *"Two populations, not a spread -- which is
+the signature of waiting on a deadline, not of doing work."*
+
+**If typical generations make the window easily and a subset blows it by
+5x, then the wall is not the cost of a frame. It is whatever makes the
+subset explode.** That is a bug-shaped problem, not a ceiling-shaped
+one, and it is exactly what Mike is refusing to accept as a limit.
+
+### The honest caveat, which is why this is a direction and not a finding
+
+**The 22.3 means are ONE SAMPLE EACH** -- the builder flagged this and it
+matters here more than anywhere. Six samples of a saturating max and one
+sample of a mean cannot give a distribution, and **the distribution is
+the entire question.** We do not know whether 5% of generations blow the
+window or 57% of them.
+
+The arithmetic that says we cannot assume the happy reading: we present
+27.8 of 64, so **57% of vints do not flip.** If the mean really were 22
+lines against a 36-line budget, far more than 43% should make it. So
+either the single-sample mean is unrepresentative, or a large fraction
+sits in the slow population. Those two readings have completely
+different consequences and nothing we own separates them.
+
+### What this does to the plan
+
+The "protocol redesign" project I named in the PM readout is premature
+and possibly nonexistent. It is replaced by one probe:
+
+**Decompose the 1.57.** Run the SAME body stamps the builder is starting
+against an ablated build, and report the DISTRIBUTION of generation
+length -- not the mean. Specifically:
+
+    1. what fraction of generations miss the 36-line flip window
+    2. for those that miss, by how much (an unsaturated counter -- the
+       current one pegs at 63 and that is now the binding limitation)
+    3. what is executing during the slow population
+
+Until (2) has an unsaturated counter we are guessing about the most
+important number in the project.
+
+**And the 60 Hz question is reopened.** If the slow population is a
+minority with a nameable cause, fixing it locks the cadence without
+making anything faster, and the ceiling I quoted does not exist. I
+should not have quoted it.
