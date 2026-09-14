@@ -3786,16 +3786,32 @@ void shim_vblank(void) {
 						 * at 0xFF6000). Stops at the end; no wrap, so a
 						 * short run reads clean. */
 						{
-							static uint16_t ol_i;
-							if (ol_i < 2048) {
+							/* NOTES 73: index on the GAME'S OWN demo frame
+							 * counter (0xFFF02A, zeroed at game start and
+							 * the very word the tape reads), not on a
+							 * count of releases. A release without a game
+							 * frame -- or two for one -- drifted the old
+							 * index and showed as a one-frame stall, which
+							 * is exactly the shape the divergence took.
+							 * Writing log[ctr] makes a repeat overwrite
+							 * itself instead of consuming a slot. */
+							/* 0xFFF02A is zeroed at EVERY game start, so
+							 * the attract's successive demos reuse the
+							 * same indices and a naive log mixes them.
+							 * Capture ONE demo: stop for good the first
+							 * time the counter goes BACKWARDS. */
+							static uint16_t ol_prev;
+							static uint8_t ol_state;   /* 0 wait, 1 log, 2 done */
+							uint16_t ol_c = *(volatile uint16_t*)0xFFF02A;
+							if (ol_c < ol_prev) ol_state++;
+							ol_prev = ol_c;
+							if (ol_state == 1 && ol_c < 2048) {
 								volatile uint16_t *lg =
-									(volatile uint16_t*)(0xFF4000u + ol_i * 4u);
+									(volatile uint16_t*)(0xFF4000u + ol_c * 4u);
 								lg[0] = *(volatile uint16_t*)0xFFC00C;
 								lg[1] = *(volatile uint16_t*)0xFFC010;
-								ol_i++;
-								/* count sits BELOW the ring: 0xFF4FFE is entry
-								 * 1023's y word and the first cut clobbered it */
-								*(volatile uint16_t*)0xFF3FFE = ol_i;
+								if (ol_c > *(volatile uint16_t*)0xFF3FFE)
+									*(volatile uint16_t*)0xFF3FFE = ol_c;
 							}
 						}
 #endif

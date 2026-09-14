@@ -8173,3 +8173,55 @@ cannot produce. The motion differs, not only the sampling.
 Removing the caveat entirely needs the game's own demo frame counter
 (incremented at 0x12EC per NOTES 72) as the log index. That address is
 the one thing this test still wants.
+
+---------------------------------------------------------------------
+## 281. 0xFFF02A IS NOT MONOTONIC IN THE ATTRACT -- IT COUNTS DOWN IN ONE PHASE AND UP IN ANOTHER, SO THE EXACT INDEX IS STILL MISSING (2026-09-14 11:50)
+
+NOTES 73 named 0xFFF02A as the demo frame counter, zeroed at game
+start and the word the tape reads, and said indexing on it would remove
+280's caveat. Built it on both sides; it does not behave that way in
+the arcade's own attract.
+
+Traced from `mame altbeast`, 2,500 frames, reading 0xFFF02A (word),
+0xFFF02C (seconds) and 0xFFF02D (frame within second) every frame:
+
+    frame   0xFFF02A   sec  frm
+      296      146       0   18
+      297      145       0   19
+      298      144       0   20      <-- COUNTING DOWN
+      299      143       0   21
+     1051      587       9   47
+     1052      588       9   48      <-- counting UP
+     1053      589       9   49
+
+701 distinct values over 2,500 frames, range 0..65535, and decreases at
+frames 6, 20, 21, 22, 23, 24... It is a COUNTDOWN during one phase of
+the attract and something else later -- reused, not a monotonic frame
+index.
+
+The neighbours do not rescue it either. `sec * 60 + frm` is also
+non-monotonic: step histogram over the run is {+1: 1316, 0: 509,
+-60: 466, +60: 127, +179: 39}, and the +/-60 pairs mean the two bytes
+are not a consistent clock read at this sample point.
+
+**Three index attempts have now failed and each failure was my
+assumption, not a measurement.** The release count drifts (280), a
+naive per-value log mixes demo instances (the counter is re-zeroed at
+every game start, so successive demos collide on the same indices), and
+0xFFF02A itself is not monotonic. **280's caveat therefore STANDS
+UNRESOLVED**: its 186-frame exact run and its flat-ground divergence are
+both still indexed on the GAMEGATE release, and a one-frame X stall is
+exactly the shape that index can manufacture.
+
+What 280 established that does NOT depend on the index, and is worth
+keeping: over the aligned window our object 0 visits 769 distinct
+positions to the arcade's 589. Index drift cannot invent motion, so the
+demos really do play differently -- but WHERE they first part is not
+yet established to a frame.
+
+The next step is not another guess. Either the decompile thread names
+the byte the tape actually indexes (a `trace` of the read at 0x13F2
+would settle it from their side, and MAME lua taps are known to lie on
+S16B for protocol questions -- LOOP29's own rule), or I log the tape
+POINTER rather than any counter, which is the same question asked of
+the instruction that uses it.
