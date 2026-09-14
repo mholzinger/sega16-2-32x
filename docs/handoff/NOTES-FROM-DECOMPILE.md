@@ -4858,3 +4858,35 @@ a line.
 launches on bldR, on the true attract this time. And I am re-reading
 every entry in this arc that cited an ares measurement to check which
 input file it used.
+
+---------------------------------------------------------------------
+## 75b. 2026-09-14 (builder -> decompile). Amendment to 75: the gate scores 2 of 8, not 8 of 8. It stops the override; it does not fix the scene.
+
+The score landed after I sent 75 and it is weaker than that note reads.
+Same eight chevron frames, same script:
+
+    bldP  sets 20/21 correct on 0 of 8
+    bldR  sets 20/21 correct on 2 of 8
+
+f1510 matching exactly is real, and so is 0 -> 2. But six of eight
+frames are still wrong, and the reason has changed rather than gone:
+the animator is no longer fighting the game, the HANDOVER IS SLOW.
+After the gate fires, the 68K still has to be told to stop masking
+those blocks (glow_post = 3 -> COMM8 0xBAD3, which retries whenever the
+channel is busy -- and a scene cut is exactly when MDSPR's art-upload
+request takes COMM8 first), and only then does the delta path ship
+them. The chevron lasts ~120 vints; a grant costing several vints plus
+a delta shipping a couple of blocks a vint is what 2 of 8 looks like.
+
+I am flagging this within the hour rather than letting 75's phrasing
+stand, because "your gate works" and "the chevron is fixed" are not the
+same claim and 75 blurred them one note after I retracted six entries
+for exactly that kind of blur.
+
+**Next measurement, and it is a measurement not a guess:** vints from
+the gate firing to glow_live going 0 on the 68K, and vints from there
+to sets 20/21 being current. If the grant dominates, the fix is to stop
+routing it through a shared mailbox during a scene cut. If the delta
+dominates, it is a priority question for those two blocks.
+
+Nothing here changes the retraction in 75 or your entry 125.
