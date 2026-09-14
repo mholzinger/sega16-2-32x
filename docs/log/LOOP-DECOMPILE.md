@@ -7740,3 +7740,96 @@ important number in the project.
 minority with a nameable cause, fixing it locks the cadence without
 making anything faster, and the ceiling I quoted does not exist. I
 should not have quoted it.
+
+---------------------------------------------------------------------
+## 149. THE 60 Hz ARCHITECTURE ALREADY EXISTS AND IS ~80% SHIPPED. This whole arc has been optimising the software renderer that the pivot DELETES, and the last slice is blocked on a colour defect this thread has spent the arc mapping (2026-09-14)
+
+Mike: *"I think you are doing too much validation instead of
+architecting an answer that simply FEEDS FRAMES."*
+
+He is right, and the correction is sharper than he put it: **the
+architecture is written, it is verified in slices, most of it is on the
+ship line, and this arc has been shaving the part of the renderer that
+the remaining slice removes.**
+
+### The arithmetic that condemns the current direction
+
+12,181 bytes are actually written to the FB per frame (entry 136). A
+generation costs 2.2 vints = ~843,700 cycles across both CPUs.
+
+    843,700 cycles / 12,181 bytes = 69 CYCLES PER BYTE WRITTEN
+
+A write costs 2-8. **We are spending 10-30x the store cost on deciding
+and fetching what to store.** Entry 137 reached "not stores" by
+arithmetic; this is the same fact stated as a ratio, and it says the
+renderer's cost is per-pixel WORK, not per-pixel traffic.
+
+You cannot shave 69 down to 10 by removing round trips, widening a
+counter, or re-timing a handshake. **Every card in this arc -- T, T2,
+T3, U -- attacks the 10, and the 59 is the per-pixel decision the pivot
+deletes.**
+
+### What ARCHITECTURE.md Section 4 already says, and it fits in one vint
+
+    "residual 32X pass  ~= 0.26 of a screen   against a 1.6-pass budget
+     leaving            ~= 1.3 passes for sprites
+     That is the whole point of the exercise, and it fits."
+
+The FG layer splits: FG cat-1 (priority) tiles stay in the 32X
+framebuffer painted over the sprites; the MD VDP draws FG cat-0 plus the
+whole BG. Measured demand: 307-340 priority tiles of 1189 visible, ~26%
+of the screen. The blocker is priority depth (S16 interleaves ten deep,
+`jts16_prio.v:84-95`, against the 32X's one boundary), NOT colour --
+peak demand is 21 distinct sets against an MD capacity of 8, a 2.6x
+grind and not a 32x wall.
+
+### And most of it is already on the ship line
+
+    MDBGALL=1   BG on the MD plane
+    MDSPR=1     mob-class sprites as MD HARDWARE sprites --
+                "claimed records never touch compose or the FB"
+    MDSTATIC=1  per-scene static MD pen tables, pinned against eviction
+    PENMATCH=1  FB groups painted with the MD's quantised pens
+
+**The pivot is not a proposal. It is ~80% shipped.**
+
+### The missing slice, and what actually blocks it
+
+`CAT1MD` is NOT on the ship line. The Makefile (2181-2187):
+
+    "C1 step 1: FG cat-1 cells are emitted on MD plane A with the
+     priority bit instead of blanked. Pixel-neutral by construction
+     while the FB keeps composing cat1; step 2 restricts the FB cat1
+     pass to SH-2 sprite rows/strips (THE 0.44 V/GEN SLAVE LEVER)."
+
+Step 1 was built, **passed on stills, FAILED Mike's play pass on
+2026-09-07 (shimmer, transform palette), and was reverted.**
+
+**So the last architectural cut in the project is blocked on a COLOUR
+defect, not on a performance question or a design unknown.** 0.44 v/gen
+is the named figure for step 2 alone; Section 4's design arithmetic
+promises considerably more and is the thing that actually reaches the
+bar.
+
+### The part that makes this actionable rather than a lament
+
+**The colour work this thread has done all arc is the groundwork for
+exactly that shimmer.** `docs/audit/round_sets_definitive.txt` -- the
+per-round set lists walked cell by cell at f700, replacing the sampled
+census that was taken during the scene load and was wrong -- plus the
+MDP_LINES colour-to-line bake and the cycled-set findings (entries
+123/125/129) are precisely the data CAT1MD needed and did not have on
+2026-09-07.
+
+CAT1MD failed against a colour model we have since proved wrong and
+rebuilt. **It has never been tried against the corrected data.**
+
+### The recommendation
+
+Stop shaving the software renderer. Re-open CAT1MD step 1 against
+`round_sets_definitive.txt` and the corrected per-round bake, gate it on
+Mike's play pass as before, and if it holds, build step 2.
+
+The measurement work is not wasted -- the body stamps still tell us
+where the residual lives and the widened counter is still needed. But it
+is no longer the main line. **The main line is finishing the pivot.**
