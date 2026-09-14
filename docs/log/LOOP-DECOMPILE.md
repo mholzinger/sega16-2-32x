@@ -6244,3 +6244,58 @@ boss and in level 2. Whatever Mike is seeing about text being "present
 in memory until the transformation" is not visible as a missing or
 garbled glyph in these frames, and needs one more sentence from him
 before anyone chases it.
+
+---------------------------------------------------------------------
+## 130. Mike's two answers: the black blocks PERSIST (so not pop-in), and the stale glyphs are the masked capture's SYMMETRIC failure -- a clear that does not mark (2026-09-14)
+
+**1. The black blocks stay.** Mike: "stays present as a black box until
+it moves past the animated background scroll." So it is not tile
+residency pop-in (129's hypothesis), which fills in. It is a cell that
+is permanently wrong and scrolls with the map.
+
+And it is not a refused colour set either: entry 129 established that
+round 0's displayed pages 0-9 use only sets 74-101, and all 28 of those
+are in round 0's table. So for the graveyard the cause is neither the
+set list nor the fill rate. What is left is per-CELL: the tile CODE
+resolving to the blank slot permanently, or that code's ART being blank
+in our bake when it is not blank in the ROM. The builder's own
+blank-cell census (LOOP29 237: tv_b_noslot, tv_b_cut, tv_b_dirty) is
+pointed at exactly this and is the instrument to re-read; and entry
+107's unpacker off-by-one is the reason a specific code could be blank
+in our art and not in Sega's.
+
+**2. The stale glyphs, and this one has a mechanism.** Mike's
+screenshots/20260914_150200-bldP.png, boxed by him: single text glyphs
+left scattered across the playfield at screen rows 8-11 -- characters
+that were written and should have been cleared after the Zeus pop-in,
+and were not.
+
+**This is the masked text capture's other failure direction, and note
+65 predicted half of it.** Note 65 warned that a text writer outside
+the builder's seven FMGATE entry points would write where nothing reads
+and its glyphs would VANISH. The mask has the symmetric failure too: a
+CLEAR whose row group is not marked is not captured, so TEXT_U keeps
+the old glyph and the port keeps drawing it. A missed write loses a
+character; a missed clear KEEPS one. Mike is seeing the second.
+
+Before card O the master captured all 928 longs every vint, so every
+clear was picked up whether or not it marked. Card O made the capture
+conditional on the mark. So this is a card O regression by construction
+and it is the first visible cost of that card.
+
+**The suspects are the list from entry 122**, the text writers that are
+NOT among 0x3A9A / 0x3AA4 / 0x3AAE / 0x153E / 0x4D88 / 0x369C /
+0x1ACCA: own-loop writers at 0x057E, 0x162E (from 0x1608), 0x37D0
+(the score writer, from 0x3766), 0x4212 (from 0x42D8), 0x469C (from
+0x4554/4568/457C/4590/45A4), 0x4D3A (from 0x4D12/0x4D1E), plus the two
+sites that STASH a text pointer into an object field (0x56DC into
+a0+36, 0x64CA into fp+108) and the eight further writers of those
+fields. Any of these that clears rather than writes produces exactly
+this.
+
+**And it strengthens note 65's recommendation.** Marking at each of
+sixty-one call sites is the fragile design; masking the DESTINATION at
+the point of use -- so every write and every clear, wherever it comes
+from, lands in a mirror whose group mark is derived from the address
+itself -- covers the stash sites and the clears in one place. That was
+the advice for fold 5; it applies to the mask today.
