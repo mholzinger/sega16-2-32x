@@ -3709,8 +3709,18 @@ void shim_vblank(void) {
 				{	/* the master captured with this post's mask: start afresh.
 					 * No echo (bailed vint) = keep accumulating. */
 					uint16_t c4m = *mars_comm4;
+					/* Any echo that proves flip_span RAN is a consume:
+					 * the capture sits above the guard, so a declining
+					 * vint captured too. Under ECHOCENSUS the decline
+					 * echo is tagged F1F1/F1F2/F1F3 instead of the plain
+					 * F1FF (NOTES 45), and without these three the census
+					 * build alone kept re-marking rows it had already
+					 * captured -- a slower rom than the ship measuring
+					 * the ship's guard. */
 					if (c4m == 0xF102 || c4m == 0xF103 || c4m == 0xF1FF
-					    || c4m == 0xF104 || c4m == 0xF1FE) txt_mask = 0;
+					    || c4m == 0xF104 || c4m == 0xF1FE
+					    || c4m == 0xF1F1 || c4m == 0xF1F2
+					    || c4m == 0xF1F3) txt_mask = 0;
 				}
 #endif
 #ifdef GAME_GATE
