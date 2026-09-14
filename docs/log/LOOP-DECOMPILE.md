@@ -6555,3 +6555,59 @@ that to SDRAM write-through stores, because the compose target on this
 line is sbuf in SDRAM, not the framebuffer. That correction is what
 makes this entry's arithmetic work: the two FB passes are the CLEAR and
 the BLIT, and nothing else on the line writes the framebuffer in bulk.
+
+---------------------------------------------------------------------
+## 135. CORRECTION to 134, forced by the builder's NOCLEAR result: the line has ONE framebuffer pass, not two, and my 0.64 is DERIVED not measured (2026-09-14)
+
+The builder tested 134's decomposition the right way -- NOCLEAR on the
+168 stack -- and R FELL, 40.7 to 33.2, floor 1.57 to 1.93. They
+attribute it to DIRTYROW enlarging the blit when the clear stops making
+rows uniform, and say NOCLEAR therefore cannot test the claim on this
+line. Both halves are right, and there is a bigger error underneath.
+
+**Answering their first question straight: 0.64 a pass is DERIVED, not
+measured.** ARCHITECTURE.md's 6.76 MB/s traces to LOOP 20 -- 13.6 SH-2
+cycles per longword of which 2.7 is instruction issue, from ares at
+47.34 us/row. 71,680 bytes at that rate is 10.6 ms, and 10.6 of a
+16.67 ms vint is 0.636. So the figure is a per-row ares number scaled
+to a full screen. It was never measured as a pass on hardware, and the
+rig has since charged 1.8-2.8x what ares charges everywhere it prices
+memory. The builder's instinct that the per-pass cost may not be
+constant is the right one to hold.
+
+**And the structural error, which is mine.** 134 said "clear + blit,
+two full framebuffer passes". On this line the compose target is
+`sbuf`, a plain `static uint8_t[336*232]` in SDRAM (m_main.c 1836), and
+LOOP29 6444 already corrected 252 on exactly this point. So the line
+writes the FRAMEBUFFER once -- the blit -- and the clear is an SDRAM
+clear of sbuf, not an FB pass at all.
+
+    134 said   clear (FB) + blit (FB) = 1.27 of the 1.57
+    actual     blit (FB) 0.64 + clear (SDRAM) + protocol = 1.57
+
+That is why NOCLEAR could not move the floor by a pass: it never
+removed one. It removed an SDRAM clear and, through DIRTYROW, enlarged
+the one real FB pass. The builder's diagnosis is right and my
+experiment design was wrong at the premise.
+
+**What survives of 134, and it is the part that matters.** DIRECTFB is
+still the lever, and the reason is unchanged even though my arithmetic
+was: it makes the compose write the FB back bank directly so the
+staging-plus-blit copy disappears. The flag's own header cites FBBENCH
+measuring FB writes at 0.98-0.99x SDRAM writes, so the copy buys
+nothing and costs a full pass of stores. That is a claim about removing
+a COPY, not about removing one of two FB passes, and it does not depend
+on 134's bad framing.
+
+**What I would NOT do now: the corrected ablation.** NOCLEAR plus a
+forced full-row blit would answer a question about my model rather than
+about the machine, and it needs two builds. The same question falls out
+free of a measurement I already asked for in NOTES 74 -- FB BYTES
+WRITTEN PER GENERATION, split by phase, on hardware. If the blit is
+~71 KB and the clear is SDRAM, the decomposition is settled without
+ablating anything, and the per-pass cost stops being derived.
+
+**Their second question, and my answer is unambiguous: start the
+protocol workstream.** 64% of the line's generation sits in it on their
+own census, it does not depend on which of us is right about passes,
+and the pass question now has a cheaper answer than an ablation.
