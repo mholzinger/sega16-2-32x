@@ -6064,3 +6064,70 @@ this game the transformation IS this full-screen scene: the player
 collects three spirit balls, the picture cuts to the chevron plane with
 the head rising, and the scene ends. Pages 10/11 and 0xFFF148 mark the
 whole of it.
+
+---------------------------------------------------------------------
+## 127. CORRECTION to 92-94: 0xFFF148 is an OBJECT INDEX + 1, not a cutscene flag. And the tape cannot desynchronise from the game, so the demo's divergence is not input timing (2026-09-14)
+
+The builder's page-select probe says our port never selects a page >= 10
+in 5,400 frames while the arcade runs the transformation twice, and
+proposes that the tape-driven demo diverges because GAMEGATE releases
+~62 game frames per 64 vints and open-loop inputs then land at the
+wrong moments. Two things from the bytes.
+
+**1. What 0xFFF148 actually is.** The object dispatcher at 0x398E walks
+64 slots from 0xFFC000 in 128-byte strides, using 0xFFF109 as the LOOP
+INDEX (cleared 0x3992, incremented 0x39BA, bounded at 64 by 0x39BE):
+
+    3996  tstb %fp@(0)              slot active?
+    399c  moveb 0xFFF148,%d0
+    39a0  beq 0x39a8                zero -> run this object's handler
+    39a2  cmpb 0xFFF109,%d0         else run ONLY object (0xFFF148 - 1)
+    39a6  bne 0x39b0                every other active object -> jsr 0x3F04
+    39a8  moveal %fp@(2),%a0 ; jsr (a0)
+
+and the transformation sets it at 0x9104 with
+
+    moveb 0xFFF109,0xFFF148 ; addqb #1,0xFFF148
+
+i.e. **the object currently running writes its own slot index + 1**, which
+freezes every other object and leaves itself the only thing updating.
+So 0xFFF148 is "object N-1 owns the frame", and the value 1 that entries
+92-94 read as "cutscene on" means object 0, the player, owns it.
+
+That matters for fold 4: MD_STATE carries this byte as a cutscene FLAG.
+It is a slot index, so any future use that tests it for a particular
+scene is testing which object seized the loop, not which scene is up.
+The page select (126) is the scene marker; this is the object marker.
+
+**2. The tape CANNOT drift against the game frame, so the builder's
+hypothesis as stated is falsified.** The demo frame counter 0xFFF02A is
+incremented at 0x12EC, and the tape is read at 0x13F2 indexed by that
+same counter. Their call sites are ONE INSTRUCTION APART:
+
+    97c  bsrw 0x12ec     0xFFF02A += 1
+    980  bsrw 0x1366     read the ports / play the tape at index 0xFFF02A
+
+Both are in the same per-game-frame routine. A vint the game does not
+get is a game frame it does not run, and the tape does not advance
+either. Inputs cannot land "at the wrong moments" through a 62-of-64
+release rate; the tape and the game step together by construction.
+
+**So what else can make our demo play a different game?** The one thing
+the program READS that our port has to synthesise: tile RAM. Entry 99
+found the only in-play tile-RAM accessor is 0x683C, which READS tile
+words at computed offsets (0x6936-0x6A84) as the ground and wall test
+-- "which is why a ledge the port does not draw still holds the player
+up". Our port keeps that data in the framebuffer hole across a
+double-buffered bank and replays it with restore_pages after every
+flip. If any page is stale or missing in the bank the game reads, the
+collision answer differs, the player lands where the arcade did not,
+and from that frame on the demo is a different game -- which would
+show up exactly as "never collects the three spirit balls".
+
+**The test that would settle it in one run, and it is cheaper than a
+frame-by-frame diff:** log object 0's position (0xFFC000's coordinate
+fields) once per GAME FRAME on both machines and find the first frame
+they differ. If the divergence starts at a landing or a ledge, it is
+the collision read-back. If it starts mid-air with identical inputs, it
+is something else. Positions are 64 bytes a second; the whole demo fits
+in a few KB.
