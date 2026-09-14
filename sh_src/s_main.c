@@ -19,6 +19,39 @@ static inline uint16_t frt_s(void)
  * in LOOP 8 — the master owns all three now, off the DREQ packet.) */
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
+#ifdef CHAIN_METER
+/* NOTES 78 / LOOP29 292: THE SLAVE CHAIN METER, RELOCATED AND SELF-CALIBRATING.
+ *
+ * WHY THE OLD ONE WAS VOID: it accumulated at 0x2603A7D8, which is also
+ * SPRLATE's lean base (m_main.c ~915) -- and the shipping line carries
+ * -DSPR_LATE.  Worse, SPRLATE writes the CACHED alias 0x0603A7D8 from
+ * the master while this wrote the UNCACHED 0x2603A7D8 from the slave, so
+ * a master writeback silently reverted the slave's sums.  Measured on
+ * the attract: busy ticks 0 against 3817 links.  A zero that is a
+ * collision, not a measurement.  The 0x3A790 slice meter shares the
+ * boot-benchmark's block ([0..4]) for the same reason.
+ *
+ * HERE: the audited-free PH scratch (0x28E38-0x28E7F, m_main.c ~1157),
+ * which is PROBE-ONLY and unused unless PHASE_CENSUS is on -- verified
+ * zero across a 4000-frame attract on the line build before use.
+ *   [0] slave_concurrent_k busy ticks   [1] links
+ *   [2] entry-to-entry ticks            [3] intervals
+ *   [4] slave_window_k pickup ticks     [5] pickups
+ * [2]/[3] CALIBRATES THE SLAVE TICK against a period the run already
+ * knows (frames / generations), so nothing here assumes the phi/8
+ * prescale the way a ticks->vints conversion otherwise would. */
+#if defined(PHASE_CENSUS)
+#error "CHAIN_METER's SCM shares PHASE_CENSUS's PH scratch - build them separately"
+#endif
+#define SCM ((volatile uint32_t *)0x26028E40)
+static uint16_t scm_prev;
+static uint8_t  scm_have;
+#define SCM_ENTRY() do { \
+        uint16_t e_ = frt_s(); \
+        if (scm_have) { SCM[2] += (uint16_t)(e_ - scm_prev); SCM[3] += 1; } \
+        scm_prev = e_; scm_have = 1; } while (0)
+#endif
+
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
 extern void text_capture(void);              /* m_main.c .ramtext */
 #endif
@@ -111,9 +144,8 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
         {
             uint16_t bt = frt_s();
             slave_window_k(bc);
-            ((volatile uint32_t *)0x2603A790)[6] +=
-                (uint16_t)(frt_s() - bt);    /* slice-blit pickup time */
-            ((volatile uint32_t *)0x2603A790)[7] += 1;
+            SCM[4] += (uint16_t)(frt_s() - bt);   /* slice-blit pickup time */
+            SCM[5] += 1;
             SYNC[4] = 0;
             SYNC[5] = bc;
             return;
@@ -319,10 +351,10 @@ __attribute__((section(".ramtext"))) void s_main(void)
 #ifdef CHAIN_METER
                 {
                     uint16_t bt0 = frt_s();
+                    SCM_ENTRY();
                     slave_concurrent_k(cmd);
-                    ((volatile uint32_t *)0x2603A7D8)[6] +=
-                        (uint16_t)(frt_s() - bt0);   /* true busy ticks */
-                    ((volatile uint32_t *)0x2603A7D8)[7] += 1;
+                    SCM[0] += (uint16_t)(frt_s() - bt0);   /* true busy ticks */
+                    SCM[1] += 1;
                 }
 #else
                 slave_concurrent_k(cmd);     /* concurrent band compose */
@@ -363,10 +395,10 @@ __attribute__((section(".ramtext"))) void s_main(void)
 #ifdef CHAIN_METER
                     {
                         uint16_t bt0 = frt_s();
+                        SCM_ENTRY();
                         slave_concurrent_k(nc);
-                        ((volatile uint32_t *)0x2603A7D8)[6] +=
-                            (uint16_t)(frt_s() - bt0);
-                        ((volatile uint32_t *)0x2603A7D8)[7] += 1;
+                        SCM[0] += (uint16_t)(frt_s() - bt0);
+                        SCM[1] += 1;
                     }
 #else
                     slave_concurrent_k(nc);

@@ -2121,7 +2121,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS)
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2872,6 +2872,66 @@ void shim_vblank(void) {
 		{
 			uint8_t tag = (uint8_t)((st_vc >> 3) & 7);
 			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | st_val[tag]);
+		}
+	}
+#endif
+#ifdef TRIP_CENSUS
+	/* NOTES 78 / LOOP29 292: THE GENERATION TRIPLE. Under GAMEGATE the
+	 * 68000 only advances when we release it, so
+	 *     generations/sec <= releases/sec <= presented + fallbacks
+	 * and "the generation takes 2.4 vints" may be a CONSEQUENCE of
+	 * presenting 26 of 64 rather than a cause. Three numbers settle it.
+	 * Per 64 vints, on four tags (16 vints each, so the rig's rate-limited
+	 * screenshots get twice the samples per tag an 8-tag census gets):
+	 *   0 GENERATIONS LAUNCHED  (master's count, over COMM6 tagged 0xA000)
+	 *   1 68K RELEASES          (0xFFA0F6 delta: token releases + fallbacks)
+	 *   2 GAMEGATE FALLBACKS    (0xFFA0F4 delta; token releases = tag1 - tag2)
+	 *   3 FRAMES PRESENTED      (FS bank changes, BOOT_FLIPRATE's method)
+	 * Reading:
+	 *   0 ~ 1 > 3   we compose frames nobody sees; the wall is presentation
+	 *   0 ~ 3 < 1   the game runs ahead; generations are being skipped
+	 *   all equal   self-gating loop -- 2.47 is an equilibrium, not a cost
+	 * ENCODING, and it is NOT the 8-tag census layout: the nine-bit word
+	 * is [8:7] tag, [6:0] value, so the value carries the FULL 0..64 range
+	 * a per-64-vint count can take. The first cut used the 3-bit tag and a
+	 * 6-bit value, and BOTH gens and releases came back as a flat 63 --
+	 * saturation reading exactly like a measurement. Nothing real can
+	 * reach 127 here, so a 127 is a fault, not a fast machine.
+	 *
+	 * VALIDATION BEFORE USE (the decompile thread's rule, NOTES 77): tag 3
+	 * must equal what BOOTFLIPRATE alone reports on the same build and
+	 * scene, and tag 1 what BOOTGAMERATE reports under GAMEGATE. Both
+	 * answers are already known. Tag 0 checks against nat_score's gens. */
+	{
+		static uint8_t  tr_vc, tr_val[4], tr_fbbase;
+		static uint16_t tr_relbase, tr_n, tr_fslast;
+		/* presented: count the FB bank changing, readable at FM=0 only */
+		if (!(*(volatile uint16_t*)0xA15100 & 0x8000u)) {
+			uint16_t fs = *(volatile uint16_t*)0xA1518A & 1u;
+			if (fs != tr_fslast) tr_n++;
+			tr_fslast = fs;
+		}
+		{	/* generations: the master re-posts every vint, so a rejected
+			 * read (the 68K's own 0xB101 announce, which HAS bit 15 set
+			 * and is what a bare `w & 0x8000` reader would claim) simply
+			 * keeps the last good value instead of reporting garbage */
+			uint16_t w = *mars_comm6;
+			if ((w & 0xF000u) == 0xA000u) { tr_val[0] = (uint8_t)(w & 127); *mars_comm6 = 0; }
+		}
+		if (++tr_vc >= 64) {
+			uint16_t rel = *(volatile uint16_t*)0xFFA0F6;
+			uint8_t  fbk = *(volatile uint8_t*)0xFFA0F4;
+			uint16_t rd  = (uint16_t)(rel - tr_relbase);
+			uint8_t  fd  = (uint8_t)(fbk - tr_fbbase);
+			tr_relbase = rel; tr_fbbase = fbk;
+			tr_val[1] = (uint8_t)(rd > 127 ? 127 : rd);
+			tr_val[2] = (uint8_t)(fd > 127 ? 127 : fd);
+			tr_val[3] = (uint8_t)(tr_n > 127 ? 127 : tr_n);
+			tr_n = 0; tr_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((tr_vc >> 4) & 3);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 7) | tr_val[tag]);
 		}
 	}
 #endif

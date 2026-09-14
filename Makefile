@@ -2603,6 +2603,28 @@ endif
 ifdef GLOWPROBE
 SHCCFLAGS += -DGLOW_PROBE
 endif
+# `make ... BOOTFLIPRATE=1 TRIPCENSUS=1` = NOTES 78 / LOOP29 292: THE
+# GENERATION TRIPLE. Under GAMEGATE the generation rate may be gating its
+# own input, so wall figures that assume an independent rate are suspect.
+# Per 64 vints on four tags: 0 generations LAUNCHED (master, over COMM6
+# tagged 0xA000 -- NOT a bare bit 15, which the 68K's own 0xB101 announce
+# would satisfy), 1 68K releases (0xFFA0F6 delta), 2 GAMEGATE fallbacks
+# (0xFFA0F4 delta), 3 frames presented (FS bank changes). Token releases
+# = tag1 - tag2. Reading: 0~1>3 = we compose frames nobody sees; 0~3<1 =
+# the game runs ahead and generations are skipped; all equal = a
+# self-gating loop, and the 2.47 v/gen is an equilibrium, not a cost.
+# Tags 3 and 1 have KNOWN answers (BOOTFLIPRATE, BOOTGAMERATE) -- check
+# them before the number sizes anything.
+ifdef TRIPCENSUS
+ifndef BOOTFLIPRATE
+$(error TRIPCENSUS needs BOOTFLIPRATE=1 - it supplies the value-channel flood)
+endif
+ifndef GAMEGATE
+$(error TRIPCENSUS measures the GAMEGATE release rate - add GAMEGATE=1)
+endif
+SHCCFLAGS += -DTRIP_CENSUS
+MDCCFLAGS += -DTRIP_CENSUS
+endif
 ifdef PALGLOW
 ifndef PALSTATIC
 $(error PALGLOW rides the PALSTATIC scene machinery - add PALSTATIC=1)

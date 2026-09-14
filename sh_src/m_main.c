@@ -1075,6 +1075,15 @@ static void hs_promote(void);
 #define HS_PROMOTE() ((void)0)
 #endif
 static uint8_t nat_gen_open;     /* a whole-frame compose is in flight */
+#ifdef TRIP_CENSUS
+#if defined(PHASE_CENSUS)
+#error "TRIP_CENSUS's TRIPS shares PHASE_CENSUS's PH scratch - build them separately"
+#endif
+static uint16_t trip_launch;     /* NOTES 78: generations LAUNCHED, ever.
+                                  * Sampled per 64 vints in the V-ISR and
+                                  * handed to the 68K over COMM6. */
+#define TRIPS ((volatile uint32_t *)0x26028E60)
+#endif
 static uint8_t nat_gen_ready;    /* closed generation awaiting its blit */
 #ifdef BLIT_CHASE
 #ifndef LAUNCH_EARLY
@@ -8232,6 +8241,38 @@ void visr_vbi(void)
         MARS_SYS_COMM6 = (uint16_t)(0x8000 | gr_val);
     }
 #endif
+#ifdef TRIP_CENSUS
+    /* NOTES 78 / LOOP29 292: GENERATIONS LAUNCHED PER 64 VINTS, handed to
+     * the 68K so the value channel can post it beside the 68K's own two
+     * numbers (releases and presented frames).
+     *
+     * THE CHANNEL'S TRAP, and why this does not repeat PHASERIG's death:
+     * the 68K writes 0xB101 to COMM6 before its post, and 0xB101 HAS BIT
+     * 15 SET, so GLOW_RATE's bare `w & 0x8000` reader can claim the
+     * announce and report (0xB101 & 63) = 1 as a rate. Tag four bits
+     * instead: 0xA000 is neither the announce (0xB...) nor any
+     * STAMP_CENSUS word (bit 15 clear). A vint whose read is rejected
+     * simply keeps the last good value; the master re-posts every vint. */
+    {
+        static uint16_t tl_base, tl_vc, tl_val;
+        if (++tl_vc >= 64) {
+            uint16_t d = (uint16_t)(trip_launch - tl_base);
+            tl_base = trip_launch;
+            tl_vc = 0;
+            tl_val = d > 127 ? 127 : d;  /* 7 bits: the natural range is
+                                          * 0..64, so nothing real can
+                                          * saturate and a 127 is a fault */
+            /* SANITY SLOT, audited-free PH scratch (probe-only, verified
+             * zero on the line across a 4000-frame attract): [0] the last
+             * delta, [1] launches ever. Lets ares check the channel's
+             * tag 0 against the counter itself with no symbol lookup --
+             * the known-answer check the value has to pass first. */
+            TRIPS[0] = d;
+            TRIPS[1] = trip_launch;
+        }
+        MARS_SYS_COMM6 = (uint16_t)(0xA000 | tl_val);
+    }
+#endif
 #ifdef STAMP6_CENSUS
     s6_first = 1;                        /* 266a: arm for this vint's first flip_span */
 #endif
@@ -9628,6 +9669,11 @@ RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint,
                                   * the bins against W1) */
 #endif
         nat_gen_open = 1;
+#ifdef TRIP_CENSUS
+        trip_launch++;           /* NOTES 78: count LAUNCHES, not closes --
+                                  * the decompile thread's question is how
+                                  * often we START a compose. */
+#endif
     }
 #ifdef GEN_SKIP
 gen_skipped: ;
