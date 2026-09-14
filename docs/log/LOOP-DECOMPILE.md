@@ -5874,3 +5874,70 @@ cutscene shows hard black dither around the iris that may or may not be
 the arcade's own. Both want a denser capture sweep or Mike's bldJ
 comparison, which he declined; neither is diagnosed here and neither
 should be attributed to card O without one.
+
+---------------------------------------------------------------------
+## 124. The round/area entry the builder asked for: 0xFFF14E is the PROGRESS COUNTER with three writers, and the tape reader is one branch away from playing back CREDITED play (2026-09-13)
+
+**The round entry, and it is clean.** 0xFFF14E is the game's progress
+counter, and it has exactly three writers in the whole program:
+
+    0x05DA  clrw 0xFFF14E                        game start (reset to round 0)
+    0x065C  moveb 0x1848[(0xFFF031 & 0x18) >> 3] ATTRACT ONLY (guarded by
+                                                 btst #0,0xFFF026 at 0x0646)
+    0x0BCA  addqb #1,0xFFF14E                    round clear
+
+and 0xFFF142, the ROUND, is DERIVED from it every scene load:
+
+    0x0662  lea 0x1CDA,%a0 ; moveb %a0@(0,0xFFF14E & 7),0xFFF142
+    0x1CDA  = 00 01 02 03 04 00 00 00
+    0x1694  lea 0x1CE2 ; index by 0xFFF142 & 7 ; -> tile bank .w + the
+            round's packed tilemap pointer .l, then unpack (0x16BE/0x16DE)
+
+So a credited game starts wherever 0xFFF14E says. The minimal patch is
+at 0x05DA: `clrw 0xFFF14E` (42 78 F1 4E) and `clrw 0xFFF142` (42 78 F1
+42) are eight consecutive bytes, and the second is REDUNDANT because
+0x0662 recomputes 0xFFF142 from 0xFFF14E on both the attract and the
+credited path. Replace both with `move.w #N,0xFFF14E` (31 FC 00 NN F1
+4E, six bytes) plus one `nop`. That is the whole feature: one constant,
+and the game boots into round N.
+
+**The area is an object field, not a variable.** The camera X reaches
+the scroll registers through 0xFFF120 / 0xFFF0E2, and 0x2390-0x23AC
+computes those from `%fp@(16)` -- the camera object's own position, in
+a work-RAM record. There is no single "area" byte to write. The spawn
+script at 0x1D2DC is keyed on camera X (12-byte records, camX first),
+so the area IS the camera position, and the cheap way to reach one is
+to start the round and walk -- which the tape already does.
+
+**And the tape is one branch from playing back CREDITED play.** Entry
+111 read the reader at 0x13C0-0x13F6; the gate is the FIRST
+instruction:
+
+    13C0  btst #0,0xFFF026     attract?
+    13C6  beqs 0x13F8          NOT attract -> skip the tape, use the live ports
+    13E4  tstb 0xFFF15E        recorder armed?
+    13EA  write d0,d1,d5 to the tape   (RECORD)
+    13F2  read  d0,d1,d5 from the tape (PLAY BACK)
+
+`beqs 0x13F8` at 0x13C6 is two bytes (67 30). NOP it and the tape drives
+CREDITED play as well as the attract. Two dependencies come with it:
+the tape pointer is chosen by `(0xFFF031 & 0x18) >> 1` from the table
+at 0x1834 -- in credited play 0xFFF031 holds whatever the attract left,
+so the pointer must be forced -- and the index is 0xFFF02A, which is
+zeroed at 0x06D0 at game start and incremented at 0x12EC. 0x12EC's
+caller has to run in play for the index to advance; if it does not, the
+patch also has to drive the counter.
+
+**The chevron is NOT gameplay-only.** Measured on a no-coin MAME run:
+0xFFF148 goes non-zero at f1054-1164 and again f4439-4549, both with
+0xFFF031 = 0x0C, which is a DEMO step. The transformation cutscene runs
+inside the attract demo, about 17.6 s in, and the rig's first demo
+window is 14-28 s after launch. No entry point is needed to reach it.
+
+**Instrument limit found while trying:** the MiSTer screenshot FIFO
+rate-limits to roughly one capture every 6 seconds -- eight requests
+one second apart returned eight shots spanning 44 seconds. So the rig
+cannot capture consecutive frames, and neither a 110-frame cutscene nor
+an alternating shimmer can be sampled through it. Dense picture work
+has to be ares (one run per frame, LOOP29 257's trap) or a rom-side
+capture.
