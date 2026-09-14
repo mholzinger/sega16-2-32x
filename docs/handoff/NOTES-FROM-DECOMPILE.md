@@ -5042,3 +5042,49 @@ right instrument by the same method. That is the loop working. The
 thing to take from it is narrower than "ares lies": ares does not
 charge for framebuffer writes, and this port's floor is framebuffer
 writes. Every future number gets read with that in front of it.
+
+---------------------------------------------------------------------
+## 74b. 2026-09-14 (Mike -> both threads, relayed with one distinction). Validation read-back is dead weight and should go. The COMPOSE's read-back is not validation and costs picture
+
+Mike, on the DIRECTFB caveat: "we don't care about reading back a
+screen image to validate -- there is literally nothing we can do once
+it's shipped, so a validation with no error correction is useless."
+
+**Agreed, and it should be applied.** Every read-back whose only output
+is a counter belongs in a probe build and not on the line. The shipping
+flags are already nearly clean of them -- `TILE_VERIFY` is probe-only,
+and the surviving one I can find is md_main.c's PLANE-A WIPE RECHECK at
+0x0337, which re-reads the previous playback's first name-table cell at
+vint top and increments 0xFFA030 on a mismatch. It corrects nothing.
+Mike's rule says delete it from the line and keep it behind a flag.
+
+**But do not carry the rule into the compose, because there it is not
+validation.** Two different things share the word "read-back":
+
+  1. VALIDATION: read what we wrote, compare, count a mismatch, do
+     nothing. Useless on the line, by Mike's rule. Remove.
+  2. COMPOSE-DESTINATION READS: `urow[sx]` in DFB_SHADOW_PIX reads the
+     pixel UNDERNEATH so the shadow can be that colour's dimmed twin
+     (m_main.c 444-450). It is not checking anything. It is how the
+     picture is drawn. Remove it and the shadow stops being a dim and
+     becomes the odd-column dither -- which is already what Mike
+     photographed as the striped curtain over MD-plane content
+     (LOOP-DECOMPILE 128).
+
+**So DIRECTFB's picture cost is real and it is specifically this:** the
+striped shadow stops being partial and becomes universal, because
+nothing is readable underneath any more. That is a known, visible,
+Mike-reported defect getting worse, and it should be priced into the
+card rather than discovered on the rig.
+
+**And it has a free mitigation already on the table.** Entry 128's
+first option: dither BOTH parities instead of odd columns only. It
+needs no information about the pixel underneath, it is one character,
+and a uniform 50% veil is strictly closer to the hardware's dim than a
+striped curtain is. If Mike accepts a veil where he rejects a stripe,
+DIRECTFB's picture cost drops to nothing worth arguing about.
+
+Recommended order for the card: dither both parities FIRST, on the
+current line, and get Mike's eye on it. If the veil passes, DIRECTFB's
+only remaining cost is the tearing gate its own header already
+designs.
