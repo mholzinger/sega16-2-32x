@@ -8953,3 +8953,85 @@ against a case whose answer is already known -- caught all three.
    patch of the INSERT COIN blocks. `tools/rig_value.py` now requires
    the flood to cover 40% of the sampled band and reports NO FLOOD
    otherwise -- 8 of 40 shots here.
+
+## 294. THE 68K'S SURPLUS FRAMES COST THE MASTER NOTHING MEASURABLE (2026-09-14)
+
+NOTES 81's isolation build. Under GAMEGATE the 68000 advances on a token
+(set by a flip echo) or after `GAMEGATE_MAXWAIT` vints without one. The
+line carries `GAMEGATEWAIT=1` -> `-DGAMEGATE_MAXWAIT=1` (`.build_flags`;
+`GATE_FREE` is NOT compiled), which is why 293's fallback count was 34.1
+and not the ~9 that MAXWAIT=4 predicts. **The counter's label was wrong,
+not the build** -- and the decompile thread's 36.2 prediction for
+MAXWAIT=1 lands on the measured 34.1.
+
+Rebuilt at `MAXWAIT=4` so the 68K runs at the compose rate instead of
+double it. `rom/night/gw4.32x`. **DIAGNOSTIC ONLY -- it runs gameplay at
+about 44% speed and must never be handed to Mike.**
+
+Rig, attract, 40 shots each, TRIPCENSUS:
+
+| per 64 vints | line (MAXWAIT=1) | ablation (MAXWAIT=4) |
+|---|---|---|
+| generations LAUNCHED | 28.8 (n=6) | **30.7 (n=7)** |
+| 68K RELEASES | 56.8 (n=6) | 26.7 (n=3) |
+| GAMEGATE FALLBACKS | 34.1 (n=7) | **0.2 (n=5)** |
+| frames PRESENTED | 27.8 (n=6) | **26.0 (n=8)** |
+
+**The flag did exactly what it was built to do and the compose rate did
+not care.** Fallbacks collapsed 34.1 -> 0.2 and the 68K's advance rate
+halved, 56.8 -> 26.7. Generations moved +1.9 and presented -1.8, both
+far inside the scene spread (gens range 11-50 on the line, 17-50 on the
+ablation).
+
+**So the ~28 surplus game frames a second cost the SH-2 nothing
+measurable, and the arbitration-pressure card is dead before it was
+written.** The master's pre-flip reads cross to MD-side memory against a
+68K doing double passes; halving that traffic moved nothing.
+
+**The bound, which is the useful form of a null.** gens 28.8 -> 30.7
+is 2.22 -> 2.08 v/gen. The per-tag standard error is about 6 counts
+(scene-driven, not noise), so the 1-SE bound on the effect is roughly
+**+-0.4 v/gen**. Against ~1.5 v/gen of master memory stall (rig
+generation 2.2-2.5 less 0.687 of master instructions, stores excluded by
+arithmetic in NOTES 77), **at most a quarter of the stall is 68K
+arbitration and at least 1.1 v/gen is something else.**
+
+**No per-word cost comes out of this.** There is no delta to divide by
+the drain+capture word count, so the number NOTES 81 wanted is still
+absent. The tree has no measured hardware per-word cost for a master
+read crossing to MD-side memory, and the two nearest candidates both
+fail:
+
+  - `m_main.c:7720-7725` "this drain is 25.0 more at 9.23 pages a flip"
+    (from LOOP-DECOMPILE 113) is 2.71 lines per 2 KB page, 5.3
+    milli-lines per longword. It is ARES-PRICED, and LOOP29 291
+    measured the same stage on the rig: post seen 22.3 lines, at the
+    guard also 22.3 -- the truth drain between those stamps costs
+    essentially nothing on hardware. 25.0 against ~0, same quantity,
+    two machines.
+  - card J (a), 256b: 7,296 uncached reads per generation removed, rig
+    unmoved (frJ 16/19/10/16/19 against frHI 21/22/8/16/17). An upper
+    bound near 10 SH-2 cycles per read, but on SDRAM, not MD-side.
+
+**What survives.** The tearing hypothesis is untouched: the truth drain
+reads staging that a running 68K is writing, and that is still a live
+candidate for Mike's bitmap corrosion. This build cannot test it -- it
+changes the writer's rate, which is the confound, not the control.
+
+### The rule this arc has now hit three times
+
+**In ares the wall is `max(echo, mtask)` and echo wins, so the SLAVE
+reads as the critical path; on the rig the master never waits, so the
+MASTER is.** LOOP29 275's "the critical path is the SLAVE, at 1.05
+against the master's 0.70" is true in ares and false on hardware, and
+every card sized from that decomposition aims at the wrong processor.
+The mechanism is the one 256b already recorded: ares charges the SH-2
+instruction cycles only, so it reports the slave's compute honestly and
+the master's stalls not at all.
+
+275 is still the document the generation card runs from. Read its split
+as an instruction-count ranking, never as a critical path.
+
+**And the slave law, from NOTES 80:** slave TIME is free (hidden, zero
+wait on the rig) but slave TRAFFIC is not (0.49 v/gen, one shared FB
+write path). Size every slave card in BYTES, never in time.
