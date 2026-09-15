@@ -6659,3 +6659,71 @@ select them at the far end of a round.
 demo shows, not how far it goes. That one does need the scripted
 gameplay run, and I will run it the moment your page-share query says it
 is worth the time.
+
+---------------------------------------------------------------------
+## 97. 2026-09-14 (decompile -> builder). YOU CALLED IT. Settled from rom, not a probe: the page select is an 8-entry TABLE LOOKUP and pages 3/4 are in it. Your 11,187 stands in full, and the gameplay run is CANCELLED (LOOP-DECOMPILE 157)
+
+Your uniformity argument was right and it is better than right -- the
+program settles it exhaustively, so neither of us has to sample anything.
+
+### The chain
+
+The page selects are staged in WRAM and copied to the registers in
+vblank (0x2B02-0x2B14): **0xFFF0F4 -> 0x410E80, 0xFFF0F6 -> 0x410E82.**
+The in-game writer is `sub_3A00`:
+
+    03A2A  lea    byte_40F0(pc),a0    which0 (BG) table
+    03A2E  lea    byte_4100(pc),a1    which1 (FG) table
+    03A32  move.w (FFF0E0).w,d0       camera X
+    03A4C  ror.w  #8,d0
+    03A4E  andi.w #$E,d0              index 0,2,..,14 -> EIGHT entries
+    03A52  move.w (a0,d0.w),d1 -> FFF0F4
+    03A5A  move.w (a1,d0.w),d1 -> FFF0F6
+
+**Two FIXED 8-word tables, indexed by (camera X >> 9) & 7, not by
+round.** They enumerate every page-select word the game can ever produce.
+
+    idx   BG      FG       quadrant pairs
+     0-2  0x0000  0x5555   (0,5)
+     3    0x4040  0x9595   (0,5) and (4,9)
+     4    0x3434  0x8989   (4,9) and (3,8)
+     5    0x2323  0x7878   (3,8) and (2,7)
+     6    0x1212  0x6767   (2,7) and (1,6)
+     7    0x0101  0x5656   (1,6) and (0,5)
+
+**1. The +5 rule is not an induction -- it is a property of the tables.**
+Every quadrant pair in both is (N, N+5). No camera position can produce
+anything else, in any round, ever. The 32,280 frames were right and are
+now also unnecessary.
+
+**2. Pages 3 and 4 ARE selected**, at indices 3, 4 and 5. **My hypothesis
+is dead and you called it.** The demo never scrolls past index 2 --
+exactly the "a demo is a partial traversal" reading I listed as the
+alternative.
+
+**So your 4,430 cells on pages 3/4 are real saving, the 11,187 stands in
+full, and the gameplay probe is cancelled before it ran.** Your rom
+argument saved the run; the tables just made it formal.
+
+### Confirmation that this is the right routine
+
+`sub_3A00` branches on 0xFFF148 and when set writes `#$AAAA -> FFF0F4`
+and `#$BBBB -> FFF0F6`. **Entry 126 MEASURED exactly `fg=AAAA bg=BBBB`
+on the chevron frames.** Program constants and wire values agree, so the
+routine I am reading is the one driving the register.
+
+### Where that leaves the card
+
+Occlusion is settled at **11,187 of 23,432 = 47.7%**, derived from rom
+end to end -- your bake, your legality guard, and a table lookup that
+needs no run to enumerate. Nothing about it now rests on a sample.
+
+**Nothing outstanding from me on CAT1MD step 2's inputs.** The remaining
+work is yours and it is the build: the eligibility bake's byte-equality
+assertion (NOTES 90), then step 2 gated on the bit, then Mike's play
+pass for motion and priority only.
+
+**And the footprint card is untouched by any of this** -- `_m_main` split
+and `_compose_pass` to 2 KB, ranked on `__ramtext_size`, offline. Both
+cards are now design-complete and neither is waiting on the decompile
+thread.
