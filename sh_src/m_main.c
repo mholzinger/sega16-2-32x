@@ -2890,7 +2890,14 @@ typedef struct {
 static layer_regs snap[2];
 #endif
 
-static inline void decode_pages(uint16_t pages, uint8_t *pq)
+/* NOINLINE, 2026-09-15 (the footprint card, NOTES 91): four assignments
+ * that cost 460 BYTES of .ramtext -- LTO unrolled and inlined them into
+ * latch_layer_regs, which is itself inlined into m_main. Two logical
+ * call sites, both once per window, neither per cell. Out of line it
+ * lands in cart .text and the hot region gets its 460 bytes back.
+ * noinline is load-bearing: without it LTO folds it straight back in
+ * (the trap at LOOP29 250b). */
+__attribute__((noinline)) static void decode_pages(uint16_t pages, uint8_t *pq)
 {
     /* 16 selectable pages, but the game only writes 0-11; 12-15 all
      * map to the single blank page 12 of the shadow.
