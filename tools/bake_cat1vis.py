@@ -11,8 +11,19 @@ foreground) before lyr2 (scr2, the background) unconditionally, and
 tile_or_obj (line 58) returns the sprite or the tile but never nothing.
 So an opaque foreground pixel ends the search above the background.
 
-Measured 50% of all cat1 cells across the five scenes, 83% in scene 2
+Measured 50% of PAGE-0 cat1 cells across the five scenes, 83% in scene 2
 (docs/log/LOOP-DECOMPILE.md 57, 58).
+
+MIND THE DENOMINATOR -- two populations, one measurement (NOTES 93,
+LOOP29 303). Occlusion can only be TESTED where BG page 0 sits under FG
+page 7, so entry 57's 50% is 2,373 of the **4,724 PAGE-0 cat1 cells**.
+The --stats table below divides the same 2,373 by cat1 cells across all
+TEN tilemap pages (23,432) and so reports 10%. Both are right; they are
+not the same question. Verified exactly: page-0 cat1 = 4,724 and scene 2
+= 83.4%, reproducing entry 57 to the cell.
+
+The one that SIZES a card is the page-0 figure, because cells outside the
+composable BG page are never composed and so cannot be saved.
 
 Emits, beside sh_src/cat1map.bin (which says WHICH tiles are cat1):
   sh_src/cat1vis.bin   1 = this cat1 tile is VISIBLE and must be composed
@@ -93,6 +104,8 @@ def main():
         stats.append((s, cat1, vis))
 
     print('scene   cat1   visible   occluded   saving')
+    print('  (cat1/saving are over ALL TEN tilemap pages; the figure that')
+    print('   sizes a card is occluded / PAGE-0 cat1 = 50.2% -- NOTES 93)')
     tc = tv = 0
     for s, cat1, vis in stats:
         tc += cat1; tv += vis

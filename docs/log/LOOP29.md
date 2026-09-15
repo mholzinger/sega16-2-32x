@@ -9542,3 +9542,70 @@ runs today reports **10% overall and 17% in scene 2** -- 23,432 cat1
 cells, 21,059 still visible. One of the two is wrong and the docstring
 cites LOOP-DECOMPILE 57/58. Settle it before anything is sized on
 occlusion; the step-2 card does not depend on it.
+
+## 303. THE OCCLUSION "DISAGREEMENT" IS A DENOMINATOR, AND THE CAUSE IS THE PAGE (2026-09-14)
+
+LOOP29 302 flagged `bake_cat1vis.py`'s docstring (50% of cat1 cells
+occluded, 83% in scene 2) against the bake's own output (10%, 17%). NOTES
+93 called it a denominator rather than a disagreement -- both compute the
+same 2,373 occluded cells -- and proposed restricting the population to
+the scroll range to test it.
+
+**The cause is sharper than scroll range: it is the PAGE, and the match is
+exact.** Occlusion can only be TESTED where BG page 0 sits under FG page 7
+(`bake_cat1vis.py` ~88, `page == BG_PAGE`). Dividing by page-0 cat1 cells
+instead of cat1 cells across all ten tilemap pages:
+
+| scene | cat1 all pages | cat1 PAGE 0 | occluded | % of all | % of page 0 |
+|---|---|---|---|---|---|
+| 0 | 2312 | 500 | 232 | 10.0% | 46.4% |
+| 1 | 8960 | 1792 | 366 | 4.1% | 20.4% |
+| 2 | 7360 | 1472 | 1227 | 16.7% | **83.4%** |
+| 3 | 1280 | 256 | 161 | 12.6% | 62.9% |
+| 4 | 3520 | 704 | 387 | 11.0% | 55.0% |
+| **total** | 23432 | **4724** | **2373** | 10.1% | **50.2%** |
+
+**Page-0 cat1 is 4,724 -- entry 57's number to the cell -- and scene 2 is
+83.4% against its "83%".** No scroll-range approximation needed; the
+populations differ by which page the occlusion rule can apply to at all.
+
+**The figure that sizes a card is the page-0 one**, because cells outside
+the composable BG page are never composed and so cannot be saved. Both
+numbers now carry their denominator in the tool.
+
+## 304. THE CACHE GEOMETRY, DERIVED (2026-09-14)
+
+NOTES 93 gives the footprint card a target. Verified in the RTL rather
+than recalled, because the whole card rests on it --
+`srcref/S32X_MiSTer/rtl/SH/SH7604/CACHE.sv:143-151`:
+
+    WAY_TAG[n] = WAYn[CBUS_A[9:4]][`TAG] == CBUS_A[28:10];
+
+`CBUS_A[9:4]` is six bits, and `reg [5:0] LRU [64]` confirms it: **64
+sets, 4 ways, 16-byte lines = 4,096 bytes.** The tag starts at bit 10, so
+**the set pattern repeats every 1,024 bytes** and two blocks 1 KB apart
+land in the same set.
+
+A contiguous hot region of S bytes therefore consumes ceil(S/1024) of the
+four ways in every set it covers:
+
+    _compose_pass    4,836 B = 4.7 ways   SELF-EVICTING ALONE
+    _m_main         18,552 B = 18.1 ways
+                             ~23 ways against a budget of 4
+
+**`_compose_pass` overflows the whole four-way capacity by itself**, which
+LOOP29 302's symbol-table read understated: splitting `_m_main` is
+necessary and not sufficient. The target NOTES 93 sets:
+
+    inner loop (per-pixel / per-cell)        <= 2,048 B = 2 ways
+    everything else resident during compose  <= 2,048 B = 2 ways
+
+4,096 for the inner loop is NOT the goal -- it would own the entire cache
+and leave nothing for anything else.
+
+**And layout is load-bearing, not cosmetic.** The set index is an address
+function, so two small hot blocks 1,024 bytes apart still collide. Hot
+code must be laid out CONTIGUOUSLY so it spreads across all 64 sets
+rather than stacking on a few -- a linker-script section directive when
+the split lands. NOTES 93 puts that at the difference between a 60% win
+and a 10% one.
