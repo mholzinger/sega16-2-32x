@@ -8447,3 +8447,84 @@ and the DIP trick cannot substitute for it** -- the lever changes which
 round the demo shows, not how far it goes. It is worth running only if
 the builder's page-3/4 share comes back large, which is a free query on
 his side and should gate my probe rather than the other way round.
+
+---------------------------------------------------------------------
+## 157. SETTLED FROM ROM, NO PROBE NEEDED: the page select is an 8-entry TABLE LOOKUP, and pages 3 and 4 ARE in it. The builder's prediction was right and the 11,187 stands in full (2026-09-14)
+
+The builder's uniformity argument said pages 3/4 should be reachable and
+predicted my demo-only hypothesis would fail. **It fails, and the
+program proves it exhaustively rather than by sampling.**
+
+### The chain, from the register back to the table
+
+    0051C  move.l #word_410E80,(FFF0EC).w   the two page-select register
+    00524  move.l #byte_410E82,(FFF0F0).w   addresses, stashed as pointers
+
+    02B02  movea.l (FFF0EC).w,a0            the vblank copier:
+    02B06  move.w  (FFF0F4).w,d0            FFF0F4 -> 0x410E80
+    02B0A  move.w  d0,(a0)
+    02B0C  movea.l (FFF0F0).w,a0
+    02B10  move.w  (FFF0F6).w,d0            FFF0F6 -> 0x410E82
+    02B14  move.w  d0,(a0)
+
+So the page selects are staged in WRAM at **0xFFF0F4 (which0) and
+0xFFF0F6 (which1)**, and whoever writes those decides every page the
+game can ever show. `sub_3A00` is the in-game writer:
+
+    03A2A  lea    byte_40F0(pc),a0    which0 table
+    03A2E  lea    byte_4100(pc),a1    which1 table
+    03A32  move.w (FFF0E0).w,d0       camera X
+    03A36  add.w  (FFF124).w,d0
+    03A3A  addi.w #$C0,d0
+    03A4C  ror.w  #8,d0
+    03A4E  andi.w #$E,d0              -> index 0,2,..,14: EIGHT entries
+    03A52  move.w (a0,d0.w),d1 -> FFF0F4
+    03A5A  move.w (a1,d0.w),d1 -> FFF0F6
+
+**Two fixed 8-word tables, indexed by (camera X >> 9) & 7, not by round.
+They enumerate every page-select word the game can produce.**
+
+### The tables, decoded
+
+    idx   which0(BG)  which1(FG)   quadrant pairs (UL,UR,LL,LR nibbles)
+     0      0x0000      0x5555      (0,5)
+     1      0x0000      0x5555      (0,5)
+     2      0x0000      0x5555      (0,5)
+     3      0x4040      0x9595      (0,5) and (4,9)
+     4      0x3434      0x8989      (4,9) and (3,8)
+     5      0x2323      0x7878      (3,8) and (2,7)
+     6      0x1212      0x6767      (2,7) and (1,6)
+     7      0x0101      0x5656      (1,6) and (0,5)
+
+**Two results, both exhaustive rather than sampled:**
+
+**1. The +5 rule is not an induction at all -- it is a property of the
+tables.** Every quadrant pair in both tables is (N, N+5). There is no
+camera position that can produce anything else, so the rule holds for
+every round, every scene, forever, without a single frame of measurement.
+
+**2. Pages 3 and 4 ARE selected**, at indices 3, 4 and 5. **My hypothesis
+is dead and the builder called it.** The demo simply never scrolls past
+index 2 -- exactly the "a demo is a partial traversal" reading, which I
+had listed as the alternative and which is now confirmed.
+
+**So the 4,430 cells the builder found on pages 3/4 are real saving, the
+11,187 stands in full, and the gameplay probe is unnecessary.** Cancelled
+before it ran, which is the best outcome available for it.
+
+### Independent confirmation that this is the right routine
+
+`sub_3A00` branches on 0xFFF148 and, when set, writes
+`#$AAAA -> FFF0F4` and `#$BBBB -> FFF0F6` (0x3A1C-0x3A22). Entry 126
+MEASURED exactly `fg=AAAA bg=BBBB` on the chevron frames. The constants
+in the program and the values on the wire agree, so the routine I am
+reading is the one that drives the register.
+
+### One flag against my own entry 127
+
+Entry 127 corrected 0xFFF148 to "object slot index + 1, NOT a cutscene
+flag." But `sub_3A00` tests it as a BOOLEAN to select the chevron page
+pair, and entry 126 measured it taking only 0 and 1 across a whole run.
+Either it is dual-purpose like 0xFFF02A (entry 131) or entry 127's
+correction was about a different access. **Not load-bearing for anything
+current, but it should not sit in the log unremarked.**
