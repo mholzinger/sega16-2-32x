@@ -8380,3 +8380,70 @@ not a maximisation, and the builder can produce it now:
 `tools/health_mame.lua`'s coin/start pattern reaches level 1; reaching
 rounds 3-4 needs a longer scripted play. Worth doing before the bake's
 output is trusted for those scenes, and it is a probe I can run.
+
+---------------------------------------------------------------------
+## 156. The +5 rule HOLDS in rounds 2, 3 and 4 -- the 79% is confirmed. And a new one: bg pages 3 and 4 are never selected in any round's demo (2026-09-14)
+
+The builder needed rounds 2-4 because scenes 2/3/4 carry 8,824 of the
+11,187 occluded cells and my census was attract-only. Closed without a
+scripted playthrough, using entry 108's lever: **writing the round into
+the DIP round table at 0x1848-0x184F changes which round the ATTRACT
+DEMOS show.** Three runs, 9,000 frames each,
+`tools/arcade_pagesel_round.lua`, data in `docs/audit/pagesel_round{2,3,4}.txt`.
+
+**Provenance first, because entry 108 is also the entry that caught a
+whole census taken through this same patch.** The runs log 0xFFF142 and
+the tile bank 0xFFF095 beside every sample:
+
+    forced 2    round 2, bank 1
+    forced 3    round 3, bank 1 and 2
+    forced 4    round 4, bank 1 and 2
+
+Entry 108 measured BANK = [1,1,1,2,2] by round. **Bank 2 appears only in
+the forced-3 and forced-4 runs and never in forced-2.** So the patch took
+and the rounds genuinely loaded; this is not the round-0 demo wearing a
+different label.
+
+### The result
+
+    forced round   distinct (which0, which1)
+        2          (0,0) (0,5) (1,6) (2,7) (10,11)
+        3          (0,0) (0,5) (1,6) (2,7)
+        4          (0,0) (0,5) (1,6) (2,7)
+
+**Every pairing in every round is +5.** No exception in 27,000 frames
+across three rounds, on top of 5,280 attract frames. The induction the
+builder flagged as carrying 79% of the number is now a measurement in
+all five rounds. **(0,5) (1,6) (2,7) (3,8) (4,9) stands.**
+
+### The new finding, and it cuts the other way
+
+**bg pages 3 and 4 never appear. In any round.** Only pages 0, 1 and 2
+are ever selected into a quadrant, in every round including 3 and 4.
+
+If those pages are never displayed, then **cat1 cells on bg pages 3 and
+4 are never composed, and occluding them saves nothing** -- they would
+be inflating the 11,187 with cells that cost nothing to begin with.
+
+**The question the builder can answer instantly from data he already
+has: how many of the 11,187 sit on bg pages 3 and 4?** If it is a small
+share this is a footnote. If it is large, the card shrinks.
+
+### The limit of this probe, stated plainly
+
+**A demo is a recorded tape (entry 111) and it is a PARTIAL traversal of
+its level.** So what I have shown is that pages 3/4 are not reached by
+the demo, not that they are never displayed. A full playthrough scrolls
+further and may select them at the far end of a round.
+
+So the honest split:
+
+    +5 pairing rule          MEASURED in all five rounds. Settled.
+    pages 3/4 never composed HYPOTHESIS. Demo-only evidence, and a demo
+                             does not traverse a whole level.
+
+**Settling the second one does need the scripted gameplay run I offered
+and the DIP trick cannot substitute for it** -- the lever changes which
+round the demo shows, not how far it goes. It is worth running only if
+the builder's page-3/4 share comes back large, which is a free query on
+his side and should gate my probe rather than the other way round.
