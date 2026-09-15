@@ -9727,3 +9727,45 @@ bake's output is trusted for scenes 2-4. Two other census notes to carry
 into it: (0,0) appears only at transitions (23 frames at f2686, 101 at
 f444) and is almost certainly a blanked load -- check the display gate
 before feeding it to the bake -- and (10,11) is the chevron (entry 126).
+
+## 307. THE PAGE 3/4 SHARE IS 39.6%, AND THE ROM ARGUES THEY ARE ORDINARY (2026-09-14)
+
+NOTES 96's gating query: of the 11,187 cat1 cells occluded under the
+locked (N, N+5) pairing, how many sit on bg pages 3 and 4 -- the pages no
+round ever selects into a quadrant?
+
+| bg page | fg | cat1 | occluded | % of 11,187 | status |
+|---|---|---|---|---|---|
+| 0 | 5 | 4724 | 2291 | 20.5% | selected |
+| 1 | 6 | 4721 | 2168 | 19.4% | selected |
+| 2 | 7 | 4642 | 2298 | 20.5% | selected |
+| 3 | 8 | 4664 | 2168 | 19.4% | **never selected** |
+| 4 | 9 | 4681 | 2262 | 20.2% | **never selected** |
+
+**4,430 of 11,187 = 39.6%.** Not a footnote. If pages 3/4 are never
+composed, the card's occlusion saving is 6,757, not 11,187.
+
+**But the rom argues they are ordinary slices, not unused variants.** The
+five background pages are near-identical in every statistic: cat1 counts
+4724 / 4721 / 4642 / 4681 / 4664 (spread 1.7%), occluded counts 2291 /
+2168 / 2298 / 2168 / 2262 (spread 6%), and each carries 19.4-20.5% of the
+total. Per scene the 3+4 share is 37.7%, 37.7%, 37.9%, 39.8%, 40.8% --
+flat across all five scenes.
+
+**Scenery variants would not look like this.** A page the game rarely
+selects would have no reason to match the selected pages to within a few
+percent on two independent measures, in every scene. What this looks like
+is five equivalent slices of one wide scrolling plane -- which is exactly
+what the (N, N+5) lock over two five-page planes already implies.
+
+**So: run the scripted gameplay probe, and my prediction is that it finds
+pages 3/4 reachable.** 39.6% is far too large to assume either way, but
+the rom-side evidence points at "the demo is a partial traversal" rather
+than "these pages are dead". The probe is worth the time precisely
+because the number is big, not because the hypothesis is likely.
+
+**And keep the two claims apart, as NOTES 96 does:**
+
+    +5 pairing rule           MEASURED, all five rounds, 32,280 frames
+    pages 3/4 never composed  HYPOTHESIS, demo-only evidence, and the
+                              rom's uniformity is evidence against it
