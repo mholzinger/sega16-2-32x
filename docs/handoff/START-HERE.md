@@ -303,6 +303,16 @@ explained.
     BODY stamps (blit, tile cache fills, sbuf, cap_drain's second site
     at m_main.c:13413), not another ISR stamp.
 
+**SETTLED 2026-09-14 (LOOP29 303-308), derived from rom end to end:**
+the page-select pairing is **(N, N+5), locked** -- a property of two
+8-word tables at 0x40F0/0x4100 indexed by (camera X >> 9) & 7, so no
+camera position can produce anything else in any round. All five bg pages
+(0-4) are reachable. Cat-1 occlusion is therefore **11,187 of 23,432
+cells = 47.7%**, not the 10.1% the bake reported for years: its hardcoded
+(0,7) was not a simplification but a pairing that never occurs. Nothing
+in that figure rests on a sample. `tools/bake_cat1vis.py --pairs` takes
+the real table and REFUSES illegal pairings.
+
 **CHECKED AND NOT A DEFECT (2026-09-14):** the crystal-ball interlude
 renders magenta on purple, and so does the arcade (ref_016289). Ours is
 a later frame of the same fill animation.

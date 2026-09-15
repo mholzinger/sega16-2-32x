@@ -9769,3 +9769,47 @@ because the number is big, not because the hypothesis is likely.
     +5 pairing rule           MEASURED, all five rounds, 32,280 frames
     pages 3/4 never composed  HYPOTHESIS, demo-only evidence, and the
                               rom's uniformity is evidence against it
+
+## 308. THE +5 RULE IS A PROPERTY OF TWO ROM TABLES, AND PAGES 3/4 ARE REACHABLE (2026-09-14)
+
+NOTES 97 traced the page select back from the register to its source and
+it is a table lookup, not a computation (`0x3A2A`): two fixed 8-word
+tables at `0x40F0` (BG) and `0x4100` (FG), indexed by
+`(camera X >> 9) & 7` -- eight entries, not keyed on round at all.
+
+**Read straight out of `roms/altbeast/prog68k.bin` here, independently:**
+
+| idx | BG | FG | quadrant pairs |
+|---|---|---|---|
+| 0-2 | 0000 | 5555 | (0,5) x4 |
+| 3 | 4040 | 9595 | (4,9) (0,5) (4,9) (0,5) |
+| 4 | 3434 | 8989 | (3,8) (4,9) (3,8) (4,9) |
+| 5 | 2323 | 7878 | (2,7) (3,8) (2,7) (3,8) |
+| 6 | 1212 | 6767 | (1,6) (2,7) (1,6) (2,7) |
+| 7 | 0101 | 5656 | (0,5) (1,6) (0,5) (1,6) |
+
+    every quadrant delta is exactly +5:  True
+    distinct pairs producible, ever:     (0,5) (1,6) (2,7) (3,8) (4,9)
+    bg pages reachable:                  0, 1, 2, 3, 4
+
+**Two results, both exhaustive rather than sampled.**
+
+1. **The +5 rule is not an induction, it is a property of the tables.**
+   No camera position can produce anything else, in any round, ever. The
+   32,280 frames of census were right and are now also unnecessary.
+2. **Pages 3 and 4 ARE selected**, at indices 3-5. NOTES 96's hypothesis
+   is dead, and LOOP29 307's prediction from rom uniformity was right:
+   the demo simply never scrolls past index 2, which is the "partial
+   traversal" reading rather than "these pages are dead".
+
+**So the 4,430 cells on pages 3/4 are real saving and the 11,187 stands
+in full.** The scripted gameplay probe was cancelled before it ran -- the
+rom argument in 307 saved the run and the tables made it formal.
+
+Provenance, because entry 108 is the entry that caught a whole census
+taken through a DIP patch: `sub_3A00` writes `#$AAAA`/`#$BBBB` on the
+chevron branch, and LOOP-DECOMPILE 126 measured exactly fg=AAAA bg=BBBB
+on the wire. Program constants and wire values agree.
+
+**OCCLUSION IS SETTLED: 11,187 of 23,432 cat1 cells = 47.7%, derived
+from rom end to end. Nothing about it rests on a sample.**
