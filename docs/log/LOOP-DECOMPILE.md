@@ -8676,3 +8676,126 @@ and the card is a small polish. If many are sparse, the line is losing
 sprite blocks constantly and this is a visible-defect fix, not a polish.
 **That number should be produced before Mike is asked to look at
 anything.**
+
+## 160. The builder's plane correction is right and my 47.7% is void -- but crossing it with the round census names a cause for Mike's BLACK TILES: the chevron sets are refused because the bake's demand model CANNOT SEE THEM (2026-09-14)
+
+### The correction, accepted in full
+
+`snap[0]` is the FOREGROUND. Three independent citations, all checked
+here rather than taken on report:
+
+  * `m_main.c:2909` `latch_layer_regs` fills `snap[0]` from text word
+    0x740 and `snap[1]` from 0x741.
+  * `m_main.c:15042` the compose walk sets `isfg = (md_phase >= 5)` and
+    then `const layer_regs *wl = isfg ? &snap[0] : bl;` -- snap[0] is
+    reached only on the fg phases. The comment above it says it outright:
+    *"phases 1-4 = Plane B (BG layer), phases 5-8 = Plane A (FG cat-0)"*.
+  * `docs/audit/pagesel_census.txt` -- which0 holds 0-4, which1 holds
+    5-9, in every sampled frame.
+
+So pages 0-4 are the FOREGROUND. `bake_cat1hole.py:15-16` had it right
+and `bake_cat1vis.py` had it inverted; the builder marked the file
+(9810f1c) rather than quietly restating the number, which is the right
+disposal.
+
+**Consequence: entry 158's 47.7% is VOID, and so is the whole occlusion
+line it sat on.** All 23,432 cat-1 cells are on the topmost tile plane
+and `jts16_prio.v:83-95` tests the foreground first, so no tile plane is
+above them. Tile-occlusion of cat-1 is ZERO. The bake was measuring
+whether the background covers the foreground, which is the impossible
+direction. Entries 57, 58, 153, 156, 157 and 158 all quoted numbers from
+that direction; they are all void as SAVINGS. The (N, N+5) pairing
+result survives untouched -- same table, correctly read, only the labels
+were swapped.
+
+**That is the fourth number of mine to come out of the record today and
+the second from this same file.** The pattern is worth naming: every one
+of them was a number I computed correctly from a premise I never checked.
+The pairing, the +5 rule, the table lookup -- all derived from bytes and
+all still standing. The occlusion shares -- all derived from a LABEL --
+all gone.
+
+### What crossing the correction with the round census turns up
+
+`round_sets_definitive.txt` says sets **19, 20, 21** -- the cycler /
+chevron plane -- appear in **every one of the five rounds**. Crossing
+that list against `mdr_s_line` in `sh_src/pal_rounds_md.h`:
+
+    round 0: 31 sets used | granted 28 | REFUSED 3 -> [19, 20, 21]
+    round 1: 13 sets used | granted 10 | REFUSED 3 -> [19, 20, 21]
+    round 2: 15 sets used | granted 12 | REFUSED 3 -> [19, 20, 21]
+    round 3: 12 sets used | granted  9 | REFUSED 3 -> [19, 20, 21]
+    round 4: 19 sets used | granted 16 | REFUSED 3 -> [19, 20, 21]
+
+**In all five rounds the ONLY sets refused an MD line are 19, 20 and 21.
+Nothing else is refused, ever.** The header of that generated file says
+what a refusal costs: *"A set absent here is REFUSED an MD line and
+renders as BACKDROP (m_main.c 2357) -- black tiles, not a fallback."*
+
+That is a single named cause for one of the three defects Mike still
+sees on bldS, and it is the same three sets in every round.
+
+### And the mechanism is NOT the pen budget
+
+The obvious reading is that the three lines are full. Counting the
+0xFFFF holes in `mdr_line_c` (indices 0, 16, 32 are each a line's
+transparent pen and never available):
+
+    round 0:  2 free pens      round 3: 10 free pens
+    round 1:  1 free pen       round 4:  0 free pens
+    round 2:  1 free pen
+
+Tight -- but round 3 has room for a set and still refuses all three, so
+capacity is not the rule doing the refusing.
+
+**The rule is `bake_tilecram.py:142`.** `worst_viewport` builds demand by
+walking the ROM's packed tilemaps and counting cells per set; a set with
+no cells is never a candidate. Counting those cells here, from the rom,
+over all ten pages of all five rounds:
+
+    round 0:      0 of 17937 non-blank cells in sets 19/20/21
+    round 1:      0 of 19462
+    round 2:      0 of 15861
+    round 3:      0 of 17972
+    round 4:      0 of 11784
+    TOTAL:        0
+
+**Zero. The chevron sets hold no cell in any round's ROM tilemap.** But
+the arcade census that found them is explicit about its method -- *"every
+cell of every tilemap page walked AFTER the round has loaded (f700)"* --
+which is LIVE tile RAM, not the packed rom map.
+
+So the two disagree, and the disagreement is the finding: **the chevron
+plane is written into tile RAM at RUNTIME, and the bake models demand
+from the ROM map, so it cannot see the plane at all.** It is not
+outvoted in the packer. It never reaches the packer.
+
+**`--also` is the existing escape hatch for exactly this** -- its help
+text says *"The worst-case viewport only sees palettes the..."* -- but
+`bake_tilecram.py:299` gates it to `s == a.live_scene`, one scene, and
+the regenerate command in the generated header does not pass it at all.
+
+### Card MDCHEV
+
+Pin sets 19/20/21 in every round. Two parts, and the second is the one
+that needs a decision:
+
+  1. **Lift `--also` off `live_scene`** so it pins across all five
+     rounds, and add it to the regenerate recipe in the header. Small.
+  2. **A static pen table cannot hold a CYCLER.** Even pinned, the
+     chevron's colours change per frame, so pinning buys the tiles their
+     art back and freezes their animation. The honest options are (a)
+     compose those cells on the 32X framebuffer, which costs FB passes
+     and is the thing the pivot is removing, or (b) give the cycler a
+     line of its own and have the 68K rewrite 16 CRAM words in vblank --
+     it already writes CRAM there, and 16 words is nothing.
+
+**(b) is the architectural answer and it is cheap**, but it needs a free
+line, and only round 3 has one. So it is a packing question first.
+
+**The number that sizes all of this is the one I could not get from the
+rom: how many CELLS the chevron plane covers once it is written at
+runtime.** That is a live tile-RAM read on the builder's side and it
+decides whether this is a visible-defect fix or a footnote. If the
+chevron is the background cycler behind the whole level it is large; if
+it is the three-column chevron strip it is small.
