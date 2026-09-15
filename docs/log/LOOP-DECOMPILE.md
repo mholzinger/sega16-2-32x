@@ -8240,3 +8240,73 @@ The builder's read of the symbol table is right and their conclusion --
 split `_m_main` rather than shrink a top five -- is right. This just
 gives the split a number to aim at, and says compose_pass needs work too
 rather than merely needing to be left alone.
+
+---------------------------------------------------------------------
+## 154. The occlusion gate is ONE HARDCODED PAGE PAIRING, and that is worth up to 5x the saving. 18,708 cat1 cells are not "visible" -- they are UNTESTED (2026-09-14)
+
+The builder found the mechanism and it is exact rather than approximate:
+occlusion is only tested where BG page 0 sits under FG page 7. Page-0
+cat1 is **4,724 -- entry 57's number to the cell** -- and scene 2 reads
+83.4% against entry 57's "83%". My scroll-range hypothesis (entry 153)
+was directionally right and the page gate is the real cause. Corrected.
+
+**But reading the bake changes what the numbers mean.**
+`tools/bake_cat1vis.py:45`:
+
+    BG_PAGE, FG_PAGE = 0, 7     # scr2 draws page 0, scr1 page 7 (entry 11)
+
+and line 99 only evaluates opacity when `page == BG_PAGE`. **That is one
+hardcoded pairing out of the ten pages a scene's tilemap carries.**
+
+So the correct statement is not "10% of cat1 cells are occluded." It is:
+
+    2,373 of 4,724 page-0 cells   TESTED, 50.2% occluded
+    18,708 cells on other pages   NEVER TESTED, counted as visible
+                                  by default
+
+**The 18,708 are not known to be visible. They are unexamined**, and the
+bake's own comment says why -- it encodes one page pairing from entry 11
+and the game demonstrably uses others. **Entry 124 found pages 10/11
+carrying the transformation, and entry 126 is the page-select gate
+itself.** The pairing is not a constant.
+
+### What it is worth
+
+If the other pairings occlude at anything like the page-0 rate, total
+occlusion is ~11,700 cells rather than 2,373 -- **about 5x the saving,
+decidable at bake time from rom alone, with no rig cycle and no runtime
+change.** Against step 2's 0.44 v/gen that is not a rounding error.
+
+**The honest counter-case, which is the thing to check first:** some of
+those pages may be scenery variants the game rarely or never selects, so
+their cells are occluded but also never composed -- real occlusion,
+zero saving. That is exactly what distinguishes a 5x card from nothing,
+and it is a decompile question rather than a bake question.
+
+### The split of work
+
+**Mine:** enumerate the (BG page, FG page) pairs the game actually
+selects, per scene, from the page-select machinery -- the same registers
+entry 126 documented and entry 124 used to find pages 10/11. Output is a
+short table: scene, pairing, and whether it is reached in normal play.
+
+**The builder's:** parameterise `bake_cat1vis.py` over that table
+instead of the `0, 7` constant, and re-report with both denominators.
+
+Neither needs the rig. Both are cheap. And the result either multiplies
+step 2's occlusion saving by ~5 or rules it out for good -- which is the
+right shape for a first move.
+
+### Banked from the same exchange
+
+  * Cache geometry confirmed by the builder against CACHE.sv 143-151
+    independently: `WAY_TAG[n] = WAYn[CBUS_A[9:4]][TAG] == CBUS_A[28:10]`
+    with `reg [5:0] LRU [64]`. Six bits, 64 sets, 4 ways, 16-byte lines,
+    tag from bit 10 -- the 1,024-byte repeat is derived, not recalled,
+    by both threads separately.
+  * Targets recorded on their side: 2 KB inner loop / 2 KB resident,
+    4 KB explicitly NOT the goal, layout treated as load-bearing.
+  * `_compose_pass` accepted as a second target rather than the thing
+    being protected.
+  * Both bakes now carry their denominator in the tool, which is the
+    durable fix -- the stale docstring could not have survived it.
