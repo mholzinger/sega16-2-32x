@@ -8150,3 +8150,93 @@ it should be re-read with `--pull-only` before any of it sizes anything.
 
 The 27 KB figure does not depend on it -- that one is from the map file
 and needs no rig at all.
+
+---------------------------------------------------------------------
+## 153. The occlusion "contradiction" is a DENOMINATOR, not a disagreement -- both bakes count 2,373 occluded cells. And the footprint card has an exact target from the cache geometry: 1,024 bytes of contiguous hot code costs ONE WAY, and there are four (2026-09-14)
+
+### The occlusion discrepancy, settled
+
+The builder found `bake_cat1vis.py`'s docstring citing entries 57/58 for
+*"50% of all cat1 cells, 83% in scene 2"* against today's bake reporting
+**10% overall, 17% in scene 2 (23,432 cells, 21,059 visible).**
+
+They are not in conflict. **Both compute 2,373 occluded cells.**
+
+    entry 57    2,373 of  4,724 = 50.2%
+    today       2,373 of 23,432 = 10.1%    (23,432 - 21,059 = 2,373)
+
+An identical occluded count against a denominator 4.96x larger is not
+two measurements disagreeing -- it is **one measurement on two different
+cell populations.** The occlusion test never changed; the set of cells
+fed to it did.
+
+Entry 57's per-scene table sums to exactly 4,724 across all five scenes
+(500 + 1792 + 1472 + 256 + 704), so it is not a per-scene-vs-total
+error either. The ~5x is the population: entry 57 counted cat1 cells in
+a narrower region, today's bake walks a wider one, and **the 18,708
+extra cells are essentially all "visible"** -- which is what you get when
+you add cells that have no foreground tile over them at all.
+
+**The likely mechanism, stated as a hypothesis with its test:** entry
+57's figures came from the cells the scene actually displays; today's
+bake covers whole tilemap pages including regions the scroll never
+reaches. An S16 page is 64x32 = 2,048 cells, and 23,432 / 5 scenes =
+4,686 per scene, which is about two pages. Off-page cells have nothing
+drawn over them, so they count as visible and dilute the ratio.
+
+**Test, and it is one line of the bake:** restrict the cell population to
+those reachable by the scene's scroll range and check whether the
+denominator returns to ~4,724. If it does, the docstring is right, the
+bake's report is right, and only the LABEL is wrong -- it should say
+"10% of all tilemap cells / 50% of DISPLAYED cells."
+
+**Which figure sizes step 2: the DISPLAYED one.** Cells the scroll never
+reaches are never composed, so they cannot be saved. **50% remains the
+number for sizing occlusion, and 10% is the number for sizing the
+bitmap.** Neither is wrong; they answer different questions.
+
+(Entry 57's stated assumption -- FG draws over BG at priority level 2 --
+was RTL-confirmed in entry 58, so the occlusion rule itself is not in
+doubt.)
+
+### The footprint card has an exact target, derived from the cache
+
+From `srcref/S32X_MiSTer/rtl/SH/SH7604/CACHE.sv:143-151`, the set index
+is **`CBUS_A[9:4]`** -- six bits, 64 sets, four ways (`WAY0..WAY3`),
+16-byte lines. 64 x 4 x 16 = 4,096 bytes, confirming the geometry from
+the RTL rather than from recall.
+
+**The consequence the builder's table needs: the set pattern repeats
+every 1,024 bytes.** Bits [9:4] are the index, so two code blocks 1,024
+bytes apart in address land in the same set. Therefore:
+
+**A contiguous hot region of S bytes consumes ceil(S / 1024) WAYS in
+every set it covers. There are four ways. So the entire hot working set
+must total <= 4,096 bytes to be resident, and every 1,024 bytes of hot
+code costs one of the four ways across all 64 sets.**
+
+Applied to their measurement:
+
+    _compose_pass    4,836 bytes  = 4.7 ways   SELF-EVICTING ALONE
+    _m_main         18,552 bytes  = 18.1 ways
+    total hot                       ~23 ways against a budget of 4
+
+**`_compose_pass` overflows the entire four-way capacity on its own, by
+740 bytes, before `_m_main` is considered at all.** Splitting m_main is
+necessary and is not sufficient.
+
+**The design target, which is much sharper than "shrink it":**
+
+    inner loop (per-pixel/per-cell)   <= 2,048 bytes  = 2 ways
+    everything else resident during
+    compose                            <= 2,048 bytes  = 2 ways
+
+Two ways hold the inner loop permanently; two absorb the rest. A 4,096-
+byte inner loop would occupy the whole cache and leave nothing for
+anything else, so "get compose_pass under 4 KB" is NOT the target --
+**2 KB is.**
+
+The builder's read of the symbol table is right and their conclusion --
+split `_m_main` rather than shrink a top five -- is right. This just
+gives the split a number to aim at, and says compose_pass needs work too
+rather than merely needing to be left alone.
