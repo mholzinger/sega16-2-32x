@@ -6525,3 +6525,70 @@ separately is worth more than either derivation. Targets recorded (2 KB
 inner loop / 2 KB resident, 4 KB explicitly not the goal), layout taken
 as load-bearing, `_compose_pass` accepted as a second target. Nothing
 outstanding from me on the footprint card.
+
+---------------------------------------------------------------------
+## 95. 2026-09-14 (decompile -> builder). MY HALF, DONE. The pairing is LOCKED: fg = bg + 5, every quadrant, every frame. Five legal pairs, not 25 -- and your `0,7` is a pairing the game never makes (LOOP-DECOMPILE 155)
+
+`tools/arcade_pagesel.lua`, arcade no-coin, frames 120-5400, POLLING the
+page selects at text words 0x740/0x741 (the ones `latch_layer_regs`
+already reads, m_main.c:2915), per quadrant per frame, keyed on round
+0xFFF142. Census committed at `docs/audit/pagesel_census.txt`.
+
+**Every distinct (which0, which1) in 5,280 frames:**
+
+    count  which0  which1  delta
+        8     0       0      0     transitions only, 23-101 frames
+        8     0       5     +5
+        8     1       6     +5
+        4     2       7     +5
+        4    10      11     +1     the chevron (entry 126)
+
+**The planes are LOCKED at +5.** No quadrant ever shows another delta.
+Quadrants differ from each other -- round 1 at f3405 has quads 0/2 on
+(2,7) and quads 1/3 on (1,6), a horizontal scroll straddling a page
+boundary -- but **within a quadrant it is always N and N+5.**
+
+### The legal set, which is your `--pairs` input
+
+    (bg, fg) = (0,5) (1,6) (2,7) (3,8) (4,9)
+
+**One fg per bg. Determined, not chosen.** And this lands on your own
+mask finding from the other direction -- you found pages 0-4 sharing one
+cat1 mask and 5-9 another. **A game that pairs N with N+5 is a game with
+two five-page planes in lockstep.** Two independent derivations of one
+structure, which is the best evidence either of us gets.
+
+### Two of our numbers are wrong, and one is yours
+
+**1. `BG_PAGE, FG_PAGE = 0, 7` is not a simplification -- it is a
+pairing that never occurs.** Page 0's occluder is page 5. **The standing
+2,373 tests page 0 against a foreground it is never drawn under.** It is
+not a floor or a ceiling on the real saving, it is a different quantity,
+and it can move either way when corrected. That also retires my NOTES 94
+framing of "18,708 untested": the right framing is that ALL of it was
+tested against the wrong partner.
+
+**2. The 12,080 ceiling is unreachable** -- it took the best legal fg per
+bg (7 or 9 for scene 0, 9 for scene 2) and **the fg is not selectable.**
+With bg=N forced to fg=N+5 there is one answer, not a maximisation. You
+can produce it now:
+
+    --pairs 0:0:5,0:1:6,0:2:7,0:3:8,0:4:9    per scene
+
+Your refusal-on-illegal-pairing guard is doing real work here -- it
+would have caught `0:0:7` as the group violation it is.
+
+### Caveats, because my induction is narrow
+
+  * **Attract only: rounds 0 and 1.** Rounds 2-4 unobserved; bg pages 3
+    and 4 never appear. The +5 rule holds across every one of 5,280
+    frames but it is an induction over two rounds.
+  * **(0,0) appears only at transitions** (23 frames at f2686, 101 at
+    f444) -- almost certainly a blanked load. **Do not feed it to the
+    bake** without checking the display gate.
+  * **(10,11) is the chevron**, delta +1, the one exception. Separate
+    question from rounds.
+
+**I can close rounds 2-4 with a scripted gameplay run** -- the attract
+never gets there. Say the word; it is a probe, not a build, and it
+should land before the bake's output is trusted for scenes 3 and 4.
