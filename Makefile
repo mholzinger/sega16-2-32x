@@ -2837,6 +2837,26 @@ SHIP_JP = $(SHIP_US)
 ship:
 	$(MAKE) ship-us
 	$(MAKE) ship-jp
+# ---- THE LINE (2026-09-15) ----
+# THE FLAGS bldS WAS BUILT WITH, AS ONE TARGET. `make ship-us` alone is
+# NOT the line and neither is bare `make`: both regenerate .build_flags
+# with a REDUCED -D set, which regenerates md_src/pal_thunks.h and
+# md_src/fmgate_tab.h differently and leaves md_main.c:5329 failing to
+# compile ('md_hold_seen' undeclared). Recovering from that costs a
+# session; `make line` cannot get it wrong.
+#
+# Verify after building: `cmp -l rom/s16.32x rom/night/bldS.32x` must
+# report bytes ONLY in 0x25F0xx (git hash) and 0x3FFFxx (BUILD string).
+LINE_FLAGS = FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
+             TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+             TEXTCAPEARLY=1 TAGKEEP=1 PENHOLD=1 PENREPAINT=1 NBUILD1=1 \
+             MDSPRTOP=1 C1NOFB=1 C1PUNCH=1 C1STAMP=1 CAT1MD=1 GLOWPAGE=1 \
+             MDBATCH=24 MDROUND=1 MDSTATE=1 MDSREFUSE=1 SETCOLS=1 \
+             SCANMEMO=1 SPRLIST=1 SPRRUN32=1 TEXTCAPMASK=1 TEXTMASKPKT=1
+.PHONY: line
+line:
+	$(MAKE) ship-us $(LINE_FLAGS)
+
 ship-us:
 	$(MAKE) GAME=altbeast $(SHIP_US)
 ship-jp:
