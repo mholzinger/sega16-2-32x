@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """Bake the CAT1 VISIBILITY bitmaps: which cat1 tiles can actually be seen.
 
+*** VOID -- THE PLANE LABELS IN THIS FILE ARE INVERTED (2026-09-14). ***
+Pages 0-4 are the FOREGROUND and 5-9 the BACKGROUND, not the reverse.
+Measured, not argued: latch_layer_regs (m_main.c:2909) fills snap[0]
+from text word 0x740 and snap[1] from 0x741, the punch pass takes
+snap[0] as fg (m_main.c:15045), and docs/audit/pagesel_census.txt shows
+which0 holding 0-4 and which1 holding 5-9 in every sampled frame.
+bake_cat1hole.py:15-16 had it right all along.
+
+So every cat1 cell (all 23,432 of them, and zero on pages 5-9) sits on
+the TOPMOST tile plane. jts16_prio.v:83-95 tests the foreground first,
+so no tile plane is above them: tile-occlusion of cat1 is ZERO, not
+47.7%. This file measures whether the background covers the foreground,
+which is the impossible direction. Do not reuse its numbers.
+
     tools/bake_cat1vis.py [--stats]
 
 A background cat1 tile sitting under a FULLY OPAQUE foreground tile is
