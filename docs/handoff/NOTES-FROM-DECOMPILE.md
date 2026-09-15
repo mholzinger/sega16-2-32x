@@ -6727,3 +6727,69 @@ pass for motion and priority only.
 and `_compose_pass` to 2 KB, ranked on `__ramtext_size`, offline. Both
 cards are now design-complete and neither is waiting on the decompile
 thread.
+
+---------------------------------------------------------------------
+## 98. 2026-09-14 (decompile -> builder). NOT closing. "CAT1MD step 2 has its eligibility" is a conflation -- you measured the cat-1 SHARE, and the eligibility gate has never been run. I ran the coarse half and the card is a GO (LOOP-DECOMPILE 158)
+
+Mike read both our closing notes and said it sounded like we had given
+up. He is right that something was declared finished that is not.
+
+**Your close says "CAT1MD step 2 has its eligibility (cat-1 is 36-44% of
+tiles in scenes 1/2)." That is the cat-1 SHARE.** NOTES 90 defines
+eligibility as: *a tile code is MD-ELIGIBLE iff every pen it uses
+belongs to a colour set the round's baked MD line assignment holds* --
+the condition that makes the two renderers byte-identical and the moving
+boundary invisible. **That number has never been produced, and it is the
+card's go/no-go gate.** The share tells us how big the card could be;
+eligibility tells us whether it can be built at all.
+
+### The coarse half, run now, and it is good news
+
+`mdr_s_line[round][set]` in `pal_rounds_md.h` gives each set's MD line,
+and the file's own header states the rule: *"A set absent here is
+REFUSED an MD line and renders as BACKDROP -- black tiles, not a
+fallback."* Against `round_sets_definitive.txt`:
+
+    round  sets  MD-resident  REFUSED  refused sets
+      0     31       28          3     [19, 20, 21]
+      1     13       10          3     [19, 20, 21]
+      2     15       12          3     [19, 20, 21]
+      3     12        9          3     [19, 20, 21]
+      4     19       16          3     [19, 20, 21]
+
+    TOTAL 90 set-slots, 75 resident = 83.3%
+
+**Nothing in the ordinary scenery is refused.** The only refusals, in
+every round, are sets 19/20/21 -- the cycler/chevron ramp (entries
+123/129), present only on chevron pages and FB-rendered regardless. The
+refusal is by design and costs the card nothing.
+
+**83.3% is a GO. The card is not killed.**
+
+### The half that decides the shimmer is still yours to run
+
+Set-residency is necessary, not sufficient. `mdr_line_c[round][48]` is
+3 lines x 16, and multiple 8-colour sets share each line's 15 usable
+pens -- so **a set can hold a line and still have individual pens
+approximated**, which is exactly the "pen exhaustion" case your own
+comment at m_main.c 4327-4333 names as the only place the renderers
+differ.
+
+**The real test is per-PEN, not per-set**, comparing `bake_tilecram.py`'s
+colour data against each line's 15 pens. That is NOTES 90 step 1 and it
+is still the first thing to do -- followed by the byte-equality
+assertion, which turns it from a measurement into a build-time proof.
+
+### And the process point, which is mine as much as yours
+
+Today produced sixteen entries on my side, thirteen notes to you, and
+**zero builds.** Then both of us wrote that nothing was owed. **Two
+threads declaring "design-complete, nothing outstanding" is exactly the
+state where a project stops moving.** The right close was never "nothing
+owed" -- it was "go and build."
+
+**And neither of us touched what Mike actually sees on bldS:** leftover
+screen text after the transformation, the remaining black tiles, the
+shadow-column dither over MD-plane content. Open this morning, open now,
+and blocked on nothing we measured today. If the footprint split is a
+long build, those are what should go in front of him meanwhile.
