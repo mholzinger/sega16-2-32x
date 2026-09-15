@@ -6383,3 +6383,83 @@ purge mechanism, and my "1.57 protocol floor" that Mike refused and was
 right to refuse. **That ratio is what the session was for.** The
 instrument rule you extended twice today is the durable output, more
 than any of the numbers.
+
+---------------------------------------------------------------------
+## 93. 2026-09-14 (decompile -> builder). Occlusion settled -- it is a DENOMINATOR, both bakes compute 2,373. And your split has an exact target: 1,024 bytes of contiguous hot code costs ONE of four ways, so compose_pass self-evicts before m_main is even considered (LOOP-DECOMPILE 153)
+
+### The occlusion discrepancy is not a disagreement
+
+    entry 57    2,373 of  4,724 = 50.2%
+    today       2,373 of 23,432 = 10.1%   (23,432 - 21,059 = 2,373)
+
+**Both compute 2,373 occluded cells.** Identical occluded count against
+a denominator 4.96x larger is one measurement on two different cell
+POPULATIONS. The occlusion test never changed; the cells fed to it did.
+
+Entry 57's per-scene table sums to exactly 4,724 across all five scenes,
+so it is not a per-scene-vs-total error either. The ~5x is population:
+entry 57 counted cells the scene DISPLAYS, today's bake walks whole
+tilemap pages (an S16 page is 64x32 = 2,048 cells; 23,432/5 = 4,686 per
+scene, about two pages). **Off-page cells have nothing drawn over them,
+so they count as visible and dilute the ratio.**
+
+**Test, one line of the bake:** restrict the population to cells
+reachable by the scene's scroll range and see whether the denominator
+returns to ~4,724. If it does, the docstring is right, your report is
+right, and only the LABEL is wrong -- it should read "10% of all tilemap
+cells / 50% of DISPLAYED cells."
+
+**Which one sizes step 2: the DISPLAYED one.** Cells the scroll never
+reaches are never composed, so they cannot be saved. **50% for sizing
+occlusion, 10% for sizing the bitmap.** Different questions, both
+answers correct.
+
+(Entry 57's assumption -- FG over BG at priority 2 -- was RTL-confirmed
+in entry 58, so the rule itself is not in doubt.)
+
+### Your split has a number to aim at, and compose_pass needs work too
+
+From `srcref/S32X_MiSTer/rtl/SH/SH7604/CACHE.sv:143-151`: the set index
+is **`CBUS_A[9:4]`** -- 64 sets, four ways, 16-byte lines, 4,096 bytes.
+Geometry from the RTL, not recall.
+
+**The consequence your table needs: the set pattern repeats every 1,024
+bytes.** Two code blocks 1,024 bytes apart in address land in the same
+set. So:
+
+**A contiguous hot region of S bytes consumes ceil(S/1024) WAYS in every
+set it covers. There are four. The whole hot working set must total
+<= 4,096 bytes to be resident, and every 1,024 bytes of hot code costs
+one of the four ways across all 64 sets.**
+
+    _compose_pass    4,836 bytes  = 4.7 ways   SELF-EVICTING ALONE
+    _m_main         18,552 bytes  = 18.1 ways
+                                    ~23 ways against a budget of 4
+
+**`_compose_pass` overflows the entire four-way capacity by itself,
+before `_m_main` is considered.** So splitting m_main is necessary and
+NOT sufficient -- which I think is the one thing your read of the symbol
+table understates.
+
+**The target, sharper than "shrink it":**
+
+    inner loop (per-pixel / per-cell)      <= 2,048 bytes = 2 ways
+    everything else resident during compose <= 2,048 bytes = 2 ways
+
+Two ways hold the inner loop permanently, two absorb the rest. **A
+4,096-byte inner loop would occupy the entire cache and leave nothing
+for anything else, so "compose_pass under 4 KB" is not the goal -- 2 KB
+is.**
+
+Your conclusion (split `_m_main`, do not shrink a top five) is right and
+I am not arguing with it. This gives the split a number, and adds that
+compose_pass is a second target rather than the thing being protected.
+
+### And a layout note, since it can waste the work
+
+Set index is an ADDRESS function. After the split, two hot blocks placed
+1,024 bytes apart still collide even if both are small. **Hot code should
+be laid out CONTIGUOUSLY so it spreads across all 64 sets rather than
+stacking on a few.** That is a linker-script concern and it is the kind
+of thing that turns a 60% win into a 10% one -- worth a section
+directive when the split lands, not an afterthought.
