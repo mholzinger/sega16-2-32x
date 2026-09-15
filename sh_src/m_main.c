@@ -2033,9 +2033,7 @@ static uint16_t rg_tpost;
 #define RSCNT   ((volatile uint16_t *)0x26038800)   /* 224 u16 */
 #define RSIDENT ((volatile uint16_t *)0x26038A00)   /* 224 u16 */
 #endif
-/* noinline (footprint card): 166 bytes of .ramtext for 0.02% of
- * instructions, spread over many call sites as a timing helper. */
-__attribute__((noinline)) static void diag_add(int slot, uint16_t t0)
+static inline void diag_add(int slot, uint16_t t0)
 {
     DIAG[slot] += (uint16_t)(frt() - t0);
 }
@@ -2164,8 +2162,12 @@ __attribute__((noinline)) static void cachelock_purge(void)
     }
 }
 #define LOCKCODE __attribute__((section(".ramtext.lock"), noinline))
+#define LOCKCODE_ROM __attribute__((section(".ramtext.lock"), noinline))
 #else
 #define LOCKCODE RAMCODE
+/* visr_vbi had NO placement attribute before this card; with the flag
+ * off it must keep none, or the line silently gains a .ramtext entry */
+#define LOCKCODE_ROM
 #endif
 static inline void cache_purge(void)
 {
@@ -3039,14 +3041,7 @@ typedef struct {
 static layer_regs snap[2];
 #endif
 
-/* NOINLINE, 2026-09-15 (the footprint card, NOTES 91): four assignments
- * that cost 460 BYTES of .ramtext -- LTO unrolled and inlined them into
- * latch_layer_regs, which is itself inlined into m_main. Two logical
- * call sites, both once per window, neither per cell. Out of line it
- * lands in cart .text and the hot region gets its 460 bytes back.
- * noinline is load-bearing: without it LTO folds it straight back in
- * (the trap at LOOP29 250b). */
-__attribute__((noinline)) static void decode_pages(uint16_t pages, uint8_t *pq)
+static inline void decode_pages(uint16_t pages, uint8_t *pq)
 {
     /* 16 selectable pages, but the game only writes 0-11; 12-15 all
      * map to the single blank page 12 of the shadow.
@@ -3236,13 +3231,16 @@ __attribute__((noinline)) static int bm_scan_baked_ok(void)   /* ROM (noinline: 
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
-/* ROM, ALWAYS (2026-09-15, the footprint card): 498 bytes of .ramtext
- * for 0.14% of the master's instructions (ares --profile, 2000 frames).
- * It runs twice a generation and is bound by its ROM table reads
- * anyway (LOOP29 246: 573 ticks a plane) -- the old #if kept it in RAM
- * only because Build E's rom happened to have room, which is not a
- * reason to hold 498 bytes of a 4 KB cache. */
+#if defined(C1_PCELL) || (defined(C1_MASKTAB) && !defined(C1_STAMP)) || (defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF)))
+/* Builds C/D need a few hundred bytes of .ramtext in the plot
+ * expansions; this runs twice a generation and is bound by its ROM
+ * table reads anyway (LOOP29 246: 573 ticks a plane), so under those
+ * flags it fetches from ROM. Build E's ship rom fits with it in RAM;
+ * only its census probe (the stamps) needs the room. */
 __attribute__((noinline)) static void bm_scan_baked(struct bm_state *a, int which, int aset)
+#else
+RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
+#endif
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
@@ -3316,10 +3314,14 @@ static void bm_memo_check(const struct bm_memo *m, const struct bm_state *y)   /
     }
 }
 #endif
-/* ROM, ALWAYS (2026-09-15, the footprint card): 564 bytes of .ramtext
- * for 0.19% of instructions. ~150 instructions twice a generation,
- * against the 573-tick cart scan it replaces. */
+#ifndef C1_STAMP
+/* the punch line's .ramtext is full (bldI overflowed by the memo's
+ * bytes); without the stamp the memo runs from ROM -- ~150 instructions
+ * twice a generation, against the 573-tick cart scan it replaces */
 __attribute__((noinline)) static void bm_scan_memo(struct bm_state *a, int which, int aset)
+#else
+RAMCODE static void bm_scan_memo(struct bm_state *a, int which, int aset)
+#endif
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
@@ -4323,9 +4325,7 @@ static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
  * colour the MD line carries (mdp_s_qc, 9-bit bbb ggg rrr, expanded 3->5
  * bits) whenever the set has an MD line; the boundary then separates
  * identical pixels. Sets without a line keep the arcade colour. */
-/* noinline (footprint card): 154 bytes of .ramtext for 0.00% of the
- * master's instructions -- it never ran in a 2000-frame profile. */
-__attribute__((noinline)) static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
 {
     volatile uint16_t *src = PAL_SH + c * 8;
     if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
@@ -8456,7 +8456,7 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
                                           * consumed by the body at pickup
                                           * of the same k2 window */
 
-LOCKCODE void visr_vbi(void)
+LOCKCODE_ROM void visr_vbi(void)
 {
 #ifdef CACHE_LOCK_SHOW
     {   /* re-posted every vint; the 68K keeps the last tagged word */
