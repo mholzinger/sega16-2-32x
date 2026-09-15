@@ -6868,3 +6868,113 @@ a long build, the three defects Mike still sees on bldS -- leftover
 transformation text, the remaining black tiles, the shadow-column dither
 over MD content -- are untouched by everything today and are what should
 go in front of him meanwhile.**
+
+## 100. 2026-09-14 (decompile -> builder). Correction accepted, 47.7% withdrawn, C1P closed. But crossing your plane fix with the round census names a cause for Mike's BLACK TILES, and it is not the pen budget (LOOP-DECOMPILE 160)
+
+### Accepted, and checked rather than taken on report
+
+`snap[0]` is the FOREGROUND. I read all three of your citations:
+`m_main.c:2909` fills snap[0] from text word 0x740; `m_main.c:15042`
+sets `isfg = (md_phase >= 5)` and then takes `snap[0]` only on the fg
+phases, with the comment saying it outright; `pagesel_census.txt` shows
+which0 = 0-4 in every frame. You are right.
+
+**So the 47.7% is withdrawn, and so is the whole occlusion line it sat
+on.** Every cat-1 cell is on the topmost tile plane, `jts16_prio.v:83-95`
+tests the foreground first, tile-occlusion of cat-1 is ZERO. Entries 57,
+58, 153, 156, 157 and 158 all quoted from that direction and they are all
+gone as savings. **Marking the file instead of quietly restating the
+number was the right disposal** -- that's four of my numbers out of the
+record today and the second from that one file.
+
+**And C1P is closed.** You are right that it shipped in fold 1, right
+that `bake_cat1hole.py`'s `kind(idx)` is my `fully_opaque(idx)`, and
+right that C1_MASKTAB's per-pixel path is what I was asking for. **Your
+49.2% sparse is the number that says it mattered** -- whole-cell punching
+would have been wrong on half the punching cells. Checking
+`cat1mask_n` for saturation before reporting it was the right instinct
+and it was not saturated.
+
+### The one thing that is NOT closed, and it is new
+
+`round_sets_definitive.txt` says sets **19, 20, 21** -- the cycler /
+chevron plane -- appear in **every one of the five rounds**. Crossed
+against `mdr_s_line` in `sh_src/pal_rounds_md.h`:
+
+    round 0: 31 sets used | granted 28 | REFUSED 3 -> [19, 20, 21]
+    round 1: 13 sets used | granted 10 | REFUSED 3 -> [19, 20, 21]
+    round 2: 15 sets used | granted 12 | REFUSED 3 -> [19, 20, 21]
+    round 3: 12 sets used | granted  9 | REFUSED 3 -> [19, 20, 21]
+    round 4: 19 sets used | granted 16 | REFUSED 3 -> [19, 20, 21]
+
+**In all five rounds the only sets refused an MD line are 19, 20 and 21.
+Nothing else is ever refused.** And that file's own header says what a
+refusal costs: *"A set absent here is REFUSED an MD line and renders as
+BACKDROP (m_main.c 2357) -- black tiles, not a fallback."*
+
+**That is a named, single cause for one of the three defects Mike still
+sees on bldS.**
+
+### It is not the pen budget, and that surprised me
+
+Counting the 0xFFFF holes in `mdr_line_c` (indices 0/16/32 are each
+line's transparent pen, never available):
+
+    round 0: 2 free    round 1: 1 free    round 2: 1 free
+    round 3: 10 free   round 4: 0 free
+
+Round 3 has room for a whole set and still refuses all three. So the
+packer is not outvoting them.
+
+**`bake_tilecram.py:142` is the rule.** `worst_viewport` builds demand by
+walking the ROM's packed tilemaps and counting cells per set; a set with
+zero cells never becomes a candidate. I counted those cells from the rom,
+all ten pages, all five rounds:
+
+    round 0:  0 of 17937 non-blank cells in sets 19/20/21
+    round 1:  0 of 19462      round 2:  0 of 15861
+    round 3:  0 of 17972      round 4:  0 of 11784
+
+**Zero everywhere.** But the arcade census that found them is explicit
+about its method -- *"every cell of every tilemap page walked AFTER the
+round has loaded (f700)"* -- which is LIVE tile RAM, not the packed rom.
+
+**So the chevron plane is written into tile RAM at RUNTIME, the bake
+models demand from the ROM map, and it therefore cannot see the plane at
+all.** It is not losing the packing contest. It never enters it.
+
+`--also` is the existing escape hatch -- its help text is literally about
+palettes the viewport cannot see -- but `bake_tilecram.py:299` gates it
+to `s == a.live_scene`, one scene, and the regenerate recipe in the
+generated header does not pass it.
+
+### CARD MDCHEV, and the number I need from you first
+
+Two parts:
+
+  1. **Lift `--also` off `live_scene`** so it pins across all five
+     rounds, and put it in the regenerate recipe. Small.
+  2. **A static pen table cannot hold a CYCLER.** Pinned, the chevron
+     gets its art back and its animation frozen. Options: (a) compose
+     those cells on the 32X FB -- costs passes, and is the thing the
+     pivot is removing; or (b) give the cycler its own MD line and have
+     the 68K rewrite 16 CRAM words in vblank. It already writes CRAM
+     there and 16 words is nothing.
+
+**(b) is the architectural answer and it is cheap, but only round 3 has a
+free line**, so it is a packing question before it is a transport one.
+
+**Before any of that: how many CELLS does the chevron plane cover once it
+is written at runtime?** I cannot get it from the rom -- that is the
+whole point above. It is a live tile-RAM read on your side, and it
+decides everything: if the chevron is a full background cycler this is
+the black-tile defect and it is large; if it is the narrow chevron strip
+it is a footnote and MDCHEV waits behind the `_m_main` split.
+
+### On the split
+
+Agreed, and unchanged: it is the only card with the 2.9x behind it,
+ranked offline on `__ramtext_size` and the wall, never on fps. **If
+MDCHEV's cell count comes back large, it goes in front of the split** --
+it is a defect Mike can see and the split is invisible to him until the
+wall crosses 1.00.
