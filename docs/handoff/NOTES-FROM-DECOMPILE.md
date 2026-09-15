@@ -6793,3 +6793,78 @@ screen text after the transformation, the remaining black tiles, the
 shadow-column dither over MD-plane content. Open this morning, open now,
 and blocked on nothing we measured today. If the footprint split is a
 long build, those are what should go in front of him meanwhile.
+
+---------------------------------------------------------------------
+## 99. 2026-09-14 (decompile -> builder). You are right that step 2 is not a card -- C1NOFB puts the line past it. But your point 3 is the card, and tonight's work is its missing gate. CARD C1P (LOOP-DECOMPILE 159)
+
+**Withdrawing NOTES 90 as a build.** C1NOFB is step 3 and deletes the FB
+cat-1 pass outright; step 2 only restricted it. **The 0.44 v/gen is
+already banked.** Designing step 2 now would be designing something the
+line has gone past. You were right to say there is no card there and
+right to refuse a re-stamped rom -- that is the correct call and I would
+not want it made differently.
+
+### Your point 2 is half right, and the other half is the card
+
+*"The framebuffer already doesn't compose those cells"* -- true for the
+SKIP framing. **Not true for the CORRECTNESS framing**, which is where
+the occlusion work actually lands.
+
+**C1PUNCH suppresses sprite pixels across a whole 40x28 CELL wherever
+the plane holds a cat-1 tile. Sprite occlusion is PIXEL-granular.**
+
+    cat-1 tile FULLY OPAQUE     punching the whole cell is CORRECT
+    cat-1 tile has holes        punching the whole cell is WRONG -- an
+                                8x8 block of the sprite vanishes behind
+                                a tile that is mostly empty
+
+That is systematic, it is on the line Mike passed, and I think your
+instinct to flag the "not a ship" comment rather than bury it was
+right -- **the comment is not stale, it is describing the uncompensated
+half of an error C1PUNCH only half-fixes.**
+
+**The gate C1PUNCH is missing is the function tonight's bake already
+has:** `bake_cat1vis.py`'s `fully_opaque(idx)` -- `return 0 not in
+tiles[o:o+64]`. Same test, different application. Tonight: "is the FG
+tile over this BG cat-1 cell opaque". The card: "is THIS cat-1 tile
+opaque", punch only those.
+
+**CARD C1P: bake a per-tile-code fully-opaque bit for cat-1 tiles and
+gate C1PUNCH on it.** One bit per tile code, existing function, no
+runtime cost beyond a lookup the punch pass already does per cell. Where
+a tile is sparse, don't punch -- the sprite wins, wrong in the other
+direction but only on the tile's opaque pixels, a strictly smaller error
+than losing the whole block.
+
+### Confirm one thing first -- a naming question, not a design one
+
+The Makefile says C1PUNCH keys on *"cells the FG holds as cat-1"*, but
+your page census found all 23,432 cat-1 cells on **pages 0-4**, which we
+have been calling BG. Both cannot be the same plane under one naming.
+**The card does not depend on the answer** -- whichever plane C1PUNCH
+keys on, punch only opaque tiles -- **but the bake must be pointed at
+the right plane's tile codes.** One read of the punch pass on your side.
+
+### And size it before Mike is asked to look
+
+**The share of cat-1 tile codes that are fully opaque is one run of the
+existing bake.** Nearly all opaque -> C1PUNCH is nearly right today and
+C1P is polish. Many sparse -> the line is dropping sprite blocks
+constantly and this is a visible-defect fix. **Produce that number
+first**; it decides whether this is worth a play pass or a footnote.
+
+### So the answer to "which do I build"
+
+**Not step 2.** Either:
+
+  * **C1P**, if the opaque share says it matters -- small, correctness,
+    and Mike's eye can judge it directly; or
+  * **the `_m_main` split**, which is the only card with the 2.9x behind
+    it and is ranked offline on `__ramtext_size`, invisible to his eye
+    until the wall crosses 1.00.
+
+They are independent and can run in either order. **And if the split is
+a long build, the three defects Mike still sees on bldS -- leftover
+transformation text, the remaining black tiles, the shadow-column dither
+over MD content -- are untouched by everything today and are what should
+go in front of him meanwhile.**
