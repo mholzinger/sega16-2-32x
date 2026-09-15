@@ -43,6 +43,22 @@ TILES = os.path.join(ROOT, 'sh_src', 'tiles.bin')
 SCENE_TABLE, SCENES, TILES_N = 0x1CE2, 5, 20480
 BYTES_PER_SCENE = TILES_N // 8
 BG_PAGE, FG_PAGE = 0, 7          # scr2 draws page 0, scr1 page 7 (entry 11)
+# NOTES 94 / LOOP29 305: that single hardcoded pairing TESTS only 2,373 of
+# 23,432 cat1 cells. The other 18,708 are not known to be visible -- they
+# are UNEXAMINED, and counted visible by default. --pairs takes the real
+# per-scene table instead: "scene:bg:fg,scene:bg:fg,..." .
+#
+# Structure derived from the rom (LOOP29 305), which bounds the table:
+#   * the cat1 MASK comes in exactly two flavours -- pages 0-4 share one,
+#     pages 5-9 the other. That is scr2 (background) and scr1 (foreground),
+#     five pages each; the tile CODES differ across all ten.
+#   * ALL 23,432 cat1 cells are on pages 0-4. Cat-1 is a background-plane
+#     phenomenon here and the foreground plane supplies the occluders, so
+#     only bg in 0..4 against fg in 5..9 is a legal overlay.
+#   * CEILING over the best legal fg for each bg page: 12,080 of 23,432 =
+#     51.6%, against today's 2,373 = 10.1%. So a real pairing table can add
+#     at most 5.1x, and cannot add more.
+BG_GROUP, FG_GROUP = range(0, 5), range(5, 10)
 
 
 def hi_pass(rom, src):
@@ -68,6 +84,14 @@ def lo_pass(rom, src):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--pairs', metavar='S:BG:FG,...',
+                    help='per-scene (bg,fg) page pairings to test for occlusion, '
+                         'replacing the single hardcoded (0,7). A scene may list '
+                         'several pairs; a cell counts occluded if ANY of its '
+                         "scene's pairs occludes it. Only bg 0-4 / fg 5-9 is legal "
+                         '(LOOP29 305). Without this the bake tests one pairing '
+                         'and reports the other 18,708 cat1 cells as visible by '
+                         'default, which is an ASSUMPTION, not a measurement.')
     a = ap.parse_args()
     with open(ROM, 'rb') as fh:
         rom = fh.read()
@@ -81,6 +105,18 @@ def main():
         if o + 64 > len(tiles):
             return False
         return 0 not in tiles[o:o + 64]
+
+    # --pairs "0:0:7,0:1:9,2:3:9" -> {0: [(0,7),(1,9)], 2: [(3,9)]}
+    table = {}
+    if a.pairs:
+        for item in a.pairs.split(','):
+            sc, bg, fg = (int(x) for x in item.split(':'))
+            if bg not in BG_GROUP or fg not in FG_GROUP:
+                sys.exit(f'illegal pairing {item}: bg must be 0-4 (scr2), fg 5-9 (scr1) '
+                         '-- see the page-group derivation at the top of this file')
+            table.setdefault(sc, []).append((bg, fg))
+    def pairs_for(sc):
+        return table.get(sc, [(BG_PAGE, FG_PAGE)])
 
     maps, stats = [], []
     for s in range(SCENES):
@@ -96,7 +132,8 @@ def main():
                 continue
             cat1 += 1
             page, cell = divmod(i, 2048)
-            if page == BG_PAGE and fully_opaque(words[FG_PAGE * 2048 + cell] & 0x1FFF):
+            if any(page == bg and fully_opaque(words[fg * 2048 + cell] & 0x1FFF)
+                   for bg, fg in pairs_for(s)):
                 continue                       # occluded: leave the bit clear
             bits[i >> 3] |= 0x80 >> (i & 7)
             vis += 1

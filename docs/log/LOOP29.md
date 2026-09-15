@@ -9609,3 +9609,56 @@ code must be laid out CONTIGUOUSLY so it spreads across all 64 sets
 rather than stacking on a few -- a linker-script section directive when
 the split lands. NOTES 93 puts that at the difference between a 60% win
 and a 10% one.
+
+## 305. THE OCCLUSION BAKE TESTS ONE PAGE PAIRING OF FIFTY, AND THE ROM BOUNDS THE REST (2026-09-14)
+
+NOTES 94's catch, and it is a good one. `bake_cat1vis.py` hardcodes
+`BG_PAGE, FG_PAGE = 0, 7` and tests opacity only when `page == BG_PAGE`.
+So of 23,432 cat1 cells it TESTS 4,724 and reports the other **18,708 as
+visible by DEFAULT**. They are not known to be visible; they are
+unexamined. That is an assumption sitting inside a measurement.
+
+**The rom bounds the answer before the decompile thread's runtime table
+arrives.** Three structural facts, derived not assumed:
+
+1. **The cat1 MASK comes in exactly two flavours.** Pages 0-4 share one
+   mask, pages 5-9 share another, in every scene -- while the tile CODES
+   differ across all ten pages. That is scr2 (background) and scr1
+   (foreground), five pages each.
+2. **All 23,432 cat1 cells are on pages 0-4.** Cat-1 is a background-plane
+   phenomenon in this game; the foreground plane supplies the occluders.
+   So only bg in 0..4 against fg in 5..9 is a legal overlay.
+3. **The ceiling over the best legal fg for each bg page is 12,080 of
+   23,432 = 51.6%**, against today's 2,373 = 10.1%.
+
+| scene | bg cat1 | bake (0,7) | best legal | best fg |
+|---|---|---|---|---|
+| 0 | 2312 | 232 | 1005 | 7, 9 |
+| 1 | 8960 | 366 | 1830 | 7 |
+| 2 | 7360 | 1227 | 6480 | 9 |
+| 3 | 1280 | 161 | 815 | 5 |
+| 4 | 3520 | 387 | 1950 | 5 |
+| **total** | **23432** | **2373** | **12080** | |
+
+**So a real pairing table can add at most 5.1x and cannot add more** --
+NOTES 94 predicted ~5x from the cell counts alone and the structural
+bound agrees.
+
+**One correction to my own first pass.** Running ALL 90 ordered pairs gave
+a 5.4x ceiling, but that let scene 0 pick fg page 2 -- inside the
+BACKGROUND group, not a legal overlay at all. Restricted to legal
+pairings the ceiling is 5.1x. The unconstrained number was wrong and
+would have oversold the card.
+
+**Builder half of NOTES 94's split, done.** `tools/bake_cat1vis.py` now
+takes `--pairs S:BG:FG,...`, a per-scene table replacing the single
+constant; a cell counts occluded if ANY of its scene's pairs occludes it.
+Illegal pairings are REFUSED with the page-group reason, so the
+constraint cannot be bypassed by a typo. Default behaviour is unchanged
+(2,373), and feeding it the ceiling table reproduces 12,074 -- the
+parameterisation is exercised end to end and matches the independent
+matrix to six cells.
+
+Waiting on the decompile thread's half: which (bg, fg) pairs the game
+actually selects per scene, and whether any page is a scenery variant
+that is never composed (in which case its occlusion is worth nothing).
