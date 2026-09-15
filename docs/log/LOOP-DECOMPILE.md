@@ -8310,3 +8310,73 @@ right shape for a first move.
     being protected.
   * Both bakes now carry their denominator in the tool, which is the
     durable fix -- the stale docstring could not have survived it.
+
+---------------------------------------------------------------------
+## 155. THE PAIRING IS LOCKED: fg = bg + 5, every sample, every quadrant. So the legal set is FIVE pairs, not 25 -- and the bake's (0,7) is a pairing the game NEVER makes (2026-09-14)
+
+My half of NOTES 94. `tools/arcade_pagesel.lua`, arcade, no-coin, frames
+120-5400, POLLING text words 0x740/0x741 (bytes 0x410E80/0x410E82 -- the
+page selects `latch_layer_regs` already reads, m_main.c 2915) per
+quadrant per frame, keyed on round 0xFFF142 and attract step 0xFFF031.
+Full census in `docs/audit/pagesel_census.txt`.
+
+**Every distinct (which0, which1) observed in 5,280 frames:**
+
+    count  which0  which1  delta
+        8     0       0      0     transitions only, 23-101 frames
+        8     0       5     +5
+        8     1       6     +5
+        4     2       7     +5
+        4    10      11     +1     the chevron (entry 126)
+
+**The two planes are LOCKED at +5.** Not once in the run does a quadrant
+show any other delta. Quadrants differ from each other -- round 1 at
+f3405 has quads 0/2 on (2,7) while quads 1/3 are on (1,6), which is a
+horizontal scroll straddling a page boundary -- but **within a quadrant
+the pairing is always N and N+5.**
+
+### So the legal pairing set is exactly five
+
+    (bg, fg) = (0,5) (1,6) (2,7) (3,8) (4,9)
+
+One fg per bg, determined and not chosen. That matches the builder's own
+mask finding exactly and from the other direction: they found pages 0-4
+share one cat1 mask and 5-9 share another. **A game that pairs N with
+N+5 is a game with two five-page planes kept in lockstep.** Two
+independent derivations of one structure.
+
+### Which makes two of our numbers wrong
+
+**1. `bake_cat1vis.py`'s `BG_PAGE, FG_PAGE = 0, 7` is not a
+simplification -- it is a pairing that never occurs.** Page 0's occluder
+is page 5. **The standing 2,373 figure tests page 0 against a foreground
+it is never drawn under**, so it is neither a floor nor a ceiling on the
+real saving; it is a different quantity. It could move either way when
+corrected.
+
+**2. The 12,080 ceiling is unreachable.** It took the best legal fg per
+bg page -- fg 7 or 9 for scene 0, fg 9 for scene 2. **The fg is not
+selectable.** With bg=N forced to fg=N+5 the true figure is one number,
+not a maximisation, and the builder can produce it now:
+
+    --pairs 0:0:5,0:1:6,0:2:7,0:3:8,0:4:9   (and the same for each scene)
+
+### Caveats, stated because the induction is narrow
+
+  * **No-coin attract only: rounds 0 and 1** (progress 0 and 1). Rounds
+    2-4 are unobserved, and bg pages 3 and 4 never appear. The +5 rule
+    is consistent across every one of 5,280 frames but it is an
+    induction over two rounds.
+  * **(0,0) appears only at transitions** -- 23 frames at f2686, 101 at
+    f444 -- and is almost certainly a blanked load, not a composed
+    pairing. It should not be fed to the bake without checking the
+    display gate.
+  * **(10,11) is the chevron**, delta +1, already documented in entry
+    126, and it is the one exception to the rule. Its cells are the
+    transformation art; whether they are worth occluding is a separate
+    question from rounds.
+
+**Confirming rounds 2-4 needs a gameplay run rather than the attract.**
+`tools/health_mame.lua`'s coin/start pattern reaches level 1; reaching
+rounds 3-4 needs a longer scripted play. Worth doing before the bake's
+output is trusted for those scenes, and it is a probe I can run.
