@@ -2033,7 +2033,9 @@ static uint16_t rg_tpost;
 #define RSCNT   ((volatile uint16_t *)0x26038800)   /* 224 u16 */
 #define RSIDENT ((volatile uint16_t *)0x26038A00)   /* 224 u16 */
 #endif
-static inline void diag_add(int slot, uint16_t t0)
+/* noinline (footprint card): 166 bytes of .ramtext for 0.02% of
+ * instructions, spread over many call sites as a timing helper. */
+__attribute__((noinline)) static void diag_add(int slot, uint16_t t0)
 {
     DIAG[slot] += (uint16_t)(frt() - t0);
 }
@@ -3087,16 +3089,13 @@ __attribute__((noinline)) static int bm_scan_baked_ok(void)   /* ROM (noinline: 
     return 1;
 }
 /* the whole plane (which, aset) in one call: presence + level per set */
-#if defined(C1_PCELL) || (defined(C1_MASKTAB) && !defined(C1_STAMP)) || (defined(PHASE_CENSUS) && (defined(C1_FAST) || defined(C1_RTOFF)))
-/* Builds C/D need a few hundred bytes of .ramtext in the plot
- * expansions; this runs twice a generation and is bound by its ROM
- * table reads anyway (LOOP29 246: 573 ticks a plane), so under those
- * flags it fetches from ROM. Build E's ship rom fits with it in RAM;
- * only its census probe (the stamps) needs the room. */
+/* ROM, ALWAYS (2026-09-15, the footprint card): 498 bytes of .ramtext
+ * for 0.14% of the master's instructions (ares --profile, 2000 frames).
+ * It runs twice a generation and is bound by its ROM table reads
+ * anyway (LOOP29 246: 573 ticks a plane) -- the old #if kept it in RAM
+ * only because Build E's rom happened to have room, which is not a
+ * reason to hold 498 bytes of a 4 KB cache. */
 __attribute__((noinline)) static void bm_scan_baked(struct bm_state *a, int which, int aset)
-#else
-RAMCODE static void bm_scan_baked(struct bm_state *a, int which, int aset)
-#endif
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
@@ -3170,14 +3169,10 @@ static void bm_memo_check(const struct bm_memo *m, const struct bm_state *y)   /
     }
 }
 #endif
-#ifndef C1_STAMP
-/* the punch line's .ramtext is full (bldI overflowed by the memo's
- * bytes); without the stamp the memo runs from ROM -- ~150 instructions
- * twice a generation, against the 573-tick cart scan it replaces */
+/* ROM, ALWAYS (2026-09-15, the footprint card): 564 bytes of .ramtext
+ * for 0.19% of instructions. ~150 instructions twice a generation,
+ * against the 573-tick cart scan it replaces. */
 __attribute__((noinline)) static void bm_scan_memo(struct bm_state *a, int which, int aset)
-#else
-RAMCODE static void bm_scan_memo(struct bm_state *a, int which, int aset)
-#endif
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
@@ -4181,7 +4176,9 @@ static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
  * colour the MD line carries (mdp_s_qc, 9-bit bbb ggg rrr, expanded 3->5
  * bits) whenever the set has an MD line; the boundary then separates
  * identical pixels. Sets without a line keep the arcade colour. */
-static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+/* noinline (footprint card): 154 bytes of .ramtext for 0.00% of the
+ * master's instructions -- it never ran in a 2000-frame profile. */
+__attribute__((noinline)) static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
 {
     volatile uint16_t *src = PAL_SH + c * 8;
     if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
