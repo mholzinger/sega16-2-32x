@@ -8528,3 +8528,72 @@ pair, and entry 126 measured it taking only 0 and 1 across a whole run.
 Either it is dual-purpose like 0xFFF02A (entry 131) or entry 127's
 correction was about a different access. **Not load-bearing for anything
 current, but it should not sit in the log unremarked.**
+
+---------------------------------------------------------------------
+## 158. NOT DONE: "CAT1MD step 2 has its eligibility" is wrong -- the cat-1 SHARE was measured and the ELIGIBILITY was not. I ran the coarse half: 83.3% MD-resident, and the only refusals are the chevron sets (2026-09-14)
+
+Mike, on both threads declaring the day closed: *"It sounds like both
+you AND the builder gave up."* Checking rather than reassuring, and he
+is right that something was declared finished that is not.
+
+**The builder's close says "CAT1MD step 2 has its eligibility (cat-1 is
+36-44% of tiles in scenes 1/2)." That is the cat-1 SHARE, not the
+eligibility.** NOTES 90 defines eligibility as: *a tile code is
+MD-ELIGIBLE iff every pen it uses belongs to a colour set the round's
+baked MD line assignment holds* -- the condition that makes the two
+renderers byte-identical and the moving boundary invisible. **That
+number has never been produced, and it is the card's go/no-go gate.**
+
+Two different quantities, and the one we have is the one that does not
+decide anything.
+
+### The coarse half, run now
+
+`mdr_s_line[round][set]` in `sh_src/pal_rounds_md.h` gives each set's MD
+line, and the file's own header states the rule: *"A set absent here is
+REFUSED an MD line and renders as BACKDROP (m_main.c 2357) -- black
+tiles, not a fallback."* Line 0 is refusal. Against
+`docs/audit/round_sets_definitive.txt`:
+
+    round  sets  MD-resident  REFUSED  refused sets
+      0     31       28          3     [19, 20, 21]
+      1     13       10          3     [19, 20, 21]
+      2     15       12          3     [19, 20, 21]
+      3     12        9          3     [19, 20, 21]
+      4     19       16          3     [19, 20, 21]
+
+    TOTAL 90 set-slots, 75 resident = 83.3%
+
+**Nothing in the ordinary scenery is refused. The only refusals, in
+every round, are sets 19/20/21** -- which entries 123 and 129 identified
+as the cycler/chevron ramp, present only on chevron pages and
+FB-rendered regardless. So the refusal is by design and costs the card
+nothing.
+
+**The card is NOT killed. 83.3% is a go.**
+
+### But the half that decides the shimmer is still unrun
+
+Set-residency is necessary, not sufficient. `mdr_line_c[round][48]` is
+3 lines x 16 entries, and multiple 8-colour sets share each line's 15
+usable pens -- so **a set can hold a line and still have individual pens
+approximated**, which is precisely the "pen exhaustion" case m_main.c
+4327-4333 names as the only place the two renderers differ.
+
+**The real eligibility test is per-PEN, not per-set**, and it needs
+`bake_tilecram.py`'s colour data compared against each line's 15 pens.
+That is NOTES 90 step 1 and it remains the first thing to do.
+
+### The wider point, recorded because it is the process failure
+
+The day produced sixteen log entries, thirteen handoff notes and **zero
+builds**. Both threads then wrote that nothing was owed. **Two threads
+declaring "design-complete, nothing outstanding" is exactly the state in
+which a project stops moving**, and the correct close was never "nothing
+owed" -- it was "the builder goes and builds."
+
+And neither thread touched the things Mike actually sees on bldS:
+**leftover screen text after the transformation, the remaining black
+tiles, the shadow-column dither over MD-plane content.** They were open
+this morning and they are open now. They are not blocked on anything
+measured today.
