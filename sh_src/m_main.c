@@ -2040,6 +2040,88 @@ __attribute__((noinline)) static void diag_add(int slot, uint16_t t0)
     DIAG[slot] += (uint16_t)(frt() - t0);
 }
 
+#ifdef CACHE_LOCK
+/* CARD CACHELOCK (docs/design/CARD-CACHELOCK.md, derived from
+ * srcref/S32X_MiSTer/rtl/SH/SH7604/CACHE.sv).
+ *
+ * CCR.TW makes WayFromLRU return only ways 2/3 (CACHE.sv:74-89), so ways
+ * 0 and 1 stop being replaced -- but WAY_HIT still compares tags across
+ * all four (CACHE.sv:148-151), so they keep hitting. Preload them with
+ * the .ramtext.lock block and 2 KB of the hot path never misses again.
+ *
+ * ORDER IS LOAD-BEARING, and getting it wrong returns WRONG BYTES rather
+ * than merely being slow: if a way's tag is still valid while its data
+ * array already holds the lock block, a fetch of the old address HITS
+ * and reads the new data. So purge first (no tag valid anywhere), set TW
+ * second (every refill from here lands in ways 2/3 and cannot tread on
+ * what we are writing), then the data, then the tags -- which is the
+ * moment each locked line becomes live, with its data already correct.
+ *
+ * CCR.CP zeroes all four ways and the LRU (CACHE.sv:297-303), not just
+ * the replaceable pair, so every purge destroys the lock and cache_purge
+ * calls this again. ~640 stores, order 1.5% of a vint at 3 purges per
+ * generation. */
+/* the toolchain prefixes C symbols with an underscore, so bind these to
+ * the linker script's own names explicitly rather than guessing depth */
+extern uint32_t __locktext_start[] __asm__("__locktext_start");
+extern uint32_t __locktext_end[]   __asm__("__locktext_end");
+
+__attribute__((noinline)) static void cachelock_install(void)
+{
+    const uint32_t *src = (const uint32_t *)__locktext_start;
+    uint32_t base = (uint32_t)(uintptr_t)__locktext_start;
+    unsigned ways = (unsigned)(((uint32_t)(uintptr_t)__locktext_end - base) >> 10);
+    if (ways > 2u) ways = 2u;
+
+    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
+    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
+
+    for (unsigned w = 0; w < ways; w++) {
+        volatile uint32_t *d =
+            (volatile uint32_t *)(SH2_CACHE_DATA_ARRAY | ((uint32_t)w << 10));
+        const uint32_t *sp = src + (w << 8);
+        for (unsigned i = 0; i < 256u; i++) d[i] = sp[i];
+        *(volatile uint8_t *)0xFFFFFE92 =
+            (uint8_t)(((uint32_t)w << SH2_CCTL_W_SHIFT) | SH2_CCTL_TW | SH2_CCTL_CE);
+        for (unsigned ss = 0; ss < 64u; ss++) {
+            uint32_t m = base + ((uint32_t)w << 10) + (ss << 4);
+            /* tag, set and valid all ride the address; the datum is ignored */
+            *(volatile uint32_t *)(SH2_CACHE_ADDR_ARRAY | (m & 0x1FFFFFF0u) | 4u) = 0;
+        }
+    }
+    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
+    /* RIG READBACK. A silent no-op and a working lock look identical on
+     * the flip rate, so publish what actually happened: ways locked in
+     * the low half, and the count of the 128 tag slots that read back
+     * with the valid bit and the tag we wrote (CACHE.sv:379-386 returns
+     * {3'b0, TAG, LRU, 1'b0, VBIT, 2'b00} for the way in CCR.W).
+     * 0x26028FC0 is free between BMT_PAR (0xFB8) and BQ_INCOMPLETE
+     * (0xFC4). */
+    {
+        unsigned ok = 0;
+        for (unsigned w = 0; w < ways; w++) {
+            *(volatile uint8_t *)0xFFFFFE92 =
+                (uint8_t)(((uint32_t)w << SH2_CCTL_W_SHIFT) | SH2_CCTL_TW | SH2_CCTL_CE);
+            for (unsigned ss = 0; ss < 64u; ss++) {
+                uint32_t m = base + ((uint32_t)w << 10) + (ss << 4);
+                uint32_t q = *(volatile uint32_t *)
+                    (SH2_CACHE_ADDR_ARRAY | (m & 0x1FFFFFF0u));
+                if ((q & 4u) && (((q >> 10) & 0x7FFFFu) == ((m >> 10) & 0x7FFFFu)))
+                    ok++;
+            }
+        }
+        *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
+        *(volatile uint32_t *)0x26028FC0 = (ways << 16) | ok;
+    }
+}
+/* noinline is LOAD-BEARING, the same trap as LOOP29 250b in its section
+ * form: a section attribute does NOT stop LTO inlining a static, and an
+ * inlined copy lives in m_main where it cannot be locked. Marking
+ * bm_scan_rows and apply_cram without it produced no symbol at all. */
+#define LOCKCODE __attribute__((section(".ramtext.lock"), noinline))
+#else
+#define LOCKCODE RAMCODE
+#endif
 static inline void cache_purge(void)
 {
 #ifdef CACHE_OFF
@@ -2093,6 +2175,14 @@ static inline void cache_purge(void)
     }
 #else
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
+#endif
+#ifdef CACHE_LOCK
+    /* MASTER ONLY, the same stack test the CACHE_OFF guard uses: each
+     * SH-2 has its own cache and only the master's is worth locking. */
+    {
+        uint32_t sp_l; __asm__ __volatile__("mov r15,%0" : "=r"(sp_l));
+        if ((sp_l & 0x000FFFFFu) < 0x0003F800u) cachelock_install();
+    }
 #endif
 }
 
@@ -3003,7 +3093,7 @@ RAMCODE static void bm_reset(struct bm_state *a)
 
 /* scan `nr` tilemap rows of (which, aset) starting at row r0;
  * returns rows actually available for that pass (28 or 29) */
-RAMCODE static int bm_scan_rows(struct bm_state *a, int which, int aset, int r0, int nr)
+LOCKCODE static int bm_scan_rows(struct bm_state *a, int which, int aset, int r0, int nr)
 {
     const layer_regs *lr = &snap[which];
     const uint8_t *pq = aset ? lr->pq_a : lr->pq;
@@ -6702,9 +6792,9 @@ static inline int rowslot(int y)
 #define BQ_INCOMPLETE ((volatile uint32_t *)0x26028FC4)
 #endif
 #ifdef BLIT_SKIP
-RAMCODE static void blit_half(int ylo, int yhi, int bank)
+LOCKCODE static void blit_half(int ylo, int yhi, int bank)
 #else
-RAMCODE static void blit_half(int ylo, int yhi)
+LOCKCODE static void blit_half(int ylo, int yhi)
 #endif
 {
 #if defined(BLIT_SKIP) && defined(R60)
@@ -8309,7 +8399,7 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
                                           * consumed by the body at pickup
                                           * of the same k2 window */
 
-void visr_vbi(void)
+LOCKCODE void visr_vbi(void)
 {
     if (!visr_arm)
         return;

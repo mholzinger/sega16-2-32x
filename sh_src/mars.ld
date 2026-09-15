@@ -130,8 +130,17 @@ SECTIONS {
 	 * before it releases the slave. This buys ~23KB under the 0x19000
 	 * region guard for sbuf's neighbours. */
 	.ramtext 0x06031000 : AT(LOADADDR(.data) + SIZEOF(.data)) {
-		. = ALIGN(0x4);
+		. = ALIGN(0x400);
 		__ramtext_start = .;
+		/* CARD CACHELOCK: the block copied into cache ways 0/1 and
+		 * held there by CCR.TW. Must be 1KB-ALIGNED and a whole
+		 * number of KB: a way is 1KB covering all 64 sets exactly
+		 * once, so alignment is what makes set index == way offset.
+		 * docs/design/CARD-CACHELOCK.md */
+		__locktext_start = .;
+		*(.ramtext.lock)
+		. = ALIGN(0x400);
+		__locktext_end = .;
 		*(.ramtext .ramtext.*)
 		. = ALIGN(0x4);
 		__ramtext_end = .;
@@ -141,6 +150,8 @@ SECTIONS {
 	_sdata = SIZEOF(.data);
 	ASSERT(__ramtext_end <= 0x06038000,
 	       ".ramtext overflows its 0x31000-0x38000 SDRAM slot (probe scrap 0x38000-0x39000, SPR_LAND 0x39000)")
+	ASSERT(__locktext_end - __locktext_start <= 0x800,
+	       ".ramtext.lock exceeds the two cache ways it is locked into (2048 B)")
 	ASSERT(__ramtext_size > 0 && (__ramtext_size & 3) == 0,
 	       ".ramtext size must be a non-zero multiple of 4 for the boot copy")
 

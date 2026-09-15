@@ -1178,6 +1178,16 @@ endif
 # `make ... C1CACHED=1` = Build F (LOOP29 249): the slave reads the punch's
 # cell mask through its cache instead of the uncached SDRAM alias (a
 # round trip per cell, per pixel on the 1:1/zoomed paths). Needs C1PUNCH.
+# `make ... CACHELOCK=1` = CARD CACHELOCK (docs/design/CARD-CACHELOCK.md).
+# Preloads cache ways 0/1 with the .ramtext.lock block and sets CCR.TW so
+# they stop being replaced but keep hitting -- 2 KB of the master's hot
+# path that never misses. RIG ONLY: ares charges instruction cycles and
+# models no cache, so it can neither show the win nor catch a mistake
+# here. Readback at 0x26028FC0 = (ways << 16) | tag slots verified (128
+# when both ways took).
+ifdef CACHELOCK
+SHCCFLAGS += -DCACHE_LOCK
+endif
 ifdef C1CACHED
 SHCCFLAGS += -DC1_CACHED
 endif

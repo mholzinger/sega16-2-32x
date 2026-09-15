@@ -116,6 +116,18 @@ typedef volatile signed long int vint32;
 #define SH2_CCTL_OD         0x04    /* data replacement disable */
 #define SH2_CCTL_ID         0x02    /* instruction replacement disable */
 #define SH2_CCTL_CE         0x01
+/* CCR[7:6] selects which way the ADDRESS array read/write touches.
+ * Packed struct, MSB first: W[7:6], unused[5], CP[4], TW[3], OD[2],
+ * ID[1], CE[0] -- srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101. */
+#define SH2_CCTL_W_SHIFT    6
+#define SH2_CCTL_W_MASK     0xC0
+/* The two cache arrays are directly addressable (CACHE.sv:53-54).
+ * ADDRESS array: way from CCR.W, and the set, tag and valid bit come
+ * from the ADDRESS WRITTEN -- set A[9:4], tag A[28:10], valid A[2]
+ * (CACHE.sv:291-294). DATA array: way A[11:10], longword A[9:2]
+ * (CACHE.sv:255-287,318-319). */
+#define SH2_CACHE_ADDR_ARRAY 0x60000000u
+#define SH2_CACHE_DATA_ARRAY 0xC0000000u
 
 #define SH2_FRT_TIER        (*(volatile uint8_t *)0xFFFFFE10)
 #define SH2_FRT_FTCSR       (*(volatile uint8_t *)0xFFFFFE11)
