@@ -2121,7 +2121,7 @@ static void r60_push(void) {
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
-#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS) || defined(BODY_CENSUS)
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS) || defined(BODY_CENSUS) || defined(CACHE_LOCK_SHOW)
 		{	/* nine bits: tag in blue, count in green+red */
 			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
@@ -2875,8 +2875,10 @@ void shim_vblank(void) {
 		}
 	}
 #endif
-#ifdef BODY_CENSUS
+#if defined(BODY_CENSUS) || defined(CACHE_LOCK_SHOW)
 	/* NOTES 85 / LOOP29 295: the master's body split, relayed verbatim.
+	 * Under CACHE_LOCK_SHOW the same relay carries the cache lock's
+	 * readback instead: tag 0 = ways locked, tag 1 = tag slots verified.
 	 * The master owns the accounting and the tag (it is the only side that
 	 * can see DIAG); this just moves its word onto the value channel.
 	 *   tag 0 window span  1 ship  2 maps drain  3 whole generation

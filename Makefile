@@ -1188,6 +1188,13 @@ endif
 ifdef CACHELOCK
 SHCCFLAGS += -DCACHE_LOCK
 endif
+# `make ... CACHELOCKSHOW=1` = put the lock readback on the value channel
+# (tag 0 ways locked, tag 1 of 128 tag slots verified). Needs CACHELOCK and
+# BOOTVALUE; without it a failed lock and a useless lock read the same.
+ifdef CACHELOCKSHOW
+SHCCFLAGS += -DCACHE_LOCK_SHOW
+MDCCFLAGS += -DCACHE_LOCK_SHOW
+endif
 ifdef C1CACHED
 SHCCFLAGS += -DC1_CACHED
 endif

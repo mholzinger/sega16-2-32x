@@ -2063,6 +2063,10 @@ __attribute__((noinline)) static void diag_add(int slot, uint16_t t0)
  * generation. */
 /* the toolchain prefixes C symbols with an underscore, so bind these to
  * the linker script's own names explicitly rather than guessing depth */
+static uint8_t cl_verified, cl_installed;
+#ifdef CACHE_LOCK_SHOW
+static uint16_t cl_show, cl_ways;
+#endif
 extern uint32_t __locktext_start[] __asm__("__locktext_start");
 extern uint32_t __locktext_end[]   __asm__("__locktext_end");
 
@@ -2090,14 +2094,13 @@ __attribute__((noinline)) static void cachelock_install(void)
         }
     }
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
-    /* RIG READBACK. A silent no-op and a working lock look identical on
-     * the flip rate, so publish what actually happened: ways locked in
-     * the low half, and the count of the 128 tag slots that read back
-     * with the valid bit and the tag we wrote (CACHE.sv:379-386 returns
-     * {3'b0, TAG, LRU, 1'b0, VBIT, 2'b00} for the way in CCR.W).
-     * 0x26028FC0 is free between BMT_PAR (0xFB8) and BQ_INCOMPLETE
-     * (0xFC4). */
-    {
+    cl_installed = 1;
+    /* RIG READBACK, ONCE. The first cut ran this 128-iteration loop on
+     * EVERY purge, which is what the 21 -> 13 on the rig measured -- my
+     * own scaffolding, not locking. It answers a question that only
+     * needs answering once: did the tags take. 0x26028FC0 is free
+     * between BMT_PAR (0xFB8) and BQ_INCOMPLETE (0xFC4). */
+    if (!cl_verified) {
         unsigned ok = 0;
         for (unsigned w = 0; w < ways; w++) {
             *(volatile uint8_t *)0xFFFFFE92 =
@@ -2112,18 +2115,80 @@ __attribute__((noinline)) static void cachelock_install(void)
         }
         *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
         *(volatile uint32_t *)0x26028FC0 = (ways << 16) | ok;
+        cl_verified = 1;
+#ifdef CACHE_LOCK_SHOW
+        /* SDRAM is not readable from the rig, and "lock installed but
+         * did not pay" and "lock silently failed" read the SAME on the
+         * flip rate -- both land on TW-only. So put the verified tag
+         * count where the value channel can see it: tag 0 = ways, tag 1
+         * = slots verified (128 when both ways took). */
+        cl_show = (uint16_t)((ok > 127u) ? 127u : ok);
+        cl_ways = (uint16_t)ways;
+#endif
     }
 }
 /* noinline is LOAD-BEARING, the same trap as LOOP29 250b in its section
  * form: a section attribute does NOT stop LTO inlining a static, and an
  * inlined copy lives in m_main where it cannot be locked. Marking
  * bm_scan_rows and apply_cram without it produced no symbol at all. */
+/* THE PURGE THAT KEEPS THE LOCK. CCR.CP zeroes all four ways
+ * (CACHE.sv:297-303), so re-installing after every purge means 640
+ * cache-array writes three times a generation -- which is what the
+ * first rig run actually measured.
+ *
+ * With TW set, every fill lands in ways 2 or 3 (CACHE.sv:74-89), so
+ * ways 2 and 3 hold EVERY non-locked line and clearing their valid bits
+ * is a complete coherency purge for everything the blanket CP was
+ * protecting. The locked block is read-only code, so it never needs
+ * invalidating. 128 tag writes instead of 640 data + 128 tag, and the
+ * lock survives.
+ *
+ * The valid bit rides address bit 2 (CACHE.sv:291-294); writing it 0
+ * clears the entry for the way named by CCR.W. */
+__attribute__((noinline)) static void cachelock_purge(void)
+{
+    uint32_t base = (uint32_t)(uintptr_t)__locktext_start;
+    for (unsigned w = 2; w < 4u; w++) {
+        *(volatile uint8_t *)0xFFFFFE92 =
+            (uint8_t)(((uint32_t)w << SH2_CCTL_W_SHIFT) | SH2_CCTL_TW | SH2_CCTL_CE);
+        for (unsigned ss = 0; ss < 64u; ss++)
+            *(volatile uint32_t *)(SH2_CACHE_ADDR_ARRAY | (ss << 4)) = 0;
+    }
+    *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_TW | SH2_CCTL_CE;
+    /* one-slot spot check: if way 0 set 0 lost its tag, something
+     * purged underneath us and the block has to go back */
+    {
+        uint32_t q = *(volatile uint32_t *)
+            (SH2_CACHE_ADDR_ARRAY | (base & 0x1FFFFFF0u));
+        if (!(q & 4u)) cl_installed = 0;
+    }
+}
 #define LOCKCODE __attribute__((section(".ramtext.lock"), noinline))
 #else
 #define LOCKCODE RAMCODE
 #endif
 static inline void cache_purge(void)
 {
+#ifdef CACHE_LOCK
+    /* MASTER ONLY, the same stack test the CACHE_OFF guard uses: each
+     * SH-2 has its own cache and only the master's is worth locking.
+     * This REPLACES the blanket CP rather than following it -- CP zeroes
+     * all four ways, so running it first and re-installing after is the
+     * 640-write-per-purge loop the first rig run actually measured
+     * (21 -> 13). cachelock_purge() invalidates ways 2/3, which under TW
+     * hold every non-locked line, so it is a complete coherency purge
+     * for everything CP was protecting, at 128 writes and with the lock
+     * left standing. */
+    {
+        uint32_t sp_l; __asm__ __volatile__("mov r15,%0" : "=r"(sp_l));
+        if ((sp_l & 0x000FFFFFu) < 0x0003F800u) {
+            if (cl_installed) cachelock_purge();
+            else              cachelock_install();   /* does its own CP */
+            return;
+        }
+        /* the slave falls through to the ordinary purge below */
+    }
+#endif
 #ifdef CACHE_OFF
     /* NOTES 89 SUPERSEDES THE CE-CLEAR FORM. CACHE_OFF_CCR is now set by
      * the Makefile to one of three values against the 0x11 baseline:
@@ -2175,14 +2240,6 @@ static inline void cache_purge(void)
     }
 #else
     *(volatile uint8_t *)0xFFFFFE92 = SH2_CCTL_CP | SH2_CCTL_CE;
-#endif
-#ifdef CACHE_LOCK
-    /* MASTER ONLY, the same stack test the CACHE_OFF guard uses: each
-     * SH-2 has its own cache and only the master's is worth locking. */
-    {
-        uint32_t sp_l; __asm__ __volatile__("mov r15,%0" : "=r"(sp_l));
-        if ((sp_l & 0x000FFFFFu) < 0x0003F800u) cachelock_install();
-    }
 #endif
 }
 
@@ -8401,6 +8458,14 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
 
 LOCKCODE void visr_vbi(void)
 {
+#ifdef CACHE_LOCK_SHOW
+    {   /* re-posted every vint; the 68K keeps the last tagged word */
+        static uint8_t cl_ph;
+        cl_ph ^= 1;
+        MARS_SYS_COMM6 = (uint16_t)(0xA000 | ((uint16_t)cl_ph << 7)
+                                    | (cl_ph ? cl_show : cl_ways));
+    }
+#endif
     if (!visr_arm)
         return;
     DIAG[49]++;

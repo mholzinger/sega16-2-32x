@@ -122,3 +122,47 @@ locking. The verdict on locking is not yet measured.
      The locked block would have to cover most fetches, which means
      extracting m_main's dispatch chain (m_main.c:11039-11171, 29% of
      master instructions by itself) into a lockable function.
+
+## AFTER THE FIXES, 2026-09-15: the mechanism works and the card still loses
+
+Two fixes. (1) the readback runs once, behind cl_verified, instead of on
+every purge. (2) cachelock_purge() REPLACES the blanket CP rather than
+following it: under TW every fill lands in ways 2/3, so clearing those
+two ways' valid bits through the address array is a complete coherency
+purge for everything CP protected, the locked block being read-only
+code. 128 writes a purge instead of 640 + 128, and the lock survives.
+
+(The "re-install lazily" idea in the section above does NOT work and is
+superseded: CP zeroes all four ways, so a lazy check finds the lock gone
+every time and rebuilds it. The fix had to be to stop running CP.)
+
+    baseline (bldS flags, 4-way)            n=6   median 27
+    TW only (half cache, nothing locked)    n=7   median 21
+    CACHELOCK v1 (reinstall every purge)    n=14  median 13
+    CACHELOCK v2 (fixed)                    n=8   median 21
+
+13 -> 21 recovers everything the instrument was costing. v2 then lands
+EXACTLY on TW-only, so locking 17.9% of the master's instruction fetches
+is worth nothing measurable, while TW's own 27 -> 21 stands.
+
+THE LOCK IS CONFIRMED TO INSTALL, so this is a tested card and not a
+no-op mistaken for one. CACHELOCKSHOW puts the readback on the value
+channel: ways = 2 on every sample, verified tag slots = 127. Note the
+127 is SATURATED -- the channel carries 7 bits and the code caps at 127
+against a maximum of 128, so 127 and 128 are indistinguishable here. The
+same saturation trap as TRIPCENSUS's flat 63. Either way both ways took.
+
+## Verdict
+
+2 KB against a 21,936 B working set is too small a locked fraction to
+pay for halving the other 82%. The mechanism is sound and cheap; the
+size is wrong. Winning needs the locked block to cover most fetches,
+which means extracting m_main's dispatch chain (m_main.c:11039-11171,
+29% of master instructions in one contiguous region) into a lockable
+function -- a refactor of a 5,000-line function with ~100 live locals,
+not a flag.
+
+STILL UNVERIFIED: cachelock_purge() replaces CP by REASONING, not
+measurement. If that reasoning is wrong the picture corrupts rather than
+slowing, and the flood covers the screen in every shot taken here, so
+the picture has not been checked. Do that before this goes near a line.
