@@ -9662,3 +9662,68 @@ matrix to six cells.
 Waiting on the decompile thread's half: which (bg, fg) pairs the game
 actually selects per scene, and whether any page is a scenery variant
 that is never composed (in which case its occlusion is worth nothing).
+
+## 306. THE PAGE PAIRING IS (N, N+5) AND LOCKED -- OCCLUSION IS 47.7%, NOT 10.1% (2026-09-14)
+
+NOTES 95 measured it off the arcade rather than inferring it:
+`tools/arcade_pagesel.lua`, no-coin, frames 120-5400, polling the page
+selects at text words 0x740/0x741 per quadrant per frame
+(`docs/audit/pagesel_census.txt`). **Every observation has delta +5.**
+Quadrants differ from each other -- round 1 at f3405 has quads 0/2 on
+(2,7) and quads 1/3 on (1,6), a scroll straddling a page boundary -- but
+within a quadrant it is always N and N+5.
+
+    (bg, fg) = (0,5) (1,6) (2,7) (3,8) (4,9)
+
+**This meets LOOP29 305's mask finding from the other direction.** Pages
+0-4 share one cat1 mask and 5-9 another; a game that pairs N with N+5 is a
+game with two five-page planes in lockstep. Two independent derivations,
+one structure.
+
+### Two of our numbers were wrong, and one was mine
+
+**(0,7) is not a simplification, it is a pairing that never occurs.**
+Page 0's occluder is page 5. The 2,373 this bake has always reported
+tested page 0 against a foreground it is never drawn under -- so it is
+not a floor or a ceiling on the real saving, it is a DIFFERENT QUANTITY
+and could have moved either way. That also retires the "18,708 untested"
+framing I wrote in 305: the right statement is that all of it was tested
+against the wrong partner.
+
+**And my 12,080 ceiling is unreachable.** It maximised over the best
+legal foreground per background page (7 or 9 for scene 0, 9 for scene 2).
+The foreground is not selectable; bg = N forces fg = N+5. There is one
+answer, not a maximisation. The bound was sound as a bound -- the real
+number does sit under it -- but it was never attainable.
+
+### The real number
+
+    --pairs 0:0:5,0:1:6,...,4:4:9
+
+| scene | cat1 | occluded | % |
+|---|---|---|---|
+| 0 | 2312 | 990 | 43% |
+| 1 | 8960 | 1373 | 15% |
+| 2 | 7360 | **6218** | **84%** |
+| 3 | 1280 | 800 | 62% |
+| 4 | 3520 | 1806 | 51% |
+| **total** | **23432** | **11187** | **47.7%** |
+
+**11,187 of 23,432 = 47.7%, against the legacy 2,373 = 10.1%. 4.7x**, and
+inside 305's 5.1x bound. It is also **93% of the unreachable 12,080** --
+the game's locked pairing is very nearly optimal for occlusion, which is
+not something either thread predicted.
+
+### What is NOT yet measured, and it is most of the number
+
+NOTES 95's census is attract only, rounds 0 and 1; bg pages 3 and 4 never
+appear there. **Scenes 2, 3 and 4 contribute 8,824 of the 11,187 -- 79%
+of the saving -- and rest on the induction that (N, N+5) holds in rounds
+the attract never reaches.** The induction is strong (every quadrant,
+every frame, 5,280 frames, no exception) but it is an induction.
+
+So yes to the scripted gameplay probe, and it should land before the
+bake's output is trusted for scenes 2-4. Two other census notes to carry
+into it: (0,0) appears only at transitions (23 frames at f2686, 101 at
+f444) and is almost certainly a blanked load -- check the display gate
+before feeding it to the bake -- and (10,11) is the chevron (entry 126).

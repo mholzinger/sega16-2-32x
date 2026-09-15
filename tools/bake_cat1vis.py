@@ -42,7 +42,20 @@ TILES = os.path.join(ROOT, 'sh_src', 'tiles.bin')
 
 SCENE_TABLE, SCENES, TILES_N = 0x1CE2, 5, 20480
 BYTES_PER_SCENE = TILES_N // 8
-BG_PAGE, FG_PAGE = 0, 7          # scr2 draws page 0, scr1 page 7 (entry 11)
+# THE PAIRING IS (N, N+5) AND IT IS LOCKED -- measured, not assumed
+# (NOTES 95, docs/audit/pagesel_census.txt: the arcade's own page selects at
+# text words 0x740/0x741, frames 120-5400, every quadrant, delta ALWAYS +5).
+#   (0,5) (1,6) (2,7) (3,8) (4,9)
+# One foreground per background. Not selectable, so there is nothing to
+# maximise over. Use --pairs with this table; see DEFAULT_PAIRS below.
+#
+# (0,7) WAS NEVER A SIMPLIFICATION -- IT IS A PAIRING THAT NEVER OCCURS.
+# Page 0's occluder is page 5. The 2,373 this file used to report tested
+# page 0 against a foreground it is never drawn under, so that figure is
+# not a floor or a ceiling on the real saving; it is a different quantity
+# and it can move either way. Kept only as the legacy default so old
+# invocations do not silently change meaning.
+BG_PAGE, FG_PAGE = 0, 7          # legacy default; NOT a pairing the game makes
 # NOTES 94 / LOOP29 305: that single hardcoded pairing TESTS only 2,373 of
 # 23,432 cat1 cells. The other 18,708 are not known to be visible -- they
 # are UNEXAMINED, and counted visible by default. --pairs takes the real
@@ -59,6 +72,13 @@ BG_PAGE, FG_PAGE = 0, 7          # scr2 draws page 0, scr1 page 7 (entry 11)
 #     51.6%, against today's 2,373 = 10.1%. So a real pairing table can add
 #     at most 5.1x, and cannot add more.
 BG_GROUP, FG_GROUP = range(0, 5), range(5, 10)
+# The locked table, ready to pass: --pairs "$(python3 -c 'print(DEFAULT_PAIRS)')"
+DEFAULT_PAIRS = ','.join(f'{s}:{b}:{b+5}' for s in range(SCENES) for b in range(5)) \
+    if 'SCENES' in dir() else ''
+# Result with it (LOOP29 306): 11,187 of 23,432 cat1 cells occluded = 47.7%,
+# against the legacy 2,373 = 10.1%. That is 4.7x, and 93% of the 12,080 that
+# free choice of foreground would allow -- the game's locked pairing is
+# very nearly optimal for occlusion.
 
 
 def hi_pass(rom, src):
