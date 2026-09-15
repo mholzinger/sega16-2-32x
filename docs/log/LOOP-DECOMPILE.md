@@ -8597,3 +8597,82 @@ And neither thread touched the things Mike actually sees on bldS:
 tiles, the shadow-column dither over MD-plane content.** They were open
 this morning and they are open now. They are not blocked on anything
 measured today.
+
+---------------------------------------------------------------------
+## 159. C1NOFB changes the plan: the line is past step 2, so step 2 is not the next card. And C1PUNCH masks at CELL granularity what is a PIXEL-granular occlusion -- tonight's `fully_opaque` test is exactly the gate it is missing (2026-09-14)
+
+The builder's find, verified in the Makefile:
+
+    C1NOFB (2007-2012)  "PLAN-TILES-TO-VDP step 3. Removes the FB cat-1
+                        pass ENTIRELY so MD plane A's priority bit
+                        carries cat1 on its own. Sprites then wrongly
+                        cover cat1 where they overlap... so this is the
+                        step-3 MEASUREMENT and not a ship."
+    C1PUNCH (1109-1112) "sprite pixels of priority < 3 are not written
+                        into cells the FG holds as cat-1 (a 40x28 mask
+                        from the master's name-table pass)... Needs
+                        CAT1MD + C1NOFB."
+
+Both are on bldS. **So the line is not at step 1 awaiting step 2 -- it
+is at step 3, past both, with a compensator.**
+
+**Consequence: NOTES 90's step-2 design is obsolete as a card.** Step 2
+restricts the FB cat-1 pass to sprite rows; step 3 deletes the pass
+outright. **The 0.44 v/gen step 2 was worth has already been banked.**
+Writing a design doc for it now would be designing something the line
+has already gone past. The builder is right that there is no card there,
+and right to say so rather than hand over a re-stamped rom.
+
+### But their point 2 is half right, and the other half is a card
+
+They say the occlusion work has no consumer because *"the framebuffer
+already doesn't compose those cells."* True for the SKIP framing. **It
+is not true for the CORRECTNESS framing, and that is where the work
+lands.**
+
+**C1PUNCH suppresses sprite pixels across a whole 40x28 CELL wherever
+the plane holds a cat-1 tile. Sprite occlusion is PIXEL-granular.** So
+for a cat-1 tile that is fully opaque, punching the whole cell is
+correct -- every pixel of it should be in front. **For a cat-1 tile with
+transparent pixels, punching the whole cell is WRONG: the sprite should
+show through the holes and does not.** An 8x8 block of the sprite
+disappears behind a tile that is mostly empty.
+
+That is a systematic error, it is on the line Mike passed, and the
+Makefile's "not a ship" comment is describing the uncompensated half of
+it rather than being stale.
+
+**The gate C1PUNCH needs is exactly the test tonight's bake already
+implements:** `bake_cat1vis.py`'s `fully_opaque(idx)` -- *"return 0 not
+in tiles[o:o+64]"*. Same function, different application. Tonight it
+asked "is the FG tile over this BG cat-1 cell fully opaque". The card
+asks "is THIS cat-1 tile fully opaque", and punches only those.
+
+    punch a cell   iff its cat-1 tile is fully opaque
+    otherwise      do not punch -- the sprite wins, which is wrong in
+                   the other direction but only on the tile's OPAQUE
+                   pixels, a strictly smaller error than losing the
+                   whole 8x8 block
+
+**Card C1P: bake a per-tile-code "fully opaque" bit for cat-1 tiles and
+gate C1PUNCH on it.** One bit per tile code, the existing function, no
+runtime cost beyond a table lookup the punch pass already does per cell.
+
+### One thing to confirm before it is built, and it is a naming question
+
+The Makefile says C1PUNCH keys on *"cells the FG holds as cat-1"*, while
+the builder's page census found all 23,432 cat-1 cells on **pages 0-4**,
+which we have been calling BG. Those cannot both be the same plane under
+one naming. **The card does not depend on the answer -- whichever plane
+C1PUNCH keys on, it should punch only fully-opaque tiles -- but the bake
+must be pointed at the right plane's tile codes** or it will gate on the
+wrong set. Builder's to resolve; it is one read of the punch pass.
+
+### And the sizing, which is free
+
+The share of cat-1 tile codes that are fully opaque is one run of the
+existing bake. If nearly all are opaque, C1PUNCH is nearly correct today
+and the card is a small polish. If many are sparse, the line is losing
+sprite blocks constantly and this is a visible-defect fix, not a polish.
+**That number should be produced before Mike is asked to look at
+anything.**
