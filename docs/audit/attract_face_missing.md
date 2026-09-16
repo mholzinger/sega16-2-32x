@@ -1,5 +1,41 @@
 # THE ATTRACT FACE SCREEN DRAWS NO FACE (2026-09-15, ares, no rig)
 
+**METHOD CORRECTED 2026-09-16 after re-reading START-HERE and
+ARCHITECTURE.md. Three things in the first version were wrong about
+documented architecture; the observation survives all three, but the
+reasoning below the line is what should be reused, not the original.**
+
+  1. ALIGNMENT. This file first aligned by a SPEED RATIO (our frame =
+     arcade x 1.309, from the ships counter). The project's method is an
+     ADDITIVE offset from the display-gate mailbox (0xFFB001 bit 5),
+     bisected, and it already exists as tools/attract_parity.py. On this
+     build it reports OFFSET = 55.
+  2. CROP. ares screenshots are 1415x243 WITH OVERSCAN. The active area
+     is crop 1280x224+65+19 -> 320x224. The first version computed pixel
+     statistics on the uncropped frame. Redone with the crop the numbers
+     barely move (arcade 31.2% vs 30.9%), but uncropped stats are not
+     comparable to the corpus and must not be quoted.
+  3. SINGLE BUFFERING. Under FBXPORT the master composes INTO THE BANK
+     BEING DISPLAYED (START-HERE, "THE BAR"), so one screenshot can
+     catch a partly-composed frame and a still frame is expected. A
+     single missing element in a single shot is NOT evidence. What makes
+     this finding stand is that it is zero at every frame across the
+     whole screen, not that it is zero in one.
+
+Also note tools/attract_parity.py's ladder tops out at 90 frames and the
+face/eye rows never collapse (diffs 100-113), which is consistent with
+our lag being far larger than 90 frames by that point in the timeline.
+A FIXED offset only holds near the alignment point on a build this slow.
+
+AND THE BAR IS NOT THE NUMBER THIS FILE FIRST QUOTED. "ships 3058/4000 =
+47.8 fps" is a ships counter. The bar is tools/presented_fps.py MOTION,
+and on this build it is 9.3 fps (any-change 25.7). START-HERE's opening
+section exists because ranking on the wrong one of these already cost
+two sessions.
+
+---
+
+
 Found offline on the line (`make line`, bldS-equivalent, 17 stamp bytes).
 
 ## Alignment
