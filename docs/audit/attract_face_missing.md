@@ -120,3 +120,31 @@ So the sets-19/20/21 refusal plausibly explains the flat blue. It does
 not explain the missing face, and I asserted that it did. The next
 question is which set the face tiles carry, and whether THAT set is
 packed -- not more work on 19/20/21.
+
+## WHERE THE FACE IS LOST (2026-09-16) — narrowed by elimination
+
+Everything upstream of the screen is CORRECT. Checked in order:
+
+    tile art baked        page 10: 127/127 codes in sh_src/tiles.bin
+                          page 11:  32/32   (1 blank, code 1281)
+    art reaches MD VRAM   91 of 91 distinct tile masks present at f1585
+    palette packs         mdpen_bake --also 20,21 fits (41 sets,
+                          lines [15,15,14], one pen spare)
+    palette matters?      NO -- built it, pixel-identical to bldS
+
+So the art is baked, shipped and resident, and the colours are available.
+The screen still renders flat.
+
+THE REMAINING SUSPECT IS THE 32X FB LAYER COVERING THE MD PLANES. The FB
+at f1585 is 67.3% pen 0 (transparent, priority set) but also 4.9% pen 18
+= rgb(0,0,248) blue, 2.8% pen 23 = blue, 4.3% pen 128 = black — roughly a
+third of the screen carrying FLAT blue and black. The MD planes below it
+hold the correct detailed art with the correct palette. A flat FB fill
+composited OVER a correct MD render is exactly the observed picture: right
+colours, no zigzag, no face.
+
+NEXT TEST, and it is one build: suppress the FB compose for this screen
+(or run with the FB layer forced transparent) and see whether the face
+and the zigzag appear from the MD planes underneath. If they do, the bug
+is that the SH-2 is compositing a screen it should be leaving to the VDP,
+and the fix is a scene/page gate, not a palette or a bake.
