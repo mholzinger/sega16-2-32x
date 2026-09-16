@@ -8931,3 +8931,96 @@ Not a palette-refusal card. Two separate things:
      is a sprite question, not a tile-art one.
 
 **(2) is the defect Mike sees. (1) is the thing I misdiagnosed as (2).**
+
+## 162. The FB theory has a confound and a hole, and the gate it needs already exists: GLOW_PAGE's "any page nibble >= 10" (2026-09-16)
+
+### The confound: the proposed test cannot produce the face
+
+The builder's build is "suppress the FB compose on that screen and see
+whether the face appears from underneath."
+
+**The face cannot appear.** Entry 161 settled from rom that the
+transformation face is a four-palette ZOOMED SPRITE built by `sub_90F4`
+at 0x90F4, not tile art. **Our sprites are composed in the 32X
+framebuffer.** Suppressing the FB compose removes the only surface the
+face could ever be drawn on.
+
+So the outcome space is:
+
+    FB suppressed, ZIGZAG appears     -> FB theory CONFIRMED
+    FB suppressed, still flat         -> FB theory DEAD
+    FB suppressed, face appears       -> IMPOSSIBLE, either way
+
+**The test is sound; only its success criterion is wrong.** Judged on
+"does the face appear" a correct confirmation reads as a failure. The
+criterion has to be the BACKDROP -- the zigzag -- and the face is a
+second, separate bug that this build cannot speak to.
+
+### The hole: 67.3% transparent does not fit a uniformly flat screen
+
+The builder's own frame census at f1585: the FB is **67.3% transparent**,
+plus 4.9% pen 18, 2.8% pen 23, 4.3% pen 128 -- about 12% flat fill.
+
+**A transparent FB pixel shows the MD planes.** So two-thirds of that
+screen is already showing the MD through, and if the MD planes held the
+right art in the right colours, **two-thirds of the zigzag should already
+be visible.** It is not.
+
+FB coverage therefore does not explain a screen that is flat
+*everywhere*. It explains a screen that is flat over ~12% of its area.
+Either the flat pens are concentrated exactly where the picture should be
+and the rest is genuinely empty backdrop, or the MD planes are not
+showing pages 10/11 at all and the FB is a second-order effect.
+
+**That is a spatial question, not a histogram question**: where are the
+flat pixels? Scattered across the frame -> the FB is painting over
+everything. One contiguous block -> the FB is innocent and the MD side is
+the fault.
+
+### The gate already exists, and it is proven exact
+
+The builder plans a "scene/page gate" for the suppress build. **The repo
+has one, it is exactly this screen, and it is already argued correct** --
+`m_main.c:14620-14650`, behind `GLOW_PAGE`:
+
+    /* The chevron plane is pages 10 and 11 and nothing else in a whole
+     * arcade run selects a page >= 10, so "any quadrant of either
+     * plane's page select >= 10" is an exact marker for the
+     * transformation. */
+    uint16_t gp_f = TEXT_C[0x740], gp_b = TEXT_C[0x741];
+    uint16_t gp_a = (uint16_t)(gp_f & ((gp_f << 1) | (gp_f << 2)) & 0x8888u);
+    uint16_t gp_c = (uint16_t)(gp_b & ((gp_b << 1) | (gp_b << 2)) & 0x8888u);
+    glow_chev = (uint8_t)((gp_a | gp_c) != 0);
+
+Branchless, four nibbles per word in one mask, and the comment records
+that the looped form cost 0.07 v/gen (LOOP29 286). **`glow_chev` is the
+gate. The suppress build should reuse it, not invent one.**
+
+The same comment also corrects my note 101 on one point, and the repo's
+reading is sharper than mine: **0xFFF148 is an OBJECT marker, not a scene
+flag -- dispatcher at 0x398E, value = slot + 1.** That is consistent with
+`sub_90F4` doing `move.b (byte_FFF109).w,(byte_FFF148).w` then
+`addq.b #1` -- 0xFFF109 is a slot index, not a cutscene id. My "cutscene
+id + 1" should read "object slot + 1".
+
+### And there is already a measured anomaly on this exact screen
+
+The `GLOW_PAGE` block carries it (LOOP29 284/285): **"the page gate fires
+at once, but only 2 of 8 chevron frames show the game's own sets 20/21."**
+
+Six of eight frames on this screen do not show the right sets, and that
+was measured before any of this week's theories existed. It is
+palette-side and it is upstream of the FB. **The builder's "does palette
+matter -- NO, pixel-identical" was a test of the STATIC bake; the
+animator handover is a different mechanism and 285 says it is already
+known to be slow.**
+
+### So the order of work
+
+  1. Reuse `glow_chev`, do not write a gate.
+  2. Judge the suppress build on the **zigzag**, never on the face.
+  3. Before or alongside it: **where are the flat pixels spatially?**
+     That question separates the FB theory from an MD-side fault more
+     cheaply than a build does.
+  4. The face is a sprite and needs its own investigation whatever
+     happens to the backdrop.
