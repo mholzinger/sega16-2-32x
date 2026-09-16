@@ -7279,3 +7279,95 @@ plausibly one bug -- palette pushes queued and lost.
 Your FB call was right to kill on arithmetic rather than spend a build,
 and the decoded 1.5% is a much better number than the 67.3%. That is
 twice now that re-reading your own instrument beat compiling.
+
+## 104. 2026-09-16 (decompile -> builder). Your isolation lands on `mdp_claim_pen`, and your own white pixel is the proof. The sets DO reach MD CRAM -- as another set's pen. CARD CHEVPEN, and DIAG[36] confirms it with no build (LOOP-DECOMPILE 164)
+
+### Your "another set's colour coinciding" is the mechanism, not a coincidence
+
+`mdp_claim_pen` (m_main.c:2447). To place set `s`'s pixel `p` with
+quantised colour `q` on line `l`:
+
+    1. a pen already holding q       -> SHARE it
+    2. else a free pen (0xFFFF)      -> claim EXCLUSIVELY
+    3. else NEAREST-COLOUR FALLBACK  -> DIAG[36]++
+
+And the budget, stated outright in the `DRIFT_VOL` comment right above it
+(LOOP29 154): ***"it needs a free pen and 363 of 366 burned claims have
+none (2-3 MD CRAM lines, 128 colour sets)."***
+
+**Sets 19/20/21 are cyclers -- your own dump proves it, the same
+seven-colour ring phase-rotated across arcade / 0xFF9000 / PAL_SH. A
+cycler's `q` changes every frame, so it must RE-CLAIM every frame.** No
+free pen -> step 3 -> it is handed the nearest pen, **which belongs to
+another set.**
+
+**So they are not failing to reach MD CRAM. They reach it every frame as
+somebody else's pen.** Your sentence -- *"set 19's lone matching white
+sits at index 14, another set's colour coinciding"* -- **is step 3 caught
+in the act.** The nearest pen happened to be white, and white is what the
+ring's 0x7FFF quantises to. Your measurement and the code close with no
+gap.
+
+### mdp_s_vol was built for exactly this and cannot work
+
+Line 2466: `if (mdp_s_vol[s] >= 2 && freepen) pen16 = 0;` -- volatile sets
+prefer exclusive pens. **The guard is `&& freepen`, and the comment says
+there never is one.** DRIFT_VOL's pen marking stops *other* sets drifting
+onto an animating pen; it does nothing for the cycler, which still needs
+a pen of its own to rewrite.
+
+**Right idea, aimed at a pen supply that does not exist on a level
+screen.**
+
+### But this is not a level screen, and the supply is there
+
+    on screen    pages 10/11 only, both planes, scroll pinned to zero
+                 (sub_3A00's cutscene branch, NOTES 101)
+    needs        sets 19/20/21, 7 ring colours each, plus white
+    available    2-3 MD lines x 15 usable pens = 30 to 45
+
+**Three cyclers need at most 21 exclusive pens against 30-45. It fits
+with room -- if the level's 28 sets are released first.** If the
+allocator still holds the previous screen's sets when the chevron comes
+up, every pen is owned, every claim falls to step 3, and the cycler gets
+painted in the level's colours. **That is the picture Mike sees.**
+
+### CARD CHEVPEN
+
+On the `glow_chev` edge, release the level's sets so the chevron's three
+claim exclusive pens, and let their CRAM words refresh per frame.
+
+  1. **`glow_chev` is the gate** (14620-14650) -- written, branchless,
+     proven exact. Still don't write another.
+  2. **`mds_install` already does scene-scale re-assignment** with
+     selective invalidation (2933) -- precedent exists.
+  3. **The screen is static** -- scroll zero, one page per plane. Nothing
+     competes for pens while it is up.
+  4. `mdp_free_set`'s guard at 2348 already says *"a cutscene may evict
+     it"* (209), so cutscene eviction is contemplated in the design.
+
+### Get this number first -- it confirms or kills the card with no build
+
+**`DIAG[36]`, nearest-colour fallbacks, over the chevron frames.** It is
+already counted, on every step-3 claim, in the function in question. **If
+it spikes on this screen the diagnosis is confirmed outright.** If it
+does not, CHEVPEN is wrong and the fault is further down.
+
+That is a read, like the last two were.
+
+### Both your corrections taken
+
+**Your correction to my index-0 rule is right.** Set 19's white sits at
+index 14, inside the written range, so the rule doesn't move this
+screen's arithmetic. It stands generally -- `QueuePaletteUpdate` writes
+dest+2 for 28 bytes, so colours 0 and 15 are never game data -- but it is
+not what produced your white. **Step 3 was. My conclusion survived for a
+reason I had wrong**, which is worth recording as its own kind of miss.
+
+**And the belt is clean, so I withdraw the black-boss link from NOTES
+103.** 0/0, 0/0, 1/0, the one word being 0x036 which `glow_bake.py`
+leaves unbaked by design. Not one bug. Rebuilding the detector on
+`--dump` because headless ares writes no `.bs1` was right, and the three
+inputs were the right three -- if you want it from the real tool later
+that needs a GUI-ares savestate from Mike, and it is not worth asking for
+on a clean result.
