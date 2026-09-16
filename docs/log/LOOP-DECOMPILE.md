@@ -9779,3 +9779,107 @@ exists.
 
 The eviction at ~1595 is measured, real, and nothing in this entry bears
 on it. **It stands as the one confirmed defect on this screen.**
+
+## 170. "Scrolls in red" is the finding. sub_3A00's cutscene branch pins ALL FOUR scroll words to zero -- so a chevron screen that scrolls is displaying the WRONG WINDOW of pages 10/11, and every colour mechanism died because colour was never broken (2026-09-16)
+
+### The observation that matters is three words long
+
+The builder's f1575 report: *"renders flat blue, flat red, no zigzag, no
+face, **scrolls in red**."*
+
+**That screen cannot scroll.** Entry 161 settled it from rom and I did
+not connect it:
+
+    03A0A  moveq   #0,d0
+    03A0C  move.w  d0,(unk_FFF0E2).w
+    03A10  move.w  d0,(unk_FFF0E4).w
+    03A14  move.w  d0,(unk_FFF0E8).w
+    03A18  move.w  d0,(unk_FFF0EA).w
+    03A1C  move.w  #$AAAA,(unk_FFF0F4).w
+    03A22  move.w  #$BBBB,(unk_FFF0F6).w
+
+**All four scroll registers are zeroed in the same six instructions that
+select pages 10 and 11.** The cutscene screen is static by construction.
+
+### The mapping is exact, both ends
+
+The vblank copy at 0x2ACA-0x2AFC:
+
+    FFF0E2 -> 0x410E98  = text word 0x74C   plane 0 X
+    FFF0E4 -> 0x410E9A  = text word 0x74D   plane 1 X
+    FFF0E8 -> 0x410E90  = text word 0x748   plane 0 Y
+    FFF0EA -> 0x410E92  = text word 0x749   plane 1 Y
+
+And `latch_layer_regs` (m_main.c:2909-2915):
+
+    xraw = TEXT_C[0x74C + which]
+    ysc  = TEXT_C[0x748 + which] & 0x1FF
+
+**Same four words, same order. Our side reads exactly what the game
+writes.** So on the chevron screen all four must read zero -- and if the
+picture moves, they do not.
+
+### What that predicts, and it accounts for the whole arc
+
+**If scroll is not zero we are displaying the wrong 320x224 window of
+pages 10/11.** Flat blue and flat red are a uniform region of the page.
+**The zigzag and the face are elsewhere in the page, off-screen.**
+
+Which explains every measurement taken in ten exchanges:
+
+    colours correct in PAL_SH        because they ARE correct
+    pens owned, tracking the ring    because that path WORKS
+    art baked, 91/91 masks in VRAM   because the art IS there
+    five colour mechanisms died      because colour was never broken
+
+**Everything downstream checked out because everything downstream is
+right. We have been auditing a working pipeline pointed at the wrong
+part of the map.**
+
+### And it is a better fit than the stale-tag pointer I gave them
+
+I offered `mdp_wipe_set_tags` / 2709-2716 last message -- *right pens,
+right colours, wrong pixels*. **A stale pen map does not make a static
+screen scroll.** The scroll is unexplained by it, and an explanation that
+leaves the loudest symptom on the floor is the weaker one. **Take the
+scroll first.**
+
+### The read, and it is four words
+
+**`TEXT_C[0x748]`, `[0x749]`, `[0x74C]`, `[0x74D]` during the chevron
+screen.**
+
+    all four ZERO      -> scroll is honoured; the movement comes from
+                          somewhere else and the stale-tag pointer moves
+                          back up the list
+    any NON-ZERO       -> the cutscene branch's zeroing is not reaching
+                          our latch, we are windowed into the wrong part
+                          of pages 10/11, and THAT is the bug
+
+Four words. No build. Same shape as the f1575 test.
+
+### If they are non-zero, the next question is already framed
+
+`sub_3A00` has two branches and writes the scroll words in **both** --
+the cutscene branch writes zeros (0x3A0C-0x3A18), the in-game branch
+writes computed values (0x3A44, 0x3A6E). **So the question would not be
+"who zeroes it" but "does our text-RAM mirror carry the cutscene
+branch's write, or a stale in-game value from before the transformation
+started".** That is the same class as the page selects, which do land --
+so the page words update and the scroll words may not, in the same
+vblank copy.
+
+### On the arc
+
+Five mechanisms of mine died in the allocation path and the builder
+killed each with a measurement taken before a build. **The f1575 test
+only closed it because they took it and reported what they saw rather
+than what the census said.** *"I had the frame in hand for two days and
+never looked at it"* -- that is the same failure I made five times in a
+row from the other direction, and it is worth both of us carrying
+forward: **the census answers the question you asked; the picture
+answers the one you did not.**
+
+**(b) is still the one confirmed defect and still worth building.** This
+does not displace it -- but if the scroll words are non-zero, (b) is a
+real bug on a screen that was pointed the wrong way regardless.
