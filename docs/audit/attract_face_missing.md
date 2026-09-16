@@ -200,3 +200,40 @@ never arrives, and fields that render because 20/21 partly do.
 The static bake is NOT the failing path — packing 20/21 into it changed
 no pixel. The handover is. `glow_chev` (m_main.c:14620-14650, GLOW_PAGE)
 already gates this screen exactly; do not write another gate.
+
+## ISOLATED (2026-09-16): PAL_SH is correct, MD CRAM never gets it
+
+Ran the LOST-PUSH detector's logic on transformation frames, rebuilt on
+--dump because headless ares writes no .bs1 (shadow 0xFF6000, game
+mirror 0xFF9000, PAL_SH at SDRAM 0x27000):
+
+    f1575  LOST-PUSH 0   pending 0
+    f1600  LOST-PUSH 0   pending 0
+    f1630  LOST-PUSH 1   pending 0   -- word 0x036, the BLINK word
+                                        glow_bake.py leaves unbaked
+
+The belt is CLEAN. And the colours are actually there, at 8 words per
+slot (the 14-colour / 28-byte structure, not 16):
+
+    arcade  set 19 @f1100   7FFF 4B00 4C00 4D00 4E00 4F00 4900 4A00
+    ours    game 0xFF9000   7FFF 4B00 4C00 4D00 4E00 4F00 4900 4A00
+    ours    PAL_SH          7FFF 4E00 4F00 4900 4A00 4B00 4C00 4D00
+
+Identical ring, phase-rotated, which is what a cycler should look like.
+
+So: the game writes it, the queue delivers it, PAL_SH holds it, the tile
+art is baked and resident in MD VRAM, the FB covers 1.5% of the screen
+and only with text -- and sets 19/20/21 still never reach MD CRAM.
+
+**The fault is isolated to the SH-2's MD pen path: PAL_SH -> MD CRAM
+line assignment.** Nothing upstream of it is wrong.
+
+Stride check, as asked: our readers are correct. m_main.c uses
+PAL_SH[s * 8 + p] throughout (2509, 2576, 2731, 2895) and
+tools/actor_palettes.py uses BASE 0x242A0 STRIDE 28. No 32-byte drift
+found on our side.
+
+Also recorded: the index-0/15 rule does not change this screen's
+arithmetic -- set 19's lone matching white sits at MD CRAM index 14,
+inside the written range, so it is another set's colour coinciding. The
+conclusion is unchanged and stronger: nothing of set 19 lands.
