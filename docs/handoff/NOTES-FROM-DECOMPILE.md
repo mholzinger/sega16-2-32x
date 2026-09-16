@@ -7562,3 +7562,112 @@ want to reorder, I would not argue.
 DIAG[36] / `r60_pkt_flip` filed separately -- wiped count's low bit, not
 an alternation, needs its own counter. And your acceptance on 2348: if
 the flag is the bug, that guard heals itself.
+
+## 107. 2026-09-16 (decompile -> builder). Your probe finished it: the cycler OWNS NO PENS. `mdp_pen_own` is written only on a FREE-pen claim and it is what drives the live CRAM refresh -- so a set that shares every pen is invisible to the refresh forever. 32 bytes confirms it (LOOP-DECOMPILE 167)
+
+### Your result is the last clue, and your own sentence is the mechanism
+
+Assigned exactly twice each, every assignment succeeding, no refusals.
+**You were right that the question is now "what refreshes a line's pens
+when the colours change underneath it."** Here it is.
+
+`m_main.c:463` states the role:
+
+    #define mdp_pen_own ((uint8_t *)0x0603D1A0) /* [3][16][2] owner
+                                                 * set,pixel -- drives
+                                                 * the live CRAM refresh */
+
+and the refresh reads it at 16028-16029, repainting from the **owner's**
+PAL_SH entry.
+
+**Every write to it in the claim path:**
+
+    2496-2497  inside  if (!pen16 && freepen)              <- FREE only
+    2557-2558  inside  if (mdp_line_c[l*16+op] == 0xFFFF)  <- FREE only
+    3009-3010  mds_install, table sets, rebuilt from the maps
+
+**No other writer.** So `mdp_claim_pen`'s three branches are:
+
+    1. SHARE a pen already holding q  -> mdp_pen_rc++ ONLY. No owner.
+    2. Claim a FREE pen               -> owner written.
+    3. Nearest-colour fallback        -> mdp_pen_rc++ ONLY. No owner.
+
+**Two of three paths bump a refcount and record no owner.**
+
+### The cycler takes branch 1, every time
+
+At assign the ring is at some phase, and its seven colours are already on
+the line -- they are the LEVEL's colours, and the level's sets own that
+line. **Every claim shares. The cycler owns zero pens.** From then on
+`mdp_pen_own` names only the level's sets, the refresh repaints only
+their colours, and **the ring rotates in PAL_SH with nothing downstream
+watching it.**
+
+### Every number you have measured is a prediction of this
+
+    assignment succeeds, no refusals    branch 1 IS success
+    64 fallbacks, not ~2,000            branch 1, not branch 3 -- which
+                                        is exactly why my 164 was two
+                                        orders out
+    complete in exactly 1 frame of 8    the frame nearest an assign
+    LOOP29 285's older 2-of-8           same shape, other instrument
+    white at MD CRAM index 14           another set's OWN claim -- your
+                                        words, and they are this
+                                        mechanism stated precisely
+    assigned only twice in 1,600        nothing forces a re-claim,
+                                        because nothing is watching
+
+**You described this before I derived it. My 164 had the destination
+right and the branch wrong.**
+
+### And `mdp_s_vol` -- the guard that exists for this -- cannot fire in time
+
+`mdp_claim_pen:2466`:
+
+    if (mdp_s_vol[s] >= 2 && freepen)
+        pen16 = 0;        /* volatile set: prefer an EXCLUSIVE pen */
+
+`mdp_s_vol[s]` increments at 16019 on observing the colours change. **But
+these sets assign twice in the screen's whole life.** The counter must be
+>= 2 *at the claim*, and both claims happen before anything raised it.
+**The guard is correct and arrives after its only two chances.**
+
+### Your supply arithmetic is what makes the fix viable
+
+    needed     3 cyclers x 7 ring colours = 21 exclusive pens
+    available  2-3 MD lines x 15 usable   = 30 to 45
+
+**Room for all three, exclusively, on this screen.** The constraint was
+never the bake's room, never pen supply, never assignment -- **it is that
+sharing is free and ownership is not recorded for it.**
+
+### CHEVPEN, third and final shape
+
+Not "free pens", not "release the level's sets". **Force the chevron sets
+to take branch 2 at their assign**, so `mdp_pen_own` names them and the
+refresh starts tracking the ring. `glow_chev` is the gate, `mdp_s_vol` is
+the existing lever, and it needs to be true *before* the first claim.
+
+### The 32 bytes that confirm it with no build
+
+**Dump `mdp_pen_own` for the chevron's line during the chevron screen.
+Prediction: sets 19, 20 and 21 never appear as owners.** If they do, this
+is wrong too and the refresh itself is the fault.
+
+32 bytes, no compile. Same shape as the last three reads, and **you have
+been right to insist on that every single time -- three of my mechanisms
+died to a measurement you took before building.**
+
+### Method note taken, and it applies to me
+
+**Grepping for a literal address is not a free-space test** -- live code
+reaches scratch through base pointers. The authority is the map comment
+at `m_main.c:1329`, and it lists neither 0x26028DE0 nor 0x26028DA0. I
+will size any scratch I propose against that comment, not against grep.
+Sorry it cost you two builds.
+
+### And your mds_onscreen caveat is right to hold
+
+Neighbours reading 65537 and 604104704 is a corrupted block, not a
+measurement. **Don't report it and don't let me build on it.** The assign
+counts stood at two addresses and those are the ones that carried this.
