@@ -1564,6 +1564,8 @@ static uint8_t mds_pin[128];
  * re-installed on the edge back. */
 static uint16_t mds_cl_t, mds_cl_n;
 static uint8_t  mds_onscreen;
+static uint8_t  chev_force;      /* CHEVPEN (c): lets the one deliberate
+                                  * re-claim through the (b) hold */
 static uint8_t  glow_chev;       /* the chevron plane is up (pages >= 10);
                                   * file scope so mdp_claim_pen and
                                   * mdp_free_set can gate on it */
@@ -2369,8 +2371,9 @@ static void mdp_free_set(unsigned s)
     /* CARD CHEVPEN (b). Measured: at f1585 sets 19/20/21 own eight pens on
      * line 0; by f1600 the line is entirely the level's 85/87/88. mds_pin
      * is 0 for sets outside the round table (2966) so the guard at 2348
-     * cannot hold them. Hold them here while the screen is up. */
-    if (glow_chev && s >= 19u && s <= 21u)
+     * cannot hold them. Hold them here while the screen is up -- EXCEPT
+     * for the one deliberate re-claim below, which sets chev_force. */
+    if (glow_chev && s >= 19u && s <= 21u && !chev_force)
         return;
 #endif
 #ifdef CHEV_PROBE
@@ -14709,6 +14712,39 @@ RAMCODE void m_main(void)
                     uint16_t gp_a = (uint16_t)(gp_f & ((gp_f << 1) | (gp_f << 2)) & 0x8888u);
                     uint16_t gp_c = (uint16_t)(gp_b & ((gp_b << 1) | (gp_b << 2)) & 0x8888u);
                     glow_chev = (uint8_t)((gp_a | gp_c) != 0);
+#ifdef CHEV_FIX
+    /* CARD CHEVPEN (c), NOTES 112. The claim runs on first tile sighting,
+     * which is a frame BEFORE sub_90F4's four queued palette updates
+     * drain -- so the pens are claimed against a UNIFORM PAL_SH and all
+     * land on one colour. That is why eight pens held one identical value
+     * rather than eight different ring phases: a phase freeze gives eight
+     * DIFFERENT valid colours, an early claim gives one.
+     * Fire ONE re-claim per set, at the moment its ring stops being
+     * uniform. The per-frame sole-owner recolour (16082) carries the
+     * rotation from there, which it can now do because (a) made the pens
+     * exclusive. */
+    {
+        static uint8_t chev_done;
+        if (!glow_chev) {
+            chev_done = 0;
+        } else if (chev_done != 7) {
+            for (unsigned cs = 19; cs <= 21; cs++) {
+                unsigned bit = 1u << (cs - 19u);
+                if (chev_done & bit) continue;
+                uint16_t q0 = mdp_quant(PAL_SH[cs * 8]);
+                unsigned varied = 0;
+                for (unsigned k = 1; k < 8u; k++)
+                    if (mdp_quant(PAL_SH[cs * 8 + k]) != q0) { varied = 1; break; }
+                if (!varied) continue;      /* still uniform: too early */
+                chev_force = 1;
+                mdp_free_set(cs);           /* next tile sighting re-assigns
+                                             * with the real ring present */
+                chev_force = 0;
+                chev_done |= (uint8_t)bit;
+            }
+        }
+    }
+#endif
 #ifdef CHEV_PROBE
     {   /* the decompile thread's extra byte: mds_onscreen per vint while
          * the chevron gate is up, so "0 -> 1 partway in" shows directly */

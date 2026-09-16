@@ -560,3 +560,31 @@ now takes exclusive pens, but still takes them a frame too early.
 NEXT, and it is their suggestion taken literally: re-claim these sets once
 when their PAL_SH actually changes. The per-frame recolour then only has
 to carry the rotation, which it already does for sole-owned pens.
+
+## CHEVFIX2 (2026-09-16): re-claim added. More geometry, colours still wrong.
+
+(c) fires ONE re-claim per set at the moment its ring stops being uniform
+-- the uniform->ramp transition -- and lets it through the (b) hold via
+chev_force. Result at f1575:
+
+    arcade     non-field 31.2%   23 distinct colours
+    bldS       non-field  0.0%    3               FLAT
+    chevfix    non-field 83.3%    2               zigzag
+    chevfix2   non-field 83.3%    3               zigzag + ornaments
+
+The flame ORNAMENTS now render as well as the zigzag -- the curled
+scrollwork is present with its outline. Geometry is close to complete.
+Colours are still wrong: olive, black and a pale outline, against blue,
+red and a yellow ramp.
+
+**On the 83.3% vs 31.2% overshoot the thread flagged: it is the metric,
+not the picture.** "Field colour" in this file is DEFINED as the arcade's
+blue / red / orange / black. Once our palette is olive, every pixel reads
+non-field by construction, so 83.3% measures the classifier failing, not
+coverage. The number is meaningless while the colours are wrong and
+should not be quoted again until they are right.
+
+**On distinct colours: 2 -> 3 against a target near 8.** The re-claim
+recovered structure but not the palette, so the pens are exclusive, the
+art indexes them correctly, and they hold the wrong values. The remaining
+fault is which colours land in those pens, not which pens the art uses.
