@@ -9964,3 +9964,66 @@ rotation itself.
 Two changes, both small, both the builder's design: repaint owned pens
 from PAL_SH per frame for rotating sets, and hold the chevron's sets
 against the ~1595 eviction. **First thing all week that moves a pixel.**
+
+## 172. THE ZIGZAG DRAWS. The mechanism was mdp_pen_rc == 1 at 16082 -- the in-place recolour fires only on SOLE-OWNED pens, which is why pen 14 tracked and the other seven froze (2026-09-16)
+
+    non-field centre   distinct colours
+    arcade      31.2%                22
+    bldS         0.0%                 3   FLAT
+    chevfix     83.3%                 2   ZIGZAG DRAWS
+
+**First pixel moved in this arc.** Built behind CHEVFIX=1, not a play
+candidate.
+
+### The mechanism, and it is the builder's
+
+`m_main.c:16082` gates the in-place recolour on **`mdp_pen_rc == 1`**. A
+SHARED pen falls through to tolerated drift and is never repainted.
+
+**That is the missing piece.** It explains both halves of the evidence
+that made me withdraw entry 167:
+
+    set 19's pen 14 tracked      sole-owned, rc == 1, recolour fires
+    the other seven froze        shared, rc > 1, recolour skipped
+
+So 167's consequence was right, my withdrawal in 169 was wrong, and the
+builder says so themselves. **I gave up a correct claim on one pen's
+worth of counter-evidence, and the unease about doing it was the right
+instinct to have acted on.** Worth carrying: a single counter-example to
+a mechanism is a reason to ask which case it is, not to withdraw.
+
+The fix is CHEVPEN's branch-2 shape after all -- force free pens under
+`glow_chev` -- plus holding the sets in `mdp_free_set` against the ~1595
+eviction `mds_pin` cannot stop.
+
+### The remaining colour error is entry 171's arithmetic, confirmed
+
+Olive and black, two values. **Eight pens at one identical value was never
+a phase freeze** -- a freeze gives eight different ring values. It is a
+claim against a uniform PAL_SH, taken before the transformation's four
+queued updates drain (entry 163). Exclusive pens now, still a frame
+early.
+
+**Their next step is the right one and it fell out for free**: re-claim
+once when PAL_SH actually changes, and let the existing per-frame
+recolour carry the rotation -- which it already does for sole-owned pens.
+
+### Two numbers to watch before this goes to Mike
+
+**1. 22 distinct on the arcade against 2 today.** After the re-claim
+lands, expect roughly **8** -- the pens sets 19/20/21 own between them
+(1 + 5 + 2). Quantisation explains part of the 22 -> 8 gap (entry 168:
+set 19's eight ring entries collapse to four in 3-bit), **but not all of
+it. The rest is pen budget, and the supply arithmetic says there is
+room** -- 11 owned against 30-45 available. **Do not read ~8 as done; read
+it as the next question.**
+
+**2. 83.3% non-field centre against the arcade's 31.2%.** Ours covers
+**more** than the arcade does. That may be the metric rather than the
+picture, but it is a 2.7x overshoot on the one geometric number we have
+and it is worth one look before a play pass rather than after.
+
+### Standing
+
+The eye screen and the ~1610 blackout are untested against this build.
+**(b) is fixed and (a) is fixed; the colour is one change away.**
