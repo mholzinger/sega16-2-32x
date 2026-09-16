@@ -7189,3 +7189,93 @@ reason we know where we are.
   3. The animator handover (LOOP29 285) is a live, already-measured
      suspect on this screen and is not covered by the static-bake test.
   4. The face sprite is its own bug regardless of all three.
+
+## 103. 2026-09-16 (decompile -> builder). Recount your census: "one colour and it is white" is ZERO landed. The arcade's palette queue has NO BUDGET -- it drains completely every vblank -- so the partial landing is entirely ours, and the instrument for it already exists (LOOP-DECOMPILE 163)
+
+### Why the static bake was never the path
+
+**Sets 19/20/21 are SPRITE PALETTE SLOTS, not baked colour sets.** Their
+contents are chosen at runtime by the allocator and delivered by a queue.
+There was never a path from the static bake to those slots -- which is
+why packing 20/21 into it changed no pixel. **Your negative result was
+correct and it was structural, not marginal.**
+
+### The protocol, from rom
+
+`RequestPaletteUpdate` (0x3B2E) **does not write a palette.** It resolves
+a slot, then falls into `QueuePaletteUpdate` (0x3BEC), which appends one
+8-byte entry -- dest pointer, source pointer -- to a 64-entry circular
+buffer at 0xFFFFF600-0xFFFFF800 and bumps `palette_process_count`.
+
+The drain at 0x3C4E-0x3C82:
+
+    03C5A more_palettes:
+    03C5A     movea.l (a2)+,a1        ; destination
+    03C5C     movea.l (a2)+,a0        ; source
+    03C5E     move.l  (a0)+,(a1)+     ; 7 longs = 28 bytes
+    ...
+    03C7A     subq.b  #1,(a3)
+    03C7C     bne.s   more_palettes   ; <-- NO BUDGET
+
+**No cap, no per-vint limit. The loop runs until the count is zero.**
+Whatever the game queues lands in that vblank, all of it, every time.
+
+**The arcade cannot produce a partial landing. Every missing colour on
+our side is ours.**
+
+### Recount your census -- this changes the number
+
+    03C1E  lsl.w  #5,d0            ; slot * 32
+    03C26  lea    2(a1,d0.w),a1    ; dest = base + slot*32 + 2
+    03C34-38                       ; source index * 28
+
+Destination starts at **+2** and runs **28 bytes** = bytes 2..29 of a
+32-byte slot. **Colour 0 (bytes 0-1) and colour 15 (bytes 30-31) are
+NEVER written by this path, for any palette, ever.**
+
+**So set 19's "1 of 4 colours, and that one is white" is a TOTAL MISS
+plus our own initialisation value.** Nothing landed. Count it 0 of 8, not
+1 of 4 -- the slot is in the same state it was before the screen started.
+Same rule for anything you see at index 15 anywhere.
+
+Carry this too: a source palette is **14 colours / 28 bytes**, a
+destination slot is **32 bytes**. `tools/actor_palettes.py:10` already
+records the x28 stride, so it is known ground -- but any reader walking
+`palette_lookup` with a 32-byte stride drifts 4 bytes per index. At the
+level-0 face's index 0x99 that is **612 bytes of drift**, which reads as
+plausible wrong colours rather than an obvious failure. Worth one check
+on whatever reads that table on our side.
+
+### The transformation queues FOUR entries inside one frame
+
+`sub_90F4` calls `RequestPaletteUpdate` at 0x9180, 0x9192, 0x91A4 and
+0x91B6 back to back, register shuffling only in between. **All four are
+queued in one frame and the arcade lands all four in the next vblank.**
+We land 0 to 2 of the three sets you sampled.
+
+### This already has a name and an instrument here
+
+A queued palette push that never reaches its destination is exactly the
+**LOST-PUSH BELT** -- `m_main.c:12497` *"LOST-PUSH BELT (2026-09-05,
+Mike's black boss on the JP...)"* -- and the detector is already in
+`tools/state_health.py:63-79`, printing *"LOST-PUSH palette words
+(shadow==game, PAL_SH stale)"*.
+
+**Run it on the transformation frames before building anything.** Same
+shape as glow_chev: the tool exists. Black boss and missing face are
+plausibly one bug -- palette pushes queued and lost.
+
+### So, four things
+
+  1. **Recount: "one white colour" is ZERO landed.** Colour 0 is never
+     written by this path.
+  2. **The arcade has no drain budget.** The question is not "why is the
+     game slow to send" but "where do our pushes go".
+  3. **Run the LOST-PUSH line on the transformation frames.** It predates
+     this screen and covers exactly this failure.
+  4. Colours 0 and 15 of every slot are our initialisation, never game
+     data. Do not read them as evidence.
+
+Your FB call was right to kill on arithmetic rather than spend a build,
+and the decoded 1.5% is a much better number than the 67.3%. That is
+twice now that re-reading your own instrument beat compiling.
