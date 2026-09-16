@@ -87,3 +87,36 @@ which is what the alignment above is built on.
 Whether the face is sprites or tiles on this screen, and therefore
 whether this is the sprite path or the tile path. That is the next
 question and it is answerable from the arcade with no rig.
+
+## PACKING ANSWER, AND A CORRECTION TO MY OWN DIAGNOSIS (2026-09-16)
+
+Arcade PAL_SH at frame 1060, quantised with mdpen_bake's quant():
+
+    set 19: 140 180 1C0 1FF      a BLUE RAMP to white -- the zigzag field
+    set 20: 140 1F 7             dark blue + red + orange
+    set 21: 140 1F 7             identical to 20
+
+Against scene 0's current pack (line 0 15/15, line 1 15/15, line 2
+11/15, so FOUR free slots, all on line 2), and remembering the real
+constraint is PER LINE -- every colour of a set must sit on one line:
+
+    union of all three (6 new)   does not fit any line
+    sets 20+21 together (3 new)  FITS on line 2
+    set 19 alone (4 new)         FITS on line 2
+    but 19 AND 20/21 together    6 new > 4 free, does NOT fit
+
+So MDCHEV is HALF buildable with no fourth line: either the ramp or the
+red/orange pair, not both.
+
+**AND THE REFUSAL IS PROBABLY NOT WHAT KILLS THE FACE.** Those six
+colours are blue, red, orange and white, and our render at frame 1585
+already shows a blue field, a red field and orange scrolls -- correct
+colours, present. What ours lacks against the arcade is the ZIGZAG
+texture in the blue (set 19's ramp, rendering flat) and the FACE, whose
+skin tones come from some other colour set entirely and are not in
+19/20/21 at all.
+
+So the sets-19/20/21 refusal plausibly explains the flat blue. It does
+not explain the missing face, and I asserted that it did. The next
+question is which set the face tiles carry, and whether THAT set is
+packed -- not more work on 19/20/21.
