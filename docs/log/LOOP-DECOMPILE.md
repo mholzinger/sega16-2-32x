@@ -9448,3 +9448,124 @@ And their acceptance of 2348: a cutscene evicting a table set requires
 `mds_onscreen == 0`, so **the guard is not unfired by oversight, it is
 gated on the flag under investigation.** If the flag is the bug, the
 guard heals itself.
+
+## 167. The cycler OWNS NO PENS. mdp_pen_own is written only on a FREE-pen claim, and it is what drives the live CRAM refresh -- so a set that shares every pen is invisible to the refresh forever (2026-09-16)
+
+### The builder's probe result, and why it is the last clue needed
+
+Sets 19/20/21 are **assigned exactly twice each over ~1,600 frames, every
+assignment returning success.** No refusals. `mdp_assign_set` is not the
+door -- the door is open and the sets walk through it.
+
+Their reading is right: the pens are claimed at assign time and never
+revisited as the ring turns. **The question is what refreshes a line's
+pens when the set's colours change underneath it.** Here it is.
+
+### mdp_pen_own drives the refresh, and it has THREE writers -- all the same condition
+
+`m_main.c:463` states the role outright:
+
+    #define mdp_pen_own ((uint8_t *)0x0603D1A0) /* [3][16][2] owner
+                                                 * set,pixel -- drives
+                                                 * the live CRAM refresh */
+
+And the refresh reads it at 16028-16029 (`os = mdp_pen_own[...]`, `op =
+mdp_pen_own[...+1]`), repainting from the OWNER's `PAL_SH` entry.
+
+Now every write to it in the claim path:
+
+    2496-2497  inside  if (!pen16 && freepen)              <- FREE pen only
+    2557-2558  inside  if (mdp_line_c[l*16+op] == 0xFFFF)  <- FREE pen only
+    3009-3010  mds_install, table sets, rebuilt from the maps
+
+**There is no other writer.** `mdp_claim_pen`'s three branches:
+
+    1. SHARE a pen already holding q   -> mdp_pen_rc++ ONLY. No owner.
+    2. Claim a FREE pen                -> owner written.
+    3. Nearest-colour fallback         -> mdp_pen_rc++ ONLY. No owner.
+
+**Two of the three claim paths increment a refcount and never record an
+owner.**
+
+### So: a set that shares every pen owns nothing, and the refresh cannot see it
+
+At assign time the cycler's ring is at some phase. Its seven colours are
+matched by pens already on the line holding those exact quantised values
+-- because those colours are the LEVEL's colours, and the level's sets
+own the line. **Every claim takes branch 1.** The cycler owns zero pens.
+
+From then on `mdp_pen_own` names only the level's sets, the refresh
+repaints only their colours, and **the ring rotates in PAL_SH with
+nothing downstream watching it.** MD CRAM holds the phase that happened
+to be current at assign, or whatever a later owner overwrote.
+
+### Every number on the board is a prediction of this
+
+    assignment succeeds, no refusals     branch 1 IS success
+    no fallback storm (64 vs ~2,000)     branch 1, not branch 3 --
+                                         which is why entry 164 was
+                                         two orders out
+    complete in exactly 1 frame of 8     the frame nearest an assign
+    LOOP29 285's older 2-of-8            same shape, different instrument
+    the white at MD CRAM index 14        another set's OWN claim, exactly
+                                         as the builder described it --
+                                         the cycler is merely pointed at
+                                         a pen it does not own
+    assigned only TWICE in 1,600 frames  nothing ever forces a re-claim,
+                                         because nothing is watching
+
+**The builder's own sentence -- "another set's own claim, not set 19
+handed a neighbour's pen" -- is this mechanism stated precisely, and they
+had it before I did.** Entry 164 got the destination right and the branch
+wrong.
+
+### And mdp_s_vol, the existing guard, cannot fire in time
+
+`mdp_claim_pen:2466` already has the rule:
+
+    if (mdp_s_vol[s] >= 2 && freepen)
+        pen16 = 0;        /* volatile set: prefer an EXCLUSIVE pen */
+
+`mdp_s_vol[s]` increments at 16019, on observing the set's colours
+change. **But the chevron sets assign twice in the screen's whole life.**
+The counter needs to be >= 2 **at the moment of the claim**, and the only
+two claims happen before anything has had cause to raise it. **The guard
+is correct and arrives after the only two opportunities to use it.**
+
+### And this is where the supply arithmetic finally does work
+
+Entry 164's supply numbers survived the builder's demolition of its
+mechanism, and they are what makes the fix viable:
+
+    needed     3 cyclers x 7 ring colours = 21 exclusive pens
+    available  2-3 MD lines x 15 usable   = 30 to 45
+
+**There is room to give all three cyclers exclusive pens on this screen.**
+The constraint was never the bake's room, never the pen supply, and never
+assignment -- **it is that sharing is free and ownership is not recorded
+for it.**
+
+### CHEVPEN, third and final shape
+
+Not "free pens", not "release the level's sets". **Force the chevron sets
+to take branch 2 -- exclusive pens -- at their assign**, so
+`mdp_pen_own` names them and the live refresh starts tracking the ring.
+`glow_chev` is the gate and `mdp_s_vol` is the existing lever; it needs
+to be true *before* the first claim, not after two observations.
+
+### The read that confirms it before any build
+
+**Dump `mdp_pen_own` for the chevron's line (32 bytes) during the chevron
+screen.** Prediction: **sets 19, 20 and 21 never appear as owners.** If
+they do appear, this is wrong too and the refresh itself is the fault.
+
+That is 32 bytes and no compile -- the same shape as the last three
+reads, and the builder has been right to insist on it every time.
+
+### Method note taken
+
+**Grepping for a literal address is not a free-space test** -- live code
+reaches scratch through base pointers, and 0x26028DE0 / 0x26028DA0 both
+cost the builder a build despite zero literal hits. **The authority is
+the map comment at `m_main.c:1329`, which lists neither.** Recording it
+here because it applies to anything I propose that needs scratch.
