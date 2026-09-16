@@ -9123,3 +9123,102 @@ palette pushes that were queued and lost.
   4. Colours 0 and 15 of every slot are never written by the game --
      anything our side shows at those indices is our own initialisation
      and must not be read as game data.
+
+## 164. The chevron sets DO reach MD CRAM -- as someone else's pen. mdp_claim_pen's nearest-colour fallback is the mechanism, and the allocator's own comment carries the budget that causes it (2026-09-16)
+
+### The builder isolated it to PAL_SH -> MD CRAM line assignment. That is `mdp_claim_pen` (m_main.c:2447), and it explains their data exactly
+
+To place set `s`'s pixel `p`, whose quantised colour is `q`, on line `l`:
+
+    1. a pen already holding q            -> SHARE it
+    2. else a free pen (0xFFFF)           -> claim EXCLUSIVELY
+    3. else NEAREST-COLOUR FALLBACK       -> DIAG[36]++
+
+And the budget is stated outright in the `DRIFT_VOL` comment above it
+(LOOP29 154): ***"it needs a free pen and 363 of 366 burned claims have
+none (2-3 MD CRAM lines, 128 colour sets)."***
+
+**Sets 19/20/21 are CYCLERS.** The builder's own dump proves it -- the
+same seven-colour ring, phase-rotated between the arcade, our 0xFF9000
+mirror and PAL_SH. **A cycler's `q` is different every frame, so it must
+RE-CLAIM every frame.** With no free pen it falls to step 3 and is given
+the nearest pen, **which belongs to another set.**
+
+**So "sets 19/20/21 never reach MD CRAM" is not quite what is happening.
+They reach it every frame, as somebody else's pen.** Which is exactly the
+builder's own observation, arrived at independently: *"set 19's lone
+matching white sits at MD CRAM index 14 -- another set's colour
+coinciding."* **That is not a coincidence. That is step 3.** The nearest
+pen happened to be white, and white is what the ring's first entry
+(0x7FFF) quantises to.
+
+Their measurement and the code agree with no gap left.
+
+### And `mdp_s_vol` was built for this and cannot work
+
+Line 2466: `if (mdp_s_vol[s] >= 2 && freepen) pen16 = 0;` -- a volatile
+set prefers an exclusive pen over sharing. **The guard is `&& freepen`,
+and the comment says there is never one.** The DRIFT_VOL follow-up marks
+the PEN instead so sharers skip it -- but that only stops *other* sets
+drifting; it does nothing for the cycler itself, which still needs a pen
+it can rewrite.
+
+**The existing volatile machinery is the right idea aimed at a pen supply
+that does not exist on a level screen.**
+
+### The fix is a supply problem, and this screen has the supply
+
+The 363-of-366 figure is for a LEVEL screen -- 128 colour sets competing
+for 2-3 lines. **The transformation screen is not a level screen.**
+
+    what is on it   pages 10 and 11 only, both planes, scroll pinned to
+                    zero (sub_3A00's cutscene branch, entry 161)
+    what it needs   sets 19/20/21 = 7 ring colours each, plus white
+    what exists     2-3 MD lines x 15 usable pens = 30 to 45 pens
+
+**Three cyclers need at most 21 exclusive pens against 30-45.** It fits
+with room to spare -- **if the level's 28 sets are released first.** If
+the allocator is still holding the previous screen's sets when the
+chevron comes up, every pen is owned, every claim falls to step 3, and
+the cycler is painted in the level's colours. That is the picture Mike
+sees.
+
+**And the gate to do it on already exists and is already proven exact:
+`glow_chev` (m_main.c:14620-14650), "any page nibble >= 10".** The
+eviction is already contemplated in the code, too -- `mdp_free_set`'s
+guard at 2348 reads *"table set: never freed inside its scene (209: a
+cutscene may evict it)"*.
+
+### Card CHEVPEN
+
+On the `glow_chev` edge, release the level's sets so the chevron's three
+can claim exclusive pens, and let their CRAM words refresh per frame.
+Three things make it small:
+
+  1. **`glow_chev` is the gate** -- written, branchless, proven exact.
+  2. **`mds_install` already installs a scene's tables wholesale** and
+     invalidates selectively (2933), so there is a precedent for a
+     scene-scale re-assignment.
+  3. **The screen is static** -- scroll pinned to zero, both planes one
+     page each. Nothing else is competing for the pens while it is up.
+
+**The one number to get first: `DIAG[36]` (nearest-colour fallbacks) over
+the chevron frames.** If it spikes on this screen the diagnosis is
+confirmed outright and no reasoning is needed. It is already counted --
+`mdp_claim_pen` increments it on every step-3 claim.
+
+### Two corrections taken from the builder
+
+**Their correction to my index-0 rule is right.** Set 19's matching white
+sits at MD CRAM index 14, inside the written range, so the rule does not
+move this screen's arithmetic. The rule stands generally -- colours 0 and
+15 are never written by `QueuePaletteUpdate` -- but it was not what
+produced their white. Step 3 was. **My conclusion survived for a reason I
+had wrong.**
+
+**And the belt is clean**: 0/0, 0/0, 1/0 across the three transformation
+frames, the one lost word being 0x036, the BLINK word `glow_bake.py`
+leaves unbaked by design. **Black boss and this are NOT one bug**, and my
+note 103's suggestion that they might be is withdrawn. Rebuilding the
+detector's logic on `--dump` because headless ares writes no `.bs1` was
+the right call and the three inputs were the right three.
