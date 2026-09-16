@@ -148,3 +148,55 @@ NEXT TEST, and it is one build: suppress the FB compose for this screen
 and the zigzag appear from the MD planes underneath. If they do, the bug
 is that the SH-2 is compositing a screen it should be leaving to the VDP,
 and the fix is a scene/page gate, not a palette or a bake.
+
+## THE FB IS INNOCENT, AND THE PALETTE HANDOVER IS THE BUG (2026-09-16)
+
+**The FB theory is DEAD and the build was not needed.** The decompile
+thread's arithmetic caught it first: 67.3% transparent cannot produce a
+uniformly flat screen. That 67.3% was a histogram over raw 32X DRAM —
+both banks plus the line table — and not a decoded framebuffer, so it
+was not a measurement of anything.
+
+Decoded properly (line table at DRAM+0, 256 word offsets, pen 0
+transparent), bank 0 at f1585:
+
+    opaque pixels 1,053 / 71,680 = 1.5%
+
+and they sit in three contiguous blocks: row 1 cols 20-24, row 25 cols
+12-15 and 26-27, row 26 cols 29-38. That is the score line, INSERT COIN
+and the SEGA notice. **The FB draws text and nothing else on this
+screen.** 98.5% of the picture is MD planes showing straight through.
+
+## What is actually wrong: the sets never reach MD CRAM
+
+Colours the screen needs, from the arcade at f1100:
+
+    set 19    1FF 180 1C0 140          white + blue ramp (the zigzag)
+    set 20/21 140 03F 037 02F 027 01F 007   blue + yellow->red ramp
+
+Against our MD CRAM across eight frames of the screen:
+
+    frame   set19 best line   set20/21 best line
+     1560        L2 1/4            L1 1/7
+     1575        L2 1/4            L1 7/7
+     1585        L2 1/4            L1 4/7
+     1600        L2 1/4            L1 5/7
+     1615        L2 1/4            L3 0/7
+     1630        L2 1/4            L3 0/7
+     1645        L2 1/4            L3 0/7
+     1660        L2 1/4            L3 0/7
+
+    frames with BOTH sets fully present: 0 of 8
+
+**Set 19 NEVER lands** — one of its four colours is present and that one
+is white, which is on the line anyway. Sets 20/21 land complete in ONE
+frame of eight. This is LOOP29 284/285's logged anomaly ("only 2 of 8
+chevron frames show the game's own sets 20/21"), measured again with set
+19 added, and it is upstream of the framebuffer.
+
+It also explains the picture exactly: no zigzag because set 19's ramp
+never arrives, and fields that render because 20/21 partly do.
+
+The static bake is NOT the failing path — packing 20/21 into it changed
+no pixel. The handover is. `glow_chev` (m_main.c:14620-14650, GLOW_PAGE)
+already gates this screen exactly; do not write another gate.
