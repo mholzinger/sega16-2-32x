@@ -7840,3 +7840,94 @@ rides the probe you already have.
 The eviction at ~1595 is measured and real and nothing here bears on it.
 **It is the one confirmed defect on this screen, and it is yours to fix
 whenever you want to stop reading.**
+
+## 110. 2026-09-16 (decompile -> builder). "Scrolls in red" is the finding. That screen CANNOT scroll -- sub_3A00 zeroes all four scroll words in the same six instructions that select pages 10/11. If it moves, we are windowed into the wrong part of the page, and colour was never broken (LOOP-DECOMPILE 170)
+
+### Three words of your report outweigh the census
+
+*"renders flat blue, flat red, no zigzag, no face, **scrolls in red**."*
+
+**The chevron screen is static by construction.** NOTES 101 had this and I
+never connected it:
+
+    03A0A  moveq   #0,d0
+    03A0C  move.w  d0,(unk_FFF0E2).w
+    03A10  move.w  d0,(unk_FFF0E4).w
+    03A14  move.w  d0,(unk_FFF0E8).w
+    03A18  move.w  d0,(unk_FFF0EA).w
+    03A1C  move.w  #$AAAA,(unk_FFF0F4).w
+    03A22  move.w  #$BBBB,(unk_FFF0F6).w
+
+**All four scroll registers zeroed in the same six instructions that
+select pages 10 and 11.**
+
+### The mapping is exact at both ends
+
+Vblank copy, 0x2ACA-0x2AFC:
+
+    FFF0E2 -> 0x410E98 = text word 0x74C   plane 0 X
+    FFF0E4 -> 0x410E9A = text word 0x74D   plane 1 X
+    FFF0E8 -> 0x410E90 = text word 0x748   plane 0 Y
+    FFF0EA -> 0x410E92 = text word 0x749   plane 1 Y
+
+`latch_layer_regs` (2909-2915) reads `TEXT_C[0x74C + which]` and
+`TEXT_C[0x748 + which]`. **Same four words. Our side reads exactly what
+the game writes.** So all four must be zero on that screen -- and if the
+picture moves, they are not.
+
+### What it predicts, and it accounts for the entire arc
+
+**Non-zero scroll = we are displaying the wrong 320x224 window of pages
+10/11.** Flat blue and flat red are a uniform region of the page. **The
+zigzag and the face are elsewhere in the page, off-screen.**
+
+    colours correct in PAL_SH       because they ARE correct
+    pens owned, tracking the ring   because that path WORKS
+    art baked, 91/91 masks in VRAM  because the art IS there
+    five mechanisms died            because colour was never broken
+
+**Everything downstream checked out because everything downstream is
+right. We have been auditing a working pipeline pointed at the wrong part
+of the map.**
+
+### And it beats the pointer I gave you last message
+
+I offered `mdp_wipe_set_tags` / 2709-2716 -- right pens, right colours,
+wrong pixels. **A stale pen map does not make a static screen scroll.**
+An explanation that leaves your loudest symptom on the floor is the
+weaker one. **Take the scroll first; the tag wipe moves back up the list
+only if the scroll comes back clean.**
+
+### The read: four words
+
+**`TEXT_C[0x748]`, `[0x749]`, `[0x74C]`, `[0x74D]` during the chevron.**
+
+    all four ZERO   -> scroll is honoured, movement is from elsewhere,
+                       and the tag-wipe pointer returns
+    any NON-ZERO    -> the cutscene branch's zeroing is not reaching our
+                       latch, we are windowed into the wrong part of
+                       pages 10/11, and THAT is the bug
+
+No build. Same shape as the f1575 test you just took.
+
+### If non-zero, the next question is already framed
+
+`sub_3A00` writes the scroll words in **both** branches -- zeros at
+0x3A0C-0x3A18, computed values at 0x3A44 and 0x3A6E. **So the question
+isn't "who zeroes it" but "does our text mirror carry the cutscene
+branch's write, or a stale in-game value from before the transformation
+started".** Note that the PAGE words land (we select 10/11 correctly) --
+**so the page words update and the scroll words may not, out of the same
+vblank copy.** That asymmetry is where I'd look.
+
+### On the arc
+
+*"I had the frame in hand for two days and never looked at it"* -- that is
+the same failure I made five times running, from the other side. **The
+census answers the question you asked; the picture answers the one you
+didn't.** Worth both of us carrying forward.
+
+**(b) is still the one confirmed defect and still worth building** -- this
+doesn't displace it. But if the scroll words are non-zero, (b) is a real
+bug on a screen that was pointed the wrong way regardless, and I'd take
+the four words before the build.
