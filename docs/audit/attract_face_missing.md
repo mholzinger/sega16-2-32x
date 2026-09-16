@@ -272,3 +272,42 @@ mdp_assign_set -- rather than being assigned and then falling to nearest.
 
 Settling it needs an uncontaminated counter, which is a small build, not
 a read.
+
+## THE 0xFFF148 DOOR: predicted mid-screen clear NOT observed (2026-09-16)
+
+Read, not built. 0xFFF148 and the attract step (0xFFF031) on our rom:
+
+    frame   0xFFF148   step      screen
+     1550          1   0x0C      chevron card up
+     1560          1   0x0C
+     1570          1   0x0C
+     1575          1   0x0C      (the one frame sets 20/21 land complete)
+     1580          1   0x0C
+     1585          1   0x0C
+     1595          1   0x0C      black 28.6%, 4 distinct colours
+     1610          0   0x10      black 100.0%, 1 colour
+     1630          0   0x10      black 100.0%
+     1650          0   0x10      black 100.0%
+
+**The flag is 1 for the entire visible life of the screen** -- at least
+1550 to 1595, 45+ frames -- and clears only between 1595 and 1610, by
+which point the picture is already 100% BLACK and the attract step has
+advanced 0x0C -> 0x10. There is no window where the flag reads 0 while
+the chevron is displayed.
+
+So the predicted trigger ("clears a few frames in, screen still up, on
+returns to 1, mds_install re-pins") is NOT what this build does. The rom
+analysis may still be right about the arcade; our build does not reach
+that state, or does not reach it while the screen is up.
+
+This does NOT clear mds_onscreen -- the flag is one input to it and we
+have not read the function's output. The probe is still the thing that
+decides.
+
+## A SEPARATE DEFECT, found on the way
+
+From ~1610 to at least 1650 our picture is 100% black, one distinct
+colour, across the start of attract step 0x10. The arcade at step 0x10
+(frames 1168+) is showing the EYE. Our eye does not appear until ~1660.
+That is roughly 50 frames of full blackout where the arcade has a
+picture, and it is separate from the flat-chevron bug.
