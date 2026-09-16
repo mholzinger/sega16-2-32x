@@ -9222,3 +9222,131 @@ leaves unbaked by design. **Black boss and this are NOT one bug**, and my
 note 103's suggestion that they might be is withdrawn. Rebuilding the
 detector's logic on `--dump` because headless ares writes no `.bs1` was
 the right call and the three inputs were the right three.
+
+## 165. CHEVPEN's door found, and it is a contradiction inside m_main.c: 0xFFF148 drives mds_onscreen as a "cutscene byte" at 6611, and the rom CLEARS it at animation frame 2 -- mid-screen (2026-09-16)
+
+### The builder's arithmetic kills my mechanism, and it is right
+
+My step-3 story predicts three cyclers re-claiming every frame: 3 sets x
+8 pens ~= 24 fallbacks/frame, ~2,000 across the screen. **Observed: 64
+total.** Two orders short, and far wider than the `.bss` wipe can carry.
+**Entry 164's mechanism is withdrawn.** The sets are not falling to
+nearest-colour; they are not reaching `mdp_claim_pen` at all.
+
+Their reading of their own instrument is also right on both counts: a
+counter that decreases across deterministic runs is being wiped
+(`m_main.c:1060` says so), and it is double-booked -- `m_main.c:15023`
+defines `r60_pkt_flip` as `DIAG[36] & 1`. **The number could not have
+settled this either way and they said so before I could.**
+
+### So: which door. It is `mds_onscreen`, and the rom decides it
+
+`mdp_assign_set` is reached from the claim path only for sets the MD
+side is willing to carry. `mds_onscreen` gates that whole regime:
+
+    2348  if (mds_pin[s] && mds_onscreen)     -> table set, never freed
+    2721  if (!mds_onscreen)                  -> cutscene regime
+    2857  if (mds_pin[s2] && mds_onscreen)    -> skip as eviction victim
+    2867  if (mds_pin[s2] && !mds_onscreen)   -> age 255, evict first
+
+And `mds_onscreen` is driven, at `m_main.c:6611`, by the state word:
+
+    /* FOLD 4: the game's own cutscene byte (0xFFF148, via the state
+     * word) forces OFF with no detector lag -- the face plane in the
+     * first frame. */
+    unsigned so = md_state_on();
+    if (so != 2) on = (uint8_t)so;
+
+with `md_state_on()` returning 0 on `MD_STATE_CUT(w)`, and NOTES 23's
+signal deriving that cut bit from **0xFFF148 != 0**.
+
+### The contradiction, and it is between two comments in the same file
+
+**`m_main.c:6611` calls 0xFFF148 "the game's own cutscene byte".**
+
+**`m_main.c:14625` says the opposite, and it is the one that matches the
+rom:** *"(0xFFF148 is an OBJECT marker, not a scene flag -- dispatcher at
+0x398E, value = slot + 1)"*. That is precisely why `glow_chev` was built.
+
+**One of these is load-bearing for `mds_onscreen` and it is the wrong
+one.**
+
+### And the rom says when it breaks: animation frame 2
+
+`sub_90F4` sets the byte on entry (0x9104-0x910A) and `sub_91CE` clears
+it:
+
+    091CE  tst.b   $21(a6)
+    091D2  bne.s   loc_924C
+    091D4  cmpi.w  #2,animation(a6)     <- animation is set to 1 at 0x914C
+    091DA  bne.s   loc_924C
+    091DC  clr.b   (byte_FFF148).w      <- CLEARED, screen still up
+    ...
+    091FA  jsr     (ReleasePaletteSlot) <- and all four palettes released
+    09206  jsr     (ReleasePaletteSlot)
+    09212  jsr     (ReleasePaletteSlot)
+
+**The flag goes to zero at the SECOND animation step -- early, while the
+transformation screen is still on display -- and the game releases the
+four palette slots at the same instant.**
+
+### The predicted consequence, and it matches every measurement so far
+
+If `mds_onscreen` follows that byte, then a few frames into the chevron
+screen the flag clears, `on` goes back to 1, and `m_main.c:6624` fires
+`mds_install(r9, ...)` -- **the round's table is re-installed and the
+level's 28 sets are re-pinned across every pen.** Sets 19/20/21 are in no
+table, so `mds_pin` is 0 for them (2966), and from that frame on they are
+the first eviction victims, never assigned, never reaching
+`mdp_claim_pen`.
+
+**That predicts exactly what the builder measured: sets 20/21 complete in
+1 of 8 frames, and 0 of 8 with both.** The one good frame is before the
+clear. It also matches LOOP29 285's older "only 2 of 8 chevron frames
+show the game's own sets 20/21" from a completely different instrument.
+
+**This is a prediction, not a finding.** The rom half is solid; the
+consequence is inferred and has to be measured.
+
+### The test, folded into the build they already want
+
+Their `mdp_assign_set` probe is the right build. **Log `mds_onscreen`
+per frame beside it.** Then:
+
+    mds_onscreen 0 -> 1 partway into the chevron   -> the door, confirmed
+    mds_onscreen stays 0 all the way through       -> door is elsewhere,
+                                                      and the refusal
+                                                      reason in their
+                                                      counter names it
+
+Either way their probe is what settles it, and one extra byte per frame
+makes it decide between two hypotheses instead of one.
+
+### If it confirms, CHEVPEN changes shape
+
+Not "free pens" -- **"do not hand the screen back to the level's table
+while the screen is still up."** `glow_chev` is already the correct
+signal for that and does not depend on 0xFFF148 at all. The fix is to let
+`glow_chev` hold `mds_onscreen` off for the duration of the chevron
+plane, rather than a byte the game clears mid-screen for its own reasons.
+
+**The builder's instinct not to spend the build twice was right, and this
+is why: the pens were never the constraint, the same way the bake's room
+was never the constraint.**
+
+### The two loose threads they flagged
+
+**1. DIAG[36] / r60_pkt_flip is a real bug and it is not about this
+screen.** `m_main.c:15023` makes the R60 packet-flip parity the low bit
+of a diagnostic counter that `m_main.c:1060` says something wipes every
+frame ("OPEN BUG, find the writer"). **So the flip parity is not an
+alternation -- it is whatever a wiped fallback count's low bit happens to
+be.** Worth filing now and fixing away from this chain; it should be its
+own counter.
+
+**2. `mdp_free_set`'s guard at 2348 IS the intended release path, and it
+is gated on the same flag.** `if (mds_pin[s] && mds_onscreen)` -- so a
+cutscene evicting a table set requires `mds_onscreen` to be 0. **It is
+not unfired by oversight; it is unfired because the flag it depends on
+goes back to 1 mid-screen.** Same root as (the predicted) door. Fix the
+flag and this guard starts working on its own.
