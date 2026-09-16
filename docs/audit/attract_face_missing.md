@@ -588,3 +588,31 @@ should not be quoted again until they are right.
 recovered structure but not the palette, so the pens are exclusive, the
 art indexes them correctly, and they hold the wrong values. The remaining
 fault is which colours land in those pens, not which pens the art uses.
+
+## THE DIFF, AND IT SAYS CHEVFIX2 IS BROKEN (2026-09-16)
+
+Dumped mdp_line_c and mdp_pen_own from the chevfix2 build at f1575, to
+diff line 0 against the seven expected values. The answer is worse than
+"four missing":
+
+    sets 19/20/21 own ZERO pens on ANY of the three lines.
+    line 0 owners:  85 85 85 87 85 85 87 85 85 87 87 88 87 87
+    line 0 colours: ---- ---- ---- ---- 09B ---- ---- ---- ---- ---- 0ED ...
+
+Line 0 is nearly all 0xFFFF -- free -- while its owner bytes still name
+85/87/88, because mdp_free_set clears line_c (2433) and does NOT clear
+mdp_pen_own. Those owner bytes are stale.
+
+**So (c) frees the sets and nothing re-assigns them.** The re-claim was
+built on the assumption that the next tile sighting would re-assign with
+the real ring present; it does not, at least not while (b) holds the sets
+against mdp_free_set. The two changes fight each other.
+
+And the "ornaments now render" reading of chevfix2 was wrong: that is the
+art drawing through a nearly EMPTY line, not a better palette. The extra
+distinct colour (2 -> 3) came from emptiness, not from correctness.
+
+**chevfix (a+b, without the re-claim) is the better build of the two** --
+there the sets really do own eight pens with distinct pixel indices, which
+is the state the diff was meant to interrogate. Re-run the seven-value
+diff against chevfix, not chevfix2.
