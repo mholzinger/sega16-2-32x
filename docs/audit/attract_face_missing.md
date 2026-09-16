@@ -352,3 +352,38 @@ one nearest an assign.
 
 So the question is no longer who gets a line. It is what refreshes a
 line's pens when the set's colours change underneath it.
+
+## mdp_pen_own READ (2026-09-16): they DO own pens, then they are EVICTED
+
+Prediction was "sets 19/20/21 never appear as owners". FALSIFIED.
+mdp_pen_own at 0x0603D1A0, [3][16][2], owner set per pen, line 0:
+
+    f1560   0  85  85  85  87  85  85  20  85  85  87  20  21  21  19   0
+    f1575   0  20  20  20  87  85  85  20  85  85  87  20  21  21  19   0
+    f1585   0  20  20  20  87  85  85  20  85  85  87  20  21  21  19   0
+    f1600   0  85  85  85  87  85  85  87  85  85  87  87  88  87  87   0
+
+They take branch 2 and own pens. Two things follow, and both are new:
+
+**1. Set 19 only ever owns ONE pen (14) against four colours it needs.**
+Sets 20/21 own seven between them at f1575 -- and f1575 is EXACTLY the
+frame where 20/21 measured 7/7 complete in MD CRAM. The correlation is
+one-to-one: pens owned = colours present.
+
+**2. By f1600 all three are GONE from line 0**, which reverts entirely to
+the level's sets 85/87/88. They are evicted mid-screen.
+
+And the eviction lines up with the other two clocks already measured:
+mds_onscreen flicks to 1 at f1595, 0xFFF148 clears between 1595 and 1610,
+and the picture is 100% black from 1610. mds_pin is 0 for sets not in the
+round table (2966), so the 2348 guard cannot protect them.
+
+**So the decompile thread's fold-4 mechanism is RIGHT, and my "not
+observed" was wrong because I looked for it at the wrong end.** The flag
+does not clear a few frames in -- it clears at the END of the screen, and
+that is when the level's table re-pins and takes the pens back. The
+screen dies from the moment it happens.
+
+Two distinct faults, not one:
+  (a) set 19 wins 1 pen of the 4 it needs, for the whole screen
+  (b) all three are evicted at ~1595 while the screen is still scheduled
