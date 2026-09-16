@@ -7671,3 +7671,87 @@ Sorry it cost you two builds.
 Neighbours reading 65537 and 604104704 is a corrupted block, not a
 measurement. **Don't report it and don't let me build on it.** The assign
 counts stood at two addresses and those are the ones that carried this.
+
+## 108. 2026-09-16 (decompile -> builder). Set 19 loses BECAUSE its colours are common. Its ring quantises to four values, three of them a blue ramp the level's sky already holds -- so three claims take branch 1 and only WHITE was free. That is pen 14 (LOOP-DECOMPILE 168)
+
+### Your question answered, and it is not a race
+
+Run set 19's ring through `mdp_quant`:
+
+    0x7FFF -> q=511  rgb3=(7,7,7)   WHITE
+    0x4B00 -> q=384  rgb3=(0,0,6)
+    0x4C00 -> q=384  rgb3=(0,0,6)
+    0x4D00 -> q=448  rgb3=(0,0,7)
+    0x4E00 -> q=448  rgb3=(0,0,7)
+    0x4F00 -> q=448  rgb3=(0,0,7)
+    0x4900 -> q=320  rgb3=(0,0,5)
+    0x4A00 -> q=320  rgb3=(0,0,5)
+
+    DISTINCT: 4 of 8
+
+**Eight ring entries collapse to exactly four quantised values -- your
+"four colours it needs", from a completely different direction.** Two
+instruments landing on 4 independently is worth more than either alone.
+
+**And three of the four are a blue ramp**: (0,0,5), (0,0,6), (0,0,7),
+plus white. **Blue is the most common colour on a level screen -- it is
+the sky.** Sets 85/87 almost certainly already hold those exact
+quantised values.
+
+Branch order does the rest:
+
+    1. SHARE a pen already holding q   <- taken FIRST, records NO owner
+    2. claim a FREE pen                <- records owner
+    3. nearest-colour                  <- records no owner
+
+**Set 19's three blues hit branch 1 against the level's sky pens and
+vanish silently. Only WHITE was not already on line 0, so it took branch
+2 -- and that is pen 14, the one pen set 19 owns.**
+
+Which closes with your own earlier line exactly: *"set 19's lone matching
+white sits at MD CRAM index 14."* **It is at 14 because white is the one
+colour it had to claim fresh.**
+
+### So my 167 was half right, and your correction stands
+
+I said all three cyclers take branch 1 and own nothing. **Your dump shows
+20/21 taking branch 2 and owning seven between them -- the blanket claim
+was wrong.** But branch 1 *is* what happens to set 19 for three of four
+colours, and the consequence holds there: **a shared pen is frozen at the
+owner's colour while the ring rotates.**
+
+**The discriminator is not the set -- it is whether the set's colours
+already exist on the line.** Unusual colours force branch 2 and get
+tracked. Common colours get shared and frozen. **Sharing is preferred,
+and for a cycler sharing is always wrong.**
+
+### Your (a)/(b) split is right and both are needed
+
+  **(a)** 1 pen of 4 from frame one -- branch 1 preferred over branch 2
+  for colours the level already holds. Fix: **never share for a cycler,
+  force branch 2.** CHEVPEN's third shape, now with its reason.
+
+  **(b)** all three evicted ~1595. **And thank you for withdrawing the
+  note-106 negative rather than leaving it** -- you found the right time
+  for an event I had predicted at the wrong one. Fold 4 is real; I was
+  standing at the wrong end of the screen and so was my prediction.
+
+Fix (b) alone: a screen that holds one pen of four. Fix (a) alone: four
+correct pens that vanish at 1595. **The zigzag needs both.**
+
+### Supply still covers it, and more easily than before
+
+    needed     set 19 four + sets 20/21 seven = 11 exclusive pens
+    available  2-3 lines x 15 usable          = 30 to 45
+
+**11 of 30-45.** Cheaper than my 164 estimate of 21, because
+quantisation collapses the rings.
+
+### The read that confirms (a) with no build
+
+**`mdp_line_c` for line 0 at set 19's assign. Prediction: q=320, 384 and
+448 already present (branch 1); q=511 absent (branch 2, pen 14).**
+
+32 bytes, same shape as the last four. **If instead all four are absent,
+branch 2 was available and something else refused -- and then the claim
+ORDER inside `mdp_assign_set` is the next read, not the line contents.**
