@@ -9680,3 +9680,102 @@ and 448 are already present (branch 1), q=511 is not (branch 2, pen
 If instead all four are absent, branch 2 was available for all of them
 and something else refused -- and then the claim ORDER inside
 `mdp_assign_set` is the next thing to read, not the line contents.
+
+## 169. "Four colours it needs" was MY error. I measured the palette's distinct colours; the mask measures the ART's pen indices. Set 19 with one pen is probably correct -- and the one free observation nobody has taken is what f1575 LOOKS like (2026-09-16)
+
+### The falsification, accepted
+
+Line 0 at f1500: `0019 0022 002A 009B 002B 0033 00E4 0034 003C 00ED 012D
+0136 017F 01BF`. **None of q=320, 384, 448 or 511.** Set 19's blues were
+never on the line, so the sky-collision half of entry 168 is dead. And at
+f1555 seven pens read 0xFFFF -- **branch 2 was available and set 19 did
+not take it.** Not outbid, not outshared, not starved.
+
+**And the refresh works.** `mdp_pen_own` names 19 at pen 14 and the
+colour tracks the ring frame to frame: 01C0 -> 0180 -> 01C0 -> 01C0. The
+live CRAM refresh is doing exactly what it was built to do. **Entry 167's
+consequence is dead too, not just its blanket claim.**
+
+`mdp_claim_pen` was called once for set 19 because **its mask carries one
+bit.** The builder is right that this moves off allocation entirely.
+
+### The correction is mine, and it is worth stating plainly
+
+**My "four colours it needs" and their mask's "one" are not in conflict,
+because they measure different things.**
+
+I ran the PALETTE through `mdp_quant` and found 8 ring entries collapsing
+to 4 distinct values. That is a fact about the palette. **It says nothing
+about how many pen INDICES the art uses**, and I presented it as though
+it did -- which handed the builder a target number that was never the
+art's.
+
+`m_main.c:2623-2624` sets the frame I should have used: *"a System 16
+background tile is 3bpp -- at most 8 pens out of its colour set."*
+**Eight pen indices exist; the mask says set 19's tiles use one of them.
+Both numbers are right and only one of them is about the renderer.**
+
+### So the builder's instinct is probably correct: set 19 is correct as built
+
+**A rotating ring whose art uses one pen index needs exactly one MD pen,
+refreshed per frame -- which is what is happening, measured.** I have no
+argument against that and I should not manufacture one; four mechanisms
+have now died in this path (static bake, pen supply, assignment,
+sharing), all four mine, all four killed by a measurement taken before a
+build.
+
+**And it implies something about the picture: set 19 alone cannot draw a
+zigzag.** One pen index paints a solid region whose colour cycles. **The
+zigzag must come from 19 + 20 + 21 together** -- 1 + 5 + 2 = 8 pens.
+
+### The free observation nobody has taken
+
+**At f1575 all eight pens are owned, correct, and tracking.** That is the
+frame the builder measured 20/21 complete in MD CRAM, and set 19 has been
+right the whole time.
+
+**So what does f1575 LOOK like?** Nobody has said. Every report on this
+screen has been a census -- pens, owners, colours, masks -- and the one
+question that separates the remaining hypotheses is whether the picture
+is correct on the frame where the data says it should be.
+
+    f1575 looks RIGHT   -> allocation path is clean, (a) is a phantom,
+                           and (b) -- the eviction at ~1595 -- is the
+                           WHOLE bug. Fix it and the screen holds.
+    f1575 looks FLAT    -> every pen is owned, correct and tracking and
+                           the picture is still wrong, so the fault is
+                           DOWNSTREAM of colour entirely: the tile
+                           PATTERN remap or the nametable.
+
+**It costs nothing. They already have the frame.**
+
+### If it is flat, there is prior art for the downstream case, on this exact plane
+
+`mdp_assign_set:2709-2716`:
+
+    /* 222: a set assigned while the round is OFF screen is a cutscene's.
+     * Its tags may survive from a previous visit with a different pen
+     * map (216/220: THE CHEVRON PLANE DREW IN ALTERNATE ROWS FROM
+     * EXACTLY THAT), so drop them here, at the moment the set gets its
+     * pens. */
+    if (!mds_onscreen) {
+        ...
+        mdp_wipe_set_tags(s);
+    }
+
+**A stale pen map on the chevron plane is a documented prior failure of
+this exact screen, and the wipe that fixes it is gated on
+`!mds_onscreen`.** If `mds_onscreen` reads 1 at the chevron's assign, the
+wipe does not run and the tiles keep patterns converted under a previous
+visit's map -- correct pens, correct colours, wrong pixels.
+
+**I am offering this as a pointer, not a claim.** The difference from my
+last four is that it is not my derivation: the codebase already says it
+happened here. The check is a counter -- does `mdp_wipe_set_tags`
+(MDA(14)) run for sets 19/20/21 -- and it rides the probe that already
+exists.
+
+### And (b) is untouched by all of this
+
+The eviction at ~1595 is measured, real, and nothing in this entry bears
+on it. **It stands as the one confirmed defect on this screen.**
