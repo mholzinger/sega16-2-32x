@@ -138,10 +138,27 @@ def partition(colsets):
     return go(0, [frozenset()] * NLINES, {})
 
 
+ALSO = []          # --also: sets the harvest CANNOT see (see bake_scene)
+
+
 def bake_scene(name, anchor, masks):
     colsets = {}
     for s, mu in sorted(masks.items()):
         cs = frozenset(quant(anchor[s * 8 + p]) for p in range(8) if mu & (1 << p))
+        if cs:
+            colsets[s] = cs
+    # --also (2026-09-16, CARD MDCHEV): sets the harvest is STRUCTURALLY
+    # blind to. Demand is built from cells in the rom's packed tilemaps,
+    # which cover pages 0-9 only; the cycler sets 19/20/21 live on pages
+    # 10 and 11 (docs/audit/chevplane_cells.txt, tools/chevcells.lua), so
+    # they have zero cells, never become candidates, and are REFUSED an
+    # MD line in every round -- which is why the attract face and eye
+    # screens, both of which are pure tiles (arcade sprite records = 0 at
+    # frames 1060/1100/1180), lose their art. Force them in with every
+    # pen group live, and let partition() fail loudly if they do not fit.
+    for s in ALSO:
+        cs = frozenset(quant(anchor[s * 8 + p]) for p in range(8))
+        cs = frozenset(c for c in cs if c is not None)
         if cs:
             colsets[s] = cs
     allc = set().union(*colsets.values()) if colsets else set()
@@ -179,8 +196,13 @@ def main():
     ap.add_argument('--harvest', action='append', default=[])
     ap.add_argument('--state', action='append', default=[])
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--also', default='',
+                    help='comma-separated colour sets to force in (they have '
+                         'no cells in the harvested tilemaps). CARD MDCHEV: '
+                         '19,20,21 -- the cycler plane on pages 10/11.')
     ap.add_argument('--out', default=str(ROOT / 'sh_src' / 'pal_scenes_md.h'))
     a = ap.parse_args()
+    ALSO[:] = [int(x) for x in a.also.split(',') if x.strip()]
     if not a.harvest and not a.state:
         sys.exit('need --harvest and/or --state inputs')
     scenes = {s: psb.load(SRC / f'{s}.palsh') for s in psb.ANCHORS}
