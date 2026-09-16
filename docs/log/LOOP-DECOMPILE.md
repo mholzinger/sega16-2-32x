@@ -9024,3 +9024,102 @@ known to be slow.**
      cheaply than a build does.
   4. The face is a sprite and needs its own investigation whatever
      happens to the backdrop.
+
+## 163. The transformation palettes are QUEUED, and the arcade's queue has NO BUDGET -- it drains completely every vblank. So the partial landing is ours, and "one colour, white" means ZERO landed (2026-09-16)
+
+### The builder's measurement, and what the rom says should happen
+
+Across eight frames of the transformation screen: set 19 never lands
+(1 of 4 colours, and that one white); sets 20/21 land complete in 1 of 8;
+both present 0 of 8. Upstream of the FB, and the static bake is provably
+not the path.
+
+**Sets 19/20/21 are SPRITE PALETTE SLOTS, not baked colour sets.** That is
+why packing them into the static bake changed no pixel -- there was never
+a path from the bake to those slots. Their contents are decided at
+runtime by the allocator and delivered by a queue.
+
+### The protocol, from rom
+
+`RequestPaletteUpdate` (0x3B2E) **does not write a palette.** It resolves
+a slot and falls through to `QueuePaletteUpdate` (0x3BEC), which appends
+one 8-byte entry -- destination pointer, source pointer -- to a 64-entry
+circular buffer at 0xFFFFF600-0xFFFFF800, and bumps
+`palette_process_count`.
+
+The drain, at 0x3C4E-0x3C82:
+
+    03C5A more_palettes:
+    03C5A     movea.l (a2)+,a1          ; destination
+    03C5C     movea.l (a2)+,a0          ; source
+    03C5E     move.l  (a0)+,(a1)+       ; 7 longs
+    ...       (x7)
+    03C7A     subq.b  #1,(a3)           ; one less
+    03C7C     bne.s   more_palettes     ; <-- NO BUDGET
+
+**There is no cap. The loop runs until the count is zero.** Whatever the
+game queued lands in that vblank, all of it, every time.
+
+**So the arcade has no rate limit here and cannot produce a partial
+landing. Every missing colour on our side is ours.**
+
+### And "one colour, and it is white" means ZERO landed
+
+Two details of the copy decide how to read the builder's census:
+
+    03C1E  lsl.w   #5,d0              ; slot * 32
+    03C26  lea     2(a1,d0.w),a1      ; dest = base + slot*32 + 2
+    03C34-03C38                       ; source index * 28
+
+Destination starts at **+2** and runs **28 bytes** -- bytes 2..29 of a
+32-byte slot. **Colour 0 (bytes 0-1) and colour 15 (bytes 30-31) are
+NEVER WRITTEN by this path, ever, for any palette.**
+
+So a slot holding exactly one non-default colour at index 0 has received
+**nothing at all**; that colour is whatever our init left there. **"1 of 4
+colours, and that one is white" is not a partial landing. It is a total
+miss plus an initialisation value**, and it should be counted as 0 of 8,
+not 1 of 4. The set is in the same state as before the screen started.
+
+Corollary worth carrying: a source palette is **14 colours, 28 bytes**,
+while a destination slot is **32 bytes**. `tools/actor_palettes.py:10`
+already records the ×28 stride for the sprite path, so this is known
+ground -- but it means any reader that walks `palette_lookup` with a
+32-byte stride drifts 4 bytes per index. At the level-0 face's index 0x99
+that is 612 bytes of drift, which would read as plausible-looking wrong
+colours rather than as an obvious failure.
+
+### The transformation queues FOUR entries with no vint between them
+
+`sub_90F4` calls `RequestPaletteUpdate` four times back to back --
+0x9180, 0x9192, 0x91A4, 0x91B6 -- with only register shuffling in
+between. **All four are queued inside one frame and the arcade lands all
+four in the next vblank.** We land 0 to 2 of the three sets the builder
+sampled.
+
+### This has a name here already: the LOST-PUSH BELT
+
+A queued palette push that never reaches its destination is exactly the
+failure the belt was built for -- `m_main.c:12497` *"LOST-PUSH BELT
+(2026-09-05, Mike's black boss on the JP...)"*, with the detector in
+`tools/state_health.py:63-79` printing *"LOST-PUSH palette words
+(shadow==game, PAL_SH stale)"*.
+
+**That is the instrument for this, it already exists, and it should be
+run on the transformation frames before anything is built** -- the same
+shape as the `glow_chev` catch. Black boss, missing face: both are
+palette pushes that were queued and lost.
+
+### What to hand over
+
+  1. **Recount the census: "one colour and it is white" is ZERO
+     landed**, because colour 0 is never written by this path.
+  2. **The arcade has no drain budget** -- any partial landing is ours,
+     so the question is not "why is the game slow to send" but "where do
+     our pushes go".
+  3. **Run `state_health.py`'s LOST-PUSH line on the transformation
+     frames.** The detector predates this screen and covers exactly this
+     failure.
+  4. Colours 0 and 15 of every slot are never written by the game --
+     anything our side shows at those indices is our own initialisation
+     and must not be read as game data.
