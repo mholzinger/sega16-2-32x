@@ -428,3 +428,45 @@ Note this may also mean set 19 is CORRECT as built: a rotating ring whose
 art uses a single pen index needs exactly one MD pen, refreshed per frame,
 which is what we see. The zigzag would then be missing for a reason that
 is not in this path at all.
+
+## f1575, THE GOOD FRAME: FLAT. The fault is downstream of colour.
+
+The decompile thread's free observation, taken. f1575 is the frame where
+all eight pens are owned by sets 19/20/21, hold the right values, and
+track the ring. The picture on that frame:
+
+    flat blue field, flat red field, NO zigzag, NO face, scrolls in red
+
+So: every pen owned, every colour correct, the refresh tracking, and the
+picture still wrong. By the thread's own split that puts the fault
+DOWNSTREAM OF COLOUR -- the tile PATTERN or the nametable, not the
+palette path at all.
+
+That closes the allocation path completely. Five mechanisms have now
+died in it: static bake, pen supply, assignment, branch-1 sharing, and
+the refresh. The measurements that killed each are in this file.
+
+**(a) is a phantom.** Set 19 owning one pen is correct behaviour for a
+ring whose art uses one pen index. There was never a claim race to lose.
+
+**(b) survives and is the only confirmed defect on this screen**: the
+eviction at ~1595, measured in mdp_pen_own (line 0 reverts to the level's
+85/87/88 between f1585 and f1600) and lined up with mds_onscreen going 1
+at f1595, 0xFFF148 clearing by 1610, and the picture going 100% black.
+
+## The pointer worth following, and it is in the codebase not in a theory
+
+mdp_assign_set:2709-2716 already records this exact plane failing this
+exact way:
+
+    "their tags may survive from a previous visit with a different pen
+     map (216/220: the chevron plane drew in alternate rows from exactly
+     that)"
+
+and the wipe that fixes it is gated `if (!mds_onscreen)`. If that reads 1
+at the chevron's assign, the wipe does not run and the result is right
+pens, right colours, wrong pixels -- which is the frame above.
+
+Check: does mdp_wipe_set_tags (MDA(14)) run for sets 19/20/21? It rides
+CHEVPROBE. NOTE the scratch hazard first -- 0x26028DE0 and 0x26028DA0 are
+both live; size any new counter against the map at m_main.c:1329.
