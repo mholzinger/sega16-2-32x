@@ -158,9 +158,10 @@ def bake_scene(name, anchor, masks):
     # pen group live, and let partition() fail loudly if they do not fit.
     for s in ALSO:
         cs = frozenset(quant(anchor[s * 8 + p]) for p in range(8))
-        cs = frozenset(c for c in cs if c is not None)
         if cs:
             colsets[s] = cs
+            masks = dict(masks)
+            masks[s] = 0xFF          # every pen group live; s_used reads this
     allc = set().union(*colsets.values()) if colsets else set()
     assign = partition(colsets)
     if assign is None:
