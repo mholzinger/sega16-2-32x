@@ -10027,3 +10027,74 @@ and it is worth one look before a play pass rather than after.
 
 The eye screen and the ~1610 blackout are untested against this build.
 **(b) is fixed and (a) is fixed; the colour is one change away.**
+
+## 173. Ornaments draw. The remaining question is arithmetic, not a mechanism: SEVEN distinct values are expected in mdp_line_c and THREE are there. Here are the seven (2026-09-16)
+
+    chevfix2   83.3% non-field, 3 distinct   zigzag + ornaments
+
+The re-claim fires once per set at the uniform->ramp transition, let
+through the (b) hold by a `chev_force` flag. **Geometry close to
+complete.**
+
+### Their classifier catch is the more valuable half of that message
+
+*"Field colour is defined in my file as the arcade's blue/red/orange/
+black. Once our palette is olive, every pixel reads non-field by
+construction."* **So 83.3% measures the classifier failing, not
+coverage, and it is meaningless until the colours are right.**
+
+They caught it before a play pass and retired the number themselves.
+**That is the fourth instrument in this arc that was lying, and the first
+one caught by its own author before it reached anybody.**
+
+### The remaining fault, stated as arithmetic
+
+Pens are exclusive, the art indexes them correctly, and they hold the
+wrong values. **So this is no longer about allocation at all -- it is
+about which colours reach `mdp_line_c`.** From the builder's own
+"should be" list plus entry 168's ring:
+
+    set 20, five pens   0x007  0x01F  0x02F  0x037  0x03F
+    set 21, two pens    0x027  0x03F        (0x03F shared with 20)
+    ---------------------------------------------------------
+    union                0x007  0x01F  0x027  0x02F  0x037  0x03F   = 6
+    set 19, one pen      one of 0x140 0x180 0x1C0 0x1FF, rotating   = 1
+
+    EXPECTED DISTINCT AT ANY INSTANT:  7
+    OBSERVED:                          3
+    MISSING:                           4
+
+**Four of seven values never reach the line.** That is the whole
+remaining defect, quantified, with the target list to diff against.
+
+`mdp_line_c[l*16+pen] = mdp_quant(PAL_SH[s*8+p])` is the only assignment.
+**PAL_SH has already been shown correct at f1575** (their dump matched the
+arcade word for word), and `mdp_quant` is deterministic. **So either the
+re-claim reads PAL_SH at a moment when only some of the eight entries
+have updated, or fewer than seven claims actually run.**
+
+**Both are counters, not derivations, and both ride the probe that
+exists.** I am not proposing a mechanism -- five have died and the
+builder's framing is right that this is a different question. **Dump
+`mdp_line_c` for line 0 against the seven above; the missing four name
+the failing pixels directly.**
+
+### The withdrawal lesson, both directions
+
+They took it: *"pen 14 tracked because it was sole-owned; that was a clue
+about `mdp_pen_rc`, and I read it as a refutation."* **It cost me a
+correct mechanism and it cost them a build.** Recording it as the durable
+finding of this arc, above any of the code:
+
+**A single counter-example to a mechanism is a reason to ask WHICH CASE
+it is, not to withdraw the mechanism.**
+
+### And the bar, which has not moved
+
+The builder states it plainly and I am recording it here so it is in the
+log and not only in a relay: **MOTION is 9.3 fps against a bar of 60, and
+`__ramtext` is 27,072 bytes against a 4 KB cache.** Nothing this week
+touched either.
+
+**The attract screen is a visible defect worth fixing. It is not the
+bar.** The `_m_main` split is.
