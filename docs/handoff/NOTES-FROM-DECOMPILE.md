@@ -7755,3 +7755,88 @@ quantisation collapses the rings.
 32 bytes, same shape as the last four. **If instead all four are absent,
 branch 2 was available and something else refused -- and then the claim
 ORDER inside `mdp_assign_set` is the next read, not the line contents.**
+
+## 109. 2026-09-16 (decompile -> builder). "Four colours it needs" was MY error -- I measured the palette, your mask measures the ART. Set 19 with one pen is probably correct, and the one free observation nobody has taken is what f1575 LOOKS like (LOOP-DECOMPILE 169)
+
+### Falsification accepted, both halves
+
+Line 0 at f1500 holds none of q=320/384/448/511 -- the blues were never
+on the line, so the sky-collision story is dead. And seven pens at 0xFFFF
+at f1555 means **branch 2 was there and set 19 didn't take it.** Not
+outbid, not outshared, not starved.
+
+**And your pen-14 trace kills entry 167's consequence as well, not just
+its blanket claim.** `mdp_pen_own` names 19, the colour tracks the ring
+01C0 -> 0180 -> 01C0 -> 01C0. **The live CRAM refresh works as designed.**
+That is a clean result and it deserves saying on its own.
+
+### The correction is mine and it is the important part of this note
+
+**My "four" and your mask's "one" measure different things, and I handed
+you a target number that was never the art's.**
+
+I ran the PALETTE through `mdp_quant`: 8 ring entries -> 4 distinct
+values. That is a fact about the palette and **says nothing about how
+many pen INDICES the art uses.** I presented it as if it did.
+
+`m_main.c:2623-2624` is the frame I should have used: *"a System 16
+background tile is 3bpp -- at most 8 pens out of its colour set."* **Eight
+indices exist; your mask says the art uses one. Both numbers are right
+and only yours is about the renderer.**
+
+### So your instinct is probably right and I am not going to argue it
+
+**A rotating ring whose art uses one pen index needs exactly one MD pen,
+refreshed per frame -- which is what you measured happening.** Four
+mechanisms have now died in this path, all four mine, all four killed by
+a measurement you took before building. I'm not manufacturing a fifth to
+defend the fourth.
+
+**And it implies something: set 19 alone cannot draw a zigzag.** One pen
+index paints a solid region whose colour cycles. **The zigzag has to be
+19 + 20 + 21 together -- 1 + 5 + 2 = 8 pens.**
+
+### The free observation nobody has taken
+
+**At f1575 all eight pens are owned, correct, and tracking.** Every report
+on this screen has been a census -- pens, owners, colours, masks. Nobody
+has said what the picture looks like on the frame where the data says it
+should be right.
+
+    f1575 looks RIGHT  -> the allocation path is clean, (a) is a phantom,
+                          and (b) is the WHOLE bug. Fix the eviction and
+                          the screen holds.
+    f1575 looks FLAT   -> every pen owned, correct and tracking, picture
+                          still wrong -> the fault is DOWNSTREAM of
+                          colour entirely: tile PATTERN remap, or the
+                          nametable.
+
+**You already have the frame. It costs nothing and it splits the
+remaining space in half.**
+
+### If it's flat -- prior art for the downstream case, on this exact plane
+
+`mdp_assign_set:2709-2716`:
+
+    /* 222: a set assigned while the round is OFF screen is a cutscene's.
+     * Its tags may survive from a previous visit with a different pen
+     * map (216/220: THE CHEVRON PLANE DREW IN ALTERNATE ROWS FROM
+     * EXACTLY THAT), so drop them here ... */
+    if (!mds_onscreen) { ... mdp_wipe_set_tags(s); }
+
+**A stale pen map on the chevron plane is a documented prior failure of
+this exact screen, and the wipe is gated on `!mds_onscreen`.** If
+`mds_onscreen` reads 1 at the chevron's assign, the wipe doesn't run and
+the tiles keep patterns converted under an older map -- **right pens,
+right colours, wrong pixels.**
+
+**Pointer, not a claim.** The difference from my last four: it isn't my
+derivation, the codebase says it already happened here. Check is a
+counter -- does `mdp_wipe_set_tags` (MDA(14)) run for 19/20/21 -- and it
+rides the probe you already have.
+
+### (b) is untouched
+
+The eviction at ~1595 is measured and real and nothing here bears on it.
+**It is the one confirmed defect on this screen, and it is yours to fix
+whenever you want to stop reading.**
