@@ -1193,6 +1193,14 @@ endif
 ifdef CHEVPROBE
 SHCCFLAGS += -DCHEV_PROBE
 endif
+# `make ... CHEVFIX=1` = CARD CHEVPEN (NOTES 111/112). (a) forces the
+# chevron sets 19/20/21 to claim EXCLUSIVE pens while glow_chev is up, so
+# mdp_pen_rc==1 and the sole-owner in-place recolour (16082) tracks their
+# colour ring -- a shared pen falls through to tolerated drift and is
+# never repainted. (b) holds those sets against the ~1595 eviction.
+ifdef CHEVFIX
+SHCCFLAGS += -DCHEV_FIX
+endif
 ifdef CACHELOCK
 SHCCFLAGS += -DCACHE_LOCK
 endif

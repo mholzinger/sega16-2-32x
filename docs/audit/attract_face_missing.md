@@ -525,3 +525,38 @@ DRIFT DETECTOR (DRQR[6]), not a repaint.
 So a cycler's pen is frozen at whatever phase it was claimed in. Set 19's
 pen 14 changing 01C0 -> 0180 -> 01C0 is then the drift path acting, not a
 refresh -- and it happens on one pen and not the other seven.
+
+## CHEVFIX BUILT (2026-09-16): the zigzag DRAWS. Colours still wrong.
+
+Two changes behind CHEVFIX=1:
+  (a) mdp_claim_pen: while glow_chev, sets 19/20/21 take a FREE pen
+      instead of sharing, so mdp_pen_rc == 1 and the sole-owner in-place
+      recolour at 16082 can track their ring. A shared pen falls through
+      to "tolerated drift" and is never repainted -- that is why five
+      distinct pixel indices all held 0x0007.
+  (b) mdp_free_set: hold those sets while glow_chev, against the ~1595
+      eviction that mds_pin (0 for non-table sets, 2966) cannot stop.
+
+Result at f1575, the frame all eight pens are owned:
+
+    arcade   non-field centre 31.2%   22 distinct colours
+    bldS     non-field centre  0.0%    3 distinct colours   FLAT
+    chevfix  non-field centre 83.3%    2 distinct colours   ZIGZAG DRAWS
+
+**The zigzag pattern renders for the first time.** It was the success
+criterion the decompile thread named and it is met: the geometry is
+there, the chevrons are the right shape and in the right places.
+
+**The colours are wrong** -- olive and black, two distinct values, where
+the arcade has blue, red and a yellow ramp. So (a) fixed WHICH pens the
+art indexes and the pens hold the wrong colours.
+
+That is the decompile thread's own arithmetic landing: eight pens holding
+one identical value was never a phase freeze (a freeze gives eight
+different ring values), it is a claim made against a UNIFORM PAL_SH --
+before the transformation's four queued palette updates drain. The claim
+now takes exclusive pens, but still takes them a frame too early.
+
+NEXT, and it is their suggestion taken literally: re-claim these sets once
+when their PAL_SH actually changes. The per-frame recolour then only has
+to carry the rotation, which it already does for sole-owned pens.

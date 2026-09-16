@@ -1564,6 +1564,9 @@ static uint8_t mds_pin[128];
  * re-installed on the edge back. */
 static uint16_t mds_cl_t, mds_cl_n;
 static uint8_t  mds_onscreen;
+static uint8_t  glow_chev;       /* the chevron plane is up (pages >= 10);
+                                  * file scope so mdp_claim_pen and
+                                  * mdp_free_set can gate on it */
 #ifdef CHEV_PROBE
 /* CARD CHEVPEN probe (NOTES 105/106). Decides between two hypotheses for
  * why sets 19/20/21 never reach MD CRAM:
@@ -2362,6 +2365,14 @@ static void mdp_wipe_set_tags(unsigned s)
 #endif
 static void mdp_free_set(unsigned s)
 {
+#ifdef CHEV_FIX
+    /* CARD CHEVPEN (b). Measured: at f1585 sets 19/20/21 own eight pens on
+     * line 0; by f1600 the line is entirely the level's 85/87/88. mds_pin
+     * is 0 for sets outside the round table (2966) so the guard at 2348
+     * cannot hold them. Hold them here while the screen is up. */
+    if (glow_chev && s >= 19u && s <= 21u)
+        return;
+#endif
 #ifdef CHEV_PROBE
 #endif
     if (!mdp_s_line[s])
@@ -2490,6 +2501,20 @@ static unsigned mdp_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
     if (mdp_s_vol[s] >= 2 && freepen)
         pen16 = 0;                           /* volatile set: prefer an
                                               * EXCLUSIVE pen over sharing */
+#ifdef CHEV_FIX
+    /* CARD CHEVPEN (a), NOTES 111/112. The chevron's sets are cyclers and
+     * the in-place recolour that tracks a ring (16082) fires ONLY on
+     * mdp_pen_rc == 1 -- a shared pen falls through to "tolerated drift"
+     * and is never repainted, so it holds its claim-time colour forever.
+     * Measured: sets 20/21 own five and two pens with five DISTINCT pixel
+     * indices, and every one of them holds 0x0007, because they were
+     * claimed by sharing. Set 19's pen 14 is sole-owned and DOES track.
+     * mdp_s_vol cannot help -- it needs two observed changes and these
+     * sets assign twice in the screen's whole life, both before it rises.
+     * So force branch 2 here, on the gate that already exists. */
+    if (glow_chev && s >= 19u && s <= 21u && freepen)
+        pen16 = 0;
+#endif
     if (!pen16 && freepen) {
         pen16 = freepen;
         mdp_line_c[l * 16 + pen16] = q;
@@ -14564,7 +14589,8 @@ RAMCODE void m_main(void)
                 static uint16_t glow_pend_run;
 #endif
 #ifdef GLOW_PAGE
-                static uint8_t glow_chev;    /* the chevron plane is up */
+                /* glow_chev is FILE SCOPE (see near mds_onscreen): the
+                 * pen allocator needs it and lives earlier in the file. */
 #endif
 #ifdef GLOW_ANIM
                 /* ONE ARCADE TICK per vint. Paused while the 68K is
