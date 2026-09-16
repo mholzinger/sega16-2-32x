@@ -387,3 +387,44 @@ screen dies from the moment it happens.
 Two distinct faults, not one:
   (a) set 19 wins 1 pen of the 4 it needs, for the whole screen
   (b) all three are evicted at ~1595 while the screen is still scheduled
+
+## mdp_line_c READ (2026-09-16): branch-1 prediction FALSIFIED, and the
+## refresh works
+
+Predicted: q=320/384/448 already on line 0 as the level's sky, q=511
+absent. Line 0 before the screen (f1500):
+
+    0019 0022 002A 009B 002B 0033 00E4 0034 003C 00ED 012D 0136 017F 01BF
+
+None of 320, 384, 448 or 511. **Set 19's blues were never on the line**,
+so it did not lose them to branch-1 sharing against the sky.
+
+And set 19's one pen is TRACKING THE RING:
+
+    f1540  pen14 = 01C0 (448)
+    f1555  pen14 = 0180 (384)
+    f1560  pen14 = 01C0 (448)
+    f1575  pen14 = 01C0 (448)
+
+**The live CRAM refresh is working.** mdp_pen_own names set 19 at pen 14
+and the colour changes underneath it frame to frame, exactly as designed.
+
+**And free pens were available while it owned only one.** At f1555 line 0
+reads `---- ---- ---- ---- 009B ---- ---- 003F ...` -- pens 1,2,3,5,6,8,9
+are 0xFFFF, free. Branch 2 was there for the taking and set 19 did not
+take it.
+
+So set 19 owns one pen not because it was outbid, outshared or starved,
+but because **mdp_claim_pen was only called once for it** -- the assign
+claims one pen per SET PIXEL in `mask`, and set 19's mask evidently
+carries one bit.
+
+That moves the question off allocation entirely and onto the mask: which
+pen indices set 19's tiles actually use, and how that mask is derived.
+If the tiles use several pen indices and the mask says one, the other
+colours are never requested and no allocator behaviour can supply them.
+
+Note this may also mean set 19 is CORRECT as built: a rotating ring whose
+art uses a single pen index needs exactly one MD pen, refreshed per frame,
+which is what we see. The zigzag would then be missing for a reason that
+is not in this path at all.
