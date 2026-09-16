@@ -221,6 +221,18 @@ The discipline, from here:
 > a loss on hardware.** Rank changes on `__ramtext_size` -- offline, no
 > rig, and a better instrument than ares on this axis.
 >
+> **BUT `__ramtext_size` RANKS SHRINKING, NOT RELOCATING (2026-09-15).**
+> `.text` is at 0x02xxxxxx, the CACHED cart view, so code moved out of
+> `.ramtext` still competes for the same 4 KB I-cache -- measured, total
+> master code touched went 25,552 -> 25,568 B across three such moves,
+> i.e. UP. Moving code to ROM cuts `__ramtext_size` and buys no cache
+> relief at all, while making its fills slower. Only removing work, or
+> removing code outright, moves the real number. The real number is the
+> TOUCHED set: `ares-headless --profile`, master PCs, distinct 16 B
+> lines. Steady state (differencing an 1800- and a 2000-frame run, so
+> boot is excluded) it is 21,936 B against a 4,096 B cache, with 75% of
+> all work in 928 B and 90% in 2,480 B.
+>
 > **The two live levers, and they compose:** shrink the footprint (the
 > tax multiplies whatever work exists) and finish the pivot, CAT1MD step
 > 2 (ARCHITECTURE.md S4 removes ~74% of the work AND the code that does
@@ -229,7 +241,14 @@ The discipline, from here:
 > together they plausibly do.
 >
 > **DEAD, do not re-propose:** Card T2 / `SH2_CCTL_TW` (2 KB covers 7.4%
-> of the path at a 48% price); re-timing cards generally (a uniform
+> of the path at a 48% price) -- BUILT AND RE-MEASURED ANYWAY on
+> 2026-09-15 because this line was not read first, and it reproduced:
+> rig flip rate 27 baseline / 21 TW-only / 21 TW + 2 KB locked, so
+> locking is worth nothing on top of TW's own price. The mechanism
+> (preload ways 0/1 through the cache arrays, CCR.TW freezes them) works
+> and is confirmed installed; the size is simply wrong.
+> docs/design/CARD-CACHELOCK.md has the derivation and the numbers if
+> the locked fraction is ever large enough to revisit; re-timing cards generally (a uniform
 > multiplier leaves no stage to move out of the way); triple buffering
 > (1 generation per 64 of quantisation loss, at SDRAM cost).
 
