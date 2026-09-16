@@ -470,3 +470,58 @@ pens, right colours, wrong pixels -- which is the frame above.
 Check: does mdp_wipe_set_tags (MDA(14)) run for sets 19/20/21? It rides
 CHEVPROBE. NOTE the scratch hazard first -- 0x26028DE0 and 0x26028DA0 are
 both live; size any new counter against the map at m_main.c:1329.
+
+## SCROLL READ: CLEAN. And my wording caused that hypothesis.
+
+TEXT_C (0x06026000) during the chevron:
+
+    frame   0x740  0x741 | 0x748 0x749 0x74C 0x74D
+     1500    AAAA   BBBB |  0000  0000  0000  0000
+     1560    AAAA   BBBB |  0000  0000  0000  0000
+     1575    AAAA   BBBB |  0000  0000  0000  0000
+     1600    AAAA   BBBB |  0000  0000  0000  0000
+
+All four scroll words zero, pages AAAA/BBBB -- exactly what sub_3A00
+writes. The mirror is LIVE, not stale: at f300 it reads 1212/6767 with
+scroll 00C0, at f700-1400 0101/5656 with scroll stepping 0192, 0189,
+017D, 0146, at f1900 0000/5555. It tracks.
+
+**The scroll hypothesis came from my word "scrolls", which meant the
+decorative flame ORNAMENTS in the art, not scrolling motion.** That is my
+ambiguity and it cost the thread a derivation. The ornaments render red
+where the arcade has a yellow-to-orange gradient.
+
+## THE ACTUAL FAULT: owners correct, colours all identical
+
+mdp_pen_own carries (set, pixel). Line 0 at f1575, with what set 20's
+ring says each pixel should be:
+
+    pen  1: set 20 pixel 3  holds 0007   should be 02F
+    pen  2: set 20 pixel 5  holds 0007   should be 01F
+    pen  3: set 20 pixel 6  holds 0007   should be 007  <- only one right
+    pen  7: set 20 pixel 1  holds 0007   should be 03F
+    pen 11: set 20 pixel 2  holds 0007   should be 037
+    pen 12: set 21 pixel 4  holds 0007   should be 027
+    pen 13: set 21 pixel 1  holds 0007   should be 03F
+    pen 14: set 19 pixel 1  holds 01C0   in set 19's ring, OK
+
+**The ownership records are right and distinct -- five different pixel
+indices -- and every pen holds the same colour, red.** One of eight is
+correct and it is correct by coincidence.
+
+That is the flat picture, exactly. The yellow-to-orange ramp collapses to
+a single red, so the ornaments are red and the fields are flat.
+
+## And there is no per-frame repaint
+
+Every writer of mdp_line_c: 2433 (free, sets 0xFFFF), 2495 (claim, `= q`),
+2556 (claim into an old pen), 2818 (assign into an old placement). **None
+of them is a per-frame refresh from PAL_SH.** The pen colour is written
+once, at claim time, from the ring's phase at that instant.
+
+16028-16029 reads mdp_pen_own and re-quantises PAL_SH, but that is the
+DRIFT DETECTOR (DRQR[6]), not a repaint.
+
+So a cycler's pen is frozen at whatever phase it was claimed in. Set 19's
+pen 14 changing 01C0 -> 0180 -> 01C0 is then the drift path acting, not a
+refresh -- and it happens on one pen and not the other seven.
