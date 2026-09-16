@@ -1571,9 +1571,10 @@ static uint8_t  mds_onscreen;
  *   door opens, something else closes it -> called and REFUSED
  * plus the decompile thread's extra byte: mds_onscreen sampled per vint,
  * so "0 -> 1 partway into the chevron" is visible directly.
- * 0x26028DE0-0x26028E0F: 12 free longs (0 refs in the tree).
+ * 0x26028DA0-0x26028DBF: 8 free longs. 0x28DE0+ was NOT free --
+ * indices 9-11 landed on live memory and read garbage.
  * READ-ONLY probe. Never ships. */
-#define CHEVP ((volatile uint32_t *)0x26028DE0)
+#define CHEVP ((volatile uint32_t *)0x26028DA0)   /* 8 longs: DA0-DBF (DC0 is taken) */
 /*  [0] mds_onscreen NOW        [1] vints seen with glow_chev set
  *  [2] assign CALLS  s=19      [3] s=20        [4] s=21
  *  [5] assign OK     s=19      [6] s=20        [7] s=21
@@ -2362,13 +2363,11 @@ static void mdp_wipe_set_tags(unsigned s)
 static void mdp_free_set(unsigned s)
 {
 #ifdef CHEV_PROBE
-    if (chev_ix(s) < 3u) CHEVP[8]++;
 #endif
     if (!mdp_s_line[s])
         return;
 #ifdef MD_STATIC
 #ifdef CHEV_PROBE
-    if (chev_ix(s) < 3u && mds_pin[s] && mds_onscreen) CHEVP[9]++;
 #endif
     if (mds_pin[s] && mds_onscreen) {        /* table set: never freed
                                               * inside its scene (209: a
@@ -2968,9 +2967,6 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
  * per-window live CRAM refresh keeps tracking fades exactly as now. */
 static void mds_install(unsigned sc, uint8_t stamp)
 {
-#ifdef CHEV_PROBE
-    CHEVP[10]++;
-#endif
     /* SELECTIVE INVALIDATION: a slot's pattern depends only on its set's
      * (line, pixel->pen map); a set whose dynamic assignment already
      * equals the table keeps its slots (same remap -> same bytes), so an
@@ -14690,11 +14686,8 @@ RAMCODE void m_main(void)
 #ifdef CHEV_PROBE
     {   /* the decompile thread's extra byte: mds_onscreen per vint while
          * the chevron gate is up, so "0 -> 1 partway in" shows directly */
-        static uint8_t cp_prev;
         CHEVP[0] = mds_onscreen;
         if (glow_chev) CHEVP[1]++;
-        if (mds_onscreen && !cp_prev) CHEVP[11]++;
-        cp_prev = mds_onscreen;
     }
 #endif
                 }

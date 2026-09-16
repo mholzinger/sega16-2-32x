@@ -311,3 +311,44 @@ colour, across the start of attract step 0x10. The arcade at step 0x10
 (frames 1168+) is showing the EYE. Our eye does not appear until ~1660.
 That is roughly 50 frames of full blackout where the arcade has a
 picture, and it is separate from the flat-chevron bug.
+
+## CHEVPEN PROBE (2026-09-16): the sets ARE assigned, and assignment SUCCEEDS
+
+CHEVPROBE=1, counters read with ares --dump. Run at two different
+scratch addresses because the first choice was not actually free.
+
+    sets 19, 20 and 21 are each assigned EXACTLY TWICE over the run,
+    and EVERY assignment returns success.
+
+That figure is corroborated across both addresses (assign OK 2/2/2 in
+each). So mdp_assign_set is not the door either: the sets are offered a
+line, they take one, and they keep it.
+
+**SCRATCH HAZARD, and it cost two builds.** Neither 0x26028DE0-0x28E0F
+nor 0x26028DA0-0x28DBF is free, despite a grep for the literal address
+returning zero references -- live code reaches that memory through base
+pointers, not literals. Counters there read 65537, 604104704 and similar.
+Only the first slots of each block survived. GREPPING FOR THE LITERAL IS
+NOT A FREE-SPACE TEST; the map comment at m_main.c:1329 is, and it does
+not list these.
+
+## Where that leaves the chain
+
+    game writes the colours          OK
+    queue/drain delivers             OK  (LOST-PUSH 0/0/1, the 1 is BLINK)
+    PAL_SH holds the ring            OK  (phase-rotated, matches arcade)
+    tile art baked and in MD VRAM    OK  (91/91 masks)
+    FB covers the picture            NO  (1.5%, text only)
+    sets assigned an MD line         OK  (2 calls, 2 successes, each set)
+    nearest-colour fallback storm    NO  (64 total, ~2,000 expected)
+    colours present in MD CRAM       NO  <-- still the only failure
+
+Assigned twice in ~1,600 frames, against a cycler whose colours rotate
+EVERY frame. The pens are claimed once at assign time and never revisited
+as the ring turns, so MD CRAM holds one stale phase -- or whatever later
+claims by other sets on the same line overwrote. That matches the
+measured "20/21 complete in exactly 1 frame of 8": the good frame is the
+one nearest an assign.
+
+So the question is no longer who gets a line. It is what refreshes a
+line's pens when the set's colours change underneath it.
