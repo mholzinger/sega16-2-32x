@@ -9350,3 +9350,101 @@ cutscene evicting a table set requires `mds_onscreen` to be 0. **It is
 not unfired by oversight; it is unfired because the flag it depends on
 goes back to 1 mid-screen.** Same root as (the predicted) door. Fix the
 flag and this guard starts working on its own.
+
+## 166. The door prediction did not fire, and the builder read it before building. Meanwhile the eye "blackout" is not a blackout: the rom sets the backdrop black on purpose, so 100% black / 1 colour means NOTHING WAS DRAWN (2026-09-16)
+
+### Entry 165's trigger: not present on our build
+
+0xFFF148 reads 1 across 1550-1595 -- the entire visible life of the
+chevron screen, 45+ frames, **including the one frame where 20/21 land
+complete** -- and clears only between 1595 and 1610, by which point the
+picture is already 100% black and the attract step has moved 0x0C ->
+0x10. **There is no window where the flag reads 0 while the chevron is
+displayed.**
+
+So "clears a few frames in, screen still up, `on` returns to 1,
+`mds_install` re-pins" **is not what this build does.** The rom reading of
+0x91D4/0x91DC stands as a statement about the arcade; our build does not
+reach that state while the screen is up, which is a different claim, and
+the builder drew that distinction themselves rather than letting my
+prediction stand on rom evidence alone.
+
+**The probe still decides.** The flag is one input; `md_state_on()` can
+return 2 (don't-care) independently, so `mds_onscreen`'s output has not
+been read. The one-byte addition keeps its value for the reason the
+builder gives: it separates *"door never opens"* from *"door opens and
+something else closes it."* Their framing is better than mine was.
+
+**And the 6611 / 14625 contradiction stands regardless of this bug.** One
+comment calls 0xFFF148 the cutscene byte, the other says object marker /
+slot + 1 / dispatcher 0x398E, and the rom agrees with the second. Worth
+fixing on its own.
+
+### The new defect: ~50 frames of 100% black at step 0x10 where the arcade shows the eye
+
+Settled from rom, and it reframes the symptom.
+
+`altered_beast_eye_attract_screen` at 0x20A0 opens with:
+
+    020A0  clr.w   (PALETTE_RAM).l          <- backdrop pen := BLACK
+    020A6  jsr     (sub_153E).l             <- 10 words to text RAM 0x410D6A
+
+**The game deliberately sets the backdrop to black at entry.** So a frame
+reading *"100% black, ONE distinct colour"* is not a blackout, a gate
+fault, or a lost palette: **it is the correct backdrop with nothing drawn
+on top of it.** The bug is emptiness, not blackness -- which points at a
+different half of the pipeline than a blackout would.
+
+`sub_153E` is tiny (10 words of text), so it explains no delay.
+
+### What is supposed to fill that screen, and both parts go through paths we already suspect
+
+**Part 1, immediately at entry (0x20B8-0x2150): four sprite objects.**
+
+    #1  0x20BC  status 0x8000, routine glowing_logo_attract_screen,
+                pos (0x1180, 0x1020)
+    #2  0x20E6  status 0x8000, routine loc_23DC, pos (0x1168, 0x1019)
+    #3  0x2110  status 0x8000, routine loc_228C, sprite_id 0x1DD,
+                slot 2, palette_bank 0x5E,
+                0x213A  jsr (RequestPaletteUpdate)   <-- the QUEUED path
+    #4  0x2144  status 0x8000, routine loc_2338
+
+**Part 2, later (called from 0x21FA): `sub_2552`, an 8-block tilemap
+upload** from `word_278B8` via `sub_258A`.
+
+**Sprite #3 requests its palette through `RequestPaletteUpdate` -- the
+same queue as the transformation face (entry 163).** And a sprite whose
+palette has not landed draws black.
+
+### The discriminator, and it is cheap
+
+*"100% black, 1 distinct colour"* is consistent with two very different
+faults, and the builder's existing pen census separates them in one read:
+
+    sprite PIXELS present, all black   -> the sprites are drawn and their
+                                          PALETTE has not landed; same
+                                          family as the face, and the
+                                          queued path is the suspect
+    no sprite pixels at all            -> the sprite objects are not being
+                                          created or not reaching the FB;
+                                          a different bug entirely
+
+**Ask which, before theorising.** It costs one frame dump they already
+know how to take.
+
+### Why this may be the more visible of the two
+
+The builder is right to flag it. The chevron renders *flat but present*;
+this renders *absent*, for ~50 frames, where the arcade has a picture.
+**On Mike's eye a 50-frame hole is louder than a wrong colour**, and the
+eye screen is in the attract loop, so it repeats.
+
+### Closes taken
+
+DIAG[36] / `r60_pkt_flip` filed separately -- the parity is a wiped
+count's low bit, not an alternation, and needs its own counter.
+
+And their acceptance of 2348: a cutscene evicting a table set requires
+`mds_onscreen == 0`, so **the guard is not unfired by oversight, it is
+gated on the flag under investigation.** If the flag is the bug, the
+guard heals itself.

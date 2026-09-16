@@ -1564,6 +1564,25 @@ static uint8_t mds_pin[128];
  * re-installed on the edge back. */
 static uint16_t mds_cl_t, mds_cl_n;
 static uint8_t  mds_onscreen;
+#ifdef CHEV_PROBE
+/* CARD CHEVPEN probe (NOTES 105/106). Decides between two hypotheses for
+ * why sets 19/20/21 never reach MD CRAM:
+ *   door never opens -> assign never CALLED for them
+ *   door opens, something else closes it -> called and REFUSED
+ * plus the decompile thread's extra byte: mds_onscreen sampled per vint,
+ * so "0 -> 1 partway into the chevron" is visible directly.
+ * 0x26028DE0-0x26028E0F: 12 free longs (0 refs in the tree).
+ * READ-ONLY probe. Never ships. */
+#define CHEVP ((volatile uint32_t *)0x26028DE0)
+/*  [0] mds_onscreen NOW        [1] vints seen with glow_chev set
+ *  [2] assign CALLS  s=19      [3] s=20        [4] s=21
+ *  [5] assign OK     s=19      [6] s=20        [7] s=21
+ *  [8] free_set CALLS 19/20/21 (summed)
+ *  [9] free_set REFUSED by the mds_pin && mds_onscreen guard (2348)
+ * [10] mds_install calls      [11] onscreen 0->1 transitions */
+static inline unsigned chev_ix(unsigned s)
+{ return (s >= 19u && s <= 21u) ? (s - 19u) : 3u; }
+#endif
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
                                           * PAL_SH is the IMAGE, not the game (heal ~9 vints):
@@ -2342,9 +2361,15 @@ static void mdp_wipe_set_tags(unsigned s)
 #endif
 static void mdp_free_set(unsigned s)
 {
+#ifdef CHEV_PROBE
+    if (chev_ix(s) < 3u) CHEVP[8]++;
+#endif
     if (!mdp_s_line[s])
         return;
 #ifdef MD_STATIC
+#ifdef CHEV_PROBE
+    if (chev_ix(s) < 3u && mds_pin[s] && mds_onscreen) CHEVP[9]++;
+#endif
     if (mds_pin[s] && mds_onscreen) {        /* table set: never freed
                                               * inside its scene (209: a
                                               * cutscene may evict it) */
@@ -2707,6 +2732,9 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
 static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
 {
     uint16_t qc[8];
+#ifdef CHEV_PROBE
+    { unsigned ci = chev_ix(s); if (ci < 3u) CHEVP[2 + ci]++; }
+#endif
 #if defined(MD_STATIC) && defined(MD_ROUND)
     /* 222: a set assigned while the round is OFF screen is a cutscene's.
      * Its tags may survive from a previous visit with a different pen
@@ -2808,7 +2836,11 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
              * after all. Cleared only on a reject. */
             MDA(25);                         /* tags kept: same pattern */
             DIAG[35]++;
-            return 1;
+            {
+#ifdef CHEV_PROBE
+        { unsigned ci = chev_ix(s); if (ci < 3u) CHEVP[5 + ci]++; }
+#endif
+        return 1; }
         }
         MDA(26);
         mdp_pend_tag[s] = 0;
@@ -2922,7 +2954,11 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
     }
 #endif
     DIAG[35]++;                              /* set assigns */
-    return 1;
+    {
+#ifdef CHEV_PROBE
+        { unsigned ci = chev_ix(s); if (ci < 3u) CHEVP[5 + ci]++; }
+#endif
+        return 1; }
 }
 #ifdef MD_STATIC
 /* Install scene `sc`'s baked pen tables wholesale and invalidate every
@@ -2932,6 +2968,9 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
  * per-window live CRAM refresh keeps tracking fades exactly as now. */
 static void mds_install(unsigned sc, uint8_t stamp)
 {
+#ifdef CHEV_PROBE
+    CHEVP[10]++;
+#endif
     /* SELECTIVE INVALIDATION: a slot's pattern depends only on its set's
      * (line, pixel->pen map); a set whose dynamic assignment already
      * equals the table keeps its slots (same remap -> same bytes), so an
@@ -14648,6 +14687,16 @@ RAMCODE void m_main(void)
                     uint16_t gp_a = (uint16_t)(gp_f & ((gp_f << 1) | (gp_f << 2)) & 0x8888u);
                     uint16_t gp_c = (uint16_t)(gp_b & ((gp_b << 1) | (gp_b << 2)) & 0x8888u);
                     glow_chev = (uint8_t)((gp_a | gp_c) != 0);
+#ifdef CHEV_PROBE
+    {   /* the decompile thread's extra byte: mds_onscreen per vint while
+         * the chevron gate is up, so "0 -> 1 partway in" shows directly */
+        static uint8_t cp_prev;
+        CHEVP[0] = mds_onscreen;
+        if (glow_chev) CHEVP[1]++;
+        if (mds_onscreen && !cp_prev) CHEVP[11]++;
+        cp_prev = mds_onscreen;
+    }
+#endif
                 }
                 if (glow_on && glow_chev) {
                     glow_pause = 8;

@@ -1185,6 +1185,14 @@ endif
 # models no cache, so it can neither show the win nor catch a mistake
 # here. Readback at 0x26028FC0 = (ways << 16) | tag slots verified (128
 # when both ways took).
+# `make ... CHEVPROBE=1` = CARD CHEVPEN probe (NOTES 105/106). Counts, at
+# 0x26028DE0: mds_onscreen now, vints with glow_chev, mdp_assign_set calls
+# and successes for sets 19/20/21, mdp_free_set calls and 2348-guard
+# refusals, mds_install calls, and onscreen 0->1 edges. Read with
+# ares --dump sdram:0x28DE0:48. PROBE ONLY, never ships.
+ifdef CHEVPROBE
+SHCCFLAGS += -DCHEV_PROBE
+endif
 ifdef CACHELOCK
 SHCCFLAGS += -DCACHE_LOCK
 endif
