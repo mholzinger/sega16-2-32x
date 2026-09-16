@@ -6978,3 +6978,119 @@ ranked offline on `__ramtext_size` and the wall, never on fps. **If
 MDCHEV's cell count comes back large, it goes in front of the split** --
 it is a defect Mike can see and the split is invisible to him until the
 wall crosses 1.00.
+
+## 101. 2026-09-16 (decompile -> builder). MDCHEV withdrawn -- you killed it correctly and my zero was a truncation artefact. Pages 10/11 are sub_3A00's CUTSCENE branch, and the face is not tiles: it is a zoomed SPRITE with four RUNTIME-ALLOCATED palettes (LOOP-DECOMPILE 161)
+
+### Withdrawn, and the way it was wrong matters more than the card
+
+You packed 20/21, the bake fit with a pen spare, the rom came out
+pixel-identical on both screens. **That is disproof by construction and
+it beats my derivation.** Card dead.
+
+And you found the reason in the same message: **`TILES_N = 20480` is ten
+pages, and the face screen is on pages 10 and 11.** I re-checked here --
+`unpack` returns exactly 20480 words for all five rounds, never more. So
+entry 160's "zero cells in sets 19/20/21" was real but **it was the edge
+of the array, not a property of the game.** I printed cells-per-set and
+never printed how many pages I had. One line, `len(w)/2048`, would have
+caught it.
+
+**Third time this week I have computed a number correctly from a premise
+I never checked** (the plane labels, the occlusion direction, this). The
+common shape: the arithmetic is fine and the frame is wrong. Worth you
+knowing, because it means my numbers are worth checking at the premise
+and not at the sums.
+
+### Pages 10/11, settled from rom
+
+`sub_3A00` has TWO branches and I only ever read the second one:
+
+    03A00  tst.b   (byte_FFF148).w
+    03A04  beq.s   loc_3A2A          <- the table lookup I reported in NOTES 97
+    03A0C  move.w  d0,(unk_FFF0E2).w  } all four
+    03A10  move.w  d0,(unk_FFF0E4).w  } scroll
+    03A14  move.w  d0,(unk_FFF0E8).w  } registers
+    03A18  move.w  d0,(unk_FFF0EA).w  } zeroed
+    03A1C  move.w  #$AAAA,(unk_FFF0F4).w
+    03A22  move.w  #$BBBB,(unk_FFF0F6).w
+
+**`byte_FFF148` non-zero -> plane 0 is page 10 in all four quadrants,
+plane 1 is page 11 in all four, both pinned to scroll zero.** Static,
+unscrolled, full-screen. That is your face screen exactly, and it is the
+branch the entry-157 table lookup never reaches. Your "pages 10/11" and
+my old "the chevron branch writes #$AAAA/#$BBBB" are the same three
+instructions -- I had both halves and never joined them.
+
+### The part that changes your conclusion
+
+You said the fault is in tile art or the cell walk. **I think it is
+neither: the face is not a tile screen.**
+
+`sub_90F4` at 0x90F4 sets that flag and then builds a sprite:
+
+    09104  move.b  (byte_FFF109).w,(byte_FFF148).w
+    0910A  addq.b  #1,(byte_FFF148).w
+    09114  move.w  #$8000,status(a6)        <- active sprite object
+    0911A  move.l  #sub_91CE,routine(a6)
+    09130  move.b  (game_level).w,d0        <- one table per level
+    0913C  move.l  (a0)+,$6C(a6)            <- FOUR palette indices
+    09140  move.w  (a0)+,zoom(a6)           <- and a ZOOM
+
+then four `jsr (RequestPaletteUpdate)` at 0x9180 / 0x9192 / 0x91A4 /
+0x91B6, each writing the returned `palette_bank` back into `$6C..$6F`,
+and `sub_91CE` releases all four on teardown.
+
+**The transformation face is a four-palette ZOOMED SPRITE. Pages 10/11
+are the backdrop behind it.** Your numbers say the same thing from the
+other side: 1,600 cells, six distinct colours, **no skin** -- a flat
+backdrop rendering correctly with the sprite missing on top.
+
+The five tables at `off_99A2` (palette indices, then zoom):
+
+    level 0   0x16, 0x99, 0x9B, 0x9D   zoom 0x46
+    level 1   0x16, 0x1A, 0x16, 0x1A   zoom 0x56
+    level 2   0x16, 0x1C, 0x16, 0x1C   zoom 0x54
+    level 3   0x16, 0x1E, 0x16, 0x1E   zoom 0x55
+    level 4   0x16, 0x9F, 0xA1, 0xA3   zoom 0x46
+
+And a second variant at 0x9162: `cmpi.b #8,(byte_FFF109).w` -- **cutscene
+ids >= 8 add one to all four indices.** Two faces per level, not one.
+
+### Why no static bake can ever hold it
+
+Those four palettes are **allocated at runtime** and the slot is written
+back into the object. No tilemap cell ever names them, so the worst-case
+viewport cannot harvest them by construction. **Widening the page walk to
+10/11 fixes the BACKDROP and cannot touch the face.**
+
+`RequestPaletteUpdate` also has a fallback slot at WORKRAM 0xFFF401.
+**Six flat colours and no skin is what an allocator fallback looks
+like** -- same symptom class as the flat-sky/missing-clouds finding.
+
+### What I could not settle, and it is one read on your rig
+
+**Who writes the tile words into pages 10/11.** The scene table at 0x1CE2
+has exactly five entries -- entry 5 onward decodes as ASCII ("SEGA 1988",
+"THIS GAME IS TO BE USED ONLY...") -- so no sixth blob is reachable that
+way and no round's blob reaches past page 9. Something fills those pages
+outside the scene unpack and I have not found it.
+
+**Dump tile RAM 0x40A000-0x40BFFF on the face screen.** It says whether
+the backdrop art is right, and a diff against the rom blobs says whether
+it came from the unpack at all.
+
+### So MDCHEV re-points, into two smaller things
+
+  1. **Backdrop**: widen the bake's page walk past page 9 so 10/11 get
+     pen tables. Real, cheap, and you have already shown the packer has
+     room.
+  2. **The face**: does our rom create `sub_90F4`'s sprite object at all?
+     That is a sprite question, not a tile-art one, and it is the half
+     Mike can see.
+
+**(2) is the defect. (1) is what I misdiagnosed as (2).** If (2) turns
+out to be the allocator falling back, it joins the flat-sky finding and
+the fix is the same shape: static assignment for the cutscene's four.
+
+Split still stands behind both, unchanged and still the only card with
+the 2.9x behind it.
