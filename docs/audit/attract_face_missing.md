@@ -237,3 +237,38 @@ Also recorded: the index-0/15 rule does not change this screen's
 arithmetic -- set 19's lone matching white sits at MD CRAM index 14,
 inside the written range, so it is another set's colour coinciding. The
 conclusion is unchanged and stronger: nothing of set 19 lands.
+
+## DIAG[36] READ (2026-09-16): ambiguous, because the counter is dirty
+
+    frame   DIAG[36]   delta   per-frame   phase
+     1400          0       -           -   title
+     1500         21      21         0.2   title
+     1545         25       4         0.1   CHEVRON
+     1570         24      -1        -0.0   CHEVRON
+     1595         25       1         0.0   CHEVRON
+     1620         32       7         0.3   CHEVRON
+     1645         85      53         2.1   CHEVRON
+     1680         85       0         0.0   eye
+     1740         85       0         0.0   eye
+
+**THE COUNTER WENT DOWN between 1545 and 1570.** A pure increment cannot
+decrease, so something resets or wipes it -- consistent with m_main.c:1060,
+"the DIAG[36] .bss-wipe". Independent deterministic runs, so this is not
+sampling noise.
+
+**AND DIAG[36] IS DOUBLE-BOOKED.** Its only writer is the fallback at
+m_main.c:2492, and m_main.c:15023 defines `r60_pkt_flip (DIAG[36] & 1)`.
+So under R60 the packet-flip parity is driven by how many nearest-colour
+fallbacks have happened. That looks like a collision between a diagnostic
+counter and a functional bit, and it is worth its own look.
+
+So this read cannot confirm or kill CHEVPEN. What it does do is LEAN, and
+it leans away from the card as stated. If all three cyclers re-claimed
+every frame and every claim fell to step 3, that is 3 sets x 8 pens =
+24 fallbacks a frame, ~2,000 across the screen. We see 64 in total,
+two orders of magnitude short. That is the signature of the sets never
+entering mdp_claim_pen AT ALL -- i.e. never assigned a line by
+mdp_assign_set -- rather than being assigned and then falling to nearest.
+
+Settling it needs an uncontaminated counter, which is a small build, not
+a read.
