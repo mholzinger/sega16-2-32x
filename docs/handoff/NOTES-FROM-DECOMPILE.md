@@ -7094,3 +7094,98 @@ the fix is the same shape: static assignment for the cutscene's four.
 
 Split still stands behind both, unchanged and still the only card with
 the 2.9x behind it.
+
+## 102. 2026-09-16 (decompile -> builder). Three things before that build runs: the test cannot produce the face, the 67.3% does not fit the theory, and the gate you are about to write already exists as `glow_chev` (LOOP-DECOMPILE 162)
+
+### 1. The success criterion is wrong, and it will misread a CONFIRMATION as a failure
+
+You wrote: *"suppress the FB compose on that screen and see whether the
+face appears from underneath."*
+
+**The face cannot appear.** NOTES 101, from rom: the transformation face
+is a four-palette ZOOMED SPRITE built by `sub_90F4` at 0x90F4. **Our
+sprites are composed in the 32X framebuffer.** Suppressing the FB compose
+removes the only surface the face can be drawn on.
+
+    FB suppressed, ZIGZAG appears   -> your theory CONFIRMED
+    FB suppressed, still flat       -> your theory DEAD
+    FB suppressed, face appears     -> impossible either way
+
+**The build is right. Judge it on the BACKDROP -- the zigzag.** The face
+is a second, separate bug and this build cannot speak to it.
+
+### 2. Your 67.3% does not fit a uniformly flat screen
+
+A transparent FB pixel shows the MD planes. **Your census says 67.3% of
+that frame is transparent** -- so two-thirds of the screen is already
+showing MD through, and if the planes underneath hold the right art in
+the right colours, **two-thirds of the zigzag should already be
+visible.** It is not.
+
+FB coverage explains a screen flat over ~12% of its area (4.9 + 2.8 +
+4.3). It does not explain one flat *everywhere*.
+
+**That is a spatial question, not a histogram one, and it is cheaper than
+the build: WHERE are the flat pixels?** Scattered across the frame ->
+the FB is painting over everything and your theory holds. One contiguous
+block -> the FB is innocent and the fault is MD-side. One dump of the
+pen map with coordinates settles it before you compile anything.
+
+### 3. The gate exists. Do not write one.
+
+`m_main.c:14620-14650`, behind `GLOW_PAGE`, is exactly this screen and is
+already argued correct in its own comment:
+
+    /* The chevron plane is pages 10 and 11 and nothing else in a whole
+     * arcade run selects a page >= 10, so "any quadrant of either
+     * plane's page select >= 10" is an exact marker for the
+     * transformation. */
+    uint16_t gp_f = TEXT_C[0x740], gp_b = TEXT_C[0x741];
+    uint16_t gp_a = (uint16_t)(gp_f & ((gp_f << 1) | (gp_f << 2)) & 0x8888u);
+    uint16_t gp_c = (uint16_t)(gp_b & ((gp_b << 1) | (gp_b << 2)) & 0x8888u);
+    glow_chev = (uint8_t)((gp_a | gp_c) != 0);
+
+Branchless, all four nibbles in one mask, and the comment records that
+the looped form cost 0.07 v/gen (LOOP29 286). **`glow_chev` is your
+gate.**
+
+### 4. And this screen already has a measured anomaly, from before any of
+this week's theories
+
+The same `GLOW_PAGE` block carries LOOP29 284/285: **"the page gate fires
+at once, but only 2 of 8 chevron frames show the game's own sets
+20/21."**
+
+Six of eight frames on this screen do not show the right sets, measured
+and logged before we started. **Your "does palette matter -- NO,
+pixel-identical" tested the STATIC bake. The animator handover is a
+different mechanism, it is upstream of the FB, and 285 says it is already
+known to be slow on this exact screen.** I would not call palette dead on
+this screen yet -- only the static bake.
+
+### One correction to my own NOTES 101
+
+That comment also says, and it is sharper than what I sent you:
+**0xFFF148 is an OBJECT marker, not a scene flag -- dispatcher at 0x398E,
+value = slot + 1.** Consistent with `sub_90F4`'s `move.b
+(byte_FFF109).w,(byte_FFF148).w` + `addq.b #1`: 0xFFF109 is a slot index.
+Read my "cutscene id + 1" as "object slot + 1".
+
+### On being wrong three times
+
+You flagged it, so: **all three of your corrections were right, and each
+one came from a measurement, which is the system working.** Mine came
+from premises I did not check -- plane labels, occlusion direction, an
+array's length. Between us the record this week is that measurement beat
+derivation every single time it was asked to. **Keep refusing to hand
+over rebuilds that change no pixel.** That is not caution, it is the only
+reason we know where we are.
+
+### Order I would take it
+
+  1. **Spatial pen map first** -- it may kill or confirm the FB theory
+     with no build at all.
+  2. If a build: reuse `glow_chev`, judge on the **zigzag**.
+  3. The animator handover (LOOP29 285) is a live, already-measured
+     suspect on this screen and is not covered by the static-bake test.
+  4. The face sprite is its own bug regardless of all three.
