@@ -9883,3 +9883,84 @@ answers the one you did not.**
 **(b) is still the one confirmed defect and still worth building.** This
 does not displace it -- but if the scroll words are non-zero, (b) is a
 real bug on a screen that was pointed the wrong way regardless.
+
+## 171. Bug LOCATED by the builder: owned pens are never repainted from PAL_SH. And one arithmetic point -- all eight holding the SAME value is not a phase freeze, it is a claim that happened before the palette landed (2026-09-16)
+
+### Scroll falsified, and the ambiguity was language not data
+
+All four scroll words read 0000 at f1560/1575/1600 with pages AAAA/BBBB
+-- exactly `sub_3A00`'s cutscene branch. And the mirror is live, not
+stale: f300 reads 1212/6767 scroll 00C0, f700-1400 steps 0192 -> 0189 ->
+017D -> 0146, f1900 reads 0000/5555. **Entry 170 is dead.** *"Scrolls in
+red"* meant the decorative flame ornaments, not motion.
+
+### The located bug
+
+Line 0 at f1575, owner and held colour against what the ring says:
+
+    pen  1: set 20 pixel 3  holds 0007  should be 02F
+    pen  2: set 20 pixel 5  holds 0007  should be 01F
+    pen  3: set 20 pixel 6  holds 0007  should be 007   <- right by luck
+    pen  7: set 20 pixel 1  holds 0007  should be 03F
+    pen 11: set 20 pixel 2  holds 0007  should be 037
+    pen 12: set 21 pixel 4  holds 0007  should be 027
+    pen 13: set 21 pixel 1  holds 0007  should be 03F
+    pen 14: set 19 pixel 1  holds 01C0  in set 19's ring, OK
+
+Ownership correct and distinct across five pixel indices; **every pen
+holds the same colour.** And no writer of `mdp_line_c` refreshes from
+PAL_SH per frame -- 2433 (free), 2495 (claim), 2556, 2818 all write at
+claim or free time, and 16028 re-quantises PAL_SH only as the drift
+detector (DRQR[6]).
+
+**That is the first thing in this arc that is located rather than
+suspected, and the builder found it.**
+
+### And it corrects entry 169's retraction back the other way
+
+I withdrew 167's consequence when the builder showed pen 14 tracking. They
+now identify that as **the drift path firing on one pen, not a refresh
+reaching all eight.** So 167's consequence was right and my withdrawal
+was premature -- I gave up a correct claim on one pen's worth of
+counter-evidence.
+
+### The one arithmetic point, and it may make their fix cheaper
+
+**All eight pens holding the IDENTICAL value is not a phase freeze.**
+
+Set 20's ring rotates. Frozen at any phase P, the pen for pixel p holds
+`ring[(p + P) mod 8]` -- **eight different values, all of them valid ring
+colours.** Observed is one value, eight times.
+
+The correct values are a ramp that differs only in GREEN:
+
+    007 = b0 g0 r7      027 = b0 g4 r7      037 = b0 g6 r7
+    01F = b0 g3 r7      02F = b0 g5 r7      03F = b0 g7 r7
+
+**r=7 throughout, g stepping 0 to 7 -- the yellow-to-orange flame
+gradient.** Every pen sits at g=0, the bottom of it.
+
+**So the claims did not read a rotated ring. They read a PAL_SH that was
+uniform at that moment** -- which is what PAL_SH looks like before the
+transformation's four queued palette updates land. `sub_90F4` queues them
+(0x9180/0x9192/0x91A4/0x91B6) and the arcade drains in the NEXT vblank
+(entry 163). **If the assign runs on first tile sighting, it claims a
+frame before the colours arrive.**
+
+That fits "assigned exactly twice, early" and it fits one-of-eight being
+right by coincidence.
+
+**It does not change whether their fix works** -- a per-frame repaint
+corrects a pre-palette claim and a rotating ring alike, and a cycler needs
+the repaint regardless. **It may let them do it cheaper**: if the cause is
+claim-before-palette, a single re-claim when the palette lands fixes the
+static half, and the per-frame repaint is then only needed for the
+rotation itself.
+
+**Offered as a sharpening, not a blocker. They should build.**
+
+### Standing
+
+Two changes, both small, both the builder's design: repaint owned pens
+from PAL_SH per frame for rotating sets, and hold the chevron's sets
+against the ~1595 eviction. **First thing all week that moves a pixel.**
