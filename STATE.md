@@ -17,26 +17,33 @@ That is how the logs became unreadable.
 `rom/s16.32x` is whatever was built LAST and is usually a probe. It must
 be left holding the LINE build at the end of any session.
 
-## THE AXIS — TRANSPORT (settled 2026-09-16)
+## THE AXIS — DEFECTS (Mike's call, 2026-09-17)
 
-**Neither SH-2's compute is the wall. Measured, both processors:**
+**Direction changed. Speed is PARKED; defects are the work.**
+
+Mike: "we had a trajectory of moving the build to solve for the frame
+updates, and that was useful. but since we have stalled this build for
+over a week with no movement updates, might as well solve defects now."
+
+The visual defects were being let through ON PURPOSE while the frame
+rate was moving. It stopped moving, so the reason to let them through
+expired.
+
+**What this parks (not kills):** the transport ablation, O-1, and the
+whole 60 Hz push. The findings below stay true and stay on the shelf:
 
     master compute ablated    84.7% of the name-table walk removed
-                              -> FLAT on the rig (medians moved the
-                                 wrong way, ranges overlap)
-    slave compute ablated     ares' 58.3 fps was SLAVE work, and ares
-                              prices the slave -- it moved there and
-                              nowhere else
-    transport, NBUILD1 off    0.33 fps against the line's 9.3  = 28x
+                              -> FLAT on the rig
+    slave compute ablated     ares' 58.3 fps was SLAVE work on a
+                              slave-gated instrument
+    transport, NBUILD1 off    0.33 fps against the line's 9.3 = 28x
+                              -- a BRAKE REMOVED, not load reduced.
+                              Whether reducing transport LOAD has a
+                              slope is still the open question, and it
+                              still needs rig time.
 
-**The transport is the only axis with a demonstrated slope.** Caveat:
-removing a brake is not the same as reducing load. The 28x shows where
-the sensitivity lives, not that headroom exists there.
-
-**Next measurement: does the transport have a slope when LOAD is reduced,
-not when a brake is removed?** Scene-anchor it — the rig's flip rate
-varies 6x between cold runs of the same rom and that must be understood
-first.
+**The bar has NOT changed.** INTENT still says 60. This is a change of
+what we work on now, not of what done means.
 
 ## MEASURED DEAD — do not re-propose without new evidence
 
