@@ -309,3 +309,44 @@ were premised on master compute mattering.
 
 CAVEAT ON n. Six and eight samples with those spreads is thin. The
 conclusion "no large effect" is safe; "no effect at all" is not claimed.
+
+## THE VARIANCE HAS A DRIVER: SCENE LOAD (2026-09-17)
+
+The decompile thread asked what makes a cold run of the same binary vary
+6x. Answer, offline and deterministic -- tools/presented_fps.py on bldS,
+three FIXED frames:
+
+    f1800: MOTION  3/60
+    f2600: MOTION  8/60
+    f3400: MOTION 17/60      -> a 5.7x spread, same rom, no rig
+
+**So the rig's 9-to-55 spread is not measurement noise. It is scene load,
+and it reproduces exactly on ares at fixed frames.**
+
+**That weakens my own flat conclusion and I am recording it against
+myself.** The rig comparison sampled both roms at arbitrary points across
+an attract cycle whose intrinsic rate varies 5.7x. A median over mixed
+scenes compares WORKLOADS as much as roms. The overlap was wide enough
+that a large effect is still excluded -- but "the medians moved the wrong
+way" is not evidence of anything, and I should not have written it as
+though it were.
+
+**The flat result should be read as: no effect large enough to clear a
+5.7x scene-driven spread at n=6/8.** That is still enough to retire the
+compute cards, because a lever worth chasing at 9.3 fps against 60 would
+have to clear it easily.
+
+## WHAT THE TRANSPORT RUN NEEDS FIRST
+
+An unanchored median cannot read the transport ablation either, and that
+run has no second processor to cross-check. Before it:
+
+**Scene-anchor the rig instrument.** The value channel currently floods
+the rate continuously, so a screenshot lands on whatever scene is up.
+Gate the flood on a known attract step (the game's own 0xFFF031, or
+md_round) so every sample prices the same workload. That turns a 6x
+spread into a comparison of roms.
+
+ares' presented_fps.py is ALREADY anchored this way -- fixed frames --
+which is why it gives a stable 9.3 across runs while the rig instrument
+does not. The rig instrument is the one that needs fixing, not the rig.
