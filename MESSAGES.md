@@ -86,10 +86,34 @@ arithmetic corrections, or anything ending "no pixel changed."
                  WRONG: the 68K scene timer is identical on both roms
                  at every window and IRQ4 miss is 0.0 on both. The
                  captures were always comparable.
-    next         depends on Mike's call in G-1. If the trade is worth
-                 chasing, the question is WHY dropping the family
-                 restores the HUD -- that mechanism is not understood
-                 and is probably the more valuable half.
+    next         depends on Mike's call in G-1.
+    WHY (chased 2026-09-17, allocator RULED OUT)
+                 The colour-set allocator does not explain it.
+                   census, gameplay f3000, both builds:
+                     line   2 set frees {41,46}, 0 tags wiped at free,
+                            [22]=[23]=0 -- the deferred wipes NEVER
+                            resolve, so those tags stay stale for the
+                            whole run
+                     notag  5 set frees {40,41,44,45,46}, 64 tags wiped
+                     onscr-wiped 0 on BOTH; the allocator is quiescent
+                   at their free (mdalloc_id[3], which I had to
+                   IMPLEMENT -- it had no writer and every previous
+                   reading of it was an unwritten .bss zero):
+                     line 41, 46      0 on-screen cells
+                     notag 40         65 cells / 64 slots, tile codes
+                                      consecutive 0x80280a14..17
+                     notag 44, 45     0
+                   at f3000 all five sets are UNASSIGNED with identical
+                   mdp_s_line / mdp_s_used / pen map / line-0 colour
+                   table on BOTH builds. No difference to explain it.
+                 And architecturally it could never have been there:
+                 m_main.c:4132 pins the HUD text class PERMANENTLY to
+                 group 0 and "no allocator/steal/evict loop ever touches
+                 index 0".
+    where next   the TEXT path, not the allocator: text_grp[par][0] and
+                 group 0's special paint at m_main.c:4830 (entry 0 is
+                 the through bit; pens 1-7 only). The lives portrait is
+                 a sprite and wants the MD sprite path. Both are reads.
 
 ### O-4  NTSKIP correctness (not a speed card any more)
     owner        BUILDER, design from DECOMPILE note 119

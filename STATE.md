@@ -83,6 +83,21 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## OPEN DEFECTS Mike can see
 
+    gameplay HUD dropout          NEW 2026-09-17, and it is not in any
+                                  earlier list though frame_grade.py has
+                                  had a detector for it since
+                                  2026-08-26. The line drops the lives
+                                  portrait, the gold "x2" and the 50000
+                                  high score at f2000/f3000/f4000 under
+                                  the level-1 play script. "400" and
+                                  "INSERT COIN" -- same blue, same row --
+                                  ARE drawn, so it is per-cell, not a
+                                  layer. Dropping the TAGKEEP family
+                                  restores all three (G-1, with Mike).
+                                  MECHANISM: NOT the colour-set
+                                  allocator -- ruled out by census and
+                                  by the permanent group-0 pin at
+                                  m_main.c:4132. Look at the text path.
     black tiles, 4.8% of cells    mechanism named: a slot reference
                                   outliving its set's pen map.
                                   TAGKEEP's deferred wipe is a
@@ -172,6 +187,11 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           subset violation: both are the shipper's,
                           one a word count. The collision was real;
                           that arithmetic was not the proof.
+    mdalloc_id[3]         HAD NO WRITER from LOOP29 158 to 2026-09-17
+                          and read an unwritten .bss zero. Implemented
+                          now (+[6] slots-on-screen). Any figure quoted
+                          from it before that date is nothing.
+                          Aim the watch: MDALLOCWHY=1 MDAWATCH=<set>.
     mdp_pen_own           stale after a free. NEVER read it without
                           masking on mdp_line_c != 0xFFFF.
     state_health.py       needs a .bs1; headless ares writes none.

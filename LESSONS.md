@@ -49,6 +49,26 @@ The cache sees ONE generation. A 200-frame union reads 21,856 B; a
 2-frame window essentially all of it is already touched — there is no
 cold region.
 
+### A documented counter index may have NO WRITER AT ALL
+
+`mdalloc_id[3]` is documented at its declaration as "on-screen cells
+naming its slots" and **nothing ever assigned it**, from LOOP29 158 until
+2026-09-17. It reads 0 because `.bss` is zeroed. Every reading of it was
+a measurement of nothing, and one of those readings was used on
+2026-09-17 to "falsify" a hypothesis — a conclusion drawn from a counter
+that did not exist.
+
+This is the ninth instrument in this project caught lying and the second
+FOUND BY READING THE SOURCE rather than by a contradictory number. A
+collision at least produces a wrong value you can catch with the subset
+rule; an unwritten index produces a plausible zero that nothing catches.
+
+*Rule:* before quoting a counter, `grep` for an ASSIGNMENT to that exact
+index, not for the index. `mdalloc_id\[3\]` appears twice in the file —
+once in a comment promising it, once now writing it.
+
+*Cost:* one build cycle and one wrong conclusion, caught the same tick.
+
 ### Counter indices collide. THERE ARE NOW REGISTRIES — READ THEM
 
     m_main.c:72     DIAG. 64 slots and the block is FULL
@@ -117,6 +137,29 @@ too.
 
 *Cost:* one tick spent parking a card that had actually produced a
 result, plus a LESSONS entry that had to be withdrawn.
+
+### The HUD is NOT on the colour-set allocator — stop taking it there
+
+Two ticks on 2026-09-16/17 went into the MD residency allocator looking
+for why the line drops the gameplay HUD. It cannot be there:
+
+    m_main.c:4132  "HUD text class: fixed home in group 0. The boot pin
+                    is PERMANENT -- no allocator/steal/evict loop ever
+                    touches index 0 (they all start at 1 or bound)"
+
+Measured, and agreeing: at f3000 (gameplay) every candidate colour set
+(40, 41, 44, 45, 46) is UNASSIGNED with an identical `mdp_s_line`,
+`mdp_s_used`, pen map and line-0 colour table on BOTH builds. The
+allocator state does not differ at all between the build that draws the
+HUD and the build that does not.
+
+*Where it must be instead:* the text path — `text_grp[par][0]`, and
+group 0's special paint at `m_main.c:4830` ("entry 0 IS the through bit
+-- paint pens 1-7 only, never the base entry") — and, for the lives
+portrait, the MD sprite path.
+
+*Rule:* a pinned resource is exempt from the allocator that manages the
+unpinned ones. Check for the pin before costing an allocator theory.
 
 ### black_pct does not resolve the black-tile defect
 

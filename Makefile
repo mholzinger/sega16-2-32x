@@ -1949,6 +1949,15 @@ endif
 # something wiped it" because DIAG[39]/[50]/[53] are each written by
 # three subsystems including the DREQ landing path. Read with
 # tools/md_alloc_why.py. PROBE ONLY (collides with SPRLINE).
+# `make ... MDALLOCWHY=1 MDAWATCH=41` aims mdalloc_id[] at a specific
+# colour set (default 33, LOOP29 158). The watch arms once, at the first
+# mdp_free_set of that set, and records: [0] cset [1] its MD line [2] the
+# owner set it conflicts with [3] on-screen cells naming its slots
+# [4] tiles wiped, then 16 tile codes. That is how you find out whether a
+# freed set owned anything VISIBLE at the moment it was freed.
+ifdef MDAWATCH
+SHCCFLAGS += -DMDA_WATCH=$(MDAWATCH)
+endif
 ifdef MDALLOCWHY
 SHCCFLAGS += -DMD_ALLOC_WHY
 endif

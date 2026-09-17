@@ -778,7 +778,12 @@ volatile uint32_t mdalloc_onscr[128];
  * (156) and it never appears in a tile harvest (157), so identify it at
  * the event: [0] cset [1] its MD line [2] the owner set it conflicts
  * with [3] on-screen cells naming its slots [4] tiles wiped, then 16
- * tile codes. Armed once, for the first free of the set in MDA_WATCH. */
+ * tile codes. Armed once, for the first free of the set in MDA_WATCH.
+ * [3] IS NOW ACTUALLY WRITTEN (2026-09-17). It never was: the comment
+ * promised it from LOOP29 158 and no code assigned it, so every read of
+ * mdalloc_id[3] before that date was an unwritten .bss zero and meant
+ * nothing. [6] = how many of its slots are on screen at all.
+ * Aim the watch with `make ... MDALLOCWHY=1 MDAWATCH=<set>`. */
 #ifndef MDA_WATCH
 #define MDA_WATCH 33
 #endif
@@ -2606,6 +2611,27 @@ static void mdp_free_set(unsigned s)
             if (md_tag[i] != 0xFFFFFFFFu
                 && ((md_tag[i] >> 16) & 0x7F) == s)
                 mdalloc_id[16 + k++] = md_tag[i];
+        /* [3] and [6]: the number the watch exists for -- did this set own
+         * anything the player can SEE at the moment it was freed? The
+         * declaration has claimed [3] = "on-screen cells naming its slots"
+         * since LOOP29 158 and NOTHING EVER WROTE IT, so every reading of
+         * it was an unwritten .bss zero (found 2026-09-17). [6] counts the
+         * slots themselves, so [3]/[6] is cells per slot. */
+        {
+            uint32_t cells = 0, slots = 0;
+            for (int i = 0; i < NSETS * NWAYS; i++)
+                if (md_tag[i] != 0xFFFFFFFFu
+                    && ((md_tag[i] >> 16) & 0x7F) == s) {
+                    uint32_t seen = 0;
+                    for (int q = 0; q < 2240; q++)
+                        if ((md_dbg_nt[q] & 0x7FF) == (unsigned)i)
+                            seen++;
+                    if (seen) slots++;
+                    cells += seen;
+                }
+            mdalloc_id[3] = cells;
+            mdalloc_id[6] = slots;
+        }
     }
     if (s == MDA_WATCH) mdalloc_id[4]++;
     mdalloc_relo[s & 127]++;
