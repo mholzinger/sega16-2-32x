@@ -270,3 +270,42 @@ frame, and a tag wipe is tile destruction.
 the same shape as the NTSKIP corruption: a slot reference outliving the
 set's pen map. NTSKIP makes it worse by adding skipped rows; it does not
 create it.
+
+## THE BOUND (2026-09-16/17): FLAT. Removing 84.7% of the walk buys nothing.
+
+Rig, BOOTFLIPRATE, presented frames per 64 vints, both roms sampled COLD
+(a first baseline was discarded because Mike was playing during it -- the
+flip rate moves with scene load, so that run measured his joystick):
+
+    baseline                          n=6   median 29.5   range 23-42
+    ablation, 84.7% of walk skipped   n=8   median 24.5   range  9-55
+
+    delta of medians  -5.0
+    ranges            overlap heavily
+
+**Removing 84.7% of the name-table walk did NOT raise the flip rate.**
+The medians move the wrong way and the ranges overlap almost completely,
+so the honest statement is: a LARGE effect is excluded; a small one is
+not resolvable at this n.
+
+And this is an UPPER BOUND on the whole NTSKIP card, because a correct
+skip skips strictly less than this broken one -- allocator-dirty rows
+must re-walk. So the card's ceiling is "no measurable gain".
+
+**This is the FLAT branch, and the decompile thread framed what it
+means before the run: the master's compute is not the rig's constraint
+either.** ares' 58.3 fps ablation removed SLAVE work (compose), and ares'
+critical path is the slave. This removed MASTER work on the rig, where
+the master is the critical path. Neither moved the picture rate.
+
+**So neither processor's compute is the wall**, and the remaining
+candidate is the TRANSPORT -- the one thing this week never measured, and
+the thing NBUILD1 exists to brake (LOOP29 170: making the producer faster
+starved the consumer, handler 58.3 -> 84.2 lines, nopost 315 -> 2,766).
+
+That also retires, on measurement rather than argument, everything this
+week has proposed: CACHELOCK, the footprint split, NT_SKIP. All three
+were premised on master compute mattering.
+
+CAVEAT ON n. Six and eight samples with those spreads is thin. The
+conclusion "no large effect" is safe; "no effect at all" is not claimed.
