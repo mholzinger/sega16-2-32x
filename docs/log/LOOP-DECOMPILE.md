@@ -10258,3 +10258,104 @@ generation. Worth carrying.
 ### And the number that has not moved
 
 MOTION 9.3 fps against a bar of 60.
+
+## 176. The incremental card is overwhelming: the camera moves at most 0.5 px/frame, so a new tile COLUMN enters the viewport at most once every 16 GENERATIONS -- and we rescan all 40 every time (2026-09-16)
+
+### The builder's finding, and it is theirs
+
+The master's 14 KB is **not** the sprite compositor -- compose runs on the
+slave and does not appear in the master's per-generation set at all. §4's
+"sprites cannot move, categorically" is intact and irrelevant here, and
+**the largest-finding-of-the-project outcome I flagged does not land.**
+Flagging it as a test rather than a conclusion was the right call and it
+cost nothing.
+
+What the master actually spends 14 KB on:
+
+    bm_scan_rows      400 B    27.6% of _m_main's instructions
+    name-table pass  1,872 B   ~18%
+    bm_tail_body     1,200 B    ~9%
+    frt/diag/decode  ~1.5 KB    ~2%
+
+**S4 moved where pixels are drawn. It did not move the per-generation
+decision work that feeds the MD.** No flag names it because it was never
+in scope. The builder's framing is exact.
+
+### Two rom facts that size the incremental card, and they are decisive
+
+**1. The tilemap does not change in play.** `m_main.c:3199` already
+records it: *"Tile RAM has no in-play writer (LOOP-DECOMPILE 99)"*. So
+the scan's input is a pure function of the ROM tilemap and the scroll.
+
+**2. The camera is glacial.** `loc_9C2` at 0x9C2 loads the camera
+velocity from an 8-word table at **0x1878**, indexed by `active_enemies`
+clamped to 7. Decoded from rom, with the math at 0x39CE
+(`v<<8` added to a 16.16 `world_xposition`, so px/frame = v/256):
+
+    enemies   raw     px/frame   frames per NEW 8px COLUMN
+       0    0x0080     0.5000            16
+       1    0x0040     0.2500            32
+       2    0x0020     0.1250            64
+       3    0x0010     0.0625           128
+     4-6    0x0004     0.0156           512
+       7    0x0000     0.0000          never
+
+**Maximum camera speed is half a pixel per frame.** And it slows as
+enemies appear -- with a full screen of them the camera stops dead.
+
+### So the card's premise is not just viable, it is overwhelming
+
+**A tile column is 8 pixels. At the fastest the game ever scrolls, a new
+column enters the viewport once every 16 generations. With enemies on
+screen -- which is most of play -- it is once every 32 to 512
+generations, or never.**
+
+    what changes per generation   at most 1/16 of one column
+    what we rescan per generation all 40 columns
+    ratio                         >= 16x, usually far more
+
+**15 of every 16 generations have ZERO new tile content and we do the
+full scan anyway.** That is the 27.6% of `_m_main`'s instructions in
+`bm_scan_rows`, and most of the 1,872 B name-table pass sits behind the
+same input.
+
+### Which makes the invalidation condition trivial
+
+The scan's output is stale only when the scroll crosses an 8-pixel
+boundary. That is one comparison on the latched scroll:
+
+    (xs >> 3) != (prev_xs >> 3)     ->  rescan
+    otherwise                       ->  reuse
+
+**No heuristic, no dirty tracking, no cache coherence problem** -- the
+tilemap cannot change underneath it, which is the fact that makes the
+whole thing safe rather than merely fast.
+
+And the builder is right that partial machinery exists: `bm_scan_memo`
+(3177) and `TAGKEEP`'s land-where-you-were (2770-2790). **SET_COLS
+already bakes per scene/page/column extents** -- the baked path at 3199
+is the same idea applied at a different level, and it is already exact
+against `bm_scan_rows` on 4,000 random windows (NOTES 21).
+
+### Three things I have NOT established, stated as gaps
+
+  1. **Vertical.** The 0.5 px/frame is the CAMERA X. Y scroll comes from
+     0xFFF0E6 + word_FFF12C masked 0xFF (0x3A62-0x3A72) and I have not
+     bounded it. Altered Beast is a side-scroller so it is likely
+     near-static in play, **but "likely" is how the last five mechanisms
+     started.**
+  2. **Rounds 2-5.** The table is one table, but per-round camera
+     behaviour is unchecked.
+  3. **The scan may depend on more than scroll.** If `bm_scan_rows`'
+     result also varies with the palette or the allocator's state, the
+     8-pixel gate is necessary but not sufficient. **The builder owns
+     that read; it is their function.**
+
+**None of the three threatens the ratio. All three could change the
+invalidation condition.**
+
+### Standing
+
+**This is the first time the bar has a named target with a measured
+lever behind it.** 27.6% of the hottest function's instructions, gated on
+a condition that is false 15 times in 16.
