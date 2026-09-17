@@ -1,0 +1,3 @@
+# Pre-existing 32X-rule findings, baselined. A NEW one fails `make lint`.
+# Regenerate with --bless only after FIXING something.
+H3|sh_src/m_main.c:328 spells 0x2401E000 as a literal in <file>()

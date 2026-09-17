@@ -1,0 +1,265 @@
+sh_src/m_main.c: In function ‘compose_layer_regs’:
+sh_src/m_main.c:4982:17: warning: this ‘if’ clause does not guard... [-Wmisleading-indentation]
+ 4982 |                 if (code & 0x1000)
+      |                 ^~
+sh_src/m_main.c:543:28: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘if’
+  543 | #define GAME_TILE_REMAP(c) ((void)0)
+      |                            ^
+sh_src/m_main.c:4984:21: note: in expansion of macro ‘GAME_TILE_REMAP’
+ 4984 |                     GAME_TILE_REMAP(code);
+      |                     ^~~~~~~~~~~~~~~
+sh_src/m_main.c:5040:33: warning: cast increases required alignment of target type [-Wcast-align]
+ 5040 |                 uint32_t *dst = (uint32_t *)DROW(by + y);
+      |                                 ^
+sh_src/m_main.c:5041:38: warning: cast increases required alignment of target type [-Wcast-align]
+ 5041 |                 const uint32_t *t0 = (const uint32_t *)(tptr[0] + y * 8);
+      |                                      ^
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5044:26: note: in expansion of macro ‘MERGE_ROW’
+ 5044 |                 case 0:  MERGE_ROW(a0, a1) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5045:26: note: in expansion of macro ‘MERGE_ROW’
+ 5045 |                 case 8:  MERGE_ROW((a0 << 8) | (a1 >> 24), (a1 << 8) | (b0 >> 24)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5046:26: note: in expansion of macro ‘MERGE_ROW’
+ 5046 |                 case 16: MERGE_ROW((a0 << 16) | (a1 >> 16), (a1 << 16) | (b0 >> 16)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5047:26: note: in expansion of macro ‘MERGE_ROW’
+ 5047 |                 case 24: MERGE_ROW((a0 << 24) | (a1 >> 8), (a1 << 24) | (b0 >> 8)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5048:26: note: in expansion of macro ‘MERGE_ROW’
+ 5048 |                 case 32: MERGE_ROW(a1, b0) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5049:26: note: in expansion of macro ‘MERGE_ROW’
+ 5049 |                 case 40: MERGE_ROW((a1 << 8) | (b0 >> 24), (b0 << 8) | (b1 >> 24)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5050:26: note: in expansion of macro ‘MERGE_ROW’
+ 5050 |                 case 48: MERGE_ROW((a1 << 16) | (b0 >> 16), (b0 << 16) | (b1 >> 16)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5026:42: warning: cast increases required alignment of target type [-Wcast-align]
+ 5026 |                     const uint32_t *tn = (const uint32_t *)(tptr[c + 1] + y * 8); \
+      |                                          ^
+sh_src/m_main.c:5051:26: note: in expansion of macro ‘MERGE_ROW’
+ 5051 |                 default: MERGE_ROW((a1 << 24) | (b0 >> 8), (b0 << 24) | (b1 >> 8)) break;
+      |                          ^~~~~~~~~
+sh_src/m_main.c:5132:13: warning: this ‘if’ clause does not guard... [-Wmisleading-indentation]
+ 5132 |             if (code & 0x1000)
+      |             ^~
+sh_src/m_main.c:543:28: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘if’
+  543 | #define GAME_TILE_REMAP(c) ((void)0)
+      |                            ^
+sh_src/m_main.c:5134:17: note: in expansion of macro ‘GAME_TILE_REMAP’
+ 5134 |                 GAME_TILE_REMAP(code);
+      |                 ^~~~~~~~~~~~~~~
+sh_src/m_main.c: In function ‘bake_find’:
+sh_src/m_main.c:5243:25: warning: cast increases required alignment of target type [-Wcast-align]
+ 5243 |         uint32_t off = *(const uint32_t *)(s + 8);
+      |                         ^
+sh_src/m_main.c:5251:14: warning: cast increases required alignment of target type [-Wcast-align]
+ 5251 |         if (*(const uint16_t *)s == addr
+      |              ^
+sh_src/m_main.c:5252:17: warning: cast increases required alignment of target type [-Wcast-align]
+ 5252 |             && *(const uint16_t *)(s + 2) == d2
+      |                 ^
+sh_src/m_main.c:5253:18: warning: cast increases required alignment of target type [-Wcast-align]
+ 5253 |             && (*(const uint16_t *)(s + 4) >> 8) == bank
+      |                  ^
+sh_src/m_main.c:5254:18: warning: cast increases required alignment of target type [-Wcast-align]
+ 5254 |             && (*(const uint16_t *)(s + 4) & 0xFF) >= hgt
+      |                  ^
+sh_src/m_main.c:5255:17: warning: cast increases required alignment of target type [-Wcast-align]
+ 5255 |             && *(const uint16_t *)(s + 6) == zm) {
+      |                 ^
+sh_src/m_main.c: In function ‘c1_stamp’:
+sh_src/m_main.c:5750:22: warning: cast increases required alignment of target type [-Wcast-align]
+ 5750 |                     ((uint32_t *)d)[0] = 0; ((uint32_t *)d)[1] = 0;
+      |                      ^
+sh_src/m_main.c:5750:46: warning: cast increases required alignment of target type [-Wcast-align]
+ 5750 |                     ((uint32_t *)d)[0] = 0; ((uint32_t *)d)[1] = 0;
+      |                                              ^
+sh_src/m_main.c: In function ‘compose_pass’:
+sh_src/m_main.c:6074:47: warning: cast increases required alignment of target type [-Wcast-align]
+ 6074 |                     const uint8_t *sp = fr + *(const uint16_t *)
+      |                                               ^
+sh_src/m_main.c:6076:36: warning: cast increases required alignment of target type [-Wcast-align]
+ 6076 |                     unsigned ns = *(const uint16_t *)sp;
+      |                                    ^
+sh_src/m_main.c:6177:47: warning: cast increases required alignment of target type [-Wcast-align]
+ 6177 |                                         do { *(uint32_t *)d = *(const uint32_t *)s + b4; d += 4; s += 4; m -= 4; } while (m >= 4);
+      |                                               ^
+sh_src/m_main.c:6177:64: warning: cast increases required alignment of target type [-Wcast-align]
+ 6177 |                                         do { *(uint32_t *)d = *(const uint32_t *)s + b4; d += 4; s += 4; m -= 4; } while (m >= 4);
+      |                                                                ^
+sh_src/m_main.c:6181:46: warning: cast increases required alignment of target type [-Wcast-align]
+ 6181 |                                             *(uint32_t *)d = w + b4; d += 4; s += 4; m -= 4;
+      |                                              ^
+sh_src/m_main.c: In function ‘cache_fill’:
+sh_src/m_main.c:6575:35: warning: cast increases required alignment of target type [-Wcast-align]
+ 6575 |             const uint32_t *src = (const uint32_t *)(altbeast_tiles + code * 64);
+      |                                   ^
+sh_src/m_main.c:6576:29: warning: cast increases required alignment of target type [-Wcast-align]
+ 6576 |             uint32_t *dst = (uint32_t *)(CACHE_C + (s4 + way) * 64);
+      |                             ^
+sh_src/m_main.c: In function ‘cap_page’:
+sh_src/m_main.c:6749:30: warning: cast increases required alignment of target type [-Wcast-align]
+ 6749 |     volatile uint32_t *src = (volatile uint32_t *)(FB_STAGING + pg * 0x800);
+      |                              ^
+sh_src/m_main.c:6750:30: warning: cast increases required alignment of target type [-Wcast-align]
+ 6750 |     volatile uint32_t *dst = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
+      |                              ^
+sh_src/m_main.c: In function ‘restore_pages’:
+sh_src/m_main.c:6832:34: warning: cast increases required alignment of target type [-Wcast-align]
+ 6832 |         volatile uint32_t *src = (volatile uint32_t *)(TILEMAP_U + pg * 0x800);
+      |                                  ^
+sh_src/m_main.c: In function ‘blit_half’:
+sh_src/m_main.c:7392:31: warning: cast increases required alignment of target type [-Wcast-align]
+ 7392 |         const uint32_t *src = (const uint32_t *)(sbuf + (8 + y) * SBUF_W + 8);
+      |                               ^
+sh_src/m_main.c: At top level:
+sh_src/m_main.c:7892:6: warning: no previous prototype for ‘text_capture’ [-Wmissing-prototypes]
+ 7892 | void text_capture(void)
+      |      ^~~~~~~~~~~~
+sh_src/m_main.c: In function ‘text_capture’:
+sh_src/m_main.c:7894:29: warning: cast increases required alignment of target type [-Wcast-align]
+ 7894 |     volatile uint32_t *td = (volatile uint32_t *)TEXT_U;
+      |                             ^
+sh_src/m_main.c:7895:29: warning: cast increases required alignment of target type [-Wcast-align]
+ 7895 |     volatile uint32_t *ts = (volatile uint32_t *)FB_TEXT;
+      |                             ^
+sh_src/m_main.c: In function ‘flip_span’:
+sh_src/m_main.c:8161:33: warning: cast increases required alignment of target type [-Wcast-align]
+ 8161 |         volatile uint32_t *td = (volatile uint32_t *)TEXT_U;
+      |                                 ^
+sh_src/m_main.c:8162:33: warning: cast increases required alignment of target type [-Wcast-align]
+ 8162 |         volatile uint32_t *ts = (volatile uint32_t *)FB_TEXT;
+      |                                 ^
+sh_src/m_main.c:8750:33: warning: cast increases required alignment of target type [-Wcast-align]
+ 8750 |         volatile uint32_t *rs = (volatile uint32_t *)TEXT_U;
+      |                                 ^
+sh_src/m_main.c: At top level:
+sh_src/m_main.c:8812:19: warning: no previous prototype for ‘visr_vbi’ [-Wmissing-prototypes]
+ 8812 | LOCKCODE_ROM void visr_vbi(void)
+      |                   ^~~~~~~~
+sh_src/m_main.c:9321:6: warning: no previous prototype for ‘slave_window_k’ [-Wmissing-prototypes]
+ 9321 | void slave_window_k(uint16_t cmd)
+      |      ^~~~~~~~~~~~~~
+sh_src/m_main.c:9600:14: warning: no previous prototype for ‘slave_concurrent_k’ [-Wmissing-prototypes]
+ 9600 | RAMCODE void slave_concurrent_k(uint16_t cmd)
+      |              ^~~~~~~~~~~~~~~~~~
+sh_src/m_main.c: In function ‘slave_concurrent_k’:
+sh_src/m_main.c:9605:17: warning: nested extern declaration of ‘slave_service_stream’ [-Wnested-externs]
+ 9605 |     extern void slave_service_stream(void);
+      |                 ^~~~~~~~~~~~~~~~~~~~
+sh_src/m_main.c:9747:18: warning: cast increases required alignment of target type [-Wcast-align]
+ 9747 |                 *(uint32_t *)(d + x) = 0;
+      |                  ^
+sh_src/m_main.c: In function ‘hs_patch’:
+sh_src/m_main.c:10187:6: warning: cast increases required alignment of target type [-Wcast-align]
+10187 |     *(volatile uint32_t *)(HS_OFFS + 8) = (uint32_t)dst;
+      |      ^
+sh_src/m_main.c: In function ‘hs_promote’:
+sh_src/m_main.c:10229:55: warning: cast increases required alignment of target type [-Wcast-align]
+10229 |         volatile uint16_t *fp = (volatile uint16_t *)*(volatile uint32_t *)(HS_OFFS + 8);
+      |                                                       ^
+sh_src/m_main.c: At top level:
+sh_src/m_main.c:10528:17: warning: redundant redeclaration of ‘fbx_landed’ [-Wredundant-decls]
+10528 | static unsigned fbx_landed;              /* words lifted this window */
+      |                 ^~~~~~~~~~
+sh_src/m_main.c:8061:17: note: previous declaration of ‘fbx_landed’ with type ‘unsigned int’
+ 8061 | static unsigned fbx_landed;              /* tentative; the definition
+      |                 ^~~~~~~~~~
+sh_src/m_main.c: In function ‘fbx_lift’:
+sh_src/m_main.c:10555:28: warning: cast increases required alignment of target type [-Wcast-align]
+10555 |             uint32_t *dp = (uint32_t *)SPR_LAND;
+      |                            ^
+sh_src/m_main.c: At top level:
+sh_src/m_main.c:11337:14: warning: no previous prototype for ‘m_main’ [-Wmissing-prototypes]
+11337 | RAMCODE void m_main(void)
+      |              ^~~~~~
+sh_src/m_main.c: In function ‘m_main’:
+sh_src/m_main.c:11582:5: warning: this ‘while’ clause does not guard... [-Wmisleading-indentation]
+11582 |     while (MARS_SYS_COMM14 != 0xB007) ;  /* the 68K's beacon first (it
+      |     ^~~~~
+sh_src/m_main.c:11584:5: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the ‘while’
+11584 |     {   /* let the slave's own B007 poll (s_main.c) see it before we
+      |     ^
+sh_src/m_main.c:13019:33: warning: cast increases required alignment of target type [-Wcast-align]
+13019 |                             && *(volatile uint32_t *)
+      |                                 ^
+sh_src/m_main.c:13034:25: warning: cast increases required alignment of target type [-Wcast-align]
+13034 |                         (volatile uint32_t *)(TEXT_U + 0x740);
+      |                         ^
+sh_src/m_main.c:13036:25: warning: cast increases required alignment of target type [-Wcast-align]
+13036 |                         (volatile uint32_t *)(SPR_LAND + 0);
+      |                         ^
+sh_src/m_main.c:13040:30: warning: cast increases required alignment of target type [-Wcast-align]
+13040 |                         d2 = (volatile uint32_t *)(TEXT_U + 0x7C0);
+      |                              ^
+sh_src/m_main.c:13041:30: warning: cast increases required alignment of target type [-Wcast-align]
+13041 |                         s2 = (volatile uint32_t *)(SPR_LAND + R60_HDR);
+      |                              ^
+sh_src/m_main.c:13203:43: warning: declaration of ‘s2’ shadows a previous local [-Wshadow]
+13203 |                             for (unsigned s2 = 0; s2 < 128; s2++)
+      |                                           ^~
+sh_src/m_main.c:13035:40: note: shadowed declaration is here
+13035 |                     volatile uint32_t *s2 =
+      |                                        ^~
+sh_src/m_main.c:14251:30: warning: unused variable ‘nl’ [-Wunused-variable]
+14251 |                     unsigned nl = (unsigned)(__builtin_popcount(tc_live32x[0])
+      |                              ^~
+sh_src/m_main.c:14396:37: warning: suggest braces around empty body in an ‘else’ statement [-Wempty-body]
+14396 |                                     ;   /* young absent owner (retired count) */
+      |                                     ^
+sh_src/m_main.c:14227:26: warning: variable ‘nl_live’ set but not used [-Wunused-but-set-variable]
+14227 |                 unsigned nl_live = 0;                /* live sets (LATE_STEAL0) */
+      |                          ^~~~~~~
+sh_src/m_main.c:14552:40: warning: cast increases required alignment of target type [-Wcast-align]
+14552 |                 const uint32_t *ssrc = (const uint32_t *)md_pktA;
+      |                                        ^
+sh_src/m_main.c:14598:24: warning: cast increases required alignment of target type [-Wcast-align]
+14598 |                 ssrc = (const uint32_t *)md_pkt;
+      |                        ^
+sh_src/m_main.c:14651:39: warning: cast increases required alignment of target type [-Wcast-align]
+14651 |                 const uint32_t *ss2 = (const uint32_t *)MDSPR_PAL;
+      |                                       ^
+sh_src/m_main.c:14655:23: warning: cast increases required alignment of target type [-Wcast-align]
+14655 |                 ss2 = (const uint32_t *)MDSPR_SAT;
+      |                       ^
+sh_src/m_main.c:16610:42: warning: declaration of ‘c0’ shadows a previous local [-Wshadow]
+16610 |                                 uint16_t c0 = mdp_line_c[lb + pen];
+      |                                          ^~
+sh_src/m_main.c:11591:18: note: shadowed declaration is here
+11591 |         uint16_t c0 = MARS_SYS_COMM0;
+      |                  ^~
+sh_src/m_main.c:11506:14: warning: variable ‘yield_spin’ set but not used [-Wunused-but-set-variable]
+11506 |     uint16_t yield_spin = 0;             /* fruitless-yield guard, see below */
+      |              ^~~~~~~~~~
+sh_src/m_main.c:11386:27: warning: unused variable ‘pend_bank’ [-Wunused-variable]
+11386 |     uint8_t pend_par = 0, pend_bank = 0;
+      |                           ^~~~~~~~~
+sh_src/m_main.c:11386:13: warning: unused variable ‘pend_par’ [-Wunused-variable]
+11386 |     uint8_t pend_par = 0, pend_bank = 0;
+      |             ^~~~~~~~
+sh_src/m_main.c:11382:13: warning: unused variable ‘pend_rg’ [-Wunused-variable]
+11382 |     uint8_t pend_rg = 0;                     /* slave-launch chain: next band
+      |             ^~~~~~~

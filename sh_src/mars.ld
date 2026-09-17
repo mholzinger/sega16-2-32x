@@ -92,6 +92,21 @@ SECTIONS {
 	.palscenes 0x022F8000 : AT(0x002F8000) {
 		KEEP(*(.palscenes))
 	} > rom
+	/* BAKED MD TILES (2026-09-17). tools/bake_tiles_md.py emits every
+	 * tile already converted to MD 4bpp with its round's pen map applied,
+	 * so md_emit_art becomes a 32-byte copy instead of 64 ROM reads + 64
+	 * table lookups + 32 writes. Layout: 5 rounds x 128 u16 index
+	 * (0xFFFF = set not baked), then 4KB blocks of 64 codes x FG,BG.
+	 * PLACED EXPLICITLY in the measured free gap at 0x263C00-0x2F8000
+	 * (593KB of 0xFF fill; 425KB needed). Not left to ld: the Makefile's
+	 * own note is that a silent overrun corrupts the 68K high rom and
+	 * "fails as a GAME bug a long way from its cause". */
+	.tilesmd 0x02263C00 : AT(0x00263C00) {
+		KEEP(*(.tilesmd))
+	} > rom
+	ASSERT(LOADADDR(.tilesmd) + SIZEOF(.tilesmd) <= 0x002F8000,
+	       ".tilesmd overran the 0x263C00-0x2F8000 gap into .palscenes")
+
 	.gamehigh 0x02300000 : AT(0x00300000) {
 		KEEP(*(.gamehigh))
 	} > rom

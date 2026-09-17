@@ -100,16 +100,31 @@ def main():
     print(f'verify: {checked} tiles re-emitted through the C algorithm, all 32 B')
 
     if a.emit:
-        out = bytearray()
+        # SPARSE BY SET. A dense table is 5 rounds x 16384 codes x 2
+        # variants x 32 B = 5.2 MB. But cset = code >> 6, so a round's used
+        # sets are blocks of 64 CONSECUTIVE codes and only ~30 of 128 sets
+        # are pinned per round. Emit one 4 KB block per used set (64 codes
+        # x FG,BG x 32 B) and an index per round:
+        #     blk = idx[round][cset]           0xFFFF = not baked
+        #     tile = base + blk*4096 + (code & 63)*64 + isfg*32
+        idx = bytearray()
+        blocks = bytearray()
         for pm in rounds:
-            for code in range(ntiles):
-                cset = (code >> 6) & 0x7F
-                m8 = pm[cset*8:cset*8+8]
-                px = art[code*64:code*64+64]
-                out += emit_tile(px, m8, 0) + emit_tile(px, m8, 1)
-        p = os.path.join(ROOT, 'sh_src', 'tiles_md.bin')
-        open(p, 'wb').write(bytes(out))
-        print(f'wrote {p} ({len(out)/1024:.0f} KB)')
+            row = [0xFFFF] * 128
+            for cs in range(128):
+                if not any(pm[cs*8:cs*8+8]):
+                    continue
+                row[cs] = len(blocks) // 4096
+                m8 = pm[cs*8:cs*8+8]
+                for code in range(cs*64, cs*64+64):
+                    px = art[code*64:code*64+64] if code < ntiles else bytes(64)
+                    blocks += emit_tile(px, m8, 0) + emit_tile(px, m8, 1)
+            for v in row:
+                idx += bytes((v >> 8, v & 0xFF))
+        pb = os.path.join(ROOT, 'sh_src', 'tiles_md.bin')
+        open(pb, 'wb').write(bytes(idx) + bytes(blocks))
+        print(f'wrote {pb}: index {len(idx)} B + {len(blocks)//4096} blocks '
+              f'= {(len(idx)+len(blocks))/1024:.0f} KB')
 
 if __name__ == '__main__':
     main()

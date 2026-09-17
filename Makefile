@@ -1951,6 +1951,18 @@ endif
 # tiles. Over-broad by mds_install's own invariant (a slot is stale iff
 # its set's line or pen map changed): mds_install's changed[] wiped 2 tags
 # where the flush wiped 1824. This drops the blanket wipe.
+# `make ... TILESMD=1` = 2026-09-17. Every tile is baked to MD 4bpp with
+# its round's pen map already applied (tools/bake_tiles_md.py), so
+# md_emit_art becomes a 32-byte copy instead of 64 ROM reads + 64 table
+# lookups + 32 writes per tile per ship. Proven byte-identical: 941/941
+# live VRAM slots re-emitted through the tool's port of the C loop.
+# 425KB into the measured 593KB free gap at 0x263C00 (mars.ld places it
+# explicitly and asserts on overrun).
+ifdef TILESMD
+SHCCFLAGS  += -DTILES_MD
+SHASFLAGS  += --defsym TILES_MD=1
+SHOBJS_EXTRA += sh_src/tiles_md_data.o
+endif
 ifdef MDSNOFLUSH
 SHCCFLAGS += -DMDS_NOFLUSH
 endif
@@ -2857,8 +2869,20 @@ endif
 # it WAS the baseline. Any flag build measured before this existed should
 # be re-measured before it is believed.
 FLAGSTAMP := .build_flags
+# INFORMATION-ONLY GOALS DO NOT RESTAMP. This $(shell) runs at PARSE time,
+# so `make lint` -- which only asks questions -- used to overwrite the
+# stamp with a reduced -D set and force a full rebuild of the next real
+# build. Any goal that compiles nothing belongs in this list.
+INFO_GOALS := print-defs line-defs shipus-defs lint lint-generic lint-32x
+ifeq ($(filter-out $(INFO_GOALS),$(MAKECMDGOALS)),)
+ifneq ($(MAKECMDGOALS),)
+FLAGSTAMP_SKIP := 1
+endif
+endif
+ifndef FLAGSTAMP_SKIP
 $(shell f='$(MDCCFLAGS) $(SHCCFLAGS)'; \
         [ "$$(cat $(FLAGSTAMP) 2>/dev/null)" = "$$f" ] || printf '%s' "$$f" > $(FLAGSTAMP))
+endif
 # (the dependency itself is declared below `all:` — an explicit rule above
 # it would make md_src/font.o the default goal)
 
@@ -3060,6 +3084,9 @@ sh_src/mars_start.o: sh_src/md_start.bin sh_src/game_body.bin sh_src/boot_copy.b
 sh_src/tiles.bin: tools/gen_tiles.py $(GAMEROMS)/prog68k.bin $(FLAGSTAMP)
 	@GAME=$(GAME) python3 tools/gen_tiles.py
 sh_src/tiles_data.o: sh_src/tiles.bin
+sh_src/tiles_md.bin: tools/bake_tiles_md.py sh_src/tiles.bin sh_src/pal_rounds_md.h
+	@python3 tools/bake_tiles_md.py --emit
+sh_src/tiles_md_data.o: sh_src/tiles_md.bin
 
 # Fold 1's hole map (LOOP29 244): two bits per tilemap cell, from the rom
 # tilemap and the tile art, .incbin'd by cat1hole_data.s under C1PUNCH.
@@ -3209,3 +3236,27 @@ sndtest-clean:
 	rm -f $(SNDMDOBJS) $(SNDSHOBJS) $(SNDMDOBJS:.o=.d) $(SNDSHOBJS:.o=.d)
 	rm -f $(SNDMDTARGET).bin $(SNDMDTARGET).elf $(SNDTARGET).32x $(SNDTARGET).elf
 	rm -f sndtest/sh/md_start.bin
+
+# ---- LINT SUPPORT (2026-09-17) ----
+# Print the EXACT -D sets a build compiles with, WITHOUT building.
+# `make -n` is not usable for this (LESSONS "make -n REWRITES
+# .build_flags"), and neither is this: the FLAGSTAMP `$(shell ...)` above
+# runs at PARSE time on every invocation, so any make rewrites the stamp.
+# tools/lint.sh saves and restores it around these targets. The recursion
+# mirrors `line:` -> `ship-us:` exactly so the two cannot drift.
+.PHONY: print-defs line-defs shipus-defs lint lint-generic lint-32x
+print-defs:
+	@echo "MD $(MDCCFLAGS)"
+	@echo "SH $(SHCCFLAGS)"
+shipus-defs:
+	@$(MAKE) --no-print-directory GAME=altbeast $(SHIP_US) print-defs
+line-defs:
+	@$(MAKE) --no-print-directory $(LINE_FLAGS) shipus-defs
+
+# `make lint` = the whole health gate. See tools/lint.sh.
+lint:
+	@tools/lint.sh
+lint-generic:
+	@tools/lint.sh --generic
+lint-32x:
+	@tools/lint.sh --32x

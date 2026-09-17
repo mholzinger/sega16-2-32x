@@ -1,0 +1,11 @@
+# Known counter findings, baselined 2026-09-17. A NEW one fails
+# `make lint`; these are pre-existing and tracked in the slot
+# registry at sh_src/m_main.c:72. Regenerate with --bless only
+# after FIXING something, never to silence a new finding.
+COLLISION DIAG[27]
+COLLISION DIAG[35]
+COLLISION DIAG[36]
+COLLISION DIAG[37]
+COLLISION DIAG[39]
+COLLISION DIAG[42]
+COLLISION DIAG[52]

@@ -39,6 +39,12 @@
 #define RAMCODE __attribute__((section(".ramtext")))
 
 extern const uint8_t altbeast_tiles[];      /* 16384 tiles x 64B, cart ROM */
+#if defined(TILES_MD) && defined(MD_ROUND) && defined(MD_STATIC) \
+    && defined(PAL_STATIC) && defined(TILE_CLASS)
+/* baked MD 4bpp tiles: 5 rounds x 128 u16 index, then 4KB blocks.
+ * Guarded exactly like md_round's own declaration (1703). */
+extern const uint8_t altbeast_tiles_md[];
+#endif
 extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
 
 /* ---- SDRAM map (stacks: master grows down from 0x0603F800, slave from
@@ -9999,6 +10005,45 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         if (*first == 0xFFFF) *first = (uint16_t)sl;
         dst[sent * 17] = (uint16_t)sl;
         volatile uint8_t *o = (volatile uint8_t *)(dst + sent * 17 + 1);
+#if defined(TILES_MD) && defined(MD_ROUND) && defined(MD_STATIC) \
+    && defined(PAL_STATIC) && defined(TILE_CLASS)
+        /* BAKED (2026-09-17). The conversion below is a pure function of
+         * the code: px is cart ROM, and map is the set's pen map, which is
+         * static per round (measured: the live map differs from the baked
+         * round in 5 bytes of 1024 and does not move over 2000 frames) --
+         * and cset = code >> 6, so the set is DERIVED from the code. So it
+         * is baked: index by round and set, then 64 codes x (FG,BG) x 32B.
+         * Proven byte-identical on 941/941 live VRAM slots.
+         * A set with no block (0xFFFF) falls through to the loop below, so
+         * this can never render less than the converter. */
+        {
+            unsigned cs_ = (unsigned)((mkey >> 16) & 0x7F);
+            /* the ROUND is the table index and the 68K publishes it; bound
+             * it exactly as the refuse rule does (191/209) so a stale or
+             * unpublished round falls through to the converter below
+             * instead of indexing past the table. */
+            unsigned rd_ = (unsigned)md_round;
+            unsigned blk_ = (rd_ < MDROUND_N)
+                ? ((const uint16_t *)altbeast_tiles_md)[rd_ * 128u + cs_]
+                : 0xFFFFu;
+            if (blk_ != 0xFFFFu) {
+                const uint8_t *b_ = altbeast_tiles_md + 5u * 128u * 2u
+                                  + blk_ * 4096u
+                                  + ((mkey & 63u) * 64u)
+                                  + ((mkey & 0x80000000u) ? 32u : 0u);
+                for (int k2 = 0; k2 < 32; k2++)
+                    o[k2] = b_[k2];
+                /* the converter's tail, which this shortcut MUST keep:
+                 * draining md_pending is what stops the demand bias
+                 * firing every window (the starvation bound at 15436).
+                 * Skipping it diverged 26,958 VRAM bytes on the first
+                 * wiring -- the bake was right, the shortcut was not. */
+                if (*pending) (*pending)--;
+                sent++;
+                continue;
+            }
+        }
+#endif
         if (mkey & 0x80000000u) {
             for (int y = 0; y < 8; y++) {
                 const uint8_t *r = px + y * 8;
