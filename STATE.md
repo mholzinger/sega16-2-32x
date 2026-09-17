@@ -83,7 +83,9 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## OPEN DEFECTS Mike can see
 
-    gameplay HUD dropout          NEW 2026-09-17, and it is not in any
+    gameplay HUD dropout          FIXED by dropping the TAGKEEP family
+                                  (Mike's G-1 verdict 2026-09-17).
+                                  Still on the LINE. NEW 2026-09-17, not in any
                                   earlier list though frame_grade.py has
                                   had a detector for it since
                                   2026-08-26. The line drops the lives
@@ -114,7 +116,22 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   deliberately, so this is EMPTINESS,
                                   not a blackout. Untested against
                                   CHEVFIX.
-    leftover transformation text  untouched
+    leftover text glyphs          DIAGNOSED 2026-09-17, and it is the
+                                  ONLY defect Mike sees on notag1.
+                                  FOUR cells, frozen identical at
+                                  f2000/f3000/f4000, planted once before
+                                  f2000 and never cleared:
+                                    r9 c43 0x024F 'O'
+                                    r9 c55 0x0259 'Y'
+                                    r11 c35 0x024E 'N'
+                                    r11 c47 0x0220 space, colour 2
+                                  NOT a capture failure -- FB_TEXT and
+                                  TEXT_U agree to the word (1856
+                                  compared, 0 differ), so the mask and
+                                  its backstop are the wrong tree.
+                                  They lie outside both TXT_WRAM_WRITERS
+                                  ranges: a scene-level message writer
+                                  still on the FB path. See O-6.
     shadow-column dither over MD content   untouched
 
 ## OPEN CARDS

@@ -15,43 +15,55 @@ grow like the logs did.
 time, or a direction call.** Never for instrument repair, premise checks,
 arithmetic corrections, or anything ending "no pixel changed."
 
-### G-1  notag1 restores the gameplay HUD and adds silhouettes. A TRADE.
-    build        rom/night/notag1.32x = the line minus the TAGKEEP
-                 family (TAGKEEP + PENHOLD + PENREPAINT).
-                 NOT a playable hand-over: it is a probe. Say the word
-                 and it gets built as a proper candidate.
-    look at      rom/night/o2_look/  -- bldS_3000 vs notag1_3000,
-                 bldS_4000 vs notag1_4000, same frame, same input
-                 script, directly comparable (proof below).
-    what changed
-        FIXED    the line DROPS the gameplay HUD -- lives icon, "x2",
-                 and the 50000 high score are absent at f2000, f3000
-                 AND f4000. notag1 draws all of them. Lives-region
-                 distinct colours 90 (line) vs 335 (notag1), stable
-                 over four consecutive frames on both.
-        COST     at f4000 notag1 carries a large solid-black
-                 silhouette blob over the creature and a red blob on
-                 the wolf, where the line renders the explosion art
-                 correctly. 10.7% of pixels differ at f4000, 2.6% at
-                 f3000.
-    why these frames ARE comparable (checked, because the first read
-    of them was wrong and got withdrawn):
-                 68K scene timer 0xFFF02A identical on both roms at
-                 f1500/2200/2900/3600/4100 (874/1224/1574/1924/2174),
-                 so 0 game-frames apart at every shot; irq4_miss_pct
-                 0.0 on both; both stable across N..N+3 so it is not a
-                 render-phase offset. The flags are SH-2 renderer
-                 flags and never touch the 68K timeline.
-    the call     this is a TRADE, not a win, so it is yours:
-                 (a) is the HUD dropout worth the silhouettes?
-                 (b) the HUD dropout is not in STATE.md OPEN DEFECTS
-                     at all -- had you seen it, or is it new?
-    NOT asked    no rig time. No play pass yet -- say whether you want
-                 a candidate built first.
+    (empty)
 
 ---
 
 ## OPEN
+
+### O-6  Leftover text glyphs -- the ONLY thing left on notag1
+    owner        BUILDER
+    state        DIAGNOSED, needs the oracle to confirm the direction
+    premise      Mike, 2026-09-17, on the G-1 frames: "the only issue
+                 with notag is the leftover text glyphs. otherwise,
+                 solid presentation, good colors on all sprites and
+                 backgrounds."
+    WHAT they are (decoded from TEXT_U, not guessed)
+                 four cells, 64-col x 29-row text layer:
+                   row  9 c43 = 0x024F  'O'
+                   row  9 c55 = 0x0259  'Y'
+                   row 11 c35 = 0x024E  'N'   (reads as "M" on screen)
+                   row 11 c47 = 0x0220  space, colour 2 (invisible)
+                 high byte 0x02 = the red/gold colour bits. Byte
+                 offsets 0x4D6, 0x4EE, 0x5CE, 0x5DE.
+                 IDENTICAL at f2000, f3000 and f4000 -- planted once
+                 before f2000 and never cleared. Not accumulating.
+    NOT the capture
+                 FB_TEXT (32X DRAM 0x1F000) vs TEXT_U (SDRAM 0x26000)
+                 at f4000: 1856 words compared, ZERO differ. The text
+                 capture is faithful; the glyphs are genuinely in the
+                 source. The whole layer holds only 40 non-blank cells.
+                 So TEXTCAP_MASK / the every-8th-vint backstop /
+                 MASK_PROBE are all the WRONG TREE for this one.
+    where it is  TXT_WRAM_WRITERS (tools/game_altbeast.py:274) covers
+                 exactly two writers -- credit line 0x3AAE and health
+                 bar 0x4D54, byte ranges 0xCB4-0xD03. These four cells
+                 are at 0x4D6-0x5DE, OUTSIDE both. They belong to a
+                 scene-level message writer still on the FB path, which
+                 is what that table's own comment warns about ("a
+                 pending footprint copy must not re-plant over the
+                 clear -- the phantom P2 orbs, 2026-09-07").
+                 A 68K write to the FB at FM=1 is silently dropped
+                 (md_main.c:3629 and the flip-latch record), so a clear
+                 that straddles the raise loses its tail. LEADING
+                 hypothesis, NOT yet proven for these cells.
+    ask          (a) ORACLE: does MAME altbeast have these four cells
+                     blank at the same game moment? That decides
+                     whether the clear is lost or never issued.
+                 (b) then either add the writer to TXT_WRAM_WRITERS or
+                     fix the gate.
+    gate         none for the read.
+
 
 ### O-1  Transport ablation: does reducing LOAD have a slope?
     owner        BUILDER
@@ -132,6 +144,22 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## LEDGER — closed, one line each
 
+    2026-09-17  G-1 ANSWERED by Mike: notag1 is "solid presentation,
+                good colors on all sprites and backgrounds", the ONLY
+                issue being leftover text glyphs. So dropping the
+                TAGKEEP family is NOT the trade I escalated -- it is a
+                clean improvement with one known defect left. A proper
+                candidate build for a play pass is offered and awaiting
+                his word.
+    2026-09-17  WITHDRAWN: "notag1 adds silhouette blobs at f4000".
+                The black shape and the red wolf are legitimate enemy
+                sprites (melting death animation; a red hellhound).
+                I pattern-matched the known SILH defect without
+                identifying the sprite -- the exact rule I had written
+                into LESSONS.md two ticks earlier. Mike's eye caught
+                it, as the record says it repeatedly does.
+    2026-09-17  Leftover glyphs are NOT a capture failure: FB_TEXT and
+                TEXT_U agree to the word. Opened as O-6.
     2026-09-16  O-5 CLOSED by a read. The scene anchor already exists
                 and is already collected: 68K scene timer WRAM
                 0xFFF02A, one tick per GAME frame, dumped by

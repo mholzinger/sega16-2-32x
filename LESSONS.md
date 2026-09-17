@@ -138,6 +138,27 @@ too.
 *Cost:* one tick spent parking a card that had actually produced a
 result, plus a LESSONS entry that had to be withdrawn.
 
+### I matched a known defect's SHAPE and skipped identifying the sprite
+
+At f4000 the candidate frame has a large solid-black shape over a
+creature and a red mass where a wolf is. I reported both as the SILH
+silhouette-fallback defect and escalated them to Mike as the COST side
+of a trade. They are neither: the black shape is an enemy in its melting
+death animation and the red mass is a red hellhound. Both are correct
+art. Mike: "good colors on all sprites and backgrounds."
+
+The rule that would have caught it was already in this file, written two
+ticks earlier — locate the visual and say what it IS before proposing a
+mechanism. Knowing the rule and citing the rule is not applying it.
+A known defect's SHAPE is the weakest possible evidence, because that is
+exactly what legitimate art in the same genre looks like.
+
+*Consequence:* a clean improvement was escalated as a trade, which is
+the kind of framing that gets a good build shelved.
+
+*Cost:* would have been a shelved build; caught because the frames went
+to Mike rather than only the numbers.
+
 ### The HUD is NOT on the colour-set allocator — stop taking it there
 
 Two ticks on 2026-09-16/17 went into the MD residency allocator looking
