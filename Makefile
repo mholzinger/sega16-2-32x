@@ -3051,6 +3051,25 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# needs 0xFF free space at the very end (as .gamehigh's own FF
 	@# padding used to provide when it was the top tenant).
 	@$(SHOBJC) -O binary --gap-fill=0xff --pad-to=0x400000 $< temp.32x
+	@# DROPPED-SECTION GUARD (2026-09-17). objcopy -O binary emits only
+	@# ALLOC sections. A section declared `.section .foo` without the "a"
+	@# flag gets CONTENTS,READONLY and no ALLOC: ld still places it
+	@# exactly where the linker script says, every placement ASSERT
+	@# passes, _end is right -- and the bytes never reach the cart.
+	@# .tilesmd lost 425KB to this and the feature was silently inert
+	@# for an evening, passing every gate because it WAS the baseline
+	@# (LESSONS.md "An .incbin blob needs .section name, \"a\"").
+	@bad=$$($(SHOBJD) -h $< | awk '/^ *[0-9]+ \./ { n=$$2; getline f; \
+	    if (f ~ /CONTENTS/ && f !~ /ALLOC/) print n }' \
+	    | grep -v '^\.\(debug\|comment\|note\|stab\)'); \
+	if [ -n "$$bad" ]; then \
+	  echo 'FATAL: section(s) carry CONTENTS but not ALLOC.'; \
+	  echo '       objcopy -O binary DROPS these -- the data will NOT be in the cart,'; \
+	  echo '       and a feature that reads it will read 0xFF gap fill and do nothing:'; \
+	  for x in $$bad; do echo "         $$x"; done; \
+	  echo '       Fix: give it the allocatable flag ->  .section NAME, "a"'; \
+	  rm -f temp.32x $@; exit 1; \
+	fi
 	@hi=$$($(SHOBJD) -h $< | awk '/^ *[0-9]+ \./ { n=$$2; s=$$3; l=$$5; \
 	    getline f; if (f ~ /LOAD/ && n != ".gamehigh") print l, s }' \
 	    | while read l s; do echo $$((16#$$l + 16#$$s)); done \
