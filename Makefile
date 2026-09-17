@@ -2024,6 +2024,13 @@ endif
 ifdef NTSKIP
 SHCCFLAGS += -DNT_SKIP
 endif
+# `make ... NTKEY8=1` = key the name-table row memo on vxr>>3 instead of
+# the full 10-bit vxr, so a sub-tile camera move does not re-key a row
+# whose cells are unchanged. Needs NTSKIP. PIXEL-GATE IT: the sub-tile
+# bits drive the mirror shift (hazard 2).
+ifdef NTKEY8
+SHCCFLAGS += -DNT_KEY8
+endif
 # `make ... NBUILD1=1` = one MD packet build per gap instead of two.
 # Brake for NTSKIP's transport flood (LOOP29 170).
 ifdef NBUILD1

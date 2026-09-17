@@ -189,3 +189,48 @@ the transport flood NTSKIP causes -- is already ON the line.
 
 against the same flag set without NTSKIP, ranked on the rig's presented
 frames per 64 vints. That is the card.
+
+## NTSKIP RUN (2026-09-16): the key fix is real, the skip is NOT CORRECT
+
+Gameplay (`--input play2.csv`), NTS read from the verified 0x28FD8:
+
+    rom                          skipped   walked   skip rate
+    NTSKIP,        MAXAGE=64      12,096    8,036      60.1%
+    NTSKIP+KEY8,   MAXAGE=64      17,080    3,080      84.7%
+
+**The decompile thread's ~26 points were there and the cause was the key
+itself, not allocator churn.** It folded the FULL 10-bit `vxr`, so a
+ONE-PIXEL camera move re-keyed a row whose cells are identical -- the
+cells a row reads are a function of `vxr >> 3` only. Keyed on `vxr>>3`:
+60.1% -> 84.7%, against the 93.75% the 8-pixel camera bound allows.
+
+**And then the pixel gate failed.** Black share against the line's
+4.8% / 4.4% at f2800 / f3100:
+
+    MAXAGE   skip rate   black f2800   black f3100
+      4          0.0%          4.9%          4.7%
+      8          0.0%          4.9%          4.7%
+     16         47.6%         14.0%         13.7%
+     64         84.7%         10.3%          --
+     64 (no KEY8) 60.1%       --            20.3%
+
+**Black tiles scale with the skip rate.** At 0% skip the picture matches
+the line; at any nonzero rate it drops tiles, which is exactly the
+corruption Mike saw on vi20. MAXAGE <= 8 giving 0.0% also confirms
+LOOP29 177's age arithmetic exactly: a row is revisited once per
+eight-phase walk and win_no advances per window, so the age at revisit is
+8-16 and a bound of 8 can never be satisfied.
+
+**Cause, and it is the gap the decompile thread named:** m_main.c:2309 --
+a cell's shipped pattern depends on its set's (line, pixel->pen map). The
+row key folds scroll, pages and per-page CONTENT generations. It does NOT
+fold allocator state. When a set is re-assigned or its pen map changes,
+every skipped row keeps a stale slot reference and those cells go black.
+The thread's hypothesis was that allocator churn RE-KEYS static rows; the
+measurement says the opposite and worse -- allocator churn SHOULD re-key
+those rows and does not.
+
+**So NTSKIP cannot be ranked on the rig yet.** A flip rate from a rom
+that drops tiles prices a machine doing less work than a correct one.
+The key must cover the allocator first, and doing so will cost back some
+of the 84.7%.

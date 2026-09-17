@@ -15411,8 +15411,31 @@ RAMCODE void m_main(void)
                          * so a skipped row keeps its previous value. */
                         {
                             unsigned ridx = (unsigned)((isfg ? 28 : 0) + row);
+#ifdef NT_KEY8
+                            /* LOOP29 178+/NOTES 118. The key folded the
+                             * FULL 10-bit vxr, so a ONE-PIXEL camera move
+                             * re-keyed a row whose cells are identical --
+                             * the cells a row reads are a function of
+                             * vxr>>3 only. The camera's ceiling is 0.5
+                             * px/frame (table at rom 0x1878, max 0x0080),
+                             * so a full-vxr key can change 8x more often
+                             * than the content does, which is the gap
+                             * between the measured 67.5% skip and the
+                             * 93.75% the 8-pixel bound allows.
+                             * HAZARD, and it is why this is a flag: the
+                             * sub-tile bits drive the MIRROR SHIFT above
+                             * (hazard 2, "an unchanged key implies dc==0").
+                             * MD_BG scrolls on the VDP's own hscroll
+                             * registers (6360), so the shift should be a
+                             * no-op -- but "should" is how five dead
+                             * mechanisms started this week. Gate the
+                             * pixels before believing the rate. */
+                            uint32_t nk = ((uint32_t)((vxr >> 3) & 0x7F))
+                                | ((uint32_t)(vyr & 0x1FF) << 10)
+#else
                             uint32_t nk = ((uint32_t)(vxr & 0x3FF))
                                 | ((uint32_t)(vyr & 0x1FF) << 10)
+#endif
                                 | ((uint32_t)(pqb[0] & 0xF) << 19)
                                 | ((uint32_t)(pqb[1] & 0xF) << 23)
                                 | ((uint32_t)(pqb[2] & 0xF) << 27);
