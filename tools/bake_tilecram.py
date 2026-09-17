@@ -23,7 +23,6 @@ That pen map is what a tile bake needs to rewrite pixel values with.
   sh_src/tilecram.h     per-palette line + pen mapping
 """
 import argparse
-import glob
 import os
 import random
 import sys
@@ -146,37 +145,15 @@ def worst_viewport(words, cols):
     except OSError:
         _art = b''
     for page in list(range(FG_PAGE, FG_PAGE + 5)) + list(range(BG_PAGE, BG_PAGE + 5)):
+        bg = page >= BG_PAGE
         for t in words[page * 2048:(page + 1) * 2048]:
             if t & 0x1FFF:
-                CELLS[(t >> 6) & 0x7F] = CELLS.get((t >> 6) & 0x7F, 0) + 1
-    # PEN0_WANT comes from the CAPTURED tilemap, not this ROM one. The game
-    # rewrites tile RAM at every scene load, so the ROM copy is the initial
-    # state and misses sets the player actually sees: computed from ROM it
-    # finds 96-99 and MISSES 92/93/95 -- the sky and two trees, three of the
-    # five the runtime is observed to override. Same reason the palettes in
-    # this bake come from live dumps rather than rom (LOOP29 192).
-    # Union across rounds is the safe direction: giving pen 0 a sensible
-    # slot only replaces a value that was 0/arbitrary.
-    tdir = os.path.join(ROOT, 'discover', 'tmap')
-    caps = sorted(glob.glob(os.path.join(tdir, '*.bin'))) if os.path.isdir(tdir) else []
-    for fn in caps:
-        d = open(fn, 'rb').read()
-        for pg in range(len(d) // 0x1000):
-            if pg < BG_PAGE:
-                continue
-            for i in range(0x800):
-                v = (d[(pg * 0x800 + i) * 2] << 8) | d[(pg * 0x800 + i) * 2 + 1]
-                if not v:
-                    continue
-                c = v & 0x1FFF
-                if _art and 0 in _art[c * 64:c * 64 + 64]:
-                    PEN0_WANT.add((v >> 6) & 0x7F)
-    if caps:
-        print('  pen0: %d captured tilemap(s) -> %d sets need a real pen 0'
-              % (len(caps), len(PEN0_WANT)))
-    else:
-        print('  pen0: NO captured tilemap in discover/tmap -- pen 0 left at 0. '
-              'The ROM tilemap is the pre-load state and is NOT a substitute.')
+                st = (t >> 6) & 0x7F
+                CELLS[st] = CELLS.get(st, 0) + 1
+                if bg and _art:
+                    c = t & 0x1FFF
+                    if 0 in _art[c * 64:c * 64 + 64]:
+                        PEN0_WANT.add(st)
     return sorted(p for p in CELLS if len(cols(p)) > 0)
 
 
