@@ -44,13 +44,33 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
-## Start here (2026-09-09)
+## START HERE — read these three, in this order, and nothing else
 
-`docs/handoff/START-HERE.md` — THE BAR (60 fps, and nothing else is the
-bar), the scope, the accepted rom, the dead ends, and the four rules for
-measuring without fooling yourself. Read it before opening anything else.
+    INTENT.md          what this project is for, and the bar. Stable.
+    STATE.md           what is TRUE RIGHT NOW: the line, the live axis,
+                       what is measured dead, what is already shipped,
+                       the open defects and cards. PRUNED, not appended.
+    LESSONS.md         findings that must never be re-derived, each with
+                       the measurement that established it and what it
+                       cost when it was violated.
 
-`docs/handoff/HANDOFF-PIPELINE.md` — the transport detail behind it.
+Then read `.build_flags`, then `LOOP-PROTOCOL.md` if you are relaying to
+the other thread.
+
+**Do NOT start by reading the logs.** `docs/log/*` (30 files) and
+`docs/handoff/*` (31 files) are HISTORY, not state. They are append-only,
+so the newest entry wins attention over the better-founded older one —
+that is how a month of work got aimed at the wrong axis while the right
+answer sat in `START-HERE.md` unread.
+
+**Run the PREMISE CHECK before proposing anything** (`LOOP-PROTOCOL.md`):
+what the record already says, what flags are on the line, which
+instrument, and whether it is already in MEASURED DEAD. Two cards in one
+week were killed by that check *after* a full costing exercise had begun.
+Both were free to kill at the top.
+
+`docs/handoff/START-HERE.md` is superseded by `STATE.md`. It is kept for
+its transport and rig detail; treat its rankings as history.
 
 ## The scope (2026-09-08)
 
