@@ -56,3 +56,47 @@ change to what the generation does, not a layout change.
 
 ARCHITECTURE.md's S4 pivot is the one thing on the books that does that:
 it removes the work AND the code that does it.
+
+## What the 14 KB IS: tile/plane work, not sprites (2026-09-16)
+
+The decompile thread's three-way test, run. Bucketing _m_main's
+per-generation PCs by source line against a line-mapped build:
+
+    src lines      bytes    %WS   instr%   what
+    3200-3249        400   3.0%   27.63%   bm_scan_rows -- "scan nr
+                                           TILEMAP ROWS of (which, aset)"
+    15300-15849    1,872  14.2%   ~18%     the NAME-TABLE pass in m_main
+    3497-4100      1,200   9.1%    ~9%     bm_tail_body, the band tail
+    4507+            256   1.9%    0.53%   apply_cram
+    2004/2061/3107   ~1.5K 11%     ~2%     frt, diag_add, decode_pages
+
+**And the sprite compositor is not in the master's per-generation set at
+all:**
+
+    _compose_pass         no
+    _slave_concurrent_k   no
+    _compose_sprites      no
+    _spr_draw             no
+
+Because compose runs on the SLAVE. The master's 14 KB is tilemap
+scanning, map building, the name-table walk and shipping.
+
+**So the answer is the thread's second branch: still tile/plane work, and
+there IS room.** S4 moved the PLANES to the MD VDP -- and the master
+still walks the tilemap every generation to decide what to ship. The
+single hottest thing in the whole master is bm_scan_rows at 27.6% of
+_m_main's instructions in 400 bytes, and its own comment says it scans
+tilemap rows.
+
+That is not a contradiction of S4 being on the line. S4 moved where the
+pixels are DRAWN. It did not move the per-generation decision work that
+feeds the MD: which sets are needed, which cells changed, what to ship.
+That work is proportional to the tilemap, it runs every generation, and
+it is most of the master's footprint.
+
+**The named target is therefore the tilemap scan/ship path, not a layout
+change and not the sprite path.** Whether it can be made incremental --
+scanning only what changed rather than the viewport every generation --
+is the question a card should ask. bm_scan_memo (3177) and the TAGKEEP
+"land where you were" path (2770-2790) suggest that idea already has
+partial machinery here.
