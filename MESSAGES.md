@@ -21,6 +21,26 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-5  Scene anchoring -- the gate on BOTH live cards
+    owner        BUILDER
+    state        DESIGN, HIGHEST VALUE
+    premise      O-1 needs it (rig flip rate varies 6x between cold runs
+                 of the same rom). O-2 needs it (frame-indexed capture
+                 puts two roms on different attract content when their
+                 image sizes differ). Two independent cards, one
+                 blocker. Nothing else on the list is unblocked.
+    known        tools/attract_parity.py ALREADY aligns on the game's
+                 own timeline rather than the frame counter
+                 (2026-09-06). tools/gameplay_speed.py refuses windows
+                 that cross a scene because the scene timer at
+                 0xFFF02A restarts. So the anchor exists in one tool
+                 and not in night_run's capture step.
+    ask          (a) read: what does attract_parity.py anchor ON, and
+                     can night_run's shots use the same anchor?
+                 (b) then re-run O-2 against it
+    gate         none for the read.
+
+
 ### O-1  Transport ablation: does reducing LOAD have a slope?
     owner        BUILDER
     state        DESIGN
@@ -35,16 +55,46 @@ arithmetic corrections, or anything ending "no pixel changed."
                      scene-anchored, read on the rig
     gate         rig time -> GATE QUEUE before running
 
-### O-2  Drop TAGKEEP
+### O-2  Drop the TAGKEEP FAMILY  -- BLOCKED on scene anchoring
     owner        BUILDER
-    state        READY TO BUILD
-    premise      [22]=0 [23]=26, 100% MOVED, two independent windows
-                 (this arc + LOOP29 155's "0 of 59"). Its premise is
-                 that a re-assigned set usually lands back on the same
-                 (line, pen map). It never does. It is ON THE LINE and
-                 holds stale references for nothing.
-    ask          build it, read black-tile share against bldS
-    gate         pixel change -> GATE QUEUE when built
+    state        BLOCKED (was READY TO BUILD, which it never was)
+    blocked by   frame-indexed capture cannot compare these two roms.
+                 Same blocker as O-1.
+    built        notag1 = LINE_FLAGS minus TAGKEEP/PENHOLD/PENREPAINT.
+                 rom/night/notag1.32x, reproducible to 3 bytes.
+    what it took (none of which the card knew about):
+      1. mdp_wipe_set_tags was DEFINED inside #ifdef TAGKEEP and CALLED
+         from mdp_assign_set under MD_STATIC && MD_ROUND &&
+         !ASSIGN_NOWIPE. Every TAGKEEP-off build since LOOP29 155 failed
+         to compile. FIXED (scope moved; line build proven identical).
+      2. PEN_HOLD at m_main.c:2622 survives TAGKEEP removal and is a pen
+         leak with no release timeout, so the FAMILY goes, not the flag.
+    result       black_pct f2000/3000/4000:
+                     bldS    4.6 / 4.6 / 4.1
+                     notag1  4.6 / 4.6 / 4.2
+                 FLAT -- but do NOT read that as an answer. At f4000 the
+                 notag1 frame carries a LARGE solid-black silhouette blob
+                 the line does not, and black_pct moved 0.1. The metric
+                 does not resolve the defect it is named for.
+    why the frames cannot be compared at all:
+                 notag1's _end is 0x60168b8 vs the line's 0x6016e38 --
+                 exactly 0x580 = 1408 B = mdp_pend_tag[128] +
+                 mdp_pend_line[128] + mdp_pend_map[1024] +
+                 mdp_pend_used[128]. That shift is 22x the 64 B that
+                 LAYOUTPROBE showed moves the ladder 18 points, and the
+                 capture script is FRAME-INDEXED, so the two roms are at
+                 different points in the attract sequence at "f3000".
+                 The HUD/score/pickups visible in notag1 and absent in
+                 bldS are that divergence, NOT a fix. Nearly escalated
+                 as one.
+                 (The 1.45 MB `diff_bytes_vs_base` is the same 1408 B
+                 shift displacing the tail. The bake is byte-identical
+                 between the two flag sets -- checked, all 7 generated
+                 artifacts. night_run's "~1.3 MB = stale bake" rule is
+                 only valid for SAME-flag comparisons.)
+    ask          scene-anchored comparison. Until that exists this card
+                 cannot be answered, and neither can O-1.
+    gate         none yet. Nothing to show Mike: no comparable pixel.
 
 ### O-4  NTSKIP correctness (not a speed card any more)
     owner        BUILDER, design from DECOMPILE note 119

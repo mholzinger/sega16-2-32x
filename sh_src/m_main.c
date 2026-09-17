@@ -2536,6 +2536,13 @@ static uint8_t mdp_pend_tag[128];
 static uint8_t mdp_pend_line[128];
 static uint8_t mdp_pend_map[128 * 8];
 static uint8_t mdp_pend_used[128];
+#endif  /* TAGKEEP -- the pend_* arrays are TAGKEEP's. The wipe below is NOT. */
+/* mdp_wipe_set_tags MUST NOT be inside #ifdef TAGKEEP: mdp_assign_set calls
+ * it at m_main.c:2974 under MD_STATIC && MD_ROUND && !ASSIGN_NOWIPE, none of
+ * which imply TAGKEEP. It was defined inside the TAGKEEP block from LOOP29
+ * 155 until 2026-09-16, so every TAGKEEP-off build since then failed to
+ * compile ("implicit declaration of mdp_wipe_set_tags") -- which is why the
+ * TAGKEEP family had never actually been measured off. */
 static void mdp_wipe_set_tags(unsigned s)
 {
     for (int i = 0; i < NSETS * NWAYS; i++)
@@ -2558,7 +2565,6 @@ static void mdp_wipe_set_tags(unsigned s)
 #endif
         }
 }
-#endif
 static void mdp_free_set(unsigned s)
 {
 #ifdef CHEV_FIX

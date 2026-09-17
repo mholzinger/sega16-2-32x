@@ -3,9 +3,9 @@
 
 *** VOID -- THE PLANE LABELS IN THIS FILE ARE INVERTED (2026-09-14). ***
 Pages 0-4 are the FOREGROUND and 5-9 the BACKGROUND, not the reverse.
-Measured, not argued: latch_layer_regs (m_main.c:2909) fills snap[0]
+Measured, not argued: latch_layer_regs (m_main.c:3103) fills snap[0]
 from text word 0x740 and snap[1] from 0x741, the punch pass takes
-snap[0] as fg (m_main.c:15045), and docs/audit/pagesel_census.txt shows
+snap[0] as fg (m_main.c:15239), and docs/audit/pagesel_census.txt shows
 which0 holding 0-4 and which1 holding 5-9 in every sampled frame.
 bake_cat1hole.py:15-16 had it right all along.
 

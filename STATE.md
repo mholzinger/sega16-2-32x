@@ -94,8 +94,26 @@ costing anything.**
 
 ## OPEN CARDS
 
-    drop TAGKEEP          clean counters, falsified premise, aimed at
-                          the visible black tiles
+    SCENE ANCHORING       the gate on both live cards. O-1 needs it
+                          (6x cold-run variance); O-2 needs it
+                          (frame-indexed capture puts two roms on
+                          different attract content when their sizes
+                          differ). attract_parity.py already anchors
+                          on the game's timeline; night_run's shot
+                          step does not. NOTHING ELSE IS UNBLOCKED.
+    drop the TAGKEEP      BUILT (rom/night/notag1.32x) and BLOCKED.
+    FAMILY                Not one flag: PEN_REPAINT and PEN_HOLD@16264
+                          are nested inside TAGKEEP and die with it,
+                          but PEN_HOLD@2622 survives as a pen leak, so
+                          the family goes together. It had NEVER
+                          COMPILED -- mdp_wipe_set_tags was defined
+                          inside #ifdef TAGKEEP and called from
+                          mdp_assign_set outside it (fixed 2026-09-16,
+                          line build proven identical).
+                          black_pct 4.6/4.6/4.1 -> 4.6/4.6/4.2, but
+                          that is NOT an answer: it removes 1408 B of
+                          .bss, and frame-indexed captures of two roms
+                          of different size are different content.
     NTSKIP correctness    per-set push key: fold mdp_s_stmp for the
                           sets a row HOLDS, not allocator state per
                           row. 665 assigns / 800 frames means most of
@@ -145,3 +163,15 @@ costing anything.**
                           masking on mdp_line_c != 0xFFFF.
     state_health.py       needs a .bs1; headless ares writes none.
                           Use the --dump rebuild.
+    black_pct             night_run's frame guard. A WHOLE-FRAME black
+                          fraction, swamped by legitimate black art: a
+                          large silhouette blob at f4000 moved it 0.1.
+                          NOT the instrument for a black-tile card.
+    night_run shots       FRAME-INDEXED. Two roms of different image
+                          size are photographed at different points in
+                          the attract sequence. Diff `_end` before
+                          comparing any two captures.
+    diff_bytes_vs_base    displacement, not divergence. 1.45 MB was one
+                          1408 B shift moving the tail; all 7 generated
+                          artifacts were byte-identical. The "~1.3 MB =
+                          stale bake" rule is SAME-FLAG only.

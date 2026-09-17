@@ -79,6 +79,82 @@ counters count the same UNIT.**
 *Cost:* two debugging cycles before the registries existed, and one
 false "mdp_claim_pen writes no MDA slot" during the census itself.
 
+### Frame-indexed captures cannot compare builds of different SIZE
+
+`LAYOUTPROBE` established it for the speed ladder — 64 B of dead `.data`
+moves the canonical window 18 points, and the memo says why: *"a build
+that falls behind is measured on different content, because the input
+script is frame-indexed."*
+
+**It applies to the SCREENSHOTS too, and that is easier to be fooled by.**
+Dropping the TAGKEEP family removes 1408 B of `.bss` (`_end` 0x6016e38
+-> 0x60168b8 — `mdp_pend_tag` + `_line` + `_map` + `_used` exactly), 22x
+the LAYOUTPROBE step. At "f2000/f3000/f4000" the two roms were at
+different points in the attract sequence: the candidate showed the lives
+HUD, the 50000 high score and pickups, and the line showed none of them.
+
+That reads exactly like a HUD-dropout FIX. It is not a fix. It is two
+roms photographed at different moments, and it was one step from being
+written into the GATE QUEUE as a visible improvement.
+
+*Rule:* before comparing any two captures, diff `_end`. If the images
+differ in size, the capture must be anchored on the GAME's own timeline
+(`tools/attract_parity.py` does this; `night_run`'s shot step does not)
+or the frames are not comparable — and neither is any number derived
+from them.
+
+*Corollary:* `night_run`'s `diff_bytes_vs_base` is displacement, not
+divergence. 1.45 MB between two roms whose generated artifacts are
+byte-identical was one 1408-byte shift moving the tail. The "~1.3 MB =
+stale bake" rule in its header holds only for SAME-flag comparisons,
+which is what it says and not how it reads at 2 a.m.
+
+### black_pct does not resolve the black-tile defect
+
+At f4000 the candidate frame carries a large solid-black silhouette blob
+over the creature that the line frame does not, and `black_pct` moved
+from 4.1 to 4.2. A whole-frame black fraction is swamped by legitimate
+black art; the defect is a share of CELLS.
+
+*Rule:* `black_pct` is a guard, as `night_run`'s own header says
+("Guards only. LOOK AT THEM"). It is not the instrument for a black-tile
+card. Look at the frame, and if a number is wanted, count cells.
+
+### A flag you have never built OFF is not a flag, it is an assumption
+
+`mdp_wipe_set_tags` was DEFINED inside `#ifdef TAGKEEP` and CALLED from
+`mdp_assign_set` under `MD_STATIC && MD_ROUND && !ASSIGN_NOWIPE` — none
+of which imply TAGKEEP. So every TAGKEEP-off build from LOOP29 155 until
+2026-09-16 died with "implicit declaration of `mdp_wipe_set_tags`".
+
+**"Drop TAGKEEP" sat in the card list as READY TO BUILD the whole time,
+and it had never once compiled.** A card is not ready to build until the
+build has been attempted; "it is one flag" is a claim about the
+Makefile, not about the source.
+
+Two more things hid in the same card, both found by reading guards
+before building:
+
+- `PENHOLD` needs `TAGKEEP` and `PENREPAINT` needs both — the Makefile
+  SAYS SO IN A COMMENT and does not enforce it. `PEN_REPAINT` and
+  `PEN_HOLD`'s second site are nested inside `TAGKEEP` and die with it,
+  but `PEN_HOLD` at `m_main.c:2622` is guarded by `PEN_HOLD` alone and
+  SURVIVES — leaving the pen-release skip with nothing to serve and no
+  release timeout. `TAGKEEP=0` alone builds "drop TAGKEEP and keep the
+  pen leak".
+- The falsifying counters `MDA[22]`/`[23]` are outside the `[16]..[21]`
+  collision range, so the falsification is clean. Worth checking, since
+  six neighbouring slots were double-booked.
+
+*Rule:* before costing a flag removal, (1) find the flag's DEFINITIONS
+as well as its uses — a definition inside the block and a call outside
+it is a compile break waiting, and (2) walk the guard stack of every
+site, because a family's members do not all die together.
+
+*Cost:* one build. Cheap only because the failure was immediate; a
+partial family that COMPILES would have produced a measured number for
+a configuration nobody designed.
+
 ### A grep for an array index misses the macro form
 
 `grep 'MDA\[\|MDA_ADD'` finds `MDA_ADD(20, ...)` and misses `MDA(19)`

@@ -53,7 +53,7 @@ SCENE_SETS = _scene_sets()
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
 SCENES, TILES_N, SLOTS = 5, 20480, 16
-# LOOP29 197: THREE, not four. m_main.c:326 sets MDP_LINES 3 by default and
+# LOOP29 197: THREE, not four. m_main.c:473 sets MDP_LINES 3 by default and
 # the fourth line is MDP_LINES4, which carries `#error "MDP_LINES4 takes the
 # MD sprite line for tiles"` against MD_SPR -- and every shipping build has
 # MD_SPR. mdpen_bake has always used NLINES=3, which is why vi39's table
@@ -77,10 +77,10 @@ def w16(rom, o):
 def md(v):
     """System 16 colour word -> MD 3-bit-per-gun triple.
 
-    LOOP29 196: this MUST be the runtime's own mdp_quant (m_main.c:1692):
+    LOOP29 196: this MUST be the runtime's own mdp_quant (m_main.c:1886):
     +2 then >>2, clamped to 7. It used to truncate, which put every table
     colour one step dark -- and because the SH-2's drift check compares a
-    table colour against mdp_quant of the live word (m_main.c:1842,
+    table colour against mdp_quant of the live word (m_main.c:2036,
     2124-2157), a truncated table disagrees with the runtime on 412 of the
     map-referenced pens and is freed and re-claimed.
     """
@@ -95,7 +95,7 @@ def md_word(c):
 
 
 def md_pack9(c):
-    """The 9-bit form mdp_line_c holds (m_main.c:333, built at 1692).
+    """The 9-bit form mdp_line_c holds (m_main.c:480, built at 1692).
 
     LOOP29 196: the emitted round tables used to carry md_word() here, so
     the SH-2 re-read every colour with the wrong field positions -- white

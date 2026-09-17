@@ -9,7 +9,7 @@
 --
 -- S16B map: tilemap page N at 0x400000 + N*0x1000 (0x800 words), text
 -- RAM at 0x410000 (word 0x740 = 0x410E80, matching arcade_pagesel*.lua).
--- Colour set = (w >> 6) & 0x7F, as sh_src/m_main.c:15350.
+-- Colour set = (w >> 6) & 0x7F, as sh_src/m_main.c:15546.
 --
 -- Env: CC_OUT, CC_FRAME (default 700, entry 125's point).
 local out   = os.getenv("CC_OUT") or "/tmp/chevcells.txt"
