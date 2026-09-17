@@ -1955,6 +1955,23 @@ endif
 # owner set it conflicts with [3] on-screen cells naming its slots
 # [4] tiles wiped, then 16 tile codes. That is how you find out whether a
 # freed set owned anything VISIBLE at the moment it was freed.
+# `make ... NTHASH=1` = 2026-09-17. The name table takes 8 of the 9
+# transport phases and re-ships all 2240 cells every rotation, while the
+# tile art the rig census says the black cells are waiting on gets the
+# other 1. Skip the SHIP of a chunk whose payload is byte-identical to the
+# last one shipped for that chunk (sc[5] = 0; the consumer's loop is
+# `i < cnt` so zero is a no-op and the header still lands).
+# NOT NT_SKIP: the walk always runs, so mdp_s_stmp stays fresh and the
+# evict gate is untouched, and the decision is a byte compare of what the
+# walk produced rather than a proxy key that omits allocator state.
+# NTHASHMAXAGE=n forces a ship every n visits (default 32).
+# Counters: DIAG[32] shipped, DIAG[33] skipped.
+ifdef NTHASH
+SHCCFLAGS += -DNT_HASH
+endif
+ifdef NTHASHMAXAGE
+SHCCFLAGS += -DNT_HASH_MAXAGE=$(NTHASHMAXAGE)
+endif
 ifdef MDAWATCH
 SHCCFLAGS += -DMDA_WATCH=$(MDAWATCH)
 endif

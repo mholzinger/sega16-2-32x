@@ -62,6 +62,16 @@ what we work on now, not of what done means.
     triple buffering      the pipeline is already full
     re-timing generally
     SH2_CCTL_TW (card T2)
+    NT ship-skip (NTHASH)  FALSIFIED 2026-09-17 the day it was written.
+                          The NT chunk payload encodes ALLOCATOR SLOT
+                          INDICES, not tile identity, so a visually
+                          static scene still emits a payload that is
+                          almost never byte-identical: 3 chunks skipped
+                          of 2384. The 280-word hash also put master
+                          compute on the window critical path and moved
+                          4900 px at f3000 off three skips. Dedup of
+                          this stream needs a STABLE ENCODING first --
+                          same root as the black tiles.
 
 ## SHIPPED — do not cost these as if they were proposals
 

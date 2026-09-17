@@ -133,8 +133,12 @@ extern const uint16_t altbeast_sprites[];   /* 512K words BE, cart ROM */
  *                                                        NO_ROW_DEFER is on)
  *   30    generation overran a vint              10150    LIVE count
  *   31    late k2 flip latch                     8527    LIVE count
- *   32    rows identical                         7364    probe (ROWSTALE_PROBE)  FREE
- *   33    rows checked                           7363    probe (ROWSTALE_PROBE)  FREE
+ *   32    rows identical                         7364    probe (ROWSTALE_PROBE)
+ *         NT_HASH: cell chunks SHIPPED                   probe (NT_HASH)
+ *   33    rows checked                           7363    probe (ROWSTALE_PROBE)
+ *         NT_HASH: cell chunks SKIPPED                   probe (NT_HASH)
+ *         -- 32/33 taken 2026-09-17. NT_HASH and ROWSTALE_PROBE are never
+ *            built together; if that ever changes, move one pair.
  *   34    md_phase | md_forced<<8               15401    LIVE value
  *         span histogram low                    12215    probe (SPAN_PROBE)
  *   35    *** COLLISION ***
@@ -16227,6 +16231,79 @@ RAMCODE void m_main(void)
 #endif
                     sc[2] = (uint16_t)(cell0 | (isfg ? 0x8000 : 0));
                     sc[5] = (uint16_t)(o - (sc + 8));   /* payload words */
+#ifdef NT_HASH
+                    /* *** FALSIFIED 2026-09-17, THE SAME DAY IT WAS WRITTEN.
+                     * ares, 3000 frames: 2381 chunks shipped, THREE skipped.
+                     * 0%. The premise was "the scene is static (tilemap has
+                     * no in-play writer, camera <= 0.5 px/frame) so the name
+                     * table content is static" -- but the payload does not
+                     * encode TILE IDENTITY, it encodes ALLOCATOR SLOT
+                     * INDICES, and those churn (2767 claims / 3000 frames).
+                     * A visually static scene emits a payload that is almost
+                     * never byte-identical.
+                     * It also COST: the 280-word hash per chunk is master
+                     * compute on the window's critical path, and the picture
+                     * moved 4900 px at f3000 off only three skips -- i.e.
+                     * timing, not the skips. Exactly the "master loop doing
+                     * too much work" failure.
+                     * KEPT, OFF, as the record of why: dedup of this stream
+                     * is impossible until the ENCODING is stable for
+                     * unchanged cells, which is the residency-stability
+                     * problem and the same root as the black tiles.
+                     * DO NOT re-propose NT ship-skipping without fixing that
+                     * first. ***
+                     *
+                     * SHIP-SKIP (2026-09-17). The name table takes 8 of the
+                     * 9 transport phases and re-ships 2240 cells every
+                     * rotation; the rom facts say that content barely moves
+                     * (tilemap static in play, camera <= 0.5 px/frame). The
+                     * rig census says the black cells are waiting on TILE
+                     * art, which gets the other 1 phase. So skip the SHIP of
+                     * a chunk whose payload is unchanged and leave the
+                     * window's bandwidth to tiles.
+                     *
+                     * WHY THIS IS NOT NT_SKIP. NT_SKIP skips the WALK on a
+                     * proxy KEY (scroll | pages | content gen) that does NOT
+                     * fold allocator state, so a skipped row keeps a stale
+                     * slot reference and those cells go black (card O-4) --
+                     * and skipping the walk also stops mdp_s_stmp being
+                     * refreshed (15897), which ages the row's sets past the
+                     * age>=12 evict gate (3157) and reassigns the very slots
+                     * the skipped cells name.
+                     * Here the WALK ALWAYS RUNS: stamps stay fresh, the
+                     * allocator is untouched, and the decision is a
+                     * byte-exact compare of the payload the walk just
+                     * produced. A reassignment changes the entry, which
+                     * changes the hash, which forces the ship. Correct by
+                     * construction rather than by trusting a key.
+                     *
+                     * BOUNDED STALENESS, same reasoning as NT_MAXAGE: FB
+                     * reads have come back stale on the FPGA where ares
+                     * reads them true, so a skip that never expires is how
+                     * a lost change-signal looks. Force a ship every
+                     * NT_HASH_MAXAGE visits. */
+#ifndef NT_HASH_MAXAGE
+#define NT_HASH_MAXAGE 32
+#endif
+                    {
+                        static uint32_t nth_h[9];
+                        static uint8_t  nth_age[9], nth_seen[9];
+                        unsigned ci = md_phase;             /* 1..8 */
+                        unsigned nw = (unsigned)(o - (sc + 8));
+                        uint32_t h = 2166136261u;
+                        for (unsigned q = 0; q < nw; q++)
+                            h = (h ^ (uint32_t)sc[8 + q]) * 16777619u;
+                        if (nth_seen[ci] && nth_h[ci] == h
+                            && nth_age[ci] < NT_HASH_MAXAGE) {
+                            nth_age[ci]++;
+                            sc[5] = 0;                      /* header only */
+                            DIAG[33]++;                     /* chunks SKIPPED */
+                        } else {
+                            nth_h[ci] = h; nth_seen[ci] = 1; nth_age[ci] = 0;
+                            DIAG[32]++;                     /* chunks SHIPPED */
+                        }
+                    }
+#endif
 #ifdef MD_ALLOC_WHY
                     MDA(35); MDA_ADD(36, sc[5]);         /* NOTES 51: cell chunks, their words.
                                                       * WAS [19]/[20] -- collided with
