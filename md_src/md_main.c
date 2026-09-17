@@ -2083,8 +2083,13 @@ static void r60_push(void) {
 		uint8_t n3 = (uint8_t)((tw >> 8) & 3);
 		uint8_t c3 = (uint8_t)((tw >> 10) & 3);
 		uint8_t d3 = (uint8_t)(((tw >> 12) & 1) | (((tw >> 14) & 1) << 1));
-		uint8_t p0 = d3;
-		uint8_t p2 = (uint8_t)(0x80 | (n3 << 3) | (c3 << 1));
+		/* ALL THREE IN p2, p0 = 0. The instrument paints d = p2 - p0
+		 * (a SPAN), so splitting independent counters across p0 and p2
+		 * aliases them: the first cut read 0x80 for both (0,0,0) and
+		 * (0,1,2) and could not rank anything. bias<<7 | n<<4 | c<<2 | d
+		 * fits all six bits under the bias and decodes uniquely. */
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)(0x80 | (n3 << 4) | (c3 << 2) | d3);
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */
