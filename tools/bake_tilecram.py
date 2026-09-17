@@ -133,16 +133,33 @@ def worst_viewport(words, cols):
     all pages is close to page 0's, so the union is what gets packed;
     anything that will not fit overflows to the framebuffer as before.
     The name is kept so the callers do not move."""
-    global CELLS
+    global CELLS, PEN0_WANT
     CELLS = {}
+    PEN0_WANT = set()
+    # PEN 0 (2026-09-17): md_emit_art's FG variant forces pixel value 0 to
+    # transparent; its BG variant looks map[0] UP. So a set with BG cells
+    # whose ART contains pixel value 0 needs a real slot at pen 0. Decide it
+    # here, where the walk already knows which plane a cell is on.
+    try:
+        _art = open(os.path.join(ROOT, 'sh_src', 'tiles.bin'), 'rb').read()
+    except OSError:
+        _art = b''
     for page in list(range(FG_PAGE, FG_PAGE + 5)) + list(range(BG_PAGE, BG_PAGE + 5)):
+        bg = page >= BG_PAGE
         for t in words[page * 2048:(page + 1) * 2048]:
             if t & 0x1FFF:
-                CELLS[(t >> 6) & 0x7F] = CELLS.get((t >> 6) & 0x7F, 0) + 1
+                st = (t >> 6) & 0x7F
+                CELLS[st] = CELLS.get(st, 0) + 1
+                if bg and _art:
+                    c = t & 0x1FFF
+                    if 0 in _art[c * 64:c * 64 + 64]:
+                        PEN0_WANT.add(st)
     return sorted(p for p in CELLS if len(cols(p)) > 0)
 
 
 CELLS = {}                      # set -> cells on the level, from worst_viewport
+PEN0_WANT = set()               # sets whose BG art uses pixel value 0
+PEN0_COL = {}                   # set -> its S16 colour 0, in MD format
 
 
 def pack(pal, cols, order, overflow=None):
@@ -234,6 +251,7 @@ def main():
                     # trees pink and banded its sky. Tally the per-pixel
                     # vectors and take the MODE below.
                     px.setdefault(pp, {})
+                    PEN0_COL.setdefault(pp, md(w16(d, pp * 16)))
                     key = tuple(md(w16(d, pp * 16 + 2 * k))
                                 for k in range(1, 8))
                     px[pp][key] = px[pp].get(key, 0) + 1
@@ -419,6 +437,35 @@ def main():
                 s_line[pp] = li + 1
                 s_used[pp] = 0xFE
                 s_map[pp] = [0] + list(slots)
+                # PEN 0 ON THE BACKGROUND (2026-09-17). md_emit_art has two
+                # variants: the FG one forces pixel value 0 to output 0
+                # (transparent), the BG one looks map[0] UP. So a set with BG
+                # cells whose art contains pixel 0 needs a real slot there,
+                # and this bake left it at 0 -- measured: the live map
+                # differs from this table in exactly 5 bytes, all pen slot 0
+                # of BG sets 92/93/95/96/97, and the runtime fills them by
+                # claiming whatever pen happened to be FREE (set 95 got slot
+                # 15, which holds 0xFFFF = unused; sets 92/93 got slot 9,
+                # nowhere near their colour 0). That is allocation history,
+                # so it is neither reproducible nor right.
+                # The lines have no room for another colour -- they pack to
+                # 14-15 of 15 and round 4 already overflows 11 sets -- so
+                # SHARE: point pen 0 at the nearest colour already on the
+                # set's line. Deterministic, costs no slot, and closer to
+                # the S16 colour than what ships.
+                if pp in PEN0_WANT:
+                    c0 = PEN0_COL.get(pp)
+                    if c0 is not None:
+                        seg = list(line_words[li])   # lc_all is a LIST OF LINES, not flat
+                        def _d(w):
+                            # md() yields a 3-bit (r,g,b) TRIPLE, and an
+                            # unused slot is None. Manhattan in MD space.
+                            if w is None:
+                                return 1 << 20          # empty: never nearest
+                            return (abs(w[0] - c0[0]) + abs(w[1] - c0[1])
+                                    + abs(w[2] - c0[2]))
+                        s_map[pp][0] = min(range(len(seg)), key=lambda i: _d(seg[i]))
+                        s_used[pp] |= 1
             sl_all.append(s_line); su_all.append(s_used); sm_all.append(s_map)
             lc_all.append(line_words)
             print('  emit-mds: round %d -> %d sets pinned, lines %s'
