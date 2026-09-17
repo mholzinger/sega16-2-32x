@@ -10359,3 +10359,100 @@ invalidation condition.**
 **This is the first time the bar has a named target with a measured
 lever behind it.** 27.6% of the hottest function's instructions, gated on
 a condition that is false 15 times in 16.
+
+## 177. GAPS 1 AND 2 CLOSED FROM ROM: vertical scroll is the CONSTANT 0x20 for the whole game, and 0.5 px/frame is the only non-zero camera speed in the binary. The invalidation condition has no vertical term at all (2026-09-16)
+
+### The builder's correction first, and it is the second in two messages
+
+`bm_scan_rows` is **0.00% of instructions in gameplay** -- it does not
+run. `bm_scan_baked_ok` passes eligibility under `MD_STATE_PLAY`, so
+SET_COLS already replaces it, and my entry 176 card **was already
+shipped.** The 27.6% was an attract artefact.
+
+**That is the second card in two messages that turned out already spent,
+and both were caught by checking rather than recalling.** Their rule --
+*"profile gameplay first from now on; every number I gave you this week
+came from an attract window"* -- is the right one and it is theirs.
+
+The real gameplay target is the **name-table pass**, 1,792 B and ~21% of
+instructions, answering *"which cells changed and what must ship"* --
+a different question from SET_COLS' *"which sets does this viewport
+hold"*, and not covered by it.
+
+### GAP 2: CLOSED. 0.5 px/frame is the only non-zero camera speed in the rom
+
+`unk_FFF158` has exactly four writers:
+
+    0x09E0   move.w (a0,d0.w),(unk_FFF158).w   <- the table at 0x1878
+    0x06E0   move.w d0,...   with d0 = 0       (moveq #0,d0 at 0x06CE)
+    0x1F0C   move.w d0,...   with d0 = 0       (moveq #0,d0 at 0x1F0A)
+    0x1F9A   move.w d0,...   with d0 = 0       (moveq #0,d0 at 0x1F98)
+
+**Three of the four write zero.** The table at 0x1878 is the only source
+of a non-zero camera velocity anywhere in the binary, it is indexed by
+`active_enemies` and not by round, and its maximum entry is 0x0080 =
+**0.5 px/frame**.
+
+**So the >= 16 generations per new column bound holds for every round and
+every screen. There is no faster path.**
+
+### GAP 1: CLOSED, and harder than I expected. Vertical scroll NEVER CHANGES
+
+`world_yposition` (0xFFF136) has **four writers and all four write the
+same immediate**:
+
+    0x0070A   move.w #$1020,(world_yposition).w
+    0x01F22   move.w #$1020,(world_yposition).w
+    0x01FB0   move.w #$1020,(world_yposition).w
+    0x1A452   move.w #$1020,(world_yposition).w
+
+No accumulator, no velocity, no read-modify-write -- and the xref list on
+the WORKRAM definition names no others. Then at 0x39EE:
+
+    039EE  move.w  (world_yposition).w,d0    ; always 0x1020
+    039F2  subi.w  #$1000,d0                 ; -> 0x0020
+    039F6  move.w  d0,(word_FFF128).w
+    039FA  move.w  d0,(word_FFF12C).w        ; constant 0x0020
+
+and `unk_FFF0E6` has exactly **one** writer, `move.w #0` at 0x050A, so
+at 0x3A62:
+
+    03A62  move.w  (unk_FFF0E6).w,d0   ; 0
+    03A66  add.w   (word_FFF12C).w,d0  ; + 0x20
+    03A6A  andi.w  #$FF,d0             ; = 0x20
+    03A6E  move.w  d0,(unk_FFF0E8).w
+    03A72  move.w  d0,(unk_FFF0EA).w
+
+**Vertical scroll is the constant 0x20 on both planes, in every round,
+for the entire game.**
+
+### What that does to the card
+
+**The invalidation condition has no vertical term.** The name-table
+walk's row content is fixed for the whole game; only the horizontal
+phase can change it, and that changes at most once per 16 generations.
+
+    rescan iff (xs >> 3) != (prev_xs >> 3)
+
+**One comparison, one scalar, no vertical, no dirty tracking** -- and
+`m_main.c:3199`'s *"Tile RAM has no in-play writer"* is what makes it
+safe rather than merely fast.
+
+I expected gap 1 to be *"likely near-static, needs measuring"*. **It is
+not near-static. It is a compile-time constant that four sites write
+identically and nothing ever increments.**
+
+### What I have NOT closed
+
+**The name-table walk may depend on more than scroll.** The builder
+closed that gap for `bm_scan_rows` (snap + TILEMAP_C, no allocator
+state); **the same read has not been done for the walk at 15300-15849,
+and it is their function.** If the walk's output depends on allocator or
+palette state, the 8-pixel gate is necessary but not sufficient -- the
+identical caveat as before, on a different function.
+
+And they name the thing to read first: **`nt_key` / `nt_gen` / `nt_win`
+at 15455-15459 already memoise per row index. Why that is not already
+collapsing the walk is the question to answer before designing a
+replacement** -- it may be that the memo is correct and its key is too
+weak, which would make this a one-line change rather than a card.
