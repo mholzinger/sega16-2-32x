@@ -145,3 +145,47 @@ row index.
 
 That is the target, and it is a different function from the one note 115
 named.
+
+## NT_SKIP: BUILT, MEASURED, KILLED -- ON ARES, BEFORE THE CRITICAL-PATH
+## CORRECTION (2026-09-16)
+
+The memo the thread pointed at is `NT_SKIP`, and it is NOT on the line.
+It is not an omission: LOOP29 177 (2026-09-11 18:20) killed it.
+
+That entry is worth reading in full. Its own "91.4% skipped" was a
+counter collision -- NTS at 0x28FD0 overlapped the band-deferral block --
+and read correctly the flag was doing NOTHING (0 skips in 23,800 walks),
+for two reasons since fixed in the source: tm_gen was global, and
+NT_MAXAGE could never be satisfied. With both fixed:
+
+    NTMAXAGE=64    63.9% skipped     21% single-vint
+    NTMAXAGE=200   67.5% skipped     21% single-vint
+    (zero skips)    0.0% skipped     20% single-vint
+
+"Skipping two thirds of the name-table walk buys ONE POINT."
+
+**But measured in gameplay, the name-table walk is 34.45% of the master's
+instructions** (2-frame window at f3000, 186,886 of 542,462), and
+build_maps_chunk -- which 177 names as "the real 0.44" -- is **0.03%**.
+So 177's closing attribution is backwards for gameplay.
+
+**And the ranking that killed it was an ARES ranking.** On ares the wall
+is max(echo, mtask) and echo wins, so the SLAVE reads as the critical
+path and removing master instructions cannot move the number. On the rig
+the master never waits for the slave, so the MASTER is the critical path.
+That correction is LOOP29 294, dated 2026-09-14 -- THREE DAYS AFTER 177
+killed NTSKIP on the earlier understanding.
+
+So NTSKIP was ranked on the machine where its target is off the critical
+path, and buried at one point. It deserves re-ranking on the rig, which
+is the only instrument that prices master instructions at all.
+
+Everything it needs is already in place: the flag exists, both of 177's
+bugs are fixed in the source, NT_MAXAGE is bounded (which addresses the
+unbounded-skip corruption Mike saw on vi20), and NBUILD1 -- the brake for
+the transport flood NTSKIP causes -- is already ON the line.
+
+    make line NTSKIP=1 NTMAXAGE=64 BOOTFLIPRATE=1
+
+against the same flag set without NTSKIP, ranked on the rig's presented
+frames per 64 vints. That is the card.
