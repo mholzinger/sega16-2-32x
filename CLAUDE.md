@@ -44,8 +44,17 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
-## START HERE — read these three, in this order, and nothing else
+## START HERE — read these four, in this order, and nothing else
 
+    docs/design/REBUILD.md
+                       THE PLAN OF RECORD. "the 60Hz arcade-perfect
+                       architecture", 2026-08-21: the target
+                       architecture, the phase sequence P1-P5, the
+                       risk register, and WHAT BURNS. Read §0-§6 (the
+                       first 204 lines); everything after that is the
+                       execution log. If a card is not moving a phase
+                       of this document forward, say so out loud
+                       before building it.
     INTENT.md          what this project is for, and the bar. Stable.
     STATE.md           what is TRUE RIGHT NOW: the line, the live axis,
                        what is measured dead, what is already shipped,
@@ -237,8 +246,12 @@ against.
 
 ## Where things are written down
 
+- `docs/design/REBUILD.md` — THE PLAN OF RECORD (§0-§6; the rest is
+  its execution log). The target architecture, phases P1-P5, and the
+  BURNS list. Was missing from this file until 2026-09-17, and a full
+  day was spent optimising machinery §5 says to delete.
 - `ARCHITECTURE.md` — how the 32X library draws a frame, where this
-  port sits, and the pivot. Start here.
+  port sits, and the pivot.
 - `docs/design/SILICON.md` — what makes the port run on REAL 32X
   hardware: the slave SDRAM warm-up, the FM=1 framebuffer rule, the FB
   packet transport, the probe rig and its traps. Every claim carries the
