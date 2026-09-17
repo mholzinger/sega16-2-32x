@@ -616,3 +616,42 @@ distinct colour (2 -> 3) came from emptiness, not from correctness.
 there the sets really do own eight pens with distinct pixel indices, which
 is the state the diff was meant to interrogate. Re-run the seven-value
 diff against chevfix, not chevfix2.
+
+## THE DIFF AGAINST CHEVFIX: also zero. And PEN_HOLD is ON.
+
+Flags: `-DPEN_HOLD -DPEN_REPAINT -DTAGKEEP` are all in .build_flags, so
+the decompile thread's warning applies in full -- mdp_free_set:2428 does
+NOT release the refcount, and free-then-assign is not
+release-then-claim.
+
+chevfix at f1575, owner read only where line_c != 0xFFFF (the mask rule):
+
+    pens owned by 19/20/21 with a live colour:  NONE
+    of set20/21's six wanted values, missing:   ALL SIX
+
+So chevfix has the same end state as chevfix2 on this measure. **That
+retracts my "the zigzag draws because the sets got exclusive pens"
+reading.** The geometry did change -- the zigzag and the ornaments are
+visibly present where bldS is flat -- but NOT because sets 19/20/21 hold
+correct exclusive pens, because at the sampled frame they hold none.
+
+What (a) and (b) actually did to produce that picture is not established.
+The honest state is: the picture changed, the mechanism I claimed for it
+is disproved, and the seven-value diff finds nothing to diff.
+
+## STOPPING THIS SCREEN
+
+Three self-corrections in three messages, and the last two were reporting
+improvements that the next read disproved. The bar is MOTION 9.3 fps
+against 60, and _m_main is 27,072 bytes of hot code against a 4 KB cache.
+This screen is a visible defect; it is not the bar. Parking it here with
+the state recorded, per the decompile thread's recommendation and my own.
+
+What a future session needs to know:
+  - bldS at f1575 DOES show 19/20/21 owning eight pens, all holding
+    0x0007. That dump is real and is the anomaly to explain.
+  - CHEVFIX (a) forces branch 2, (b) holds against eviction, (c) is
+    broken and fights (b). All behind CHEVFIX=1, none on the line.
+  - PEN_HOLD means a free reserves rather than releases; any re-claim
+    design must account for that first.
+  - Never read mdp_pen_own without masking on mdp_line_c != 0xFFFF.
