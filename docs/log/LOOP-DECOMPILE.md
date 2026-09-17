@@ -10630,3 +10630,87 @@ corruption on the line today, and the 4.8% has a named cause.
 it** -- but unlike the last five it costs one counter read of something
 already instrumented, and it is pointed at a defect Mike can see rather
 than at a flip rate.
+
+## 180. TAGKEEP is FALSIFIED and should go -- but the pen-starvation number is VOID: MDA[19] and [20] are double-booked, and [20] is a WORD ACCUMULATOR from the cell-chunk shipper (2026-09-16)
+
+### Lever 1 is clean and I would build it
+
+    [22] TAGKEEP deferred wipe SAME     0
+    [23] TAGKEEP deferred wipe MOVED   26
+
+Single writers, `m_main.c:2979` and `:2980`, nothing else touches either
+index. **100% MOVED**, and it reproduces LOOP29 155's independent "0 of
+59" on a different build over a longer window.
+
+**TAGKEEP's entire premise is that a re-assigned set usually lands back
+on the same (line, pen map) so the wipe can be skipped. Two independent
+measurements say it never does.** It defers a wipe that is always needed
+and pays the staleness window for nothing, and it is on the line.
+
+**Build it. Falsified premise, two windows, zero wins.**
+
+### Lever 2's number cannot be read, and it is structurally impossible
+
+    [19] burned set claiming a pen        218
+    [20]  ... with NO exclusive pen    23,038
+
+`mdp_claim_pen:2497-2502`:
+
+    if (mdp_s_vol[s] >= 2) {
+        MDA(19);
+        if (!freepen) MDA(20);
+        if (pen16)    MDA(21);
+    }
+
+**[20] is strictly inside the `if` that increments [19], so [20] <= [19]
+by construction. 23,038 > 218 is impossible.**
+
+The cause, `m_main.c:15989`:
+
+    MDA(19); MDA_ADD(20, sc[5]);   /* NOTES 51: cell chunks, their words */
+
+**A completely different measurement shares both indices, and `MDA_ADD(20,
+sc[5])` accumulates a PAYLOAD WORD COUNT.** So 23,038 is mostly words
+shipped by the cell-chunk path, not failed exclusive claims, and 218 is
+burned-set claims mixed with cell chunks.
+
+**The pen-starvation finding is void. "28.8 failed exclusive claims a
+frame" is a word count.**
+
+**[21] = 0 survives** -- single writer at 2501 -- so *"zero shareable
+matches among burned sets"* is real. **But with no trustworthy
+denominator it reads "0 of unknown", and it cannot carry a card.**
+
+### This is the same bug the builder caught in DIAG[36], and it is now systemic
+
+`m_main.c:15023` makes `r60_pkt_flip` the low bit of `DIAG[36]`, which is
+also the nearest-colour fallback counter. Now MDA[19]/[20]. **Two
+counter-index collisions found in two weeks, in two different blocks.**
+
+**The memory map at `m_main.c:1329` is the authority for scratch
+addresses -- the builder's own rule after two dead scratch blocks. There
+is no equivalent for counter indices, and that is exactly why these
+collide.** A registry comment listing every MDA and DIAG index with its
+owner would have prevented both, and it is cheaper than either
+debugging session was.
+
+**Eighth instrument in this arc to mislead. I caught this one
+structurally -- a subset counter exceeding its parent -- rather than by
+suspecting anything, which is the only reason it was cheap.**
+
+### The call
+
+  1. **Drop TAGKEEP.** Clean counters, falsified premise, aimed at
+     Mike's visible defect.
+  2. **Do NOT build lever 2.** Move the pen-starvation counters to free
+     indices and re-run; the question is still good and the number is
+     not.
+  3. **Write the counter registry** while the two collisions are fresh.
+
+### And their sizing number stands
+
+**665 assigns in 800 frames, ~0.83/frame, against 56 rows.** Only rows
+holding a re-assigned set lose their skip, so **most of the 84.7% should
+survive a per-set generation fold.** Single writer at 2452 (`MDA(13)`),
+nothing else touches index 13. **The push design holds and the number
+supports it.**
