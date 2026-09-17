@@ -10714,3 +10714,75 @@ holding a re-assigned set lose their skip, so **most of the 84.7% should
 survive a per-set generation fold.** Single writer at 2452 (`MDA(13)`),
 nothing else touches index 13. **The push design holds and the number
 supports it.**
+
+## 181. The bounding run should be NTKEY8, which is ALREADY BUILT. Wrong pixels disqualify it as a candidate and qualify it as an ablation -- it is an upper bound on the whole card, available with no new rom (2026-09-16)
+
+### The builder's framing is right and the gap is real
+
+**There is no speed bounding number.** MOTION 9.3 against 60. The
+recorded 58.3 fps ceiling (START-HERE:166) came from ablating the maps
+drain and the sprite compose **on ares** -- and compose runs on the
+SLAVE, which is ares' critical path. **On the rig the master is.** So
+that 58.3 bounds a machine we do not run on, and they are right to
+discount it.
+
+And the honest gap they name: **nobody has measured what removing master
+instructions does to the rig's flip rate.** No slope. Every card this
+week -- cache, CACHELOCK, the split, NTSKIP -- was ranked on ares or on
+nothing.
+
+### But the ablation rom exists
+
+**`NTSKIP + NTKEY8, MAXAGE=64` skips 84.7% of the name-table walk and is
+already built.**
+
+They held it back because it drops tiles -- *"a flip rate from a rom that
+drops tiles prices a machine doing less work than a correct one."* **That
+reasoning is exactly right for ranking a CANDIDATE and exactly backwards
+for taking a BOUND.**
+
+    as a candidate   disqualified -- wrong pixels, cannot ship
+    as an ablation   ideal -- it is a rom doing 84.7% less of the
+                     specific work in question, which is what an
+                     ablation IS
+
+**It gives an UPPER bound on the entire card**, because a correct NTSKIP
+skips strictly less than a broken one (allocator-dirty rows must
+re-walk). **That is the number Mike asked for, and it needs no new rom
+and no deliberately-broken build.**
+
+### Read it as a slope with one confound named
+
+Stubbing or skipping the walk removes **both** the master's instructions
+and the MD transport those rows would have carried. **So the slope is
+"walk removed -> flip rate", not "master instruction removed -> flip
+rate."** The two are coupled by design and cannot be separated by this
+experiment.
+
+**That is fine for the decision it informs** -- *is the name-table work
+worth attacking* -- and it should not be quoted as an
+instructions-to-frames constant. Naming it now so it does not become the
+ninth instrument to be believed past its scope.
+
+### The branches, and both are decisive
+
+    FLAT        the master is not the rig's constraint either, and this
+                week's entire premise is wrong. Worth knowing before
+                another card, and it would redirect the project.
+
+    STEEP       NTSKIP's 32% has a number attached, the correctness work
+                is justified, and the per-set push key is the next build.
+
+**Either outcome bounds the next month, which is what Mike is actually
+asking for.**
+
+### And if it comes back flat, the next question is already framed
+
+The ares 58.3 came from ablating **slave** work. If the rig is also
+insensitive to master instructions, **then neither processor's compute is
+the rig's wall, and the remaining candidate is the transport** -- which
+is the one thing this week never measured and the one thing `NBUILD1`
+exists to brake.
+
+**I am not proposing that as a card.** It is where the reading would go,
+and saying so now costs nothing.
