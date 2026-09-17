@@ -10786,3 +10786,86 @@ exists to brake.
 
 **I am not proposing that as a card.** It is where the reading would go,
 and saying so now costs nothing.
+
+## 182. FLAT confirmed, the week retires -- and the transport ablation has ALREADY BEEN RUN. NBUILD1 off is 0.33 fps against 9.3: a 28x sensitivity on the one axis nobody measured (2026-09-16)
+
+### The result
+
+    baseline                          n=6   median 29.5   range 23-42
+    ablation, 84.7% of walk skipped   n=8   median 24.5   range  9-55
+
+**Removing 84.7% of the name-table walk did not raise the flip rate**, and
+it is an upper bound because a correct skip skips strictly less. Two
+ablations now, one per processor, both flat on the machine that prices
+them: **neither SH-2's compute is the wall.**
+
+**That retires the week on measurement**: CACHELOCK, the footprint split,
+NT_SKIP, my `__ramtext_size` correction (entry 152), the working-set
+baseline, and the split card. All premised on master compute mattering.
+
+### The variance should be understood before the project turns on it
+
+**The ablation ranges 9 to 55 on one rom.** That is a 6x spread on cold
+runs, and the baseline spreads 23 to 42. **A flip rate that varies 6x
+between cold runs of the same binary is a distribution with a driver, not
+a measurement.**
+
+The conclusion is very likely right -- two independent ablations on two
+processors agreeing is strong convergent evidence, and I have been wrong
+six times this week against this builder's numbers. **But if the rig's
+flip rate is this noisy, the TRANSPORT ablation will produce the same
+unreadable result**, and that one has no second processor to
+cross-check it.
+
+**Worth one question before the next run: what makes a cold run vary 6x?**
+If it is scene load, then a median over mixed scenes compares workloads
+rather than roms, and the fix is scene-anchoring, not more samples.
+
+### The transport slope is already in the record
+
+`docs/handoff/START-HERE.md:169-171`:
+
+    **`NBUILD1` is MANDATORY** (without it the rig is 0.33 fps and ares
+    sees a 10% difference)
+
+**0.33 fps against the line's 9.3. That is a 28x swing from one transport
+flag** -- measured, on the rig, and sitting in the handoff file the whole
+time.
+
+    master compute ablated    flat
+    slave compute ablated     flat (ares' 58.3 was slave work, and ares
+                              prices the slave -- it moved there and
+                              nowhere else)
+    transport, NBUILD1 off    28x
+
+**The one axis nobody measured this week is the only one with a
+demonstrated slope, and it is the largest single number in the record.**
+
+### The caveat, stated plainly so it is not over-read
+
+**Removing a brake and reducing load are not the same thing.** NBUILD1
+off proves the transport can be *broken* catastrophically -- that the
+pipeline is fragile at that point and something there binds. **It does
+not prove that reducing transport work makes it faster.** The 28x is
+evidence of where the sensitivity lives, not a promise of headroom.
+
+**But it is the strongest available reason to point the next ablation at
+the transport rather than anywhere else**, and it costs nothing to read
+because it was already written down.
+
+### What the transport ablation should be
+
+Their instinct is right and LOOP29 170's signature supports it: *making
+the producer faster starved the consumer, handler 58.3 -> 84.2 lines,
+nopost 315 -> 2,766.* **A pipeline where speeding the producer makes
+things worse is limited downstream.**
+
+Design note, same discipline as entry 181: **an ablation that removes
+transport work removes it in both directions at once.** Ship fewer cells
+and the master also does less compute -- the two are coupled exactly as
+the name-table walk was. **This time the confound runs the other way and
+the compute half is already known flat**, which makes the attribution
+cleaner than it was for NTSKIP.
+
+**Scene-anchor it, and fix the 6x variance first or it will not be
+readable.**
