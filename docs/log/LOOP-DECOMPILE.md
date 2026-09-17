@@ -10169,3 +10169,92 @@ written.** Worth checking before building it, not after -- it is a
     `PEN_HOLD`'s semantics accounted for.
   * **The bar has still not moved: 27,072 bytes against 4 KB, MOTION 9.3
     against 60.**
+
+## 175. S4 IS NOT PARKED -- it is ON THE LINE. The 14,304 B baseline was measured on a build that already has it, so costing S4 against that baseline would be costing a card already spent (2026-09-16)
+
+### The builder's question
+
+*"Do you want me to cost it out against this baseline -- what it removes
+from the 14 KB and what that does to the 3.5x -- or is there a reason
+it's been parked that I should read first?"*
+
+**I checked rather than recalled, and the answer is the second one.**
+
+### `.build_flags` on the line
+
+    -DMD_BG        BG plane on the MD VDP
+    -DMD_BG_FG0    FG cat-0 on the MD VDP
+    -DC1_NOFB      the framebuffer cat-1 pass DELETED
+    -DC1_PUNCH     sprite pixels suppressed under cat-1 cells
+    -DC1_STAMP     per-pixel masks for sparse cat-1 tiles
+    -DMD_SPR -DMDSPR -DMDSPR_TOP
+    -DMD_STATIC -DPAL_STATIC -DPEN_MATCH
+
+**That is S4.** Both scroll planes are already on the MD VDP, the
+framebuffer's tile passes are already gone, the static per-scene palettes
+and pen matching are already in.
+
+**So the 14,304 B per-generation working set is what REMAINS AFTER the
+pivot, not what the pivot would reduce.** Costing S4 against it would
+have measured a card that has already been spent -- and the builder was
+about to do exactly that, in good faith, because the architecture doc
+reads like a proposal and the log has called it "the pivot" all week.
+
+**This is the premise-check I failed five times on the chevron screen,
+caught once, in the other direction.** It is worth more than any of the
+five.
+
+### What that leaves, and §4 names it as categorical
+
+If the planes have moved and 14 KB remains with `_m_main` holding 9,808
+of it and 80.7% of the instructions, **the residual is the sprite
+compositor.** And `ARCHITECTURE.md` §4 is explicit that sprites cannot
+follow:
+
+    ### What cannot move -- sprites, categorically
+    - hardware zoom, shrink to ~0.5 in 32 steps (jts16_obj_draw.v:70)
+      -- the werewolf transformation rides on this
+    - ragged variable-width strips up to full screen
+      (jts16_obj_draw.v:107) -- the MD sprite format cannot express them
+    - the MD's ceiling: 20 sprites / 320 pixels per line
+
+**Three independent hard stops, all expressibility rather than
+fidelity.** If the 14 KB is the sprite path, **there may be no footprint
+lever at all**, and the three dead approaches the builder just measured
+(relocation, hot/cold, locking) would be dead for a fourth reason:
+nothing is left to move.
+
+**I am flagging that as the thing to test, not concluding it.** It would
+be the largest single finding of the project and it should not rest on my
+inference from a flag list.
+
+### The read that settles it, and it is free
+
+**Attribute `_m_main`'s 9,808 B internally.** The profile CSV already has
+per-PC counts; bucket them by address range inside `_m_main` against
+`rom/s16.lst`. That names what the residual actually is:
+
+    mostly sprite compose      -> the footprint lever does not exist,
+                                  and the bar needs a different argument
+    still tile/plane work      -> S4 is INCOMPLETE on the line and there
+                                  is room after all; name the flag
+    something else entirely    -> whatever it is, it has never been
+                                  looked at
+
+**No build. Same CSV they already have.**
+
+### Their self-correction, which killed their own card
+
+Recording it because it is the third in four messages and the most
+expensive one: they reported a "1% tail" of 13,168 B from a 200-frame
+union and proposed moving it off the hot path. **The 2-frame window shows
+essentially all of it already touched -- there is no cold region, and the
+footprint card as written has little room.** They measured their own card
+to death before writing a line of it.
+
+**Union over 200 frames is not a working set.** The cache sees one
+generation. Worth carrying.
+
+### And the number that has not moved
+
+MOTION 9.3 fps against a bar of 60.
