@@ -644,6 +644,56 @@ static void md_consume(uint32_t pkt_base) {
 				 * delay: measured +3..+40 beam lines (f703 blew the
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
+#ifdef CART_DMA_PROBE
+				/* CART-DMA GATE (2026-09-17). THE question for the
+				 * architectural shift: can the MD VDP DMA straight out of
+				 * CART ROM into VRAM while we hold RV=1?
+				 *
+				 * Why it decides everything: md_emit_art today has the
+				 * SH-2 read 32 bytes of cart art and write them into a
+				 * 17-word FB packet, which the 68K then DMAs to VRAM.
+				 * The SH-2 touches every byte -- and NOTES.md:181 says
+				 * the SH-2 must NEVER touch cart ROM while RV=1. If the
+				 * 68K can source the DMA from cart directly, the record
+				 * collapses 17 words -> 2 (slot + block/code), nobody
+				 * touches a payload byte, and the same packet space
+				 * carries ~8x the tiles per window -- which is residency,
+				 * which is the black tiles.
+				 *
+				 * NO WRAM REPORTING, DELIBERATELY. The first cut reported
+				 * to 0xFFA260 and read back garbage: the 0xFFA200 ring
+				 * (:3277) and the 48-word CRAM shadow at 0xFFA1C0 (:1056)
+				 * both cover it, and they already overlap each other.
+				 * The DMA's own landing IS the result -- dump VRAM and
+				 * compare against tiles_md.bin on the host. Nothing to
+				 * collide with, and the check is external.
+				 *
+				 * Target VRAM 0xF800: free (SAT 0xF000 + 512B, planes
+				 * 0xC000/0xE000, tile slots stop at 0xB000) and nothing
+				 * reads it, so this cannot move a pixel.
+				 *
+				 * Source cart 0x264140 = blob offset 0x540, picked because
+				 * its 16 words are non-zero and mostly distinct
+				 * (357A AC77 35AA 7C75 ...): "read the cart" cannot be
+				 * confused with "read nothing". Block 0's first tile is
+				 * blank and would have made the probe unfalsifiable.
+				 *
+				 * Unconditional, not one-shot: it is idempotent into dead
+				 * VRAM, and a static guard is one more thing that can
+				 * silently not happen. */
+				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
+					const uint32_t cdp_src = 0x264140uL >> 1;
+					const uint32_t cdp_va  = 0xF800uL;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;   /* 16 words */
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (cdp_src & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((cdp_src >> 8) & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((cdp_src >> 16) & 0x7F));
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (cdp_va & 0x3FFFu)) << 16)
+					               | (((cdp_va >> 14) & 3u) | 0x80u);
+				}
+#endif
 #ifdef TILE_VERIFY
 				uint16_t tv_fs0 = *(volatile uint16_t*)0xA1518A;   /* FS: FB control, was 0xA1510A (DREQ dst) -- vi77's 0 is void */
 				*(volatile uint16_t*)0xFFA1EC = sc[1];   /* SH-2 verdict bits 8-12 */

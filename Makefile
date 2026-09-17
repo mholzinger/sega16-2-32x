@@ -820,6 +820,20 @@ ifdef BOOTTILEVER
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_TILEVER -DTILE_VERIFY
 SHCCFLAGS += -DTILE_VERIFY
 endif
+# CARTDMAPROBE=1 = 2026-09-17. THE GATE on the architectural shift: can
+# the MD VDP DMA straight out of CART ROM into VRAM while we hold RV=1?
+# Every vint it DMAs 16 words from the baked blob at cart 0x264140 into
+# VRAM 0xF800 -- free (SAT 0xF000+512B, planes 0xC000/0xE000, tile slots
+# stop at 0xB000) and read by nothing, so it cannot move a pixel.
+# NO WRAM reporting on purpose: the first cut reported to 0xFFA260 and
+# read back garbage, because the 0xFFA200 ring and the 48-word CRAM
+# shadow at 0xFFA1C0 both cover it (and already overlap each other).
+# VERIFY EXTERNALLY: dump "VDP VRAM" and compare 0xF800..0xF820 against
+# sh_src/tiles_md.bin offset 0x540 (357A AC77 35AA 7C75 ...). Equal =
+# CART DMA WORKS. All zero = the DMA did nothing. Needs TILESMD=1.
+ifdef CARTDMAPROBE
+MDCCFLAGS += -DCART_DMA_PROBE
+endif
 ifdef BOOTENTRYV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
 endif

@@ -511,3 +511,43 @@ so no tile plane is above cat-1. **Tile-occlusion of cat-1 is zero.**
 
 *Cost of the inverted label:* six entries of occlusion percentages, all
 void.
+
+### An `.incbin` blob needs `.section name, "a"` or objcopy drops it
+
+`.section .tilesmd` without the `"a"` flag makes a section with
+`CONTENTS, READONLY` and **no ALLOC and no LOAD**. `ld` keeps it in the
+ELF and places it exactly where the linker script says -- every
+placement ASSERT passes, the map looks right, `_end` is right -- and
+then `objcopy -O binary`, which is what actually builds the cart, SKIPS
+it. 425 KB never reached the ROM.
+
+`sprbake_data.s:13` and `md_sprart_data.s:7` both carry the `"a"`.
+Ours did not, and nothing in the build said so.
+
+*What made it invisible, and this is the real lesson:* `md_emit_art`
+falls through to the converter when a set has no baked block, so that
+the bake "can never render less than the converter". With the blob
+absent it read 0xFF gap fill, every index was `0xFFFF` = not baked, and
+it fell through **every time**. The feature was perfectly inert. It
+therefore PASSED every gate that compared it to the line -- VRAM
+identical, pixels identical -- because it WAS the line.
+
+*Cost:* an evening. Two rig builds handed over and played, a rig verdict
+taken on them ("slightly, but nothing significant"), a halfword
+transport optimisation gated at 0 VRAM / 0 pixels against dead code, a
+claim to Mike that 4 VRAM slots differed "where the bake is deliberately
+correct", and a cart-DMA probe aimed at 0xFF filler. All void.
+
+**A GATE THAT COMPARES A FEATURE TO THE BASELINE CANNOT DETECT A
+FEATURE THAT DOES NOTHING.** Any build flag that adds data to the cart
+needs a gate that asserts THE DATA IS IN THE CART IMAGE -- find the
+blob's bytes in the `.32x` file -- before any behavioural gate runs.
+That is now GATE 0 in the tilesmd script. The same hole exists for
+every other `.incbin` blob and for any flag whose failure mode is
+"quietly does nothing".
+
+Related: free cart space is `0xFF` gap fill, not zeros, so an absent
+blob reads as `0xFFFF` -- which is exactly the "not baked" sentinel.
+A sentinel that collides with erased-flash is a sentinel that cannot
+report its own absence.
+

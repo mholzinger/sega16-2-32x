@@ -4,7 +4,16 @@
 ! GUARDED: SHOBJS wildcards sh_src/*.s, so without this the 425KB blob
 ! would link into every build. TILESMD=1 defines the symbol.
         .ifdef TILES_MD
-        .section .tilesmd
+        ! "a" = ALLOCATABLE. Without it GAS makes a section with
+        ! CONTENTS,READONLY and no ALLOC/LOAD: ld keeps it in the ELF,
+        ! objcopy -O binary DROPS it, and the 425KB blob never reaches
+        ! the cart. md_emit_art then reads 0xFF gap fill, every index
+        ! is 0xFFFF = "not baked", and the shortcut falls through to
+        ! the converter EVERY TIME -- so the picture stays perfect and
+        ! the whole feature is silently inert. Cost: a full evening of
+        ! rig verdicts and gate runs on a flag that did nothing.
+        ! sprbake_data.s and md_sprart_data.s both carry the "a".
+        .section .tilesmd, "a"
         .align  4
         .global _altbeast_tiles_md
 _altbeast_tiles_md:
