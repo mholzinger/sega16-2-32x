@@ -100,3 +100,48 @@ scanning only what changed rather than the viewport every generation --
 is the question a card should ask. bm_scan_memo (3177) and the TAGKEEP
 "land where you were" path (2770-2790) suggest that idea already has
 partial machinery here.
+
+## CORRECTION (2026-09-16): note 115 measured ATTRACT, not gameplay
+
+Re-run with `--input discover/inputs/play2.csv`, 2-frame window at f3000:
+
+    gameplay working set   946 lines = 15,136 B   3.7x cache
+    bm_scan_rows           0.00% of instructions  -- IT DOES NOT RUN
+    bm_scan_baked_ok       present, eligibility PASSES
+
+**SET_COLS already replaces the tilemap colour-set scan in gameplay, and
+it fires exactly where it matters.** The 27.6% I attributed to
+bm_scan_rows was an ATTRACT artefact: bm_scan_baked_ok requires
+MD_STATE_PLAY, or step 1/3/5 with bit 8, and attract fails that, so the
+live scan runs there and only there.
+
+So the decompile thread's "make the scan incremental" card is ALREADY
+BUILT, ships on the line, and works. Costing it would have been the
+second card spent twice in two messages.
+
+## The real gameplay hot path
+
+    src lines      bytes    %WS   instr%   what
+    11350-11399      224   1.6%   16.90%   the maps drain --
+                                           build_maps_chunk call site
+    15450-15499      496   3.6%   10.84%   NAME-TABLE pass: per-row
+                                           tilemap page pointers
+    15600-15649      336   2.4%    6.96%   NAME-TABLE cell walk: code
+                                           extract, bank fold, cset,
+                                           allocator entry
+    15300-15849    1,792  13.0%    ~21%    the name-table pass entire
+
+The master's gameplay cost is the NAME-TABLE WALK plus the MAPS DRAIN --
+walking every viewport cell each generation to decide what to ship to the
+MD. That is tilemap-derived decision work and SET_COLS does not cover it;
+SET_COLS answers "which colour sets does this viewport hold", a different
+question from "which cells changed and what must ship".
+
+**And the thread's camera arithmetic applies to it unchanged**: at most
+0.5 px/frame, so at most 1/16 of one column of new cells per generation,
+against a full 40-column walk. The partial machinery is visible in the
+same block -- nt_key / nt_gen / nt_win at 15455-15459 already memoise per
+row index.
+
+That is the target, and it is a different function from the one note 115
+named.
