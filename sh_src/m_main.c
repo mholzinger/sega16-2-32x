@@ -7033,8 +7033,49 @@ __attribute__((noinline)) static void disp_gate(void)
             tm_gen++;
             if (!tm_gen) tm_gen = 1;
 #endif
-#ifdef MD_STATIC
+#if defined(MD_STATIC) && !defined(MDS_NOFLUSH)
             mds_flush();
+#elif defined(MD_STATIC)
+            /* *** FALSIFIED 2026-09-17, same day. DO NOT RE-PROPOSE. ***
+             * Gate result, ares 3000 frames, against the line:
+             *     claim 2765 -> 2144   evict 499 -> 1022
+             *     tags wiped by install 2 -> 1023
+             *     pixels: 139,904 of 343,845 differ at f2000 (41%)
+             * The evidence for this card was an ORDERING ARTIFACT. "flush
+             * wipes 1824, install wipes 2" does not mean the install is
+             * precise -- the flush runs FIRST and empties the tags, so the
+             * install finds nothing left. Remove the flush and changed[]
+             * wipes 1023 of 1024: at a scene cut essentially EVERY colour
+             * set does change its line or pen map, so the selective path is
+             * not selective here. The flush is not over-broad.
+             * It also clears md_ref[] and md_dirty[], which the install path
+             * does NOT -- stale dirty bits make the shipper believe art is
+             * resident that is not, which is the 41%.
+             * The claims that stopped came back as evictions: total slot
+             * acquisitions 3264 -> 3166, i.e. nothing.
+             *
+             * MDS_NOFLUSH (2026-09-17). The display gate wiped ALL 1024
+             * md_tag entries on every scene cut -- MEASURED 1824 live tags
+             * over 3 flushes in 3000 gameplay frames, against 2767 total
+             * claims. Two THIRDS of every claim in the run is a re-claim
+             * forced by this wipe, and each re-claim is also a re-SHIP of
+             * the art at 24 tiles a batch, which is the window the rig
+             * census sees as noslot/dirty -- Mike's black tiles.
+             *
+             * It is over-broad by the subsystem's OWN invariant, stated at
+             * mds_install: "a slot's pattern depends only on its set's
+             * (line, pixel->pen map)". A slot is stale iff its colour set's
+             * line or pen map changed. A scene cut rewrites the TILEMAP --
+             * which codes cells reference -- and that is the NAME TABLE,
+             * rebuilt by the walk every chunk. It does not change what tile
+             * code C looks like: the art is ROM indexed by code.
+             * mds_install already computes exactly the right set with
+             * changed[] and wiped TWO tags where the flush wiped 1824.
+             *
+             * So: drop the blanket wipe and let the install's selective
+             * one do it. tm_gen++ above still fires, so NT_SKIP's
+             * everything-is-stale signal is untouched. */
+            MDS[2]++;                    /* count the cut, wipe nothing */
 #endif
         }
         disp_settle = 0; disp_hold = 0;

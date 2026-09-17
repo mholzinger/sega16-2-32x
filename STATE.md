@@ -62,6 +62,16 @@ what we work on now, not of what done means.
     triple buffering      the pipeline is already full
     re-timing generally
     SH2_CCTL_TW (card T2)
+    MDS_NOFLUSH           FALSIFIED 2026-09-17 same day. Dropping
+                          mds_flush at the display gate: claims
+                          2765->2144 but evictions 499->1022 (no net
+                          win) and 41% of pixels wrong. The evidence
+                          was an ORDERING ARTIFACT -- the flush runs
+                          first and empties the tags, so install's
+                          changed[] "wiping only 2" measured nothing.
+                          Without the flush it wipes 1023/1024. The
+                          flush also clears md_ref/md_dirty, which the
+                          install path does not.
     NT ship-skip (NTHASH)  FALSIFIED 2026-09-17 the day it was written.
                           The NT chunk payload encodes ALLOCATOR SLOT
                           INDICES, not tile identity, so a visually

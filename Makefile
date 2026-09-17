@@ -1943,6 +1943,17 @@ endif
 ifdef MDSPR_WHY
 SHCCFLAGS += -DMDSPR_WHY
 endif
+# `make ... MDSNOFLUSH=1` = 2026-09-17. mds_flush() wipes ALL 1024 md_tag
+# entries at every display-gate close. Measured: 1824 live tags over 3
+# flushes in 3000 gameplay frames against 2767 total claims -- two thirds
+# of all claims are re-claims forced by it, and each re-claim re-ships art
+# at 24/batch, which is the noslot/dirty window the rig sees as black
+# tiles. Over-broad by mds_install's own invariant (a slot is stale iff
+# its set's line or pen map changed): mds_install's changed[] wiped 2 tags
+# where the flush wiped 1824. This drops the blanket wipe.
+ifdef MDSNOFLUSH
+SHCCFLAGS += -DMDS_NOFLUSH
+endif
 # `make ... MDALLOCWHY=1` = LOOP29 153: the MD residency allocator's own
 # counters, 16 longs at 0x3A680 (see MDALLOC in m_main.c). Entry 152
 # could not tell "the cell never claimed a slot" from "it claimed and
