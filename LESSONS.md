@@ -193,6 +193,46 @@ black art; the defect is a share of CELLS.
 ("Guards only. LOOK AT THEM"). It is not the instrument for a black-tile
 card. Look at the frame, and if a number is wanted, count cells.
 
+### FMGATE fits SHORT, RARE writers. Check the caller and the volume.
+
+2026-09-17, cost: a rig launch and a red screen. `0x9052` was FM-gated
+because LOOP-DECOMPILE 131 called it "the transformation-only playfield
+text clear ... in nobody's marked set", which reads like a rare
+one-shot. It is not. It has two callers and the live one is in the MAIN
+LOOP:
+
+    988: tstw 0xfffff148     ; object marker
+    98c: bnes 0x996
+    98e: jsr  0x3aae         ; credit line (already a TXTWRAM writer)
+    996: jsr  0x9052         ; the clear -- every pass an object holds
+
+and the routine writes 20 rows x 20 longs = 1,600 bytes. Gating it holds
+FM=0 across that clear on every one of those frames, the SH-2 never gets
+the framebuffer, the 32X layer never composes, and the bare MD backdrop
+shows through: Mike got a solid red screen.
+
+The precedents I copied are all short and rare — the round-clear
+typewriter is one glyph per 5 frames, round-clear-all runs once at a
+round end. **Volume x frequency is the thing that matters, and neither
+is in the description of the routine.**
+
+*Rules:*
+1. Before gating a site, find its CALLERS (scan for bsr/bra/jsr to it)
+   and count the bytes it writes. A per-frame kilobyte is not a
+   candidate for an inline gate.
+2. A recorded description tells you what a routine IS, not how often it
+   runs. Read the caller.
+3. For a long or frequent writer the mechanism is staging
+   (`TXT_WRAM_WRITERS`), not gating — but note TXTWRAM has its own
+   recorded cost (LOOP29 237: halves the rig frame rate), so neither
+   tool is free.
+
+*If it is retried:* granularity, not mechanism. `0x3A9A` is the
+precedent — "moveb copy loop head (dbf re-enters gate)". Gating the
+per-row setup at `0x905E` (`movew #19,%d2`, 4 bytes) gives 20 windows of
+80 bytes with FM released between rows, instead of one 1,600-byte hold.
+UNVERIFIED.
+
 ### A flag you have never built OFF is not a flag, it is an assumption
 
 `mdp_wipe_set_tags` was DEFINED inside `#ifdef TAGKEEP` and CALLED from

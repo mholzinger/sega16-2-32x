@@ -63,6 +63,25 @@ arithmetic corrections, or anything ending "no pixel changed."
                  (b) then either add the writer to TXT_WRAM_WRITERS or
                      fix the gate.
     gate         none for the read.
+    ATTEMPT 1 FAILED (2026-09-17, cost a rig launch)
+                 FM-gated 0x9052 (entry, 6 bytes, 0x41F9) + span
+                 (0x9052,0x9072). Built clean, thunk 290->298 words,
+                 well under the 0xBFF0 bound. RED SCREEN on the rig.
+                 Cause: 0x9052 is NOT rare. Caller 0x996 is in the main
+                 loop (gated on 0xFFF148) and the routine writes 400
+                 longs = 1,600 bytes, so the gate holds FM=0 across a
+                 kilobyte-plus clear every frame an object holds -- the
+                 SH-2 never gets the FB, the 32X layer never composes,
+                 and the bare MD backdrop shows. REVERTED; the line
+                 reproduces bldS again.
+                 NOTE the gate also changes THE LINE, not just a
+                 candidate: game_altbeast.py feeds the game-body bake
+                 and FM_GATE is on the line.
+    next idea    granularity, not mechanism: gate the per-row setup at
+                 0x905E (movew #19,%d2, 4 bytes) so each row is an 80-
+                 byte window and FM is released between rows -- the
+                 0x3A9A "dbf re-enters gate" pattern. UNVERIFIED and
+                 NOT to be put on the rig without an ares check first.
 
 
 ### O-1  Transport ablation: does reducing LOAD have a slope?
