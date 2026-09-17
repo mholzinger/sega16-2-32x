@@ -439,6 +439,34 @@ The face itself is a four-palette **zoomed sprite** built by `sub_90F4`
 "the game's own cutscene byte". That contradiction is unresolved and is
 load-bearing for `mds_onscreen`.
 
+### map[0] MUST stay 0: MD colour index 0 is transparent
+
+2026-09-17, cost: a build that turned the attract sky PURPLE.
+
+md_emit_art's BG variant maps pixel value 0 through map[0], and I read
+that as "BG needs a real colour at pen 0" because the FG variant forces
+pixel 0 to transparent explicitly. Backwards. On the MD VDP, **colour
+index 0 in a tile is transparent** -- so map[0] = 0 means pixel 0 renders
+as backdrop, which is what the BG wants and what the bake already did.
+Pointing map[0] at a real slot makes those pixels OPAQUE, and the sky's
+transparent pixels became that slot's colour.
+
+The record already said it and I read past it: "Colours 0 and 15 of every
+slot are NEVER written by the game -- anything there is our own
+initialisation and is not evidence." I used that never-written colour 0
+as the TARGET to find a nearest match to, so the match was against
+garbage and then painted on screen.
+
+*The real finding, inverted:* the 5-byte divergence between the baked pen
+map and the live one is the RUNTIME claiming a pen for index 0 on sets
+92/93/95/96/97 -- the sky and trees. The bake is right; the runtime is
+wrong there, and it is a candidate cause of colour defects in exactly
+those sets rather than something to reproduce.
+
+*Rule:* before "fixing" a difference between a bake and the runtime,
+establish which side is CORRECT. I assumed the runtime was the reference
+because it was the observed behaviour.
+
 ### The palette and pen math is CORRECT. Stop re-measuring it.
 
 Established 2026-09-17, all against the arcade at a MATCHED scene (the
