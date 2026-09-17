@@ -10031,8 +10031,24 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                                   + blk_ * 4096u
                                   + ((mkey & 63u) * 64u)
                                   + ((mkey & 0x80000000u) ? 32u : 0u);
-                for (int k2 = 0; k2 < 32; k2++)
-                    o[k2] = b_[k2];
+                /* WIDTH (2026-09-17). The byte loop was 32 reads + 32
+                 * writes per tile: the bake removed the ARITHMETIC and
+                 * left the transport at byte width, which is why the rig
+                 * moved only slightly. Both sides are 2-aligned by
+                 * construction -- the blob is .align 4 and every offset
+                 * into it (blk*4096 + code*64 + 0/32) is a multiple of
+                 * 32; the destination is (uint16_t *)dst + n*17 + 1. So
+                 * halve it: 16 halfword moves. Byte ORDER is untouched,
+                 * both sides are raw big-endian bytes.
+                 * 4-byte moves need the art field 4-aligned, and the
+                 * 17-word packet stride alternates alignment -- that is
+                 * a packet_fmt change, a separate card. */
+                {
+                    const uint16_t *bw_ = (const uint16_t *)b_;
+                    volatile uint16_t *ow_ = (volatile uint16_t *)o;
+                    for (int k2 = 0; k2 < 16; k2++)
+                        ow_[k2] = bw_[k2];
+                }
                 /* the converter's tail, which this shortcut MUST keep:
                  * draining md_pending is what stops the demand bias
                  * firing every window (the starvation bound at 15436).
