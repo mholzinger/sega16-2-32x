@@ -234,3 +234,39 @@ those rows and does not.
 that drops tiles prices a machine doing less work than a correct one.
 The key must cover the allocator first, and doing so will cost back some
 of the 84.7%.
+
+## THE TWO COUNTERS (2026-09-16), MDALLOCWHY=1, gameplay f2600->f3400
+
+    [ 0] cells reaching allocator     59,556
+    [13] assign_set entered              665
+    [14] wipe_set_tags                 3,699
+    [19] burned set claiming a pen       218
+    [20]  ... with NO exclusive pen   23,038
+    [21]  ... and a shareable match        0
+    [22] TAGKEEP deferred wipe SAME        0
+    [23] TAGKEEP deferred wipe MOVED      26
+    [24] free_set                      1,129
+
+**TAGKEEP NEVER WINS. [22] = 0, [23] = 26. One hundred per cent MOVED.**
+Its whole premise is that a re-assigned set usually lands back on the
+same (line, pen map) so the wipe can be skipped. It never does. That
+reproduces LOOP29 155's own "0 of 59" on a different build and a longer
+window -- so TAGKEEP defers a wipe that is ALWAYS needed, and pays the
+deferral's staleness window for nothing.
+
+**Set re-assign rate: 665 in 800 frames**, ~0.83/frame. That sizes the
+NTSKIP key: only rows holding a re-assigned set lose their skip, and at
+0.83 assigns a frame against 56 rows, most of the 84.7% should survive a
+per-set generation fold. The decompile thread's push design is the right
+shape and the number supports it.
+
+**And the pen supply is starved, which is new.** [20] says a burned set
+found NO exclusive pen 23,038 times in 800 frames -- 28.8 per frame --
+and [21] says a shareable match was found ZERO times. Every one of those
+falls to nearest-colour. 3,699 tag wipes in the same window is 4.6 a
+frame, and a tag wipe is tile destruction.
+
+**That is a named, measured cause for the line's 4.8% black**, and it is
+the same shape as the NTSKIP corruption: a slot reference outliving the
+set's pen map. NTSKIP makes it worse by adding skipped rows; it does not
+create it.
