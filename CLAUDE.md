@@ -54,8 +54,10 @@ already answer.
                        the measurement that established it and what it
                        cost when it was violated.
 
-Then read `.build_flags`, then `LOOP-PROTOCOL.md` if you are relaying to
-the other thread.
+Then read `.build_flags` — but it is the stamp of the LAST BUILD, which
+is usually a probe, NOT the line. The line's flags are `LINE_FLAGS` in
+the Makefile; `make line` is the only thing that builds it. Then
+`LOOP-PROTOCOL.md` if you are relaying to the other thread.
 
 **Do NOT start by reading the logs.** `docs/log/*` (30 files) and
 `docs/handoff/*` (31 files) are HISTORY, not state. They are append-only,

@@ -56,7 +56,11 @@ cold region.
     m_main.c:718    mdalloc_ctr. 48 slots.
 
 Written 2026-09-16 from a preprocessor-aware census: each site's guard
-evaluated against `.build_flags`, so "LIVE" means live ON THE LINE.
+evaluated against the flag set, so "LIVE" means live ON THE LINE.
+(First run used `.build_flags`, which turned out to be a PROBE's stamp —
+see the `.build_flags` entry below. Re-run against the true line stamp
+after `make line`: identical verdicts, because no counter site is
+guarded by any of the four flags that differed.)
 **No DIAG slot is free in every build.** A new cumulative counter goes
 in `.bss` the way `mdalloc_ctr` does — not into a slot you picked.
 
@@ -79,35 +83,40 @@ counters count the same UNIT.**
 *Cost:* two debugging cycles before the registries existed, and one
 false "mdp_claim_pen writes no MDA slot" during the census itself.
 
-### Frame-indexed captures cannot compare builds of different SIZE
+### Before blaming trajectory divergence, READ THE SCENE TIMER
 
-`LAYOUTPROBE` established it for the speed ladder — 64 B of dead `.data`
-moves the canonical window 18 points, and the memo says why: *"a build
-that falls behind is measured on different content, because the input
-script is frame-indexed."*
+`LAYOUTPROBE` established that 64 B of dead `.data` moves the speed
+ladder 18 points, and the memo explains it as *"a build that falls
+behind is measured on different content, because the input script is
+frame-indexed."* True — and on 2026-09-16 it was applied to a case where
+it did not hold, which nearly buried a real result.
 
-**It applies to the SCREENSHOTS too, and that is easier to be fooled by.**
 Dropping the TAGKEEP family removes 1408 B of `.bss` (`_end` 0x6016e38
--> 0x60168b8 — `mdp_pend_tag` + `_line` + `_map` + `_used` exactly), 22x
-the LAYOUTPROBE step. At "f2000/f3000/f4000" the two roms were at
-different points in the attract sequence: the candidate showed the lives
-HUD, the 50000 high score and pickups, and the line showed none of them.
+-> 0x60168b8), 22x the LAYOUTPROBE step, and the f2000/f3000/f4000
+captures differed a lot. That was written up as trajectory divergence
+and the card was parked. **It was not divergence.** The 68K scene timer
+(WRAM `0xFFF02A`, one tick per GAME frame) reads 874 / 1224 / 1574 /
+1924 / 2174 at f1500..f4100 for BOTH roms — identical at every point,
+0 game-frames apart at every shot — and `irq4_miss_pct` was 0.0 for
+both. The flags are SH-2 RENDERER flags; they never touched the 68K
+timeline, so nothing could diverge.
 
-That reads exactly like a HUD-dropout FIX. It is not a fix. It is two
-roms photographed at different moments, and it was one step from being
-written into the GATE QUEUE as a visible improvement.
+*The test, and it is free:* `night_run` already records `0xFFF02A` at
+all five window frames. Interpolate it to the shot frame for each rom
+and compare. Same game frame = comparable captures, whatever the image
+sizes are. Different = do not compare the pictures.
 
-*Rule:* before comparing any two captures, diff `_end`. If the images
-differ in size, the capture must be anchored on the GAME's own timeline
-(`tools/attract_parity.py` does this; `night_run`'s shot step does not)
-or the frames are not comparable — and neither is any number derived
-from them.
+*Rule:* rom size predicts NOTHING about comparability on its own. The
+scene timer measures it directly. Read the timer.
 
-*Corollary:* `night_run`'s `diff_bytes_vs_base` is displacement, not
-divergence. 1.45 MB between two roms whose generated artifacts are
-byte-identical was one 1408-byte shift moving the tail. The "~1.3 MB =
-stale bake" rule in its header holds only for SAME-flag comparisons,
-which is what it says and not how it reads at 2 a.m.
+*Also check phase before believing a frame pair:* shoot N, N+1, N+2,
+N+3. Here both roms were stable across four consecutive frames (the
+lives-region held 90 distinct colours on the line and 335 on the
+candidate at every one), so a one-vint render-phase offset was excluded
+too.
+
+*Cost:* one tick spent parking a card that had actually produced a
+result, plus a LESSONS entry that had to be withdrawn.
 
 ### black_pct does not resolve the black-tile defect
 
@@ -171,6 +180,27 @@ macro.
 
 *Cost:* caught before publication only because the claim contradicted
 `STATE.md` and the contradiction was chased instead of assumed.
+
+### `.build_flags` is the LAST BUILD, not the line
+
+At the start of 2026-09-16 it carried `NT_SKIP`, `NT_KEY8`, `BOOT_VALUE`
+and `BOOT_FLIPRATE`. None are in the Makefile's `LINE_FLAGS`. It was the
+stamp of somebody's probe, and `STATE.md` said "the authority for what
+is on the line", so a whole session's premise checks were run against a
+probe's flag set.
+
+    the line          `LINE_FLAGS` (Makefile:2890) / `make line`
+    what is built     `.build_flags`
+    are they equal?   check before trusting any measurement taken
+                      against rom/s16.32x
+
+`STATE.md` also claimed `rom/s16.32x` was "bldS-equivalent (stamp bytes
+only)" at session start; it was not verified, and `make line` had to be
+run to make it true.
+
+*Cost:* nothing this time — no counter site was guarded by any of the
+four — but only because it was checked. Corrected in `STATE.md`,
+`CLAUDE.md` and `LOOP-PROTOCOL.md`.
 
 ### `make -n` REWRITES .build_flags
 
@@ -250,9 +280,10 @@ Six mechanisms died in one week. **Every one was arithmetically correct
 and built on an unchecked premise** — a plane label, an occlusion
 direction, an array's length, an attract profile.
 
-*Rule:* before a card, state what the record already says and **read
-`.build_flags`**. Both times that was done, it killed a card before it
-cost anything.
+*Rule:* before a card, state what the record already says and read BOTH
+`.build_flags` (what is built right now) and `LINE_FLAGS` in the Makefile
+(what the line is). **They are not the same thing.** Both times that was
+done, it killed a card before it cost anything.
 
 ### Docs written as proposals get re-proposed
 

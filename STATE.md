@@ -68,8 +68,18 @@ one. It shipped.** Both scroll planes are on the MD VDP:
     -DMD_STATIC -DPAL_STATIC -DPEN_MATCH
     -DSET_COLS              replaces bm_scan_rows in GAMEPLAY
 
-`.build_flags` is the authority for what is on the line. **Read it before
-costing anything.**
+**`.build_flags` is NOT the authority for the line.** It is the stamp of
+whatever was BUILT LAST, which is usually a probe. At the start of
+2026-09-16 it carried `NT_SKIP`, `NT_KEY8`, `BOOT_VALUE` and
+`BOOT_FLIPRATE` — none of which are in the line.
+
+    the line's flags   Makefile `LINE_FLAGS` (Makefile:2890), i.e.
+                       whatever `make line` passes. That target exists
+                       precisely because `make ship-us` alone is not it.
+    what is built now  `.build_flags`. Check it MATCHES the line before
+                       trusting a measurement against rom/s16.32x.
+
+**Read both before costing anything.**
 
 ## OPEN DEFECTS Mike can see
 
@@ -94,13 +104,16 @@ costing anything.**
 
 ## OPEN CARDS
 
-    SCENE ANCHORING       the gate on both live cards. O-1 needs it
-                          (6x cold-run variance); O-2 needs it
-                          (frame-indexed capture puts two roms on
-                          different attract content when their sizes
-                          differ). attract_parity.py already anchors
-                          on the game's timeline; night_run's shot
-                          step does not. NOTHING ELSE IS UNBLOCKED.
+    SCENE ANCHORING       SOLVED for captures, still open for the rig.
+                          The anchor is the 68K scene timer WRAM
+                          0xFFF02A (one tick per GAME frame), already
+                          dumped on every gameplay_speed run and
+                          already stored in night_run's `timers`.
+                          Two captures are comparable iff their
+                          interpolated game frames match -- rom SIZE
+                          predicts nothing. O-1's 6x cold-run variance
+                          is a RIG problem and is NOT addressed by
+                          this.
     drop the TAGKEEP      BUILT (rom/night/notag1.32x) and BLOCKED.
     FAMILY                Not one flag: PEN_REPAINT and PEN_HOLD@16264
                           are nested inside TAGKEEP and die with it,

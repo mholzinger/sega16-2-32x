@@ -14,7 +14,8 @@ goes at the TOP of the message, not in the body:
 
     PREMISE CHECK
       record says      <what STATE.md / LESSONS.md already establish>
-      flags on line    <the relevant entries from .build_flags>
+      flags on line    <from Makefile LINE_FLAGS -- NOT .build_flags,
+                       which is the last build and usually a probe>
       instrument       <which one, and its known failure mode>
       already dead?    <checked MEASURED DEAD in STATE.md: yes/no>
 
@@ -106,7 +107,8 @@ better-founded older one.
 
 1. Read `INTENT.md`, `STATE.md`, `LESSONS.md`. In that order. Nothing
    else.
-2. Read `.build_flags`.
+2. Read `.build_flags` AND the Makefile's `LINE_FLAGS`. The first is
+   what is built; the second is the line. They are routinely different.
 3. State the premise check for whatever you are about to do.
 
 **Do not start by reading the logs.**
