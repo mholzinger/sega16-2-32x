@@ -2074,11 +2074,17 @@ static void r60_push(void) {
 		 * blank-cell census, cells emitted as the blank slot because
 		 * their slot was DIRTY outside cut mode, summed over 64 windows,
 		 * >> 2, sat 63. */
-		uint8_t p0 = 0;
+		/* 2026-09-17: three blanking reasons, 2 bits each, so ONE rig
+		 * screenshot names which path makes Mike's black tiles.
+		 * p2 = 0x80 | noslot<<3 | cut<<1        (bits: n n c c)
+		 * p0 =        dirty                     (0..3)
+		 * Decode: R=d&7 G=(d>>3)&7 B=(d>>6)&3 per BOOTVALUE. */
 		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
-		uint8_t p2 = (uint8_t)(0x80
-			| (((tw >> 14) & 1) << 5)
-			| ((tw >> 8) & 0x1F));
+		uint8_t n3 = (uint8_t)((tw >> 8) & 3);
+		uint8_t c3 = (uint8_t)((tw >> 10) & 3);
+		uint8_t d3 = (uint8_t)(((tw >> 12) & 1) | (((tw >> 14) & 1) << 1));
+		uint8_t p0 = d3;
+		uint8_t p2 = (uint8_t)(0x80 | (n3 << 3) | (c3 << 1));
 #elif defined(BOOT_CONSV)
 		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
 		 * V at cons.entry (0xFFB0B0), in lines */

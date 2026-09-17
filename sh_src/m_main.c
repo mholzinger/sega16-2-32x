@@ -427,8 +427,20 @@ static uint16_t tv_real;
 static uint16_t tv_b_noslot, tv_b_cut, tv_b_dirty, tv_b_win;
 static uint16_t tv_b_l_noslot, tv_b_l_cut, tv_b_l_dirty;
 #define TV_BLANK_LATCH() do { if (++tv_b_win >= 64) { tv_b_l_noslot = tv_b_noslot; tv_b_l_cut = tv_b_cut; tv_b_l_dirty = tv_b_dirty; tv_b_noslot = tv_b_cut = tv_b_dirty = 0; tv_b_win = 0; } } while (0)
-#define TV_BITS_V ((tv_b_l_dirty >> 2) > 63u ? 63u : (tv_b_l_dirty >> 2))
-#define TV_BITS ((uint32_t)(((TV_BITS_V & 31u) << 8) | (((TV_BITS_V >> 5) & 1u) << 14)))
+/* 2026-09-17: the six wire bits carried ONE counter at >>2 sat 63. The
+ * question on the rig is WHICH of the three blanking reasons fires, not
+ * how many, so carry all three at 2 bits each (sat 3). Mike's black
+ * tiles are hardware-only (LOOP29 231), so this is the only instrument
+ * that can name the path -- ares reads all three as zero.
+ *   bits 8-9   noslot : no way claimed
+ *   bits 10-11 cut    : slot dirty, cut mode
+ *   bit 12,14  dirty  : slot dirty, outside cut mode  (lo,hi of a 2-bit) */
+#define TV_SAT3(v) ((v) > 3u ? 3u : (v))
+#define TV_N3 TV_SAT3((uint32_t)tv_b_l_noslot)
+#define TV_C3 TV_SAT3((uint32_t)tv_b_l_cut)
+#define TV_D3 TV_SAT3((uint32_t)tv_b_l_dirty)
+#define TV_BITS ((uint32_t)((TV_N3 << 8) | (TV_C3 << 10) \
+                            | ((TV_D3 & 1u) << 12) | (((TV_D3 >> 1) & 1u) << 14)))
 #else
 #define TV_BITS 0u
 #endif
