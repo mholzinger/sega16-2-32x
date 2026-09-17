@@ -439,6 +439,32 @@ The face itself is a four-palette **zoomed sprite** built by `sub_90F4`
 "the game's own cutscene byte". That contradiction is unresolved and is
 load-bearing for `mds_onscreen`.
 
+### The palette and pen math is CORRECT. Stop re-measuring it.
+
+Established 2026-09-17, all against the arcade at a MATCHED scene (the
+gated captures in discover/cram/wide vs discover/cram/arcade):
+
+    game palette vs arcade      2047 / 2048 entries exact
+    baked CRAM reaching MD CRAM   47 / 48 slots exact
+    tile conversion vs live VRAM 941 / 941 slots exact
+
+The one palette entry that differs is palette 3 entry 6 (arcade 100F,
+ours 7FFF) -- an entry we never write.
+
+**The colour cyclers are correct, including their quirks.** Palette 9
+was reported as "two steps out of phase" from a SINGLE sample. Measured
+over time, ours and the arcade both advance exactly 2 positions per 20
+frames, same direction, and BOTH show the same anomaly at position 6
+(last entry 4C00 instead of continuing the ramp). A one-frame offset
+between two dumps says nothing about phase; only a time series does.
+
+*Consequence, and it is the useful part:* a wrong picture is NOT a
+palette problem. Colour, pen maps and tile conversion are all verified
+against the arcade or against live VRAM. Look at which tiles land in
+which cells, or at the sprite layer -- the two worst attract scenes
+(face, eye) are sprite-driven, and the transformation face is a zoomed
+SPRITE, not tiles.
+
 ### Palettes are QUEUED, and the arcade queue has no budget
 
 `RequestPaletteUpdate` (`0x3B2E`) does not write a palette; it queues an
