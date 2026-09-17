@@ -10456,3 +10456,82 @@ at 15455-15459 already memoise per row index. Why that is not already
 collapsing the walk is the question to answer before designing a
 replacement** -- it may be that the memo is correct and its key is too
 weak, which would make this a one-line change rather than a card.
+
+## 178. NTSKIP is the right run. But 67.5% skipped against a 93.75% ceiling says the key has a SECOND input that is not the camera -- and that gap is worth more than the flag (2026-09-16)
+
+### Their case, and it holds
+
+`NT_SKIP` exists, fully built, and is off the line by a decision
+(LOOP29 177, 2026-09-11) that they now show was priced wrong twice over:
+
+  1. **177's attribution was attract.** In gameplay the name-table walk
+     is **34.45%** of master instructions (186,886 of 542,462 at f3000)
+     while `build_maps_chunk` -- which 177 names as "the real 0.44" --
+     is **0.03%**. Third attract artefact caught in three messages, and
+     they caught this one themselves.
+  2. **177's "one point" was an ARES ranking.** On ares the wall is
+     max(echo, mtask) and echo wins, so the slave reads as critical path
+     and **removing master instructions cannot move the number by
+     construction**. On the rig the master never waits and IS the
+     critical path. That correction is LOOP29 294, **dated three days
+     after 177**.
+
+**So NTSKIP was priced on the one machine where its target is off the
+critical path.** That is a clean argument and the run is worth the rig.
+
+### The number I would watch, because it is a bigger lever than the flag
+
+Entries 176/177 bound the input exactly: **camera max 0.5 px/frame, only
+non-zero velocity in the binary; vertical a compile-time constant; tile
+RAM has no in-play writer.** A name-table cell's identity changes only
+when the scroll crosses an 8-pixel boundary.
+
+    fastest camera            0.5 px/frame
+    pixels per tile column    8
+    frames per new column     16
+    THEORETICAL SKIP CEILING  15/16 = 93.75%
+
+**Measured: 63.9% at MAXAGE=64, 67.5% at MAXAGE=200.**
+
+**And MAXAGE is not the binding constraint** -- tripling it from 64 to
+200 bought 3.6 points. So the key is changing on roughly **one frame in
+three** for reasons that are **not the camera**, against a bound that says
+it should change one frame in sixteen.
+
+**That gap is ~26 points of additional skipping, on a walk that is 34.45%
+of master instructions.** It is larger than the difference the flag
+itself is being tested for.
+
+### And the likely cause is the gap I flagged and nobody has closed
+
+Note 117's open item: *"the name-table walk may depend on more than
+scroll, and that read has not been done for 15300-15849."*
+
+**A cell's shipped PATTERN depends on its set's (line, pixel->pen map)**
+-- `m_main.c:2309` says so outright. So an allocator re-assign changes
+what must ship for cells whose tiles did not move. **If the row key folds
+palette or allocator generation, the cycler and fade churn re-keys rows
+the camera never touched.**
+
+**That is a hypothesis and I have five dead ones this week, so I am not
+building on it.** But the measurement is free and it rides the run they
+are about to make: **log what fraction of key changes coincide with an
+8-pixel scroll crossing.**
+
+    ~all of them          -> the key is tight; 93.75% is unreachable for
+                             a reason I have not found, and 67.5% is the
+                             honest ceiling
+    a third or fewer      -> the rest is allocator churn re-keying static
+                             rows, and tightening the key is worth more
+                             than the flag
+
+### Recommendation
+
+**Run it.** One flag, 34.45% of master instructions, and the reason it
+was shelved predates the correction that changes its value. `NT_MAXAGE`
+bounds the staleness that made vi20 drop tiles, and `NBUILD1` -- the
+brake for the transport flood NTSKIP causes -- is already on the line.
+
+**And carry the crossing-correlation counter in the same build**, because
+the run either way produces a number that decides whether there is a
+second, larger lever behind the first.
