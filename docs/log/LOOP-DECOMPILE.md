@@ -10098,3 +10098,74 @@ touched either.
 
 **The attract screen is a visible defect worth fixing. It is not the
 bar.** The `_m_main` split is.
+
+## 174. The builder caught their own regression on the diff. Stale mdp_pen_own is real but probably BENIGN at runtime -- it is a DIAGNOSTIC hazard, and PEN_HOLD is the thing that will bite the (c) fix (2026-09-16)
+
+### What they found, and it is a good catch on themselves
+
+In chevfix2, sets 19/20/21 own **zero** pens. Line 0 reads nearly all
+0xFFFF while the owner bytes still say 85/87/88. **(c) frees the sets and
+nothing re-assigns them, because (b) is holding those same sets against
+`mdp_free_set`. The two changes fight.**
+
+And it retracts their own picture reading: *"ornaments now render"* was
+art drawing through a nearly empty line, and 2 -> 3 distinct came from
+emptiness, not correctness. **They reported an improvement that was a
+regression and caught it one message later, on a diff they asked for.**
+
+**chevfix (a+b, no re-claim) is the better build**, and it is the state
+entry 173's seven-value diff was designed to interrogate. The arithmetic
+stands; it was pointed at the wrong rom.
+
+### The stale owner: real, and I would not inflate it
+
+`mdp_free_set` clears `mdp_line_c` at 2433 and does not clear
+`mdp_pen_own`. Confirmed -- the only clears are 2988 (`mds_install`) and
+10809 (init).
+
+**But at runtime it is probably harmless.** A freed pen reads 0xFFFF, no
+tile indexes it, and the next `mdp_claim_pen` writes owner and colour
+together. The owner refresh repainting a free pen writes a value nothing
+reads.
+
+**Where it is NOT harmless is in a dump.** It made `mdp_pen_own` say
+85/87/88 for pens that were free, and that is exactly what misled the
+builder into reading chevfix2 as an improvement.
+
+**The durable rule, and it would have saved this round:**
+
+    never read mdp_pen_own without masking on mdp_line_c != 0xFFFF
+
+**An owner byte is only meaningful for a pen that holds a colour.** Worth
+putting in the probe rather than in anybody's memory -- that is the fifth
+instrument in this arc to mislead, and the second to do it by reporting
+stale state as live.
+
+### PEN_HOLD is what will bite the (c) fix
+
+Their plan -- *"the free needs a matching assign in the same breath"* --
+is right in shape, but `mdp_free_set:2428` has a wrinkle that changes
+what "free" means:
+
+    #ifdef PEN_HOLD
+    /* LOOP29 158: HOLD THE PENS ... this loop releases the set's pens,
+     * another set takes them, and the re-assign cannot go home ...
+     * Keeping the refcount RESERVES them across the gap. */
+
+**Under `PEN_HOLD` the free deliberately does NOT release the refcount.**
+So a free-then-assign pair does not behave like release-then-claim: the
+pens stay reserved, and whether the re-assign lands on the same pens
+depends on `TAGKEEP`'s land-where-you-were path (2770-2790), not on the
+pens being available.
+
+**Which flags are on in chevfix decides whether (c) even can work as
+written.** Worth checking before building it, not after -- it is a
+`.build_flags` read, not a compile.
+
+### Standing
+
+  * Run the seven-value diff against **chevfix**, not chevfix2.
+  * Fix (c) so the free and the assign are one operation, with
+    `PEN_HOLD`'s semantics accounted for.
+  * **The bar has still not moved: 27,072 bytes against 4 KB, MOTION 9.3
+    against 60.**
