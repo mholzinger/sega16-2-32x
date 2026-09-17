@@ -10535,3 +10535,98 @@ brake for the transport flood NTSKIP causes -- is already on the line.
 **And carry the crossing-correlation counter in the same build**, because
 the run either way produces a number that decides whether there is a
 second, larger lever behind the first.
+
+## 179. My churn hypothesis was INVERTED and the builder stated the correction precisely. The key design follows -- and the same mechanism is the likely shape of Mike's standing "remaining black tiles" (2026-09-16)
+
+### The win landed, and the cause was the key
+
+    NTSKIP,      MAXAGE=64   60.1% skipped
+    NTSKIP+KEY8, MAXAGE=64   84.7% skipped     ceiling 93.75%
+
+The key folded the full 10-bit `vxr`, so a one-pixel camera move re-keyed
+a row whose cells are identical -- **because the cells a row reads are a
+function of `vxr >> 3` only, which is the arithmetic from the camera
+table in entry 176.** +24.6 points against my predicted ~26.
+
+**And it was NOT allocator churn.** I hypothesised churn re-keying static
+rows. **It is the opposite: allocator churn SHOULD re-key those rows and
+does not.** The builder's phrasing is exact and worth keeping: *"your
+instinct pointed at the right line of code for the wrong direction."*
+`m_main.c:2309` was the right line; the arrow was backwards.
+
+**Recording it as an inverted hypothesis rather than a wrong one** --
+six now, and this is the first that was wrong only in sign.
+
+### The gate failed, and it failed honestly
+
+    MAXAGE   skip rate   black f2800
+       4          0.0%         4.9%
+       8          0.0%         4.9%
+      16         47.6%        14.0%
+      64         84.7%        10.3%
+
+**Black scales with skip rate and MAXAGE cannot bound it away.** And
+`MAXAGE <= 8` reading 0.0% **reproduces 177's age arithmetic exactly**
+-- revisit age is 8-16, so a bound of 8 is unsatisfiable. **177 was
+mispriced, not wrong about everything, and that is worth saying since
+this arc has been hard on it.**
+
+Holding the rig is the right call: **a flip rate from a rom that drops
+tiles prices a machine doing less work than a correct one.**
+
+### The key design, and the arrays already exist
+
+A cell's shipped pattern depends on its set's `(line, pixel->pen map)`.
+The row key folds scroll, pages and per-page content generations, and
+**not that.**
+
+**The cheap form is a PUSH, not a wider pull.** Do not fold allocator
+state for all 128 sets into every row key -- **fold a per-set assign
+generation, only for the sets a row actually holds.** The row already
+resolves `cset` per cell, and the per-set arrays are there:
+
+    mdp_s_line [128]     line+1, 0 = unassigned
+    mdp_s_map  [128][8]  pixel -> pen
+    mdp_s_stmp [128]     LRU stamp, already bumped at 2859/2967
+
+**And the live set count is small.** `m_main.c:2623-2628`: *"two sets
+share a line comfortably and three lines hold six sets"* -- so a row folds
+a handful of generation bytes, not 128.
+
+**Which bounds what it costs back.** Only rows holding a re-assigned set
+lose their skip, not all rows. **How much of the 84.7% survives is then a
+measurement of how often a set is re-assigned in gameplay** -- and the
+builder already has one datapoint suggesting that is rare (sets 19/20/21
+assigned twice in 1,600 frames), against one suggesting it is not
+(LOOP29 153: set 33 alone takes 44 relocations in 4,000 frames, "65% of
+all on-screen tile destruction"). **Fades are the driver, and that is the
+number to take before designing further.**
+
+### And this may close a standing defect of Mike's
+
+**The mechanism they just measured -- a stale slot reference surviving a
+re-assign, rendering the cells black -- is the shape of Mike's
+"remaining black tiles", which the LINE has at 4.8% with NTSKIP OFF.**
+
+`mdp_free_set`'s own comment (2302-2306) says the wipe exists precisely
+to prevent this: *"the pattern in VRAM is pen-remapped under the old
+assignment, and the (code,set) key would keep matching after a re-assign
+with a different remap."*
+
+**And `TAGKEEP` -- which is ON THE LINE -- defers that wipe.** Its comment
+(2308-2316): *"Defer it: keep the old line and map, and at the re-assign
+wipe only if they moved. [22] deferred wipes resolved SAME, [23]
+MOVED."*
+
+**So the line deliberately keeps stale references and resolves them
+late.** That is the same hazard NTSKIP just failed on, reached by a
+different path.
+
+**Counters [22] and [23] already exist and answer it directly.** If [23]
+(MOVED) is non-zero in gameplay, TAGKEEP is producing exactly this
+corruption on the line today, and the 4.8% has a named cause.
+
+**This is a hypothesis with six dead ancestors, so I am not building on
+it** -- but unlike the last five it costs one counter read of something
+already instrumented, and it is pointed at a defect Mike can see rather
+than at a flip rate.
