@@ -37,6 +37,25 @@ void shim(void) {
     *(volatile uint16_t*)0x85E000 = 7;
 }
 ''', False),
+ 'H8': ('sh', '''
+void f(void) { *(volatile uint8_t *)0x24012000 = 1; }
+''', True),
+ 'H8-word': ('sh', '''
+void f(void) { *(volatile uint16_t *)0x24012000 = 1; }
+''', False),
+ 'H8-notfb': ('sh', '''
+void f(void) { *(volatile uint8_t *)0x2603A680 = 1; }
+''', False),
+ 'H9': ('sh', '''
+void flip_span(void) {
+    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != want) ;
+}
+''', True),
+ 'H9-lib': ('sh', '''
+void Hw32xFlipWait(void) {
+    while ((MARS_VDP_FBCTL & MARS_VDP_FS) != want) ;
+}
+''', False),
  'H4-comment': ('md', '''
 void shim(void) {
     *(volatile uint16_t*)0xA15100 |= 0x8000;
@@ -47,7 +66,10 @@ void shim(void) {
 }
 
 RULE_OF = {'H1': lint32x.rule_H1, 'H2': lint32x.rule_H2,
-           'H3': lint32x.rule_H3, 'H4': lint32x.rule_H4, 'H5': lint32x.rule_H5}
+           'H3': lint32x.rule_H3, 'H4': lint32x.rule_H4, 'H5': lint32x.rule_H5,
+           'H8': lint32x.rule_H8, 'H9': lint32x.rule_H9}
+# H7 and H10 read the BUILT ROM (rom/s16.lst, rom/s16.32x), so they have no
+# source fixture; they are exercised against the live tree by `make lint`.
 
 
 def run():

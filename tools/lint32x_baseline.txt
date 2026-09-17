@@ -1,3 +1,13 @@
 # Pre-existing 32X-rule findings, baselined. A NEW one fails `make lint`.
 # Regenerate with --bless only after FIXING something.
+#
+# H7 IS DELIBERATELY NOT HERE. 18 per-vint SH-2 functions linking from
+# the cart window is a hardware defect, not a style note, and the gate
+# should stay red until they are RAMCODE. Baseline it only on Mike's say.
+#
+# H9 flip_span: the spin is KNOWN and BOUNDED -- m_main.c:8610 argues it
+# (18000-tick backstop, DIAG[31] counts late latches, correctness over
+# the stall). An informed exception, kept visible as INFO.
+# H3 FB_SPR/FBX_PKT_SH share 0x2401E000 by design (m_main.c:13914).
 H3|sh_src/m_main.c:328 spells 0x2401E000 as a literal in <file>()
+H9|sh_src/m_main.c:8620 spins on the FBCTL frame-select latch in <file>()

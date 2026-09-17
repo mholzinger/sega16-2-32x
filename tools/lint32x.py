@@ -39,6 +39,48 @@ hardware fact with the document that established it:
                  several add per-vint work that shifts the very outcome
                  being measured.
 
+The next four are the ones that decide whether the rom RUNS ON REAL
+HARDWARE at all. Each is a lesson this project paid for; none of them
+reproduce under emulation, which is why none of them were caught by a
+test:
+
+  H7 RAMCODE     a per-vint SH-2 function linked into the CART WINDOW
+                 (0x02xxxxxx) instead of SDRAM (0x06xxxxxx). NOTES.md:181:
+                 "While RV=1 the SH-2s must NEVER touch ROM" -- and RV=1
+                 is held for the whole game because the arcade binary's
+                 self-references need the cart identity-mapped at
+                 0x000000 (NOTES.md:162). Measured cost where it is only
+                 slow rather than fatal: a 4-6x fetch stall on EVERY
+                 instruction (md_main.c ~515; NOTES-FROM-DECOMPILE 57
+                 caught flip_span and visr_vbi at 0x0204xxxx this way).
+                 The fix is `RAMCODE` on the definition -- and
+                 `__attribute__((noinline))` with it, because a static
+                 with a section placement still inlines under LTO.
+                 Needs rom/s16.lst; skipped if absent.
+
+  H8 FBBYTE      a BYTE-wide access to the framebuffer. TOOLKIT.md:617,
+                 "FB byte-write zero-drop -- patch game byte-writers to
+                 word writes": a byte write to the FB does not write a
+                 byte, it drops. The 68K half of this is why patch_game.py
+                 has a byte-writer pass at all.
+
+  H9 FSSPIN      a spin on the FBCTL frame-select latch. TOOLKIT.md:615,
+                 "FBCTL flips ONLY in early vblank, gated by the MD
+                 V-counter ... never the 32X VBLK bit". The latch is
+                 deferred to vblank by the hardware, so a spin waiting for
+                 it to change while FM is held stalls the master for the
+                 rest of the frame -- measured at 12 points of speed
+                 (FLIPEDGEOFF, 2026-09-10) before the write was moved
+                 inside vblank.
+
+  H10 VDPLEAK    an arcade hardware address surviving in the PATCHED game
+                 body of the built rom. The arcade's I/O lives at
+                 0xC4xxxx and "0xC4 low byte lands on MD VDP -- MUST all
+                 be patched" (NOTES.md, the small-patch set). One missed
+                 operand is the 68K writing game data straight into the
+                 Mega Drive VDP on real hardware. Scans rom/s16.32x;
+                 skipped if absent.
+
 Guards are evaluated against the line's flag set, so a rule fires only on
 code that is actually in the shipping rom.
 """
@@ -67,6 +109,20 @@ def is_hw(a):
 
 FB_MD = (0x840000, 0x860000)        # 68K view of the 32X framebuffer
 FB_SH = (0x24000000, 0x24020000)    # master view of the same
+CART_SH = (0x02000000, 0x03000000)  # cart window: forbidden to the SH-2 at RV=1
+SDRAM_SH = (0x06000000, 0x07000000)
+BYTE_CAST = re.compile(r'\(\s*(?:const\s+|volatile\s+)*u?int8_t\s*\*\s*\)\s*(0x[0-9A-Fa-f]+)')
+FS_SPIN = re.compile(r'\b(?:while|do)\b[^;]*MARS_VDP_FBCTL[^;]*MARS_VDP_FS'
+                     r'|\bwhile\s*\([^;]*MARS_VDP_FS')
+# Arcade windows that MUST NOT survive patching. The 0xC4 range is the one
+# that reaches the Mega Drive VDP; the rest would read or write nothing.
+ARCADE_WINDOWS = [('arcade I/O -> MD VDP 0xC4xxxx', 0xC40000, 0xC44000),
+                  ('MD VDP ports 0xC000xx',         0xC00000, 0xC00020),
+                  ('arcade tile RAM 0x40xxxx',      0x400000, 0x410000),
+                  ('arcade text RAM 0x41xxxx',      0x410000, 0x420000),
+                  ('arcade sprite RAM 0x44xxxx',    0x440000, 0x450000),
+                  ('arcade palette 0x84xxxx',       0x840000, 0x850000)]
+GAME_BODY = (0x800, 0x40400)        # native offsets, NOTES.md "Cart layout"
 # FM is bit 15 of 0xA15100. Track it as a RUNNING STATE over the function
 # text: the first version of this rule fired on a framebuffer touch 800
 # lines after a raise that had been cleared 100 lines earlier.
@@ -229,7 +285,126 @@ def rule_H6(sh_defs, md_defs):
                    f'{flag} NEVER SHIP / probe only')
 
 
-RULES = {'H1': rule_H1, 'H2': rule_H2, 'H3': rule_H3, 'H4': rule_H4, 'H5': rule_H5}
+def rule_H7(sh, md):
+    """Per-vint SH-2 functions that did not land in SDRAM."""
+    lst = os.path.join(ROOT, 'rom', 's16.lst')
+    if not os.path.exists(lst):
+        return
+    import code_census
+    defs = {'sh': ' '.join(t for _, recs in sh for t in []) or None}
+    # reuse the census' own call graph rather than re-deriving reachability
+    per_file, funcs, calls = code_census.collect(code_census.defs_for_line())
+    hot = code_census.reachable(calls, code_census.VINT_ROOTS)
+    sym = {}
+    for ln in open(lst):
+        p = ln.split()
+        if len(p) >= 3 and p[1] in 'tT':
+            sym.setdefault(p[2].lstrip('_'), int(p[0], 16))
+    bad = sorted((sym[n], n) for n in hot
+                 if n in sym and CART_SH[0] <= sym[n] < CART_SH[1])
+    # A name that says boot is reachable from m_main but runs once. Keep it
+    # visible and out of the count; `--rule H7` prints the whole set.
+    BOOTISH = re.compile(r'boot|_init$|^init|reseed|^hs_(stub|patch)$')
+    live = [(a, n) for a, n in bad if not BOOTISH.search(n)]
+    once = [n for _, n in bad if BOOTISH.search(n)]
+    # THE FIX HAS A BUDGET. .ramtext is 0x06031000..0x06038000 (mars.ld:147
+    # and its ASSERT) = 28672 B, and the linker already fails the build on
+    # overflow. Quoting the shortfall is the difference between a usable
+    # finding and "add RAMCODE to eighteen functions".
+    used = free = None
+    for ln in open(lst):
+        p_ = ln.split()
+        if len(p_) >= 3 and p_[2] == '__ramtext_size':
+            used = int(p_[0], 16); free = 0x7000 - used
+    size = {}
+    try:
+        import subprocess as _sp
+        nm = os.environ.get('MARSDEV', os.path.expanduser('~/src/marsdev/mars'))
+        nm = os.path.join(nm, 'sh-elf', 'bin', 'sh-elf-nm')
+        elf = os.path.join(ROOT, 'rom', 's16.elf')
+        if os.path.exists(nm) and os.path.exists(elf):
+            for ln in _sp.run([nm, '-S', elf], capture_output=True,
+                              text=True).stdout.splitlines():
+                p_ = ln.split()
+                if len(p_) >= 4:
+                    size[p_[3].lstrip('_')] = int(p_[1], 16)
+    except Exception:
+        pass
+    need = sum(size.get(n, 0) for _, n in live)
+    budget = ''
+    if free is not None:
+        budget = (f' BUDGET: moving all {len(live)} costs {need} B and .ramtext has '
+                  f'{free} B free of 0x7000 (mars.ld:168 fails the build past it) — '
+                  f'this is a RANKED migration, not a sweep. Cheapest first: '
+                  + ', '.join(f'{n}({size.get(n, 0)}B)' for _, n in
+                              sorted(live, key=lambda x: size.get(x[1], 1 << 30))[:6])
+                  + '.')
+    if live:
+        yield ('ERROR', 'H7', f'{len(live)} per-vint SH-2 function(s) link into the '
+               f'CART WINDOW instead of SDRAM. At RV=1 the SH-2 must not fetch from '
+               f'the cart (NOTES.md:181); where it merely works it is a 4-6x fetch '
+               f'stall on every instruction (md_main.c ~515). Fix: RAMCODE + '
+               f'__attribute__((noinline)) on the definition — a static with a '
+               f'section placement still inlines under LTO. '
+               + ', '.join(f'{n}@0x{a:06X}' for a, n in live) + '.' + budget)
+    if once:
+        yield ('INFO', 'H7', f'{len(once)} more in the cart window that run at boot, '
+               f'not per vint: ' + ', '.join(once))
+
+
+def rule_H8(sh, md):
+    for f, recs in sh + md:
+        for r in recs:
+            if not r.live:
+                continue
+            for m in BYTE_CAST.finditer(strip_comments(r.text)):
+                a = int(m.group(1), 16)
+                if FB_SH[0] <= a < FB_SH[1] or FB_MD[0] <= a < FB_MD[1]:
+                    yield ('ERROR', 'H8', f'{f}:{r.line} reaches the framebuffer '
+                           f'(0x{a:X}) through a uint8_t pointer in {r.func}() — a '
+                           f'byte write to the FB drops (TOOLKIT.md:617). Use words.')
+
+
+def rule_H9(sh, md):
+    for f, recs in sh:
+        for r in recs:
+            # The stock marsdev library (Hw32x*) runs at boot and its
+            # FlipWait exists precisely to wait. The rule is about the
+            # per-vint path.
+            if not r.live or r.func.startswith('Hw32x'):
+                continue
+            if FS_SPIN.search(strip_comments(r.text)):
+                yield ('WARN', 'H9', f'{f}:{r.line} spins on the FBCTL frame-select '
+                       f'latch in {r.func}() — the hardware defers the latch to '
+                       f'vblank, so this waits out the frame if FM is held '
+                       f'(TOOLKIT.md:615; 12 points, 2026-09-10). Gate the flip on '
+                       f'the MD V-counter instead.')
+
+
+def rule_H10(sh, md):
+    """Arcade hardware addresses surviving in the patched game body."""
+    import struct
+    rom = os.path.join(ROOT, 'rom', 's16.32x')
+    if not os.path.exists(rom):
+        return
+    body = open(rom, 'rb').read()[GAME_BODY[0]:GAME_BODY[1]]
+    hits = {}
+    for i in range(0, len(body) - 3, 2):
+        v = struct.unpack_from('>I', body, i)[0]
+        for name, lo, hi in ARCADE_WINDOWS:
+            if lo <= v < hi:
+                hits.setdefault(name, []).append((GAME_BODY[0] + i, v))
+    for name, where in sorted(hits.items()):
+        off, v = where[0]
+        yield ('WARN', 'H10', f'{len(where)} long(s) in the patched game body point '
+               f'into {name} — first 0x{v:06X} at rom offset 0x{off:X}. If any is an '
+               f'OPERAND the 68K writes there on real hardware (NOTES.md, the '
+               f'small-patch set). Confirm with tools/code_stream.py; data that '
+               f'merely looks like an address is a false positive.')
+
+
+RULES = {'H1': rule_H1, 'H2': rule_H2, 'H3': rule_H3, 'H4': rule_H4, 'H5': rule_H5,
+         'H7': rule_H7, 'H8': rule_H8, 'H9': rule_H9, 'H10': rule_H10}
 BASELINE = os.path.join(ROOT, 'tools', 'lint32x_baseline.txt')
 
 
