@@ -94,7 +94,8 @@ if [ $DO_GCC = 1 ] && [ -x "$SHCC" ]; then
   grep -ohE '\[-W[a-z-]+\]' "$TMP/w_sh" "$TMP/w_md" | sort | uniq -c | sort -rn | sed 's/^/  /'
   N=$(grep -c 'warning:' "$TMP/w_sh" "$TMP/w_md" 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')
   echo "  total $N warnings (census, not a gate)"
-  cp "$TMP/w_sh" "$TMP/w_md" "$ROOT/docs/audit/" 2>/dev/null || true
+  cat "$TMP/w_sh" "$TMP/w_md" > "$ROOT/docs/audit/gcc_strict.log" 2>/dev/null || true
+  echo "  full text: docs/audit/gcc_strict.log"
 elif [ $DO_GCC = 1 ]; then
   echo "  SKIP — sh-elf-gcc not found at $SHCC"
 else

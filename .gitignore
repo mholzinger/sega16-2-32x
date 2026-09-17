@@ -64,3 +64,4 @@ docs/audit/function_map.md
 
 # Golden Axe decompile thread (2026-09-12): census outputs derived from the ROM
 docs/audit/goldnaxe/*.json
+docs/audit/gcc_strict.log
