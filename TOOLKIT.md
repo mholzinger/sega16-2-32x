@@ -822,7 +822,7 @@ scene anchors. Everything else is BOARD-level or 32X-level.
 
 | Component | LOC | Reuse | Per-title residue |
 |---|---|---|---|
-| `sh_src/` renderer (`m_main.c`, `mars_start.s`, `s_main.c`) | 6055 | ~95% | 3 extern symbol names; sprite bank mask `&7` (`m_main.c:1563`, assumes 1MB sprite ROM); `MD_TILE_MAX`; 16384-tile assumption |
+| `sh_src/` renderer (`m_main.c`, `mars_start.s`, `s_main.c`) | 6055 | ~95% | 3 extern symbol names; sprite bank mask `&7` (`m_main.c:1757`, assumes 1MB sprite ROM); `MD_TILE_MAX`; 16384-tile assumption |
 | `md_src/` shim | 1821 | ~80% | MCU personality (~60 lines), input map, DIP defaults, sound mailbox |
 | `tools/patch_game.py` | 981 | ~60% | 117 lines of hex tables + 22 hand `bfix` sites + the `remap()` address map |
 | `bake_sprites.py` + `sprite_discover.*` | ~950 | ~100% | none |

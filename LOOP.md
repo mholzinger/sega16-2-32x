@@ -67,8 +67,11 @@ ablations that produce a number and no pixel.
     - never hand Mike a probe as a playable build
     - never quote an ares number as a speed ranking (slave-gated)
     - never quote an attract number as a gameplay number
-    - a subset counter may not exceed its parent; if it does, the
-      instrument is broken, not the code
+    - a subset counter may not exceed its parent — but only once you
+      have checked both count the same UNIT. MDA[20] (words) over
+      MDA[19] (chunks) looked impossible and was not.
+    - before adding any counter, read the registries at m_main.c:72
+      (DIAG, 64 slots, full) and m_main.c:718 (mdalloc_ctr)
     - wrong pixels disqualify a CANDIDATE and qualify an ABLATION
 
 ## INVOCATION

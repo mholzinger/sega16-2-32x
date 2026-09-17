@@ -64,7 +64,10 @@ mechanisms were killed by a read the other thread took before compiling.
    the same rom. A median over mixed scenes compares workloads, not
    roms.
 2. **Cross-check subset counters.** A subset may never exceed its
-   parent. That rule found a counter collision in one step.
+   parent — **after** you have checked both count the same UNIT.
+   `MDA[20]`/`MDA[19]` read as a violation and was a word count over a
+   chunk count. The registries at `m_main.c:72` and `m_main.c:718` say
+   what each slot counts; read one before quoting a counter.
 3. **Look at the picture.** A census answers the question you asked. If
    you have the frame, open it.
 4. **Wrong pixels disqualify a CANDIDATE and qualify an ABLATION.**

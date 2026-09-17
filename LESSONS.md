@@ -49,27 +49,84 @@ The cache sees ONE generation. A 200-frame union reads 21,856 B; a
 2-frame window essentially all of it is already touched — there is no
 cold region.
 
-### Counter indices collide, and there is no registry
+### Counter indices collide. THERE ARE NOW REGISTRIES — READ THEM
 
-`DIAG[36]` is both the nearest-colour fallback counter and
-`r60_pkt_flip` (`m_main.c:15023`) — and something wipes it every frame.
-`MDA[19]`/`MDA[20]` are shared between `mdp_claim_pen` and the
-cell-chunk shipper, where `MDA_ADD(20, sc[5])` accumulates a **word
-count**.
+    m_main.c:72     DIAG. 64 slots and the block is FULL
+                    (0x28000..0x280FF; BM starts at 0x28100).
+    m_main.c:718    mdalloc_ctr. 48 slots.
 
-*Detection rule:* **a subset counter may never exceed its parent.**
-`MDA[20] = 23,038` against `MDA[19] = 218` is structurally impossible and
-that is how the collision was found.
+Written 2026-09-16 from a preprocessor-aware census: each site's guard
+evaluated against `.build_flags`, so "LIVE" means live ON THE LINE.
+**No DIAG slot is free in every build.** A new cumulative counter goes
+in `.bss` the way `mdalloc_ctr` does — not into a slot you picked.
 
-*Cost:* two debugging cycles. A registry comment listing every index with
-its owner is cheaper than either.
+What the census found: `DIAG[36]` is the nearest-colour fallback counter
+AND `r60_pkt_flip`, which XORs it every gap — plus NINE more live
+collisions ([35] [37] [38] [39] [42] [50] [51] [52] [53]), two of them
+four-way. On the MDA side the collision was **six slots wide**, not two:
+the NOTES 51 batch census took [16]..[21] from the allocator, including
+`mdp_claim_pen`'s pen-starvation trio. Fixed — census moved to
+[32]..[37].
+
+*The detection rule that DID NOT work:* "a subset counter may never
+exceed its parent". `MDA[20] = 23,038` against `MDA[19] = 218` was read
+as structurally impossible. It is not: both belong to the shipper, and
+[20] is a WORD count against [19]'s CHUNK count — ~105 words per chunk.
+The collision was real and the rule pointed at it, but by luck. **A
+ratio is only a subset violation once you have checked that the two
+counters count the same UNIT.**
+
+*Cost:* two debugging cycles before the registries existed, and one
+false "mdp_claim_pen writes no MDA slot" during the census itself.
+
+### A grep for an array index misses the macro form
+
+`grep 'MDA\[\|MDA_ADD'` finds `MDA_ADD(20, ...)` and misses `MDA(19)`
+entirely. That single blind spot is why the `mdalloc_ctr[16..21]`
+collision survived: the batch census (db8d834) took six slots the
+allocator (eea4cf8) already owned, and a census run on 2026-09-16
+initially reported "mdp_claim_pen writes no MDA slot" — the exact
+opposite of the truth, and it was one keystroke from being written into
+a registry as fact.
+
+**Search for the ACCESSOR, not the array.** `MDA(`, `MDA_ADD(`,
+`mdalloc_ctr[` — all three. Same for any counter reached through a
+macro.
+
+*Cost:* caught before publication only because the claim contradicted
+`STATE.md` and the contradiction was chased instead of assumed.
+
+### `make -n` REWRITES .build_flags
+
+The `FLAGSTAMP` rule is a `$(shell ...)` at Makefile PARSE time
+(`Makefile:2823`), so it fires on `make -n`, on a `make` that builds
+nothing, and on any `make` whose goal is unrelated. `make -n ship-us
+FBXPORT=1` silently replaced the line's stamp with a reduced `-D` set —
+the stamp no longer described `rom/s16.32x`, and the next real build
+would have rebuilt every object against it.
+
+**To read flags without touching the build: save the file, run, restore.**
+
+    cp .build_flags /tmp/bf.save; make -n <goal> ... ; cp /tmp/bf.save .build_flags
+
+`.build_flags` is gitignored, so there is no `git checkout` to recover
+it. If it is lost, the only authority left is the Makefile's
+`LINE_FLAGS` (`Makefile:2890`) and a rebuild.
+
+### An LTO object is not a byte-diff instrument
+
+`-flto` stores GIMPLE, and GIMPLE carries line numbers, so inserting a
+COMMENT changes the object bytes. Proving "this edit changed no code"
+needs `-S` with `-flto` stripped and the `! <n> "file"` inline-asm
+markers filtered out. Done that way, a 200-line comment insertion
+produced identical SH-2 assembly.
 
 ### grep is not a free-space test
 
 Live code reaches scratch through base pointers. `0x26028DE0` and
 `0x26028DA0` both had zero literal references and both were live.
 
-**The authority is the memory map comment at `m_main.c:1329`.**
+**The authority is the memory map comment at `m_main.c:1523`.**
 
 *Cost:* two builds.
 
@@ -101,7 +158,7 @@ base address; the classifier above; `MDA[19]/[20]`.
 
 The claim "cyclers own no pens and are never repainted" was withdrawn
 because one pen (14) tracked correctly. That pen was **sole-owned**, and
-`m_main.c:16082` gates the in-place recolour on `mdp_pen_rc == 1`. The
+`m_main.c:16281` gates the in-place recolour on `mdp_pen_rc == 1`. The
 counter-example was the clue.
 
 *Cost:* a correct mechanism was abandoned and a build was spent.
@@ -153,21 +210,21 @@ both planes for the entire game.
 
 ### Tile RAM has no in-play writer
 
-`m_main.c:3199` / LOOP-DECOMPILE 99. The tilemap is static during play,
+`m_main.c:3393` / LOOP-DECOMPILE 99. The tilemap is static during play,
 which is what makes caching the scan **safe**, not merely fast.
 
 ### The transformation screen
 
 `sub_3A00`'s cutscene branch (`0x3A0C-0x3A22`) zeroes all four scroll
 registers and selects pages 10/11 (`#$AAAA`/`#$BBBB`). Static by
-construction. `glow_chev` (`m_main.c:14620-14650`) is the exact gate —
+construction. `glow_chev` (`m_main.c:14814-14844`) is the exact gate —
 "any page nibble >= 10". **Do not write another.**
 
 The face itself is a four-palette **zoomed sprite** built by `sub_90F4`
 (`0x90F4`), not tiles. Pages 10/11 are the backdrop behind it.
 
 `0xFFF148` is an **object marker, value = slot + 1** (dispatcher
-`0x398E`) — **not** a scene flag, despite `m_main.c:6611` calling it
+`0x398E`) — **not** a scene flag, despite `m_main.c:6805` calling it
 "the game's own cutscene byte". That contradiction is unresolved and is
 load-bearing for `mds_onscreen`.
 
@@ -183,7 +240,7 @@ our own initialisation and is not evidence.
 
 ### Cat-1 is on the FOREGROUND plane and is never tile-occluded
 
-Pages 0-4 are the foreground (`snap[0]`, `m_main.c:2909`/`:15042`,
+Pages 0-4 are the foreground (`snap[0]`, `m_main.c:3103`/`:15042`,
 `pagesel_census.txt`). `jts16_prio.v:83-95` tests the foreground first,
 so no tile plane is above cat-1. **Tile-occlusion of cat-1 is zero.**
 

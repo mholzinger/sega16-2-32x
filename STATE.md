@@ -102,9 +102,6 @@ costing anything.**
                           the 84.7% survives. NOT a speed card any
                           more -- the rig says flat -- but the key bug
                           is real and NTKEY8's +24.6 points is real.
-    counter registry      two index collisions in two weeks
-                          (DIAG[36]/r60_pkt_flip, MDA[19]/[20]).
-                          20 minutes.
     transport ablation    the live axis. Design it against the 6x
                           variance first.
 
@@ -121,11 +118,29 @@ costing anything.**
     MAME (our 32x)        a convenience model. Renders every NATIVE
                           build as confetti; cannot pixel-gate the
                           line. MD-side counters are honest.
+    counter registries    m_main.c:72 (DIAG, 64 slots, FULL) and
+                          m_main.c:718 (mdalloc_ctr, now 48 slots).
+                          Written 2026-09-16 from a preprocessor-aware
+                          census. READ ONE BEFORE ADDING A COUNTER --
+                          no DIAG slot is free in every build.
     DIAG[36]              DOUBLE-BOOKED as r60_pkt_flip, and wiped
-                          every frame. Unusable.
-    MDA[19] / MDA[20]     DOUBLE-BOOKED with the cell-chunk shipper.
-                          MDA_ADD(20) accumulates a WORD COUNT.
-                          Unusable until moved.
+                          every frame. Unusable. The registry names
+                          NINE more live DIAG collisions -- [35] [37]
+                          [38] [39] [42] [50] [51] [52] [53]. Every
+                          number read from one is the SUM of two
+                          subsystems. [39] and [42] have FOUR owners.
+    MDA[16]..[21]         WAS six-way double-booked: the NOTES 51
+                          batch census had taken the allocator's own
+                          slots, including the mdp_claim_pen pen-
+                          starvation trio [19][20][21]. FIXED
+                          2026-09-16 -- census moved to [32]..[37],
+                          array grown to 48, tools/batch_census.py
+                          follows. Any pen-starvation or batch figure
+                          from before that date is a SUM.
+                          The `[20] > [19]` that flagged it was NOT a
+                          subset violation: both are the shipper's,
+                          one a word count. The collision was real;
+                          that arithmetic was not the proof.
     mdp_pen_own           stale after a free. NEVER read it without
                           masking on mdp_line_c != 0xFFFF.
     state_health.py       needs a .bs1; headless ares writes none.

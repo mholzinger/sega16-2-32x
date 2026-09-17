@@ -46,19 +46,6 @@ arithmetic corrections, or anything ending "no pixel changed."
     ask          build it, read black-tile share against bldS
     gate         pixel change -> GATE QUEUE when built
 
-### O-3  Counter registry
-    owner        BUILDER
-    state        READY
-    premise      two index collisions in two weeks. DIAG[36] is also
-                 r60_pkt_flip and is wiped every frame. MDA[19]/[20]
-                 are shared with the cell-chunk shipper where
-                 MDA_ADD(20) accumulates a word count.
-    ask          a registry comment listing every MDA and DIAG index
-                 with its owner, same role as the memory map at
-                 m_main.c:1329. Then move the pen-starvation counters
-                 to free indices and re-run.
-    gate         none. No pixel, no rig.
-
 ### O-4  NTSKIP correctness (not a speed card any more)
     owner        BUILDER, design from DECOMPILE note 119
     state        DESIGN
@@ -76,6 +63,20 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## LEDGER — closed, one line each
 
+    2026-09-16  O-3 CLOSED. Counter registries written from a
+                preprocessor-aware census: DIAG at m_main.c:72 (64
+                slots, FULL -- 0x28000..0x280FF, BM starts at 28100),
+                mdalloc_ctr at m_main.c:718. Nine live DIAG collisions
+                beyond the known [36]; [39] and [42] have four owners.
+    2026-09-16  MDA collision was SIX slots, not two. The NOTES 51
+                batch census (db8d834) had taken [16]..[21] from the
+                allocator (eea4cf8), including the mdp_claim_pen pen-
+                starvation trio. Census moved to [32]..[37], array
+                grown to 48, tools/batch_census.py follows. Line build
+                proven unaffected: identical SH-2 assembly vs HEAD.
+    2026-09-16  The `[20] > [19]` subset violation was a FALSE alarm --
+                both are the shipper's, one a word count. The collision
+                was real; that arithmetic was not the proof of it.
     2026-09-16  Compute axis CLOSED. Master ablation (84.7% of the
                 name-table walk) FLAT on the rig; ares' 58.3 was slave
                 work on a slave-gated instrument. Neither SH-2's
