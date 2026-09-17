@@ -127,12 +127,24 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   allocator -- ruled out by census and
                                   by the permanent group-0 pin at
                                   m_main.c:4132. Look at the text path.
-    black tiles, 4.8% of cells    mechanism named: a slot reference
-                                  outliving its set's pen map.
-                                  TAGKEEP's deferred wipe is a
-                                  candidate cause and is falsified
-                                  independently -- removing it is the
-                                  first thing to try.
+    black tiles, 4.8% of cells    MECHANISM IS RESIDENCY, not stale
+                                  tags (rig census 2026-09-17, 20/20
+                                  frames decoded, 20 distinct md5s):
+                                    noslot  mean 1.20  no way claimed
+                                    dirty   mean 1.20  claimed, art
+                                                       not shipped yet
+                                    cut     mean 0.15  dead code
+                                  Both live paths mean THE ART IS NOT
+                                  IN VRAM YET when the cell is drawn.
+                                  NOT palette, NOT pens, NOT the
+                                  allocator, NOT stale tags -- the
+                                  earlier "slot reference outliving
+                                  its pen map" reading is RETIRED.
+                                  So this defect is DOWNSTREAM OF EMIT
+                                  THROUGHPUT: it is the same card as
+                                  BAKED TILE TRANSPORT below, and the
+                                  black-cell count is the honest
+                                  instrument for that card.
     transformation screen         zigzag + ornaments DRAW under
                                   CHEVFIX=1 (not on the line).
                                   Colours wrong: 3 distinct against
@@ -194,6 +206,36 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           is real and NTKEY8's +24.6 points is real.
     transport ablation    the live axis. Design it against the 6x
                           variance first.
+    BAKED TILE            LIVE. md_emit_art's per-tile conversion is
+    TRANSPORT             baked to ROM (TILESMD=1, 425KB at 0x263C00,
+                          byte-identical on 941/941 live VRAM slots).
+                          Rig verdict on the BYTE-width build
+                          (tilesmd.32x, Mike 2026-09-17): "slightly.
+                          but nothing significant" + "the Neff battle
+                          feels pretty good".
+                          WHY IT WAS ONLY SLIGHT: the bake removed the
+                          ARITHMETIC and left the transport at BYTE
+                          width -- 32 byte reads + 32 byte writes per
+                          tile through a volatile pointer the compiler
+                          cannot merge. The plan asks for a cart->VRAM
+                          move; what shipped was a byte-copy loop.
+                          NOW: halfword, 64 touches -> 32 (41b4dfc),
+                          gated against the byte build at VRAM 0 of
+                          65536 and pixels 0. rom/night/tilesmd2.32x,
+                          ON THE RIG 23:34, awaiting the A/B against
+                          the byte build Mike already played.
+                          NEXT if it moves: 4-byte moves take it to 8,
+                          but the art field must be 4-aligned and the
+                          packet stride is 17 words, so alignment
+                          alternates -- a packet_fmt card.
+                          DO NOT read a flat result as "the bake is
+                          the wrong direction": the recorded frame
+                          threshold law says cuts under ~50 lines buy
+                          nothing, so a real sub-threshold win reads
+                          as flat until enough of them stack.
+                          CAVEAT held: tilesmd runs ONE GAME FRAME
+                          offset from the line. Constant, not
+                          drifting. Mike accepted the tolerance.
 
 ## INSTRUMENT STATUS
 
