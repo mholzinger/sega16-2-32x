@@ -65,7 +65,7 @@ PIX0_MIN_CELLS = int(os.environ.get('PIX0_MIN_CELLS', 512))
 # forever" (the CHEV_FIX comment at :2759). Filling round 0 from
 # [14,14,15] to [15,15,15] cost the wolf transformation its animating
 # sprites on the rig, 2026-09-18. The bake does not own every pen.
-PEN_RESERVE = int(os.environ.get('PEN_RESERVE', 2))
+PEN_RESERVE = int(os.environ.get('PEN_RESERVE', 1))
 # LOOP29 197: THREE, not four. m_main.c:473 sets MDP_LINES 3 by default and
 # the fourth line is MDP_LINES4, which carries `#error "MDP_LINES4 takes the
 # MD sprite line for tiles"` against MD_SPR -- and every shipping build has
