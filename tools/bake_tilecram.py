@@ -57,6 +57,15 @@ SCENES, TILES_N, SLOTS = 5, 20480, 16
 # constraint rather than a best-effort post-pass. A full screen is
 # 40x28 = 1120 cells, so 512 is roughly half a screen of that one set.
 PIX0_MIN_CELLS = int(os.environ.get('PIX0_MIN_CELLS', 512))
+# Pens per line the bake must LEAVE FREE for the runtime allocator.
+# mdp_claim_pen (m_main.c:2734) scans for a 0xFFFF pen so a VOLATILE set
+# -- a cycler, an animation -- can take an EXCLUSIVE one; with none free
+# it is forced to share, and a shared pen "falls through to tolerated
+# drift and is never repainted, so it holds its claim-time colour
+# forever" (the CHEV_FIX comment at :2759). Filling round 0 from
+# [14,14,15] to [15,15,15] cost the wolf transformation its animating
+# sprites on the rig, 2026-09-18. The bake does not own every pen.
+PEN_RESERVE = int(os.environ.get('PEN_RESERVE', 2))
 # LOOP29 197: THREE, not four. m_main.c:473 sets MDP_LINES 3 by default and
 # the fourth line is MDP_LINES4, which carries `#error "MDP_LINES4 takes the
 # MD sprite line for tiles"` against MD_SPR -- and every shipping build has
@@ -163,7 +172,7 @@ def pack(pal, cols, order, overflow=None):
     for p in order:
         c = cols(p)
         cand = sorted((len(g | c) - len(g), i) for i, g in enumerate(groups)
-                      if len(g | c) <= SLOTS - 1)
+                      if len(g | c) <= SLOTS - 1 - PEN_RESERVE)
         if not cand:
             if overflow is None:
                 return None
@@ -417,7 +426,7 @@ def main():
             for li, byc in want.items():
                 for c0, ps in sorted(byc.items(),
                                      key=lambda kv: -len(kv[1])):
-                    if len(slot[li]) + 1 <= SLOTS - 1:
+                    if len(slot[li]) + 1 <= SLOTS - 1 - PEN_RESERVE:
                         slot[li][c0] = len(slot[li]) + 1
                         for p in ps:
                             pen0[p] = slot[li][c0]
@@ -444,6 +453,8 @@ def main():
             print('  pixel 0: %d reused an existing pen, %d took a spare, '
                   '%d left transparent (line full)'
                   % (p0_reuse, p0_new, p0_full))
+        print('  free pens per line (runtime headroom): %s'
+              % [SLOTS - 1 - len(g) for g in groups])
         print('scene %d: %2d palettes, lines %s, %d slots used%s'
               % (s, len(pal), [len(g) for g in groups],
                  sum(len(g) for g in groups),
