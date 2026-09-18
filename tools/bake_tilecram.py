@@ -53,19 +53,6 @@ SCENE_SETS = _scene_sets()
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
 SCENES, TILES_N, SLOTS = 5, 20480, 16
-# Cells a set must cover before its index-0 colour becomes a PACKING
-# constraint rather than a best-effort post-pass. A full screen is
-# 40x28 = 1120 cells, so 512 is roughly half a screen of that one set.
-PIX0_MIN_CELLS = int(os.environ.get('PIX0_MIN_CELLS', 512))
-# Pens per line the bake must LEAVE FREE for the runtime allocator.
-# mdp_claim_pen (m_main.c:2734) scans for a 0xFFFF pen so a VOLATILE set
-# -- a cycler, an animation -- can take an EXCLUSIVE one; with none free
-# it is forced to share, and a shared pen "falls through to tolerated
-# drift and is never repainted, so it holds its claim-time colour
-# forever" (the CHEV_FIX comment at :2759). Filling round 0 from
-# [14,14,15] to [15,15,15] cost the wolf transformation its animating
-# sprites on the rig, 2026-09-18. The bake does not own every pen.
-PEN_RESERVE = int(os.environ.get('PEN_RESERVE', 1))
 # LOOP29 197: THREE, not four. m_main.c:473 sets MDP_LINES 3 by default and
 # the fourth line is MDP_LINES4, which carries `#error "MDP_LINES4 takes the
 # MD sprite line for tiles"` against MD_SPR -- and every shipping build has
@@ -172,7 +159,7 @@ def pack(pal, cols, order, overflow=None):
     for p in order:
         c = cols(p)
         cand = sorted((len(g | c) - len(g), i) for i, g in enumerate(groups)
-                      if len(g | c) <= SLOTS - 1 - PEN_RESERVE)
+                      if len(g | c) <= SLOTS - 1)
         if not cand:
             if overflow is None:
                 return None
@@ -223,7 +210,7 @@ def main():
     # too. Live dumps are the only correct source above 63.
     # per-scene live colours: {scene: {pal: set(colours)}} and a
     # representative per-pixel list for the pen map
-    slive, slivepix, slive0 = {}, {}, {}
+    slive, slivepix = {}, {}
     if a.live_dir:
         import glob as _glob
         for sc in range(SCENES):
@@ -237,14 +224,6 @@ def main():
                 if len(d) < 0x800:
                     sys.exit('%s: want >= 0x800 bytes of palette ram' % fn)
                 for pp in range(128):
-                    # PIXELS 1-7 ONLY, deliberately. Index 0 is handled
-                    # by the post-pass below, NOT here: feeding it to the
-                    # packer makes it a grouping constraint, which forced
-                    # a full repack and pushed 12 sets into overflow --
-                    # and an overflowed set loses ALL its pens and falls
-                    # back to the framebuffer, so that trades 7 correct
-                    # pens for none. Measured 2026-09-17: 106 pinned sets
-                    # -> 94, round 2 alone losing 9.
                     u.setdefault(pp, set()).update(
                         md(w16(d, pp * 16 + 2 * k)) for k in range(1, 8))
                     # LOOP29 195: the pen MAP must be the palette's
@@ -256,17 +235,12 @@ def main():
                     # vectors and take the MODE below.
                     px.setdefault(pp, {})
                     key = tuple(md(w16(d, pp * 16 + 2 * k))
-                                for k in range(0, 8))
+                                for k in range(1, 8))
                     px[pp][key] = px[pp].get(key, 0) + 1
             # collapse each palette's tally to its most common vector
             px = {pp: list(max(v.items(), key=lambda kv: kv[1])[0])
                   for pp, v in px.items()}
             slive[sc], slivepix[sc] = u, px
-            # index 0's modal colour, one per set. Kept SEPARATE from the
-            # packing requirement: it joins cols() only for sets that
-            # cover real screen area (PIX0_MIN_CELLS), because feeding it
-            # in for all 128 forced a repack that cost 12 pinned sets.
-            slive0[sc] = {pp: v[0] for pp, v in px.items()}
             print('live scene %d: %d gated dumps' % (sc, len(fs)))
     live = None
     livepix = {}
@@ -298,19 +272,7 @@ def main():
 
         def cols(p, _b=base, _s=s):
             if _s in slive:
-                c = set(slive[_s][p])
-                # A BG set's index 0 is a real colour (md_emit_art's BG
-                # variant looks map[0] up). For a set that covers real
-                # area -- the sky is 2200 cells -- it must be guaranteed
-                # a pen, which means the GROUPING has to know about it.
-                # Below the threshold the post-pass picks it up from a
-                # spare or an existing pen, and if neither exists that
-                # set keeps map[0] = 0. Sets sharing a line and a colour
-                # ride the same pen, so pulling set 95 in also serves
-                # 96 and 97 for free.
-                if CELLS.get(p, 0) >= PIX0_MIN_CELLS and _s in slive0:
-                    c.add(slive0[_s][p])
-                return frozenset(c)
+                return frozenset(slive[_s][p])
             if live is not None and _s == a.live_scene:
                 return frozenset(live[p])
             return frozenset(md(w16(rom, _b + p * 16 + 2 * k)) for k in range(1, 8))
@@ -340,10 +302,6 @@ def main():
         # 215: BIG sets first, so that what overflows is small. The old
         # order (colours desc) put sets 100/101 -- 2,012 BG cells of round
         # 0 -- in the framebuffer to make room for a 15-cell set.
-        if os.environ.get('CELLS_DEBUG'):
-            print('  scene %d cells: %s' % (s, ' '.join(
-                '%d:%d' % (q, CELLS.get(q, 0))
-                for q in sorted(pal, key=lambda q: -CELLS.get(q, 0))[:14])))
         order = sorted(pal, key=lambda p: (-CELLS.get(p, 0), -len(cols(p))))
         groups = pack(pal, cols, order)
         if groups is None:
@@ -379,8 +337,7 @@ def main():
             for li, g in enumerate(groups):
                 if c <= g:
                     if s in slive:
-                        assign[p] = (li, [slot[li][c]
-                                          for c in slivepix[s][p][1:]])
+                        assign[p] = (li, [slot[li][c] for c in slivepix[s][p]])
                     elif live is not None and s == a.live_scene:
                         # BUG FIXED (LOOP29 176): this read `sorted(live[p])`,
                         # a SET, so the emitted pen map was in colour order
@@ -392,52 +349,6 @@ def main():
                                                           + 2 * k))]
                                           for k in range(1, 8)])
                     break
-        # PIXEL 0, AFTER the packing is fixed (2026-09-17).
-        #
-        # md_emit_art has two variants and only the FG one forces pixel 0
-        # to 0; the BG variant looks map[0] UP. With map[0] pinned to 0
-        # every index-0 pixel of a BG set drew the backdrop -- the black
-        # sky band on sets 92/93/95/96/97.
-        #
-        # Resolved per set against the line it ALREADY sits on, so the
-        # grouping never changes and no set can be pushed to overflow:
-        #   1. the colour is already a pen on that line -> reuse it, free
-        #   2. the line has a spare pen            -> paint it there
-        #   3. the line is full                    -> leave map[0] = 0,
-        #      i.e. exactly today's behaviour for that set alone
-        # Measured on round 0: line 2 already held 0x01EC (sets 92/93 cost
-        # NOTHING) and line 1 had 2 spare pens (95/96/97 cost one). The
-        # whole sky fix is one pen.
-        # Spares go BY DEMAND, not by arrival. A line has at most a pen
-        # or two spare, and first-come spent line 1's single spare on a
-        # colour one set wanted -- leaving sets 95/96/97, which all three
-        # want the SAME colour (0x01EC), transparent. One pen serves all
-        # three if it is allocated for the colour rather than the set.
-        pen0 = {}
-        p0_reuse = p0_new = p0_full = 0
-        if s in slive:
-            want = {}                      # line -> colour -> [sets]
-            for p, (li, slots) in assign.items():
-                c0 = slivepix[s][p][0]
-                if c0 in slot[li]:
-                    pen0[p] = slot[li][c0]; p0_reuse += 1
-                else:
-                    want.setdefault(li, {}).setdefault(c0, []).append(p)
-            for li, byc in want.items():
-                for c0, ps in sorted(byc.items(),
-                                     key=lambda kv: -len(kv[1])):
-                    if len(slot[li]) + 1 <= SLOTS - 1 - PEN_RESERVE:
-                        slot[li][c0] = len(slot[li]) + 1
-                        for p in ps:
-                            pen0[p] = slot[li][c0]
-                        p0_new += len(ps)
-                    else:
-                        for p in ps:
-                            pen0[p] = 0
-                        p0_full += len(ps)
-        for p in list(assign):
-            li, slots = assign[p]
-            assign[p] = (li, [pen0.get(p, 0)] + list(slots))
         line_cols, line_words = [], []
         for li, g in enumerate(groups):
             row = [None] * SLOTS          # None = free; (0,0,0) = BLACK
@@ -449,12 +360,6 @@ def main():
         out_col.append(line_cols)
         out_h.append((s, len(pal), [len(g) for g in groups], assign))
         ov = overflow.get(s, [])
-        if s in slive:
-            print('  pixel 0: %d reused an existing pen, %d took a spare, '
-                  '%d left transparent (line full)'
-                  % (p0_reuse, p0_new, p0_full))
-        print('  free pens per line (runtime headroom): %s'
-              % [SLOTS - 1 - len(g) for g in groups])
         print('scene %d: %2d palettes, lines %s, %d slots used%s'
               % (s, len(pal), [len(g) for g in groups],
                  sum(len(g) for g in groups),
@@ -512,13 +417,8 @@ def main():
             s_map = [[0] * 8 for _ in range(128)]
             for pp, (li, slots) in assign.items():
                 s_line[pp] = li + 1
-                # 0xFF not 0xFE: pixel 0 now owns a pen like any other.
-                # slots is 8 long now (pixels 0-7), so no [0] + prefix --
-                # that prefix was what pinned every BG set's index 0 to
-                # transparent. MD pen 0 stays reserved and unused, so
-                # hardware transparency is unaffected.
-                s_used[pp] = 0xFF if slots[0] else 0xFE
-                s_map[pp] = list(slots)
+                s_used[pp] = 0xFE
+                s_map[pp] = [0] + list(slots)
             sl_all.append(s_line); su_all.append(s_used); sm_all.append(s_map)
             lc_all.append(line_words)
             print('  emit-mds: round %d -> %d sets pinned, lines %s'
