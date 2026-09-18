@@ -149,6 +149,31 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   CHEVFIX=1 (not on the line).
                                   Colours wrong: 3 distinct against
                                   an expected 7.
+                                  2026-09-18 (Mike, rig, tilesmd6/7):
+                                  the animating character shows for
+                                  exactly ONE FRAME, then only flames
+                                  and chevron. NOT caused by the pen
+                                  bake -- MDP_LINES is 3, so the tile
+                                  tables own MD CRAM lines 1-3 and
+                                  MDSPR owns the fourth (m_main.c:595);
+                                  no pen the bake allocates can reach a
+                                  sprite. Reserving 6 free pens changed
+                                  nothing, which is the same evidence.
+                                  UNTESTED ON THE LINE -- run bldS and
+                                  trigger a transformation. That single
+                                  test says regression vs pre-existing
+                                  and nothing else should be built for
+                                  it until it is done.
+                                  BLACK TILES during the flame wipe are
+                                  a SEPARATE and now-explained thing:
+                                  md_state_on() reports the round OFF
+                                  SCREEN through the transformation
+                                  (m_main.c:1738, deliberate), so sets
+                                  assigned there get their tags wiped
+                                  (:6954) and the art must re-ship.
+                                  Mike's 02:24:04 frame is full of
+                                  black 8x8 holes; 02:24:05 has them
+                                  filled. Residency, caught in the act.
     eye screen                    ~50 frames of black from ~f1610
                                   where the arcade shows a picture.
                                   The rom sets the backdrop black
