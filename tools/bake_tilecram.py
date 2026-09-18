@@ -224,8 +224,17 @@ def main():
                 if len(d) < 0x800:
                     sys.exit('%s: want >= 0x800 bytes of palette ram' % fn)
                 for pp in range(128):
+                    # LOOP29 (2026-09-17): range(0, 8), NOT range(1, 8).
+                    # Colour index 0 used to be excluded from the harvest
+                    # entirely, so it was never packed and never got a pen,
+                    # and the emit hardcoded map[0] = 0 = transparent. For a
+                    # BG tile md_emit_art looks map[0] UP (only the FG
+                    # variant forces pixel 0 to 0), so every index-0 pixel
+                    # of a BG set drew the backdrop: the black sky band.
+                    # Including it here is safe for FG sets because the FG
+                    # variant overrides map[0] regardless.
                     u.setdefault(pp, set()).update(
-                        md(w16(d, pp * 16 + 2 * k)) for k in range(1, 8))
+                        md(w16(d, pp * 16 + 2 * k)) for k in range(0, 8))
                     # LOOP29 195: the pen MAP must be the palette's
                     # RESTING state, not whichever dump sorted first.
                     # setdefault took file[0], and if that sample is
@@ -235,7 +244,7 @@ def main():
                     # vectors and take the MODE below.
                     px.setdefault(pp, {})
                     key = tuple(md(w16(d, pp * 16 + 2 * k))
-                                for k in range(1, 8))
+                                for k in range(0, 8))
                     px[pp][key] = px[pp].get(key, 0) + 1
             # collapse each palette's tally to its most common vector
             px = {pp: list(max(v.items(), key=lambda kv: kv[1])[0])
@@ -417,8 +426,13 @@ def main():
             s_map = [[0] * 8 for _ in range(128)]
             for pp, (li, slots) in assign.items():
                 s_line[pp] = li + 1
-                s_used[pp] = 0xFE
-                s_map[pp] = [0] + list(slots)
+                # 0xFF not 0xFE: pixel 0 now owns a pen like any other.
+                # slots is 8 long now (pixels 0-7), so no [0] + prefix --
+                # that prefix was what pinned every BG set's index 0 to
+                # transparent. MD pen 0 stays reserved and unused, so
+                # hardware transparency is unaffected.
+                s_used[pp] = 0xFF
+                s_map[pp] = list(slots)
             sl_all.append(s_line); su_all.append(s_used); sm_all.append(s_map)
             lc_all.append(line_words)
             print('  emit-mds: round %d -> %d sets pinned, lines %s'
