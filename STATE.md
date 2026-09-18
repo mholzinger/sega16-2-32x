@@ -10,12 +10,49 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/bldS.32x          Mike PASSED it 2026-09-14. Do not re-ask.
-    rom/s16.32x                 bldS-equivalent (stamp bytes only)
-    rig (MiSTer)                bldS
+    rom/night/tilesmd4.32x      THE LINE. Mike's call 2026-09-18:
+    (== rom/night/lineT.32x)    "it has defects but its progress ...
+                                by no means production but it is the
+                                BASELINE FOR THE NEW DIRECTION we
+                                built." Baked MD tiles are ON.
+    rom/s16.32x                 line-equivalent (stamp bytes only)
+    rig (MiSTer)                tilesmd4
+
+    rom/night/bldS.32x          PREVIOUS line (passed 2026-09-14).
+                                Superseded. Keep as the reference for
+                                "was this always broken" questions --
+                                which is the question that cost four
+                                rig cycles on 2026-09-18.
+
+INVARIANT CHECK CHANGED. The line now carries TILESMD=1, which moves the
+stamp, so it is no longer `25f0 3fff`:
+
+    cmp -l rom/s16.32x rom/night/lineT.32x \
+      | awk '{printf "%x\n",$1-1}' | cut -c1-4 | sort -u
+    -> 25f1 3fff          (4 B BUILD_HASH32 at 0x25F13C,
+                           14 B build string at 0x3FFFD4; 18 total)
 
 `rom/s16.32x` is whatever was built LAST and is usually a probe. It must
 be left holding the LINE build at the end of any session.
+
+WHAT THE LINE CARRIES THAT bldS DID NOT
+    - baked MD tiles (TILESMD=1 in LINE_FLAGS). 377 KB at cart
+      0x263C00; md_emit_art copies 16 halfwords instead of 64 ROM
+      reads + 64 pen lookups + 32 writes.
+    - the sky fix: colour index 0 is harvested and packed, so BG sets
+      92/93/95/96/97 resolve pixel 0 to 0x01EC instead of the backdrop.
+    - Mike on the rig: sky correct, "the framerate feels more
+      consistent". Consistency, not mean speed, is the expected shape
+      of this change -- it cuts the TAIL (see the transport card).
+
+KNOWN DEFECTS ON THE LINE, accepted as the price of the baseline
+    - wolf transformation: one frame of the character, then flames and
+      chevron only. PRE-EXISTING -- confirmed missing on bldS too
+      (2026-09-18 screenshots). Not caused by the tile or pen work.
+    - black tile pop-in, worst during the flame wipe (residency).
+    - leftover text glyphs (four cells).
+    - rounds 1/2/4 lose 12 pinned sets to overflow vs bldS; they fall
+      to the framebuffer path. Level 1 (round 0) keeps all 30.
 
 ## THE AXIS — DEFECTS (Mike's call, 2026-09-17)
 
