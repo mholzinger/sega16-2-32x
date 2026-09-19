@@ -250,6 +250,11 @@ against.
   its execution log). The target architecture, phases P1-P5, and the
   BURNS list. Was missing from this file until 2026-09-17, and a full
   day was spent optimising machinery §5 says to delete.
+- `docs/design/SLIM-PIPELINE.md` — cart art to the VDP in the fewest
+  steps. What the hardware allows (VDP DMA from cart is BLOCKED; the
+  68K reaches cart only through the 0x900000 bank window), why
+  throughput is a CORRECTNESS metric and not a speed one, the 2-word
+  record design, and the proven 512-words/vint budget it must respect.
 - `ARCHITECTURE.md` — how the 32X library draws a frame, where this
   port sits, and the pivot.
 - `docs/design/SILICON.md` — what makes the port run on REAL 32X
