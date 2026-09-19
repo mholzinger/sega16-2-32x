@@ -186,6 +186,15 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   CHEVFIX=1 (not on the line).
                                   Colours wrong: 3 distinct against
                                   an expected 7.
+                                  MOVED 2026-09-19 on mdb48 (MDBATCH=48,
+                                  NO CHEVFIX): 3 -> 4 distinct. The new
+                                  one is a second blue (0,0,206 beside
+                                  0,0,174) and it is the ZIGZAG, which
+                                  had only ever drawn under CHEVFIX.
+                                  So the zigzag tiles were never wrong,
+                                  they were not ARRIVING -- residency,
+                                  fixed by throughput, not by a colour
+                                  card. Still 3 short of 7.
                                   2026-09-18 (Mike, rig, tilesmd6/7):
                                   the animating character shows for
                                   exactly ONE FRAME, then only flames
