@@ -301,6 +301,28 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## INSTRUMENT STATUS
 
+    RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
+                            /dev/MiSTer_cmd tight loop: accepts 769
+                              req/s and COALESCES -- 30 requests in
+                              39ms produced exactly ONE file.
+                            /dev/MiSTer_cmd paced (wait for the file):
+                              ~1 frame per 6.8 SECONDS.
+                            /dev/fb0: reads at ~36fps, 960x540x32, but
+                              it is the OSD layer -- 99.8% black, it
+                              does NOT carry core video.
+                          CONSEQUENCE, and it is a design rule for every
+                          rig probe: A PROBE MUST NOT FLASH. Latch the
+                          result in the ROM and hold a STABLE colour, so
+                          one slow screenshot captures an answer
+                          accumulated over many frames. Five cuts of
+                          CARTDMAPROBE were unreadable because they
+                          showed a per-frame value and the only way to
+                          see it was Mike filming the CRT in slow-mo --
+                          which then raised the fair question of whether
+                          the camera was inventing the colours.
+                          /media/fat/burst.sh on the rig carries these
+                          numbers in its header.
+
     ares                  charges SH-2 INSTRUCTION CYCLES ONLY. No
                           SDRAM/uncached waits, no data cache, no
                           instruction fetch. SLAVE-GATED: the slave
