@@ -628,7 +628,7 @@ no readback anywhere. **Design the probe so that the right answer looks
 different from every wrong answer, including every way the probe itself
 can fail.**
 
-### The 68K reaches cart through the 0x900000 BANK WINDOW, not the identity map
+### The 68K CAN read cart on hardware -- BOTH routes -- and ares is wrong about it
 
 Measured 2026-09-19 with a same-frame control (immediate GREEN into CRAM
 0-31, cart-read words into 32-63):
@@ -647,8 +647,28 @@ landing exactly on .mdsprart at cart 0x2F9100:
 recorded why. This is why: the identity map does not serve the 68K for
 bulk cart reads, the window does.
 
-**This needs no rig confirmation** -- mdspr_upload is ON THE LINE and
-sprite art renders on the FPGA, so the path is proven by shipping code.
+**THE ABOVE IS ares ONLY AND THE RIG SAYS OTHERWISE.** Measured on the
+FPGA 2026-09-19 with the same-frame control, digital captures, six
+frames each:
+
+    bank window 0x900000 + bank 2 : purple 25-27% on EVERY frame
+    identity map 0x200000 at RV=1 : purple 9% on one frame of four
+    control (immediate green)     : 58-63% throughout
+
+**BOTH ROUTES READ CART ON HARDWARE.** ares reports the exact inverse
+(identity 0/32, window 32/32), so ares cannot be trusted on how the 68K
+reaches cart, and this class of question must be gated on the rig.
+
+**AND I MUST RETRACT THE JUSTIFICATION.** I wrote here that this needed
+no rig test because `mdspr_upload` is on the line and sprite art
+renders. That was an inference from code EXISTING, not from code
+RUNNING. Instrumented 2026-09-19: `mdspr_upload_pump` executes **ZERO
+times in 3000 frames**. It is dead code on the line and proves nothing.
+Sprite art arrives by some other path.
+
+Same failure as the wolf transformation: reasoning from what the source
+looks like instead of measuring what it does. It cost a black-screened
+rig and three builds.
 
 *Why it matters:* with VDP DMA from cart ruled out, this is what makes
 the slim pipeline possible at all --

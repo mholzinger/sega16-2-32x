@@ -844,6 +844,28 @@ ifdef TILESLIM
 SHCCFLAGS += -DTILE_SLIM
 MDCCFLAGS += -DTILE_SLIM
 endif
+# `make ... BANKPOKE=1` = bisect the slim build's hardware-only black
+# screen. This is the LINE's working FB tile route with ONE addition:
+# the 0xA15104 bank switch and restore every vint. Tiles still ship the
+# old way, so a black screen cannot be blamed on missing art.
+#   black screen -> the bank switch is the fault (the SH-2 reads cart
+#     through that same register; mdspr_upload only gets away with it
+#     during scene loads while the SH-2 is quiet)
+#   renders fine -> the switch is safe, and the slim build dies on the
+#     VOLUME of cart reads and VDP writes inside the vint
+ifdef BANKPOKE
+MDCCFLAGS += -DBANK_POKE
+endif
+# `make ... TILESLIM=1 SLIMCAP=N` = tiles the 68K fetches per vint.
+# The uncapped slim build (up to 40) black-screens on the FPGA and
+# renders fine in ares; BANKPOKE proved the bank switch innocent, so it
+# is VOLUME -- 40 VDP address setups and 640 scattered cart reads a
+# vint, against mdspr_upload's 512 reads in ONE contiguous run through
+# ONE address setup. ares cannot see adapter wait states, so the rig
+# decides: raise N until the screen dies and that is the budget.
+ifdef SLIMCAP
+MDCCFLAGS += -DSLIM_CAP=$(SLIMCAP)
+endif
 # `make ... MDBATCHBLANK=N` = the batch used while the display is BLANKED
 # or off, which measurement shows is where EVERY large batch happens --
 # peak 40, 59 of 398 batches in the 33-64 bucket, histogram identical

@@ -450,6 +450,15 @@ static void mdspr_upload_pump(void) {
 		(0x900000ul + MDSPR_CART_WINOFF) + mdspr_up_woff;
 	uint32_t va = (uint32_t)MDSPR_VRAM_BASE + ((uint32_t)mdspr_up_voff << 1);
 	*(volatile uint16_t*)0xA15104 = MDSPR_CART_BANK;
+#ifdef DMA_CENSUS
+	/* DOES THIS EVER RUN, AND DOES THE READ RETURN ANYTHING? The whole
+	 * "68K cart reads are proven on hardware" argument rests on this
+	 * function, and nobody checked that it EXECUTES. 0xFFB330 counts
+	 * word-moving calls; 0xFFB334 keeps the first word actually read, so
+	 * a zero there means the read came back empty even when it ran. */
+	(*(volatile uint32_t*)0xFFB330)++;
+	*(volatile uint16_t*)0xFFB334 = src[0];
+#endif
 	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
 	*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 	                 | ((va >> 14) & 3u);
@@ -491,6 +500,9 @@ static void mdspr_upload_pump(void) {
  * wipe) and a cap only bites at the peak. One insertion point before
  * the route split, so FB and SLIM are counted identically. */
 #define TILEMAX  ((volatile uint16_t *)0xFFB310)
+#ifndef SLIM_CAP
+#define SLIM_CAP 8
+#endif
 #define TILEHIST ((volatile uint16_t *)0xFFB320)   /* 0,1-2,3-4,5-8,9-16,17-32,33-64,65+ */
 static void mdspr_consume(void) {
 #ifdef MDCONSUME_OFF
@@ -715,17 +727,25 @@ static void md_consume(uint32_t pkt_base) {
 					 *     read at     0x900000 + winoff
 					 * So cart 0x200000 is bank 2, winoff 0. Bank 3 is
 					 * the resting value the other sites restore. */
+					/* IDENTITY MAP, not the bank window (2026-09-19).
+					 * The rig says the BANK WINDOW read returns NOTHING:
+					 * control green landed, cart purple did not. ares
+					 * said the opposite (identity 0/32, window 32/32),
+					 * so this is an ares divergence and the rig wins.
+					 * And the identity map is what SHOULD work here --
+					 * holding RV=1 is the whole reason the arcade
+					 * binary's ROM self-references resolve, which means
+					 * the cart really is at 0x000100-0x3FFFFF for the
+					 * 68K. Test that directly, no bank switch at all. */
 					const volatile uint16_t *cart =
-						(const volatile uint16_t *)0x900000uL;
+						(const volatile uint16_t *)0x200000uL;
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
 					*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
 					for (uint16_t q = 0; q < 32; q++)
 						*vdp_data_port = 0x00E0u;          /* control: GREEN */
-					*(volatile uint16_t*)0xA15104 = 2;     /* bank 2 -> cart 0x200000 */
 					*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0u;
 					for (uint16_t q = 0; q < 32; q++)
 						*vdp_data_port = cart[q];          /* test: 68K cart read */
-					*(volatile uint16_t*)0xA15104 = 3;     /* restore */
 				}
 #endif
 #ifdef TILE_VERIFY
@@ -739,6 +759,28 @@ static void md_consume(uint32_t pkt_base) {
 				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
 				*vdp_data_port = sc[6];           /* VSRAM 0 = plane A vy */
 				if (typ == 0) {
+#ifdef BANK_POKE
+					/* ISOLATE THE BANK SWITCH (2026-09-19). The slim
+					 * build black-screens on the FPGA and renders fine
+					 * in ares, so the fault is hardware-only. This is
+					 * the LINE's working FB tile route with ONE thing
+					 * added: the 0xA15104 bank switch and restore, every
+					 * vint, at the same point the slim path does it.
+					 * Nothing else changes -- tiles still ship the old
+					 * way, so a black screen here CANNOT be blamed on
+					 * missing art.
+					 *   black screen -> the bank switch is the fault.
+					 *     0xA15104 is the 32X cart bank register and the
+					 *     SH-2 reads cart too; mdspr_upload gets away
+					 *     with switching it only because it runs during
+					 *     scene loads while the SH-2 is quiet.
+					 *   renders fine -> the switch is safe and the slim
+					 *     build dies on VOLUME instead: 40 tiles x 32
+					 *     bus operations inside the vint, with cart wait
+					 *     states ares does not charge. */
+					*(volatile uint16_t*)0xA15104 = 2;
+					*(volatile uint16_t*)0xA15104 = 3;
+#endif
 #ifdef DMA_CENSUS
 					{
 						uint16_t c9 = cnt;
@@ -772,8 +814,42 @@ static void md_consume(uint32_t pkt_base) {
 					{
 					volatile uint16_t *e = sc + 8;
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					/* SLIM_BANKONLY (2026-09-19): the full slim build
+					 * BLACK-SCREENS on the FPGA while rendering
+					 * correctly in ares, so the fault is hardware-only.
+					 * Two suspects, and this flag separates them:
+					 *   (a) THE BANK SWITCH. 0xA15104 is the 32X cart
+					 *       bank register and the SH-2 reads cart too
+					 *       (the index table, and the converter
+					 *       fallthrough for unbaked sets). mdspr_upload
+					 *       switches it safely because it runs during
+					 *       scene loads while the SH-2 is quiet; this
+					 *       switches it EVERY VINT mid-compose.
+					 *   (b) TIME. Up to 40 tiles x 32 bus operations
+					 *       inside the vint, with cart wait states ares
+					 *       does not charge.
+					 * SLIM_BANKONLY does the switch and the restore and
+					 * NOTHING ELSE -- no cart reads, no VDP writes.
+					 * Black screen  -> (a), the bank switch alone.
+					 * Renders fine  -> (b), it is the volume. */
 					*(volatile uint16_t*)0xA15104 = 2;
-					for (uint16_t i = 0; i < cnt; i++, e += 2) {
+					/* SLIM_CAP: tiles the 68K will fetch THIS VINT.
+					 * The uncapped version (up to 40) BLACK-SCREENS on
+					 * the FPGA while rendering correctly in ares, and
+					 * BANKPOKE proved the bank switch is innocent -- so
+					 * it is volume. Per vint this path costs 40 VDP
+					 * address setups and 640 SCATTERED cart reads, where
+					 * mdspr_upload survives 512 reads because they are
+					 * ONE contiguous run through ONE address setup.
+					 * ares charges instruction cycles and not the
+					 * adapter's cart wait states, so only the rig can
+					 * say what fits. Raise it until the screen dies:
+					 * that number IS the hardware budget. Leftover
+					 * records are simply not shipped this vint; the slot
+					 * stays dirty and comes back. */
+					uint16_t done9 = 0;
+					for (uint16_t i = 0; i < cnt && done9 < SLIM_CAP;
+					     i++, e += 2, done9++) {
 						uint16_t w0 = e[0], w1 = e[1];
 						uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
 						if (va + 32u > 0xB000u) continue;

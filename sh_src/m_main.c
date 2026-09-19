@@ -9987,6 +9987,18 @@ static void nat_quick_claim(int par)
  * *pending, reports the first slot in *first (0xFFFF if none). ROM:
  * called once or twice per window, <= 40 records. */
 __attribute__((noinline))
+/* WORDS PER TILE RECORD. 17 for the FB route (slot + 16 art words), 2
+ * for the slim route (slot|fg, blk/code) -- and EVERY site that walks
+ * the packet must use this, not a literal. The slim build black-screened
+ * on the FPGA because the second emit site still advanced `o` by 17 per
+ * record while md_emit_art wrote 2, so the packet was structurally
+ * corrupt from the first record. It failed at a cap of 8 as readily as
+ * at 40, which is what finally ruled out "it is the volume". */
+#ifdef TILE_SLIM
+#define MD_REC_W 2
+#else
+#define MD_REC_W 17
+#endif
 static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                        uint16_t *pending, uint16_t *first)
 {
@@ -16309,16 +16321,16 @@ RAMCODE void m_main(void)
                          * windows. A cell chunk is ~316 words of a 688-word
                          * body (the palette block sits at 688): ride the
                          * dirty slots along in EVERY window. */
-                        if (md_pending && o + 18 <= sc + 688) {   /* idle: no scan */
+                        if (md_pending && o + MD_REC_W + 1 <= sc + 688) {   /* idle: no scan */
                             volatile uint16_t *na = o++;
                             uint16_t fs = 0xFFFF;
-                            int room = (int)((sc + 688 - o) / 17);
+                            int room = (int)((sc + 688 - o) / MD_REC_W);
                             int sli = md_scan;
                             int n = md_emit_art(o, room > 24 ? 24 : room,
                                                 &sli, &md_pending, &fs);
                             md_scan = (uint16_t)sli;
                             *na = (uint16_t)n;
-                            o += n * 17;
+                            o += n * MD_REC_W;
                             art_n = (uint16_t)n;
                             DIAG[57] += (uint32_t)n;
 #ifdef MD_ALLOC_WHY

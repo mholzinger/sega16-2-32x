@@ -18,15 +18,45 @@ Everything below is measured. Where a number is an estimate it says so.
 on-screen control in the same frame: WRAM→CRAM lands, cart→CRAM does
 not). The transfer executes; the cart data never arrives. See LESSONS.
 
-**The 68K reaches cart only through the `0x900000` bank window**, not
-the RV=1 identity map — measured 0/32 vs 32/32 in the same frame:
+**The 68K can read cart BOTH ways on hardware** — corrected 2026-09-19
+from digital rig captures, after ares sent me the wrong way:
+
+| route | ares | **hardware** |
+|---|---|---|
+| bank window `0x900000` + bank 2 | 32/32 | **25-27% every frame** |
+| identity map `0x200000` at RV=1 | 0/32 | **9%, one frame of four** |
+
+ares reports the inverse of the rig on the identity map. The bank-window
+convention below is still correct and is the more reliable of the two:
 
     cart address = bank * 0x100000 + winoff
     read it at     0x900000 + winoff        (bank -> 0xA15104)
     bank 3 is the resting value every site restores
 
-This needs no rig test: `mdspr_upload` (md_main.c:449) already uses it,
-is on the line, and sprite art renders on the FPGA.
+**RETRACTED:** this document claimed the route needed no rig test
+because `mdspr_upload` uses it and sprite art renders. Instrumented:
+`mdspr_upload_pump` runs **zero times in 3000 frames**. It is dead code
+and proves nothing. The rig test above is what establishes the fact.
+
+## 1b. STATUS: the slim build still black-screens on hardware
+
+`TILESLIM=1` renders correctly in ares and produces a **fully black
+screen** on the FPGA — 0.0% non-black, so the HUD and both planes are
+gone too, which is a wedged or half-disabled vint handler and not
+missing tile art.
+
+RULED OUT so far, each with a control:
+- **the cart read route** — both work on hardware (above)
+- **the bank switch** — `BANKPOKE=1` is the line plus only the
+  `0xA15104` switch and restore every vint; plays identically
+- **volume** — it fails identically at `SLIMCAP=8` as at 40
+- **the record stride** — the second emit site advanced `o` by 17 words
+  per 2-word record, structurally corrupting the packet. Real bug, now
+  `MD_REC_W` everywhere. Fixing it did NOT fix the black screen.
+
+NOT yet ruled out: the `} else if (0) {` splice in md_main.c leaves the
+post-loop tail of the FB branch dead under TILE_SLIM, and the 68K writes
+VRAM by PORT WRITES where the FB route uses DMA.
 
 **So 2 copies is the floor**, and it takes the SH-2 out of the payload
 path completely.
