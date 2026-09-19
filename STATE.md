@@ -268,6 +268,39 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           is real and NTKEY8's +24.6 points is real.
     transport ablation    the live axis. Design it against the 6x
                           variance first.
+    BATCH CAP / PACKET    MEASURED 2026-09-19, and it is the
+    WALL                  throughput lever. DMACENSUS=1, ares, 3000
+                          frames of level 1:
+                            MDBATCH=24 (line)   8.82 tiles/vint
+                            MDBATCH=48         18.61
+                            MDBATCH=64         18.61  saturated
+                            MDBATCH=96          4.93  COLLAPSES
+                            MDBATCH=160         5.22  COLLAPSES
+                          8.8 was never demand -- it was the cap. The
+                          collapse past 64 is the 688-word packet body
+                          overflowing: at 17 words a record only ~40
+                          fit.
+                          BLACK TILES ARE RESIDENCY, so throughput IS
+                          the defect, and this measures the 2-word
+                          record directly: 688 words holds ~40 records
+                          now and ~344 at 2 words, at which point the
+                          limit becomes the 68K's VBLANK budget --
+                          ~90 tiles/vint at ~200 cycles/tile against
+                          ~18,500 cycles of NTSC vblank. Today's 8.8
+                          would cost 10% of vblank to CPU-copy, 18.6
+                          costs 20%. The 68K can afford it.
+                          CART DMA IS NOT AVAILABLE for this (see
+                          LESSONS): the 68K must CPU-copy from cart,
+                          which mdspr_upload already does for sprite
+                          art. Read srcref for how commercial titles
+                          pace a bulk upload before picking a batch.
+                          rom/night/mdb48.32x = the free half, one
+                          constant, 2.1x. Anchored gate at game frame
+                          1124: 138032/343845 px differ and the diff is
+                          MORE ART (sky band largely gone, background
+                          more complete, several stray glyphs absent);
+                          reaches that game frame at emulator 1998 vs
+                          the line's 2005. ON THE RIG, awaiting Mike.
     BAKED TILE            LIVE. md_emit_art's per-tile conversion is
     TRANSPORT             baked to ROM (TILESMD=1, 425KB at 0x263C00,
                           byte-identical on 941/941 live VRAM slots).
