@@ -834,6 +834,11 @@ endif
 ifdef CARTDMAPROBE
 MDCCFLAGS += -DCART_DMA_PROBE
 endif
+# CARTDMANODMA=1: the same probe with the DMA REMOVED, to prove the
+# CPU write to the readout entry survives the frame at all.
+ifdef CARTDMANODMA
+MDCCFLAGS += -DCART_DMA_NODMA
+endif
 ifdef BOOTENTRYV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
 endif

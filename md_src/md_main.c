@@ -645,76 +645,46 @@ static void md_consume(uint32_t pkt_base) {
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
 #ifdef CART_DMA_PROBE
-				/* CART-DMA GATE (2026-09-17). THE question for the
-				 * architectural shift: can the MD VDP DMA straight out of
-				 * CART ROM into VRAM while we hold RV=1?
+				/* CART-DMA GATE, cut 3 (2026-09-19). Can the MD VDP DMA
+				 * out of CART ROM while we hold RV=1?
 				 *
-				 * Why it decides everything: md_emit_art today has the
-				 * SH-2 read 32 bytes of cart art and write them into a
-				 * 17-word FB packet, which the 68K then DMAs to VRAM.
-				 * The SH-2 touches every byte -- and NOTES.md:181 says
-				 * the SH-2 must NEVER touch cart ROM while RV=1. If the
-				 * 68K can source the DMA from cart directly, the record
-				 * collapses 17 words -> 2 (slot + block/code), nobody
-				 * touches a payload byte, and the same packet space
-				 * carries ~8x the tiles per window -- which is residency,
-				 * which is the black tiles.
+				 * NO READBACK. Cuts 1 and 2 DMAd into spare VRAM and read
+				 * it back, and the readback was the whole problem: ares
+				 * completes a DMA atomically so it read clean there, but
+				 * on the FPGA reading the data port while the VDP is busy
+				 * returns garbage. Mike saw one honest RED frame at boot
+				 * (slack in the vint) and then blue/white flashing, which
+				 * was undefined data, not evidence. Polling VDP status
+				 * bit 1 did not fix it.
 				 *
-				 * NO WRAM REPORTING, DELIBERATELY. The first cut reported
-				 * to 0xFFA260 and read back garbage: the 0xFFA200 ring
-				 * (:3277) and the 48-word CRAM shadow at 0xFFA1C0 (:1056)
-				 * both cover it, and they already overlap each other.
-				 * The DMA's own landing IS the result -- dump VRAM and
-				 * compare against tiles_md.bin on the host. Nothing to
-				 * collide with, and the check is external.
+				 * So let the VDP do the comparison and read NOTHING:
+				 *   1. CPU-write CRAM 63 = RED          (this path works)
+				 *   2. DMA ONE word, cart -> CRAM 63
+				 *   3. backdrop (VDP reg 7) shows entry 63
+				 * Cart 0x26E8A2 holds 0x00E0 -- vivid GREEN in MD wire
+				 * format -- and it is inside the baked blob, so it is
+				 * unambiguously cart.
 				 *
-				 * Target VRAM 0xF800: free (SAT 0xF000 + 512B, planes
-				 * 0xC000/0xE000, tile slots stop at 0xB000) and nothing
-				 * reads it, so this cannot move a pixel.
-				 *
-				 * Source cart 0x264140 = blob offset 0x540, picked because
-				 * its 16 words are non-zero and mostly distinct
-				 * (357A AC77 35AA 7C75 ...): "read the cart" cannot be
-				 * confused with "read nothing". Block 0's first tile is
-				 * blank and would have made the probe unfalsifiable.
-				 *
-				 * Unconditional, not one-shot: it is idempotent into dead
-				 * VRAM, and a static guard is one more thing that can
-				 * silently not happen. */
+				 *   GREEN backdrop -> CART DMA WORKS. The 2-word record
+				 *                     and a 68K DMA from the blob are on.
+				 *   RED   backdrop -> the DMA did not happen. Blocked.
+				 * There is no third colour to misread. */
 				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
-					const uint32_t cdp_src = 0x264140uL >> 1;
-					const uint32_t cdp_va  = 0xF800uL;
+					const uint32_t cdp_src = 0x26E8A2uL >> 1;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x873F;  /* backdrop = line 3 pen 15 */
+					/* 1. RED into CRAM 63 by CPU (CRAM byte addr 63*2) */
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;   /* 16 words */
+					*vdp_ctrl_wide = ((uint32_t)0xC07Eu << 16) | 0u;
+					*vdp_data_port = 0x000Eu;
+					/* 2. one word, cart -> CRAM 63 */
+#ifndef CART_DMA_NODMA
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9301;   /* length 1 word */
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (cdp_src & 0xFF));
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((cdp_src >> 8) & 0xFF));
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((cdp_src >> 16) & 0x7F));
-					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (cdp_va & 0x3FFFu)) << 16)
-					               | (((cdp_va >> 14) & 3u) | 0x80u);
-					/* CONTROL, and the probe is worthless without it.
-					 * The same DMA, same length, same vint, same
-					 * destination page -- but sourced from the FB
-					 * window, which the tile-record path already DMAs
-					 * from every frame (the "commercial-title idiom"
-					 * comment above). Lands at VRAM 0xF820.
-					 *   F820 non-zero, F800 zero -> CART is the problem
-					 *   both zero                 -> THE PROBE is broken
-					 * Two earlier cuts of this probe reported a clean
-					 * negative that turned out to be a bug in the probe
-					 * (wrong WRAM report address, then a source address
-					 * pointing at 0xFF gap fill). */
-					{
-						const uint32_t ctl_src = 0x85EE00uL >> 1;
-						const uint32_t ctl_va  = 0xF820uL;
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (ctl_src & 0xFF));
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((ctl_src >> 8) & 0xFF));
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((ctl_src >> 16) & 0x7F));
-						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (ctl_va & 0x3FFFu)) << 16)
-						               | (((ctl_va >> 14) & 3u) | 0x80u);
-					}
+					*vdp_ctrl_wide = ((uint32_t)0xC07Eu << 16) | 0x80u;
+#endif
 				}
 #endif
 #ifdef TILE_VERIFY
