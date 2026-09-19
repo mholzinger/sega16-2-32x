@@ -978,6 +978,149 @@ static void md_consume(uint32_t pkt_base) {
 						*vdp_data_port = sc[3];
 						*vdp_data_port = sc[7];
 					}
+#ifdef DELIV_TEST
+				/* ===================================================
+				 * FRAME DELIVERY TEST HARNESS (2026-09-19, Mike's ask)
+				 * ===================================================
+				 * Validate ONE delivery method against a KNOWN SAMPLE
+				 * before any of it is banked. Four slim builds failed
+				 * tonight because the whole path was written and then
+				 * debugged backwards; every ISOLATED probe with a
+				 * control gave a clean answer first time.
+				 *
+				 * METHOD (-DDELIV_TEST=n):
+				 *   0  DMA from the FB window   -- the shipping route.
+				 *      MUST PASS. If it fails, the harness is broken.
+				 *   1  port writes, immediate data
+				 *   2  port writes, cart via the BANK WINDOW
+				 *   3  port writes, cart via the IDENTITY MAP
+				 *   4  DMA sourced from CART    -- known BROKEN on the
+				 *      rig. MUST FAIL. If it passes, the harness cannot
+				 *      detect failure and no pass from it means anything.
+				 *
+				 * Sample: 16 words into VRAM 0xF800, free space above
+				 * the SAT (line VRAM reads 0/32 non-zero there), read by
+				 * nothing, so a wrong result cannot move a pixel.
+				 *
+				 * VERDICT IS STICKY AND STABLE -- never flashing. The rig
+				 * has no fast capture (screenshots are ~1 per 6.8s and
+				 * /dev/fb0 is the OSD), so a per-frame value is
+				 * unreadable. Once a mismatch is seen it stays failed.
+				 *   GREEN  every checked word matched
+				 *   RED    delivered, wrong bytes
+				 *   BLUE   VRAM read back all zero: nothing delivered
+				 * Painted into CRAM 0-31 every vint so it dominates. */
+				{
+					static uint16_t dv_bad, dv_zero, dv_ran;
+					const uint32_t dv_va = 0xF800uL;
+					uint16_t exp[16], k9;
+					/* the sample the method must deliver */
+					for (k9 = 0; k9 < 16; k9++)
+						exp[k9] = (uint16_t)(0xA000u + k9);
+#if DELIV_TEST == 1
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+					               | ((dv_va >> 14) & 3u);
+					for (k9 = 0; k9 < 16; k9++) *vdp_data_port = exp[k9];
+#elif DELIV_TEST == 2 || DELIV_TEST == 3
+					/* KNOWN CONSTANT, not self-comparison. Reading the
+					 * cart and comparing it against itself tests only
+					 * delivery: a cart read returning garbage would
+					 * still pass. cart 0x200000 holds 64 IDENTICAL words
+					 * of 0x0707 (verified in the rom image), so expect
+					 * that literal and the test covers the READ and the
+					 * DELIVERY together. */
+					{
+#if DELIV_TEST == 2
+						const volatile uint16_t *cw =
+							(const volatile uint16_t *)0x900000uL;
+						*(volatile uint16_t*)0xA15104 = 2;
+#else
+						const volatile uint16_t *cw =
+							(const volatile uint16_t *)0x200000uL;
+#endif
+						uint16_t got[16];
+						for (k9 = 0; k9 < 16; k9++) got[k9] = cw[k9];
+						for (k9 = 0; k9 < 16; k9++) exp[k9] = 0x0707u;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | ((dv_va >> 14) & 3u);
+						for (k9 = 0; k9 < 16; k9++) *vdp_data_port = got[k9];
+#if DELIV_TEST == 2
+						*(volatile uint16_t*)0xA15104 = 3;
+#endif
+					}
+#elif DELIV_TEST == 4
+					{
+						const uint32_t sc9 = 0x200000uL >> 1;
+						for (k9 = 0; k9 < 16; k9++) exp[k9] = 0x0707u;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (sc9 & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((sc9 >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((sc9 >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | (((dv_va >> 14) & 3u) | 0x80u);
+					}
+#else
+					/* method 0: stage the sample in WRAM, DMA it in --
+					 * the shipping idiom, and the harness's own control */
+					{
+						volatile uint16_t *st = (volatile uint16_t *)0xFFB340;
+						uint32_t sc9;
+						for (k9 = 0; k9 < 16; k9++) st[k9] = exp[k9];
+						sc9 = 0xFFB340uL >> 1;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (sc9 & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((sc9 >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((sc9 >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | (((dv_va >> 14) & 3u) | 0x80u);
+					}
+#endif
+					/* wait out any DMA before reading back -- a readback
+					 * racing a DMA returns undefined data, which is what
+					 * made three earlier probes unreadable */
+					{ uint16_t g9 = 0;
+					  while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} }
+					*vdp_ctrl_wide = ((uint32_t)(dv_va & 0x3FFFu) << 16)
+					               | ((dv_va >> 14) & 3u);
+					{
+						uint16_t z9 = 1;
+						for (k9 = 0; k9 < 16; k9++) {
+							uint16_t v9 = *vdp_data_port;
+							if (v9) z9 = 0;
+							if (v9 != exp[k9]) dv_bad = 1;
+						}
+						if (z9) dv_zero = 1;
+						dv_ran = 1;
+					}
+					{
+						uint16_t col = !dv_ran ? 0x0E00u
+						             : dv_zero ? 0x0E00u      /* BLUE  */
+						             : dv_bad  ? 0x000Eu      /* RED   */
+						                       : 0x00E0u;     /* GREEN */
+						/* ALSO to WRAM, and this is what makes the
+						 * harness self-checkable. A CRAM dump reads the
+						 * END state, which is the game's own palette
+						 * upload -- my paint lands mid-frame and is
+						 * gone by then, so ares always read 0x000 and
+						 * could not tell pass from fail. WRAM 0xFFB350
+						 * is in the verified-free 0xFFB100-0xFFB33F
+						 * neighbourhood's tail and nothing overwrites
+						 * it, so `--dump wram:0xFFB350:2` is a
+						 * deterministic local verdict. The CRAM paint
+						 * stays for the rig, which has no dump. */
+						*(volatile uint16_t*)0xFFB350 = col;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+						for (k9 = 0; k9 < 32; k9++) *vdp_data_port = col;
+					}
+				}
+#endif
 #ifdef PORT_POKE
 					/* PORT WRITES, MOVED TO THE END (2026-09-19). The slim
 					 * build black-screens on hardware and renders in

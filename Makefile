@@ -853,6 +853,18 @@ endif
 #     during scene loads while the SH-2 is quiet)
 #   renders fine -> the switch is safe, and the slim build dies on the
 #     VOLUME of cart reads and VDP writes inside the vint
+# `make ... DELIVTEST=n` = FRAME DELIVERY TEST HARNESS. Validate ONE
+# delivery method against a known 16-word sample into free VRAM 0xF800,
+# read it back, and paint a STICKY verdict over CRAM 0-31:
+#   GREEN every word matched | RED delivered wrong bytes | BLUE nothing
+# Methods: 0 DMA from WRAM (the shipping idiom -- MUST PASS, it is the
+# harness's own control), 1 port writes immediate, 2 port writes from
+# cart via the bank window, 3 same via the identity map, 4 DMA sourced
+# from CART (known broken on the rig -- MUST FAIL, or the harness cannot
+# detect failure and no pass from it means anything).
+ifdef DELIVTEST
+MDCCFLAGS += -DDELIV_TEST=$(DELIVTEST)
+endif
 ifdef PORTPOKE
 MDCCFLAGS += -DPORT_POKE
 endif
