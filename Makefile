@@ -831,6 +831,27 @@ endif
 # VERIFY EXTERNALLY: dump "VDP VRAM" and compare 0xF800..0xF820 against
 # sh_src/tiles_md.bin offset 0x540 (357A AC77 35AA 7C75 ...). Equal =
 # CART DMA WORKS. All zero = the DMA did nothing. Needs TILESMD=1.
+# `make ... TILESLIM=1` = 2026-09-19, docs/design/SLIM-PIPELINE.md.
+# The SH-2 stops shipping tile PIXELS and ships a 2-WORD record instead;
+# the 68K fetches the art from cart through the 0x900000 bank window and
+# writes it to VRAM. cart -> 68K -> VRAM is TWO payload copies against
+# the three the FB route costs, and 688 packet words then hold ~344
+# records instead of ~40 -- the packet is the throughput wall (MDBATCH 96
+# collapses), and throughput is residency, which is the black tiles.
+# Needs TILESMD=1: it reads the baked blob. VDP DMA from cart is BLOCKED
+# (measured, ares + FPGA, control-gated) so port writes are the only way.
+ifdef TILESLIM
+SHCCFLAGS += -DTILE_SLIM
+MDCCFLAGS += -DTILE_SLIM
+endif
+# `make ... MDBATCHBLANK=N` = the batch used while the display is BLANKED
+# or off, which measurement shows is where EVERY large batch happens --
+# peak 40, 59 of 398 batches in the 33-64 bucket, histogram identical
+# across MDBATCH 24/48/320. MDBATCH governs only the non-blank path and
+# was never the cap. Defaults to 40, the historic literal.
+ifdef MDBATCHBLANK
+SHCCFLAGS += -DMD_BATCH_BLANK=$(MDBATCHBLANK)
+endif
 ifdef CARTDMAPROBE
 MDCCFLAGS += -DCART_DMA_PROBE
 endif
@@ -3299,3 +3320,16 @@ lint-generic:
 	@tools/lint.sh --generic
 lint-32x:
 	@tools/lint.sh --32x
+
+# The blob's cart address lives in TWO files: the AT() in sh_src/mars.ld
+# and the 68K's recompute in md_src/md_main.c. A silent mismatch makes
+# the 68K fetch gap fill and render garbage a long way from its cause,
+# which is exactly how .tilesmd's missing "a" flag cost an evening.
+#
+# AT THE END OF THE FILE ON PURPOSE. Defined up among the flag blocks it
+# became the FIRST target in the Makefile and therefore the DEFAULT
+# GOAL, so a plain `make` ran the check and built no rom at all -- which
+# is how it broke `make line` the moment it was added.
+.PHONY: tilesmd-addr
+tilesmd-addr:
+	@python3 tools/check_tilesmd_addr.py

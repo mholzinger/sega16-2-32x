@@ -461,6 +461,37 @@ static void mdspr_upload_pump(void) {
 	mdspr_up_left -= n;
 }
 
+/* CLEAN TILE COUNTER (2026-09-19). 0xFFB200, in the middle of the
+ * untouched 0xFFB100-0xFFB33F gap -- verified by surveying every
+ * 0xFFBxxx literal in both CPUs.
+ * The old DMACENSUS counters cannot be used for this:
+ *   0xFFA246 is a uint16_t and WRAPS -- the slim route ships >65536
+ *     tiles in 3000 frames, so its readings there are garbage;
+ *   0xFFA248 sits in the 0xFFA240 block that md_main.c:848 itself
+ *     calls CLOBBERED, and it reports ~198 tiles/vint for every config
+ *     including the line, which is nonsense.
+ * A throughput number is the whole basis of the slim-pipeline design,
+ * so it does not get to rest on a counter the source says is broken. */
+#define TILECNT ((volatile uint32_t *)0xFFB200)
+/* A SECOND counter at a DIFFERENT free address, incremented at the
+ * IDENTICAL site. Three counters have now given three different answers
+ * for tiles/vint, so the address is under suspicion as much as the
+ * code. If TILECNT and TILECNT2 agree, the address class is sound and
+ * the number is real; if they disagree, one of them is being clobbered
+ * and neither may be quoted. */
+#define TILECNT2 ((volatile uint32_t *)0xFFB300)
+/* And a SENTINEL: written once at the first consume, never touched
+ * again. If it reads back as anything but 0xA5A5A5A5 the region is not
+ * ours and every number from it is void. */
+#define TILESENT ((volatile uint32_t *)0xFFB308)
+/* PEAK, not mean. The trustworthy mean is ~1.07 tiles/vint and is FLAT
+ * across MDBATCH and across the slim record -- a mostly-static level
+ * does not need new art most frames, so the mean cannot see a cap and
+ * never could. Black tiles arrive in BURSTS (a scene cut, the flame
+ * wipe) and a cap only bites at the peak. One insertion point before
+ * the route split, so FB and SLIM are counted identically. */
+#define TILEMAX  ((volatile uint16_t *)0xFFB310)
+#define TILEHIST ((volatile uint16_t *)0xFFB320)   /* 0,1-2,3-4,5-8,9-16,17-32,33-64,65+ */
 static void mdspr_consume(void) {
 #ifdef MDCONSUME_OFF
 	/* SESSION 7 CALIBRATION: after the boot/attract loads (vint 900),
@@ -708,8 +739,76 @@ static void md_consume(uint32_t pkt_base) {
 				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
 				*vdp_data_port = sc[6];           /* VSRAM 0 = plane A vy */
 				if (typ == 0) {
+#ifdef DMA_CENSUS
+					{
+						uint16_t c9 = cnt;
+						if (c9 > TILEMAX[0]) TILEMAX[0] = c9;
+						TILEHIST[c9 == 0 ? 0 : c9 <= 2 ? 1 : c9 <= 4 ? 2
+						        : c9 <= 8 ? 3 : c9 <= 16 ? 4 : c9 <= 32 ? 5
+						        : c9 <= 64 ? 6 : 7]++;
+					}
+#endif
+#ifdef TILE_SLIM
+				/* SLIM PIPELINE (docs/design/SLIM-PIPELINE.md). The SH-2
+				 * no longer ships pixels -- it ships a 2-WORD record and
+				 * the 68K fetches the art from cart itself:
+				 *     word 0: slot | fg<<15
+				 *     word 1: blk*64 + (code & 63)
+				 * cart -> 68K -> VRAM is TWO payload copies against the
+				 * three the FB route costs, and 688 packet words now hold
+				 * ~344 records instead of ~40. The packet was the
+				 * throughput wall (MDBATCH 96 collapsed), and throughput
+				 * is residency, which is the black tiles.
+				 *
+				 * THE BANK IS SET ONCE, NOT PER TILE: .tilesmd runs
+				 * 0x263C00..~0x2C2000, entirely inside bank 2, and a
+				 * 32-byte tile is 32-byte aligned so it can never
+				 * straddle a 1MB boundary. Bank 3 is the resting value
+				 * every other site restores.
+				 *
+				 * VDP DMA is NOT an option here: measured on ares and the
+				 * FPGA with a same-frame control, the VDP will not read
+				 * cart at all (LESSONS). Port writes are the only route. */
+					{
+					volatile uint16_t *e = sc + 8;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*(volatile uint16_t*)0xA15104 = 2;
+					for (uint16_t i = 0; i < cnt; i++, e += 2) {
+						uint16_t w0 = e[0], w1 = e[1];
+						uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+						if (va + 32u > 0xB000u) continue;
+						{
+							/* TILESMD_CART_BASE: MUST EQUAL the AT()
+							 * address of .tilesmd in sh_src/mars.ld.
+							 * Two files, one number -- `make tilesmd-addr`
+							 * greps both and fails if they drift, because
+							 * a silent mismatch here reads gap fill and
+							 * renders garbage a long way from its cause. */
+							uint32_t src = 0x264000uL + 5u * 128u * 2u
+								+ ((uint32_t)(w1 >> 6)) * 4096u
+								+ ((uint32_t)(w1 & 63u)) * 64u
+								+ ((w0 & 0x8000u) ? 32u : 0u);
+							const volatile uint16_t *cw =
+								(const volatile uint16_t *)
+								(0x900000uL + (src - 0x200000uL));
+							*vdp_ctrl_wide =
+								((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+								| ((va >> 14) & 3u);
+							for (uint16_t k = 0; k < 16; k++)
+								*vdp_data_port = cw[k];
+						}
+#ifdef DMA_CENSUS
+						TILECNT[0]++; TILECNT2[0]++; TILESENT[0] = 0xA5A5A5A5u;
+#endif
+					}
+					*(volatile uint16_t*)0xA15104 = 3;
+					}
+				} else if (0) {
+					volatile uint16_t *e = sc + 8;
+#else
 					/* tile pixels: 16 contiguous FB words per record */
 					volatile uint16_t *e = sc + 8;
+#endif
 					for (uint16_t i = 0; i < cnt; i++, e += 17) {
 						uint32_t va = (uint32_t)e[0] * 32u;
 						if (va + 32u > 0xB000u) continue;
@@ -722,8 +821,7 @@ static void md_consume(uint32_t pkt_base) {
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 							| (((va >> 14) & 3u) | 0x80u);
 #ifdef DMA_CENSUS
-						(*(volatile uint16_t*)0xFFA246)++;      /* tile-record DMAs */
-						(*(volatile uint32_t*)0xFFA248) += 16;  /* words */
+						TILECNT[0]++; TILECNT2[0]++; TILESENT[0] = 0xA5A5A5A5u;
 #endif
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =

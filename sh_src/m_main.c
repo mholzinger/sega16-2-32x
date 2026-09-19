@@ -2083,6 +2083,9 @@ static uint8_t flick_bay[16];               /* 4x4 Bayer, boot-built,
  * the top end is the tear/purple band described above, so it is Mike's
  * eye that ranks it, not a counter. */
 #ifdef MD_BATCH_N
+#ifndef MD_BATCH_BLANK
+#define MD_BATCH_BLANK 40
+#endif
 #define MD_BATCH     MD_BATCH_N
 #else
 #define MD_BATCH     12
@@ -10003,7 +10006,9 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         const uint8_t *px = altbeast_tiles + (mkey & 0xFFFFu) * 64;
         const uint8_t *map = mdp_s_map + ((mkey >> 16) & 0x7F) * 8;
         if (*first == 0xFFFF) *first = (uint16_t)sl;
+#ifndef TILE_SLIM
         dst[sent * 17] = (uint16_t)sl;
+#endif
         volatile uint8_t *o = (volatile uint8_t *)(dst + sent * 17 + 1);
 #if defined(TILES_MD) && defined(MD_ROUND) && defined(MD_STATIC) \
     && defined(PAL_STATIC) && defined(TILE_CLASS)
@@ -10027,6 +10032,32 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                 ? ((const uint16_t *)altbeast_tiles_md)[rd_ * 128u + cs_]
                 : 0xFFFFu;
             if (blk_ != 0xFFFFu) {
+#ifdef TILE_SLIM
+                /* SLIM PIPELINE (2026-09-19, docs/design/SLIM-PIPELINE.md).
+                 * The SH-2 does not touch the payload AT ALL. It writes a
+                 * 2-WORD record and the 68K fetches the art from cart
+                 * itself through the 0x900000 bank window, which is the
+                 * only route the 68K has to cart (measured: the RV=1
+                 * identity map reads nothing, the window reads 32/32).
+                 *
+                 *   word 0: slot | fg<<15
+                 *   word 1: blk*64 + (code & 63)
+                 *
+                 * cart -> 68K -> VRAM is TWO payload copies against
+                 * today's three (cart -> SH-2 -> FB -> VRAM), and 688
+                 * packet words hold ~344 records instead of ~40 -- the
+                 * packet was the throughput wall (MDBATCH 96 collapses).
+                 * Records are laid at stride 2 from the SAME dst base, so
+                 * the 68K's `e += 2` mirrors this exactly. */
+                {
+                    volatile uint16_t *r_ = dst + sent * 2;
+                    r_[0] = (uint16_t)(sl | ((mkey & 0x80000000u) ? 0x8000u : 0u));
+                    r_[1] = (uint16_t)(blk_ * 64u + (mkey & 63u));
+                    if (*pending) (*pending)--;
+                    sent++;
+                    continue;
+                }
+#endif
                 const uint8_t *b_ = altbeast_tiles_md + 5u * 128u * 2u
                                   + blk_ * 4096u
                                   + ((mkey & 63u) * 64u)
@@ -15588,13 +15619,22 @@ RAMCODE void m_main(void)
                      * horizon band of tiles that never landed (219,
                      * vi66 vs vi66b). Ship the blanked load at the
                      * off-screen batch (MDBATCHOFF, 214) too. */
-                    int bmax = (disp_blank || !r60_disp_on) ? 40
+                    /* MD_BATCH_BLANK, not a literal 40 (2026-09-19).
+                     * Measured: EVERY large batch happens here, in the
+                     * blanked/off-display path -- peak 40, with 59 of
+                     * 398 batches in the 33-64 bucket and the histogram
+                     * IDENTICAL across MDBATCH 24/48/320. MDBATCH only
+                     * governs the non-blank path, which never has big
+                     * batches, so it was never the cap. This 40 is.
+                     * And this is the LOAD path, which is where art has
+                     * to arrive and where the black tiles are. */
+                    int bmax = (disp_blank || !r60_disp_on) ? MD_BATCH_BLANK
                                : (!mds_onscreen ? MD_BATCH_OFF : MD_BATCH);
                     /* 222: vi68 shipped the blanked load at 24 and the
                      * load STALLED (10% black 300 frames on, flips down
                      * early) -- the batch accounting assumes 40 there. */
 #else
-                    int bmax = (disp_blank || !r60_disp_on) ? 40 : MD_BATCH;
+                    int bmax = (disp_blank || !r60_disp_on) ? MD_BATCH_BLANK : MD_BATCH;
 #endif
                     /* (md_cut || display-on tried 2026-09-06: consume max 90
                      * lines — the active-display DMA rate, the batch-40 grave) */

@@ -101,7 +101,7 @@ SECTIONS {
 	 * (593KB of 0xFF fill; 425KB needed). Not left to ld: the Makefile's
 	 * own note is that a silent overrun corrupts the 68K high rom and
 	 * "fails as a GAME bug a long way from its cause". */
-	.tilesmd 0x02263C00 : AT(0x00263C00) {
+	.tilesmd 0x02264000 : AT(0x00264000) {
 		KEEP(*(.tilesmd))
 	} > rom
 	ASSERT(LOADADDR(.tilesmd) + SIZEOF(.tilesmd) <= 0x002F8000,

@@ -31,7 +31,37 @@ is on the line, and sprite art renders on the FPGA.
 **So 2 copies is the floor**, and it takes the SH-2 out of the payload
 path completely.
 
-## 2. Why it is worth doing: throughput IS the defect
+## 2. RETRACTED: the throughput numbers that motivated this
+
+**The MDBATCH sweep below is VOID and so is the conclusion built on it.**
+
+It was read from `0xFFA246`/`0xFFA248`, which sit in the block
+`md_main.c:848` itself calls **clobbered**, and the 16-bit one *wraps*
+(the slim route ships >65536 tiles in 3000 frames). A clean 32-bit
+counter at `0xFFB200`, validated against a second counter at `0xFFB300`
+and a sentinel at `0xFFB308` (both agree, sentinel intact), reports:
+
+    total 3202 tiles over 3000 frames, on only ~398 batches
+    PEAK 40 tiles in one vint
+    IDENTICAL -- to the byte -- across FB vs SLIM, MDBATCH 24/48/320,
+    and blank-batch 40/300
+
+Byte-identical totals across builds that differ is a broken instrument,
+not a result. **So it is not established that MDBATCH changes anything,
+nor that the packet is the throughput wall.** The 40 is suspicious (688
+packet words / 17-word records = 40) but suspicion is not measurement,
+and three separate knobs failed to move it.
+
+*What still stands on its own:* the slim pipeline BUILDS and RENDERS
+correctly -- SH-2 emits 2-word records, the 68K fetches art from cart
+through the bank window, picture verified correct. Two payload copies
+instead of three is a structural fact, not a measurement.
+
+*What is needed before this ships:* a throughput instrument that
+demonstrably RESPONDS to a knob. Until one exists, no throughput claim
+from this document may be quoted.
+
+## 2b. The original (VOID) argument, kept so nobody re-derives it
 
 Black tiles are residency — the art is not in VRAM when the cell draws
 (rig census: `noslot` 1.20/frame, `dirty` 1.20/frame, `cut` dead). So

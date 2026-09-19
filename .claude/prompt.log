@@ -1438,3 +1438,4 @@
 [2026-09-12 20:32:40] Edit: sh_src/m_main.c
 [2026-09-19 14:33:30] Write: tools/frametest.py
 [2026-09-19 14:44:10] Write: docs/design/SLIM-PIPELINE.md
+[2026-09-19 15:27:14] Write: tools/check_tilesmd_addr.py
