@@ -551,7 +551,7 @@ blob reads as `0xFFFF` -- which is exactly the "not baked" sentinel.
 A sentinel that collides with erased-flash is a sentinel that cannot
 report its own absence.
 
-### The MD VDP cannot DMA from cart ROM at RV=1
+### The MD VDP cannot DMA from cart ROM at RV=1 (CONFIRMED ON HARDWARE)
 
 Measured 2026-09-18 with a control, which is the only reason it counts.
 One vint, two identical 16-word VDP DMAs, same destination page:
@@ -581,8 +581,34 @@ delete.
 transport is a 16-halfword copy) and the 68K's own cart reads, which
 demonstrably work by CPU access even though DMA does not.
 
-THREE PROBES DIED GETTING HERE, all of them reporting a clean negative
-that was really a broken probe: reporting into WRAM that a ring buffer
-overwrote; a source address pointing at 0xFF gap fill; and no control at
-all. A negative result needs a positive control in the same run.
+**CONFIRMED ON THE FPGA, 2026-09-19.** The decisive design: DMA 64 words
+from cart 0x200000, where all 64 words are IDENTICAL (0x0707), straight
+over all of MD CRAM. A working DMA could therefore only ever produce a
+STABLE FLAT PURPLE screen. Mike saw red/red/blue/green -- varying, never
+purple. An earlier cut sourcing all-0xFFFF likewise gave red/white/green
+instead of stable white.
+
+So on hardware the transfer EXECUTES and the cart data never arrives; it
+picks up garbage that varies per frame, where ares deterministically
+reads zero. Same conclusion, different failure signature.
+
+FIVE PROBE CUTS DIED GETTING HERE and every one of them failed in the
+READOUT, never in the thing being measured:
+  1. reported into WRAM that a ring buffer at 0xFFA200 overwrote
+  2. source address pointed at 0xFF gap fill (the blob was not in the
+     cart at all -- the .section "a" bug)
+  3. read VRAM back immediately after the DMA; ares completes a DMA
+     atomically, the FPGA does not, so the readback raced and returned
+     undefined data (blue/white flashing)
+  4. wrote ONE CRAM entry; entry 63 is contested on hardware, so the
+     colour flickered between values the probe cannot even produce
+  5. flooded CRAM from an all-0xFFFF source; white is a plausible game
+     colour, so a white frame could not be told from the game winning
+     the vint
+
+What finally worked: a source whose CORRECT result is both UNMISTAKABLE
+and STABLE (64 identical words of a colour the game never floods), and
+no readback anywhere. **Design the probe so that the right answer looks
+different from every wrong answer, including every way the probe itself
+can fail.**
 

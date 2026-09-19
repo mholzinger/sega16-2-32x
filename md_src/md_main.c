@@ -645,46 +645,47 @@ static void md_consume(uint32_t pkt_base) {
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
 #ifdef CART_DMA_PROBE
-				/* CART-DMA GATE, cut 3 (2026-09-19). Can the MD VDP DMA
+				/* CART-DMA GATE, cut 4 (2026-09-19). Can the MD VDP DMA
 				 * out of CART ROM while we hold RV=1?
 				 *
-				 * NO READBACK. Cuts 1 and 2 DMAd into spare VRAM and read
-				 * it back, and the readback was the whole problem: ares
-				 * completes a DMA atomically so it read clean there, but
-				 * on the FPGA reading the data port while the VDP is busy
-				 * returns garbage. Mike saw one honest RED frame at boot
-				 * (slack in the vint) and then blue/white flashing, which
-				 * was undefined data, not evidence. Polling VDP status
-				 * bit 1 did not fix it.
+				 * THE LOUDEST POSSIBLE SIGNAL, because every quieter one
+				 * failed. Cuts 1-2 read VRAM back and the readback raced
+				 * the DMA (ares completes one atomically, the FPGA does
+				 * not). Cut 3 wrote a single CRAM entry and Mike's slowmo
+				 * caught red/green/blue/black alternating -- blue is not
+				 * a colour that probe can write, so entry 63 is contested
+				 * on hardware even though the write survived in ares.
 				 *
-				 * So let the VDP do the comparison and read NOTHING:
-				 *   1. CPU-write CRAM 63 = RED          (this path works)
-				 *   2. DMA ONE word, cart -> CRAM 63
-				 *   3. backdrop (VDP reg 7) shows entry 63
-				 * Cart 0x26E8A2 holds 0x00E0 -- vivid GREEN in MD wire
-				 * format -- and it is inside the baked blob, so it is
-				 * unambiguously cart.
+				 * So: DMA 64 words from cart straight over the WHOLE of
+				 * CRAM. Source 0x31EF1E is a 0xFF gap-fill run, so every
+				 * word is 0xFFFF = WHITE. Nothing else writes all 64
+				 * entries in one go, and the result needs no readback and
+				 * no spare entry:
 				 *
-				 *   GREEN backdrop -> CART DMA WORKS. The 2-word record
-				 *                     and a 68K DMA from the blob are on.
-				 *   RED   backdrop -> the DMA did not happen. Blocked.
-				 * There is no third colour to misread. */
+				 *   SCREEN GOES SOLID WHITE  -> CART DMA WORKS. The
+				 *      2-word record and a 68K DMA from the baked blob
+				 *      are back on the table.
+				 *   SCREEN GOES SOLID BLACK  -> the DMA RAN and sourced
+				 *      ZERO. Cart is not visible to the VDP as a DMA bus
+				 *      master. (This is what ares reports.)
+				 *   PICTURE LOOKS NORMAL     -> the DMA never executed.
+				 *
+				 * The game is unplayable under this build by design. */
 				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
-					const uint32_t cdp_src = 0x26E8A2uL >> 1;
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x873F;  /* backdrop = line 3 pen 15 */
-					/* 1. RED into CRAM 63 by CPU (CRAM byte addr 63*2) */
+					/* 0x200000: 64 IDENTICAL words of 0x0707 in cart,
+					 * which is MD colour R3 G0 B3 -- a flat mid-PURPLE.
+					 * 0xFFFF white was a bad pick: white is a plausible
+					 * game colour (the statues), so a white frame could
+					 * not be told from the game's own palette winning
+					 * the frame. Nothing floods all 64 entries purple. */
+					const uint32_t cdp_src = 0x200000uL >> 1;
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-					*vdp_ctrl_wide = ((uint32_t)0xC07Eu << 16) | 0u;
-					*vdp_data_port = 0x000Eu;
-					/* 2. one word, cart -> CRAM 63 */
-#ifndef CART_DMA_NODMA
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9301;   /* length 1 word */
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;   /* 64 words */
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (cdp_src & 0xFF));
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((cdp_src >> 8) & 0xFF));
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((cdp_src >> 16) & 0x7F));
-					*vdp_ctrl_wide = ((uint32_t)0xC07Eu << 16) | 0x80u;
-#endif
+					*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0x80u;  /* CRAM 0, DMA */
 				}
 #endif
 #ifdef TILE_VERIFY
