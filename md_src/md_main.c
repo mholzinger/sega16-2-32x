@@ -692,6 +692,29 @@ static void md_consume(uint32_t pkt_base) {
 					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((cdp_src >> 16) & 0x7F));
 					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (cdp_va & 0x3FFFu)) << 16)
 					               | (((cdp_va >> 14) & 3u) | 0x80u);
+					/* CONTROL, and the probe is worthless without it.
+					 * The same DMA, same length, same vint, same
+					 * destination page -- but sourced from the FB
+					 * window, which the tile-record path already DMAs
+					 * from every frame (the "commercial-title idiom"
+					 * comment above). Lands at VRAM 0xF820.
+					 *   F820 non-zero, F800 zero -> CART is the problem
+					 *   both zero                 -> THE PROBE is broken
+					 * Two earlier cuts of this probe reported a clean
+					 * negative that turned out to be a bug in the probe
+					 * (wrong WRAM report address, then a source address
+					 * pointing at 0xFF gap fill). */
+					{
+						const uint32_t ctl_src = 0x85EE00uL >> 1;
+						const uint32_t ctl_va  = 0xF820uL;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (ctl_src & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((ctl_src >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((ctl_src >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (ctl_va & 0x3FFFu)) << 16)
+						               | (((ctl_va >> 14) & 3u) | 0x80u);
+					}
 				}
 #endif
 #ifdef TILE_VERIFY

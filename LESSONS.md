@@ -551,3 +551,38 @@ blob reads as `0xFFFF` -- which is exactly the "not baked" sentinel.
 A sentinel that collides with erased-flash is a sentinel that cannot
 report its own absence.
 
+### The MD VDP cannot DMA from cart ROM at RV=1
+
+Measured 2026-09-18 with a control, which is the only reason it counts.
+One vint, two identical 16-word VDP DMAs, same destination page:
+
+    source cart 0x264140 (the baked tile blob)  -> VRAM 0xF800 : ALL ZERO
+    source FB   0x85EE00 (the SAT staging)      -> VRAM 0xF820 : LANDED
+
+So it is not the probe, the length, the timing or the destination. The
+cart is not a legal DMA source for the VDP while the 32X adapter is
+mapping it.
+
+**Corroboration already in the tree:** `mdspr_upload` (md_main.c:449)
+reads cart sprite art on the 68K and pushes it to VRAM with a MANUAL
+WRITE LOOP through the 0x900000 bank window, not a DMA -- 512 port
+writes at a time. Someone hit this before and coded round it without
+recording why, which is why it cost a probe to rediscover.
+
+*What it costs us:* the "runtime becomes a DMA from cart to VRAM" design
+does not work as stated. A tile record cannot collapse to 2 words
+(slot + code) with the 68K DMAing straight from the baked blob, because
+the DMA has no legal way to read the blob. Any path still has to stage
+the bytes into a DMA-able region first -- which is what the SH-2 does
+today into the FB window, and is exactly the copy the bake was trying to
+delete.
+
+*What still stands:* the bake itself (the arithmetic is gone, the
+transport is a 16-halfword copy) and the 68K's own cart reads, which
+demonstrably work by CPU access even though DMA does not.
+
+THREE PROBES DIED GETTING HERE, all of them reporting a clean negative
+that was really a broken probe: reporting into WRAM that a ring buffer
+overwrote; a source address pointing at 0xFF gap fill; and no control at
+all. A negative result needs a positive control in the same run.
+
