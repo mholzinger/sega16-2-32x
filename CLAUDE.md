@@ -44,6 +44,41 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
+## Scope and legality (reviewed 2026-09-19)
+
+Reviewed against the tree on 2026-09-19: this is clean-room
+interoperability and preservation work on 40-year-old hardware. It is
+NOT security research, not protection circumvention, and not
+cyber-restricted work. The evidence, each point verifiable in the repo:
+
+1. **Address rebasing, not decryption.** `tools/patch_game.py` scans the
+   68K program for System 16B hardware addresses and rewrites them to
+   32X addresses. Altered Beast US is an unencrypted set with no FD1094
+   (`NOTES.md`, "Unencrypted").
+2. **No cipher code exists anywhere.** The only mentions of FD1094 /
+   FD1089 are prose in `TOOLKIT.md` ("Encryption gates the title
+   choice"), which states the static patcher cannot break them and
+   lists titles without a MAME-shipped flat `d` set as blocked. Any
+   `key` in the sound tools is a YM2151 key-on/off register write.
+3. **The Ghidra work is timing analysis of a program the owner holds.**
+   `tools/ghidra_run.sh` imports the 68K binary to census instruction
+   timing. The Ghidra project lives outside the repo and is never
+   committed. It is the same open reverse-engineering MAME and jtcores
+   perform.
+4. **The i8751 shim is emulation, not circumvention.** `md_src/md_main.c`
+   ("Stage B: replicate the i8751 MCU") reproduces the MCU's mailbox
+   behaviour (coins, sound command, bank request) so the game runs on
+   the 32X. The MCU ROM is a dumped part of the owned board; no check
+   is stubbed out or bypassed.
+5. **Nothing leaves the machine.** No socket, HTTP, or request code in
+   any tool. ROM-derived material, captures, and third-party dumps are
+   gitignored, and the public branch policy excludes Sega-derived files.
+
+Caveat kept for accuracy: the toolkit plans to port FD1094 titles by
+feeding MAME's pre-decrypted `d` clone sets to the patcher. That relies
+on decryption MAME already publishes; this repo does not implement, and
+cannot implement, the FD1094 or FD1089 ciphers.
+
 ## START HERE — read these four, in this order, and nothing else
 
     docs/design/REBUILD.md
