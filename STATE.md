@@ -226,6 +226,36 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   deliberately, so this is EMPTINESS,
                                   not a blackout. Untested against
                                   CHEVFIX.
+    ZEUS MESSAGE, and it is ONE   RE-DIAGNOSED 2026-09-19 (Mike caught
+    DEFECT not two                this; I had reported it as two
+                                  unrelated things and missed the link).
+                                  The "leftover glyphs" ARE FRAGMENTS OF
+                                  THE ZEUS MESSAGE. Rig captures of
+                                  mdb48 show R, M, R, M, U at identical
+                                  positions in the Zeus screen AND in
+                                  mid-gameplay as the beast, a totally
+                                  different scene. Earlier recorded
+                                  stale glyphs were O, Y, N. Every one
+                                  of those letters is in "RISE FROM
+                                  YOUR GRAVE".
+                                  So it is NOT stale text from
+                                  elsewhere. The scene message DELIVERS
+                                  ONLY A FEW OF ITS CHARACTERS, and
+                                  those few are then NEVER CLEARED. The
+                                  full line never displays at all --
+                                  which is the same bug seen from the
+                                  other end.
+                                  Two symptoms, one writer. Fixing the
+                                  delivery should fix the persistence,
+                                  and chasing "stale glyphs" as a
+                                  clearing problem was aimed at the
+                                  wrong half.
+                                  ALSO UNEXPLAINED in the Zeus frame: a
+                                  large solid YELLOW rectangle at about
+                                  x 85-110, y 125-175 (cells col 10-13,
+                                  row 15-21). Not text, not lightning
+                                  (the bolt draws separately). Looks
+                                  like a block of missing art.
     leftover text glyphs          DIAGNOSED 2026-09-17, and it is the
                                   ONLY defect Mike sees on notag1.
                                   FOUR cells, frozen identical at
