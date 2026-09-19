@@ -645,47 +645,65 @@ static void md_consume(uint32_t pkt_base) {
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
 #ifdef CART_DMA_PROBE
-				/* CART-DMA GATE, cut 4 (2026-09-19). Can the MD VDP DMA
-				 * out of CART ROM while we hold RV=1?
+				/* CART-DMA HARNESS, cut 6 (2026-09-19). SELF-CONTROLLED
+				 * AND IN ONE FRAME -- no comparison across time, no
+				 * readback, nothing to film.
 				 *
-				 * THE LOUDEST POSSIBLE SIGNAL, because every quieter one
-				 * failed. Cuts 1-2 read VRAM back and the readback raced
-				 * the DMA (ares completes one atomically, the FPGA does
-				 * not). Cut 3 wrote a single CRAM entry and Mike's slowmo
-				 * caught red/green/blue/black alternating -- blue is not
-				 * a colour that probe can write, so entry 63 is contested
-				 * on hardware even though the write survived in ares.
+				 * Cut 5 flooded CRAM from cart and saw no purple, and I
+				 * called cart DMA dead on it. That was not a harness: it
+				 * had NO CONTROL ON HARDWARE, so "no purple" could just
+				 * as well have meant the flood itself does not work on
+				 * the FPGA. Mike's rule, and he is right: isolate, and
+				 * build the specific harness, before calling anything
+				 * dead.
 				 *
-				 * So: DMA 64 words from cart straight over the WHOLE of
-				 * CRAM. Source 0x31EF1E is a 0xFF gap-fill run, so every
-				 * word is 0xFFFF = WHITE. Nothing else writes all 64
-				 * entries in one go, and the result needs no readback and
-				 * no spare entry:
+				 * So run BOTH sources in the same vint into DIFFERENT
+				 * HALVES of CRAM:
+				 *   entries  0-31 <- 68K WRAM 0xFFA300, filled with
+				 *                    GREEN 0x00E0. WRAM is an
+				 *                    indisputably legal DMA source, so
+				 *                    this is the POSITIVE CONTROL.
+				 *   entries 32-63 <- cart 0x200000, 64 identical words
+				 *                    of 0x0707 = PURPLE. The TEST.
 				 *
-				 *   SCREEN GOES SOLID WHITE  -> CART DMA WORKS. The
-				 *      2-word record and a 68K DMA from the baked blob
-				 *      are back on the table.
-				 *   SCREEN GOES SOLID BLACK  -> the DMA RAN and sourced
-				 *      ZERO. Cart is not visible to the VDP as a DMA bus
-				 *      master. (This is what ares reports.)
-				 *   PICTURE LOOKS NORMAL     -> the DMA never executed.
-				 *
-				 * The game is unplayable under this build by design. */
+				 * CRAM lines 0-1 are entries 0-31 (sprites + one BG
+				 * line); lines 2-3 are entries 32-63 (BG). So ONE
+				 * screenshot reads:
+				 *   green somewhere + purple somewhere -> BOTH WORK,
+				 *       cart DMA is real and ares is wrong
+				 *   green somewhere, no purple          -> the harness
+				 *       works and CART IS BLOCKED. Now it means it.
+				 *   no green at all                     -> the harness
+				 *       is broken; believe NOTHING, fix it first
+				 * Unplayable by design. */
 				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
-					/* 0x200000: 64 IDENTICAL words of 0x0707 in cart,
-					 * which is MD colour R3 G0 B3 -- a flat mid-PURPLE.
-					 * 0xFFFF white was a bad pick: white is a plausible
-					 * game colour (the statues), so a white frame could
-					 * not be told from the game's own palette winning
-					 * the frame. Nothing floods all 64 entries purple. */
-					const uint32_t cdp_src = 0x200000uL >> 1;
+					volatile uint16_t *ctl = (volatile uint16_t *)0xFFA300;
+					for (uint16_t q = 0; q < 32; q++)
+						ctl[q] = 0x00E0u;                 /* GREEN */
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;   /* 64 words */
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (cdp_src & 0xFF));
-					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((cdp_src >> 8) & 0xFF));
-					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((cdp_src >> 16) & 0x7F));
-					*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0x80u;  /* CRAM 0, DMA */
+					{   /* CONTROL: WRAM -> CRAM entries 0-31 */
+						const uint32_t src = 0xFFA300uL >> 1;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9320;   /* 32 words */
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+						/* bits 6:0 are source bits 22:16; BIT 7 IS THE
+						 * DMA MODE BIT (1 = VRAM fill), so 0x9700|0x80
+						 * asked for a fill and landed nothing. The
+						 * control catching my own setup bug is the whole
+						 * argument for having one. */
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7Fu));
+						*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0x80u;
+					}
+					{   /* TEST: cart -> CRAM entries 32-63 (byte addr 64) */
+						const uint32_t src = 0x200000uL >> 1;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9320;   /* 32 words */
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0x80u;
+					}
 				}
 #endif
 #ifdef TILE_VERIFY

@@ -581,12 +581,28 @@ delete.
 transport is a 16-halfword copy) and the 68K's own cart reads, which
 demonstrably work by CPU access even though DMA does not.
 
-**CONFIRMED ON THE FPGA, 2026-09-19.** The decisive design: DMA 64 words
-from cart 0x200000, where all 64 words are IDENTICAL (0x0707), straight
-over all of MD CRAM. A working DMA could therefore only ever produce a
-STABLE FLAT PURPLE screen. Mike saw red/red/blue/green -- varying, never
-purple. An earlier cut sourcing all-0xFFFF likewise gave red/white/green
-instead of stable white.
+**CONFIRMED ON THE FPGA, 2026-09-19, WITH AN ON-SCREEN CONTROL.** The
+harness that finally settles it runs BOTH sources in the SAME VINT into
+DIFFERENT HALVES of CRAM, so there is no comparison across time and
+nothing to film:
+
+    entries  0-31  <- 68K WRAM 0xFFA300, filled GREEN  (positive control,
+                      WRAM is an indisputably legal DMA source)
+    entries 32-63  <- cart 0x200000, 64 identical words (the test)
+
+Digital captures off the rig, three frames:
+
+    green (control) 100.0% / 60.0% / 56.6%   -> THE HARNESS WORKS HERE
+    purple (test)     0.0% /  0.0% /  0.0%   -> CART IS BLOCKED
+
+Everything before this was weaker than it looked. Cut 5 flooded from
+cart alone and saw no purple, and that was called dead -- but with NO
+CONTROL ON HARDWARE, "no purple" could equally have meant the flood does
+not work on the FPGA at all. The control also caught a bug in my own
+setup: `0x9700 | 0x80` sets BIT 7 OF REG 23, which is the DMA MODE bit
+(1 = VRAM fill), so the control landed nothing until it used the same
+`(src >> 16) & 0x7F` form as every other DMA in the file. Without a
+control that bug would have read as a second confirmation.
 
 So on hardware the transfer EXECUTES and the cart data never arrives; it
 picks up garbage that varies per frame, where ares deterministically
