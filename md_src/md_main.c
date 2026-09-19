@@ -864,14 +864,35 @@ static void md_consume(uint32_t pkt_base) {
 								+ ((uint32_t)(w1 >> 6)) * 4096u
 								+ ((uint32_t)(w1 & 63u)) * 64u
 								+ ((w0 & 0x8000u) ? 32u : 0u);
+							/* READ FIRST, THEN BURST. Do NOT interleave
+							 * cart reads between the VDP address write
+							 * and the data writes.
+							 *
+							 * Every technique here is individually proven
+							 * on the rig -- cart reads through both
+							 * routes, the bank switch (BANKPOKE), and
+							 * VRAM port writes (PORTPOKE renders at 99%
+							 * non-black). Only the COMBINATION black-
+							 * screens, and the combination is the one
+							 * thing no probe covered: the VDP control
+							 * port carries a first/second-word pending
+							 * state and an address latch across this
+							 * sequence, and on 32X a cart read crosses
+							 * the adapter's bus right in the middle of
+							 * it. Pull the 16 words into locals while the
+							 * VDP is idle, then set the address and write
+							 * them back to back with nothing in between. */
 							const volatile uint16_t *cw =
 								(const volatile uint16_t *)
 								(0x900000uL + (src - 0x200000uL));
+							uint16_t t9[16];
+							for (uint16_t k = 0; k < 16; k++)
+								t9[k] = cw[k];
 							*vdp_ctrl_wide =
 								((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 								| ((va >> 14) & 3u);
 							for (uint16_t k = 0; k < 16; k++)
-								*vdp_data_port = cw[k];
+								*vdp_data_port = t9[k];
 						}
 #ifdef DMA_CENSUS
 						TILECNT[0]++; TILECNT2[0]++; TILESENT[0] = 0xA5A5A5A5u;
@@ -879,12 +900,10 @@ static void md_consume(uint32_t pkt_base) {
 					}
 					*(volatile uint16_t*)0xA15104 = 3;
 					}
-				} else if (0) {
-					volatile uint16_t *e = sc + 8;
 #else
+					{
 					/* tile pixels: 16 contiguous FB words per record */
 					volatile uint16_t *e = sc + 8;
-#endif
 					for (uint16_t i = 0; i < cnt; i++, e += 17) {
 						uint32_t va = (uint32_t)e[0] * 32u;
 						if (va + 32u > 0xB000u) continue;
@@ -943,11 +962,57 @@ static void md_consume(uint32_t pkt_base) {
 					if ((tv_fs0 ^ *(volatile uint16_t*)0xA1518A) & 1u)
 						(*(volatile uint16_t*)0xFFA1E8)++;
 #endif
+					}
+#endif
+					/* THE SCROLL RUNS ON BOTH PATHS. It used to sit
+					 * inside the FB branch, and the first TILE_SLIM cut
+					 * spliced that branch out with `} else if (0) {` --
+					 * which silently took the hscroll table write with
+					 * it. Under slim the planes therefore never got a
+					 * scroll value at all, which is a black screen, not
+					 * a tile defect. That is why the failure survived
+					 * SLIMCAP=8, the stride fix, and every read-route
+					 * experiment: none of them were the bug. */
 					{	/* scroll rides the tile chunk too: sc[3]/sc[7] */
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
 						*vdp_data_port = sc[3];
 						*vdp_data_port = sc[7];
 					}
+#ifdef PORT_POKE
+					/* PORT WRITES, MOVED TO THE END (2026-09-19). The slim
+					 * build black-screens on hardware and renders in
+					 * ares. Ruled out with controls: the cart read route
+					 * (BOTH work on the rig), the bank switch (BANKPOKE
+					 * plays identically), volume (fails at SLIMCAP=8 as
+					 * at 40), the record stride, and the missing hscroll
+					 * write. The ONE structural difference left is that
+					 * slim writes VRAM through the DATA PORT where the
+					 * FB route uses DMA.
+					 * Placed at the END of the block, AFTER the scroll.
+					 * At the HEAD it moved 76,900 pixels in ares while
+					 * writing only 16 words to free VRAM -- so it is not
+					 * the writes, it is the VDP ADDRESS LATCH and AUTO-
+					 * INCREMENT they leave behind, which everything after
+					 * them inherits. slim does this PER TILE.
+					 *   black screen -> port writes to VRAM here are the
+					 *     fault, and the slim 68K side must use DMA from
+					 *     a staged buffer instead of writing directly.
+					 *   renders fine -> port writes are safe and the bug
+					 *     is elsewhere in my slim code. */
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					/* MASK THE ADDRESS. 0x4000 | 0xF800 is 0xFC00, which
+					 * is the HSCROLL TABLE -- the first cut of this probe
+					 * wrote 16 words of 0x1234 over it and moved 77,000
+					 * pixels, which I nearly read as "port writes are
+					 * unsafe". The low 14 bits go in the first word, the
+					 * top 2 in the second, exactly as the slim path and
+					 * every other site here already do it. */
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xF800u & 0x3FFFu)) << 16)
+					               | (((0xF800u >> 14) & 3u));
+					for (uint16_t q = 0; q < 16; q++)
+						*vdp_data_port = 0x1234u;
+#endif
+
 				} else {
 					/* NT_WRAP chunk: mirror-diffed rows; each span's
 					 * cells are contiguous in the FB — DMA per span. */

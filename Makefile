@@ -853,6 +853,9 @@ endif
 #     during scene loads while the SH-2 is quiet)
 #   renders fine -> the switch is safe, and the slim build dies on the
 #     VOLUME of cart reads and VDP writes inside the vint
+ifdef PORTPOKE
+MDCCFLAGS += -DPORT_POKE
+endif
 ifdef BANKPOKE
 MDCCFLAGS += -DBANK_POKE
 endif
