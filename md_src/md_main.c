@@ -645,65 +645,56 @@ static void md_consume(uint32_t pkt_base) {
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
 #ifdef CART_DMA_PROBE
-				/* CART-DMA HARNESS, cut 6 (2026-09-19). SELF-CONTROLLED
-				 * AND IN ONE FRAME -- no comparison across time, no
-				 * readback, nothing to film.
+				/* CART CPU-READ HARNESS (2026-09-19). The DMA question is
+				 * closed -- the VDP will not read cart (LESSONS, with an
+				 * on-screen control). So the slimmest pipeline available
+				 * is cart -> 68K -> VRAM, TWO payload copies instead of
+				 * today's three (cart -> SH-2 -> FB -> VRAM), and the
+				 * record collapses 17 words -> 2.
 				 *
-				 * Cut 5 flooded CRAM from cart and saw no purple, and I
-				 * called cart DMA dead on it. That was not a harness: it
-				 * had NO CONTROL ON HARDWARE, so "no purple" could just
-				 * as well have meant the flood itself does not work on
-				 * the FPGA. Mike's rule, and he is right: isolate, and
-				 * build the specific harness, before calling anything
-				 * dead.
+				 * That design has ONE load-bearing unknown: can the 68K
+				 * CPU-READ the blob through the RV=1 identity map?
+				 * mdspr_upload reads cart, but through the 0x900000 BANK
+				 * WINDOW, not the identity map, and nobody wrote down
+				 * why.
 				 *
-				 * So run BOTH sources in the same vint into DIFFERENT
-				 * HALVES of CRAM:
-				 *   entries  0-31 <- 68K WRAM 0xFFA300, filled with
-				 *                    GREEN 0x00E0. WRAM is an
-				 *                    indisputably legal DMA source, so
-				 *                    this is the POSITIVE CONTROL.
-				 *   entries 32-63 <- cart 0x200000, 64 identical words
-				 *                    of 0x0707 = PURPLE. The TEST.
+				 * Same harness shape that settled the DMA question --
+				 * control and test in ONE frame, no readback, nothing to
+				 * film:
+				 *   entries  0-31 <- immediate GREEN, written by the 68K.
+				 *                    Proves the CRAM write path works at
+				 *                    all. POSITIVE CONTROL.
+				 *   entries 32-63 <- words the 68K READ from cart
+				 *                    0x200000, which holds 0x0707 =
+				 *                    PURPLE. THE TEST.
 				 *
-				 * CRAM lines 0-1 are entries 0-31 (sprites + one BG
-				 * line); lines 2-3 are entries 32-63 (BG). So ONE
-				 * screenshot reads:
-				 *   green somewhere + purple somewhere -> BOTH WORK,
-				 *       cart DMA is real and ares is wrong
-				 *   green somewhere, no purple          -> the harness
-				 *       works and CART IS BLOCKED. Now it means it.
-				 *   no green at all                     -> the harness
-				 *       is broken; believe NOTHING, fix it first
-				 * Unplayable by design. */
+				 *   green + purple -> 68K cart reads WORK on the identity
+				 *       map. Build the 2-word record.
+				 *   green, no purple -> reads return junk; use the
+				 *       0x900000 bank window like mdspr_upload does.
+				 *   no green -> harness broken, believe nothing. */
 				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
-					volatile uint16_t *ctl = (volatile uint16_t *)0xFFA300;
-					for (uint16_t q = 0; q < 32; q++)
-						ctl[q] = 0x00E0u;                 /* GREEN */
+					/* THE BANK WINDOW, not the identity map. ares says
+					 * a plain read of 0x200000 returns nothing useful,
+					 * and mdspr_upload has always gone through the
+					 * window -- now we know why. Convention, from
+					 * MDSPR_CART_BANK=2 + MDSPR_CART_WINOFF=0xF9100
+					 * landing on .mdsprart at cart 0x2F9100:
+					 *     cart addr = bank * 0x100000 + winoff
+					 *     read at     0x900000 + winoff
+					 * So cart 0x200000 is bank 2, winoff 0. Bank 3 is
+					 * the resting value the other sites restore. */
+					const volatile uint16_t *cart =
+						(const volatile uint16_t *)0x900000uL;
 					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-					{   /* CONTROL: WRAM -> CRAM entries 0-31 */
-						const uint32_t src = 0xFFA300uL >> 1;
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9320;   /* 32 words */
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
-						/* bits 6:0 are source bits 22:16; BIT 7 IS THE
-						 * DMA MODE BIT (1 = VRAM fill), so 0x9700|0x80
-						 * asked for a fill and landed nothing. The
-						 * control catching my own setup bug is the whole
-						 * argument for having one. */
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7Fu));
-						*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0x80u;
-					}
-					{   /* TEST: cart -> CRAM entries 32-63 (byte addr 64) */
-						const uint32_t src = 0x200000uL >> 1;
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9320;   /* 32 words */
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
-						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
-						*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0x80u;
-					}
+					*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+					for (uint16_t q = 0; q < 32; q++)
+						*vdp_data_port = 0x00E0u;          /* control: GREEN */
+					*(volatile uint16_t*)0xA15104 = 2;     /* bank 2 -> cart 0x200000 */
+					*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0u;
+					for (uint16_t q = 0; q < 32; q++)
+						*vdp_data_port = cart[q];          /* test: 68K cart read */
+					*(volatile uint16_t*)0xA15104 = 3;     /* restore */
 				}
 #endif
 #ifdef TILE_VERIFY

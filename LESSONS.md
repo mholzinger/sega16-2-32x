@@ -628,3 +628,35 @@ no readback anywhere. **Design the probe so that the right answer looks
 different from every wrong answer, including every way the probe itself
 can fail.**
 
+### The 68K reaches cart through the 0x900000 BANK WINDOW, not the identity map
+
+Measured 2026-09-19 with a same-frame control (immediate GREEN into CRAM
+0-31, cart-read words into 32-63):
+
+    read 0x200000 directly (RV=1 identity map) :  0/32  nothing
+    read 0x900000 with bank register = 2       : 32/32  the cart value
+
+Convention, derived from MDSPR_CART_BANK=2 + MDSPR_CART_WINOFF=0xF9100
+landing exactly on .mdsprart at cart 0x2F9100:
+
+    cart address = bank * 0x100000 + winoff
+    read it at     0x900000 + winoff      (bank -> 0xA15104)
+    bank 3 is the resting value every site restores
+
+`mdspr_upload` (md_main.c:449) has always used this window and nobody
+recorded why. This is why: the identity map does not serve the 68K for
+bulk cart reads, the window does.
+
+**This needs no rig confirmation** -- mdspr_upload is ON THE LINE and
+sprite art renders on the FPGA, so the path is proven by shipping code.
+
+*Why it matters:* with VDP DMA from cart ruled out, this is what makes
+the slim pipeline possible at all --
+
+    today    cart -> SH-2 -> FB packet -> VRAM   3 payload copies, 17-word record
+    next     cart -> 68K -> VRAM                 2 payload copies,  2-word record
+    ideal    cart -> VRAM                        BLOCKED, the VDP will not read cart
+
+Two copies is the floor the hardware allows, and it takes the SH-2 out
+of the payload path completely.
+
