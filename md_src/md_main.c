@@ -745,6 +745,43 @@ void partb_hook(void)
 	slim_fetch();
 	slim_dma();
 #endif
+#ifdef BG_VALUE
+	/* RIG READOUT: which part of the MD background is missing? One byte,
+	 * field id in bits 6-7 rotating every 128 vints, value in bits 0-5:
+	 *   0 CRAM entry 17 (BG line 1, pen 1), packed 9-bit colour >> 3
+	 *   1 NT-A entry at row 12 col 20: tile index bits 5-10
+	 *   2 VRAM art word 0 of THAT tile, >> 10
+	 *   3 VRAM art word 0 of slot 1 (0x0020), >> 10
+	 * +1 so 0 never reads as "did not run". */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t f = (uint16_t)((vc >> 4) & 3u), v = 0, w;
+		if (f == 0) {
+			*vdp_ctrl_wide = ((uint32_t)(0x0000u | 34u) << 16) | 0x20u;   /* CRAM read, entry 17 */
+			w = *vdp_data_port; v = (uint16_t)((((w >> 9) & 7) << 6 | ((w >> 5) & 7) << 3 | ((w >> 1) & 7)) >> 3);
+		} else if (f == 1) {
+			uint32_t a = 0xC000u + 12u * 128u + 20u * 2u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; v = (uint16_t)((w >> 5) & 0x3F);
+		} else if (f == 2) {
+			uint32_t a = 0xC000u + 12u * 128u + 20u * 2u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; a = (uint32_t)(w & 0x7FFu) * 32u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; v = (uint16_t)(w >> 10);
+		} else {
+			*vdp_ctrl_wide = ((uint32_t)0x0020u << 16) | 0u;
+			w = *vdp_data_port; v = (uint16_t)(w >> 10);
+		}
+		if (v > 62) v = 62;
+		v = (uint16_t)((f << 6) | (v + 1));
+		{
+			uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+			*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+			for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+		}
+	}
+#endif
 #ifdef SLIM_VALUE
 	/* RIG READOUT (SILICON.md 4, the value instrument): flood MD CRAM with
 	 * one byte, field id in bits 6-7 rotating every 128 vints, value+1 in
@@ -883,6 +920,27 @@ static void md_consume(uint32_t pkt_base) {
 				else if (!md_hold_seen) md_hold_seen = 1;
 #ifdef NT_WRAP
 				uint16_t palp = (uint16_t)(sc[1] & 0x8000u);
+#ifdef PAL_FIRST
+				/* PALETTE FIRST (2026-09-20). The BG palette DMA used to sit at
+				 * the END of the consume behind a vblank gate; anything that
+				 * lengthened the consume or the vint on the FPGA deferred it,
+				 * and a deferred palette on silicon showed as a black level
+				 * background (Mike: "the palette swap at Neff is what triggers
+				 * the background"). Land it before any tile or name-table
+				 * work, while the consume is certainly inside vblank. */
+				if (palp) {
+					uint32_t src = ((uint32_t)(sc + 688)) >> 1;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+					*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+					(*(volatile uint16_t*)0xFFA164)++;                 /* diag: palettes landed first */
+					palp = 0;                                          /* the gated block below is skipped */
+				}
+#endif
 #endif
 				if (typ == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
 				else          (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
@@ -2760,9 +2818,16 @@ static void r60_push(void) {
 			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
 		}
 #endif
+#ifdef MDS_VALUE
+		/* alternate 4-second windows: value flood / the picture itself, so
+		 * one run reads the SH-2's install state AND shows the background */
+		if (*(volatile uint16_t*)0xFFB0F0 & 0x100)
+#endif
+		{
 		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
 		for (int q = 0; q < 64; q++)
 			*(volatile uint16_t*)0xC00000 = col;
+		}
 	}
 #endif
 #ifdef BOOT_PUSHDELAY

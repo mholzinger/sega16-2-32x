@@ -801,3 +801,50 @@ references (tools/patch_report.txt) against the gate table; a "wrong
 layer" defect is a PRIORITY question -- read the tile words and the
 sprite field in MAME before touching the compose; and run the one-flag
 control (MDSPROFF, CARTREADAT) before building a mechanism.
+
+
+### The FPGA's level-start background follows BUILD LAYOUT, not the feature under test (2026-09-20, evening)
+
+Measured on the rig with the attract demo as the scene (a 99% non-black
+frame with the line's colour mix at 37-50 s after launch = background
+present; a sky-only blue frame and dark frames = absent), each rom
+launched twice where it mattered:
+
+    slim22                         present
+    slim22 + Zeus thunk bset #2    ABSENT     (slim23, slim25)
+    slim22 + Zeus thunk 1 NOP      present    (twice)
+    slim22 + Zeus thunk 3 NOPs     present
+    slim22 + Zeus thunk st.b       present    (slim30, the line)
+    slim22 + Zeus thunk 5 NOPs     ABSENT     (twice)
+
+A NOP pad flips it, and relaunches repeat the verdict, so the outcome is
+a deterministic function of the build's layout, invisible in ares (which
+charges instruction cycles only and models no cache), and unrelated to
+what the changed bytes DO. Mike's slim25 capture in gameplay (background
+black, sprites and gravestone row present) is the same defect.
+
+**Everything blamed on a feature today between 14:00 and 19:30 is
+therefore UNPROVEN**: same-vint art landing (slim26/27/28), the
+high-score gates (every variant), the palette gate, the DMA position.
+Each was one layout. They may all be fine; they may all be luck.
+
+What is measured and stands: DELIVTEST 0 is GREEN on the rig (immediate
+WRAM write then DMA lands); SLIMVERIFY is GREEN (same-vint slim art lands
+with the right bytes); the SH-2 reports round 0, tables installed,
+display on, on both a passing and a failing pad (MDSVALUE); on a failing
+build the name table and the tile art read back non-zero (BGVALUE).
+What has not been read on a failing build is the MD BG palette itself,
+and the Neff observation ("the palette swap is what brings the
+background") still points there.
+
+*Rules:*
+1. Before attributing an FPGA-only level-start failure to a change,
+   build the same change with a 1-, 3- and 5-NOP pad (ZEUSPAD=N) and
+   see whether the verdict follows the pad. If it does, stop.
+2. A rig instrument that floods CRAM destroys the BG palette for the
+   rest of the run (the game re-sends it only on change): read values
+   in a window the picture does not need, or through 32X CRAM.
+3. The next instrument is a readback of MD CRAM 16-63 on a failing pad,
+   without a flood, plus the SH-2's palette landing count -- then find
+   the layout-sensitive step (candidates: the master's palette-landing
+   timing vs the 68K's DMA, SH-2 instruction-cache alignment).

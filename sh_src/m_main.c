@@ -8909,6 +8909,16 @@ LOCKCODE_ROM void visr_vbi(void)
         /* The value channel is 68K-side (0xFFA18A); hand the count
          * over COMM6 with bit 15 SET, which STAMP_CENSUS's reader
          * ignores and the 68K's GLOW_RATE reader claims. */
+#ifdef MDS_VALUE
+        /* 2026-09-20: the MD tile-table install state instead of the ramp
+         * count. bits 0-2 md_round (7 = unknown), bit 3 no scene installed
+         * (mds_scene_cur == 0xFF), bit 4 mds_onscreen, bit 5 install
+         * count parity (MDS[5]). */
+        gr_val = (uint8_t)((md_round < 7 ? md_round : 7)
+                         | (mds_scene_cur == 0xFF ? 0x08 : 0)
+                         | (mds_onscreen ? 0x10 : 0)
+                         | ((MDS[5] & 1) ? 0x20 : 0));
+#endif
         MARS_SYS_COMM6 = (uint16_t)(0x8000 | gr_val);
     }
 #endif

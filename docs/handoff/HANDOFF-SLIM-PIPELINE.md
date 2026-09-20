@@ -59,7 +59,18 @@ HARNESS: `make line CARTREADAT=18|17|19|20|21 [CARTREADADDR=..]
 vint position; `SLIMNODMA=1` / `SLIMNOFETCH=1` drop one slim step. All
 verified against `.build_flags` before use.
 
-## THE LINE (updated 2026-09-20 03:30: slim21 passed Mike's play pass)
+## THE LINE (updated 2026-09-20 19:40 -- READ LESSONS "follows BUILD LAYOUT" first)
+
+    rom/night/slim30.32x  THE LINE = `make line`: slim22 + Zeus mark st.b.
+                          Rig: background present. Unplayed by Mike.
+    rom/night/slim25.32x  passed Mike at 14:20 (score table), lost the
+                          level background at 18:24 on the same rig.
+    tools: ZEUSPAD=N (NOP pad), ZEUSBSET=1, HSGATE=1 (+HSNOMARK/HSNOSPAN/
+    HSPLAINSPIN), PALFIRST=1, BGVALUE=1, MDSVALUE=1, SLIMVERIFY=1,
+    SLIMSAMEVINT=1, SLIMNODMA/SLIMNOFETCH, CARTREADAT=n -- all documented
+    in the Makefile; none change `make line`.
+
+## THE LINE (earlier today: slim21 passed Mike's play pass)
 
     rom/night/slim25.32x  THE LINE = `make line`. Mike 2026-09-20: "the score
                           table IS fixed on slim25" (slim23 + the high-score

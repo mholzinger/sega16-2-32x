@@ -264,21 +264,13 @@ TABLES = {
         # own frame wait, so a span over the routine would defer every FM
         # raise for the whole screen. Each store has a 4-byte instruction
         # in front of it to displace; the dbf loops re-enter their gate.
-        (0x45EC, 4, 0x0600, "high-score: addib #-48,d0 before the rank store"),
-        (0x45FE, 4, 0x0601, "high-score: addib #-96,d1 before the name store"),
-        (0x4614, 4, 0x0601, "high-score: addib #-96,d1 before the string store (loop)"),
-        (0x4634, 4, 0x14FC, "high-score: moveb #0,(a2)+ leading-zero blank"),
-        (0x4648, 4, 0x0601, "high-score: addib #-48,d1 before the digit store"),
-        (0x4658, 4, 0x123C, "high-score: moveb #-48,d1 before the zero-digit store"),
-        (0x46A2, 4, 0x1081, "high-score: moveb d1,(a0); addql #2,a0 fill loop head"),
+        # (high-score sites temporarily under HSGATE env, see below)
     ],
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
                      (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
                      (0x64FC, 0x6506), (0x6558, 0x6562),
-                     (0x45EC, 0x45F2), (0x45FE, 0x4604), (0x4614, 0x461A),
-                     (0x4634, 0x4638), (0x4648, 0x4650), (0x4658, 0x4660),
-                     (0x46A2, 0x46AA)],
+                     ],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),
@@ -305,3 +297,21 @@ TABLES = {
     'REBASE_EXCLUDE': [(0x6DC0, 0x6DCA), (0x1AD10, 0x1AD34), (0x7358, 0x73A0),
                        (0xEC32, 0xEC46), (0xECAC, 0xECB0)],
 }
+
+# 2026-09-20 bisect: the high-score gates join the tables only when HSGATE=1
+# (slim23 = the line without them lost the FPGA background; isolating).
+import os as _os
+if _os.environ.get('HSGATE'):
+    TABLES['FMGATE_ENTRIES'] += [
+        (0x45EC, 4, 0x0600, "high-score: addib #-48,d0 before the rank store"),
+        (0x45FE, 4, 0x0601, "high-score: addib #-96,d1 before the name store"),
+        (0x4614, 4, 0x0601, "high-score: addib #-96,d1 before the string store (loop)"),
+        (0x4634, 4, 0x14FC, "high-score: moveb #0,(a2)+ leading-zero blank"),
+        (0x4648, 4, 0x0601, "high-score: addib #-48,d1 before the digit store"),
+        (0x4658, 4, 0x123C, "high-score: moveb #-48,d1 before the zero-digit store"),
+        (0x46A2, 4, 0x1081, "high-score: moveb d1,(a0); addql #2,a0 fill loop head"),
+    ]
+    if not _os.environ.get('HSNOSPAN'):
+        TABLES['FMGATE_SPANS'] += [(0x45EC, 0x45F2), (0x45FE, 0x4604), (0x4614, 0x461A),
+                                   (0x4634, 0x4638), (0x4648, 0x4650), (0x4658, 0x4660),
+                                   (0x46A2, 0x46AA)]

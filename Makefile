@@ -869,6 +869,19 @@ endif
 ifdef SLIMVALUE
 MDCCFLAGS += -DSLIM_VALUE
 endif
+# `make line PALFIRST=1` = BG palette DMA at the consume's top (2026-09-20)
+# `make line BOOTFLIPRATE=1 GLOWRATE=1 MDSVALUE=1` = the SH-2's tile-table install
+# state on the value channel, flooded in alternate 4-second windows.
+ifdef MDSVALUE
+SHCCFLAGS += -DMDS_VALUE
+MDCCFLAGS += -DMDS_VALUE
+endif
+ifdef PALFIRST
+MDCCFLAGS += -DPAL_FIRST
+endif
+ifdef BGVALUE
+MDCCFLAGS += -DBG_VALUE
+endif
 ifdef SLIMVERIFY
 MDCCFLAGS += -DSLIM_VERIFY
 endif

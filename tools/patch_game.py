@@ -1314,7 +1314,7 @@ if FMGATE:
             #   cmpa.l #0x00FF0000,%a1 ; bhs.s <past the spin>
             # (CCR is rewritten by the displaced moveb/clrb anyway)
             fmgate_words += [0xB3FC, 0x00FF, 0x0000, 0x6408]
-        if FBXPEND:
+        if FBXPEND and not (os.environ.get('HSPLAINSPIN') and off in (0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2)):
             # jsr (spin).w ; nop ; nop  -- same 8 bytes as the inline spin,
             # so the TXTWRAM bhs.s +8 above still lands past it. The spin
             # routine is appended after the table; its address is patched in
@@ -1367,8 +1367,21 @@ if FMGATE:
                 # forced full mask every 8th vint: a few letters landed,
                 # most did not, and the erase stores were lost the same
                 # way -- "R M U" burned in until the transform's clear-all.
-                fmgate_words += [0x08F8, 0x0002, 0xA1A6]          # bset #2,(0xFFA1A6).w  rows 8-11
-            elif off in (0x369C, 0x1ACCA, 0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2):
+                # 2026-09-20 evening, rig: with `bset #2` (rows 8-11) the
+                # level background was black on the FPGA; with `st.b` (all
+                # rows) or three NOPs it was present -- and then a FIVE-nop
+                # pad lost it again while one and three nops kept it,
+                # deterministically on relaunch. The FPGA outcome follows
+                # BUILD LAYOUT, not this mark (LESSONS). st.b is the
+                # default because that layout passes today; ZEUSPAD=N /
+                # ZEUSBSET=1 reproduce the experiment.
+                if os.environ.get('ZEUSPAD'):
+                    fmgate_words += [0x4E71] * int(os.environ['ZEUSPAD'])   # PROBE: N-word shift, no mark
+                elif os.environ.get('ZEUSBSET'):
+                    fmgate_words += [0x08F8, 0x0002, 0xA1A6]      # bset #2,(0xFFA1A6).w  rows 8-11 (slim23/25)
+                else:
+                    fmgate_words += [0x50F8, 0xA1A6, 0x4E71]      # st.b (0xFFA1A6).w  all rows
+            elif off in (0x369C, 0x1ACCA) or (off in (0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2) and not os.environ.get('HSNOMARK')):
                 fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows (0x45EC..0x46A2: the high-score table paints a screen)
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")

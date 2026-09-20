@@ -10,15 +10,21 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/slim25.32x        THE LINE. Mike's play pass 2026-09-20:
-                                "I see the score table IS fixed on
-                                slim25". = slim23 + the high-score table
-                                writer gated store-by-store and marking
-                                all text rows (game_altbeast.py sites
-                                0x45EC..0x46A2). = `make line`.
+    rom/night/slim30.32x        THE LINE = `make line` (2026-09-20 19:34).
+                                = slim22 (slim pipeline + per-pixel cat-1
+                                masks) + the Zeus typewriter marking ALL
+                                rows (st.b). Rig: level background
+                                present (attract demo 98.6-99.4%). NOT
+                                yet played by Mike; slim25's transform
+                                and score-table verdicts do not transfer
+                                because slim25 lost the background on
+                                the same rig (LESSONS, layout).
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                slim25
+    rig (MiSTer)                slim30
 
+    rom/night/slim25.32x        previous line. Mike: score table fixed
+                                (14:20), then "black background" (18:24,
+                                capture). Layout-dependent, see LESSONS.
     rom/night/slim23.32x        previous line (same day): + per-pixel
                                 cat-1 masks for unbaked pages (the
                                 transform) + the Zeus typewriter's row
@@ -232,8 +238,10 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   deliberately, so this is EMPTINESS,
                                   not a blackout. Untested against
                                   CHEVFIX.
-    ZEUS MESSAGE                  FIXED 2026-09-20 (Mike: "fixed the
-                                  zeus text"). The writer is the object
+    ZEUS MESSAGE                  FIXED 2026-09-20 on slim23 (Mike: "fixed
+                                  the zeus text"); slim30 marks ALL rows
+                                  instead of rows 8-11 (layout, LESSONS),
+                                  unverified by Mike. The writer is the object
                                   state routine at 0x56E8: one glyph
                                   every two frames into rows 9/11, then
                                   zeros over the same cells. It was
