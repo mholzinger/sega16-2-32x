@@ -898,9 +898,39 @@ extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
  * the name-table pass stores the MASK INDEX per class-2 cell (binary
  * search of the raw 13-bit code) where it stored the tile code. */
 #include "cat1mask.h"
+/* RUNTIME MASKS FOR UNBAKED PAGES (2026-09-20). The bake covers the
+ * level pages only; the transformation cutscene draws from pages 10/11
+ * and page 10's 800 cells ALL carry the priority bit (MAME census at
+ * attract frames 4460-4540). Those cells used to be classified "whole
+ * cell" for want of a mask, so the flames erased the character outright
+ * where the arcade erases only their opaque pixels (Mike: "the animated
+ * character is behind the chevron and flames"). Now a priority cell on
+ * an unbaked page gets a mask computed from the tile art into a 64-slot
+ * direct-mapped cache appended to the baked table; the slave's c1_hit
+ * indexes both the same way. */
+#define C1RT_N 64
 static uint16_t c1mask_codes[CAT1MASK_MAX];
-static uint8_t  c1mask_bits[CAT1MASK_MAX * 8];
+static uint8_t  c1mask_bits[(CAT1MASK_MAX + C1RT_N) * 8];
 static uint16_t c1mask_n;
+static uint16_t c1rt_tag[C1RT_N];         /* code13 | 0x8000 (0 = empty) */
+static uint8_t  c1rt_cls[C1RT_N];         /* 0 no hole, 1 whole, 2 per pixel */
+static unsigned c1rt_class(unsigned code13, unsigned art)
+{
+    unsigned slot = code13 & (C1RT_N - 1);
+    if (c1rt_tag[slot] != (uint16_t)(code13 | 0x8000u)) {
+        const uint8_t *px = altbeast_tiles + art * 64u;
+        unsigned opaque = 0;
+        for (unsigned py = 0; py < 8; py++) {
+            unsigned mb = 0;
+            for (unsigned x = 0; x < 8; x++)
+                if (px[py * 8u + x]) { mb |= 0x80u >> x; opaque++; }
+            c1mask_bits[(CAT1MASK_MAX + slot) * 8u + py] = (uint8_t)mb;
+        }
+        c1rt_cls[slot] = (uint8_t)(opaque == 64u ? 1u : opaque == 0u ? 0u : 2u);
+        c1rt_tag[slot] = (uint16_t)(code13 | 0x8000u);
+    }
+    return c1rt_cls[slot];
+}
 #define C1MASK_U ((const volatile uint8_t *)(0x20000000u | (uint32_t)c1mask_bits))
 static void c1mask_install(unsigned sc)
 {
@@ -15962,8 +15992,20 @@ RAMCODE void m_main(void)
                                             cat1code[row][col] = (uint16_t)c2;
 #endif
                                         }
-                                    } else
+                                    } else {
+#ifdef C1_MASKTAB
+                                        /* no bake for this page (the cutscene's
+                                         * 10/11): classify from the art */
+                                        unsigned c2 = w & 0x1FFF;
+                                        if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
+                                        GAME_TILE_REMAP(c2);
+                                        hv = c1rt_class(w & 0x1FFFu, c2);
+                                        if (hv == 2)
+                                            cat1code[row][col] = (uint16_t)(CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1)));
+#else
                                         hv = 1;         /* no bake for this page: whole cell */
+#endif
+                                    }
                                 }
                                 cat1scr[row][col] = (uint8_t)hv;
 #ifdef C1_STAMP
