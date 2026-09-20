@@ -968,14 +968,27 @@ static void md_consume(uint32_t pkt_base) {
 					 * 17-word record (an unbaked set's pixels) -- copy its
 					 * art into slim_art now, at FM=0; otherwise a 2-word
 					 * baked record for slim_fetch. */
-					for (uint16_t i = 0; i < cnt && slim_n + slim_inl < SLIM_CAP; i++) {
+					for (uint16_t i = 0; i < cnt && slim_n < SLIM_CAP; i++) {
 						uint16_t w0 = e[0];
 						if (w0 & 0x4000u) {
+							/* INLINE: DMA the 16 words straight from the
+							 * FB, the FB route's own idiom. The first cut
+							 * copied them through the 68K (16 slow adapter
+							 * reads per tile, 640 per vint at a load) and
+							 * the FPGA never finished the level's first
+							 * load: no background until the round cut
+							 * (Mike, 2026-09-20). */
 							uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
 							if (va + 32u <= 0xB000u) {
-								uint16_t *d = slim_art + slim_inl * 16u;
-								for (uint16_t k = 0; k < 16; k++) d[k] = e[1 + k];
-								slim_va[slim_inl++] = (uint16_t)va;
+								uint32_t src = ((uint32_t)(e + 1)) >> 1;
+								*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+								*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+								*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+								*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+									| (((va >> 14) & 3u) | 0x80u);
 								(*(volatile uint16_t*)0xFF340A)++;   /* diag: inline tiles */
 							}
 							e += 17;
