@@ -10,38 +10,33 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/lineV.32x         THE LINE. Mike's play pass 2026-09-20:
-                                "lineV.32x is playable! we have our
-                                regular set of defects to solve for".
-                                = tilesmd4/lineT + the boot-stack move
-                                (md_start.s 0xFFBFF0 -> 0xFF3FF0, md.ld
-                                guard) + two hook call sites that
-                                assemble only under PARTB_HOOK. ares:
-                                identical to lineT (718, 0 px, 0 VRAM).
+    rom/night/slim21.32x        THE LINE. Mike's play pass 2026-09-20:
+                                "background fixed, and frames feel
+                                consistent again". = lineV + the slim
+                                pipeline (TILESLIM=1 SLIMCAP=40, now in
+                                LINE_FLAGS): SH-2 ships 2-word records
+                                for baked sets, the 68K fetches the art
+                                from cart after the game's IRQ4 and
+                                DMAs it next vint (SLIM-PIPELINE.md 1b).
+                                ares: scene timer 718 (lineT 718),
+                                3792 px one-vint lag at frame 1100.
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                lineV
-    rom/night/slim21.32x        the slim pipeline candidate
-                                (TILESLIM=1 SLIMCAP=40): runs on ares
-                                and the FPGA WITH the background
-                                (SLIM-PIPELINE.md 1b). slim18-20 had
-                                black pens until the Neff cut (the
-                                palette gate, LESSONS). Play pass
-                                pending; "slower" unmeasured.
+    rig (MiSTer)                slim21
 
-    rom/night/lineT.32x         PREVIOUS line (== tilesmd4, Mike
-    (== tilesmd4.32x)           2026-09-18). Superseded by lineV.
-    rom/night/bldS.32x          the line before that (2026-09-14). Keep
-                                for "was this always broken" questions.
+    rom/night/lineV.32x         PREVIOUS line (2026-09-20, earlier):
+                                the FB tile route + the boot-stack move.
+                                Keep for "was this always broken".
+    rom/night/lineT.32x         the line before that (== tilesmd4).
 
-INVARIANT CHECK: rom/s16.32x differs from lineV in the build string only:
+INVARIANT CHECK: rom/s16.32x differs from the line at the stamp bytes
+only (`25f1 3fff`: BUILD_HASH32 and the build string):
 
-    cmp -l rom/s16.32x rom/night/lineV.32x \
+    cmp -l rom/s16.32x rom/night/slim21.32x \
       | awk '{printf "%x\n",$1-1}' | cut -c1-4 | sort -u
-    -> 3fff              (the 14 B build string at 0x3FFFD4)
 
-The old `25f1 3fff` does NOT hold against lineV: the 68K image moved when
-the boot stack did. `rom/s16.32x` must be left holding the LINE build at
-the end of any session.
+`rom/s16.32x` must be left holding the LINE build at the end of any
+session. The slim diag counters at WRAM 0xFF3400-0xFF340F and the
+SLIMVALUE readout are still compiled in; remove once nobody needs them.
 
 WHAT THE LINE CARRIES THAT bldS DID NOT
     - baked MD tiles (TILESMD=1 in LINE_FLAGS). 377 KB at cart

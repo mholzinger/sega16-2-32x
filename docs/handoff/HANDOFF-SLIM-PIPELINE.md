@@ -59,12 +59,15 @@ HARNESS: `make line CARTREADAT=18|17|19|20|21 [CARTREADADDR=..]
 vint position; `SLIMNODMA=1` / `SLIMNOFETCH=1` drop one slim step. All
 verified against `.build_flags` before use.
 
-## THE LINE (updated 2026-09-20: lineV passed Mike's play pass)
+## THE LINE (updated 2026-09-20 03:30: slim21 passed Mike's play pass)
 
-    rom/night/lineV.32x   THE LINE ("playable", Mike 2026-09-20)
-    rom/night/lineT.32x   == rom/night/tilesmd4.32x   previous line
-    rom/s16.32x           line-equivalent (differs from lineV at 3fff only)
-    rig                   lineV
+    rom/night/slim21.32x  THE LINE = `make line` (TILESLIM=1 SLIMCAP=40 in
+                          LINE_FLAGS). Mike: "background fixed, and frames
+                          feel consistent again".
+    rom/night/lineV.32x   previous line (FB tile route + boot-stack move)
+    rom/night/lineT.32x   == rom/night/tilesmd4.32x   the line before that
+    rom/s16.32x           line-equivalent (stamp bytes 25f1 3fff only)
+    rig                   slim21
 
 INVARIANT CHECK CHANGED when TILESMD joined the line. It is no longer
 `25f0 3fff`:
