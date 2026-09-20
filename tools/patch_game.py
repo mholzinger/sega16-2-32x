@@ -1368,8 +1368,8 @@ if FMGATE:
                 # most did not, and the erase stores were lost the same
                 # way -- "R M U" burned in until the transform's clear-all.
                 fmgate_words += [0x08F8, 0x0002, 0xA1A6]          # bset #2,(0xFFA1A6).w  rows 8-11
-            elif off in (0x369C, 0x1ACCA):
-                fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows
+            elif off in (0x369C, 0x1ACCA, 0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2):
+                fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows (0x45EC..0x46A2: the high-score table paints a screen)
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")
     for wi, w in enumerate(TXTW):

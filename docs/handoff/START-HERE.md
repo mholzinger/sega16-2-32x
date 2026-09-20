@@ -1,4 +1,4 @@
-**THE LINE (2026-09-20): rom/night/slim23.32x = `make line` (the slim pipeline + the transform and Zeus fixes), Mike's play pass passed. See STATE.md; this file's rankings are history.**
+**THE LINE (2026-09-20): rom/night/slim25.32x = `make line` (the slim pipeline + the transform, Zeus and high-score fixes), Mike's play pass passed. See STATE.md; this file's rankings are history.**
 
 # START HERE — read this before anything else
 

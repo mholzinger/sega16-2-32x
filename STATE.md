@@ -10,17 +10,19 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/slim23.32x        THE LINE. Mike's play pass 2026-09-20:
-                                "yay to both! fixed the zeus text AND
-                                the wolf transform!" = slim21 (the slim
-                                pipeline) + per-pixel cat-1 masks for
-                                unbaked pages (the transform's page 10)
-                                + the Zeus typewriter's row mark
-                                (patch_game.py, site 0x56E8). = `make
-                                line`.
+    rom/night/slim25.32x        THE LINE. Mike's play pass 2026-09-20:
+                                "I see the score table IS fixed on
+                                slim25". = slim23 + the high-score table
+                                writer gated store-by-store and marking
+                                all text rows (game_altbeast.py sites
+                                0x45EC..0x46A2). = `make line`.
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                slim23
+    rig (MiSTer)                slim25
 
+    rom/night/slim23.32x        previous line (same day): + per-pixel
+                                cat-1 masks for unbaked pages (the
+                                transform) + the Zeus typewriter's row
+                                mark.
     rom/night/slim21.32x        previous line (2026-09-20 03:30): the
                                 slim pipeline, before the two fixes.
     rom/night/lineV.32x         the line before that (FB tile route +

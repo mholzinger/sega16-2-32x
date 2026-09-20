@@ -61,10 +61,12 @@ verified against `.build_flags` before use.
 
 ## THE LINE (updated 2026-09-20 03:30: slim21 passed Mike's play pass)
 
-    rom/night/slim23.32x  THE LINE = `make line`. Mike 2026-09-20: "yay to
-                          both! fixed the zeus text AND the wolf transform!"
-                          (slim21 + per-pixel cat-1 masks for unbaked pages
-                          + the Zeus typewriter's row mark)
+    rom/night/slim25.32x  THE LINE = `make line`. Mike 2026-09-20: "the score
+                          table IS fixed on slim25" (slim23 + the high-score
+                          writer gated per store, all rows marked)
+    rom/night/slim23.32x  previous line: "fixed the zeus text AND the wolf
+                          transform" (per-pixel cat-1 masks for unbaked
+                          pages + the Zeus typewriter's row mark)
     rom/night/slim21.32x  previous line (the slim pipeline alone)
     rom/night/lineV.32x   previous line (FB tile route + boot-stack move)
     rom/night/lineT.32x   == rom/night/tilesmd4.32x   the line before that

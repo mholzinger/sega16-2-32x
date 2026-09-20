@@ -778,3 +778,26 @@ mechanism; quote the fix and the readout.
 not into the consume; "art present, background black" means PENS, not
 tiles -- read the rig value instrument (SLIMVALUE) and 0xFFA162 before
 touching the tile path.
+
+
+### Three text/priority defects, one afternoon, all from the arcade's own data (2026-09-20)
+
+- **Zeus message** (partial, never erased): the typewriter at 0x56E8 was
+  FM-gated but never MARKED its rows for TEXTCAPMASK. Found by the glyph
+  words in STATE (0x200|ASCII), the string in the ROM at 0x7043, and the
+  one `lea` that references it.
+- **Wolf transform** (character under the flames): a MAME census showed
+  the cutscene's FG page 10 has priority on all 800 cells; our punch
+  classified an UNBAKED page's priority cell as a whole-cell hole. Per-
+  pixel masks from the art now. MDSPROFF=1 was the control that cleared
+  the sprite-offload theory first.
+- **High-score table** ("broken the entire time"): the writer at 0x4540
+  had no gate and no mark. Gated at each STORE (LOOP29 228), not the
+  routine: its delay helper sits in the game's frame wait, so a span over
+  the routine would have deferred every FM raise for the whole screen.
+
+*Rules:* a text defect is a WRITER SITE question -- census text-RAM
+references (tools/patch_report.txt) against the gate table; a "wrong
+layer" defect is a PRIORITY question -- read the tile words and the
+sprite field in MAME before touching the compose; and run the one-flag
+control (MDSPROFF, CARTREADAT) before building a mechanism.

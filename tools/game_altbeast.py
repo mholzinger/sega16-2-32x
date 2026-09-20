@@ -254,11 +254,31 @@ TABLES = {
         # around each movew d1,(a1) is hit by a vint almost never.
         (0x64FC, 4, 0x323C, "round clear text: movew #512,d1 before the glyph store"),
         (0x6558, 4, 0x323C, "round clear points: movew #512,d1 before the glyph store"),
+        # 2026-09-20: THE HIGH-SCORE TABLE (attract). 0x4540 copies a
+        # palette, then writes text rows 7 and 9 and seven entry rows via
+        # the helpers 0x4612/0x4624/0x4664/0x466C/0x469C (called from
+        # nowhere else). Never gated, never marked: its stores were
+        # dropped at FM=1 and its rows captured only on the forced full
+        # mask. "Broken the entire time" (Mike). GATE THE STORES, not the
+        # routine (LOOP29 228): its delay helper 0x4664 sits in the game's
+        # own frame wait, so a span over the routine would defer every FM
+        # raise for the whole screen. Each store has a 4-byte instruction
+        # in front of it to displace; the dbf loops re-enter their gate.
+        (0x45EC, 4, 0x0600, "high-score: addib #-48,d0 before the rank store"),
+        (0x45FE, 4, 0x0601, "high-score: addib #-96,d1 before the name store"),
+        (0x4614, 4, 0x0601, "high-score: addib #-96,d1 before the string store (loop)"),
+        (0x4634, 4, 0x14FC, "high-score: moveb #0,(a2)+ leading-zero blank"),
+        (0x4648, 4, 0x0601, "high-score: addib #-48,d1 before the digit store"),
+        (0x4658, 4, 0x123C, "high-score: moveb #-48,d1 before the zero-digit store"),
+        (0x46A2, 4, 0x1081, "high-score: moveb d1,(a0); addql #2,a0 fill loop head"),
     ],
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
                      (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
-                     (0x64FC, 0x6506), (0x6558, 0x6562)],
+                     (0x64FC, 0x6506), (0x6558, 0x6562),
+                     (0x45EC, 0x45F2), (0x45FE, 0x4604), (0x4614, 0x461A),
+                     (0x4634, 0x4638), (0x4648, 0x4650), (0x4658, 0x4660),
+                     (0x46A2, 0x46AA)],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),
