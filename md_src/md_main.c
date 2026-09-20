@@ -593,10 +593,10 @@ static void cart_read_burst(void) {
  *   2. partb_hook (after the game's IRQ4 and the FM raise): 68K reads the
  *      art from cart -> slim_art (WRAM).     [cart reads at the TOP of
  *      vblank collapse the FPGA's frame; here they are harmless]
- *   3. slim_dma (top of the NEXT vint, in vblank): 68K->VDP DMA from
- *      slim_art -> VRAM.                     [DMA from WRAM: DELIVTEST
- *      method 0, GREEN; port writes here would stall on the VDP FIFO
- *      once vblank is over]
+ *   3. slim_dma (partb_end_hook, the SAME vint, after the FM raise and
+ *      the post): 68K->VDP DMA from slim_art -> VRAM. [DMA from WRAM:
+ *      DELIVTEST method 0, GREEN. Same vint as the name-table entry, so
+ *      no one-frame black flash per new tile.]
  * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
  * port-write walk, and the SH-2 never touches the tile bytes. */
 static uint16_t slim_rec[SLIM_CAP * 2];   /* step 1: staged records */
@@ -686,6 +686,15 @@ void partb_end_hook(void)
 {
 #if defined(CART_READ_AT) && CART_READ_AT == 20
 	cart_read_burst();
+#endif
+#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
+	/* SAME-VINT LANDING (2026-09-20). The fetch ran in partb_hook a few
+	 * instructions ago; landing here, after the FM raise and post, puts
+	 * the art in VRAM in the SAME vint as the name-table entry that
+	 * references it. Landing it next vint (the first cut) showed every
+	 * newly shipped tile black for one frame: Mike's "black tiles
+	 * randomly". The drain at the top of slim_fetch stays as the belt. */
+	slim_dma();
 #endif
 }
 /* PART-B HOOK. md_start.s calls this at the top of fmgate_partb, i.e.
