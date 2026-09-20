@@ -65,10 +65,14 @@ the line's colour mix). slim18-20 (DMA at the consume top) showed art
 without a palette until the Neff cut; Mike's play pass on slim21 is the
 gate. "Slower" on slim18 is unmeasured on slim21.
 
-**Bake coverage, measured:** 2278 of 3120 shipped tiles were INLINE
-(unbaked sets, pixels converted by the SH-2), 842 baked. The "SH-2 out
-of the payload path" claim holds for 27% of the tiles until the bake
-covers the rest.
+**Bake coverage, measured (BAKECENSUS=1, ares, level-1 play script):**
+the 2278 inline tiles are ALL "round out of range": during the title and
+the demo the game's scene variable (0xFFF142 & 7) is not a level, so
+`md_round` stays 0xFF and every set falls through to the converter. Once
+the round is published, 841 tiles are baked and 69 fall through -- five
+sets with no block (38, 42, 46, 64, 65) -- i.e. 92% of GAMEPLAY tiles
+take the cart path. The attract is not worth baking; the five sets might
+be.
 
 **What every earlier slim build died of** (LESSONS 2026-09-20): the boot
 stack over the FM-gate thunk table, then the unbounded fetch address on

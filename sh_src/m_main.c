@@ -10063,6 +10063,19 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
             unsigned blk_ = (rd_ < MDROUND_N)
                 ? ((const uint16_t *)altbeast_tiles_md)[rd_ * 128u + cs_]
                 : 0xFFFFu;
+#ifdef BAKE_CENSUS
+            /* WHY do tiles fall through the bake? (2026-09-20, ares census)
+             * SDRAM 0x28F90: [0] round out of range  [1] set has no block
+             * [2] baked  [3] last md_round  [4] last unbaked set  [5] bitmap
+             * of unbaked sets 0-31 [6] 32-63 [7] 64-95 [8] 96-127 */
+            {
+                volatile uint32_t *bc = (volatile uint32_t *)0x06028F90u;
+                if (rd_ >= MDROUND_N) bc[0]++;
+                else if (blk_ == 0xFFFFu) { bc[1]++; bc[4] = cs_; bc[5 + (cs_ >> 5)] |= 1u << (cs_ & 31); }
+                else bc[2]++;
+                bc[3] = rd_;
+            }
+#endif
             if (blk_ != 0xFFFFu) {
 #ifdef TILE_SLIM
                 /* SLIM PIPELINE (2026-09-19, docs/design/SLIM-PIPELINE.md).

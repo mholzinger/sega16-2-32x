@@ -861,6 +861,11 @@ endif
 # rig bisect of the slim pipeline's steps (2026-09-20): drop step 3 (the
 # WRAM->VRAM DMA) or step 2 (the cart fetch) from a TILESLIM build.
 # `make line TILESLIM=1 SLIMVALUE=1` = flood MD CRAM with the slim counters (rig readout)
+# `make line TILESLIM=1 BAKECENSUS=1` = why tiles miss the bake; SDRAM 0x28F90
+# (SLIM-PIPELINE.md 1b). ares: --dump sdram:0x28F90:36:out.bin
+ifdef BAKECENSUS
+SHCCFLAGS += -DBAKE_CENSUS
+endif
 ifdef SLIMVALUE
 MDCCFLAGS += -DSLIM_VALUE
 endif
