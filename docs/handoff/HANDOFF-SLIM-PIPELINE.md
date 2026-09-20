@@ -37,8 +37,16 @@ bytes in ares as LESSONS predicts).
 STATE OF SLIM: docs/design/SLIM-PIPELINE.md 1b. Runs on ares and the
 FPGA. 73% of shipped tiles are unbaked and go inline.
 
+2026-09-20 03:15 -- slim18 played: "playable, slower, no background
+until the Neff smoke". Three guesses failed (inline copy, fetch
+discard, both real but not it); the rig value readout then showed the
+art landing, and Mike named it: the PALETTE. The BG palette DMA is
+vblank-gated at the consume's end and slim's DMAs at the consume top
+deferred it every load vint on the FPGA. slim21 moves step 3 to
+partb_hook; the rig's attract demo shows the full background again.
+
 NEXT:
-  1. Mike's play pass on rom/night/slim18.32x (TILESLIM=1 SLIMCAP=40)
+  1. Mike's play pass on rom/night/slim21.32x (TILESLIM=1 SLIMCAP=40)
      against lineV; scene-anchored captures, not wall-clock ones.
   2. The bake coverage: why 2278 of 3120 tiles fall through to the
      converter on level 1. Until that is fixed the slim pipeline

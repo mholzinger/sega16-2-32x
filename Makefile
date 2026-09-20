@@ -860,6 +860,10 @@ MDCCFLAGS += -DCART_READ_DELAY=$(CARTREADDELAY)
 endif
 # rig bisect of the slim pipeline's steps (2026-09-20): drop step 3 (the
 # WRAM->VRAM DMA) or step 2 (the cart fetch) from a TILESLIM build.
+# `make line TILESLIM=1 SLIMVALUE=1` = flood MD CRAM with the slim counters (rig readout)
+ifdef SLIMVALUE
+MDCCFLAGS += -DSLIM_VALUE
+endif
 ifdef SLIMNODMA
 MDCCFLAGS += -DSLIM_NODMA
 endif

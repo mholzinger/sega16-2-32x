@@ -750,3 +750,24 @@ showed a healthy picture because nothing had changed.
 in ares before its rig result counts; hook code through a symbol the
 LINE's path actually reaches (md_start.s `fmgate_partb`, not a
 flag-gated C function).
+
+
+### The BG palette DMA is vblank-gated at the END of the consume: whatever runs before it can defer the palette for a whole level (2026-09-20)
+
+`md_consume` DMAs the packet's 48 palette words to CRAM 16-63 only if the
+V counter still reads >= 0xE0 when it gets there; otherwise it parks
+them in a WRAM hold for the next vint's top. The slim pipeline's first
+cut ran up to 40 WRAM->VRAM DMAs at the consume's TOP. On the FPGA,
+where every adapter access costs more than ares charges, that pushed the
+palette gate past vblank on every load vint: the tiles landed (rig value
+readout: thousands staged and DMA'd, 0 stray) and the level's pens
+stayed black until the Neff cut re-published the palette. Mike called
+it from the symptom: "the palette swap at Neff is what triggers the
+background". Moving the slim DMA to partb_hook restored the background.
+
+*Rules:* the consume's vblank budget belongs to the palette first; new
+work in the vint goes AFTER the game's IRQ4 (partb_hook), not into the
+consume; and "art present, background black" means PENS, not tiles --
+read 0xFFA162 (deferrals) before touching the tile path. Why the
+deferred hold does not replay on hardware is still open (it does in
+ares: 9 deferrals, no visible loss).

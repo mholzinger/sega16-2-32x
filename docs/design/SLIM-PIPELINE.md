@@ -40,14 +40,18 @@ and proves nothing. The rig test above is what establishes the fact.
 
 ## 1b. STATUS 2026-09-20: the slim pipeline RUNS on ares and on the FPGA
 
-`make line TILESLIM=1 SLIMCAP=40` (rom/night/slim18.32x). Three steps,
+`make line TILESLIM=1 SLIMCAP=40` (rom/night/slim21.32x). Three steps,
 one vint apart, each where the hardware allows it (md_main.c, "SLIM
 PIPELINE STATE"):
 
     1. md_consume (top of vblank, FM=0)   copy records out of the FB packet
     2. partb_hook (after the game's IRQ4, before the FM raise)
                                           68K reads the art from cart -> WRAM
-    3. slim_dma (top of the next vint)    68K->VDP DMA, WRAM -> VRAM
+    3. slim_dma, from partb_hook of the NEXT vint (after that vint's
+       game IRQ4; NOT the consume top -- LESSONS 2026-09-20, the palette
+       gate)                           68K->VDP DMA, WRAM -> VRAM
+       Inline (unbaked) records are DMA'd from the FB in the consume,
+       the FB route's own idiom.
 
 Records are MIXED: a baked set is 2 words (slot|fg<<15, blk*64+code); a
 set the bake does not cover ships its pixels as a 17-word record flagged
@@ -56,7 +60,10 @@ by bit 14 of the slot word. The 68K walks by flag.
 ares, level-1 play script, 1200 frames: scene timer 720 (line 718),
 3120 tiles staged = 3110 DMA'd, 0 stray, 5672 px different from the line
 at frame 1100 (the one-vint lag), 0 px different at frame 600.
-FPGA: boots and runs the attract; Mike's play pass is the gate.
+FPGA: the attract demo shows the full level background (99.6% non-black,
+the line's colour mix). slim18-20 (DMA at the consume top) showed art
+without a palette until the Neff cut; Mike's play pass on slim21 is the
+gate. "Slower" on slim18 is unmeasured on slim21.
 
 **Bake coverage, measured:** 2278 of 3120 shipped tiles were INLINE
 (unbaked sets, pixels converted by the SH-2), 842 baked. The "SH-2 out

@@ -604,13 +604,23 @@ static uint16_t slim_n;                   /* records staged this vint */
 static uint16_t slim_art[SLIM_CAP * 16];  /* step 2: art in WRAM */
 static uint16_t slim_va[SLIM_CAP];        /* step 2: VRAM address per tile */
 static uint16_t slim_ready;               /* tiles waiting for step 3 */
-static uint16_t slim_inl;                 /* inline (unbaked) tiles already in slim_art */
+static void slim_dma(void);
 
 __attribute__((section(".data"), noinline))
 static void slim_fetch(void)              /* step 2 */
 {
-	uint16_t n = slim_inl;                   /* inline tiles sit first in slim_art */
-	if (!slim_n) { slim_ready = n; slim_inl = 0; return; }
+	uint16_t n = 0;
+	/* NEVER DISCARD (2026-09-20). Art fetched last vint and not yet
+	 * DMA'd (a vint whose consume did not run) is landed here first,
+	 * outside vblank if need be; the first cut zeroed slim_ready on
+	 * every fetch with nothing staged and the FPGA, whose vints skip
+	 * the consume far more often than ares', lost the level's first
+	 * load until the round cut re-shipped everything. */
+	if (slim_ready) {
+		(*(volatile uint16_t*)0xFF340C)++;   /* diag: drains (every landing) */
+		slim_dma();
+	}
+	if (!slim_n) return;
 	(*(volatile uint16_t*)0xFF3400)++;       /* diag: fetch calls */
 	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
 	for (uint16_t i = 0; i < slim_n; i++) {
@@ -646,7 +656,6 @@ static void slim_fetch(void)              /* step 2 */
 	(*(volatile uint16_t*)0xFF3402) += n;    /* diag: tiles fetched */
 	slim_ready = n;
 	slim_n = 0;
-	slim_inl = 0;
 }
 
 __attribute__((section(".data"), noinline))
@@ -700,6 +709,27 @@ void partb_hook(void)
 #if defined(TILE_SLIM) && !defined(SLIM_NOFETCH)
 	slim_fetch();
 #endif
+#ifdef SLIM_VALUE
+	/* RIG READOUT (SILICON.md 4, the value instrument): flood MD CRAM with
+	 * one byte, field id in bits 6-7 rotating every 128 vints, value+1 in
+	 * bits 0-5 (never 0, so "did not run" reads as black):
+	 *   1 baked records staged / 16   2 tiles landed by DMA / 16
+	 *   3 inline tiles DMA'd / 64     0 BG palette deferrals / 16
+	 * decode d = (b>>5 << 6) | (g>>5 << 3) | (r>>5) from the top colour. */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t f = (uint16_t)((vc >> 7) & 3u), v;
+		if (f == 1)      v = (uint16_t)(*(volatile uint16_t*)0xFF340E >> 4);
+		else if (f == 2) v = (uint16_t)(*(volatile uint16_t*)0xFF3404 >> 4);
+		else if (f == 3) v = (uint16_t)(*(volatile uint16_t*)0xFF340A >> 6);
+		else             v = (uint16_t)(*(volatile uint16_t*)0xFFA162 >> 4);   /* BG palette deferrals / 16 */
+		if (v > 62) v = 62;
+		v = (uint16_t)((f << 6) | (v + 1));
+		uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+		*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+		for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+	}
+#endif
 }
 #endif /* TILE_SLIM || CART_READ_AT: the hooks exist only when something uses them */
 __attribute__((section(".data"), noinline))
@@ -708,9 +738,12 @@ static void md_consume(uint32_t pkt_base) {
 	/* pure delay at the top of the consume: ~64 x 12 cycles */
 	{ volatile uint16_t d = 0; while (++d < 64) {} }
 #endif
-#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
-	if (pkt_base == 0x851A00uL) slim_dma();  /* step 3: last vint's art, in vblank */
-#endif
+	/* (slim step 3 used to run HERE, at the consume's top. On the FPGA the
+	 * extra DMAs pushed the consume's end -- where the BG palette DMA is
+	 * vblank-gated -- past line 0xFF on every load vint, and the palette
+	 * deferred for the whole level: art in VRAM, black pens (Mike,
+	 * 2026-09-20: "the palette swap at Neff is what triggers the
+	 * background"). The fetch drains it in partb_hook instead.) */
 #if defined(CART_READ_AT) && CART_READ_AT == 18
 	if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) cart_read_burst();
 #endif
@@ -996,6 +1029,7 @@ static void md_consume(uint32_t pkt_base) {
 							slim_rec[slim_n * 2u] = w0;
 							slim_rec[slim_n * 2u + 1u] = e[1];
 							slim_n++;
+							(*(volatile uint16_t*)0xFF340E)++;   /* diag: baked records staged */
 							e += 2;
 						}
 					}

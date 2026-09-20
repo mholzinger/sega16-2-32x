@@ -20,11 +20,13 @@ That is how the logs became unreadable.
                                 identical to lineT (718, 0 px, 0 VRAM).
     rom/s16.32x                 line-equivalent (stamp bytes only)
     rig (MiSTer)                lineV
-    rom/night/slim18.32x        the slim pipeline candidate
+    rom/night/slim21.32x        the slim pipeline candidate
                                 (TILESLIM=1 SLIMCAP=40): runs on ares
-                                and the FPGA (SLIM-PIPELINE.md 1b).
-                                Play pass pending. 73% of its tiles are
-                                unbaked and go inline.
+                                and the FPGA WITH the background
+                                (SLIM-PIPELINE.md 1b). slim18-20 had
+                                black pens until the Neff cut (the
+                                palette gate, LESSONS). Play pass
+                                pending; "slower" unmeasured.
 
     rom/night/lineT.32x         PREVIOUS line (== tilesmd4, Mike
     (== tilesmd4.32x)           2026-09-18). Superseded by lineV.
