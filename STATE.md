@@ -29,7 +29,7 @@ That is how the logs became unreadable.
     rom/night/lineT.32x         the line before that (== tilesmd4).
 
 INVARIANT CHECK: rom/s16.32x differs from the line at the stamp bytes
-only (`25f1 3fff`: BUILD_HASH32 and the build string):
+only (`25f3 3fff`: BUILD_HASH32 at 0x25F3xx and the build string at 0x3FFFD4):
 
     cmp -l rom/s16.32x rom/night/slim21.32x \
       | awk '{printf "%x\n",$1-1}' | cut -c1-4 | sort -u

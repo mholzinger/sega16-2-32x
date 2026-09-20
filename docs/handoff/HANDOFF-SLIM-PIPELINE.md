@@ -66,7 +66,7 @@ verified against `.build_flags` before use.
                           feel consistent again".
     rom/night/lineV.32x   previous line (FB tile route + boot-stack move)
     rom/night/lineT.32x   == rom/night/tilesmd4.32x   the line before that
-    rom/s16.32x           line-equivalent (stamp bytes 25f1 3fff only)
+    rom/s16.32x           line-equivalent (stamp bytes 25f3 3fff only)
     rig                   slim21
 
 INVARIANT CHECK CHANGED when TILESMD joined the line. It is no longer
