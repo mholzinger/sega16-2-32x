@@ -1529,6 +1529,14 @@ static void md_consume(uint32_t pkt_base) {
 					}
 #endif
 #endif
+#if defined(CART_READ_AT) && CART_READ_AT == 22
+					/* probe: burn ~CART_READ_DELAY x 12 cycles right before the
+					 * palette gate, to force the deferral path on the line */
+#ifndef CART_READ_DELAY
+#define CART_READ_DELAY 1024
+#endif
+					{ volatile uint16_t d = 0; while (++d < CART_READ_DELAY) {} }
+#endif
 					uint16_t vnow = *(volatile uint16_t*)0xC00008;
 					*(volatile uint16_t*)0xFFA090 = vnow;              /* V at pal DMA */
 #ifdef BOOT_CRAMCHK

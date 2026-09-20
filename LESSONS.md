@@ -765,9 +765,16 @@ stayed black until the Neff cut re-published the palette. Mike called
 it from the symptom: "the palette swap at Neff is what triggers the
 background". Moving the slim DMA to partb_hook restored the background.
 
-*Rules:* the consume's vblank budget belongs to the palette first; new
-work in the vint goes AFTER the game's IRQ4 (partb_hook), not into the
-consume; and "art present, background black" means PENS, not tiles --
-read 0xFFA162 (deferrals) before touching the tile path. Why the
-deferred hold does not replay on hardware is still open (it does in
-ares: 9 deferrals, no visible loss).
+*What is proven and what is not:* moving the DMA out of the consume
+restored the background (rig, attract demo, 99.6%). But forcing the
+gate on the LINE with a ~20-line delay before it (CARTREADAT=22) only
+raised ares' deferrals from 9 to 25 of 1200 vints and the rig kept its
+background, so the deferral/replay path itself works on hardware, and
+the exact way slim18-20 lost the palette (a burst of WRAM->VRAM DMAs at
+the consume top) is NOT established. Do not quote "the gate" as the
+mechanism; quote the fix and the readout.
+
+*Rules:* new work in the vint goes AFTER the game's IRQ4 (partb_hook),
+not into the consume; "art present, background black" means PENS, not
+tiles -- read the rig value instrument (SLIMVALUE) and 0xFFA162 before
+touching the tile path.
