@@ -10,23 +10,23 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/slim21.32x        THE LINE. Mike's play pass 2026-09-20:
-                                "background fixed, and frames feel
-                                consistent again". = lineV + the slim
-                                pipeline (TILESLIM=1 SLIMCAP=40, now in
-                                LINE_FLAGS): SH-2 ships 2-word records
-                                for baked sets, the 68K fetches the art
-                                from cart after the game's IRQ4 and
-                                DMAs it next vint (SLIM-PIPELINE.md 1b).
-                                ares: scene timer 718 (lineT 718),
-                                3792 px one-vint lag at frame 1100.
+    rom/night/slim23.32x        THE LINE. Mike's play pass 2026-09-20:
+                                "yay to both! fixed the zeus text AND
+                                the wolf transform!" = slim21 (the slim
+                                pipeline) + per-pixel cat-1 masks for
+                                unbaked pages (the transform's page 10)
+                                + the Zeus typewriter's row mark
+                                (patch_game.py, site 0x56E8). = `make
+                                line`.
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                slim21
+    rig (MiSTer)                slim23
 
-    rom/night/lineV.32x         PREVIOUS line (2026-09-20, earlier):
-                                the FB tile route + the boot-stack move.
-                                Keep for "was this always broken".
-    rom/night/lineT.32x         the line before that (== tilesmd4).
+    rom/night/slim21.32x        previous line (2026-09-20 03:30): the
+                                slim pipeline, before the two fixes.
+    rom/night/lineV.32x         the line before that (FB tile route +
+                                the boot-stack move). Keep for "was this
+                                always broken".
+    rom/night/lineT.32x         == tilesmd4 (2026-09-18).
 
 INVARIANT CHECK: rom/s16.32x differs from the line at the stamp bytes
 only (`25f3 3fff`: BUILD_HASH32 at 0x25F3xx and the build string at 0x3FFFD4):
@@ -49,9 +49,10 @@ WHAT THE LINE CARRIES THAT bldS DID NOT
       of this change -- it cuts the TAIL (see the transport card).
 
 KNOWN DEFECTS ON THE LINE, accepted as the price of the baseline
-    - wolf transformation: one frame of the character, then flames and
-      chevron only. PRE-EXISTING -- confirmed missing on bldS too
-      (2026-09-18 screenshots). Not caused by the tile or pen work.
+    - wolf transformation: FIXED 2026-09-20. The flames are FG
+      priority tiles on page 10 (all 800 cells, MAME census); our
+      punch erased whole cells on that unbaked page. Per-pixel masks
+      from the tile art now (m_main.c c1rt_class).
     - black tile pop-in, worst during the flame wipe (residency).
     - leftover text glyphs (four cells).
     - rounds 1/2/4 lose 12 pinned sets to overflow vs bldS; they fall
@@ -229,52 +230,16 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   deliberately, so this is EMPTINESS,
                                   not a blackout. Untested against
                                   CHEVFIX.
-    ZEUS MESSAGE, and it is ONE   RE-DIAGNOSED 2026-09-19 (Mike caught
-    DEFECT not two                this; I had reported it as two
-                                  unrelated things and missed the link).
-                                  The "leftover glyphs" ARE FRAGMENTS OF
-                                  THE ZEUS MESSAGE. Rig captures of
-                                  mdb48 show R, M, R, M, U at identical
-                                  positions in the Zeus screen AND in
-                                  mid-gameplay as the beast, a totally
-                                  different scene. Earlier recorded
-                                  stale glyphs were O, Y, N. Every one
-                                  of those letters is in "RISE FROM
-                                  YOUR GRAVE".
-                                  So it is NOT stale text from
-                                  elsewhere. The scene message DELIVERS
-                                  ONLY A FEW OF ITS CHARACTERS, and
-                                  those few are then NEVER CLEARED. The
-                                  full line never displays at all --
-                                  which is the same bug seen from the
-                                  other end.
-                                  Two symptoms, one writer. Fixing the
-                                  delivery should fix the persistence,
-                                  and chasing "stale glyphs" as a
-                                  clearing problem was aimed at the
-                                  wrong half.
-                                  ALSO UNEXPLAINED in the Zeus frame: a
-                                  large solid YELLOW rectangle at about
-                                  x 85-110, y 125-175 (cells col 10-13,
-                                  row 15-21). Not text, not lightning
-                                  (the bolt draws separately). Looks
-                                  like a block of missing art.
-    leftover text glyphs          DIAGNOSED 2026-09-17, and it is the
-                                  ONLY defect Mike sees on notag1.
-                                  FOUR cells, frozen identical at
-                                  f2000/f3000/f4000, planted once before
-                                  f2000 and never cleared:
-                                    r9 c43 0x024F 'O'
-                                    r9 c55 0x0259 'Y'
-                                    r11 c35 0x024E 'N'
-                                    r11 c47 0x0220 space, colour 2
-                                  NOT a capture failure -- FB_TEXT and
-                                  TEXT_U agree to the word (1856
-                                  compared, 0 differ), so the mask and
-                                  its backstop are the wrong tree.
-                                  They lie outside both TXT_WRAM_WRITERS
-                                  ranges: a scene-level message writer
-                                  still on the FB path. See O-6.
+    ZEUS MESSAGE                  FIXED 2026-09-20 (Mike: "fixed the
+                                  zeus text"). The writer is the object
+                                  state routine at 0x56E8: one glyph
+                                  every two frames into rows 9/11, then
+                                  zeros over the same cells. It was
+                                  FM-gated but never MARKED its 4-row
+                                  group for TEXTCAPMASK; the mark is in
+                                  its thunk now (patch_game.py). The
+                                  "leftover glyphs" were the same
+                                  defect: lost erase stores.
     shadow-column dither over MD content   untouched
 
 ## OPEN CARDS

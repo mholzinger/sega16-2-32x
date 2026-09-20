@@ -61,9 +61,11 @@ verified against `.build_flags` before use.
 
 ## THE LINE (updated 2026-09-20 03:30: slim21 passed Mike's play pass)
 
-    rom/night/slim21.32x  THE LINE = `make line` (TILESLIM=1 SLIMCAP=40 in
-                          LINE_FLAGS). Mike: "background fixed, and frames
-                          feel consistent again".
+    rom/night/slim23.32x  THE LINE = `make line`. Mike 2026-09-20: "yay to
+                          both! fixed the zeus text AND the wolf transform!"
+                          (slim21 + per-pixel cat-1 masks for unbaked pages
+                          + the Zeus typewriter's row mark)
+    rom/night/slim21.32x  previous line (the slim pipeline alone)
     rom/night/lineV.32x   previous line (FB tile route + boot-stack move)
     rom/night/lineT.32x   == rom/night/tilesmd4.32x   the line before that
     rom/s16.32x           line-equivalent (stamp bytes 25f3 3fff only)
@@ -191,15 +193,14 @@ each step.
 
 ## OPEN DEFECTS ON THE LINE
 
-- **Zeus message — ONE defect, not two.** The "leftover glyphs" ARE
+- **Zeus message — FIXED 2026-09-20 (the 0x56E8 typewriter never marked its rows). Was: ONE defect, not two.** The "leftover glyphs" ARE
   fragments of the message: R, M, R, M, U at identical positions in the
   Zeus screen AND mid-gameplay; earlier recorded glyphs were O, Y, N.
   Every letter is in RISE FROM YOUR GRAVE. The message delivers a few
   characters and never clears them; the full line never displays. Two
   symptoms, one writer. Most visible defect on the line.
-- **Wolf transformation** — one frame of the character, then flames and
-  chevron only. **PRE-EXISTING, confirmed missing on `bldS`.** Sprite
-  layer. Not caused by any tile or pen work.
+- **Wolf transformation** — FIXED 2026-09-20: whole-cell cat-1 punch on the
+  unbaked cutscene page; per-pixel masks now. Was called a sprite-layer bug.
 - **Black tile pop-in** — measured 0-4 cells of 1120 per capture on
   mdb48 (0.0-0.4%), down from a 4.8% baseline but NOT gone. A still
   frame undercounts it; it is temporal.
