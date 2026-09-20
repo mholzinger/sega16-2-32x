@@ -593,10 +593,10 @@ static void cart_read_burst(void) {
  *   2. partb_hook (after the game's IRQ4 and the FM raise): 68K reads the
  *      art from cart -> slim_art (WRAM).     [cart reads at the TOP of
  *      vblank collapse the FPGA's frame; here they are harmless]
- *   3. slim_dma (partb_end_hook, the SAME vint, after the FM raise and
- *      the post): 68K->VDP DMA from slim_art -> VRAM. [DMA from WRAM:
- *      DELIVTEST method 0, GREEN. Same vint as the name-table entry, so
- *      no one-frame black flash per new tile.]
+ *   3. slim_dma, right after the fetch in partb_hook, still BEFORE the
+ *      FM raise: 68K->VDP DMA from slim_art -> VRAM. [Same vint as the
+ *      name-table entry, so no one-frame black flash per new tile. After
+ *      the raise (slim26) the FPGA lost the background.]
  * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
  * port-write walk, and the SH-2 never touches the tile bytes. */
 static uint16_t slim_rec[SLIM_CAP * 2];   /* step 1: staged records */
@@ -687,15 +687,10 @@ void partb_end_hook(void)
 #if defined(CART_READ_AT) && CART_READ_AT == 20
 	cart_read_burst();
 #endif
-#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
-	/* SAME-VINT LANDING (2026-09-20). The fetch ran in partb_hook a few
-	 * instructions ago; landing here, after the FM raise and post, puts
-	 * the art in VRAM in the SAME vint as the name-table entry that
-	 * references it. Landing it next vint (the first cut) showed every
-	 * newly shipped tile black for one frame: Mike's "black tiles
-	 * randomly". The drain at the top of slim_fetch stays as the belt. */
-	slim_dma();
-#endif
+	/* (slim26 landed the art HERE, after the FM raise and the post, and
+	 * the FPGA lost the level background -- the slim18-20 shape; ares was
+	 * fine. A WRAM->VRAM DMA burst after the raise breaks the frame on
+	 * silicon; before the raise it does not. Moved into partb_hook.) */
 }
 /* PART-B HOOK. md_start.s calls this at the top of fmgate_partb, i.e.
  * after the game's IRQ4 has returned and before FM is raised -- the one
@@ -717,6 +712,13 @@ void partb_hook(void)
 #endif
 #if defined(TILE_SLIM) && !defined(SLIM_NOFETCH)
 	slim_fetch();
+#ifndef SLIM_NODMA
+	/* SAME-VINT LANDING (2026-09-20): DMA the art just fetched, still
+	 * BEFORE the FM raise. slim21-25 landed last vint's art at this very
+	 * spot (the drain), so the cost profile is unchanged; slim26 landed
+	 * after the raise and the FPGA lost the background. */
+	slim_dma();
+#endif
 #endif
 #ifdef SLIM_VALUE
 	/* RIG READOUT (SILICON.md 4, the value instrument): flood MD CRAM with
