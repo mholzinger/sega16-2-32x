@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The baked blob's cart address lives in TWO files. Fail if they drift.
 
-    sh_src/mars.ld    .tilesmd ... : AT(0x00264000)
+    sh_src/mars.ld    .tilesmd ... : AT(0x00268000)
     md_src/md_main.c  the 68K recomputes the cart address from it
 
 A silent mismatch makes the 68K fetch gap fill and render garbage a long

@@ -560,7 +560,7 @@ static uint16_t bm_pushed;               /* probe: last word 20 as pushed */
  * instruction; consume B measured 14 lines for a 280-word chunk. */
 #ifdef CART_READ_AT
 /* RIG BISECT (2026-09-19): 64 back-to-back 68K reads of the cart window
- * at cart 0x264000 (bank 2, the baked tile blob), results discarded.
+ * at cart 0x268000 (bank 2, the baked tile blob), results discarded.
  * CART_READ_AT selects the position in the vint:
  *   18 = top of md_consume (early vblank, before the packet walk)
  *   17 = partb_hook, the top of fmgate_partb (md_start.s): after the
@@ -571,7 +571,7 @@ static uint16_t bm_pushed;               /* probe: last word 20 as pushed */
 __attribute__((section(".data"), noinline))
 static void cart_read_burst(void) {
 #ifndef CART_READ_ADDR
-#define CART_READ_ADDR 0x964000uL          /* bank 2: cart 0x264000, the tile blob */
+#define CART_READ_ADDR 0x968000uL          /* bank 2: cart 0x268000, the tile blob */
 #define CART_READ_BANK 2
 #endif
 #ifndef CART_READ_BANK
@@ -590,13 +590,14 @@ static void cart_read_burst(void) {
  * hardware allows it (rig-measured 2026-09-19/20):
  *   1. md_consume (top of vblank, FM=0): copy the 2-word records out of
  *      the FB packet -> slim_rec.            [the only step that needs FM]
- *   2. partb_hook (after the game's IRQ4 and the FM raise): 68K reads the
- *      art from cart -> slim_art (WRAM).     [cart reads at the TOP of
- *      vblank collapse the FPGA's frame; here they are harmless]
- *   3. slim_dma, right after the fetch in partb_hook, still BEFORE the
- *      FM raise: 68K->VDP DMA from slim_art -> VRAM. [Same vint as the
- *      name-table entry, so no one-frame black flash per new tile. After
- *      the raise (slim26) the FPGA lost the background.]
+ *   2. still in md_consume, right after staging: 68K reads the art from
+ *      cart -> slim_art (WRAM). [slim28; the earlier "cart reads at the
+ *      top of vblank collapse the FPGA" was a title-screen misread]
+ *   3. slim_dma, FIRST THING in partb_hook (after the game's IRQ4,
+ *      before the FM raise): 68K->VDP DMA from slim_art -> VRAM. The
+ *      only placement the FPGA accepts (slim18-20/26/27 lost the
+ *      background at the consume top, after the fetch, after the raise).
+ *      Same vint as the name-table entry: no one-frame black flash.
  * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
  * port-write walk, and the SH-2 never touches the tile bytes. */
 static uint16_t slim_rec[SLIM_CAP * 2];   /* step 1: staged records */
@@ -609,27 +610,22 @@ static void slim_dma(void);
 __attribute__((section(".data"), noinline))
 static void slim_fetch(void)              /* step 2 */
 {
-	uint16_t n = 0;
-	/* NEVER DISCARD (2026-09-20). Art fetched last vint and not yet
-	 * DMA'd (a vint whose consume did not run) is landed here first,
-	 * outside vblank if need be; the first cut zeroed slim_ready on
-	 * every fetch with nothing staged and the FPGA, whose vints skip
-	 * the consume far more often than ares', lost the level's first
-	 * load until the round cut re-shipped everything. */
-	if (slim_ready) {
-		(*(volatile uint16_t*)0xFF340C)++;   /* diag: drains (every landing) */
-		slim_dma();
-	}
+	uint16_t n = slim_ready;                 /* APPEND: both consumes fetch */
+	/* NEVER DISCARD (2026-09-20): art not yet landed stays in slim_art
+	 * and new art appends behind it; slim_dma at the start of partb_hook
+	 * lands all of it. (The first cut zeroed slim_ready on an empty
+	 * fetch and the FPGA lost the level's first load.) */
 	if (!slim_n) return;
+	if (n >= SLIM_CAP) { slim_n = 0; return; }   /* buffer full: records wait */
 	(*(volatile uint16_t*)0xFF3400)++;       /* diag: fetch calls */
 	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
-	for (uint16_t i = 0; i < slim_n; i++) {
+	for (uint16_t i = 0; i < slim_n && n < SLIM_CAP; i++) {
 		uint16_t w0 = slim_rec[i * 2u], w1 = slim_rec[i * 2u + 1u];
 		uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
 		if (va + 32u > 0xB000u) continue;
 		/* TILESMD_CART_BASE: MUST EQUAL the AT() address of .tilesmd in
 		 * sh_src/mars.ld -- `make tilesmd-addr` greps both. */
-		uint32_t src = 0x264000uL + 5u * 128u * 2u
+		uint32_t src = 0x268000uL + 5u * 128u * 2u
 			+ ((uint32_t)(w1 >> 6)) * 4096u
 			+ ((uint32_t)(w1 & 63u)) * 64u
 			+ ((w0 & 0x8000u) ? 32u : 0u);
@@ -637,8 +633,8 @@ static void slim_fetch(void)              /* step 2 */
 		 * would send this read past the 1MB bank window: 0xA00000+ is
 		 * I/O and 0xC00000+ the VDP/PSG mirrors, and a 68K read there
 		 * LOCKS the machine on silicon while ares and MAME shrug. The
-		 * blob ends below 0x2C3000, so anything outside is not art. */
-		if (src < 0x264000uL || src >= 0x2C3000uL) {
+		 * blob ends below 0x2C7000, so anything outside is not art. */
+		if (src < 0x268000uL || src >= 0x2C7000uL) {
 			uint16_t k9 = (*(volatile uint16_t*)0xFF3406)++;   /* diag: stray records */
 			if (k9 < 16) {                        /* diag ring: first 16 stray (w0,w1) */
 				((volatile uint16_t*)0xFF3440)[k9 * 2] = w0;
@@ -675,6 +671,33 @@ static void slim_dma(void)                /* step 3 */
 		               | (((va >> 14) & 3u) | 0x80u);
 	}
 	(*(volatile uint16_t*)0xFF3404) += slim_ready;   /* diag: tiles DMA'd */
+#ifdef SLIM_VERIFY
+	/* RIG VERDICT (2026-09-20): did the first tile of this batch land in
+	 * VRAM as the bytes in slim_art? Sticky, painted into CRAM 32-63:
+	 * GREEN match, RED mismatch, BLUE VRAM read back all zero. */
+	{
+		static uint16_t sv_bad, sv_zero, sv_ran;
+		uint16_t g9 = 0;
+		while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {}
+		{
+			uint32_t va = slim_va[0]; uint16_t z9 = 1;
+			*vdp_ctrl_wide = ((uint32_t)(va & 0x3FFFu) << 16) | ((va >> 14) & 3u);
+			for (uint16_t k = 0; k < 16; k++) {
+				uint16_t v9 = *vdp_data_port;
+				if (v9) z9 = 0;
+				if (v9 != slim_art[k]) sv_bad = 1;
+			}
+			if (z9) sv_zero = 1;
+			sv_ran = 1;
+		}
+		{
+			uint16_t col = !sv_ran ? 0x0E00u : sv_zero ? 0x0E00u : sv_bad ? 0x000Eu : 0x00E0u;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0u;
+			for (uint16_t k = 0; k < 32; k++) *vdp_data_port = col;
+		}
+	}
+#endif
 	slim_ready = 0;
 }
 #endif
@@ -710,15 +733,17 @@ void partb_hook(void)
 #endif
 	{ volatile uint16_t d = 0; while (++d < CART_READ_DELAY) {} }
 #endif
-#if defined(TILE_SLIM) && !defined(SLIM_NOFETCH)
-	slim_fetch();
-#ifndef SLIM_NODMA
-	/* SAME-VINT LANDING (2026-09-20): DMA the art just fetched, still
-	 * BEFORE the FM raise. slim21-25 landed last vint's art at this very
-	 * spot (the drain), so the cost profile is unchanged; slim26 landed
-	 * after the raise and the FPGA lost the background. */
+#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
+	/* THE ONE SPOT THE FPGA ACCEPTS THE DMA: first thing after the game's
+	 * IRQ4, before the FM raise (slim21-25 landed here and worked; the
+	 * consume top, after the fetch, and after the raise all lost the
+	 * background on silicon while ares rendered every one). */
 	slim_dma();
 #endif
+#if defined(TILE_SLIM) && defined(SLIM_SAMEVINT)
+	/* the slim27 shape under test: fetch then DMA, here */
+	slim_fetch();
+	slim_dma();
 #endif
 #ifdef SLIM_VALUE
 	/* RIG READOUT (SILICON.md 4, the value instrument): flood MD CRAM with
@@ -1044,6 +1069,15 @@ static void md_consume(uint32_t pkt_base) {
 							e += 2;
 						}
 					}
+#if !defined(SLIM_NOFETCH) && !defined(SLIM_SAMEVINT)
+					/* FETCH HERE (slim28, 2026-09-20): cart -> slim_art now, so
+					 * the DMA at the start of partb_hook lands this vint's art
+					 * in this vint. The FPGA accepts the DMA only at that spot
+					 * (slim18-20, 26, 27 lost the background elsewhere); the
+					 * "cart reads in the consume kill the FPGA" reading was a
+					 * title-screen misread (LESSONS 2026-09-20). */
+					slim_fetch();
+#endif
 					}
 #else
 					{

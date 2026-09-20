@@ -101,11 +101,16 @@ SECTIONS {
 	 * (593KB of 0xFF fill; 425KB needed). Not left to ld: the Makefile's
 	 * own note is that a silent overrun corrupts the 68K high rom and
 	 * "fails as a GAME bug a long way from its cause". */
-	.tilesmd 0x02264000 : AT(0x00264000) {
+	.tilesmd 0x02268000 : AT(0x00268000) {
 		KEEP(*(.tilesmd))
 	} > rom
 	ASSERT(LOADADDR(.tilesmd) + SIZEOF(.tilesmd) <= 0x002F8000,
-	       ".tilesmd overran the 0x263C00-0x2F8000 gap into .palscenes")
+	       ".tilesmd overran the gap into .palscenes at 0x2F8000")
+	/* 2026-09-20: the ROM image (.text+.data+.ramtext) reached 0x264050 and
+	 * silently overlapped .tilesmd at 0x264000 on a probe build. The blob
+	 * moved to 0x268000 and this says so in words when it happens again. */
+	ASSERT(LOADADDR(.ramtext) + SIZEOF(.ramtext) <= LOADADDR(.tilesmd),
+	       ".ramtext ROM image reached .tilesmd -- move the blob (mars.ld + md_main.c, make tilesmd-addr)")
 
 	.gamehigh 0x02300000 : AT(0x00300000) {
 		KEEP(*(.gamehigh))
