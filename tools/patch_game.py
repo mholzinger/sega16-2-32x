@@ -1358,6 +1358,16 @@ if FMGATE:
                                  0x201F]                          # move.l (sp)+,d0
             elif off in (0x153E, 0x4D88):
                 fmgate_words += [0x08F8, 0x0006, 0xA1A6]          # bset #6,(0xFFA1A6).w  rows 24-27
+            elif off == 0x56E8:
+                # THE ZEUS MESSAGE TYPEWRITER (2026-09-20). One glyph every
+                # two frames at 0x4104B8 + 2*i, bit 6 of i folding to +256
+                # (rows 9 and 11), 64 glyphs, then 64 ZERO stores over the
+                # same cells (the erase). The site was gated but never
+                # MARKED, so the master captured its rows only on the
+                # forced full mask every 8th vint: a few letters landed,
+                # most did not, and the erase stores were lost the same
+                # way -- "R M U" burned in until the transform's clear-all.
+                fmgate_words += [0x08F8, 0x0002, 0xA1A6]          # bset #2,(0xFFA1A6).w  rows 8-11
             elif off in (0x369C, 0x1ACCA):
                 fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows
         fmgate_words += disp + [0x4E75]
