@@ -1,3 +1,5 @@
+**THE LINE (2026-09-20): rom/night/lineV.32x, Mike's play pass passed. See STATE.md; this file's rankings are history.**
+
 # START HERE — read this before anything else
 
 Written 2026-09-09 after a session that lost the plot. If you are a new

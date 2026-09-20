@@ -1,7 +1,7 @@
 # STATE — what is true right now
 
 **Volatile document. PRUNE IT, do not append to it.**
-Last updated: 2026-09-16.
+Last updated: 2026-09-20.
 
 If a line here is stale, fix the line. Do not add a newer line below it.
 That is how the logs became unreadable.
@@ -10,40 +10,36 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/tilesmd4.32x      THE LINE. Mike's call 2026-09-18:
-    (== rom/night/lineT.32x)    "it has defects but its progress ...
-                                by no means production but it is the
-                                BASELINE FOR THE NEW DIRECTION we
-                                built." Baked MD tiles are ON.
-    rom/s16.32x                 line-equivalent (stamp bytes only)
-    rom/night/lineV.32x         `make line` as of 2026-09-20: the boot
-                                stack moved off the thunk page (LESSONS)
-                                and two flag-gated hook sites. ares:
+    rom/night/lineV.32x         THE LINE. Mike's play pass 2026-09-20:
+                                "lineV.32x is playable! we have our
+                                regular set of defects to solve for".
+                                = tilesmd4/lineT + the boot-stack move
+                                (md_start.s 0xFFBFF0 -> 0xFF3FF0, md.ld
+                                guard) + two hook call sites that
+                                assemble only under PARTB_HOOK. ares:
                                 identical to lineT (718, 0 px, 0 VRAM).
-                                Awaiting Mike's play pass to become THE
-                                LINE; the 25f1 3fff invariant does not
-                                apply to it.
-    rom/night/slim18.32x        the slim pipeline, RUNS on ares and the
-                                FPGA (SLIM-PIPELINE.md 1b). Play pass
-                                pending. 73% of its tiles are unbaked.
-    rig (MiSTer)                tilesmd4
+    rom/s16.32x                 line-equivalent (stamp bytes only)
+    rig (MiSTer)                lineV
+    rom/night/slim18.32x        the slim pipeline candidate
+                                (TILESLIM=1 SLIMCAP=40): runs on ares
+                                and the FPGA (SLIM-PIPELINE.md 1b).
+                                Play pass pending. 73% of its tiles are
+                                unbaked and go inline.
 
-    rom/night/bldS.32x          PREVIOUS line (passed 2026-09-14).
-                                Superseded. Keep as the reference for
-                                "was this always broken" questions --
-                                which is the question that cost four
-                                rig cycles on 2026-09-18.
+    rom/night/lineT.32x         PREVIOUS line (== tilesmd4, Mike
+    (== tilesmd4.32x)           2026-09-18). Superseded by lineV.
+    rom/night/bldS.32x          the line before that (2026-09-14). Keep
+                                for "was this always broken" questions.
 
-INVARIANT CHECK CHANGED. The line now carries TILESMD=1, which moves the
-stamp, so it is no longer `25f0 3fff`:
+INVARIANT CHECK: rom/s16.32x differs from lineV in the build string only:
 
-    cmp -l rom/s16.32x rom/night/lineT.32x \
+    cmp -l rom/s16.32x rom/night/lineV.32x \
       | awk '{printf "%x\n",$1-1}' | cut -c1-4 | sort -u
-    -> 25f1 3fff          (4 B BUILD_HASH32 at 0x25F13C,
-                           14 B build string at 0x3FFFD4; 18 total)
+    -> 3fff              (the 14 B build string at 0x3FFFD4)
 
-`rom/s16.32x` is whatever was built LAST and is usually a probe. It must
-be left holding the LINE build at the end of any session.
+The old `25f1 3fff` does NOT hold against lineV: the 68K image moved when
+the boot stack did. `rom/s16.32x` must be left holding the LINE build at
+the end of any session.
 
 WHAT THE LINE CARRIES THAT bldS DID NOT
     - baked MD tiles (TILESMD=1 in LINE_FLAGS). 377 KB at cart

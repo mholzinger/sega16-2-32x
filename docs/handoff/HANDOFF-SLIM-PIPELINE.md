@@ -51,11 +51,12 @@ HARNESS: `make line CARTREADAT=18|17|19|20|21 [CARTREADADDR=..]
 vint position; `SLIMNODMA=1` / `SLIMNOFETCH=1` drop one slim step. All
 verified against `.build_flags` before use.
 
-## THE LINE
+## THE LINE (updated 2026-09-20: lineV passed Mike's play pass)
 
-    rom/night/lineT.32x   == rom/night/tilesmd4.32x   THE LINE
-    rom/s16.32x           line-equivalent
-    rig                   lineT
+    rom/night/lineV.32x   THE LINE ("playable", Mike 2026-09-20)
+    rom/night/lineT.32x   == rom/night/tilesmd4.32x   previous line
+    rom/s16.32x           line-equivalent (differs from lineV at 3fff only)
+    rig                   lineV
 
 INVARIANT CHECK CHANGED when TILESMD joined the line. It is no longer
 `25f0 3fff`:
