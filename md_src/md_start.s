@@ -201,7 +201,16 @@ _start:
 		move.b	#0x40,(IO_DATA1)	/* 1P: TH idle high */
 		move.b	#0x40,(IO_DATA2)	/* 2P: TH idle high */
 
-		lea		0xFFBFF0,sp			/* boot/shim stack, clear of game work RAM */
+		/* BOOT/SHIM STACK (moved 2026-09-19). It was 0xFFBFF0, 184 bytes
+		 * above the END of the FM-gate thunk table (0xFFBF38), and the vint
+		 * handler runs on it during boot ~200 bytes deep: the line survived
+		 * by 14 bytes (deepest SP 0xFFBF46), and any vint-path build with a
+		 * 32-byte local (every slim build, DELIVTEST 2/3) pushed to 0xFFBF26
+		 * and overwrote the shared gate spin's last words -- the game's first
+		 * FM-gated writer then branched into zeros. MAME watchpoint-proven.
+		 * 0xFF3FF0 sits in the audited free gap above .bss (md.ld asserts
+		 * .bss ends below 0xFF3000) and under the OBJ_LOG ring at 0xFF4000. */
+		lea		0xFF3FF0,sp			/* boot/shim stack, clear of game work RAM AND the thunk page */
 .ifdef BOOT_BEACON
 		move.l	#0xC0000000,(0xC00004).l
 		move.w	#0x0EEE,(0xC00000).l	/* white: into main */
@@ -444,6 +453,16 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 	 * (same cost class as a V-gate skip; counted in fmgate_defer). */
 fmgate_partb:
 		movem.l	d0-d1/a0,-(sp)
+		/* C hooks (md_main.c partb_hook / partb_end_hook), assembled only
+		 * under PARTB_HOOK (TILESLIM or CARTREADAT builds) so the line's
+		 * vint path is byte-for-byte untouched otherwise. The slim cart
+		 * fetch runs in the first one: after the game's IRQ4, before the
+		 * FM raise. C clobbers a1 too. */
+.ifdef PARTB_HOOK
+		move.l	a1,-(sp)
+		jsr		partb_hook
+		move.l	(sp)+,a1
+.endif
 		move.w	(fmgate_wcmd),d0
 		beq.s	9f					/* no window wanted this vint */
 		tst.w	(0xA15120).l		/* COMM0: previous window running? */
@@ -482,7 +501,13 @@ fmgate_partb:
 	8:	addq.w	#1,(fmgate_defer)
 		clr.w	(fmgate_posted)
 	7:	clr.w	(fmgate_wcmd)
-	9:	movem.l	(sp)+,d0-d1/a0
+	9:
+.ifdef PARTB_HOOK
+		move.l	a1,-(sp)			/* C hook after the post/raise (partb_end_hook) */
+		jsr		partb_end_hook
+		move.l	(sp)+,a1
+.endif
+		movem.l	(sp)+,d0-d1/a0
 		rts
 _hblank:
 		rte

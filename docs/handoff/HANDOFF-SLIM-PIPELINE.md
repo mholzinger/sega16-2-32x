@@ -2,6 +2,55 @@
 
 Session ending 2026-09-19. Read with `STATE.md` and `LESSONS.md`.
 
+## ADDENDUM 2026-09-20 (read this first)
+
+THE LINE IS UNCHANGED IN BEHAVIOUR AND CHANGED IN BYTES. `make line` now
+carries the boot-stack move (md_start.s 0xFFBFF0 -> 0xFF3FF0, md.ld
+guard) and two hook call sites that assemble only under PARTB_HOOK
+(TILESLIM / CARTREADAT builds). rom/night/lineV.32x == `make line`:
+ares 1200-frame play script gives scene timer 718, 0 pixels and 0 VRAM
+bytes different from lineT; the stack-fix build rendered on the rig at
+99.7%. The `25f1 3fff` invariant no longer holds against lineT (the 68K
+image moved); take lineV as the new reference once Mike has played it.
+
+WHAT WAS WRONG (LESSONS, four new entries):
+  1. the boot stack sat 184 bytes above the FM-gate thunk table and the
+     boot-time vint overwrote the table's tail whenever the vint path
+     grew by 32 bytes -- every slim build and DELIVTEST 2/3;
+  2. under TILE_SLIM the SH-2's converter fallthrough (unbaked sets)
+     emitted pixel words as records; the 68K's computed cart address
+     then left the bank window and locked the 68K on silicon (the VDP/
+     PSG mirrors), invisibly in ares and MAME;
+  3. rig captures at wall-clock offsets compare attract phases, not
+     health -- eight "collapses" were healthy title screens;
+  4. three probe results were no-ops (define missing / hook on a path
+     the line does not run). Verify `.build_flags` and a non-zero
+     counter before a rig result counts.
+
+RETRACT from the body below: "renders correctly in ares, FAILS on
+hardware" (it failed in both; slim4's 336k-pixel ares diff WAS the red
+screen); "volume ruled out at SLIMCAP=8" (measured on the broken base);
+"methods 2 and 3 reach no verdict" (they crashed on defect 1; on the
+fixed base 2 = GREEN and 3 = RED, the identity map returning other
+bytes in ares as LESSONS predicts).
+
+STATE OF SLIM: docs/design/SLIM-PIPELINE.md 1b. Runs on ares and the
+FPGA. 73% of shipped tiles are unbaked and go inline.
+
+NEXT:
+  1. Mike's play pass on rom/night/slim18.32x (TILESLIM=1 SLIMCAP=40)
+     against lineV; scene-anchored captures, not wall-clock ones.
+  2. The bake coverage: why 2278 of 3120 tiles fall through to the
+     converter on level 1. Until that is fixed the slim pipeline
+     removes the SH-2 from 27% of the payload.
+  3. SLIMCAP ladder on the rig with the scene timer as the anchor.
+  4. Remove the slim diag counters at 0xFF3400 once the play pass is in.
+
+HARNESS: `make line CARTREADAT=18|17|19|20|21 [CARTREADADDR=..]
+[CARTREADDELAY=..]` = a 64-read cart burst or a pure delay at a named
+vint position; `SLIMNODMA=1` / `SLIMNOFETCH=1` drop one slim step. All
+verified against `.build_flags` before use.
+
 ## THE LINE
 
     rom/night/lineT.32x   == rom/night/tilesmd4.32x   THE LINE

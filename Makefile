@@ -843,6 +843,28 @@ endif
 ifdef TILESLIM
 SHCCFLAGS += -DTILE_SLIM
 MDCCFLAGS += -DTILE_SLIM
+MDASFLAGS += -Wa,--defsym,PARTB_HOOK=1
+endif
+# `make line CARTREADAT=n` = 64 cart-window reads per vint at position n
+# (18 = top of md_consume, 17 = partb_hook after the game's IRQ4); see
+# md_main.c cart_read_burst. VERIFY .build_flags carries CART_READ_AT.
+ifdef CARTREADAT
+MDCCFLAGS += -DCART_READ_AT=$(CARTREADAT)
+MDASFLAGS += -Wa,--defsym,PARTB_HOOK=1
+endif
+ifdef CARTREADADDR
+MDCCFLAGS += -DCART_READ_ADDR=$(CARTREADADDR)
+endif
+ifdef CARTREADDELAY
+MDCCFLAGS += -DCART_READ_DELAY=$(CARTREADDELAY)
+endif
+# rig bisect of the slim pipeline's steps (2026-09-20): drop step 3 (the
+# WRAM->VRAM DMA) or step 2 (the cart fetch) from a TILESLIM build.
+ifdef SLIMNODMA
+MDCCFLAGS += -DSLIM_NODMA
+endif
+ifdef SLIMNOFETCH
+MDCCFLAGS += -DSLIM_NOFETCH
 endif
 # `make ... BANKPOKE=1` = bisect the slim build's hardware-only black
 # screen. This is the LINE's working FB tile route with ONE addition:

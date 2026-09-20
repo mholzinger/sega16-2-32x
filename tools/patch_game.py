@@ -954,8 +954,11 @@ PAL_DIRTY = 0xB9FC                   # dirty word, abs.w (>=0x8000: 68K
 PAL_THUNK_BASE = 0xBA00              # 0xFFBA00: free (tile thunks end at
                                      # 0xFFB9E8, bitmap 0xFFB9FE, game RAM
                                      # starts 0xFFC000). The boot stack top
-                                     # is 0xFFBFF0 and the game runs on its
-                                     # OWN stack (0xFFFFFF00), so only boot
+                                     # WAS 0xFFBFF0 in this page; it is
+                                     # 0xFF3FF0 since 2026-09-19 (the boot
+                                     # vint overwrote the thunk tail). The
+                                     # game runs on its OWN stack
+                                     # (0xFFFFFF00), so only boot
                                      # shares this page — and only its top.
 # (site, displaced length, region mask, note)
 # LOOP29 182 — MISSKEEP. The game CLEARS its own missed-frame counter at

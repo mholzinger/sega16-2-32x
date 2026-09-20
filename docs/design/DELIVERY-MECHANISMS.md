@@ -17,7 +17,7 @@ failed. The difference was not effort, it was scope.
 | 3 | code to art bytes (bake vs convert) | SH-2 | re-emit through the tool, byte-compare |
 | 4 | record write into the packet | SH-2 | dump the packet, decode by stride |
 | 5 | packet publish (typ, cnt, first) | SH-2 | read the header back |
-| 6 | DREQ ship FB to 68K | both | compare 68K-side bytes to FB |
+| 6 | packet visible to the 68K (it READS the FB window at 0x851A00/0x85E800 at FM=0; no DREQ carries tiles) | both | compare 68K-side bytes to FB |
 | 7 | header read | 68K | echo typ/cnt to WRAM |
 | 8 | record walk at the right stride | 68K | echo each decoded slot |
 | 9 | record to VRAM address | 68K | echo computed addresses |
@@ -67,3 +67,17 @@ the next thing to isolate.
 **The rig has no fast capture** (screenshots ~1 per 6.8 s, /dev/fb0 is
 the OSD layer), so every rig verdict must be STICKY and STABLE. A
 per-frame value cannot be read.
+
+
+## Added 2026-09-20, after the slim bisect
+
+| # | mechanism | side | how to test it alone |
+|---|---|---|---|
+| 16 | WRAM layout: the vint's stack vs the thunk page | 68K | MAME watchpoint on the table's last words; deepest boot SP vs table end |
+| 17 | bound on a computed bus address | 68K | count records outside the blob; a stray one locks silicon, not emulators |
+| 18 | record format agreement, INCLUDING the fallthrough path | both | dump the first stagings' header and first words; pixel nibbles where records belong = a second format |
+
+Where the slim failures actually lived: #16 (every slim build until the
+stack moved), #18 (the converter fallthrough emitted 17-word pixel
+records under the 2-word flag) and #17 (those pixels, read as block
+numbers, sent the 68K into the VDP/PSG mirrors on the FPGA).

@@ -9995,7 +9995,10 @@ __attribute__((noinline))
  * corrupt from the first record. It failed at a cap of 8 as readily as
  * at 40, which is what finally ruled out "it is the volume". */
 #ifdef TILE_SLIM
-#define MD_REC_W 2
+#define MD_REC_W 2                            /* baked records; inline ones are 17 */
+#if defined(ART_TAIL)
+#error "TILE_SLIM: the ART_TAIL site advances by MD_REC_W and cannot walk mixed records"
+#endif
 #else
 #define MD_REC_W 17
 #endif
@@ -10003,6 +10006,20 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                        uint16_t *pending, uint16_t *first)
 {
     int sent = 0, sl = *scan;
+#ifdef TILE_SLIM
+    /* MIXED RECORDS (2026-09-20). A baked set is a 2-word record
+     * (slot|fg<<15, blk*64+code); a set the bake does not cover still has
+     * to ship PIXELS, as a 17-word record flagged by bit 14 of its slot
+     * word (slot|0x4000, then 16 art words). Records are laid out
+     * sequentially at `w`, so the 68K walks them by flag, not stride.
+     * The first cut emitted the converter's pixels with NO slot word and
+     * the 68K read pixel nibbles as records: the cart addresses it
+     * derived left the bank window and, on silicon, locked the 68K in
+     * the VDP/PSG mirror space. Worst case 40 x 17 = 680 words = the
+     * packet body, so the batch is clamped here. */
+    volatile uint16_t *w = dst;
+    if (bmax > 40) bmax = 40;
+#endif
     for (int i = 0; i < NSETS * NWAYS && sent < bmax; i++) {
         sl = (sl + 1) & (NSETS * NWAYS - 1);
         if ((sl & 31) == 0 && !md_dirty[sl >> 5]) {   /* word skip */
@@ -10018,10 +10035,13 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         const uint8_t *px = altbeast_tiles + (mkey & 0xFFFFu) * 64;
         const uint8_t *map = mdp_s_map + ((mkey >> 16) & 0x7F) * 8;
         if (*first == 0xFFFF) *first = (uint16_t)sl;
-#ifndef TILE_SLIM
+#ifdef TILE_SLIM
+        w[0] = (uint16_t)(sl | 0x4000u);      /* inline record unless baked below */
+        volatile uint8_t *o = (volatile uint8_t *)(w + 1);
+#else
         dst[sent * 17] = (uint16_t)sl;
-#endif
         volatile uint8_t *o = (volatile uint8_t *)(dst + sent * 17 + 1);
+#endif
 #if defined(TILES_MD) && defined(MD_ROUND) && defined(MD_STATIC) \
     && defined(PAL_STATIC) && defined(TILE_CLASS)
         /* BAKED (2026-09-17). The conversion below is a pure function of
@@ -10062,9 +10082,9 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                  * Records are laid at stride 2 from the SAME dst base, so
                  * the 68K's `e += 2` mirrors this exactly. */
                 {
-                    volatile uint16_t *r_ = dst + sent * 2;
-                    r_[0] = (uint16_t)(sl | ((mkey & 0x80000000u) ? 0x8000u : 0u));
-                    r_[1] = (uint16_t)(blk_ * 64u + (mkey & 63u));
+                    w[0] = (uint16_t)(sl | ((mkey & 0x80000000u) ? 0x8000u : 0u));
+                    w[1] = (uint16_t)(blk_ * 64u + (mkey & 63u));
+                    w += 2;
                     if (*pending) (*pending)--;
                     sent++;
                     continue;
@@ -10145,6 +10165,9 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         }
 #endif
         if (*pending) (*pending)--;
+#ifdef TILE_SLIM
+        w += 17;                              /* the inline record just written */
+#endif
         sent++;
     }
     *scan = sl;

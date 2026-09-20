@@ -41,3 +41,9 @@ SECTIONS {
  * fence. If a staging buffer takes the room, this is what tells you. */
 ASSERT(__bss_end <= 0x00FF6000,
        "68K .data+.bss overran free WRAM and hit PAL_SHADOW at 0xFF6000")
+/* The boot/shim stack tops at 0xFF3FF0 (md_start.s) and grows down toward
+ * .bss; keep at least 4KB. It used to live at 0xFFBFF0, 184 bytes above
+ * the FM-gate thunk table, and the boot-time vint handler overwrote the
+ * table's tail whenever its frame grew by 32 bytes (2026-09-19). */
+ASSERT(__bss_end <= 0x00FF3800,
+       "68K .bss reached the boot stack region (top 0xFF3FF0, keep 2KB: boot depth measured 202 bytes)")

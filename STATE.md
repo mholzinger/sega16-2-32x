@@ -16,6 +16,16 @@ That is how the logs became unreadable.
                                 BASELINE FOR THE NEW DIRECTION we
                                 built." Baked MD tiles are ON.
     rom/s16.32x                 line-equivalent (stamp bytes only)
+    rom/night/lineV.32x         `make line` as of 2026-09-20: the boot
+                                stack moved off the thunk page (LESSONS)
+                                and two flag-gated hook sites. ares:
+                                identical to lineT (718, 0 px, 0 VRAM).
+                                Awaiting Mike's play pass to become THE
+                                LINE; the 25f1 3fff invariant does not
+                                apply to it.
+    rom/night/slim18.32x        the slim pipeline, RUNS on ares and the
+                                FPGA (SLIM-PIPELINE.md 1b). Play pass
+                                pending. 73% of its tiles are unbaked.
     rig (MiSTer)                tilesmd4
 
     rom/night/bldS.32x          PREVIOUS line (passed 2026-09-14).

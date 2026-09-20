@@ -38,7 +38,37 @@ because `mdspr_upload` uses it and sprite art renders. Instrumented:
 `mdspr_upload_pump` runs **zero times in 3000 frames**. It is dead code
 and proves nothing. The rig test above is what establishes the fact.
 
-## 1b. STATUS: the slim build still black-screens on hardware
+## 1b. STATUS 2026-09-20: the slim pipeline RUNS on ares and on the FPGA
+
+`make line TILESLIM=1 SLIMCAP=40` (rom/night/slim18.32x). Three steps,
+one vint apart, each where the hardware allows it (md_main.c, "SLIM
+PIPELINE STATE"):
+
+    1. md_consume (top of vblank, FM=0)   copy records out of the FB packet
+    2. partb_hook (after the game's IRQ4, before the FM raise)
+                                          68K reads the art from cart -> WRAM
+    3. slim_dma (top of the next vint)    68K->VDP DMA, WRAM -> VRAM
+
+Records are MIXED: a baked set is 2 words (slot|fg<<15, blk*64+code); a
+set the bake does not cover ships its pixels as a 17-word record flagged
+by bit 14 of the slot word. The 68K walks by flag.
+
+ares, level-1 play script, 1200 frames: scene timer 720 (line 718),
+3120 tiles staged = 3110 DMA'd, 0 stray, 5672 px different from the line
+at frame 1100 (the one-vint lag), 0 px different at frame 600.
+FPGA: boots and runs the attract; Mike's play pass is the gate.
+
+**Bake coverage, measured:** 2278 of 3120 shipped tiles were INLINE
+(unbaked sets, pixels converted by the SH-2), 842 baked. The "SH-2 out
+of the payload path" claim holds for 27% of the tiles until the bake
+covers the rest.
+
+**What every earlier slim build died of** (LESSONS 2026-09-20): the boot
+stack over the FM-gate thunk table, then the unbounded fetch address on
+pixel words the fallthrough emitted. Neither was the cart route, the
+bank switch, the port writes, or volume.
+
+## 1c. (superseded) the slim build still black-screens on hardware
 
 `TILESLIM=1` renders correctly in ares and produces a **fully black
 screen** on the FPGA — 0.0% non-black, so the HUD and both planes are

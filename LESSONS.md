@@ -680,3 +680,73 @@ the slim pipeline possible at all --
 Two copies is the floor the hardware allows, and it takes the SH-2 out
 of the payload path completely.
 
+
+
+### The 68K boot stack sat 184 bytes above the FM-gate thunk table (FIXED 2026-09-20)
+
+Measured with a MAME write-watchpoint and a 68K trace, not inferred.
+`md_start.s` put the boot/shim stack at 0xFFBFF0; the generated FM-gate
+thunk table ends at 0xFFBF38 (`FMGATE_THUNK_ADDR 0xBCF4 + 290 words`).
+The vint handler runs on that stack during boot, ~200 bytes deep:
+
+    working line (lineT)     deepest boot SP 0xFFBF46   14 bytes clear
+    any vint path +32 bytes  deepest boot SP 0xFFBF26   thunk tail overwritten
+
+The overwritten words were the shared gate spin's `beq` target; the
+game's first FM-gated writer (the screen clear at 0x369C, called from
+its boot at 0x900556) branched into zeros, ran off through WRAM and the
+void, and the vint kept servicing a dead main thread: black or red
+screen, `game_running` set, shim counters advancing, scene timer 0.
+
+**Every slim build, DELIVTEST methods 2/3 and the "one instruction flips
+it" bisects were this one defect.** It looked hardware-only because the
+slim builds that happened to be even-sized rendered in ares. The stack is
+at 0xFF3FF0 now, in the audited free gap, and `md.ld` asserts `.bss`
+stays below 0xFF3800.
+
+*Rules:* nothing else goes in the thunk page's tail; a black screen with
+the shim's counters still moving means the GAME thread is dead, so trace
+the 68K in MAME (`trace file,maincpu,noloop`) before touching the pipeline.
+
+### A 68K read at an address computed from packet data must be bounded (2026-09-20)
+
+The slim fetch computed a cart address from the record's block field.
+When the SH-2's converter fallthrough (an UNBAKED set) wrote pixel words
+where the 68K expected records, the "block" was pixel data and the read
+landed past the 1MB bank window -- in 0xA00000+ I/O and the
+0xC00000-0xDFFFFF VDP/PSG mirrors. On silicon a read there locks the
+68K; ares and MAME return garbage and carry on. The FPGA showed a total
+black wedge (0.0%, one colour), ares rendered correctly.
+
+*Rules:* bound every computed bus address before the access (the fetch
+now skips anything outside the blob and counts it); a "hardware-only
+wedge" with a computed address in the path is this until proven
+otherwise; and a packet with two record formats needs a flag bit, not
+two strides (bit 14 of the slot word marks a 17-word inline record).
+
+### Rig captures at wall-clock offsets compare attract PHASES, not health (2026-09-20)
+
+`non-black %` of a capture 37/50/63 s after launch depends on where the
+attract is. A build whose 68K vint is a few lines longer paces the
+game differently and shows the TITLE SCREEN (7-12% non-black, 40-90
+colours, logo and sprites intact) where the line shows the level demo
+(99%). Eight "collapse" results in one night were healthy title screens.
+A pure delay of ~20 lines per vint still ran the demo.
+
+*Rules:* only a single-colour frame (distinct colours = 1) is a failure
+signature; LOOK at the frame; anchor comparisons on the game's own scene
+timer (0xFFF02A), never on seconds since launch.
+
+### A probe that never ran reads as a pass: verify the define in `.build_flags` (2026-09-20)
+
+Three "position" results (reads after the game's IRQ4 = fine) were
+no-ops: the Makefile block carrying the define had been deleted with
+unrelated scaffolding, and once the hook was in a function the line
+never calls (`r60_late_post` exists only under POST_LATE). The rig
+showed a healthy picture because nothing had changed.
+
+*Rules:* every probe build prints and greps its define out of
+`.build_flags` before it is pushed; a probe's counter must be non-zero
+in ares before its rig result counts; hook code through a symbol the
+LINE's path actually reaches (md_start.s `fmgate_partb`, not a
+flag-gated C function).

@@ -558,8 +558,162 @@ static uint16_t bm_pushed;               /* probe: last word 20 as pushed */
 /* RAMCODE (2026-09-06): the consume ran from cart ROM under the master's
  * compose traffic (nm: 0x8c0b48) — a 4-6x fetch-stall on every
  * instruction; consume B measured 14 lines for a 280-word chunk. */
+#ifdef CART_READ_AT
+/* RIG BISECT (2026-09-19): 64 back-to-back 68K reads of the cart window
+ * at cart 0x264000 (bank 2, the baked tile blob), results discarded.
+ * CART_READ_AT selects the position in the vint:
+ *   18 = top of md_consume (early vblank, before the packet walk)
+ *   17 = partb_hook, the top of fmgate_partb (md_start.s): after the
+ *        game's IRQ4 has returned, on the LINE's own path
+ * The slim walk's reads at position 18 black-screen the FPGA whatever the
+ * bank, cap or spacing; the game's own fetches from the same window at
+ * position 17 are fine every frame (rig, 2026-09-20). WHEN, not WHAT. */
+__attribute__((section(".data"), noinline))
+static void cart_read_burst(void) {
+#ifndef CART_READ_ADDR
+#define CART_READ_ADDR 0x964000uL          /* bank 2: cart 0x264000, the tile blob */
+#define CART_READ_BANK 2
+#endif
+#ifndef CART_READ_BANK
+#define CART_READ_BANK 3                   /* a 0x9xxxxx address at the resting bank */
+#endif
+	const volatile uint16_t *cw = (const volatile uint16_t *)CART_READ_ADDR;
+	volatile uint16_t sink;
+	*(volatile uint16_t*)0xA15104 = CART_READ_BANK;
+	for (uint16_t k = 0; k < 64; k++) sink = cw[k];
+	*(volatile uint16_t*)0xA15104 = 3;
+	(void)sink;
+}
+#endif
+#ifdef TILE_SLIM
+/* SLIM PIPELINE STATE. Three steps, one vint apart, each where the
+ * hardware allows it (rig-measured 2026-09-19/20):
+ *   1. md_consume (top of vblank, FM=0): copy the 2-word records out of
+ *      the FB packet -> slim_rec.            [the only step that needs FM]
+ *   2. partb_hook (after the game's IRQ4 and the FM raise): 68K reads the
+ *      art from cart -> slim_art (WRAM).     [cart reads at the TOP of
+ *      vblank collapse the FPGA's frame; here they are harmless]
+ *   3. slim_dma (top of the NEXT vint, in vblank): 68K->VDP DMA from
+ *      slim_art -> VRAM.                     [DMA from WRAM: DELIVTEST
+ *      method 0, GREEN; port writes here would stall on the VDP FIFO
+ *      once vblank is over]
+ * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
+ * port-write walk, and the SH-2 never touches the tile bytes. */
+static uint16_t slim_rec[SLIM_CAP * 2];   /* step 1: staged records */
+static uint16_t slim_n;                   /* records staged this vint */
+static uint16_t slim_art[SLIM_CAP * 16];  /* step 2: art in WRAM */
+static uint16_t slim_va[SLIM_CAP];        /* step 2: VRAM address per tile */
+static uint16_t slim_ready;               /* tiles waiting for step 3 */
+static uint16_t slim_inl;                 /* inline (unbaked) tiles already in slim_art */
+
+__attribute__((section(".data"), noinline))
+static void slim_fetch(void)              /* step 2 */
+{
+	uint16_t n = slim_inl;                   /* inline tiles sit first in slim_art */
+	if (!slim_n) { slim_ready = n; slim_inl = 0; return; }
+	(*(volatile uint16_t*)0xFF3400)++;       /* diag: fetch calls */
+	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
+	for (uint16_t i = 0; i < slim_n; i++) {
+		uint16_t w0 = slim_rec[i * 2u], w1 = slim_rec[i * 2u + 1u];
+		uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+		if (va + 32u > 0xB000u) continue;
+		/* TILESMD_CART_BASE: MUST EQUAL the AT() address of .tilesmd in
+		 * sh_src/mars.ld -- `make tilesmd-addr` greps both. */
+		uint32_t src = 0x264000uL + 5u * 128u * 2u
+			+ ((uint32_t)(w1 >> 6)) * 4096u
+			+ ((uint32_t)(w1 & 63u)) * 64u
+			+ ((w0 & 0x8000u) ? 32u : 0u);
+		/* HARD BOUND (2026-09-20). A record whose block field is stray
+		 * would send this read past the 1MB bank window: 0xA00000+ is
+		 * I/O and 0xC00000+ the VDP/PSG mirrors, and a 68K read there
+		 * LOCKS the machine on silicon while ares and MAME shrug. The
+		 * blob ends below 0x2C3000, so anything outside is not art. */
+		if (src < 0x264000uL || src >= 0x2C3000uL) {
+			uint16_t k9 = (*(volatile uint16_t*)0xFF3406)++;   /* diag: stray records */
+			if (k9 < 16) {                        /* diag ring: first 16 stray (w0,w1) */
+				((volatile uint16_t*)0xFF3440)[k9 * 2] = w0;
+				((volatile uint16_t*)0xFF3440)[k9 * 2 + 1] = w1;
+			}
+			continue;
+		}
+		const volatile uint16_t *cw =
+			(const volatile uint16_t *)(0x900000uL + (src - 0x200000uL));
+		uint16_t *d = slim_art + n * 16u;
+		for (uint16_t k = 0; k < 16; k++) d[k] = cw[k];
+		slim_va[n++] = (uint16_t)va;
+	}
+	*(volatile uint16_t*)0xA15104 = 3;
+	(*(volatile uint16_t*)0xFF3402) += n;    /* diag: tiles fetched */
+	slim_ready = n;
+	slim_n = 0;
+	slim_inl = 0;
+}
+
+__attribute__((section(".data"), noinline))
+static void slim_dma(void)                /* step 3 */
+{
+	if (!slim_ready) return;
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+	for (uint16_t i = 0; i < slim_ready; i++) {
+		uint32_t src = ((uint32_t)(slim_art + i * 16u)) >> 1;
+		uint32_t va = slim_va[i];
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+		*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+		               | (((va >> 14) & 3u) | 0x80u);
+	}
+	(*(volatile uint16_t*)0xFF3404) += slim_ready;   /* diag: tiles DMA'd */
+	slim_ready = 0;
+}
+#endif
+#if defined(TILE_SLIM) || defined(CART_READ_AT)
+/* PART-B END HOOK: md_start.s calls this at the END of fmgate_partb,
+ * after the window post and the FM raise. */
+__attribute__((section(".data")))
+void partb_end_hook(void)
+{
+#if defined(CART_READ_AT) && CART_READ_AT == 20
+	cart_read_burst();
+#endif
+}
+/* PART-B HOOK. md_start.s calls this at the top of fmgate_partb, i.e.
+ * after the game's IRQ4 has returned and before FM is raised -- the one
+ * place on the line's vint path that runs late in vblank from C. The
+ * cart -> VRAM walk lives here because 68K cart reads at the TOP of
+ * vblank collapse the FPGA's frame (see slim_fetch / CART_READ_AT). */
+__attribute__((section(".data")))
+void partb_hook(void)
+{
+#if defined(CART_READ_AT) && CART_READ_AT == 17
+	cart_read_burst();
+#endif
+#if defined(CART_READ_AT) && CART_READ_AT == 19
+	/* pure delay, no bus traffic beyond WRAM: CART_READ_DELAY x ~12 cycles */
+#ifndef CART_READ_DELAY
+#define CART_READ_DELAY 64
+#endif
+	{ volatile uint16_t d = 0; while (++d < CART_READ_DELAY) {} }
+#endif
+#if defined(TILE_SLIM) && !defined(SLIM_NOFETCH)
+	slim_fetch();
+#endif
+}
+#endif /* TILE_SLIM || CART_READ_AT: the hooks exist only when something uses them */
 __attribute__((section(".data"), noinline))
 static void md_consume(uint32_t pkt_base) {
+#if defined(CART_READ_AT) && CART_READ_AT == 21
+	/* pure delay at the top of the consume: ~64 x 12 cycles */
+	{ volatile uint16_t d = 0; while (++d < 64) {} }
+#endif
+#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
+	if (pkt_base == 0x851A00uL) slim_dma();  /* step 3: last vint's art, in vblank */
+#endif
+#if defined(CART_READ_AT) && CART_READ_AT == 18
+	if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) cart_read_burst();
+#endif
 #ifdef MDCONSUME_OFF
 	/* SESSION 7 CALIBRATION: after the boot/attract loads (vint 900),
 	 * no MD-plane / sprite / art upload at all (the VDP planes and
@@ -791,114 +945,47 @@ static void md_consume(uint32_t pkt_base) {
 					}
 #endif
 #ifdef TILE_SLIM
-				/* SLIM PIPELINE (docs/design/SLIM-PIPELINE.md). The SH-2
-				 * no longer ships pixels -- it ships a 2-WORD record and
-				 * the 68K fetches the art from cart itself:
-				 *     word 0: slot | fg<<15
-				 *     word 1: blk*64 + (code & 63)
-				 * cart -> 68K -> VRAM is TWO payload copies against the
-				 * three the FB route costs, and 688 packet words now hold
-				 * ~344 records instead of ~40. The packet was the
-				 * throughput wall (MDBATCH 96 collapsed), and throughput
-				 * is residency, which is the black tiles.
+				/* SLIM PIPELINE (docs/design/SLIM-PIPELINE.md): the SH-2
+				 * ships a 2-WORD record (slot|fg<<15, blk*64+code) and the
+				 * 68K fetches the art from cart itself. cart -> 68K -> VRAM
+				 * is two payload copies against the FB route's three.
 				 *
-				 * THE BANK IS SET ONCE, NOT PER TILE: .tilesmd runs
-				 * 0x263C00..~0x2C2000, entirely inside bank 2, and a
-				 * 32-byte tile is 32-byte aligned so it can never
-				 * straddle a 1MB boundary. Bank 3 is the resting value
-				 * every other site restores.
-				 *
-				 * VDP DMA is NOT an option here: measured on ares and the
-				 * FPGA with a same-frame control, the VDP will not read
-				 * cart at all (LESSONS). Port writes are the only route. */
+				 * STAGE HERE, SHIP LATER (2026-09-19, rig-proven). This
+				 * consume runs at the TOP of vblank, and 68K cart-window
+				 * reads here collapse the FPGA's picture (64 reads on the
+				 * line: 7-11% non-black) while the same 64 reads after the
+				 * game's IRQ4 has returned are clean (99%). The master's
+				 * V-ISR needs the cart bus in early vblank and the adapter
+				 * gives a pending 68K access priority (S32X_MiSTer IF.sv,
+				 * the ROM arbiter). ares charges instruction cycles only and
+				 * cannot see it: every slim build rendered there. So this
+				 * branch only COPIES the records to WRAM; slim_fetch() reads
+				 * the art after the game's IRQ4 and slim_dma() lands it
+				 * next vint -- see the SLIM PIPELINE STATE comment. */
 					{
 					volatile uint16_t *e = sc + 8;
-					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-					/* SLIM_BANKONLY (2026-09-19): the full slim build
-					 * BLACK-SCREENS on the FPGA while rendering
-					 * correctly in ares, so the fault is hardware-only.
-					 * Two suspects, and this flag separates them:
-					 *   (a) THE BANK SWITCH. 0xA15104 is the 32X cart
-					 *       bank register and the SH-2 reads cart too
-					 *       (the index table, and the converter
-					 *       fallthrough for unbaked sets). mdspr_upload
-					 *       switches it safely because it runs during
-					 *       scene loads while the SH-2 is quiet; this
-					 *       switches it EVERY VINT mid-compose.
-					 *   (b) TIME. Up to 40 tiles x 32 bus operations
-					 *       inside the vint, with cart wait states ares
-					 *       does not charge.
-					 * SLIM_BANKONLY does the switch and the restore and
-					 * NOTHING ELSE -- no cart reads, no VDP writes.
-					 * Black screen  -> (a), the bank switch alone.
-					 * Renders fine  -> (b), it is the volume. */
-					*(volatile uint16_t*)0xA15104 = 2;
-					/* SLIM_CAP: tiles the 68K will fetch THIS VINT.
-					 * The uncapped version (up to 40) BLACK-SCREENS on
-					 * the FPGA while rendering correctly in ares, and
-					 * BANKPOKE proved the bank switch is innocent -- so
-					 * it is volume. Per vint this path costs 40 VDP
-					 * address setups and 640 SCATTERED cart reads, where
-					 * mdspr_upload survives 512 reads because they are
-					 * ONE contiguous run through ONE address setup.
-					 * ares charges instruction cycles and not the
-					 * adapter's cart wait states, so only the rig can
-					 * say what fits. Raise it until the screen dies:
-					 * that number IS the hardware budget. Leftover
-					 * records are simply not shipped this vint; the slot
-					 * stays dirty and comes back. */
-					uint16_t done9 = 0;
-					for (uint16_t i = 0; i < cnt && done9 < SLIM_CAP;
-					     i++, e += 2, done9++) {
-						uint16_t w0 = e[0], w1 = e[1];
-						uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
-						if (va + 32u > 0xB000u) continue;
-						{
-							/* TILESMD_CART_BASE: MUST EQUAL the AT()
-							 * address of .tilesmd in sh_src/mars.ld.
-							 * Two files, one number -- `make tilesmd-addr`
-							 * greps both and fails if they drift, because
-							 * a silent mismatch here reads gap fill and
-							 * renders garbage a long way from its cause. */
-							uint32_t src = 0x264000uL + 5u * 128u * 2u
-								+ ((uint32_t)(w1 >> 6)) * 4096u
-								+ ((uint32_t)(w1 & 63u)) * 64u
-								+ ((w0 & 0x8000u) ? 32u : 0u);
-							/* READ FIRST, THEN BURST. Do NOT interleave
-							 * cart reads between the VDP address write
-							 * and the data writes.
-							 *
-							 * Every technique here is individually proven
-							 * on the rig -- cart reads through both
-							 * routes, the bank switch (BANKPOKE), and
-							 * VRAM port writes (PORTPOKE renders at 99%
-							 * non-black). Only the COMBINATION black-
-							 * screens, and the combination is the one
-							 * thing no probe covered: the VDP control
-							 * port carries a first/second-word pending
-							 * state and an address latch across this
-							 * sequence, and on 32X a cart read crosses
-							 * the adapter's bus right in the middle of
-							 * it. Pull the 16 words into locals while the
-							 * VDP is idle, then set the address and write
-							 * them back to back with nothing in between. */
-							const volatile uint16_t *cw =
-								(const volatile uint16_t *)
-								(0x900000uL + (src - 0x200000uL));
-							uint16_t t9[16];
-							for (uint16_t k = 0; k < 16; k++)
-								t9[k] = cw[k];
-							*vdp_ctrl_wide =
-								((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
-								| ((va >> 14) & 3u);
-							for (uint16_t k = 0; k < 16; k++)
-								*vdp_data_port = t9[k];
+					/* MIXED RECORDS: bit 14 of the slot word = an inline
+					 * 17-word record (an unbaked set's pixels) -- copy its
+					 * art into slim_art now, at FM=0; otherwise a 2-word
+					 * baked record for slim_fetch. */
+					for (uint16_t i = 0; i < cnt && slim_n + slim_inl < SLIM_CAP; i++) {
+						uint16_t w0 = e[0];
+						if (w0 & 0x4000u) {
+							uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+							if (va + 32u <= 0xB000u) {
+								uint16_t *d = slim_art + slim_inl * 16u;
+								for (uint16_t k = 0; k < 16; k++) d[k] = e[1 + k];
+								slim_va[slim_inl++] = (uint16_t)va;
+								(*(volatile uint16_t*)0xFF340A)++;   /* diag: inline tiles */
+							}
+							e += 17;
+						} else {
+							slim_rec[slim_n * 2u] = w0;
+							slim_rec[slim_n * 2u + 1u] = e[1];
+							slim_n++;
+							e += 2;
 						}
-#ifdef DMA_CENSUS
-						TILECNT[0]++; TILECNT2[0]++; TILESENT[0] = 0xA5A5A5A5u;
-#endif
 					}
-					*(volatile uint16_t*)0xA15104 = 3;
 					}
 #else
 					{
@@ -6283,9 +6370,11 @@ void main(void) {
 	}
 	// Palette dirty-bit thunks (generated: pal_thunks.h) at 0xFFBA00, the
 	// same abs.w sign-extension rule as the tile thunks above. This block
-	// ends at 0xFFBD1A and the boot stack starts at 0xFFBFF0 — they share
-	// this page, but only during boot: the game runs on its own stack at
-	// 0xFFFFFF00, and our vint handler is entered in the game's context.
+	// ends at 0xFFBD1A. The boot stack USED to start at 0xFFBFF0 in this
+	// same page, 184 bytes above the FM-gate table's end, and the boot-time
+	// vint handler overwrote the table's tail whenever its frame grew by
+	// 32 bytes (2026-09-19, MAME watchpoint). It is at 0xFF3FF0 now
+	// (md_start.s); nothing else may be placed in this page's tail.
 	// The dirty word at 0xFFB9FC starts ALL-DIRTY so the whole palette
 	// ships once before the game's first upload.
 	{
@@ -6297,7 +6386,7 @@ void main(void) {
 #if FMGATE_ON
 	// LOOP 23 — FM entry-gate thunks, immediately after the pal thunks
 	// (FMGATE_THUNK_ADDR is generated from the pal area's actual end;
-	// the generator asserts it clears the boot stack at 0xFFBFF0).
+	// the generator asserts it stays under 0xBFF0, the page's end).
 	{
 		volatile uint16_t *ft =
 			(volatile uint16_t*)(0xFF0000uL | FMGATE_THUNK_ADDR);
