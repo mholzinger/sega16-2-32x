@@ -15,7 +15,12 @@ That is how the logs became unreadable.
                                 publishes forced (the FB persists across
                                 a warm relaunch). Rig: background present
                                 on 2 of 3 launches -- a per-launch race,
-                                layout-biased (LESSONS 01:30). Mike played
+                                layout-biased (LESSONS 01:30). MIKE'S
+                                CALL 2026-09-21: "THIS is the new line!"
+                                (Zeus text solved, sprites smoother; the
+                                black-background launch is the race).
+                                Delta from bldS: docs/design/
+                                LINE-DELTA-bldS-slim31.md. Mike played
                                 slim30:
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
