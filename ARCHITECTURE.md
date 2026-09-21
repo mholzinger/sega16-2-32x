@@ -11,6 +11,43 @@ wrong. Hardware claims cite `srcref/jtcores` Verilog by file and line.
 
 ---
 
+## THE LINE'S TILE PIPELINE IS THE SLIM ROUTE (2026-09-21, Mike: "THIS is the new line")
+
+The frame described below the scope section was drawn, until 2026-09-20,
+with the SH-2 converting every tile at run time and packing it into the
+framebuffer packet for the 68K to DMA into VRAM: cart -> SH-2 -> FB ->
+VRAM, three payload copies, 17 words per tile, ~40 tiles per packet.
+
+The line now draws it the other way (`make line`, rom/night/slim31.32x):
+
+    bake     every (round, set) the level pages use is pre-converted to MD
+             4bpp in a cart blob at 0x268000 (TILESMD, tools/bake_tiles_md.py)
+    record   the SH-2 emits 2 words per baked tile: slot|fg<<15, blk*64+code
+    fetch    the 68K, after the game's IRQ4 and before the FM raise
+             (partb_hook), reads the 16 art words from cart through the
+             0x900000 bank window into WRAM
+    land     68K->VDP DMA from WRAM to VRAM, first thing in the same hook
+    inline   a set the bake does not cover still ships its pixels as a
+             17-word record flagged by bit 14; the 68K DMAs it from the FB
+
+cart -> 68K -> VRAM, two copies, and the SH-2 never touches the bytes of
+92% of gameplay tiles (BAKECENSUS). The VDP cannot DMA from cart
+(measured, LESSONS), so two is the floor. docs/design/SLIM-PIPELINE.md
+is the design and its measurements; docs/design/LINE-DELTA-bldS-slim31.md
+is the validation against the previous line; docs/design/HOTPATH.md is
+what has worked on hardware and how it was verified.
+
+Two hardware facts shaped where the steps sit, both from the rig, both
+invisible in ares: the 68K's cart reads and the WRAM->VRAM DMA are
+accepted at the start of the after-IRQ4 hook and rejected at the top of
+the consume, after the fetch, and after the FM raise (2026-09-20, four
+placements); and the FB persists across a warm relaunch, so the first
+BG palette publishes are forced. One thing is NOT yet understood and is
+the open card: the level-start background is a per-launch race on the
+FPGA whose odds a build's layout shifts (LESSONS 2026-09-20/21).
+
+---
+
 ## THE SCOPE OF THIS PROJECT (2026-09-08, Mike — read this first)
 
 **The 68000 is not the problem, and the clock is not a loss.** Measured,
