@@ -13,7 +13,7 @@ bit through sprites and the text layer.
 
 Layout: byte 0 0xA5 | 1-2 vint | 3 packets consumed | 4 palette-flagged
 consumed | 5 SH-2 packets published | 6 SH-2 palette-flagged | 7 [5:0]
-CRAM 16-47 non-zero [6] shadow non-zero [7] packet magic in the FB | 8
+CRAM 16-47 non-zero [6] md_hold (packet bit 13) [7] IO_MISC bit 5 video-on | 8
 [2:0] round [3] cut [6:4] attract step [7] play | 9 XOR of 0-8.
 Counters are mod 256. `--raw` prints every row's symbols.
 """
@@ -92,8 +92,8 @@ def decode(path, raw=False):
                 agree = sum(1 for r in rows if r == c)
                 out.update(ok=True, how=how, agree=agree, r0=r0, dy=dy,
                            vint=(c[1] << 8) | c[2], pkt=c[3], pal68=c[4],
-                           sh_pub=c[5], sh_pal=c[6], cram=c[7] & 63, shadow=(c[7] >> 6) & 1,
-                           magic=c[7] >> 7, round=c[8] & 7, cut=(c[8] >> 3) & 1,
+                           sh_pub=c[5], sh_pal=c[6], cram=c[7] & 63, hold=(c[7] >> 6) & 1,
+                           vidon=c[7] >> 7, round=c[8] & 7, cut=(c[8] >> 3) & 1,
                            step=(c[8] >> 4) & 7, play=c[8] >> 7)
                 return out
     return out
@@ -103,7 +103,7 @@ def show(d):
         print(f"  {d['file']}  NO BARCODE"); return
     print(f"  {d['file']}  vint {d['vint']:5d}  pkt {d['pkt']:3d}  pal68 {d['pal68']:3d}  "
           f"sh_pub {d['sh_pub']:3d}  sh_pal {d['sh_pal']:3d}  cram16-47 {d['cram']:2d}  "
-          f"shadow {d['shadow']}  magic {d['magic']}  round {d['round']} cut {d['cut']} "
+          f"hold {d['hold']} vidon {d['vidon']}  round {d['round']} cut {d['cut']} "
           f"step {d['step']} play {d['play']}   [{d['how']} r{d['r0']}{d['dy']:+d}, {d['agree']}/6 rows agree]")
 
 ap = argparse.ArgumentParser()
