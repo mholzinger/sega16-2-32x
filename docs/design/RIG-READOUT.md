@@ -150,3 +150,25 @@ NO MD plane at all -- no sky, columns or ground; the 32X layer's
 sprites, logo and text are intact. Next: make a barcode build that
 LOSES, to read a losing launch (BCEND=1 emits after the raise -- the
 slim26 placement that lost -- and BCROWS=2 cuts the DMA to 128 words).
+
+## The readout found the race (2026-09-21, 04:30-05:30): ares reproduces it, and it is a lost framebuffer packet
+
+`rom/night/barcode6.32x` (line layout + a byte-7 change in the probe)
+loses IN ARES, every run: the barcode read `cram16-47 0, hold 0, vidon 1,
+pkt == sh_pub`, i.e. display on, packets flowing, palette black. Dumps:
+the SH-2's `PAL_SH` lacked blocks 15-19 (the level-1 palette, which the
+game preloads at boot) while the 68K's shadow claimed them shipped. The
+boot sweep (frames 20-110, one ares run per frame) shows the 68K's boot
+palette storm as FB packets 1/2/3/4 and the master lifting 1, 3, 4:
+packet 2 sat in the bank a flip had swapped away, FBXPEND blasts once,
+the master's gap echo (BAD1) came after the 68K had pushed packet 4, and
+the two-deep re-mark belt no longer held packet 2's list. Full account:
+LESSONS 2026-09-21 "lost boot-storm packet".
+
+Fix: `FBXECHO=1` (master echoes its lifted sequence in packet word 5
+bits 12-15; the 68K re-blasts an unechoed packet two vints after its
+blast). ares gate: `palgate.sh` (scratch) = PAL_SH blocks 0-32 present at
+frame 300 (barcode5's reference) and CRAM 16-47 non-zero at frame 2004.
+
+The barcode itself stays the rig instrument; its "cure" was the DMA
+shifting the boot-time blast-vs-flip phase, not a fix.

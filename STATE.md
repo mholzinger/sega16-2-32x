@@ -378,6 +378,20 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           /media/fat/burst.sh on the rig carries these
                           numbers in its header.
 
+    LEVEL-START RACE      MECHANISM FOUND 2026-09-21 05:30 (LESSONS "lost
+                          boot-storm packet"): ares reproduces it on a
+                          losing layout (rom/night/barcode6.32x). The
+                          68K's boot palette storm loses FB packet 2
+                          (blocks 15-29 = the preloaded level-1 palette)
+                          to a bank flip; the master's gap echo arrives
+                          one push too late for the two-deep re-mark
+                          belt. FIX CANDIDATE: FBXECHO=1 (master echoes
+                          its lifted sequence in packet word 5 bits
+                          12-15; 68K re-blasts unechoed packets).
+                          Gates: ares palgate over six layouts (running),
+                          then rig 3 launches on pad-5 and the line,
+                          then Mike. Not yet on the line.
+
     RIG BARCODE READOUT   BUILT 2026-09-21 (`make line RIGBARCODE=1`,
                           docs/design/RIG-READOUT.md, decode with
                           tools/rig_barcode.py). 80 bits per capture,
