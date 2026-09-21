@@ -1031,3 +1031,19 @@ round/step; a fixed frame number lands in a different scene per build.
 And when a probe flag is guarded by another flag, grep `.build_flags`
 for the guard before believing a null result (C1RTALL and NTWIPEGEN were
 both compiled out on the line: C1_MASKTAB and NT_SKIP are not on it).
+
+**Belt correction 11:20 (ares boot trace of a losing layout, scratch
+bsweep2):** the re-blast lands in the SAME bank as the original blast
+(same vint phase relative to the master's deferred flip at vcounter
+~490-506), so it cannot rescue a packet by itself; what rescues it is the
+second half, the re-mark of the lost push's palette ids into the next
+packet -- and that never fired, because the re-blast reset the age the
+re-mark tests. Re-blast spacing has its own counter now; the re-mark
+counts from the ORIGINAL blast. The layout that lost in ares
+(rom/night/attbc.32x) passes the palette gate with it (attbc2), and the
+line build shows 2 re-marks by frame 300. Rig verdict pending (rig18).
+The one-line truth: a blast lands in whichever bank is draw at that
+instant, the master lifts from whichever is draw at its pre-flip lift,
+and the flip sits between them in the vblank -- so every packet can be
+lost once, and recovery must be by CONTENT (re-mark and re-ship), not
+by re-writing the same bytes at the same phase.
