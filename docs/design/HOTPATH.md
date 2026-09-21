@@ -8,10 +8,10 @@ rig-verified build; say what was verified and how.
 ## The line and how it is built
 
     make line                    LINE_FLAGS in the Makefile, nothing else.
-    rom/night/slim31.32x         THE LINE (2026-09-21 01:15). Verified on
-                                 the rig three launches running: level-1
-                                 background present in the attract demo
-                                 (99% non-black, mean ~[120,160,150]).
+    rom/night/slim31.32x         THE LINE (2026-09-21 01:15). Rig: level-1
+                                 background present on 2 of 3 launches
+                                 (99% non-black, mean ~[120,160,150]);
+                                 the third lost it. The race below.
     rom/s16.32x                  must equal the line at session end
                                  (differs at the stamp bytes 25f3/3fff).
 
@@ -25,7 +25,8 @@ Verification that a build satisfies level one, in order, cheapest first:
 3. Rig, attract demo, `tools/mister_push.sh` + 5 captures 25 s apart:
    at least two frames >95% non-black with the level's colour mix at
    37-50 s. Sky-only blue [~5,92,130] at ~61 s with no 99% frame = the
-   background is missing. Relaunch once; the verdict repeats per rom.
+   background is missing. Launch THREE times and report pass/total: the
+   verdict is a race whose odds the layout shifts (LESSONS 01:30).
 4. Mike's play pass: background, transform, Zeus text, score table,
    frame feel.
 
@@ -56,10 +57,11 @@ Verification that a build satisfies level one, in order, cheapest first:
 
 ## What is NOT known to work, and why the list above must stay honest
 
-The level-start background on the FPGA follows BUILD LAYOUT: a 1- or
-3-word pad in one thunk keeps it, a 5-word pad, one added gate site, or
-the bset mark lose it, deterministically per rom on relaunch, and ares
-never shows it (LESSONS 2026-09-20 evening). Until that step is found,
+The level-start background on the FPGA is a per-launch race whose odds
+build layout shifts: a 1- or 3-word pad in one thunk passes, a 5-word
+pad, one added gate site, or the bset mark fail almost always, the line
+itself fails one launch in three, and ares never shows it (LESSONS
+2026-09-20 evening and 2026-09-21 01:30). Until that step is found,
 any verdict on a build that changes the 68K image is one layout's luck.
 The rig readback (CRAMPROBE) on failing layouts: no palette-flagged
 packet consumed in 60 s; forcing the SH-2's flag did not rescue them.

@@ -14,7 +14,9 @@ That is how the logs became unreadable.
                                 = slim30 + the first 16 BG palette
                                 publishes forced (the FB persists across
                                 a warm relaunch). Rig: background present
-                                on three launches. Mike played slim30:
+                                on 2 of 3 launches -- a per-launch race,
+                                layout-biased (LESSONS 01:30). Mike played
+                                slim30:
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)

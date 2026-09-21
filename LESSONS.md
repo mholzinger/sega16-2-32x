@@ -869,3 +869,19 @@ posting, per window, whether it published a tile/cell packet, a stub
 
 *Rule:* a rig instrument's picture windows are only valid if the
 instrument restores what it floods; the CRAMPROBE pattern does.
+
+
+### CORRECTION 01:30: it is a per-launch RACE, biased by layout, not deterministic per rom (2026-09-21)
+
+slim31, the line, passed two launches and lost the background on the
+third with the same bytes. Tally, launches as pass/total: slim31 2/3,
+1-word pad 2/2, 3-word pad 1/1, st.b (slim30) 1/1, slim22 1/1; 5-word
+pad 0/3, bset (slim23/25) 0/2, every build that adds a gate site 0/6,
+slim26-28 0/4. Read that as a level-start race whose odds a build's
+layout shifts between ~90% and ~10%, on the FPGA only. The "deterministic
+per build" wording of the previous two entries is withdrawn; the pad
+table stands as data.
+
+*Rules:* three launches per rom before any rig verdict on the level
+background; report pass/total; a fix for this card must move a 0/N
+build to N/N, nothing less.
