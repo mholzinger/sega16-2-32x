@@ -254,6 +254,11 @@ TABLES = {
         # around each movew d1,(a1) is hit by a vint almost never.
         (0x64FC, 4, 0x323C, "round clear text: movew #512,d1 before the glyph store"),
         (0x6558, 4, 0x323C, "round clear points: movew #512,d1 before the glyph store"),
+        # 2026-09-21: THE ZEUS TYPEWRITER'S STORE ITSELF. The entry gate at
+        # 0x56E8 sits ~20 instructions before the store at 0x573E; one
+        # erase store per run still landed at FM=1 and left a single glyph
+        # (Mike, slim30). Gate the store (LOOP29 228), as the round-clear
+        # typewriter is gated: the displaced movew runs last in the thunk.
         # 2026-09-20: THE HIGH-SCORE TABLE (attract). 0x4540 copies a
         # palette, then writes text rows 7 and 9 and seven entry rows via
         # the helpers 0x4612/0x4624/0x4664/0x466C/0x469C (called from
@@ -269,8 +274,7 @@ TABLES = {
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
                      (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
-                     (0x64FC, 0x6506), (0x6558, 0x6562),
-                     ],
+                     (0x64FC, 0x6506), (0x6558, 0x6562)],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),
@@ -315,3 +319,13 @@ if _os.environ.get('HSGATE'):
         TABLES['FMGATE_SPANS'] += [(0x45EC, 0x45F2), (0x45FE, 0x4604), (0x4614, 0x461A),
                                    (0x4634, 0x4638), (0x4648, 0x4650), (0x4658, 0x4660),
                                    (0x46A2, 0x46AA)]
+
+# 2026-09-21 01:22: gating the Zeus typewriter's STORE (0x573E) for the one
+# leftover glyph. On the rig that build lost the level background, like every
+# other thunk-table growth tonight (LESSONS "follows BUILD LAYOUT"); the gate
+# is right by the round-clear precedent and waits under ZEUSSTORE=1.
+if _os.environ.get('ZEUSSTORE'):
+    TABLES['FMGATE_ENTRIES'] += [
+        (0x573E, 4, 0x3182, "zeus typewriter: movew d2,(a0,d0.l) the glyph/erase store"),
+    ]
+    TABLES['FMGATE_SPANS'] += [(0x573E, 0x5742)]

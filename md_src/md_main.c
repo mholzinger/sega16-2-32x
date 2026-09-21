@@ -745,6 +745,48 @@ void partb_hook(void)
 	slim_fetch();
 	slim_dma();
 #endif
+#ifdef CRAM_PROBE
+	/* PALETTE READBACK WITHOUT LOSING THE PICTURE (2026-09-20). For 64 of
+	 * every 512 vints, flood CRAM with a value byte; on the vint after,
+	 * DMA the BG palette back from the WRAM shadow and black entry 0.
+	 * Value: bit 6 = field (0 = non-zero CRAM entries 16-47, read back;
+	 * 1 = non-zero words in the shadow, what we last landed), bits 0-5 =
+	 * count (0-32) + 1. Bit 7 tags a flood frame. */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t ph = (uint16_t)(vc & 0x1FF);
+		if (ph < 0x40) {
+			uint16_t n = 0, f = (uint16_t)((vc >> 9) & 1u);
+			if (f == 0) {
+				for (uint16_t i = 16; i < 48; i++) {
+					*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
+					if (*vdp_data_port & 0x0EEEu) n++;
+				}
+			} else {
+				volatile uint16_t *sh = (volatile uint16_t*)0xFF3500;
+				for (uint16_t i = 0; i < 32; i++) if (sh[i] & 0x0EEEu) n++;
+			}
+			if (n > 62) n = 62;
+			{
+				uint16_t v = (uint16_t)(0x80u | (f << 6) | (n + 1));
+				uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+				*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+				for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+			}
+		} else if (ph == 0x40) {
+			uint32_t src = 0xFF3500uL >> 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+			*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+			*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+			*vdp_data_port = 0;                                        /* entry 0 black */
+		}
+	}
+#endif
 #ifdef BG_VALUE
 	/* RIG READOUT: which part of the MD background is missing? One byte,
 	 * field id in bits 6-7 rotating every 128 vints, value in bits 0-5:
@@ -920,6 +962,14 @@ static void md_consume(uint32_t pkt_base) {
 				else if (!md_hold_seen) md_hold_seen = 1;
 #ifdef NT_WRAP
 				uint16_t palp = (uint16_t)(sc[1] & 0x8000u);
+#ifdef CRAM_PROBE
+				/* shadow of every BG palette block this consume will land */
+				if (palp) {
+					volatile uint16_t *sh = (volatile uint16_t*)0xFF3500;
+					for (uint16_t i = 0; i < 48; i++) sh[i] = sc[688 + i];
+					(*(volatile uint16_t*)0xFF3560)++;              /* palettes seen */
+				}
+#endif
 #ifdef PAL_FIRST
 				/* PALETTE FIRST (2026-09-20). The BG palette DMA used to sit at
 				 * the END of the consume behind a vblank gate; anything that

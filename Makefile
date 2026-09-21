@@ -879,6 +879,10 @@ endif
 ifdef PALFIRST
 MDCCFLAGS += -DPAL_FIRST
 endif
+# `make line CRAMPROBE=1` = BG palette readback (CRAM vs shadow) with the picture kept
+ifdef CRAMPROBE
+MDCCFLAGS += -DCRAM_PROBE
+endif
 ifdef BGVALUE
 MDCCFLAGS += -DBG_VALUE
 endif
@@ -2985,6 +2989,15 @@ endif
 # the flag had no effect at all, LOOP29 176).
 ifdef MDSPROFF
 SHCCFLAGS := $(filter-out -DMD_SPR -DMDSPR_TOP -DMDSPR_WHY,$(SHCCFLAGS))
+endif
+# `make line NOSLIM=1` = the line WITHOUT the slim pipeline (the FB tile
+# route), for A/B against `make line`. Filtered here, after every
+# assignment, because LINE_FLAGS sets TILESLIM=1 inside the recursive make.
+comma := ,
+ifdef NOSLIM
+SHCCFLAGS := $(filter-out -DTILE_SLIM,$(SHCCFLAGS))
+MDCCFLAGS := $(filter-out -DTILE_SLIM -DSLIM_CAP=40,$(MDCCFLAGS))
+MDASFLAGS := $(filter-out -Wa$(comma)--defsym$(comma)PARTB_HOOK=1,$(MDASFLAGS))
 endif
 
 # FLAG STAMP — objects must depend on the FLAG SET, not just on sources.

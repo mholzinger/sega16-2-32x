@@ -16829,6 +16829,19 @@ RAMCODE void m_main(void)
                         sc[688 + i] = cw;
                     }
 #ifdef NT_WRAP
+                    /* FORCE THE FIRST PUBLISHES (2026-09-21). The change
+                     * detector compares against the slot's PREVIOUS
+                     * content, and on the FPGA the framebuffer survives a
+                     * warm relaunch: a run whose first palette equalled
+                     * the last one the previous run left in this slot
+                     * never flagged it, the 68K never landed it, and the
+                     * level's pens stayed black until the Neff cut (rig
+                     * readback: shadow 0 palettes landed in 60 s; ares
+                     * boots from zeroed DRAM and never sees it). */
+                    {
+                        static uint8_t pal_first = 16;
+                        if (pal_first) { chg = 1; pal_first--; }
+                    }
                     if (chg)
                         sc[1] |= 0x8000;     /* palette present this window */
 #else

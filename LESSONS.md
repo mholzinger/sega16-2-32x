@@ -848,3 +848,24 @@ background") still points there.
    without a flood, plus the SH-2's palette landing count -- then find
    the layout-sensitive step (candidates: the master's palette-landing
    timing vs the 68K's DMA, SH-2 instruction-cache alignment).
+
+
+### The palette is what the failing layouts never land; the FB persists across a warm relaunch (2026-09-21)
+
+Rig readback without a flood (CRAMPROBE: the 68K shadows every BG
+palette block it lands, floods CRAM for 64 of 512 vints, restores from
+the shadow): on three padded builds that lose the level background the
+shadow held ZERO palettes after 60 s -- no packet with the palette flag
+was ever consumed. The SH-2 sets that flag only when the block differs
+from the slot's previous content, and on the FPGA the framebuffer
+survives a warm relaunch, so a first palette equal to the previous
+run's last one is never flagged; ares boots from zeroed DRAM. Forcing
+the first 16 publishes (slim31) is correct and passes three launches,
+but did NOT rescue the failing pads or the high-score build. So the
+flag path is where the loss shows, and the layout-sensitive cause is
+still upstream of it. Next: the same shadow readout with the SH-2
+posting, per window, whether it published a tile/cell packet, a stub
+(hs_stub carries no palette), or nothing.
+
+*Rule:* a rig instrument's picture windows are only valid if the
+instrument restores what it floods; the CRAMPROBE pattern does.

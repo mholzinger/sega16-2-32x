@@ -10,15 +10,13 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/slim30.32x        THE LINE = `make line` (2026-09-20 19:34).
-                                = slim22 (slim pipeline + per-pixel cat-1
-                                masks) + the Zeus typewriter marking ALL
-                                rows (st.b). Rig: level background
-                                present (attract demo 98.6-99.4%). NOT
-                                yet played by Mike; slim25's transform
-                                and score-table verdicts do not transfer
-                                because slim25 lost the background on
-                                the same rig (LESSONS, layout).
+    rom/night/slim31.32x        THE LINE = `make line` (2026-09-21 01:15).
+                                = slim30 + the first 16 BG palette
+                                publishes forced (the FB persists across
+                                a warm relaunch). Rig: background present
+                                on three launches. Mike played slim30:
+                                "background fixed, presentation tighter,
+                                frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
     rig (MiSTer)                slim30
 
