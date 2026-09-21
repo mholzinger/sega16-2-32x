@@ -2643,6 +2643,21 @@ static void nt_wipe_gen(void) { tm_gen++; if (!tm_gen) tm_gen = 1; }
 #else
 #define nt_wipe_gen() ((void)0)
 #endif
+#ifdef OFFSCREEN_REMARK
+/* RE-SHIP A SET'S SLOTS INSTEAD OF WIPING THEM (2026-09-21, the eye's
+ * stale patches): a wiped tag leaves every cell naming the slot showing
+ * the next claimant's art until its row is re-walked; a dirty mark
+ * re-ships the same tile under the set's current map and the cells stay
+ * valid (their palette bits catch up at the next walk). */
+static void mdp_remark_set_tags(unsigned s)
+{
+    for (int i = 0; i < NSETS * NWAYS; i++)
+        if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
+            MD_MARK(i);
+            MDA(14);
+        }
+}
+#endif
 static void mdp_wipe_set_tags(unsigned s)
 {
     for (int i = 0; i < NSETS * NWAYS; i++)
@@ -3102,8 +3117,19 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
     if (!mds_onscreen) {
         unsigned r9 = MD_ROUND_GET();
         if (r9 >= MDROUND_N) r9 = md_round;
-        if (!(r9 < MDROUND_N && mds_s_line[r9][s]))
+        if (!(r9 < MDROUND_N && mds_s_line[r9][s])) {
+#ifdef OFFSCREEN_REMARK
+            /* 2026-09-21: this fired on every assignment of the eye
+             * picture's own live sets (ares: ~540 slot tags wiped in the
+             * eye's first 90 frames, all from here) -- the picture scenes
+             * are "off screen" by the round's definition. Re-ship, do not
+             * wipe: the stale-visit case this guarded is covered too, since
+             * the re-ship carries the new map. */
+            mdp_remark_set_tags(s);
+#else
             mdp_wipe_set_tags(s);
+#endif
+        }
     }
 #endif
 #endif
@@ -3319,9 +3345,6 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
  * same invalidation mdp_free_set relies on for a relocation, applied to
  * the whole map. Refcounts and owners are rebuilt from the maps so the
  * per-window live CRAM refresh keeps tracking fades exactly as now. */
-#ifdef MDS_REMARK
-static uint16_t md_pending;                 /* tentative: defined below */
-#endif
 static void mds_install(unsigned sc, uint8_t stamp)
 {
     /* SELECTIVE INVALIDATION: a slot's pattern depends only on its set's
@@ -3383,7 +3406,6 @@ static void mds_install(unsigned sc, uint8_t stamp)
              * re-walked (36-51 such cells 50 frames into the eye, ares).
              * Marking the slot dirty re-ships the SAME tile under the new
              * pen map and every cell stays valid. */
-            if (!(md_dirty[i >> 5] & (1u << (i & 31)))) md_pending++;
             MD_MARK(i);
             MDA(12);
 #else
@@ -6992,6 +7014,26 @@ static uint8_t disp_settle, disp_hold;
 static volatile uint8_t md_rot;          /* name-table walk rotations (9 phases) */
 static uint8_t disp_rot_on;              /* md_rot when the game said display-on */
 #define DISP_HOLD_MAX 60
+#ifdef HOLD_COMPLETE
+#ifndef HOLD_COMPLETE_MAX
+#define HOLD_COMPLETE_MAX 150             /* the eye picture settles in ~150 (ares, 2026-09-21) */
+#endif
+/* EXACT SETTLE (2026-09-21, the eye's stale patches): the hold used to
+ * release once the walk had gone round twice with no art pending, but
+ * cells re-broken by set churn AFTER that (slots freed, then claimed by
+ * other tiles) kept showing garbage for ~150 frames. Settled means every
+ * visible cell in the mirror names a claimed, shipped slot. */
+static unsigned md_screen_complete(void)
+{
+    for (unsigned q = 0; q < 2240; q++) {
+        unsigned sl = md_dbg_nt[q] & 0x7FFu;
+        if (sl == MD_BLANK_SLOT || sl >= NSETS * NWAYS) continue;
+        if (md_tag[sl] == 0xFFFFFFFFu) return 0;
+        if (md_dirty[sl >> 5] & (1u << (sl & 31))) return 0;
+    }
+    return 1;
+}
+#endif
 /* gate census (state_health reads it): high 16 = blanks entered, low 16
  * = vints held blank AFTER the game said display-on (our lag) */
 #define DISP_CENSUS (*(volatile uint32_t *)0x26028F7C)   /* free: after CAT1_PEND[28], before DRQR */
@@ -7245,10 +7287,18 @@ __attribute__((noinline)) static void disp_gate(void)
         if (!disp_hold || disp_settle == 1)
             for (int ci = 0; ci < 32; ci++) cram_keygen[ci] = 0xFFFF;
         disp_settle = (uint8_t)(((uint8_t)(md_rot - disp_rot_on) >= 2
-                                 && !pg_pending && dirt == 0)
+                                 && !pg_pending && dirt == 0
+#ifdef HOLD_COMPLETE
+                                 && md_screen_complete()
+#endif
+                                 )
                                 ? disp_settle + 1 : 0);
         if (disp_hold < 255) disp_hold++;
+#ifdef HOLD_COMPLETE
+        if (disp_settle >= 5 || disp_hold >= HOLD_COMPLETE_MAX) {
+#else
         if (disp_settle >= 5 || disp_hold >= DISP_HOLD_MAX) {
+#endif
             MARS_VDP_DISPMODE = (uint16_t)(base | MARS_VDP_MODE_256);
             disp_blank = 0;
             DISP_CENSUS += disp_hold;    /* held vints after display-on */

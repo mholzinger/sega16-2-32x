@@ -637,7 +637,7 @@ static void slim_fetch(void)              /* step 2 */
 	 * lands all of it. (The first cut zeroed slim_ready on an empty
 	 * fetch and the FPGA lost the level's first load.) */
 	if (!slim_n) return;
-	if (n >= SLIM_CAP) { slim_n = 0; return; }   /* buffer full: records wait */
+	if (n >= SLIM_CAP) { slim_diag[4] += slim_n; slim_n = 0; return; }   /* buffer full: RECORDS DROPPED (counted, 2026-09-21) */
 	slim_diag[0]++;       /* diag: fetch calls */
 	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
 	for (uint16_t i = 0; i < slim_n && n < SLIM_CAP; i++) {

@@ -305,7 +305,9 @@ TABLES = {
 # 2026-09-20 bisect: the high-score gates join the tables only when HSGATE=1
 # (slim23 = the line without them lost the FPGA background; isolating).
 import os as _os
-if _os.environ.get('HSGATE'):
+# 2026-09-21: ON THE LINE (the score table fills on the rig, 7/7 launches
+# with the echo belt); HSNOGATE=1 turns them off again.
+if not _os.environ.get('HSNOGATE'):
     TABLES['FMGATE_ENTRIES'] += [
         (0x45EC, 4, 0x0600, "high-score: addib #-48,d0 before the rank store"),
         (0x45FE, 4, 0x0601, "high-score: addib #-96,d1 before the name store"),

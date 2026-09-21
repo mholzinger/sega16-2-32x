@@ -984,3 +984,50 @@ round/step from the COMM14 trace (`anchors.py`), never at fixed frame
 numbers -- a build's vint length shifts the attract by tens of frames,
 and a fixed frame lands inside a legitimate display hold (the black
 frame that looked like a crash).
+
+### Attract cards, 2026-09-21 09:30-10:45: what each one was
+
+1. **Level-2 demo background black** — CLOSED. The round's MD table was
+   never installed (LESSONS 09:30 above). Rig 3/3.
+2. **Score table unpopulated** — CLOSED: the high-score writer's stores
+   were never FM-gated (parked as HSGATE=1 during the race). With the
+   echo belt closed the gates are on by default (`HSNOGATE=1` off). The
+   table types in over ~8 s in ares and fills on the rig.
+3. **Black cells around the level-2 rocks** — CLOSED: the 2026-08-25
+   "purple backstop" blanks every BG cell in view rows 24-27 wherever
+   the FG has a cell there, because level 1's FG covers that band
+   solid. Level 2's FG has holes there and the arcade shows the floor
+   through them. `BGBOTTOM=1` (on the line): blank only under a fully
+   OPAQUE FG tile (standalone art scan, 256-slot cache). Measured
+   against `mame altbeast` frames: the floor band now runs to y=215
+   (arcade 213), it stopped at 193 before.
+4. **The echo belt had a hole** — CLOSED: rig att1 launch 2/3 lost the
+   level-1 background with the belt on. A lost packet whose successor
+   is built before the master's echo arrives is never re-blasted (the
+   belt compares against the newer sequence). Second half: before the
+   stage is overwritten, an unechoed two-vint-old push has its palette
+   ids re-marked (dirty + force raw) so they ship in the new packet.
+   Rig 4/4 after.
+5. **The eye picture loads in full view for ~150 frames** — OPEN. Not
+   the display hold (it honours the game's blank and releases when the
+   walk has gone round twice, 32-37 vints); not lost packets (no skipped
+   consumes, no deferred publishes); not the slim buffer (0 records
+   dropped, counted now). The eye's tiles are UNBAKED: 1133 tiles went
+   through the inline 17-word records in 300 frames (baked +19), at 12-40
+   per packet, and the dynamic allocator churned the picture's colour
+   sets throughout (~540 slot-tag wipes in 90 frames, all from the
+   off-screen assignment rule at m_main.c "222/223"). Re-shipping
+   instead of wiping (MDSREMARK, OFFSCREENREMARK) and an exact settle
+   test (HOLDCOMPLETE) each helped a little and none cured it. THE FIX
+   IS TO BAKE THE ATTRACT PICTURES (eye, the two other pictures, the
+   score backdrop) into `.tilesmd` and a static table, as the rounds
+   are: baked tiles ship 40/vint through the slim route (2400/s), inline
+   ones ~24/window, and a static table ends the churn. Until then the
+   eye shows its load.
+
+**Rules:** compare an attract scene against `mame altbeast` frames from
+a no-coin run (scratch `arc_attract.lua`), anchored on the game's own
+round/step; a fixed frame number lands in a different scene per build.
+And when a probe flag is guarded by another flag, grep `.build_flags`
+for the guard before believing a null result (C1RTALL and NTWIPEGEN were
+both compiled out on the line: C1_MASKTAB and NT_SKIP are not on it).

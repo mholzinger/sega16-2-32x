@@ -10,7 +10,18 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/round1.32x        THE LINE = `make line` (2026-09-21 09:30)
+    rom/night/attract1.32x      THE LINE = `make line` (2026-09-21 10:45)
+                                = round1 + high-score gates on by default
+                                + BGBOTTOM (bottom-band backstop only
+                                under opaque FG) + MDSREMARK + the echo
+                                belt's second half (re-mark an unechoed
+                                push). Rig: 4/4 launches, every
+                                background; score table fills; level-2
+                                floor complete. OPEN: the eye picture
+                                loads in view (~2.5 s) -- its tiles are
+                                unbaked (LESSONS attract cards, 5).
+                                AWAITING MIKE'S PLAY PASS -- on the rig.
+    rom/night/round1.32x        previous line (2026-09-21 09:30)
                                 = echo2 + the round's MD table installed
                                 on a round change while on screen (the
                                 attract's level-2 demo had no background:
@@ -45,7 +56,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                round1 (launched 2026-09-21 09:21)
+    rig (MiSTer)                attract1 (launched 2026-09-21 10:45)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
@@ -410,6 +421,17 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           from partb_hook two vints after its blast.
                           Rig: pad-5 0/6 -> 3/3, line 3/3; ares gate
                           PASS on eight layouts. Mike's pass pending.
+
+    BAKE THE ATTRACT      NEXT CARD (2026-09-21 10:45). The eye and the
+    PICTURES              other attract pictures are unbaked: their tiles
+                          ride the inline records (~24/window) and their
+                          colour sets churn through the dynamic
+                          allocator, so each picture loads in full view
+                          for ~2.5 s. Bake them into .tilesmd + a static
+                          table like the rounds (tools/bake_tiles_md.py,
+                          bake_tilecram.py --emit-mds; scene dumps from
+                          ares at the round/step anchors). Gate: ares eye
+                          at step-4 +50 clean; rig 3 launches.
 
     RIG BARCODE READOUT   BUILT 2026-09-21 (`make line RIGBARCODE=1`,
                           docs/design/RIG-READOUT.md, decode with

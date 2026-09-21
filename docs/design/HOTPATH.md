@@ -94,3 +94,11 @@ display-on edge (existing) OR the published round differing from the
 installed one while on screen (new). Conditions: MDROUND + MDSTATE +
 MDSREFUSE (the line). Proof: ares level-2 demo background present at
 the round-anchored frame; rig 3/3 (screenshots/rig_round1).
+
+## 2026-09-21 10:45 -- attract line (attract1)
+
+Proven on the rig (4/4 launches): high-score writer gates (FMGATE
+entries+spans for 0x45EC-0x46A2), bottom-band backstop under opaque FG
+only (BGBOTTOM), echo belt second half (re-mark an unechoed push's
+palette ids before the next packet). Gate for attract scenes: MAME
+no-coin arcade frames vs ours at the round/step anchors.
