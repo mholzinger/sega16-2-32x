@@ -10,7 +10,21 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract3.32x      THE LINE = `make line` (2026-09-21 14:10)
+    rom/night/attract4.32x      THE LINE = `make line` (2026-09-21 14:45)
+                                = attract3 + md_pending at file scope (the
+                                re-mark paths bump it: orphaned dirty
+                                slots had left the transformation's red
+                                field black) + scene 9 = harvest + the
+                                ground sets. ares scene gate 19/19 clean
+                                (the cut drains by +30, matches the
+                                arcade from +60: blue zigzag, red field,
+                                flames); rig 3/3. Residual: scene-start
+                                holds of ~0.3-0.5 s (the load), and the
+                                cut's first ~40 frames load in view with
+                                a black sky (its sky sets do not fit the
+                                table beside the zigzag's). AWAITING
+                                MIKE'S PLAY PASS -- on the rig.
+    rom/night/attract3.32x      previous line (2026-09-21 14:10)
                                 = attract2 + THE ATTRACT BAKE: scenes 5-9
                                 (splash, eye, picture, scores, the
                                 transformation) harvested from ares and
@@ -80,7 +94,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                attract3 (launched 2026-09-21 14:06)
+    rig (MiSTer)                attract4 (launched 2026-09-21 14:35)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,

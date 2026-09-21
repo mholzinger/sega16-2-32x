@@ -1089,3 +1089,13 @@ tiles a vint) holds the display ~40 vints after the game turns it on --
 the arcade shows it at once. HOLD_FROM_BLANK counts the settle from the
 blank and asks one rotation of a baked scene; the floor is the transport.
 Next lever: a larger per-vint slim budget while blanked.
+
+**md_pending (2026-09-21 14:40):** the master's "claimed slots not yet
+shipped" counter was a LOCAL of its main function; the emitter is only
+called while it is non-zero. Every re-mark path added today (install
+re-ship, off-screen re-ship) set dirty bits without bumping it, so their
+slots were orphaned: the transformation's red field (set 20, 57 slots)
+stayed dirty and black for 100 frames while set 21, marked by the normal
+path, drained. File scope now, bumped per newly dirtied slot. Rule: a
+dirty bit and the pending count are one fact; never set one without the
+other.
