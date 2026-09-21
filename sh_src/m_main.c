@@ -6988,6 +6988,26 @@ __attribute__((noinline)) static void disp_gate(void)
                 MDS[5] += 0x10000;
             }
         }
+#ifdef MD_ROUND
+        /* ROUND CHANGE WHILE ON SCREEN (2026-09-21, the attract's level 2).
+         * The edge install above reads the round at the display-on edge,
+         * and the game writes its round variable AFTER that edge in the
+         * attract's level-2 demo (ares: 0xFFF142 = 1 from before f5200,
+         * md_round 0 through f6200, no edge in between). The other
+         * install path is gated behind PALSTATIC's scene detector, which
+         * cannot see level 2 at all (pal_scenes.h: level 2 reuses level
+         * 1's palette words). So: a published round that differs from the
+         * installed one, while on screen and past the load gap, installs
+         * its table here, once. */
+        if (on && mds_onscreen && !mds_loadgap) {
+            unsigned r8 = MD_ROUND_GET();
+            if (r8 < MDROUND_N && r8 != md_round) {
+                mds_install(r8, disp_hold);
+                md_round = (uint8_t)r8;
+                MDS[5] += 0x100;
+            }
+        }
+#endif
         if (!on && mds_onscreen) {              /* edge out */
             MDS[5] += 1;
             /* 222: no wipe here at all. 218's full wipe re-ships the level
