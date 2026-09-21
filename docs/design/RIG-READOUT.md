@@ -188,3 +188,7 @@ Belt v2 (in `partb_hook`, every vint, FM=0-guarded):
 The readout (`RIGBARCODE=1`, `tools/rig_barcode.py`) stays as the rig's
 multi-value instrument. `bgcheck.py` (scratch) is the one-number
 background verdict per capture.
+
+Rig 2026-09-21 11:00-11:23: attbc2 (line + readout) 3/3, every level
+capture cram16-47 = 29, packets and palette-flagged counts agreeing on
+both CPUs (pal68 == sh_pal or +2/3); attract2 (the line) 4/4.

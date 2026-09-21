@@ -10,7 +10,16 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract1.32x      THE LINE = `make line` (2026-09-21 10:45)
+    rom/night/attract2.32x      THE LINE = `make line` (2026-09-21 11:25)
+                                = attract1 + the echo belt's re-mark half
+                                actually firing (re-blast spacing counted
+                                apart from the packet's age). Rig 4/4
+                                launches, every background; the readout
+                                twin (attbc2) 3/3 with the palette
+                                counters agreeing on both CPUs. Awaiting
+                                Mike's play pass -- on the rig.
+    rom/night/attract1.32x      previous candidate (2026-09-21 10:45): 1/3
+                                on the rig -- the re-mark half was inert
                                 = round1 + high-score gates on by default
                                 + BGBOTTOM (bottom-band backstop only
                                 under opaque FG) + MDSREMARK + the echo
@@ -56,7 +65,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                attract1 (launched 2026-09-21 10:45)
+    rig (MiSTer)                attract2 (launched 2026-09-21 11:20)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
