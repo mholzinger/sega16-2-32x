@@ -2701,6 +2701,11 @@ endif
 ifdef MDSCENES
 SHCCFLAGS += -DMD_SCENES
 endif
+# HOLDFROMBLANK=1 = 2026-09-21: the display hold's settle rotations count
+# from the game's blank, and a baked attract scene needs one rotation.
+ifdef HOLDFROMBLANK
+SHCCFLAGS += -DHOLD_FROM_BLANK
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set

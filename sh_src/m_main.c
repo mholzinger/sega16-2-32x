@@ -1792,7 +1792,10 @@ static inline unsigned md_state_on(void)
 #ifdef MD_SCENES
     /* every scene with a baked table is "on screen": its sets are pinned
      * and refused like a level's (2026-09-21, the attract bake) */
-    { uint8_t s9 = md_scene_raw(); if (s9 >= 5u && s9 < MDROUND_N) return 1; }
+    /* (first cut made every baked scene "on screen"; the refuse rule then
+     * blanked whatever a harvest had missed -- the splash, the score
+     * backdrop. Pictures stay OFF screen: their baked sets are pinned
+     * below, anything else goes dynamic instead of black.) */
 #endif
     uint16_t w = md_state_word();
     if (!MD_STATE_OK(w)) return 2;                 /* no word yet: undecided */
@@ -1851,9 +1854,18 @@ static inline uint8_t md_scene_raw(void)     /* the scene the state word names, 
     if (!MD_STATE_OK(w)) return 0xFFu;
     r = (w >> 4) & 7u;
     if (MD_STATE_PLAY(w)) return (uint8_t)r;
+#ifdef MD_SCENE_CUT
     if (MD_STATE_CUT(w) && r == 0) return 9;
+#endif
+    /* (scene 9, the transformation cut, is baked but not selected: its
+     * install inside the level demo wiped the level in view and the attract
+     * stalled after it, ares 2026-09-21 -- its own card) */
+    /* step 2 = the title splash (boot f31-503, mid-attract after level
+     * 2's demo); step 1 and 3 = a level demo of the published round
+     * (2026-09-21 trace: "round 1 step 1" IS level 2's demo); 4 eye; 5
+     * second picture; 0/7 the score table. */
     switch (MD_STATE_STEP(w)) {
-        case 1: case 2: return 5;
+        case 2:         return 5;
         case 4:         return 6;
         case 5:         return 7;
         case 0: case 7: return 8;
@@ -2744,7 +2756,12 @@ static void mdp_free_set(unsigned s)
 #ifdef MD_STATIC
 #ifdef CHEV_PROBE
 #endif
-    if (mds_pin[s] && mds_onscreen) {        /* table set: never freed
+    if (mds_pin[s] && (mds_onscreen
+#ifdef MD_SCENES
+                       || (md_round >= 5u && md_round < MDROUND_N)   /* a harvested attract scene: its
+                                                                     * baked sets hold while it is up */
+#endif
+                       )) {                   /* table set: never freed
                                               * inside its scene (209: a
                                               * cutscene may evict it) */
         MDS[3]++;
@@ -7056,6 +7073,19 @@ static uint8_t  fbx_seq_seen;            /* tentative: defined again with the li
 static volatile uint8_t r60_disp_on;     /* from the packet, bit 15 of word 20 */
 static uint8_t r60_seq_prev = 0xFF;      /* lost-push belt v3: last landed push sequence */
 static uint8_t disp_blank;               /* 32X layer currently blanked */
+#ifdef HOLD_FROM_BLANK
+static uint8_t disp_rot_set;             /* disp_rot_on latched at the blank's start */
+#endif
+/* walk rotations a scene needs before its hold may release: a baked
+ * attract scene ships whole in one (its art rides the slim route) */
+static inline unsigned disp_rot_need(void)
+{
+#if defined(MD_SCENES) && defined(HOLD_FROM_BLANK)
+    return (md_round >= 5u && md_round < MDROUND_N) ? 1u : 2u;
+#else
+    return 2u;
+#endif
+}
 static uint8_t disp_settle, disp_hold;
 static volatile uint8_t md_rot;          /* name-table walk rotations (9 phases) */
 static uint8_t disp_rot_on;              /* md_rot when the game said display-on */
@@ -7144,7 +7174,16 @@ __attribute__((noinline)) static void disp_gate(void)
          * 1's palette words). So: a published round that differs from the
          * installed one, while on screen and past the load gap, installs
          * its table here, once. */
-        if (on && mds_onscreen && !mds_loadgap) {
+        if (!mds_loadgap
+#ifdef MD_SCENES
+            /* a harvested scene installs whether or not the round is "on"
+             * (pictures are off screen by the round's rule; the mid-attract
+             * splash sat on level 2's table until this, ares 2026-09-21) */
+            && ((on && mds_onscreen) || md_scene_raw() >= 5u)
+#else
+            && on && mds_onscreen
+#endif
+            ) {
             unsigned r8 = MD_ROUND_GET();
             if (r8 < MDROUND_N && r8 != md_round) {
                 mds_install(r8, disp_hold);
@@ -7156,7 +7195,7 @@ __attribute__((noinline)) static void disp_gate(void)
                  * with the display up; a wipe there would re-ship the level
                  * in view. mds_install's selective invalidation covers the
                  * sets whose map changed. */
-                if (!r60_disp_on || disp_blank)
+                if (!r60_disp_on)
                 /* A ROUND CHANGE IS A LEVEL LOAD: every slot shipped so far
                  * carried the OLD round's bake (the level-2 demo's cells
                  * around its foreground rocks stayed black: emitted under
@@ -7306,6 +7345,14 @@ __attribute__((noinline)) static void disp_gate(void)
 #endif
         }
         disp_settle = 0; disp_hold = 0;
+#ifdef HOLD_FROM_BLANK
+        /* 2026-09-21: the walk rotations that settle the hold count from
+         * the BLANK's start, not from display-on -- the game blanks 30-50
+         * vints for a picture load and the scene is walked during them;
+         * counting from display-on held the finished picture black for
+         * another 45 vints (ares mid-splash probe). */
+        disp_rot_on = md_rot; disp_rot_set = 1;
+#endif
     } else if (disp_blank) {
         /* settle = no page pending and the art backlog within ONE
          * batch ("no dirty art at all" never held on the title's
@@ -7321,7 +7368,12 @@ __attribute__((noinline)) static void disp_gate(void)
         for (int i = 0; i < NSETS * NWAYS / 32; i++)
             dirt += __builtin_popcount(md_dirty[i]);
         if (!disp_hold) {
+#ifdef HOLD_FROM_BLANK
+            if (!disp_rot_set) disp_rot_on = md_rot;
+            disp_rot_set = 0;
+#else
             disp_rot_on = md_rot;                 /* first vint after display-on */
+#endif
 #ifdef ROW_GEN
             RG_MARK_SPAN(0, 224);                 /* new scene: every FB row
                                                    * recomposes during the hold
@@ -7338,7 +7390,7 @@ __attribute__((noinline)) static void disp_gate(void)
          * vint, so the windows inside the hold repaint every live group. */
         if (!disp_hold || disp_settle == 1)
             for (int ci = 0; ci < 32; ci++) cram_keygen[ci] = 0xFFFF;
-        disp_settle = (uint8_t)(((uint8_t)(md_rot - disp_rot_on) >= 2
+        disp_settle = (uint8_t)(((uint8_t)(md_rot - disp_rot_on) >= disp_rot_need()
                                  && !pg_pending && dirt == 0
 #ifdef HOLD_COMPLETE
                                  && md_screen_complete()
