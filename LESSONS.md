@@ -1047,3 +1047,45 @@ instant, the master lifts from whichever is draw at its pre-flip lift,
 and the flip sits between them in the vblank -- so every packet can be
 lost once, and recovery must be by CONTENT (re-mark and re-ship), not
 by re-writing the same bytes at the same phase.
+
+### The attract bake (2026-09-21, 11:00-14:00): what it took, and the traps
+
+Scenes 5-9 (title splash, eye, second picture, score table, the round-0
+transformation) are harvested from ares at frames anchored on the state
+word (tools/attract_harvest.py: palette RAM + the colour sets whose tiles
+were on screen, via VRAM slot -> md_tag), packed by bake_tilecram.py as
+extra "rounds" (seeded from round 0 for 7 and 9 so shared sets keep their
+pen maps and the blob dedups), and baked into .tilesmd (510 KB against
+the 576 KB gap). The runtime keys the tables by SCENE from the state word
+(MDSCENES=1, md_scene_raw/md_scene_get). The eye now settles at +50 where
+it used to show churn garbage for 150 frames; the splash backdrop, the
+score backdrop and the transformation's blue zigzag are right.
+
+Traps, each one build and one gate:
+1. **Step 1 is not the title.** At boot steps 0-2 are the SEGA card and
+   the splash; mid-attract "round 1 step 1" is level 2's demo. Only step
+   2 is the splash. Level 2 went black on the first build.
+2. **Do not make baked pictures "on screen".** The refuse rule then
+   blanks every set a harvest missed (the splash's relief, the score
+   backdrop). Pictures stay off screen; their baked sets are PINNED
+   (mdp_free_set honours pins for scenes >= 5) and anything else goes
+   dynamic.
+3. **Pictures have no "on" flag, so the scene-change install must not
+   require it** -- the mid-attract splash sat on level 2's table.
+4. **A pin the free refuses must not be an eviction victim.** The
+   victim loop picks a pinned off-screen set (age forced to 255), the
+   free refuses it, nothing changes, the loop never exits: the master
+   hangs holding FM, the game spins in the FM-gate thunk, the vint's
+   part B defers its post forever, the 68K vint counter freezes. Found
+   by the COMM trace (both CPUs silent within ten frames) and the
+   68K's recorded interrupted PC = FMGATE_SPIN_ADDR. The first
+   harvested scene with a set outside its table (the transformation)
+   was the first to need an eviction.
+5. **The wipe on a scene change belongs under the game's blank only**
+   (`!r60_disp_on`); the transformation cut has none.
+
+What remains: a scene's own load (1120 cells per plane + its art at 40
+tiles a vint) holds the display ~40 vints after the game turns it on --
+the arcade shows it at once. HOLD_FROM_BLANK counts the settle from the
+blank and asks one rotation of a baked scene; the floor is the transport.
+Next lever: a larger per-vint slim budget while blanked.

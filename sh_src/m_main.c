@@ -3328,7 +3328,14 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
                 if (s2 == s || mdp_s_line[s2] != (uint8_t)(bestl + 1))
                     continue;
 #ifdef MD_STATIC
-                if (mds_pin[s2] && mds_onscreen) { MDS[1]++; continue; }
+                if (mds_pin[s2] && (mds_onscreen
+#ifdef MD_SCENES
+                    /* the free refuses a harvested scene's pinned set too
+                     * (2026-09-21); choosing it here looped forever -- the
+                     * transformation's first off-table set hung the master */
+                    || (md_round >= 5u && md_round < MDROUND_N)
+#endif
+                    )) { MDS[1]++; continue; }
 #endif
                 age = (uint8_t)(stamp - mdp_s_stmp[s2]);
                 /* >= 12: a set's cells re-stamp every <= 9 windows now

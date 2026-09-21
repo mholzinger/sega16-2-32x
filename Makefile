@@ -2706,6 +2706,11 @@ endif
 ifdef HOLDFROMBLANK
 SHCCFLAGS += -DHOLD_FROM_BLANK
 endif
+# MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
+# cut) from the state word's cut bit; off until its install is proven
+ifdef MDSCENECUT
+SHCCFLAGS += -DMD_SCENE_CUT
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set
