@@ -960,3 +960,27 @@ Also: the belt's first home, the pre-post slot, is NOT on the boot-time
 vint path (age never advanced); it lives in `partb_hook` now, every
 vint, FM=0-guarded. With that, the same layout re-blasts at f29 and f31,
 the master lifts packet 2 at f32, and PAL_SH is complete at f300.
+
+### The attract's level-2 demo had no background because nothing ever installed round 1's table (2026-09-21, 09:30)
+
+Mike's rig capture: dragons over a black plane B, foreground rocks
+present. ares reproduces it (echo2 and slim31 alike, so pre-existing).
+Chain: the per-round MD pen tables exist for all five rounds
+(`pal_rounds_md.h`), but the two paths that install one both missed --
+the display-on-edge install reads the published round at the edge, and
+the game writes its round variable AFTER that edge in this demo (ares
+COMM14 trace: round 0 -> 1 at f3563, no edge after); the other install
+is gated behind PALSTATIC's palette detector, which cannot see level 2
+(2026-09-02: zero stable discriminators, level 2 reuses level 1's
+palette words -- baking a level-2 scene was tried and withdrawn). With
+MDSREFUSE, every level-2 background set outside round 0's table renders
+as backdrop. Fix: install the published round's table when it differs
+from the installed one while on screen and past the load gap
+(m_main.c, the display-edge block). ares: level-2 demo 0.22 -> 1.00
+non-black at the round-anchored frame; rig 3/3.
+
+**Rule:** compare attract scenes at frames anchored on the game's own
+round/step from the COMM14 trace (`anchors.py`), never at fixed frame
+numbers -- a build's vint length shifts the attract by tens of frames,
+and a fixed frame lands inside a legitimate display hold (the black
+frame that looked like a crash).

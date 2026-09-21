@@ -85,3 +85,12 @@ it lifted in its packet header (word 5 bits 12-15); `fbx_echo_belt()` in
 partb_hook re-blasts the kept packet two vints after an unechoed blast.
 Conditions: FBXSTAGE + FBXPEND + FBXISRLIFT (the line), FM=0 at
 partb_hook. Proof: ares palgate 8/8 layouts; rig pad-5 0/6 -> 3/3.
+
+## 2026-09-21 09:30 -- round-driven MD table install on a round change
+
+Path: 68K posts the game's round in the MD_STATE word (COMM14 [6:4]);
+the SH-2 installs `pal_rounds_md.h`'s table for that round. Trigger:
+display-on edge (existing) OR the published round differing from the
+installed one while on screen (new). Conditions: MDROUND + MDSTATE +
+MDSREFUSE (the line). Proof: ares level-2 demo background present at
+the round-anchored frame; rig 3/3 (screenshots/rig_round1).

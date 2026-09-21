@@ -10,7 +10,17 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/echo2.32x         THE LINE = `make line` (2026-09-21 05:20)
+    rom/night/round1.32x        THE LINE = `make line` (2026-09-21 09:30)
+                                = echo2 + the round's MD table installed
+                                on a round change while on screen (the
+                                attract's level-2 demo had no background:
+                                the game writes its round after the
+                                display-on edge and the palette detector
+                                cannot see level 2). Rig 3/3: level-1 and
+                                level-2 demo backgrounds on every launch.
+                                AWAITING MIKE'S PLAY PASS -- it is on the
+                                rig.
+    rom/night/echo2.32x         previous line (2026-09-21 05:20)
                                 = slim31 + FBXECHO=1 (the framebuffer
                                 packet echo belt) + the slim diag and
                                 palette shadow moved out of slim_art.
@@ -35,7 +45,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                echo2 (pushed 2026-09-21 05:19)
+    rig (MiSTer)                round1 (launched 2026-09-21 09:21)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
