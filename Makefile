@@ -879,6 +879,11 @@ endif
 ifdef PALFIRST
 MDCCFLAGS += -DPAL_FIRST
 endif
+# `make line PALSTICKY=N` = keep the packet's palette flag raised for N
+# publishes after every change (race-card fix candidate, 2026-09-21)
+ifdef PALSTICKY
+SHCCFLAGS += -DPAL_STICKY=$(PALSTICKY)
+endif
 # `make line CRAMPROBE=1` = BG palette readback (CRAM vs shadow) with the picture kept
 ifdef CENSUS2
 SHCCFLAGS += -DCENSUS2
@@ -892,6 +897,15 @@ endif
 ifdef RIGBARCODE
 SHCCFLAGS += -DRIG_BARCODE
 MDCCFLAGS += -DRIG_BARCODE
+endif
+# bisect the barcode build's ingredients (it wins the level-start race on
+# every layout, 2026-09-21): BCNODMA=1 drops its 384-word DMA, BCDMAONLY=1
+# drops its CRAM reads/writes and FB reads and keeps the DMA
+ifdef BCNODMA
+MDCCFLAGS += -DBC_NODMA
+endif
+ifdef BCDMAONLY
+MDCCFLAGS += -DBC_DMAONLY
 endif
 ifdef BGVALUE
 MDCCFLAGS += -DBG_VALUE

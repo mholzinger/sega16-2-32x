@@ -104,3 +104,21 @@ again. The two palette-flag counters (SH-2 `cz_pal` vs the 68K's
 same event; reconcile before reading either as "flagged packets lost".
 No losing launch has been read yet; pad-3 and bset layouts were queued
 next.
+
+Rig results 2026-09-21 03:10-03:45 (bgcheck: non-black fraction of y
+60-180; a level capture reads 1.00 with its palette, 0.09-0.21 without):
+
+    barcode5p3  (ZEUSPAD=3 + barcode)     3/3 background
+    barcode5bs  (ZEUSBSET=1 + barcode)    3/3 background
+    pad5        (slim31 + ZEUSPAD=5)      0/3 -- the losing layout, reproduced
+    pad5st      (pad5 + PALSTICKY=4)      0/3 -- the sticky palette flag
+                                          does NOT rescue it: a flag
+                                          dropped in transit is not the
+                                          mechanism (or not the only one)
+
+So 12/12 launches with the barcode on four layouts, 0/6 on pad-5
+without it. The readout build carries the cure in one of its per-vint
+ingredients (window regs, three CRAM writes, 32 CRAM reads, two FB word
+reads, a 384-word WRAM->VRAM DMA after slim_dma, and on the SH-2 two
+long writes into the header after the ISR copy). Bisect knobs:
+`BCNODMA=1`, `BCDMAONLY=1`.

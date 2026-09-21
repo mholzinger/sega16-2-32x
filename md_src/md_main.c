@@ -779,18 +779,22 @@ void partb_hook(void)
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8330;
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9100;
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9296;
+#ifndef BC_DMAONLY
 		/* CRAM 61 blue, 62 red, 63 white (pal 3 pens 13-15) */
 		*vdp_ctrl_wide = ((uint32_t)(0xC000u | 122u) << 16) | 0u;
 		*vdp_data_port = 0x0E00; *vdp_data_port = 0x000E; *vdp_data_port = 0x0EEE;
+#endif
 		{
 			uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
 			uint16_t n = 0, sh = 0, magic = 0;
+#ifndef BC_DMAONLY
 			if (*(volatile uint16_t*)0x851A00uL == 0xB6B6 || *(volatile uint16_t*)0x85E800uL == 0xB6B6) magic = 1;
 			for (uint16_t i = 16; i < 48; i++) {
 				*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
 				if (*vdp_data_port & 0x0EEEu) n++;
 			}
 			for (uint16_t i = 0; i < 32; i++) if (((volatile uint16_t*)0xFF3500)[i] & 0x0EEEu) sh = 1;
+#endif
 			by[0] = 0xA5;
 			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
 			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
@@ -810,6 +814,7 @@ void partb_hook(void)
 			uint16_t cell = (uint16_t)(sym ? (0xE7C0u + sym - 1u) : 0x03FFu);
 			for (uint16_t r = 0; r < 6; r++) bc_nt[r * 64u + c] = cell;
 		}
+#ifndef BC_NODMA
 		{
 			uint32_t src = ((uint32_t)bc_nt) >> 1;
 			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
@@ -820,6 +825,7 @@ void partb_hook(void)
 			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xCB00u & 0x3FFFu)) << 16) | (((0xCB00u >> 14) & 3u) | 0x80u);
 		}
+#endif
 	}
 #endif
 #if defined(TILE_SLIM) && defined(SLIM_SAMEVINT)

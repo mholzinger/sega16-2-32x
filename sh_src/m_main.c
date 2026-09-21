@@ -16877,6 +16877,13 @@ RAMCODE void m_main(void)
                         static uint8_t pal_first = 16;
                         if (pal_first) { chg = 1; pal_first--; }
                     }
+#ifdef PAL_STICKY
+                    /* STICKY FLAG (2026-09-21, the race card): a palette
+                     * change keeps the flag raised for PAL_STICKY publishes,
+                     * so a flag the FPGA drops in transit (magic seen, flag
+                     * word stale) still lands on the next window. */
+                    { static uint8_t pst; if (chg) pst = PAL_STICKY; if (pst) { chg = 1; pst--; } }
+#endif
                     if (chg)
                         sc[1] |= 0x8000;     /* palette present this window */
 #if defined(CENSUS2) || defined(RIG_BARCODE)
