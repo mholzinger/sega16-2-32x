@@ -1842,6 +1842,9 @@ static inline unsigned chev_ix(unsigned s)
 { return (s >= 19u && s <= 21u) ? (s - 19u) : 3u; }
 #endif
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
+#ifdef CENSUS2
+static uint16_t cz_pub, cz_pal, cz_stub;  /* 2026-09-21 publish census */
+#endif
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
                                           * PAL_SH is the IMAGE, not the game (heal ~9 vints):
                                           * the hold-time distance check must not run then
@@ -8922,6 +8925,22 @@ LOCKCODE_ROM void visr_vbi(void)
         MARS_SYS_COMM6 = (uint16_t)(0x8000 | gr_val);
     }
 #endif
+#ifdef CENSUS2
+    /* 2026-09-21 PUBLISH CENSUS for the level-start race: per 64 calls
+     * here, post one field on COMM6 (bit 15 set, field in bits 8-9,
+     * count+1 in bits 0-5): 0 packets published, 1 palette-flagged
+     * publishes, 2 scroll stubs. The 68K relays it into CRAMPROBE. */
+    {
+        static uint16_t cz_vc, cz_f;
+        if (++cz_vc >= 64) {
+            uint16_t n = cz_f == 0 ? cz_pub : cz_f == 1 ? cz_pal : cz_stub;
+            if (n > 62) n = 62;
+            MARS_SYS_COMM6 = (uint16_t)(0x8000 | (cz_f << 8) | (n + 1));
+            cz_pub = cz_pal = cz_stub = 0;
+            cz_vc = 0; cz_f = (uint16_t)((cz_f + 1) % 3);
+        }
+    }
+#endif
 #ifdef BODY_CENSUS
     /* NOTES 85 / LOOP29 295: WHERE THE GENERATION'S BODY GOES, ON HARDWARE.
      *
@@ -10343,6 +10362,9 @@ static void hs_stub(void)
     fp[0] = 0xB6B6u;                      /* magic LAST */
     HS_OFFS[3] = 0;
     HS_OFFS[10]++;                        /* diag: stubs posted */
+#ifdef CENSUS2
+    cz_stub++;
+#endif
 }
 
 __attribute__((noinline))
@@ -16844,10 +16866,16 @@ RAMCODE void m_main(void)
                     }
                     if (chg)
                         sc[1] |= 0x8000;     /* palette present this window */
+#ifdef CENSUS2
+                    if (chg) cz_pal++;
+#endif
 #else
                     (void)chg;
 #endif
                 }
+#ifdef CENSUS2
+                cz_pub++;
+#endif
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
 #ifdef K2_FREE
 #ifdef R60

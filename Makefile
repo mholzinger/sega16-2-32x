@@ -880,6 +880,10 @@ ifdef PALFIRST
 MDCCFLAGS += -DPAL_FIRST
 endif
 # `make line CRAMPROBE=1` = BG palette readback (CRAM vs shadow) with the picture kept
+ifdef CENSUS2
+SHCCFLAGS += -DCENSUS2
+MDCCFLAGS += -DCENSUS2
+endif
 ifdef CRAMPROBE
 MDCCFLAGS += -DCRAM_PROBE
 endif

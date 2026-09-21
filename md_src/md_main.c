@@ -755,7 +755,22 @@ void partb_hook(void)
 	{
 		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
 		uint16_t ph = (uint16_t)(vc & 0x1FF);
+#ifdef CENSUS2
+		/* relay the SH-2's census byte (COMM6, bit 15) as the value */
+		{
+			static uint8_t cz_byte;
+			uint16_t w = *(volatile uint16_t*)0xA1512C;   /* COMM6 */
+			if (w & 0x8000) { cz_byte = (uint8_t)((((w >> 8) & 3) << 6) | (w & 63)); *(volatile uint16_t*)0xA1512C = 0; }
+			if (ph < 0x40) {
+				uint16_t col = (uint16_t)(((cz_byte & 7) << 1) | (((cz_byte >> 3) & 7) << 5) | (((cz_byte >> 6) & 3) << 9));
+				*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+				for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+			}
+		}
+		if (0) {
+#else
 		if (ph < 0x40) {
+#endif
 			uint16_t n = 0, f = (uint16_t)((vc >> 9) & 1u);
 			if (f == 0) {
 				for (uint16_t i = 16; i < 48; i++) {
