@@ -48,6 +48,8 @@ static uint8_t  fbx_age;                 /* vints since the last blast(1) */
 static uint16_t fbx_keep_n;              /* words of the last blasted packet, kept for a re-blast */
 static uint8_t  fbx_keep_live;           /* the kept packet is whole (not being rebuilt) */
 static uint16_t fbx_reblasts;            /* diag: re-blasts issued */
+static uint16_t fbx_stage[];             /* tentative: the packet stage (defined with FBX_STAGE) */
+static uint8_t  fbx_seq_pub;             /* tentative: last published sequence */
 #endif
 const uint32_t fmgate_spans[] = FMGATE_SPANS;
 #endif
@@ -819,6 +821,39 @@ static void bc_emit(void)
 	}
 }
 #endif
+#if defined(FBX_STAGE) && defined(FBX_ECHO)
+/* FBX ECHO BELT (2026-09-21, the level-start race). The master's
+ * packet header carries the sequence it last lifted. Its ISR lifts
+ * BEFORE it flips, and a blast still in progress at that moment leaves
+ * the finished packet in the bank that just became the DISPLAYED one:
+ * unreadable by either CPU until the next flip, and the master's scene
+ * fill erases it first (ares, boot packet 2 of the losing layouts,
+ * docs/design/RIG-READOUT.md). So: two vints after a blast, if the echo
+ * has not caught up, write the kept packet again, same sequence, into
+ * whatever bank is draw now. Runs from partb_hook, every vint, at FM=0.
+ * (Its first home, the pre-post slot, is not on the boot-time path.) */
+__attribute__((section(".data"), noinline))
+static void fbx_echo_belt(void)
+{
+	if (*(volatile uint16_t*)0xA15100 & 0x8000) return;   /* FM up: a write would be dropped */
+	if (fbx_age < 255) fbx_age++;
+	if (fbx_keep_live && fbx_age >= 2
+	    && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
+		const uint32_t *sp = (const uint32_t*)fbx_stage;
+		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
+		uint16_t n = fbx_keep_n, nl = (uint16_t)(n >> 1);
+		while (nl--) *dp++ = *sp++;
+		if (n & 1) ((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
+		{
+			volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+			pub[1] = n;
+			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+		}
+		fbx_age = 0;
+		fbx_reblasts++;
+	}
+}
+#endif
 /* PART-B END HOOK: md_start.s calls this at the END of fmgate_partb,
  * after the window post and the FM raise. */
 __attribute__((section(".data")))
@@ -843,6 +878,9 @@ void partb_end_hook(void)
 __attribute__((section(".data")))
 void partb_hook(void)
 {
+#if defined(FBX_STAGE) && defined(FBX_ECHO)
+	fbx_echo_belt();
+#endif
 #if defined(CART_READ_AT) && CART_READ_AT == 17
 	cart_read_burst();
 #endif
@@ -4526,30 +4564,7 @@ void shim_vblank(void) {
 				 * so this is the one blast that packet gets. */
 				if (fbx_pend) { fbx_pend = 0; r60_blast(1); }
 #endif
-#if defined(FBX_STAGE) && defined(FBX_ECHO)
-				/* FBX ECHO BELT (2026-09-21): the master's packet header
-				 * carries the sequence it last lifted. If, two vints after
-				 * a blast, it still has not lifted ours, the packet sat in
-				 * the bank it does not read (a flip between blast and lift:
-				 * ares, boot storm packet 2 of the losing layouts) -- write
-				 * it again, same sequence, FM is 0 here. */
-				if (fbx_age < 255) fbx_age++;
-				if (fbx_keep_live && fbx_age >= 2
-				    && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
-					const uint32_t *sp = (const uint32_t*)fbx_stage;
-					volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
-					uint16_t n = fbx_keep_n, nl = (uint16_t)(n >> 1);
-					while (nl--) *dp++ = *sp++;
-					if (n & 1) ((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
-					{
-						volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
-						pub[1] = n;
-						pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
-					}
-					fbx_age = 0;
-					fbx_reblasts++;                          /* diag: re-blasts */
-				}
-#endif
+
 #ifdef TAIL_CENSUS
 				*(volatile uint16_t*)0xFFA1FA = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pending blast */
 #endif
