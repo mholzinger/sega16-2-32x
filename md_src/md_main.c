@@ -45,6 +45,7 @@ uint16_t fmgate_defer;               /* part-B defers (diag)          */
 #ifdef FBX_ECHO
 static uint8_t  fbx_echo;                /* master's last lifted sequence (packet word 5 >> 12) */
 static uint8_t  fbx_age;                 /* vints since the last blast(1) */
+static uint8_t  fbx_rb_age;              /* vints since the last re-blast */
 static uint16_t fbx_keep_n;              /* words of the last blasted packet, kept for a re-blast */
 static uint8_t  fbx_keep_live;           /* the kept packet is whole (not being rebuilt) */
 static uint16_t fbx_reblasts;            /* diag: re-blasts issued */
@@ -838,7 +839,8 @@ static void fbx_echo_belt(void)
 {
 	if (*(volatile uint16_t*)0xA15100 & 0x8000) return;   /* FM up: a write would be dropped */
 	if (fbx_age < 255) fbx_age++;
-	if (fbx_keep_live && fbx_age >= 2
+	if (fbx_rb_age < 255) fbx_rb_age++;
+	if (fbx_keep_live && fbx_rb_age >= 2
 	    && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
 		const uint32_t *sp = (const uint32_t*)fbx_stage;
 		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
@@ -850,7 +852,12 @@ static void fbx_echo_belt(void)
 			pub[1] = n;
 			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
 		}
-		fbx_age = 0;
+		fbx_rb_age = 0;                      /* spacing between re-blasts only:
+		                                      * fbx_age keeps counting from the
+		                                      * ORIGINAL blast, so the re-mark
+		                                      * half (age >= 2 at the next build)
+		                                      * still fires (ares: it never did,
+		                                      * the re-blast reset the age) */
 		fbx_reblasts++;
 	}
 }
@@ -3530,7 +3537,7 @@ static void r60_blast(int bump) {
 			((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
 	}
 #ifdef FBX_ECHO
-	if (bump) { fbx_keep_n = n; fbx_keep_live = 1; fbx_age = 0; }
+	if (bump) { fbx_keep_n = n; fbx_keep_live = 1; fbx_age = 0; fbx_rb_age = 0; }
 #endif
 	{
 		volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
