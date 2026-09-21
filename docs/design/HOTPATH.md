@@ -102,3 +102,12 @@ entries+spans for 0x45EC-0x46A2), bottom-band backstop under opaque FG
 only (BGBOTTOM), echo belt second half (re-mark an unechoed push's
 palette ids before the next packet). Gate for attract scenes: MAME
 no-coin arcade frames vs ours at the round/step anchors.
+
+## 2026-09-21 14:10 -- the attract bake (attract3)
+
+Path: state word (round/step/cut/play) -> scene id -> baked MD tables
+(pal_rounds_md.h, 10 scenes) + tile blob blocks; harvested scenes install
+on the scene change (no "on" flag needed), their sets pinned, pictures
+otherwise off screen (no refusals); the emitter stops on packet words,
+the 68K fetches 80 tiles a vint and keeps the remainder staged. Proof:
+ares scene gate 19/19 anchors, rig 3/3.

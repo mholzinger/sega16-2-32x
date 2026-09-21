@@ -192,3 +192,17 @@ background verdict per capture.
 Rig 2026-09-21 11:00-11:23: attbc2 (line + readout) 3/3, every level
 capture cram16-47 = 29, packets and palette-flagged counts agreeing on
 both CPUs (pal68 == sh_pal or +2/3); attract2 (the line) 4/4.
+
+## The attract bake, gated (2026-09-21 14:10)
+
+`scenegate.py` (scratch): one ares run per anchor, both planes' visible
+cells checked against md_tag (untagged) and md_dirty (art pending), a
+background fraction, and screenshots. The line build (attract3) reads
+0 untagged / 0 dirty at every anchor of the splash, level 1, eye, second
+picture, score table, level 2 and the mid-attract splash; the cut shows
+plane B fully dirty for its duration (the level's slots re-marked by the
+scene install, re-shipped after). Rig 3/3 launches: every level
+background, every picture. Floors measured on the way: a picture's hold
+releases ~40 vints after the game's blank at 40 tiles/vint and ~25-35 at
+80; the transformation, which the game does not blank, walks its field
+in over ~60 frames in view.

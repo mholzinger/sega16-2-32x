@@ -10,7 +10,22 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract2.32x      THE LINE = `make line` (2026-09-21 11:25)
+    rom/night/attract3.32x      THE LINE = `make line` (2026-09-21 14:10)
+                                = attract2 + THE ATTRACT BAKE: scenes 5-9
+                                (splash, eye, picture, scores, the
+                                transformation) harvested from ares and
+                                baked into the tables and the tile blob;
+                                tables keyed by SCENE from the state word;
+                                slim budget 80/vint with a word-capped
+                                emitter; hold settles from the game's
+                                blank. ares scene gate 19/19 anchors
+                                clean; rig 3/3. Residual: a baked scene
+                                still shows ~0.3-0.5 s of our hold after
+                                the game's blank (the load), and the
+                                transformation loads its zigzag field in
+                                view over ~1 s (no game blank there).
+                                AWAITING MIKE'S PLAY PASS -- on the rig.
+    rom/night/attract2.32x      previous line (2026-09-21 11:25)
                                 = attract1 + the echo belt's re-mark half
                                 actually firing (re-blast spacing counted
                                 apart from the packet's age). Rig 4/4
@@ -65,7 +80,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                attract2 (launched 2026-09-21 11:20)
+    rig (MiSTer)                attract3 (launched 2026-09-21 14:06)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
@@ -431,16 +446,16 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           Rig: pad-5 0/6 -> 3/3, line 3/3; ares gate
                           PASS on eight layouts. Mike's pass pending.
 
-    BAKE THE ATTRACT      NEXT CARD (2026-09-21 10:45). The eye and the
-    PICTURES              other attract pictures are unbaked: their tiles
-                          ride the inline records (~24/window) and their
-                          colour sets churn through the dynamic
-                          allocator, so each picture loads in full view
-                          for ~2.5 s. Bake them into .tilesmd + a static
-                          table like the rounds (tools/bake_tiles_md.py,
-                          bake_tilecram.py --emit-mds; scene dumps from
-                          ares at the round/step anchors). Gate: ares eye
-                          at step-4 +50 clean; rig 3 launches.
+    ATTRACT BAKE          DONE 2026-09-21 14:10 (LESSONS "The attract
+                          bake"). Open residue: (a) the ~0.3-0.5 s hold
+                          after a picture's blank = the load (1120 cells
+                          x 2 planes + art at 80/vint); (b) the
+                          transformation's zigzag field loads in view
+                          ~1 s (the game does not blank it; its sets
+                          are baked, its cells still walk in over 8
+                          windows); (c) the level's plane B stays
+                          dirty (1120) through the cut and re-ships
+                          after -- cosmetic, hidden by the eye's blank.
 
     RIG BARCODE READOUT   BUILT 2026-09-21 (`make line RIGBARCODE=1`,
                           docs/design/RIG-READOUT.md, decode with
