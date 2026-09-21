@@ -10329,7 +10329,15 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
      * the VDP/PSG mirror space. Worst case 40 x 17 = 680 words = the
      * packet body, so the batch is clamped here. */
     volatile uint16_t *w = dst;
+#ifdef SLIM_WORDCAP
+    /* WORD CAP (2026-09-21): the packet body holds 680 words; a baked
+     * record is 2 and an inline one 17. Stop when the WORST case no
+     * longer fits, before the slot's dirty bit is consumed, instead of
+     * clamping to 40 records -- a baked scene then loads up to 8x faster
+     * per packet (the 68K's SLIM_CAP is the other half of the budget). */
+#else
     if (bmax > 40) bmax = 40;
+#endif
 #endif
     for (int i = 0; i < NSETS * NWAYS && sent < bmax; i++) {
         sl = (sl + 1) & (NSETS * NWAYS - 1);
@@ -10339,6 +10347,9 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         }
         if (!(md_dirty[sl >> 5] & (1u << (sl & 31))))
             continue;
+#if defined(TILE_SLIM) && defined(SLIM_WORDCAP)
+        if ((unsigned)(w - dst) + 17u > 680u) break;   /* body full: the slot stays dirty */
+#endif
         md_dirty[sl >> 5] &= ~(1u << (sl & 31));
         uint32_t mkey = md_tag[sl];
         if (mkey == 0xFFFFFFFFu)
@@ -10414,7 +10425,7 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                     continue;
                 }
 #endif
-                const uint8_t *b_ = altbeast_tiles_md + 5u * 128u * 2u
+                const uint8_t *b_ = altbeast_tiles_md + (unsigned)MDROUND_N * 128u * 2u   /* the index precedes the blocks */
                                   + blk_ * 4096u
                                   + ((mkey & 63u) * 64u)
                                   + ((mkey & 0x80000000u) ? 32u : 0u);

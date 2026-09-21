@@ -2711,6 +2711,12 @@ endif
 ifdef MDSCENECUT
 SHCCFLAGS += -DMD_SCENE_CUT
 endif
+# SLIMWORDCAP=1 = 2026-09-21: the slim emitter stops on packet WORDS, not
+# at 40 records (baked records are 2 words). Pair with SLIMCAP=N and
+# MDBATCHBLANK=N to load a baked scene faster while the display is blank.
+ifdef SLIMWORDCAP
+SHCCFLAGS += -DSLIM_WORDCAP
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set
@@ -3167,7 +3173,8 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
-              TILESLIM=1 SLIMCAP=40 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1
+              TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
+             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
 # pipeline: docs/design/SLIM-PIPELINE.md 1b.

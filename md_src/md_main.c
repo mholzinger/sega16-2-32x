@@ -639,10 +639,11 @@ static void slim_fetch(void)              /* step 2 */
 	 * lands all of it. (The first cut zeroed slim_ready on an empty
 	 * fetch and the FPGA lost the level's first load.) */
 	if (!slim_n) return;
-	if (n >= SLIM_CAP) { slim_diag[4] += slim_n; slim_n = 0; return; }   /* buffer full: RECORDS DROPPED (counted, 2026-09-21) */
+	if (n >= SLIM_CAP) return;               /* art buffer full: the records stay staged for the next vint (2026-09-21) */
 	slim_diag[0]++;       /* diag: fetch calls */
 	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
-	for (uint16_t i = 0; i < slim_n && n < SLIM_CAP; i++) {
+	uint16_t i;
+	for (i = 0; i < slim_n && n < SLIM_CAP; i++) {
 		uint16_t w0 = slim_rec[i * 2u], w1 = slim_rec[i * 2u + 1u];
 		uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
 		if (va + 32u > 0xB000u) continue;
@@ -674,7 +675,15 @@ static void slim_fetch(void)              /* step 2 */
 	*(volatile uint16_t*)0xA15104 = 3;
 	slim_diag[1] += n;    /* diag: tiles fetched */
 	slim_ready = n;
-	slim_n = 0;
+	if (i < slim_n) {                        /* remainder: keep for the next vint (2026-09-21) */
+		uint16_t k;
+		for (k = 0; i + k < slim_n; k++) {
+			slim_rec[k * 2u] = slim_rec[(i + k) * 2u];
+			slim_rec[k * 2u + 1u] = slim_rec[(i + k) * 2u + 1u];
+		}
+		slim_n = k;
+	} else
+		slim_n = 0;
 }
 
 __attribute__((section(".data"), noinline))
@@ -1381,10 +1390,13 @@ static void md_consume(uint32_t pkt_base) {
 							}
 							e += 17;
 						} else {
-							slim_rec[slim_n * 2u] = w0;
-							slim_rec[slim_n * 2u + 1u] = e[1];
-							slim_n++;
-							slim_diag[7]++;   /* diag: baked records staged */
+							if (slim_n < SLIM_CAP) {          /* bound (2026-09-21): a packet may carry more
+							                                   * records than the buffer since SLIM_WORDCAP */
+								slim_rec[slim_n * 2u] = w0;
+								slim_rec[slim_n * 2u + 1u] = e[1];
+								slim_n++;
+								slim_diag[7]++;   /* diag: baked records staged */
+							} else slim_diag[4]++;            /* dropped: buffer full (re-marked by the SH-2? no: lost) */
 							e += 2;
 						}
 					}
