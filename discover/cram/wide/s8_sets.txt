@@ -1,0 +1,2 @@
+# harvested from attract2.32x at frames [2930, 3000, 3100, 3300, 3500]
+0 5600

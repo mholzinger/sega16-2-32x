@@ -1753,7 +1753,10 @@ static uint8_t pscene_nomatch;  /* consecutive no-match landings; at
 #define mds_s_used mdr_s_used
 #undef mds_table_of
 #define mds_table_of mdr_table_of
-static const uint8_t mdr_table_of[MDROUND_N] = { 0, 1, 2, 3, 4 };
+#if MDROUND_N > 16
+#error "mdr_table_of: extend the identity initializer"
+#endif
+static const uint8_t mdr_table_of[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };   /* identity: the table IS the scene */
 /* the round the 68K last published, in COMM10 bits 13-15 (187: the low
  * 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF, so the top
  * three are free -- three bits for five rounds) */
@@ -1781,8 +1784,16 @@ static inline uint16_t md_state_word(void)
     if (MD_STATE_OK(w)) md_state_last = w;
     return md_state_last;
 }
+#ifdef MD_SCENES
+static inline uint8_t md_scene_raw(void);   /* defined below */
+#endif
 static inline unsigned md_state_on(void)
 {
+#ifdef MD_SCENES
+    /* every scene with a baked table is "on screen": its sets are pinned
+     * and refused like a level's (2026-09-21, the attract bake) */
+    { uint8_t s9 = md_scene_raw(); if (s9 >= 5u && s9 < MDROUND_N) return 1; }
+#endif
     uint16_t w = md_state_word();
     if (!MD_STATE_OK(w)) return 2;                 /* no word yet: undecided */
     if (MD_STATE_CUT(w)) return 0;
@@ -1823,7 +1834,42 @@ static inline uint8_t md_state_round(void)
     uint16_t w = MD_STATE_W();
     return MD_STATE_OK(w) ? (uint8_t)((w >> 4) & 7) : 0xFFu;
 }
+#ifdef MD_SCENES
+/* THE TABLE KEY IS A SCENE, NOT A ROUND (2026-09-21, the attract bake).
+ * Rounds 0-4 stay themselves, in play and in the level demos. The
+ * attract's pictures have their own baked tables (tools/attract_harvest.py
+ * -> bake_tilecram.py --emit-mds), keyed from the same state word:
+ *   5 title splash (attract step 1-2)   6 eye (step 4)
+ *   7 second picture (step 5)            8 score table (step 0/7)
+ *   9 the round-0 transformation cut (cut bit, level demo)
+ * A scene the bake does not have (MDROUND_N too small) falls back to the
+ * round, which is what the runtime did before. */
+static inline uint8_t md_scene_raw(void)     /* the scene the state word names, baked or not */
+{
+    uint16_t w = MD_STATE_W();
+    unsigned r;
+    if (!MD_STATE_OK(w)) return 0xFFu;
+    r = (w >> 4) & 7u;
+    if (MD_STATE_PLAY(w)) return (uint8_t)r;
+    if (MD_STATE_CUT(w) && r == 0) return 9;
+    switch (MD_STATE_STEP(w)) {
+        case 1: case 2: return 5;
+        case 4:         return 6;
+        case 5:         return 7;
+        case 0: case 7: return 8;
+        default:        return (uint8_t)r;
+    }
+}
+static inline uint8_t md_scene_get(void)
+{
+    uint8_t sc = md_scene_raw();
+    if (sc == 0xFFu || sc < MDROUND_N) return sc;
+    return (uint8_t)((MD_STATE_W() >> 4) & 7u);   /* no table for it: the round, as before */
+}
+#define MD_ROUND_GET() md_scene_get()
+#else
 #define MD_ROUND_GET() md_state_round()
+#endif
 #else
 #define MD_ROUND_GET() ((uint8_t)((MARS_SYS_COMM10 >> 13) & 7))
 #endif
@@ -7105,6 +7151,12 @@ __attribute__((noinline)) static void disp_gate(void)
                 md_round = (uint8_t)r8;
                 MDS[5] += 0x100;
 #ifndef ROUND_NOWIPE
+                /* ... but only under a blank. With MD_SCENES the key changes
+                 * for the transformation cut INSIDE the level demo (scene 9),
+                 * with the display up; a wipe there would re-ship the level
+                 * in view. mds_install's selective invalidation covers the
+                 * sets whose map changed. */
+                if (!r60_disp_on || disp_blank)
                 /* A ROUND CHANGE IS A LEVEL LOAD: every slot shipped so far
                  * carried the OLD round's bake (the level-2 demo's cells
                  * around its foreground rocks stayed black: emitted under
@@ -7112,8 +7164,8 @@ __attribute__((noinline)) static void disp_gate(void)
                  * Wipe every tag so the scene re-ships whole under the new
                  * round's tables. (222's no-wipe rule is for SAME-round
                  * returns, where a re-ship bands real hardware.) */
-                for (int i9 = 0; i9 < NSETS * NWAYS; i9++) md_tag[i9] = 0xFFFFFFFFu;
-                nt_wipe_gen();
+                { for (int i9 = 0; i9 < NSETS * NWAYS; i9++) md_tag[i9] = 0xFFFFFFFFu;
+                  nt_wipe_gen(); }
 #endif
             }
         }

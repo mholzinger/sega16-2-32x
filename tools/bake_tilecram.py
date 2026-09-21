@@ -50,6 +50,10 @@ def _scene_sets():
 
 
 SCENE_SETS = _scene_sets()
+# harvested attract scene -> the ROM round whose packing seeds it (shared
+# sets keep the round's pen maps, so their tile blocks dedup)
+HARVEST_BASE = {7: 0, 9: 0}
+base_lines = {}
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
 SCENES, TILES_N, SLOTS = 5, 20480, 16
@@ -213,9 +217,13 @@ def main():
     slive, slivepix = {}, {}
     if a.live_dir:
         import glob as _glob
-        for sc in range(SCENES):
+        # every scene id with dumps: the ROM rounds 0-4 and the harvested
+        # attract scenes (tools/attract_harvest.py, ids >= 5)
+        ids = sorted({int(os.path.basename(f)[1:].split('_')[0])
+                      for f in _glob.glob(os.path.join(a.live_dir, 's*_f*.bin'))})
+        for sc in ids:
             fs = sorted(_glob.glob(os.path.join(a.live_dir,
-                                                's%d_*.bin' % sc)))
+                                                's%d_f*.bin' % sc)))
             if not fs:
                 continue
             u, px = {}, {}
@@ -273,11 +281,32 @@ def main():
     rom = load()
     out_bin, out_h, out_col = [], [], []
     overflow = {}          # scene -> palettes the framebuffer must draw
-    for s in range(SCENES):
-        o = 0x1CE2 + 6 * s
-        blk = w16(rom, o) & 3
-        base = 0x232A0 + blk * 0x400
-        words = unpack(rom, int.from_bytes(rom[o + 2:o + 6], 'big'))
+    # HARVESTED SCENES (2026-09-21): ids >= SCENES with a
+    # discover/cram/wide/s<id>_sets.txt (tools/attract_harvest.py) have no
+    # ROM tilemap; their sets and cell counts come from that file and
+    # their colours from their own live dumps like every other scene.
+    harvested = {}
+    if a.live_dir:
+        import glob as _glob
+        for fn in sorted(_glob.glob(os.path.join(a.live_dir, 's*_sets.txt'))):
+            sc = int(os.path.basename(fn)[1:].split('_')[0])
+            if sc < SCENES or sc not in slive:
+                continue
+            harvested[sc] = {}
+            for ln in open(fn):
+                if ln.startswith('#') or not ln.strip():
+                    continue
+                k, v = ln.split()
+                harvested[sc][int(k)] = int(v)
+    scene_ids = list(range(SCENES)) + sorted(harvested)
+    for s in scene_ids:
+        if s < SCENES:
+            o = 0x1CE2 + 6 * s
+            blk = w16(rom, o) & 3
+            base = 0x232A0 + blk * 0x400
+            words = unpack(rom, int.from_bytes(rom[o + 2:o + 6], 'big'))
+        else:
+            base, words = 0, None
 
         def cols(p, _b=base, _s=s):
             if _s in slive:
@@ -286,8 +315,14 @@ def main():
                 return frozenset(live[p])
             return frozenset(md(w16(rom, _b + p * 16 + 2 * k)) for k in range(1, 8))
 
-        pal = worst_viewport(words, cols)
-        if a.union_scene_sets:
+        if s < SCENES:
+            pal = worst_viewport(words, cols)
+        else:
+            global CELLS
+            CELLS = dict(harvested[s])
+            pal = sorted(p for p in CELLS if len(cols(p)) > 0)
+            print('  harvested scene %d: %d sets, %d cells' % (s, len(pal), sum(CELLS.values())))
+        if a.union_scene_sets and s < SCENES:
             # NOTES 67 (Mike's call: "union the set lists blind, treat
             # every set listed as reachable"). worst_viewport walks ONE
             # tilemap over all 64 scroll positions, so it sees one AREA
@@ -312,7 +347,47 @@ def main():
         # order (colours desc) put sets 100/101 -- 2,012 BG cells of round
         # 0 -- in the framebuffer to make room for a 15-cell set.
         order = sorted(pal, key=lambda p: (-CELLS.get(p, 0), -len(cols(p))))
-        groups = pack(pal, cols, order)
+        line_lists = None
+        if s in HARVEST_BASE and HARVEST_BASE[s] in base_lines:
+            # SEEDED PACK (2026-09-21): start from the base round's lines
+            # so every set shared with it keeps the base's slot map and
+            # the tile bake dedups their blocks (scenes 7 and 9 share 11
+            # sets with round 0). New colours append after the base's.
+            base = base_lines[HARVEST_BASE[s]]
+            # keep only the base colours that a set OF THIS SCENE needs, at
+            # their base slot positions (holes = None); the rest is room
+            keep = set()
+            for p in pal:
+                c = cols(p)
+                if any(c <= set(ll) for ll in base):
+                    keep |= c
+            line_lists = [[col if col in keep else None for col in ll] for ll in base]
+            ov = []
+            for p in order:
+                c = cols(p)
+                if any(c <= {x for x in ll if x is not None} for ll in line_lists):
+                    continue
+                cand = []
+                for i, ll in enumerate(line_lists):
+                    have = {x for x in ll if x is not None}
+                    need = sorted(c - have)
+                    room = ll.count(None) + (SLOTS - 1 - len(ll))
+                    if len(need) <= room:
+                        cand.append((len(need), i))
+                if not cand:
+                    ov.append(p); continue
+                ll = line_lists[min(cand)[1]]
+                for col in sorted(c - {x for x in ll if x is not None}):
+                    if None in ll: ll[ll.index(None)] = col
+                    else: ll.append(col)
+            if ov:
+                overflow[s] = ov
+            groups = [{x for x in ll if x is not None} for ll in line_lists]
+            print('  seeded scene %d from round %d: lines %s%s'
+                  % (s, HARVEST_BASE[s], [len(ll) for ll in line_lists],
+                     '  OVERFLOW %s' % ov if ov else ''))
+        else:
+            groups = pack(pal, cols, order)
         if groups is None:
             # exhaustive-ish retry FIRST: an overflow we could have avoided
             # by reordering is not an overflow.
@@ -335,8 +410,11 @@ def main():
             sys.exit('scene %d: no %d-line packing found' % (s, LINES))
 
         slot = []
-        for g in groups:
-            m = {c: i + 1 for i, c in enumerate(sorted(g))}   # slot 0 = transparent
+        if line_lists is None:
+            line_lists = [sorted(g) for g in groups]
+        base_lines[s] = line_lists
+        for ll in line_lists:
+            m = {c: i + 1 for i, c in enumerate(ll) if c is not None}   # slot 0 = transparent; base order kept
             slot.append(m)
         assign = {}
         for p in pal:
@@ -389,7 +467,7 @@ def main():
                  ' * every System 16 tile palette in the worst-case viewport.\n'
                  ' * See docs/log/LOOP-DECOMPILE.md 60-61. */\n')
         fh.write('#define TILECRAM_SCENES %d\n#define TILECRAM_LINES %d\n'
-                 % (SCENES, LINES))
+                 % (len(out_h), LINES))
         for s, n, sizes, assign in out_h:
             fh.write('/* scene %d: %d palettes, line fill %s */\n' % (s, n, sizes))
             fh.write('static const unsigned char tilepal_line_%d[128] = {' % s)
@@ -417,7 +495,7 @@ def main():
         # game's own scene variable; the 68K has to publish it, and
         # COMM10 bits 13-15 are spare (LOOP29 187), which is 3 bits for 5
         # rounds.
-        nsc = SCENES
+        nsc = len(scene_ids)          # ROM rounds + harvested attract scenes
         sl_all, su_all, sm_all, lc_all = [], [], [], []
         for sc in range(nsc):
             line_words, (scn, npal, sizes, assign) = out_col[sc], out_h[sc]
