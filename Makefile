@@ -887,6 +887,12 @@ endif
 ifdef CRAMPROBE
 MDCCFLAGS += -DCRAM_PROBE
 endif
+# `make line RIGBARCODE=1` = 80-bit name-table barcode on plane A rows 24-27
+# (docs/design/RIG-READOUT.md); decode captures with tools/rig_barcode.py
+ifdef RIGBARCODE
+SHCCFLAGS += -DRIG_BARCODE
+MDCCFLAGS += -DRIG_BARCODE
+endif
 ifdef BGVALUE
 MDCCFLAGS += -DBG_VALUE
 endif

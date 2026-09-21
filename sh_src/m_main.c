@@ -1842,7 +1842,7 @@ static inline unsigned chev_ix(unsigned s)
 { return (s >= 19u && s <= 21u) ? (s - 19u) : 3u; }
 #endif
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
-#ifdef CENSUS2
+#if defined(CENSUS2) || defined(RIG_BARCODE)
 static uint16_t cz_pub, cz_pal, cz_stub;  /* 2026-09-21 publish census */
 #endif
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
@@ -10359,10 +10359,14 @@ static void hs_stub(void)
     fp[7] = HS_CLOSED[28];
     fp[4] = HS_CLOSED[56];
     fp[6] = HS_CLOSED[57];
+#ifdef RIG_BARCODE
+    fp[4] = (uint16_t)((fp[4] & 0xFFu) | ((cz_pub & 0xFFu) << 8));
+    fp[6] = (uint16_t)((fp[6] & 0xFFu) | ((cz_pal & 0xFFu) << 8));
+#endif
     fp[0] = 0xB6B6u;                      /* magic LAST */
     HS_OFFS[3] = 0;
     HS_OFFS[10]++;                        /* diag: stubs posted */
-#ifdef CENSUS2
+#if defined(CENSUS2) || defined(RIG_BARCODE)
     cz_stub++;
 #endif
 }
@@ -14725,6 +14729,11 @@ RAMCODE void m_main(void)
                     } else {
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
+#ifdef RIG_BARCODE
+                        /* the counters ride the header AFTER the copy (words 4/6 high bytes) */
+                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
+                        d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
+#endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendA = 0;
 #ifdef TILE_VERIFY
@@ -14764,6 +14773,10 @@ RAMCODE void m_main(void)
                     } else {
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
+#ifdef RIG_BARCODE
+                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
+                        d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
+#endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendB = 0;
                     }
@@ -16866,15 +16879,23 @@ RAMCODE void m_main(void)
                     }
                     if (chg)
                         sc[1] |= 0x8000;     /* palette present this window */
-#ifdef CENSUS2
+#if defined(CENSUS2) || defined(RIG_BARCODE)
                     if (chg) cz_pal++;
 #endif
 #else
                     (void)chg;
 #endif
                 }
-#ifdef CENSUS2
+#if defined(CENSUS2) || defined(RIG_BARCODE)
                 cz_pub++;
+#endif
+#ifdef RIG_BARCODE
+                /* RIG BARCODE (docs/design/RIG-READOUT.md): the SH-2's
+                 * running publish counts ride the packet header's spare
+                 * high bytes -- sc[4]/sc[6] are plane vy (8 bits); the
+                 * 68K masks them (BC_LO) before VSRAM under this flag. */
+                sc[4] = (uint16_t)((sc[4] & 0xFFu) | ((cz_pub & 0xFFu) << 8));
+                sc[6] = (uint16_t)((sc[6] & 0xFFu) | ((cz_pal & 0xFFu) << 8));
 #endif
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
 #ifdef K2_FREE

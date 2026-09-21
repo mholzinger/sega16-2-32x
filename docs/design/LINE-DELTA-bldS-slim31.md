@@ -67,7 +67,7 @@ window/flip protocol, the patched game body (byte-identical).
     ares, level-1 play script, 1200 frames   bldS 720   slim31 716   (scene timer: same pace)
     rig flips per 64 vints, attract demo     slim31 ~28 (FB route on the same base ~29)
     bldS's rig flip rate                     not measured this session
-    scene-anchored frame tests bldS vs slim31   running (frametest_bldS.json)
+    scene-anchored frame tests bldS vs slim31   no regression (tools/frametest: tiles/vint 4.93 = 4.93; level1_early colours 74 vs 72, hot_glyphs 76 = 76; level1_mid 65 = 65, 73 = 73; black_cells 0 both)
 
 ## What is still open on the new line
 

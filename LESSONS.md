@@ -885,3 +885,23 @@ table stands as data.
 *Rules:* three launches per rom before any rig verdict on the level
 background; report pass/total; a fix for this card must move a 0/N
 build to N/N, nothing less.
+
+### The two CPUs name the COMM registers differently; CENSUS2 read the 68K's own stamp (2026-09-21)
+
+`sh_src/mars.h` defines `MARS_SYS_COMM6` as 0x20004026, whose 68K
+address is 0xA15126 (`md_src/common.h` `MARS_COMM6`). The CENSUS2 relay
+in `partb_hook` read 0xA1512C, which is COMM12 — the register the 68K
+itself stamps with `0xD000 | late_V` in `fmgate_partb`. So every
+"packets/64 = 34" of the 2026-09-21 census was the 68K decoding its own
+late-V byte (0xD000 has bit 15 set; (w>>8)&3 = 0 = field 0; w & 63 = 33,
++1 = 34), and the SH-2's post never reached a capture at all. Two
+launches and 24 captures were spent on it.
+
+**Rule:** name a COMM register by its raw address on BOTH sides in the
+same comment when a probe opens a channel, and prove the channel with a
+known constant (post 0x8055, read 0x8055) before reading a counter
+through it. The barcode readout (`RIGBARCODE=1`) carries the SH-2 counts
+inside the packet header instead — words 4 and 6 high bytes, stamped by
+the ISR after its SDRAM->FB copy (the publish-site stamp is overwritten
+by that copy) — and ares showed the 68K consume count equal to the SH-2
+publish count on four frames before the rig saw it.
