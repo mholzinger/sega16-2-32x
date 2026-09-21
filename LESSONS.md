@@ -948,3 +948,15 @@ for the level-1 black-tile pop-in) and the shadow copy overwrote 96
 bytes of it. They are named statics now. **Rule:** no hard-coded WRAM
 scratch below `__bss_end`; grep `rom/md_start.lst` before choosing an
 address, and prefer a static.
+
+**Correction 06:30, from the two-bank dump of the losing layout
+(`rom/night/lay_bc2.32x`):** the packet was not "in the other bank after
+a flip" -- the master's ISR lifts BEFORE it flips, and the 68K's blast
+was still in progress at that lift: the master read the old publish
+word, flipped, and the finished packet 2 sat in the now-displayed bank
+0, unreadable by either CPU, until the master flipped back and its scene
+fill erased it (bank 0 publish word 0xB602 at f28-29, 0x0000 at f30).
+Also: the belt's first home, the pre-post slot, is NOT on the boot-time
+vint path (age never advanced); it lives in `partb_hook` now, every
+vint, FM=0-guarded. With that, the same layout re-blasts at f29 and f31,
+the master lifts packet 2 at f32, and PAL_SH is complete at f300.
