@@ -2644,6 +2644,17 @@ endif
 ifdef FBXPEND
 MDCCFLAGS += -DFBX_PEND
 endif
+# FBXECHO=1 = 2026-09-21, the level-start race. The master echoes the
+# sequence of the last 68K packet it lifted in its own packet header
+# (word 5 bits 12-15); the 68K re-blasts a packet not echoed two vints
+# after its blast (the packet sat in the bank the master does not read).
+# Boot-storm packet 2 -- palette blocks 15-29, the level-1 palette the
+# game preloads -- was lost that way on the losing layouts (ares,
+# docs/design/RIG-READOUT.md).
+ifdef FBXECHO
+SHCCFLAGS += -DFBX_ECHO
+MDCCFLAGS += -DFBX_ECHO
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set

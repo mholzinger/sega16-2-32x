@@ -6913,6 +6913,9 @@ RAMCODE static void restore_pages(uint16_t bm)
  * The 68K is already exonerated (push_aborts true-0, spin headroom
  * 2597/2600 on ares bs9 BUILD 1426c951) — this decides the rest. */
 #define DRQR ((volatile uint32_t *)0x26028F80)
+#if defined(FBX_ECHO) && defined(FB_XPORT)
+static uint8_t  fbx_seq_seen;            /* tentative: defined again with the lift */
+#endif
 /* DISPLAY GATE (2026-09-05, Mike: "boot screen and transitions slow and
  * littered with tiles"). The arcade hides every tilemap load behind
  * its video-enable bit (port 0xC40001 bit 5): both cuts in ref_arcade
@@ -10355,6 +10358,9 @@ static void hs_stub(void)
     if (fp[0] == 0xB6B6u || ((fp == (volatile uint16_t *)0x24011A00u) && k2f_pendA))
         return;                           /* both busy: the scroll rides the next packet */
     fp[1] = 0; fp[2] = 0; fp[5] = 0;
+#if defined(FBX_ECHO) && defined(FB_XPORT)
+    fp[5] = (uint16_t)((fbx_seq_seen & 15u) << 12);   /* FBX ECHO: last lifted sequence */
+#endif
     fp[3] = HS_CLOSED[0];
     fp[7] = HS_CLOSED[28];
     fp[4] = HS_CLOSED[56];
@@ -14734,6 +14740,14 @@ RAMCODE void m_main(void)
                         d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
                         d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
 #endif
+#if defined(FBX_ECHO) && defined(FB_XPORT)
+                        /* FBX ECHO (2026-09-21, the level-start race): the sequence
+                         * of the last 68K packet this master LIFTED rides word 5
+                         * bits 12-15 (the count uses 9). The 68K re-blasts a packet
+                         * the echo has not confirmed -- a flip between its blast
+                         * and our lift left the packet in the other bank. */
+                        d[2] = (d[2] & 0xFFFF0FFFu) | ((uint32_t)(fbx_seq_seen & 15u) << 12);
+#endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendA = 0;
 #ifdef TILE_VERIFY
@@ -14776,6 +14790,9 @@ RAMCODE void m_main(void)
 #ifdef RIG_BARCODE
                         d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
                         d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
+#endif
+#if defined(FBX_ECHO) && defined(FB_XPORT)
+                        d[2] = (d[2] & 0xFFFF0FFFu) | ((uint32_t)(fbx_seq_seen & 15u) << 12);
 #endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendB = 0;

@@ -905,3 +905,46 @@ inside the packet header instead — words 4 and 6 high bytes, stamped by
 the ISR after its SDRAM->FB copy (the publish-site stamp is overwritten
 by that copy) — and ares showed the 68K consume count equal to the SH-2
 publish count on four frames before the rig saw it.
+
+### The level-start "race" is a lost boot-storm packet: framebuffer packet 2 sat in the bank the master does not read, and the two-deep re-mark belt had rotated past it (2026-09-21, 04:30-05:30)
+
+Found in ares, which DOES reproduce it once the build layout is one that
+loses (rom/night/barcode6.32x: the line's layout plus a byte-7 change in
+the barcode probe; deterministic, every run). The frame-by-frame dumps
+(scratch bootsweep, `docs/design/RIG-READOUT.md`):
+
+    f26  68K blasts FB packet 1: palette blocks 0-14 raw.  Master lifts it (seen 1).
+    f27  68K blasts packet 2: blocks 15-29 (the level-1 palette the game
+         PRELOADS at boot).  pub 2.  The master's lift finds sequence 1
+         for the next SEVEN vints: a flip put packet 2 in the bank the
+         master does not read, and FBXPEND blasts a packet exactly once.
+    f34  68K blasts packet 3: blocks 30-44.  Master lifts it (seen 1->3),
+         sees the sequence gap, posts BAD1 at f36.
+    f36  68K has already pushed packet 4 (blocks 45-55) BEFORE reading
+         the echo; the belt re-marks the last TWO lists = packets 4 and 3.
+         Packet 2 is out of the belt.  Its blocks' shadow == mirror, so no
+         compare ever re-ships them; nothing re-dirties them until the
+         Neff cut rewrites the palette.  Level 1's BG pens are 0x0000.
+
+So: not the palette flag, not the display gate, not timing of the raise
+(DMAWAIT/DMADELAY dead), not a tile. The 68K->SH-2 palette transport
+loses one packet per unlucky flip and its recovery is one packet too
+shallow when the gap echo arrives a vint late. Every layout shifts the
+blast-vs-flip phase at boot, which is the whole "layout lottery"; the
+barcode's extra DMA happened to shift it into the winning phase on
+every layout tried (12/12).
+
+**Fix (FBXECHO=1):** the master echoes the sequence it last lifted in
+its own packet header (word 5 bits 12-15; the count uses 9), and the 68K
+re-blasts the kept packet, same sequence, when two vints after a blast
+the echo still has not caught up. Structural: no dependence on flip
+phase, one extra ~2-line copy only when a packet was actually missed.
+
+**Also found on the way:** the slim diag counters (0xFF3400-0xFF347F) and
+the palette shadow (0xFF3500-0xFF3561) were hard-coded WRAM addresses
+that, since .bss grew past 0xFF3200, sat INSIDE `slim_art` and
+`slim_va`: every diag increment corrupted fetched tile art (a candidate
+for the level-1 black-tile pop-in) and the shadow copy overwrote 96
+bytes of it. They are named statics now. **Rule:** no hard-coded WRAM
+scratch below `__bss_end`; grep `rom/md_start.lst` before choosing an
+address, and prefer a static.

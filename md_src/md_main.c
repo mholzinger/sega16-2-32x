@@ -42,6 +42,13 @@ uint32_t fmgate_pc;                  /*   around the trampoline       */
 volatile uint16_t fmgate_posted;     /* part B posted last vint       */
 uint16_t fmgate_belt;                /* overrun-belt entries (diag)   */
 uint16_t fmgate_defer;               /* part-B defers (diag)          */
+#ifdef FBX_ECHO
+static uint8_t  fbx_echo;                /* master's last lifted sequence (packet word 5 >> 12) */
+static uint8_t  fbx_age;                 /* vints since the last blast(1) */
+static uint16_t fbx_keep_n;              /* words of the last blasted packet, kept for a re-blast */
+static uint8_t  fbx_keep_live;           /* the kept packet is whole (not being rebuilt) */
+static uint16_t fbx_reblasts;            /* diag: re-blasts issued */
+#endif
 const uint32_t fmgate_spans[] = FMGATE_SPANS;
 #endif
 
@@ -600,6 +607,17 @@ static void cart_read_burst(void) {
  *      Same vint as the name-table entry: no one-frame black flash.
  * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
  * port-write walk, and the SH-2 never touches the tile bytes. */
+/* DIAG IN NAMED STATICS (2026-09-21). These lived at the hard-coded
+ * WRAM addresses 0xFF3400-0xFF347F and 0xFF3500-0xFF3561 -- which, once
+ * .bss grew past 0xFF3200, sat INSIDE slim_art (the tile art buffer)
+ * and slim_va: every diag increment corrupted fetched art, and the
+ * palette shadow copy overwrote 96 bytes of it. Placement moved with
+ * every build, which is one face of the "layout lottery". */
+static uint16_t slim_diag[8];             /* [0] fetch calls [1] tiles fetched [2] DMA'd
+                                           * [3] stray records [5] inline tiles [6] DMA wait [7] baked staged */
+static uint16_t slim_ring[32];            /* first 16 stray (w0,w1) */
+static uint16_t pal_shadow_w[48];         /* last BG palette block consumed */
+static uint16_t pal_shadow_seen;          /* palette-flagged consumes */
 static uint16_t slim_rec[SLIM_CAP * 2];   /* step 1: staged records */
 static uint16_t slim_n;                   /* records staged this vint */
 static uint16_t slim_art[SLIM_CAP * 16];  /* step 2: art in WRAM */
@@ -617,7 +635,7 @@ static void slim_fetch(void)              /* step 2 */
 	 * fetch and the FPGA lost the level's first load.) */
 	if (!slim_n) return;
 	if (n >= SLIM_CAP) { slim_n = 0; return; }   /* buffer full: records wait */
-	(*(volatile uint16_t*)0xFF3400)++;       /* diag: fetch calls */
+	slim_diag[0]++;       /* diag: fetch calls */
 	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
 	for (uint16_t i = 0; i < slim_n && n < SLIM_CAP; i++) {
 		uint16_t w0 = slim_rec[i * 2u], w1 = slim_rec[i * 2u + 1u];
@@ -635,10 +653,10 @@ static void slim_fetch(void)              /* step 2 */
 		 * LOCKS the machine on silicon while ares and MAME shrug. The
 		 * blob ends below 0x2C7000, so anything outside is not art. */
 		if (src < 0x268000uL || src >= 0x2C7000uL) {
-			uint16_t k9 = (*(volatile uint16_t*)0xFF3406)++;   /* diag: stray records */
+			uint16_t k9 = slim_diag[3]++;   /* diag: stray records */
 			if (k9 < 16) {                        /* diag ring: first 16 stray (w0,w1) */
-				((volatile uint16_t*)0xFF3440)[k9 * 2] = w0;
-				((volatile uint16_t*)0xFF3440)[k9 * 2 + 1] = w1;
+				slim_ring[k9 * 2] = w0;
+				slim_ring[k9 * 2 + 1] = w1;
 			}
 			continue;
 		}
@@ -649,7 +667,7 @@ static void slim_fetch(void)              /* step 2 */
 		slim_va[n++] = (uint16_t)va;
 	}
 	*(volatile uint16_t*)0xA15104 = 3;
-	(*(volatile uint16_t*)0xFF3402) += n;    /* diag: tiles fetched */
+	slim_diag[1] += n;    /* diag: tiles fetched */
 	slim_ready = n;
 	slim_n = 0;
 }
@@ -670,7 +688,7 @@ static void slim_dma(void)                /* step 3 */
 		*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 		               | (((va >> 14) & 3u) | 0x80u);
 	}
-	(*(volatile uint16_t*)0xFF3404) += slim_ready;   /* diag: tiles DMA'd */
+	slim_diag[2] += slim_ready;   /* diag: tiles DMA'd */
 #ifdef SLIM_VERIFY
 	/* RIG VERDICT (2026-09-20): did the first tile of this batch land in
 	 * VRAM as the bytes in slim_art? Sticky, painted into CRAM 32-63:
@@ -730,7 +748,7 @@ static void bc_emit(void)
 	 *   byte 1-2 vint count 0xFFB0F0   byte 6  SH-2 palette-flagged (sc[6]>>8 at consume)
 	 *   byte 3  packets consumed       byte 7  [5:0] CRAM 16-47 non-zero,
 	 *   byte 4  palette-flagged                [6] shadow non-zero, [7] magic in FB
-	 *           consumed (0xFF3560)    byte 8  [2:0] round [3] cut [6:4] step [7] play
+	 *           consumed (pal_shadow_seen) byte 8  [2:0] round [3] cut [6:4] step [7] play
 	 *                                  byte 9  XOR of bytes 0-8 */
 	{
 		static uint16_t bc_nt[BC_ROWS * 64];
@@ -762,15 +780,18 @@ static void bc_emit(void)
 				*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
 				if (*vdp_data_port & 0x0EEEu) n++;
 			}
-			for (uint16_t i = 0; i < 32; i++) if (((volatile uint16_t*)0xFF3500)[i] & 0x0EEEu) sh = 1;
+			for (uint16_t i = 0; i < 32; i++) if (pal_shadow_w[i] & 0x0EEEu) sh = 1;
 #endif
 			by[0] = 0xA5;
 			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
 			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
-			by[4] = (uint8_t)*(volatile uint16_t*)0xFF3560;
+			by[4] = (uint8_t)pal_shadow_seen;
 			by[5] = bc_shpub;
 			by[6] = bc_shpal;
-			by[7] = (uint8_t)((n & 63) | (sh << 6) | (magic << 7));
+			/* bit 6: the MD display gate's hold (md_hold, from packet bit 13);
+			 * bit 7: the game's own video-enable (IO_MISC bit 5) */
+			(void)sh; (void)magic;
+			by[7] = (uint8_t)((n & 63) | ((md_hold ? 1u : 0u) << 6) | (((IO_MISC & 0x20) ? 1u : 0u) << 7));
 			by[8] = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7)
 			      | (*(volatile uint8_t*)0xFFF148 ? 8 : 0)
 			      | ((*(volatile uint8_t*)0xFFF031 >> 2) & 7) << 4
@@ -844,7 +865,7 @@ void partb_hook(void)
 	 * wins the level-start race on every layout (12/12; pad-5 0/6 without
 	 * it, 3/3 with the DMA alone). Does the raise overtake slim_dma's
 	 * last DMA on the FPGA? Wait for the VDP's DMA-busy bit, no traffic. */
-	{ uint16_t g9 = 0; while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} (*(volatile uint16_t*)0xFF340C) = g9; }
+	{ uint16_t g9 = 0; while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} slim_diag[6] = g9; }
 #endif
 #ifdef DMA_DELAY
 	/* RACE CANDIDATE: a pure delay of about the DMA's length, no traffic */
@@ -893,7 +914,7 @@ void partb_hook(void)
 					if (*vdp_data_port & 0x0EEEu) n++;
 				}
 			} else {
-				volatile uint16_t *sh = (volatile uint16_t*)0xFF3500;
+				volatile uint16_t *sh = pal_shadow_w;
 				for (uint16_t i = 0; i < 32; i++) if (sh[i] & 0x0EEEu) n++;
 			}
 			if (n > 62) n = 62;
@@ -904,7 +925,7 @@ void partb_hook(void)
 				for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
 			}
 		} else if (ph == 0xC0 || ph == 0x40) {
-			uint32_t src = 0xFF3500uL >> 1;
+			uint32_t src = ((uint32_t)pal_shadow_w) >> 1;
 			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
 			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
 			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
@@ -964,9 +985,9 @@ void partb_hook(void)
 	{
 		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
 		uint16_t f = (uint16_t)((vc >> 7) & 3u), v;
-		if (f == 1)      v = (uint16_t)(*(volatile uint16_t*)0xFF340E >> 4);
-		else if (f == 2) v = (uint16_t)(*(volatile uint16_t*)0xFF3404 >> 4);
-		else if (f == 3) v = (uint16_t)(*(volatile uint16_t*)0xFF340A >> 6);
+		if (f == 1)      v = (uint16_t)(slim_diag[7] >> 4);
+		else if (f == 2) v = (uint16_t)(slim_diag[2] >> 4);
+		else if (f == 3) v = (uint16_t)(slim_diag[5] >> 6);
 		else             v = (uint16_t)(*(volatile uint16_t*)0xFFA162 >> 4);   /* BG palette deferrals / 16 */
 		if (v > 62) v = 62;
 		v = (uint16_t)((f << 6) | (v + 1));
@@ -1095,7 +1116,12 @@ static void md_consume(uint32_t pkt_base) {
 				if (r60_isB) *(volatile uint16_t*)0xFFA090 =
 					*(volatile uint16_t*)0xC00008;   /* B: post-census */
 #endif
+#ifdef FBX_ECHO
+				fbx_echo = (uint8_t)(sc[5] >> 12);            /* FBX ECHO: master's lifted seq */
+				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = (uint16_t)(sc[5] & 0x0FFFu);
+#else
 				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = sc[5];
+#endif
 				if (sc[1] & 0x2000u) md_hold_seen = 2;
 				else if (!md_hold_seen) md_hold_seen = 1;
 #ifdef NT_WRAP
@@ -1103,9 +1129,9 @@ static void md_consume(uint32_t pkt_base) {
 #if defined(CRAM_PROBE) || defined(RIG_BARCODE)
 				/* shadow of every BG palette block this consume will land */
 				if (palp) {
-					volatile uint16_t *sh = (volatile uint16_t*)0xFF3500;
+					volatile uint16_t *sh = pal_shadow_w;
 					for (uint16_t i = 0; i < 48; i++) sh[i] = sc[688 + i];
-					(*(volatile uint16_t*)0xFF3560)++;              /* palettes seen */
+					pal_shadow_seen++;              /* palettes seen */
 				}
 #endif
 #ifdef PAL_FIRST
@@ -1132,7 +1158,7 @@ static void md_consume(uint32_t pkt_base) {
 #endif
 				if (typ == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
 				else          (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
-				(*(volatile uint16_t*)0xFFB0E8) = sc[5];  // last count
+				(*(volatile uint16_t*)0xFFB0E8) = (uint16_t)(sc[5] & 0x0FFFu);  // last count
 				// vertical fine scroll, every window and nearly free
 				// (horizontal is per-strip now: cell-mode hscroll words
 				// ride each name-table chunk)
@@ -1304,14 +1330,14 @@ static void md_consume(uint32_t pkt_base) {
 								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 								*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 									| (((va >> 14) & 3u) | 0x80u);
-								(*(volatile uint16_t*)0xFF340A)++;   /* diag: inline tiles */
+								slim_diag[5]++;   /* diag: inline tiles */
 							}
 							e += 17;
 						} else {
 							slim_rec[slim_n * 2u] = w0;
 							slim_rec[slim_n * 2u + 1u] = e[1];
 							slim_n++;
-							(*(volatile uint16_t*)0xFF340E)++;   /* diag: baked records staged */
+							slim_diag[7]++;   /* diag: baked records staged */
 							e += 2;
 						}
 					}
@@ -2329,6 +2355,9 @@ static void r60_push(void) {
 	PSTAMP(0xFFA0B4);                    /* entry */
 #ifdef FB_XPORT
 	fbx_i = 0;
+#ifdef FBX_ECHO
+	fbx_keep_live = 0;                   /* the stage is being rebuilt: nothing to repeat */
+#endif
 #endif
 	/* (busy-loop calibration retired: loop1 vblank 7 lines, loop2
 	 * active-line-87 9 lines — both FULL SPEED, no ambient bus tax
@@ -3438,6 +3467,9 @@ static void r60_blast(int bump) {
 		if (n & 1)
 			((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
 	}
+#ifdef FBX_ECHO
+	if (bump) { fbx_keep_n = n; fbx_keep_live = 1; fbx_age = 0; }
+#endif
 	{
 		volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
 		pub[1] = n;                      /* exact word count */
@@ -4493,6 +4525,30 @@ void shim_vblank(void) {
 				 * staged; FM is 0 here (the consumes above needed it),
 				 * so this is the one blast that packet gets. */
 				if (fbx_pend) { fbx_pend = 0; r60_blast(1); }
+#endif
+#if defined(FBX_STAGE) && defined(FBX_ECHO)
+				/* FBX ECHO BELT (2026-09-21): the master's packet header
+				 * carries the sequence it last lifted. If, two vints after
+				 * a blast, it still has not lifted ours, the packet sat in
+				 * the bank it does not read (a flip between blast and lift:
+				 * ares, boot storm packet 2 of the losing layouts) -- write
+				 * it again, same sequence, FM is 0 here. */
+				if (fbx_age < 255) fbx_age++;
+				if (fbx_keep_live && fbx_age >= 2
+				    && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
+					const uint32_t *sp = (const uint32_t*)fbx_stage;
+					volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
+					uint16_t n = fbx_keep_n, nl = (uint16_t)(n >> 1);
+					while (nl--) *dp++ = *sp++;
+					if (n & 1) ((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
+					{
+						volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+						pub[1] = n;
+						pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+					}
+					fbx_age = 0;
+					fbx_reblasts++;                          /* diag: re-blasts */
+				}
 #endif
 #ifdef TAIL_CENSUS
 				*(volatile uint16_t*)0xFFA1FA = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pending blast */
