@@ -75,7 +75,7 @@ def vote(rows):
 def decode(path, raw=False):
     im = frame(path); px = im.load()
     out = {"file": os.path.basename(path), "ok": False}
-    for r0 in (22, 21, 23):              # ares' crop lands the rows one up
+    for r0 in (22, 21, 23, 26, 25, 27):  # ares' crop lands the rows one up; BCROWS=2 sits at 26
         for dy in (0, -3, 3):
             rows = [row_bytes(px, r0 + k, dy)[0] for k in range(6)]
             if raw:

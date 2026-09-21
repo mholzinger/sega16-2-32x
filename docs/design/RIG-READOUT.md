@@ -135,3 +135,18 @@ rows are covered by the picture and sprites); what it does to the
 machine does. Candidates for the property, next: DMAWAIT=1 (spin on the
 VDP DMA-busy bit after slim_dma, no traffic) and DMADELAY=80 (a pure
 delay of about the DMA's length).
+
+Rig 2026-09-21 04:03-04:16, pad-5 layout, three launches each:
+
+    pad5wait   DMAWAIT=1  (spin on VDP DMA-busy after slim_dma)   0/3
+    pad5delay  DMADELAY=80 (a pure delay ~3 lines, no traffic)    0/3
+
+Neither cures. The core's VDP holds the DMA-trigger write until BR and
+halts the 68K for the transfer (srcref/S32X_MiSTer/rtl/GEN/vdp.sv
+296-310, 540-560, 618-621), so "the raise overtook the tile DMA" is out,
+and so is "the raise came too early". What the extra DMA does to the
+machine is not the 68K's timing. A losing frame (rig_pad5/…033219) has
+NO MD plane at all -- no sky, columns or ground; the 32X layer's
+sprites, logo and text are intact. Next: make a barcode build that
+LOSES, to read a losing launch (BCEND=1 emits after the raise -- the
+slim26 placement that lost -- and BCROWS=2 cuts the DMA to 128 words).

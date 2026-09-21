@@ -907,6 +907,14 @@ endif
 ifdef BCDMAONLY
 MDCCFLAGS += -DBC_DMAONLY
 endif
+# BCEND=1 emits the barcode from partb_end_hook (after the FM raise);
+# BCROWS=N uses N rows (default 6; the DMA is N*64 words)
+ifdef BCEND
+MDCCFLAGS += -DBC_END
+endif
+ifdef BCROWS
+MDCCFLAGS += -DBC_ROWS=$(BCROWS)
+endif
 # race candidates after slim_dma (2026-09-21): DMAWAIT=1 spins on the VDP
 # DMA-busy bit; DMADELAY=N spins N x ~12 cycles
 ifdef DMAWAIT

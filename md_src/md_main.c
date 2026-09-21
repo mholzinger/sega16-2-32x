@@ -705,6 +705,99 @@ static void slim_dma(void)                /* step 3 */
 static uint8_t bc_shpub, bc_shpal;   /* SH-2 counters, taken from the header at consume */
 #endif
 #if defined(TILE_SLIM) || defined(CART_READ_AT)
+#ifdef RIG_BARCODE
+#ifndef BC_ROWS
+#define BC_ROWS 6
+#endif
+#define BC_VA (0xC000u + (28u - BC_ROWS) * 128u)
+__attribute__((section(".data"), noinline))
+static void bc_emit(void)
+{
+	/* RIG BARCODE (docs/design/RIG-READOUT.md, 2026-09-21). 80 bits per
+	 * capture, written INTO the picture through the MD WINDOW plane (never
+	 * scrolled): name-table rows 22-27 (VRAM 0xCB00, 64-cell stride) each
+	 * carry the SAME 80 bits as 40 four-colour cells, 2 bits per cell:
+	 *   00 blank (0x03FF, the reserved slot)   01 WHITE  tile 0x7C0 pen 15
+	 *   10 RED   tile 0x7C1 pen 14             11 BLUE   tile 0x7C2 pen 13
+	 * (solid tiles at VRAM 0xF800-0xF85F, free space above the SAT; CRAM
+	 * 61-63 forced blue/red/white every vint). Six rows = six votes per
+	 * bit: the text layer covers the bottom-right cells and sprites cross
+	 * the band, and a majority survives both. The window (reg 0x12 down
+	 * from row 22, table reg 0x03 = plane A's 0xC000) draws the rows at
+	 * screen rows 22-27 unscrolled. One 384-word WRAM->VRAM DMA here,
+	 * before the FM raise, next to slim_dma.
+	 *   byte 0  0xA5 marker            byte 5  SH-2 packets published (sc[4]>>8 at consume)
+	 *   byte 1-2 vint count 0xFFB0F0   byte 6  SH-2 palette-flagged (sc[6]>>8 at consume)
+	 *   byte 3  packets consumed       byte 7  [5:0] CRAM 16-47 non-zero,
+	 *   byte 4  palette-flagged                [6] shadow non-zero, [7] magic in FB
+	 *           consumed (0xFF3560)    byte 8  [2:0] round [3] cut [6:4] step [7] play
+	 *                                  byte 9  XOR of bytes 0-8 */
+	{
+		static uint16_t bc_nt[BC_ROWS * 64];
+		static uint8_t bc_init;
+		uint8_t by[10];
+		if (!bc_init) {
+			bc_init = 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xF800u & 0x3FFFu)) << 16) | ((0xF800u >> 14) & 3u);
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xFFFF;
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xEEEE;
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xDDDD;
+			for (uint16_t k = 0; k < BC_ROWS * 64; k++) bc_nt[k] = 0x03FF;
+		}
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8330;
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9100;
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9280u | (28u - BC_ROWS));
+#ifndef BC_DMAONLY
+		/* CRAM 61 blue, 62 red, 63 white (pal 3 pens 13-15) */
+		*vdp_ctrl_wide = ((uint32_t)(0xC000u | 122u) << 16) | 0u;
+		*vdp_data_port = 0x0E00; *vdp_data_port = 0x000E; *vdp_data_port = 0x0EEE;
+#endif
+		{
+			uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+			uint16_t n = 0, sh = 0, magic = 0;
+#ifndef BC_DMAONLY
+			if (*(volatile uint16_t*)0x851A00uL == 0xB6B6 || *(volatile uint16_t*)0x85E800uL == 0xB6B6) magic = 1;
+			for (uint16_t i = 16; i < 48; i++) {
+				*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
+				if (*vdp_data_port & 0x0EEEu) n++;
+			}
+			for (uint16_t i = 0; i < 32; i++) if (((volatile uint16_t*)0xFF3500)[i] & 0x0EEEu) sh = 1;
+#endif
+			by[0] = 0xA5;
+			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
+			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
+			by[4] = (uint8_t)*(volatile uint16_t*)0xFF3560;
+			by[5] = bc_shpub;
+			by[6] = bc_shpal;
+			by[7] = (uint8_t)((n & 63) | (sh << 6) | (magic << 7));
+			by[8] = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7)
+			      | (*(volatile uint8_t*)0xFFF148 ? 8 : 0)
+			      | ((*(volatile uint8_t*)0xFFF031 >> 2) & 7) << 4
+			      | ((~*(volatile uint8_t*)0xFFF026 & 1) << 7));
+			by[9] = 0;
+			for (uint16_t i = 0; i < 9; i++) by[9] ^= by[i];
+		}
+		for (uint16_t c = 0; c < 40; c++) {
+			uint16_t sym = (uint16_t)((by[c >> 2] >> (6 - 2 * (c & 3))) & 3u);
+			uint16_t cell = (uint16_t)(sym ? (0xE7C0u + sym - 1u) : 0x03FFu);
+			for (uint16_t r = 0; r < BC_ROWS; r++) bc_nt[r * 64u + c] = cell;
+		}
+#ifndef BC_NODMA
+		{
+			uint32_t src = ((uint32_t)bc_nt) >> 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9300u | ((BC_ROWS * 64u) & 0xFFu));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9400u | ((BC_ROWS * 64u) >> 8));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (BC_VA & 0x3FFFu)) << 16) | (((BC_VA >> 14) & 3u) | 0x80u);
+		}
+#endif
+	}
+}
+#endif
 /* PART-B END HOOK: md_start.s calls this at the END of fmgate_partb,
  * after the window post and the FM raise. */
 __attribute__((section(".data")))
@@ -712,6 +805,9 @@ void partb_end_hook(void)
 {
 #if defined(CART_READ_AT) && CART_READ_AT == 20
 	cart_read_burst();
+#endif
+#if defined(RIG_BARCODE) && defined(BC_END)
+	bc_emit();      /* the barcode AFTER the raise: does it still cure? */
 #endif
 	/* (slim26 landed the art HERE, after the FM raise and the post, and
 	 * the FPGA lost the level background -- the slim18-20 shape; ares was
@@ -755,89 +851,9 @@ void partb_hook(void)
 	{ volatile uint16_t d = 0; while (++d < DMA_DELAY) {} }
 #endif
 #ifdef RIG_BARCODE
-	/* RIG BARCODE (docs/design/RIG-READOUT.md, 2026-09-21). 80 bits per
-	 * capture, written INTO the picture through the MD WINDOW plane (never
-	 * scrolled): name-table rows 22-27 (VRAM 0xCB00, 64-cell stride) each
-	 * carry the SAME 80 bits as 40 four-colour cells, 2 bits per cell:
-	 *   00 blank (0x03FF, the reserved slot)   01 WHITE  tile 0x7C0 pen 15
-	 *   10 RED   tile 0x7C1 pen 14             11 BLUE   tile 0x7C2 pen 13
-	 * (solid tiles at VRAM 0xF800-0xF85F, free space above the SAT; CRAM
-	 * 61-63 forced blue/red/white every vint). Six rows = six votes per
-	 * bit: the text layer covers the bottom-right cells and sprites cross
-	 * the band, and a majority survives both. The window (reg 0x12 down
-	 * from row 22, table reg 0x03 = plane A's 0xC000) draws the rows at
-	 * screen rows 22-27 unscrolled. One 384-word WRAM->VRAM DMA here,
-	 * before the FM raise, next to slim_dma.
-	 *   byte 0  0xA5 marker            byte 5  SH-2 packets published (sc[4]>>8 at consume)
-	 *   byte 1-2 vint count 0xFFB0F0   byte 6  SH-2 palette-flagged (sc[6]>>8 at consume)
-	 *   byte 3  packets consumed       byte 7  [5:0] CRAM 16-47 non-zero,
-	 *   byte 4  palette-flagged                [6] shadow non-zero, [7] magic in FB
-	 *           consumed (0xFF3560)    byte 8  [2:0] round [3] cut [6:4] step [7] play
-	 *                                  byte 9  XOR of bytes 0-8 */
-	{
-		static uint16_t bc_nt[6 * 64];
-		static uint8_t bc_init;
-		uint8_t by[10];
-		if (!bc_init) {
-			bc_init = 1;
-			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xF800u & 0x3FFFu)) << 16) | ((0xF800u >> 14) & 3u);
-			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xFFFF;
-			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xEEEE;
-			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xDDDD;
-			for (uint16_t k = 0; k < 6 * 64; k++) bc_nt[k] = 0x03FF;
-		}
-		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8330;
-		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9100;
-		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9296;
-#ifndef BC_DMAONLY
-		/* CRAM 61 blue, 62 red, 63 white (pal 3 pens 13-15) */
-		*vdp_ctrl_wide = ((uint32_t)(0xC000u | 122u) << 16) | 0u;
-		*vdp_data_port = 0x0E00; *vdp_data_port = 0x000E; *vdp_data_port = 0x0EEE;
+#ifndef BC_END
+	bc_emit();
 #endif
-		{
-			uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
-			uint16_t n = 0, sh = 0, magic = 0;
-#ifndef BC_DMAONLY
-			if (*(volatile uint16_t*)0x851A00uL == 0xB6B6 || *(volatile uint16_t*)0x85E800uL == 0xB6B6) magic = 1;
-			for (uint16_t i = 16; i < 48; i++) {
-				*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
-				if (*vdp_data_port & 0x0EEEu) n++;
-			}
-			for (uint16_t i = 0; i < 32; i++) if (((volatile uint16_t*)0xFF3500)[i] & 0x0EEEu) sh = 1;
-#endif
-			by[0] = 0xA5;
-			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
-			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
-			by[4] = (uint8_t)*(volatile uint16_t*)0xFF3560;
-			by[5] = bc_shpub;
-			by[6] = bc_shpal;
-			by[7] = (uint8_t)((n & 63) | (sh << 6) | (magic << 7));
-			by[8] = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7)
-			      | (*(volatile uint8_t*)0xFFF148 ? 8 : 0)
-			      | ((*(volatile uint8_t*)0xFFF031 >> 2) & 7) << 4
-			      | ((~*(volatile uint8_t*)0xFFF026 & 1) << 7));
-			by[9] = 0;
-			for (uint16_t i = 0; i < 9; i++) by[9] ^= by[i];
-		}
-		for (uint16_t c = 0; c < 40; c++) {
-			uint16_t sym = (uint16_t)((by[c >> 2] >> (6 - 2 * (c & 3))) & 3u);
-			uint16_t cell = (uint16_t)(sym ? (0xE7C0u + sym - 1u) : 0x03FFu);
-			for (uint16_t r = 0; r < 6; r++) bc_nt[r * 64u + c] = cell;
-		}
-#ifndef BC_NODMA
-		{
-			uint32_t src = ((uint32_t)bc_nt) >> 1;
-			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9380;      /* 384 words */
-			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9401;
-			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
-			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
-			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
-			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xCB00u & 0x3FFFu)) << 16) | (((0xCB00u >> 14) & 3u) | 0x80u);
-		}
-#endif
-	}
 #endif
 #if defined(TILE_SLIM) && defined(SLIM_SAMEVINT)
 	/* the slim27 shape under test: fetch then DMA, here */
