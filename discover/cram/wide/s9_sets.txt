@@ -13,3 +13,8 @@
 83 1
 85 239
 86 65
+# + the ground sets under the face at the cut's start (ares cut+10); the sky sets 92-101 would push 20/21 out
+82 16
+84 35
+87 46
+88 26

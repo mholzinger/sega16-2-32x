@@ -1761,6 +1761,13 @@ static const uint8_t mdr_table_of[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 
  * 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF, so the top
  * three are free -- three bits for five rounds) */
 static uint8_t md_round = 0xFF;
+/* claimed slots not yet shipped. FILE SCOPE (2026-09-21): it was a local
+ * of the master's main function, so the re-mark paths (mds_install under
+ * MDS_REMARK, mdp_remark_set_tags) set dirty bits without bumping it, and
+ * the emitter -- only called while this is non-zero -- left them orphaned
+ * (the transformation's red field: set 20's 57 slots dirty for 100
+ * frames, never shipped). */
+static uint16_t md_pending;
 #ifdef MD_STATE
 /* FOLD 4 (LOOP29 233): the round comes from the 68K's per-vint state
  * word on COMM14 (md_main.c shim_vblank: tag E, seq, cutscene, round),
@@ -2711,6 +2718,7 @@ static void mdp_remark_set_tags(unsigned s)
 {
     for (int i = 0; i < NSETS * NWAYS; i++)
         if (md_tag[i] != 0xFFFFFFFFu && ((md_tag[i] >> 16) & 0x7F) == s) {
+            if (!(md_dirty[i >> 5] & (1u << (i & 31)))) md_pending++;
             MD_MARK(i);
             MDA(14);
         }
@@ -3476,6 +3484,7 @@ static void mds_install(unsigned sc, uint8_t stamp)
              * re-walked (36-51 such cells 50 frames into the eye, ares).
              * Marking the slot dirty re-ships the SAME tile under the new
              * pen map and every cell stays valid. */
+            if (!(md_dirty[i >> 5] & (1u << (i & 31)))) md_pending++;
             MD_MARK(i);
             MDA(12);
 #else
@@ -11934,7 +11943,7 @@ RAMCODE void m_main(void)
 #ifdef MD_BG
     uint16_t md_scan = 0;                /* dirty-slot scan cursor */
     uint8_t  md_phase = 0;               /* 0 = tiles, 1-4 = name table */
-    uint16_t md_pending = 0;             /* claimed slots not yet shipped */
+    md_pending = 0;                      /* claimed slots not yet shipped (file scope since 2026-09-21) */
     uint8_t  mdp_chk = 0;                /* palette drift check cursor */
     uint8_t  md_forced = 0;              /* consecutive demand-bias tile
                                           * batches; see the starvation
