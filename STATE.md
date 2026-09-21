@@ -25,7 +25,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                slim30
+    rig (MiSTer)                rom/night/barcode5p5.32x -- A PROBE (RIGBARCODE=1 on the pad-5 layout); push slim31 back before handing over
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
@@ -377,6 +377,25 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           the camera was inventing the colours.
                           /media/fat/burst.sh on the rig carries these
                           numbers in its header.
+
+    RIG BARCODE READOUT   BUILT 2026-09-21 (`make line RIGBARCODE=1`,
+                          docs/design/RIG-READOUT.md, decode with
+                          tools/rig_barcode.py). 80 bits per capture,
+                          written into the picture through the MD
+                          window plane (rows 22-27, four-colour cells,
+                          six votes per bit), nothing flashes and no
+                          palette entry the BG uses below 61 is touched.
+                          Carries: vint, packets consumed, palette-
+                          flagged consumed, the SH-2's published /
+                          flagged counts (packet header words 4/6 high
+                          bytes), CRAM 16-47 live count, shadow, round /
+                          cut / attract step. Rig 2026-09-21 02:48-02:57:
+                          35 of 36 captures decoded over three launches
+                          of barcode5; SH-2 published == 68K consumed on
+                          every capture; CRAM 16-47 = 29 on every level
+                          capture (3/3 launches kept the background).
+                          It replaces the CRAM flood for anything with
+                          more than one number in it.
 
     ares                  charges SH-2 INSTRUCTION CYCLES ONLY. No
                           SDRAM/uncached waits, no data cache, no

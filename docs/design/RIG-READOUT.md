@@ -87,3 +87,20 @@ decoder searches r22/21/23 and votes.
 
 Rig protocol: three launches, 12 captures at 8 s from 25 s after launch
 (`rigcap.sh rom 12 25`), then `tools/rig_barcode.py screenshots/rig_<rom>/*.png`.
+
+Rig results 2026-09-21 (12 captures per launch, three launches each):
+
+    barcode5    (line layout + barcode)   3/3 background; 35/36 decoded
+    barcode5p5  (ZEUSPAD=5 + barcode)     3/3 background; 30/36 decoded
+                                          (the six NO BARCODE captures are
+                                          scene cuts: the rows fade with
+                                          the picture)
+
+Every decoded capture, both roms: SH-2 published == 68K consumed (mod
+256). On the FPGA every packet lands. The pad-5 layout lost 0/3 without
+the barcode (LESSONS 2026-09-20 evening); with it, 3/3 -- the lottery
+again. The two palette-flag counters (SH-2 `cz_pal` vs the 68K's
+0xFF3560) advance by different amounts per interval and are not the
+same event; reconcile before reading either as "flagged packets lost".
+No losing launch has been read yet; pad-3 and bset layouts were queued
+next.
