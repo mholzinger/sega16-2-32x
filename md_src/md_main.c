@@ -743,6 +743,17 @@ void partb_hook(void)
 	 * background on silicon while ares rendered every one). */
 	slim_dma();
 #endif
+#ifdef DMA_WAIT
+	/* RACE CANDIDATE (2026-09-21): the barcode build's 384-word DMA here
+	 * wins the level-start race on every layout (12/12; pad-5 0/6 without
+	 * it, 3/3 with the DMA alone). Does the raise overtake slim_dma's
+	 * last DMA on the FPGA? Wait for the VDP's DMA-busy bit, no traffic. */
+	{ uint16_t g9 = 0; while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} (*(volatile uint16_t*)0xFF340C) = g9; }
+#endif
+#ifdef DMA_DELAY
+	/* RACE CANDIDATE: a pure delay of about the DMA's length, no traffic */
+	{ volatile uint16_t d = 0; while (++d < DMA_DELAY) {} }
+#endif
 #ifdef RIG_BARCODE
 	/* RIG BARCODE (docs/design/RIG-READOUT.md, 2026-09-21). 80 bits per
 	 * capture, written INTO the picture through the MD WINDOW plane (never

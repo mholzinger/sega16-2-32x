@@ -907,6 +907,14 @@ endif
 ifdef BCDMAONLY
 MDCCFLAGS += -DBC_DMAONLY
 endif
+# race candidates after slim_dma (2026-09-21): DMAWAIT=1 spins on the VDP
+# DMA-busy bit; DMADELAY=N spins N x ~12 cycles
+ifdef DMAWAIT
+MDCCFLAGS += -DDMA_WAIT
+endif
+ifdef DMADELAY
+MDCCFLAGS += -DDMA_DELAY=$(DMADELAY)
+endif
 ifdef BGVALUE
 MDCCFLAGS += -DBG_VALUE
 endif

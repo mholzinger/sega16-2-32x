@@ -122,3 +122,16 @@ ingredients (window regs, three CRAM writes, 32 CRAM reads, two FB word
 reads, a 384-word WRAM->VRAM DMA after slim_dma, and on the SH-2 two
 long writes into the header after the ISR copy). Bisect knobs:
 `BCNODMA=1`, `BCDMAONLY=1`.
+
+Bisect 2026-09-21 03:47-04:01, pad-5 layout, three launches each:
+
+    pad5bcnodma   barcode minus its DMA (CRAM reads/writes, FB reads,
+                  window regs kept)                       0/3 -- loses
+    pad5bcdmaonly the DMA alone (no CRAM or FB traffic)   3/3 -- wins
+
+THE CURE IS THE DMA: a 384-word WRAM->VRAM DMA issued in partb_hook
+after slim_dma and before the FM raise. Nothing it writes matters (the
+rows are covered by the picture and sprites); what it does to the
+machine does. Candidates for the property, next: DMAWAIT=1 (spin on the
+VDP DMA-busy bit after slim_dma, no traffic) and DMADELAY=80 (a pure
+delay of about the DMA's length).
