@@ -2655,6 +2655,34 @@ ifdef FBXECHO
 SHCCFLAGS += -DFBX_ECHO
 MDCCFLAGS += -DFBX_ECHO
 endif
+# C1RTALL=1 = 2026-09-21: classify every priority (cat-1) cell from its
+# tile -- the scene's baked mask by code, else a mask from the art --
+# instead of cat1hole's per-cell class baked from gameplay (the attract's
+# level-2 demo put rocks where the bake had none: black cells).
+ifdef C1RTALL
+SHCCFLAGS += -DC1_RT_ALL
+endif
+# BGBOTTOM=1 = 2026-09-21: the BG bottom-band backstop (2026-08-25) blanks
+# a BG cell in view rows 24-27 only where the FG tile over it is fully
+# OPAQUE; level 2's foreground has holes there and the arcade shows the
+# floor through them (black cells around the rocks).
+ifdef BGBOTTOM
+SHCCFLAGS += -DBG_BOTTOM_HOLES
+endif
+# NTWIPEGEN=1 = 2026-09-21: bump the name-table walk generation whenever
+# slot tags are wiped (install, set free, round change) so rows naming
+# wiped slots re-walk at their next visit instead of after NT_MAXAGE
+# (the eye scene's stale patches).
+ifdef NTWIPEGEN
+SHCCFLAGS += -DNT_WIPE_GEN
+endif
+# MDSREMARK=1 = 2026-09-21: a scene install re-ships (marks dirty) the
+# slots of sets whose pen map changed instead of wiping their tags; cells
+# naming a wiped slot showed the next claimant's art until re-walked (the
+# eye scene's stale patches).
+ifdef MDSREMARK
+SHCCFLAGS += -DMDS_REMARK
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set
@@ -3241,8 +3269,8 @@ $(TARGET).32x: $(TARGET).elf $(TARGET).lst
 	@# .tilesmd lost 425KB to this and the feature was silently inert
 	@# for an evening, passing every gate because it WAS the baseline
 	@# (LESSONS.md "An .incbin blob needs .section name, \"a\"").
-	@bad=$$($(SHOBJD) -h $< | awk '/^ *[0-9]+ \./ { n=$$2; getline f; \
-	    if (f ~ /CONTENTS/ && f !~ /ALLOC/) print n }' \
+	@bad=$$($(SHOBJD) -h $< | awk '/^ *[0-9]+ \./ { n=$$2; sz=$$3; getline f; \
+	    if (sz != "00000000" && f ~ /CONTENTS/ && f !~ /ALLOC/) print n }' \
 	    | grep -v '^\.\(debug\|comment\|note\|stab\)'); \
 	if [ -n "$$bad" ]; then \
 	  echo 'FATAL: section(s) carry CONTENTS but not ALLOC.'; \

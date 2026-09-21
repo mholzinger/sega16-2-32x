@@ -810,6 +810,8 @@ volatile uint32_t mdalloc_onscr[128];
 #define MDA_WATCH 33
 #endif
 volatile uint32_t mdalloc_id[24];
+volatile uint8_t  mdalloc_refused[32];   /* ring: the last refused colour sets */
+volatile uint8_t  mdalloc_refbits[16];   /* bitmap: every colour set ever refused */
 volatile uint8_t  mdalloc_pin[128];
 #define MDA(i) (mdalloc_ctr[i]++)
 #define MDA_ADD(i, n) (mdalloc_ctr[i] += (uint32_t)(n))
@@ -897,6 +899,25 @@ extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
  * bytes, tools/bake_cat1mask.py) are copied into SDRAM at mds_install;
  * the name-table pass stores the MASK INDEX per class-2 cell (binary
  * search of the raw 13-bit code) where it stored the tile code. */
+#ifdef BG_BOTTOM_HOLES
+/* Is this FG tile fully opaque (no pen-0 pixel)? Cached by raw 13-bit
+ * code in a 256-slot direct-mapped table; the art scan runs once per
+ * code. Used by the BG bottom-band backstop (2026-09-21). */
+static uint16_t fgop_tag[256];            /* code13 | 0x8000, 0 = empty */
+static uint8_t  fgop_val[256];
+static unsigned fg_tile_opaque(unsigned code13, unsigned art)
+{
+    unsigned slot = code13 & 255u;
+    if (fgop_tag[slot] != (uint16_t)(code13 | 0x8000u)) {
+        const uint8_t *px = altbeast_tiles + art * 64u;
+        unsigned op = 1;
+        for (unsigned i = 0; i < 64; i++) if (!px[i]) { op = 0; break; }
+        fgop_val[slot] = (uint8_t)op;
+        fgop_tag[slot] = (uint16_t)(code13 | 0x8000u);
+    }
+    return fgop_val[slot];
+}
+#endif
 #include "cat1mask.h"
 /* RUNTIME MASKS FOR UNBAKED PAGES (2026-09-20). The bake covers the
  * level pages only; the transformation cutscene draws from pages 10/11
@@ -908,7 +929,11 @@ extern const uint8_t cat1hole[];         /* sh_src/cat1hole_data.s */
  * an unbaked page gets a mask computed from the tile art into a 64-slot
  * direct-mapped cache appended to the baked table; the slave's c1_hit
  * indexes both the same way. */
+#ifdef C1_RT_ALL
+#define C1RT_N 256                        /* every priority cell may classify here */
+#else
 #define C1RT_N 64
+#endif
 static uint16_t c1mask_codes[CAT1MASK_MAX];
 static uint8_t  c1mask_bits[(CAT1MASK_MAX + C1RT_N) * 8];
 static uint16_t c1mask_n;
@@ -2607,6 +2632,17 @@ static uint8_t mdp_pend_used[128];
  * 155 until 2026-09-16, so every TAGKEEP-off build since then failed to
  * compile ("implicit declaration of mdp_wipe_set_tags") -- which is why the
  * TAGKEEP family had never actually been measured off. */
+#if defined(NT_WIPE_GEN) && defined(NT_SKIP)
+static uint16_t tm_gen;                    /* tentative; defined with NT_SKIP below */
+/* A WIPED TAG IS A STALE CELL (2026-09-21, the eye scene): a name-table
+ * cell that names a wiped slot shows whatever art lands there next, and
+ * the row walk skips it for up to NT_MAXAGE windows because the skip
+ * key tracks page content, not slot tags. Bump the walk generation on
+ * every wipe so every row re-walks at its next visit. */
+static void nt_wipe_gen(void) { tm_gen++; if (!tm_gen) tm_gen = 1; }
+#else
+#define nt_wipe_gen() ((void)0)
+#endif
 static void mdp_wipe_set_tags(unsigned s)
 {
     for (int i = 0; i < NSETS * NWAYS; i++)
@@ -2748,6 +2784,7 @@ static void mdp_free_set(unsigned s)
             MDA(14);
         }
 #endif
+    nt_wipe_gen();
     DIAG[37]++;                              /* set frees/invalidations */
 }
 
@@ -3026,6 +3063,10 @@ static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
 #endif
             ) {
             MDA(30);                 /* refused: not in the scene's table */
+#ifdef MDALLOC_WHY
+            { static uint8_t rl_i; mdalloc_refused[rl_i & 31] = (uint8_t)cset; rl_i++;
+              mdalloc_refbits[(cset >> 3) & 15] |= (uint8_t)(1u << (cset & 7)); }
+#endif
             return;
         }
         mdp_assign_set(cset, stamp, mask, 0);
@@ -3278,6 +3319,9 @@ static int mdp_assign_set(unsigned s, uint8_t stamp, uint8_t mask, int soft)
  * same invalidation mdp_free_set relies on for a relocation, applied to
  * the whole map. Refcounts and owners are rebuilt from the maps so the
  * per-window live CRAM refresh keeps tracking fades exactly as now. */
+#ifdef MDS_REMARK
+static uint16_t md_pending;                 /* tentative: defined below */
+#endif
 static void mds_install(unsigned sc, uint8_t stamp)
 {
     /* SELECTIVE INVALIDATION: a slot's pattern depends only on its set's
@@ -3332,8 +3376,21 @@ static void mds_install(unsigned sc, uint8_t stamp)
 #endif
     for (int i = 0; i < NSETS * NWAYS; i++)
         if (md_tag[i] != 0xFFFFFFFFu && changed[(md_tag[i] >> 16) & 0x7F]) {
+#ifdef MDS_REMARK
+            /* RE-SHIP, DO NOT WIPE (2026-09-21, the eye scene's stale
+             * patches). A wiped tag frees the slot; the cells still naming
+             * it show whatever tile claims it next until their row is
+             * re-walked (36-51 such cells 50 frames into the eye, ares).
+             * Marking the slot dirty re-ships the SAME tile under the new
+             * pen map and every cell stays valid. */
+            if (!(md_dirty[i >> 5] & (1u << (i & 31)))) md_pending++;
+            MD_MARK(i);
+            MDA(12);
+#else
             md_tag[i] = 0xFFFFFFFFu;
             MDA(12);
+            nt_wipe_gen();
+#endif
         }
     MDS[0]++;
 }
@@ -7005,6 +7062,17 @@ __attribute__((noinline)) static void disp_gate(void)
                 mds_install(r8, disp_hold);
                 md_round = (uint8_t)r8;
                 MDS[5] += 0x100;
+#ifndef ROUND_NOWIPE
+                /* A ROUND CHANGE IS A LEVEL LOAD: every slot shipped so far
+                 * carried the OLD round's bake (the level-2 demo's cells
+                 * around its foreground rocks stayed black: emitted under
+                 * round 0 before the install, tags unchanged after it).
+                 * Wipe every tag so the scene re-ships whole under the new
+                 * round's tables. (222's no-wipe rule is for SAME-round
+                 * returns, where a re-ship bands real hardware.) */
+                for (int i9 = 0; i9 < NSETS * NWAYS; i9++) md_tag[i9] = 0xFFFFFFFFu;
+                nt_wipe_gen();
+#endif
             }
         }
 #endif
@@ -16059,7 +16127,31 @@ RAMCODE void m_main(void)
                                 unsigned hv = 0;
                                 if (w && (w & 0x8000)) {
                                     unsigned pgn = pqb[(((unsigned)vy >> 7) & 2) + ((vx >> 9) & 1)] & 15u;
+#if defined(C1_RT_ALL) && defined(C1_MASKTAB)
+                                    /* CLASSIFY FROM THE TILE, NEVER FROM THE CELL (2026-09-21,
+                                     * the attract's level-2 demo). cat1hole is a per-CELL class
+                                     * baked from gameplay; the demo puts different tiles in
+                                     * those cells, and a "no hole" cell over a rock's transparent
+                                     * edge left the FB opaque: black cells around every rock.
+                                     * The code's baked mask if the scene has one, else a mask
+                                     * from the art (the cutscene path), for every priority cell. */
+                                    (void)pgn;
+                                    {
+                                        unsigned mi = c1mask_find(w & 0x1FFFu);
+                                        if (mi != 0xFFFFu) { hv = 2; cat1code[row][col] = (uint16_t)mi; }
+                                        else {
+                                            unsigned c2 = w & 0x1FFF;
+                                            if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
+                                            GAME_TILE_REMAP(c2);
+                                            hv = c1rt_class(w & 0x1FFFu, c2);
+                                            if (hv == 2)
+                                                cat1code[row][col] = (uint16_t)(CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1)));
+                                        }
+                                    }
+                                    if (0) {
+#else
                                     if (md_round < 5 && pgn < 5) {
+#endif
                                         unsigned n = pgn * 2048u + (((unsigned)vy >> 3) & 31u) * 64u + ((vx >> 3) & 63u);
                                         hv = CAT1HOLE_GET(cat1hole + (unsigned)md_round * CAT1HOLE_BYTES_PER_SCENE, n);
                                         if (hv == 2) {
@@ -16110,11 +16202,25 @@ RAMCODE void m_main(void)
                                           & 0x1FF;
                                 unsigned fvx = (unsigned)((fl->vx0 & ~7)
                                                           + col * 8) & 0x3FF;
-                                fgcov = TILEMAP_C[fl->pq[((fvy >> 7) & 2)
+                                uint16_t fw = TILEMAP_C[fl->pq[((fvy >> 7) & 2)
                                                         + ((fvx >> 9) & 1)]
                                                   * 0x800
                                                   + ((fvy >> 3) & 0x1F) * 64
-                                                  + ((fvx >> 3) & 0x3F)] != 0;
+                                                  + ((fvx >> 3) & 0x3F)];
+                                fgcov = fw != 0;
+#ifdef BG_BOTTOM_HOLES
+                                /* 2026-09-21 (Mike's level-2 demo): the FG's
+                                 * bottom band has HOLES on level 2 (rock edges,
+                                 * gaps between rocks) and the arcade shows the
+                                 * floor through them. Covered means the FG tile
+                                 * there is fully OPAQUE, not merely present. */
+                                if (fgcov) {
+                                    unsigned fc = fw & 0x1FFF;
+                                    if (fc & 0x1000) fc = (fc & 0xFFF) + (unsigned)bank1 * 0x1000u;
+                                    GAME_TILE_REMAP(fc);
+                                    fgcov = fg_tile_opaque(fw & 0x1FFFu, fc);
+                                }
+#endif
                             }
                             if (!isfg && row >= 24 && fgcov) {
                                 /* PURPLE BACKSTOP (2026-08-25). View rows

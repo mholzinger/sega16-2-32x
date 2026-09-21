@@ -48,6 +48,7 @@ static uint8_t  fbx_age;                 /* vints since the last blast(1) */
 static uint16_t fbx_keep_n;              /* words of the last blasted packet, kept for a re-blast */
 static uint8_t  fbx_keep_live;           /* the kept packet is whole (not being rebuilt) */
 static uint16_t fbx_reblasts;            /* diag: re-blasts issued */
+static uint16_t fbx_remarks;             /* diag: unechoed pushes re-marked */
 static uint16_t fbx_stage[];             /* tentative: the packet stage (defined with FBX_STAGE) */
 static uint8_t  fbx_seq_pub;             /* tentative: last published sequence */
 #endif
@@ -2392,6 +2393,29 @@ static void r60_push(void) {
 #define PSTAMP(a) (*(volatile uint16_t*)(a) = *(volatile uint16_t*)0xC00008)
 	PSTAMP(0xFFA0B4);                    /* entry */
 #ifdef FB_XPORT
+#ifdef FBX_ECHO
+	/* ECHO BELT, SECOND HALF (2026-09-21, rig att1 launch 2/3 black): a
+	 * lost packet whose SUCCESSOR is built before the master's echo can
+	 * catch up is never re-blasted -- the belt compares against the newer
+	 * sequence. So before overwriting the stage with a new packet, if the
+	 * kept one is two vints old and still unechoed, put its palette ids
+	 * back on the dirty map (force raw, the BAD1 rule) so they ship again
+	 * in this packet. Costs nothing when the echo is on time. */
+	if (fbx_keep_live && fbx_age >= 2 && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
+		volatile uint8_t *lp9 = (volatile uint8_t*)0xFFA0C0;
+		volatile uint8_t *pd9 = (volatile uint8_t*)0xFFBA00;
+		uint8_t lk9 = lp9[0];
+		if (lk9 <= 15)
+			for (uint8_t j9 = 0; j9 < lk9; j9++) {
+				uint8_t idb = lp9[1 + j9];
+				if (idb < 64) {
+					pd9[idb >> 3] |= (uint8_t)(1u << (idb & 7));
+					pal_force[idb >> 3] |= (uint8_t)(1u << (idb & 7));
+				}
+			}
+		fbx_remarks++;
+	}
+#endif
 	fbx_i = 0;
 #ifdef FBX_ECHO
 	fbx_keep_live = 0;                   /* the stage is being rebuilt: nothing to repeat */
