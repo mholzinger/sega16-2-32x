@@ -172,3 +172,19 @@ frame 300 (barcode5's reference) and CRAM 16-47 non-zero at frame 2004.
 
 The barcode itself stays the rig instrument; its "cure" was the DMA
 shifting the boot-time blast-vs-flip phase, not a fix.
+
+## Closed (2026-09-21 05:20): FBXECHO=1 is on the line
+
+Belt v1 (in the pre-post slot) was inert: rig pad5echo 0/3, lineecho
+2/3, ares age never advanced -- that slot is not on the boot vint path.
+Belt v2 (in `partb_hook`, every vint, FM=0-guarded):
+
+    ares palgate, eight layouts (p1/p3/p5/bc2/bc6/d16/d40/line + belt)  8/8 PASS
+    rig pad5echo2  (ZEUSPAD=5 + belt)   3/3 background   (pad-5 was 0/6)
+    rig lineecho2  (line + belt)        3/3 background
+    rom/night/echo2.32x = `make line` with FBXECHO=1 in LINE_FLAGS,
+    4 stamp bytes from lineecho2; on the rig 05:19.
+
+The readout (`RIGBARCODE=1`, `tools/rig_barcode.py`) stays as the rig's
+multi-value instrument. `bgcheck.py` (scratch) is the one-number
+background verdict per capture.

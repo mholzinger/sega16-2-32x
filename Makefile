@@ -3111,7 +3111,7 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
-              TILESLIM=1 SLIMCAP=40
+              TILESLIM=1 SLIMCAP=40 FBXECHO=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
 # pipeline: docs/design/SLIM-PIPELINE.md 1b.

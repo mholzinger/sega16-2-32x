@@ -10,7 +10,17 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/slim31.32x        THE LINE = `make line` (2026-09-21 01:15).
+    rom/night/echo2.32x         THE LINE = `make line` (2026-09-21 05:20)
+                                = slim31 + FBXECHO=1 (the framebuffer
+                                packet echo belt) + the slim diag and
+                                palette shadow moved out of slim_art.
+                                Rig: pad-5 layout 3/3 (0/6 before),
+                                line layout 3/3; ares palette gate PASS
+                                on eight layouts. Closes the level-start
+                                black background (LESSONS 2026-09-21
+                                "lost boot-storm packet"). AWAITING
+                                MIKE'S PLAY PASS -- it is on the rig.
+    rom/night/slim31.32x        previous line (2026-09-21 01:15).
                                 = slim30 + the first 16 BG palette
                                 publishes forced (the FB persists across
                                 a warm relaunch). Rig: background present
@@ -25,7 +35,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                rom/night/barcode5p5.32x -- A PROBE (RIGBARCODE=1 on the pad-5 layout); push slim31 back before handing over
+    rig (MiSTer)                echo2 (pushed 2026-09-21 05:19)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
@@ -378,19 +388,18 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           /media/fat/burst.sh on the rig carries these
                           numbers in its header.
 
-    LEVEL-START RACE      MECHANISM FOUND 2026-09-21 05:30 (LESSONS "lost
-                          boot-storm packet"): ares reproduces it on a
-                          losing layout (rom/night/barcode6.32x). The
-                          68K's boot palette storm loses FB packet 2
-                          (blocks 15-29 = the preloaded level-1 palette)
-                          to a bank flip; the master's gap echo arrives
-                          one push too late for the two-deep re-mark
-                          belt. FIX CANDIDATE: FBXECHO=1 (master echoes
+    LEVEL-START RACE      CLOSED 2026-09-21 06:45 (LESSONS "lost boot-storm
+                          packet" + its 06:30 correction). The master's
+                          pre-flip lift overlapped a 68K blast in
+                          progress; the finished packet sat in the
+                          displayed bank until the master's fill erased
+                          it; the two-deep BAD1 belt had rotated past
+                          it. FBXECHO=1 (on the line): the master echoes
                           its lifted sequence in packet word 5 bits
-                          12-15; 68K re-blasts unechoed packets).
-                          Gates: ares palgate over six layouts (running),
-                          then rig 3 launches on pad-5 and the line,
-                          then Mike. Not yet on the line.
+                          12-15, the 68K re-blasts an unechoed packet
+                          from partb_hook two vints after its blast.
+                          Rig: pad-5 0/6 -> 3/3, line 3/3; ares gate
+                          PASS on eight layouts. Mike's pass pending.
 
     RIG BARCODE READOUT   BUILT 2026-09-21 (`make line RIGBARCODE=1`,
                           docs/design/RIG-READOUT.md, decode with

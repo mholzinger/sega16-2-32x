@@ -73,3 +73,15 @@ packet consumed in 60 s; forcing the SH-2's flag did not rescue them.
   38, 42, 46, 64, 65. Either the later rounds' bakes are complete and
   level 1's is the odd one, or the pop-in is a level-1 load shape.
   Measure before building.
+
+## 2026-09-21 05:20 -- the framebuffer packet echo belt (FBXECHO=1)
+
+Path: 68K stages the packet in WRAM -> blasts it into the draw bank at
+FM=0 -> master lifts in its ISR before flipping. Failure: a lift that
+overlaps a blast in progress leaves the finished packet in the displayed
+bank, and the master's fill erases it (the level-start black
+background: boot palette packet 2). Fix: the master echoes the sequence
+it lifted in its packet header (word 5 bits 12-15); `fbx_echo_belt()` in
+partb_hook re-blasts the kept packet two vints after an unechoed blast.
+Conditions: FBXSTAGE + FBXPEND + FBXISRLIFT (the line), FM=0 at
+partb_hook. Proof: ares palgate 8/8 layouts; rig pad-5 0/6 -> 3/3.
