@@ -1398,45 +1398,7 @@ static void md_consume(uint32_t pkt_base) {
 					volatile uint16_t *e = sc + 8;
 					slim_walk(e, cnt);
 					}
-					if (0) {
-					volatile uint16_t *e = sc + 8;
-					/* (the walker below moved into slim_walk(), 2026-09-21;
-					 * kept for the diff, never compiled in) */
-					for (uint16_t i = 0; i < cnt && slim_n < SLIM_CAP; i++) {
-						uint16_t w0 = e[0];
-						if (w0 & 0x4000u) {
-							/* INLINE: DMA the 16 words straight from the
-							 * FB, the FB route's own idiom. The first cut
-							 * copied them through the 68K (16 slow adapter
-							 * reads per tile, 640 per vint at a load) and
-							 * the FPGA never finished the level's first
-							 * load: no background until the round cut
-							 * (Mike, 2026-09-20). */
-							uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
-							if (va + 32u <= 0xB000u) {
-								uint32_t src = ((uint32_t)(e + 1)) >> 1;
-								*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
-								*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
-								*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
-								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
-								*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
-								*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
-									| (((va >> 14) & 3u) | 0x80u);
-								slim_diag[5]++;   /* diag: inline tiles */
-							}
-							e += 17;
-						} else {
-							if (slim_n < SLIM_CAP) {          /* bound (2026-09-21): a packet may carry more
-							                                   * records than the buffer since SLIM_WORDCAP */
-								slim_rec[slim_n * 2u] = w0;
-								slim_rec[slim_n * 2u + 1u] = e[1];
-								slim_n++;
-								slim_diag[7]++;   /* diag: baked records staged */
-							} else slim_diag[4]++;            /* dropped: buffer full (re-marked by the SH-2? no: lost) */
-							e += 2;
-						}
-					}
+					{
 #if !defined(SLIM_NOFETCH) && !defined(SLIM_SAMEVINT)
 					/* FETCH HERE (slim28, 2026-09-20): cart -> slim_art now, so
 					 * the DMA at the start of partb_hook lands this vint's art
@@ -1799,6 +1761,9 @@ static void md_consume(uint32_t pkt_base) {
 						slim_walk(e, na);        /* mixed records (2026-09-21) */
 						(*(volatile uint16_t*)0xFFA0F0) += na;
 						na = 0;
+#if !defined(SLIM_NOFETCH) && !defined(SLIM_SAMEVINT)
+						slim_fetch();            /* fetch the tail's art this vint too, not at the next batch */
+#endif
 #endif
 						for (uint16_t i = 0; i < na; i++, e += 17) {
 							uint32_t va = (uint32_t)e[0] * 32u;
