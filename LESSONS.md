@@ -1410,6 +1410,11 @@ cutpf4 keeps prefetched slots clean and skips the re-mark for sets with
 no line in the new table (left resident, not freed: LESSONS 2026-09-21
 on wiped tags).
 
+Outcome (cutpf4): dirty at the switch 965 -> 16; black cells at
++10/+15/+20/+25 = 232/36/19/0 against eye9's 357/454/496/595 (clear at
++55); 0 cells differ from the arcade at +25. The ~15 frames left are
+the row rotation (9 windows) plus the pre-switch scan finishing.
+
 **Rules:** measure a transition as black cells against the scene's own
 anchor, never as a diff against a sparsely sampled arcade; and when a
 switch is slow, count what is DIRTY at the switch before speeding up

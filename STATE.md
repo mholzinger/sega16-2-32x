@@ -629,7 +629,23 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           Dead: compose skip, flip skip, page budget --
                           the load is bound by the game's own gated
                           tilemap writes and the walk's rotation.
-                          NEXT DESIGN (not built): PRE-SWITCH WALK. The
+                          BUILT 2026-09-22 20:45 as CUTPREFETCH=1 (on
+                          LINE_FLAGS, rom/night/cut1.32x pending rig):
+                          on the cut bit the master claims ways for
+                          pages 10/11's tiles (free, else untouched
+                          for 32 windows) and ships them under scene
+                          9's table (md_tag bit 30); mds_install keeps
+                          those slots clean and no longer re-marks
+                          sets with no line in the new table. ares,
+                          anchor-relative: dirty at the switch 965 ->
+                          16; black cells +10/+15/+20/+25 = 232/36/19/0
+                          (eye9: 357/454/496/595, clear by +55); 0
+                          cells vs the arcade at +25. LESSONS "The
+                          cut's transition is the scene install's
+                          re-mark". Remaining ~15 frames = the row
+                          rotation. The pan's end (no install, page 0
+                          rewritten by the game) is not covered.
+                          ORIGINAL DESIGN (not built): PRE-SWITCH WALK. The
                           arcade shows the transformation complete on
                           its first frame because the game writes the
                           cut's pages (10/11) during the level and only
