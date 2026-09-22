@@ -10306,6 +10306,10 @@ static void nat_quick_claim(int par)
  * [slot][16 pixel words] at dst, clears the dirty bits, drains
  * *pending, reports the first slot in *first (0xFFFF if none). ROM:
  * called once or twice per window, <= 40 records. */
+#ifdef TILE_SLIM
+static volatile uint16_t *md_emit_end;   /* one past the last record md_emit_art wrote (mixed 2/17-word records) */
+static unsigned md_emit_budget = 680;    /* words the caller has room for (SLIM_WORDCAP); the tail site lowers it */
+#endif
 __attribute__((noinline))
 /* WORDS PER TILE RECORD. 17 for the FB route (slot + 16 art words), 2
  * for the slim route (slot|fg, blk/code) -- and EVERY site that walks
@@ -10316,9 +10320,8 @@ __attribute__((noinline))
  * at 40, which is what finally ruled out "it is the volume". */
 #ifdef TILE_SLIM
 #define MD_REC_W 2                            /* baked records; inline ones are 17 */
-#if defined(ART_TAIL)
-#error "TILE_SLIM: the ART_TAIL site advances by MD_REC_W and cannot walk mixed records"
-#endif
+/* ART_TAIL + TILE_SLIM (2026-09-21): the tail site advances by
+ * md_emit_end, not MD_REC_W, and the 68K walks the tail by record flag. */
 #else
 #define MD_REC_W 17
 #endif
@@ -10338,6 +10341,7 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
      * the VDP/PSG mirror space. Worst case 40 x 17 = 680 words = the
      * packet body, so the batch is clamped here. */
     volatile uint16_t *w = dst;
+    md_emit_end = dst;
 #ifdef SLIM_WORDCAP
     /* WORD CAP (2026-09-21): the packet body holds 680 words; a baked
      * record is 2 and an inline one 17. Stop when the WORST case no
@@ -10357,7 +10361,7 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         if (!(md_dirty[sl >> 5] & (1u << (sl & 31))))
             continue;
 #if defined(TILE_SLIM) && defined(SLIM_WORDCAP)
-        if ((unsigned)(w - dst) + 17u > 680u) break;   /* body full: the slot stays dirty */
+        if ((unsigned)(w - dst) + 17u > md_emit_budget) break;   /* body full: the slot stays dirty */
 #endif
         md_dirty[sl >> 5] &= ~(1u << (sl & 31));
         uint32_t mkey = md_tag[sl];
@@ -10429,6 +10433,7 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                     w[0] = (uint16_t)(sl | ((mkey & 0x80000000u) ? 0x8000u : 0u));
                     w[1] = (uint16_t)(blk_ * 64u + (mkey & 63u));
                     w += 2;
+                    md_emit_end = w;
                     if (*pending) (*pending)--;
                     sent++;
                     continue;
@@ -10511,6 +10516,7 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
         if (*pending) (*pending)--;
 #ifdef TILE_SLIM
         w += 17;                              /* the inline record just written */
+        md_emit_end = w;
 #endif
         sent++;
     }
@@ -16773,11 +16779,22 @@ RAMCODE void m_main(void)
                             uint16_t fs = 0xFFFF;
                             int room = (int)((sc + 688 - o) / MD_REC_W);
                             int sli = md_scan;
+#ifdef TILE_SLIM
+                            /* mixed records: budget in WORDS, advance to
+                             * where the emitter stopped (2026-09-21) */
+                            md_emit_budget = (unsigned)(sc + 688 - o);
+                            int n = md_emit_art(o, 999, &sli, &md_pending, &fs);
+                            md_emit_budget = 680;
+                            md_scan = (uint16_t)sli;
+                            *na = (uint16_t)n;
+                            o = md_emit_end;
+#else
                             int n = md_emit_art(o, room > 24 ? 24 : room,
                                                 &sli, &md_pending, &fs);
                             md_scan = (uint16_t)sli;
                             *na = (uint16_t)n;
                             o += n * MD_REC_W;
+#endif
                             art_n = (uint16_t)n;
                             DIAG[57] += (uint32_t)n;
 #ifdef MD_ALLOC_WHY

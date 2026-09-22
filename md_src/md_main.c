@@ -630,6 +630,41 @@ static uint16_t slim_va[SLIM_CAP];        /* step 2: VRAM address per tile */
 static uint16_t slim_ready;               /* tiles waiting for step 3 */
 static void slim_dma(void);
 
+/* MIXED-RECORD WALKER (2026-09-21, shared by the tile batch and the
+ * chunk's ART_TAIL). Bit 14 of the slot word = an inline 17-word record
+ * (an unbaked set's pixels): DMA its art from the FB now, at FM=0.
+ * Otherwise a 2-word baked record: stage it for slim_fetch. */
+__attribute__((section(".data"), noinline))
+static void slim_walk(volatile uint16_t *e, uint16_t cnt)
+{
+	for (uint16_t i = 0; i < cnt; i++) {
+		uint16_t w0 = e[0];
+		if (w0 & 0x4000u) {
+			uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+			if (va + 32u <= 0xB000u) {
+				uint32_t src = ((uint32_t)(e + 1)) >> 1;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+				*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+					| (((va >> 14) & 3u) | 0x80u);
+				slim_diag[5]++;
+			}
+			e += 17;
+		} else {
+			if (slim_n < SLIM_CAP) {
+				slim_rec[slim_n * 2u] = w0;
+				slim_rec[slim_n * 2u + 1u] = e[1];
+				slim_n++;
+				slim_diag[7]++;
+			} else slim_diag[4]++;            /* dropped: buffer full */
+			e += 2;
+		}
+	}
+}
 __attribute__((section(".data"), noinline))
 static void slim_fetch(void)              /* step 2 */
 {
@@ -1361,10 +1396,12 @@ static void md_consume(uint32_t pkt_base) {
 				 * next vint -- see the SLIM PIPELINE STATE comment. */
 					{
 					volatile uint16_t *e = sc + 8;
-					/* MIXED RECORDS: bit 14 of the slot word = an inline
-					 * 17-word record (an unbaked set's pixels) -- copy its
-					 * art into slim_art now, at FM=0; otherwise a 2-word
-					 * baked record for slim_fetch. */
+					slim_walk(e, cnt);
+					}
+					if (0) {
+					volatile uint16_t *e = sc + 8;
+					/* (the walker below moved into slim_walk(), 2026-09-21;
+					 * kept for the diff, never compiled in) */
 					for (uint16_t i = 0; i < cnt && slim_n < SLIM_CAP; i++) {
 						uint16_t w0 = e[0];
 						if (w0 & 0x4000u) {
@@ -1758,6 +1795,11 @@ static void md_consume(uint32_t pkt_base) {
 #ifdef ART_TAIL
 					if (sc[1] & 0x4000u) {   /* art tail: [n] n x [slot][16 words] */
 						uint16_t na = *e++;
+#ifdef TILE_SLIM
+						slim_walk(e, na);        /* mixed records (2026-09-21) */
+						(*(volatile uint16_t*)0xFFA0F0) += na;
+						na = 0;
+#endif
 						for (uint16_t i = 0; i < na; i++, e += 17) {
 							uint32_t va = (uint32_t)e[0] * 32u;
 							if (va + 32u > 0xB000u) continue;
