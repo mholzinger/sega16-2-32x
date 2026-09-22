@@ -1198,3 +1198,71 @@ arcade shows the refilled page at once. Same class as the transformation
 cut. Not a palette bug: set 11's colour 0 is the blue and its pens are
 right once the cells arrive. Fix is the PRE-SWITCH / atomic-walk design
 card (STATE), not a bake or table change.
+
+### The eye's "loose tiles" were three CRAM entries for a set of eight colours: the harvest read plane B from an empty address (2026-09-22)
+
+Traced in ares at eye+280 against the arcade's frame 4780 with the
+name tables, the slot tags and CRAM: plane B behind the eye is right in
+tiles and sets (0 of 1120 visible cells point at a slot of the wrong
+set), and the FG's pen-0 pixels are transparent as on the silicon
+(jts16_prio.v). What shows through them is BG set 35 with the pen map
+[13,12,11,11,15,15,14,14] -- three entries for eight colours, two of
+them unassigned -- because `tools/attract_harvest.py` dumped 8 KB from
+0xC000 and read "plane B" at its second half, 0xD000. Plane B's table is
+at 0xE000 (md_main.c:153). Every harvested scene (5-9) had counted its
+BG cells as slot 0 / set 0 and got no BG sets at all; the eye's 33-36,
+and the FG sets 25-32, 19-21, were packed by whatever the seed round
+left.
+
+Two more findings on the way:
+
+- **The "arcade shows the planes 8 rows lower" measurement was a crop
+  error.** ares-headless writes 1415x243 frames; the active display is
+  rows 11-234 (rows 0-10 and 235-242 are border), and the scratch
+  scripts cropped at row 19. jts16_tilemap.v's vtimer (VB_START 0xDF,
+  262 lines) and jts16_scr.v (vpos = vscan + vscr, vscan <= vrender)
+  put plane line y+vscr on screen line y with no offset, and with the
+  crop fixed the eye's cells align at shift 0. Crop at (65,11), never
+  (65,19); scenegate.py is corrected.
+- **Counting every plane-B cell over-harvests.** The first corrected
+  harvest pulled the level ground behind the scores table into scene 8
+  (21 sets) and the blob grew 510 -> 694 KB, past the 576 KB gap (the
+  cart is full: .sprbake ends at 0x400000). Skipping BG cells under an
+  opaque FG tile (the silicon's rule, jts16_prio.v) removed almost
+  nothing: the ground sat in the scores' BLACK bands, where plane A is
+  empty and plane B is stale content the walker never re-marked. The
+  harvest now reads the walker's own per-view-cell mirror (md_dbg_nt,
+  m_main.c:653, SDRAM 0x0603D200: [BG][FG] x 28 x 40 name-table words,
+  blank and never-written marked), which is the S16's truth per screen
+  cell, and keeps the opaque-FG rule on top.
+
+- **The blob budget forced a layout change, not a set cut.** With the
+  BG sets in, every harvested scene's blob grew and the total passed
+  the gap even after seeding the level-set scenes from round 0 (610 KB).
+  The mirrors say most sets live on ONE layer (scene 6: 17 of 19,
+  rounds 0-4: 72 of 89 by the audit), and a both-variant block spends
+  2 KB on the layer that never reads it. `bake_tiles_md.py` now emits a
+  2 KB single-variant block for those, flagged in bit 15 of the index
+  entry with the base in 2 KB units; the SH-2 folds the entry into the
+  record word (bit 15 flag, bits 6-14 base, bits 0-5 code; m_main.c
+  TILE_SLIM emitter) and the 68K decodes it in slim_fetch. Rounds-only
+  masks took the blob 610 -> 564 KB; the harvested masks come from the
+  third column of s<id>_sets.txt; with them the blob is 414 KB (206 x
+  2 KB, 100 single-variant).
+
+Outcome (eye2, the line): ares 19/19 anchors clean, refusals 37,000 ->
+0 over the attract, palgate PASS, rig 3/3; the eye phase-matched
+against a dense arcade capture (every 8 frames, 4540-4980): yellow
+phase 239 -> 223 cells, blue ~105 in both builds. Of the 9,297 pixels
+still differing at eye+290, 5,549 are sets 24-27 colour 5 displayed one
+MD level bright: the quantiser (`mdp_quant`, +2 >> 2) is nearest in
+LINEAR 5-bit space, the MD ramp is not linear. PALQUANT=1 is the
+ramp-nearest table; it moves 16 of 32 inputs one level down on every
+screen, so it waits for Mike's A/B.
+
+**Rules:** a harvest reads the VDP's tables at the addresses md_main.c
+programs, and it says which; the blob budget is a gate on every
+harvest change (make line fails loudly at .tilesmd); a "hardware
+offset" measured from screenshots is a crop until the RTL agrees; and
+when a blob outgrows its gap, measure what the layout wastes before
+cutting content.

@@ -52,7 +52,7 @@ def _scene_sets():
 SCENE_SETS = _scene_sets()
 # harvested attract scene -> the ROM round whose packing seeds it (shared
 # sets keep the round's pen maps, so their tile blocks dedup)
-HARVEST_BASE = {7: 0, 9: 0}
+HARVEST_BASE = {5: 0, 7: 0, 8: 0, 9: 0}
 # scenes that ANIMATE their palette pack by per-pixel colour history (the
 # splash's logo, the eye's fade); seeded scenes keep colour keys so their
 # blocks dedup against the base round's
@@ -316,7 +316,7 @@ def main():
             for ln in open(fn):
                 if ln.startswith('#') or not ln.strip():
                     continue
-                k, v = ln.split()
+                k, v = ln.split()[:2]          # 3rd column = layer mask (bake_tiles_md.py)
                 harvested[sc][int(k)] = int(v)
     scene_ids = list(range(SCENES)) + sorted(harvested)
     for s in scene_ids:

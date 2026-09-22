@@ -28,9 +28,9 @@ ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/h
 OUT = os.path.join(ROOT, "discover", "cram", "wide")
 MD_TAG = 0x0603B400            # m_main.c: md_tag, NSETS*NWAYS longs
 SCENES = {
-    5: [60, 120, 200, 300, 400, 480, 4530, 4600, 4700, 4800, 4900],
-    6: [1640, 1660, 1700, 1760, 1850, 1950],
-    7: [1980, 2050, 2150, 2300, 2500, 2800],
+    5: [60, 120, 200, 300, 400, 480, 4530, 4560, 4600, 4650, 4700, 4750, 4800, 4850, 4900, 4950],
+    6: [1660, 1700, 1760, 1850, 1900, 1950],   # 1640 is still the cut (eye anchor 1652)
+    7: [2030, 2050, 2150, 2300, 2500, 2800],   # 1980 is still the eye (picture anchor 2004)
     8: [2930, 3000, 3100, 3300, 3500],
     9: [1503, 1510, 1520, 1535, 1550, 1570, 1590, 1605],
 }
@@ -39,30 +39,55 @@ def run(rom, f, d):
     os.makedirs(d, exist_ok=True)
     cmd = [ARES, "--frames", str(f + 2),
            "--dump", f"wram:0xFF9000:0x800:{d}/pal.bin",
-           "--dump", f"vram:0xC000:8192:{d}/nt.bin",
+           "--dump", f"vram:0xC000:4096:{d}/nt.bin",
+           "--dump", f"vram:0xE000:4096:{d}/ntb.bin",
+           "--dump", f"vram:0:32768:{d}/tiles.bin",
+           "--dump", f"sdram:0x0603D200:4480:{d}/mirror.bin",
            "--dump", f"vsram:0:4:{d}/vs.bin",
            "--dump", f"vram:0xFC00:4:{d}/hs.bin",
            "--dump", f"sdram:0x{MD_TAG:X}:4096:{d}/tag.bin", rom]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
+MASKS = {}   # scene -> {set: layer mask, 1 = plane B (S16 BG), 2 = plane A (FG)}
+
 def sets_on_screen(d):
-    nt = open(f"{d}/nt.bin", "rb").read()
+    """Colour sets the walker put on the visible screen, per layer.
+
+    Source is md_dbg_nt (m_main.c:653, SDRAM 0x0603D200): the walker's
+    [2][28][40] mirror of the name-table word it wrote for every VIEW
+    cell -- BG view first, FG at +1120 -- with MD_BLANK_SLOT for a
+    blank cell and 0xDEAD for never-written. That is the S16's truth
+    for the frame, per screen cell, with no scroll arithmetic. Reading
+    the VDP tables instead (until 2026-09-22) counted stale plane-B
+    content the walker never re-marked: the level ground behind the
+    scores table's black bands, 21 sets nobody sees.
+
+    A BG cell under an FG tile with no pen-0 nibble is hidden
+    (jts16_prio.v: the FG covers it) and is not counted.
+    """
+    mir = struct.unpack(">2240H", open(f"{d}/mirror.bin", "rb").read())
     tags = struct.unpack(">1024I", open(f"{d}/tag.bin", "rb").read())
-    vs = struct.unpack(">2H", open(f"{d}/vs.bin", "rb").read())
-    hs = struct.unpack(">2H", open(f"{d}/hs.bin", "rb").read())
+    tiles = open(f"{d}/tiles.bin", "rb").read()
     cells = {}
-    for plane, base, vsc, hsc in (("A", 0, vs[0], hs[0]), ("B", 4096, vs[1], hs[1])):
-        for row in range(28):
-            for col in range(40):
-                tr = ((row * 8 + vsc) >> 3) & 31
-                tc = (((col * 8 - hsc) & 0x3FF) >> 3) & 63
-                w = struct.unpack(">H", nt[base + tr * 128 + tc * 2: base + tr * 128 + tc * 2 + 2])[0]
-                slot = w & 0x7FF
-                if slot == 0x3FF or slot >= 1024: continue
-                t = tags[slot]
-                if t == 0xFFFFFFFF: continue
-                cs = (t >> 16) & 0x7F
-                cells[cs] = cells.get(cs, 0) + 1
+    masks = MASKS.setdefault(int(os.path.basename(d).split("_")[0][1:]), {})   # set -> 1 BG | 2 FG
+    for q in range(1120):
+        fg = mir[1120 + q]
+        bg = mir[q]
+        for layer, w in (("A", fg), ("B", bg)):
+            if w == 0xDEAD: continue
+            slot = w & 0x7FF
+            if slot == 0x3FF or slot >= 1024: continue
+            if layer == "B":
+                fs = fg & 0x7FF
+                if fg != 0xDEAD and fs < 1024:
+                    px = tiles[fs * 32: fs * 32 + 32]
+                    if len(px) == 32 and all(b & 0xF0 and b & 0x0F for b in px):
+                        continue
+            t = tags[slot]
+            if t == 0xFFFFFFFF: continue
+            cs = (t >> 16) & 0x7F
+            cells[cs] = cells.get(cs, 0) + 1
+            masks[cs] = masks.get(cs, 0) | (2 if layer == "A" else 1)
     return cells
 
 def main():
@@ -86,7 +111,8 @@ def main():
             print(f"scene {sc} f{f}: {len(cells)} sets on screen, {sum(cells.values())} cells")
         with open(os.path.join(OUT, f"s{sc}_sets.txt"), "w") as fh:
             fh.write(f"# harvested from {os.path.basename(a.rom)} at frames {frames}\n")
-            for k in sorted(total): fh.write(f"{k} {total[k]}\n")
+            fh.write("# set cells layermask (1 = plane B / S16 BG, 2 = plane A / FG, 3 = both)\n")
+            for k in sorted(total): fh.write(f"{k} {total[k]} {MASKS.get(sc, {}).get(k, 3)}\n")
         print(f"scene {sc}: {len(total)} sets total: {sorted(total)}")
 
 if __name__ == "__main__":

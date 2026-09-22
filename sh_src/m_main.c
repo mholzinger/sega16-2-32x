@@ -2666,6 +2666,28 @@ static inline const uint8_t *tile_pixels(unsigned code, int cpu)
  * visible checkerboard. Rounding recentres the buckets so 1-LSB pairs
  * collapse back to one colour almost everywhere, and fixes the global
  * darkening truncation caused. */
+#ifdef PAL_QUANT_RAMP
+/* PALQUANT (2026-09-22). The +2 >> 2 rounding above is nearest in
+ * LINEAR 5-bit space (bucket k = [4k-2, 4k+1]), but the MD's DAC ramp
+ * is not linear: measured 0,52,87,116,144,172,206,255 (ares, and the
+ * FPGA within a few counts). The arcade output is linear (MAME:
+ * v*255/31, checked on the eye's lid: raw 15,9,7 -> 123,74,58), so the
+ * nearest MD level to v*255/31 on that ramp is what the eye should
+ * see. Traced at eye+290: 5549 of 9297 differing pixels were sets
+ * 24-27 colour 5 = raw (15,9,7), which +2>>2 sends to level (4,2,2) =
+ * 144,87,87 and the ramp-nearest sends to (3,2,1) = 116,87,52, the
+ * arcade's 123,74,58. Sixteen of 32 inputs move one level down.
+ * Dither pairs 1 LSB apart still collapse: every bucket is 3-4 wide. */
+static const uint8_t mdp_q5[32] = {
+    0,0,0,0, 1,1,1,1, 1,2,2,2, 2,3,3,3, 4,4,4,4, 5,5,5,6, 6,6,6,6, 6,7,7,7 };
+static uint16_t mdp_quant(uint16_t v)
+{
+    unsigned r = mdp_q5[(((v)       & 0xF) << 1) | ((v >> 12) & 1)];
+    unsigned g = mdp_q5[(((v >> 4)  & 0xF) << 1) | ((v >> 13) & 1)];
+    unsigned b = mdp_q5[(((v >> 8)  & 0xF) << 1) | ((v >> 14) & 1)];
+    return (uint16_t)((b << 6) | (g << 3) | r);
+}
+#else
 static uint16_t mdp_quant(uint16_t v)
 {
     unsigned r = ((((v)       & 0xF) << 1) | ((v >> 12) & 1)) + 2;
@@ -2677,6 +2699,7 @@ static uint16_t mdp_quant(uint16_t v)
     if (b > 7) b = 7;
     return (uint16_t)((b << 6) | (g << 3) | r);
 }
+#endif
 
 /* Release a set's pens and INVALIDATE its VRAM slots: the pattern in
  * VRAM is pen-remapped under the old assignment, and the (code,set)
@@ -10440,7 +10463,10 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                  * the 68K's `e += 2` mirrors this exactly. */
                 {
                     w[0] = (uint16_t)(sl | ((mkey & 0x80000000u) ? 0x8000u : 0u));
-                    w[1] = (uint16_t)(blk_ * 64u + (mkey & 63u));
+                    /* index entry -> record word (bake_tiles_md.py LAYOUT):
+                     * bit 15 = single-variant block, bits 6-14 = block
+                     * base in 2 KB units, bits 0-5 = code & 63. */
+                    w[1] = (uint16_t)((blk_ & 0x8000u) | ((blk_ & 0x1FFu) << 6) | (mkey & 63u));
                     w += 2;
                     md_emit_end = w;
                     if (*pending) (*pending)--;
@@ -10449,9 +10475,10 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
                 }
 #endif
                 const uint8_t *b_ = altbeast_tiles_md + (unsigned)MDROUND_N * 128u * 2u   /* the index precedes the blocks */
-                                  + blk_ * 4096u
-                                  + ((mkey & 63u) * 64u)
-                                  + ((mkey & 0x80000000u) ? 32u : 0u);
+                                  + (blk_ & 0x7FFFu) * 2048u
+                                  + ((blk_ & 0x8000u)
+                                     ? ((mkey & 63u) * 32u)                      /* single-variant block */
+                                     : ((mkey & 63u) * 64u) + ((mkey & 0x80000000u) ? 32u : 0u));
                 /* WIDTH (2026-09-17). The byte loop was 32 reads + 32
                  * writes per tile: the bake removed the ARITHMETIC and
                  * left the transport at byte width, which is why the rig

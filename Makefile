@@ -2707,6 +2707,14 @@ endif
 ifdef HOLDFROMBLANK
 SHCCFLAGS += -DHOLD_FROM_BLANK
 endif
+# PALQUANT=1 = 2026-09-22: mdp_quant maps each 5-bit S16 channel to the
+# NEAREST level of the MD's measured DAC ramp (0,52,87,116,144,172,206,
+# 255) instead of +2>>2 in linear space; 16 of 32 inputs land one level
+# darker, matching the arcade (LESSONS 2026-09-22, the eye's lid). A
+# global colour change: Mike's A/B before it joins the line.
+ifdef PALQUANT
+SHCCFLAGS += -DPAL_QUANT_RAMP
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT

@@ -685,10 +685,14 @@ static void slim_fetch(void)              /* step 2 */
 		if (va + 32u > 0xB000u) continue;
 		/* TILESMD_CART_BASE: MUST EQUAL the AT() address of .tilesmd in
 		 * sh_src/mars.ld -- `make tilesmd-addr` greps both. */
+		/* record word (bake_tiles_md.py LAYOUT, m_main.c emitter): bit 15
+		 * = single-variant block (one 32 B pattern per code, either
+		 * layer), bits 6-14 = block base in 2 KB units, bits 0-5 = code. */
 		uint32_t src = 0x268000uL + (uint32_t)TILESMD_INDEX_BYTES
-			+ ((uint32_t)(w1 >> 6)) * 4096u
-			+ ((uint32_t)(w1 & 63u)) * 64u
-			+ ((w0 & 0x8000u) ? 32u : 0u);
+			+ ((uint32_t)((w1 >> 6) & 0x1FFu)) * 2048u
+			+ ((w1 & 0x8000u)
+			   ? ((uint32_t)(w1 & 63u)) * 32u
+			   : ((uint32_t)(w1 & 63u)) * 64u + ((w0 & 0x8000u) ? 32u : 0u));
 		/* HARD BOUND (2026-09-20). A record whose block field is stray
 		 * would send this read past the 1MB bank window: 0xA00000+ is
 		 * I/O and 0xC00000+ the VDP/PSG mirrors, and a 68K read there

@@ -1,7 +1,7 @@
 # STATE — what is true right now
 
 **Volatile document. PRUNE IT, do not append to it.**
-Last updated: 2026-09-20.
+Last updated: 2026-09-22.
 
 If a line here is stale, fix the line. Do not add a newer line below it.
 That is how the logs became unreadable.
@@ -10,7 +10,27 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract8b.32x     THE LINE = `make line` (2026-09-22 16:30)
+    rom/night/eye2.32x          THE LINE = `make line` (2026-09-22 18:00)
+                                = attract8b + the attract harvest reading
+                                plane B at its real address (0xE000; it
+                                read 0xD000, empty, so scenes 5-9 had no
+                                BG sets: the eye's iris showed set 35 on
+                                three CRAM entries -- Mike's "loose
+                                tiles") and sets taken from the walker's
+                                per-cell mirror (md_dbg_nt) with a layer
+                                mask; the tile blob in single-variant
+                                2 KB blocks (694 -> 414 KB, LESSONS
+                                2026-09-22). ares: 19/19 anchors clean,
+                                refusals 37,000 -> 0, palgate PASS; eye
+                                vs the arcade phase-matched 239 -> 223
+                                cells (yellow), ~105 (blue); rig 3/3.
+                                Residual: the 5-bit quantiser rounds one
+                                MD level bright on 16 of 32 inputs
+                                (PALQUANT=1 built for Mike's A/B, not on
+                                the line); the blue-to-yellow switch is
+                                the switch-in-view class (600+ cells for
+                                ~40 frames, both builds).
+    rom/night/attract8b.32x     previous line (2026-09-22 16:30)
                                 = attract7 + the splash re-harvested across
                                 its whole palette animation and packed by
                                 per-pixel colour history (the logo's red

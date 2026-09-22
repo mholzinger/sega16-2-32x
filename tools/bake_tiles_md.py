@@ -64,6 +64,37 @@ def emit_tile(px, pmap, isfg):
             o += 1
     return bytes(out)
 
+AUDIT = os.path.join(ROOT, 'docs', 'audit', 'mdpen_scene_sets.txt')
+LIVE  = os.path.join(ROOT, 'discover', 'cram', 'wide')
+ROUNDS = 5           # ROM rounds 0-4; ids >= 5 are harvested attract scenes
+
+def layer_masks(nrounds):
+    """round -> {set: mask}, 1 = BG variant needed, 2 = FG, 3 = both.
+    Rounds 0-4 from docs/audit/mdpen_scene_sets.txt (union over the
+    round's scenes, like --union-scene-sets); harvested scenes from the
+    third column of discover/cram/wide/s<id>_sets.txt (attract_harvest).
+    A set with no record gets 3: both variants, the old layout."""
+    out = {r: {} for r in range(nrounds)}
+    if os.path.exists(AUDIT):
+        for ln in open(AUDIT):
+            m = re.match(r'round (\d+) scene (\d+)\s+BG sets ([\d,]*)\s*\|\s*FG sets ([\d,]*)', ln)
+            if not m: continue
+            r = int(m.group(1))
+            if r >= nrounds: continue
+            for x in m.group(3).split(','):
+                if x: out[r][int(x)] = out[r].get(int(x), 0) | 1
+            for x in m.group(4).split(','):
+                if x: out[r][int(x)] = out[r].get(int(x), 0) | 2
+    for r in range(ROUNDS, nrounds):
+        fn = os.path.join(LIVE, f's{r}_sets.txt')
+        if not os.path.exists(fn): continue
+        for ln in open(fn):
+            if ln.startswith('#') or not ln.strip(): continue
+            parts = ln.split()
+            if len(parts) >= 3:
+                out[r][int(parts[0])] = int(parts[2]) & 3 or 3
+    return out
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--emit', action='store_true', help='write sh_src/tiles_md.bin')
@@ -107,27 +138,49 @@ def main():
         # x FG,BG x 32 B) and an index per round:
         #     blk = idx[round][cset]           0xFFFF = not baked
         #     tile = base + blk*4096 + (code & 63)*64 + isfg*32
+        # LAYOUT (2026-09-22, single-variant blocks). A set that a scene
+        # shows on ONE layer needs one variant, so its block is 2 KB (64
+        # codes x 32 B) and the index entry carries bit 15. Both-layer
+        # sets keep the 4 KB block (FG at +0, BG at +32 per code). Block
+        # bases are in 2 KB units:
+        #     e = idx[round][cset]             0xFFFF = not baked
+        #     base = (e & 0x7FFF) * 2048
+        #     e & 0x8000: tile = base + (code & 63) * 32        (either layer)
+        #     else:       tile = base + (code & 63) * 64 + isfg * 32
+        # The SH-2 folds e into the record word: w1 = (e & 0x8000) |
+        # ((e & 0x1FF) << 6) | (code & 63), so the blob must stay under
+        # 512 x 2 KB = 1 MB (asserted below). Before this the eye's
+        # harvest (LESSONS 2026-09-22) pushed the both-variant blob to
+        # 694 KB against a 576 KB gap.
+        masks = layer_masks(len(rounds))
         idx = bytearray()
         blocks = bytearray()
-        # DEDUP (2026-09-21, the attract scenes): a block depends only on
-        # (set, pen map). Scenes that pack a set the same way -- the text
-        # sets, the transformation cut over its round -- share the block.
         seen = {}
         shared = 0
-        for pm in rounds:
+        single = 0
+        for ri, pm in enumerate(rounds):
             row = [0xFFFF] * 128
             for cs in range(128):
                 if not any(pm[cs*8:cs*8+8]):
                     continue
                 m8 = bytes(pm[cs*8:cs*8+8])
-                key = (cs, m8)
+                mask = masks.get(ri, {}).get(cs, 3)
+                key = (cs, m8, mask)
                 if key in seen:
                     row[cs] = seen[key]; shared += 1
                     continue
-                row[cs] = seen[key] = len(blocks) // 4096
+                assert len(blocks) % 2048 == 0
+                base2k = len(blocks) // 2048
+                assert base2k < 512, 'tiles_md.bin past 1 MB: the record word cannot address it'
+                e = base2k | (0x8000 if mask != 3 else 0)
+                row[cs] = seen[key] = e
+                if mask != 3: single += 1
                 for code in range(cs*64, cs*64+64):
                     px = art[code*64:code*64+64] if code < ntiles else bytes(64)
-                    blocks += emit_tile(px, m8, 0) + emit_tile(px, m8, 1)
+                    if mask == 3:
+                        blocks += emit_tile(px, m8, 0) + emit_tile(px, m8, 1)
+                    else:
+                        blocks += emit_tile(px, m8, 1 if mask == 2 else 0)
             for v in row:
                 idx += bytes((v >> 8, v & 0xFF))
         pb = os.path.join(ROOT, 'sh_src', 'tiles_md.bin')
@@ -139,8 +192,9 @@ def main():
             fh.write(f'#define TILESMD_SCENES {nsc}\n')
             fh.write(f'#define TILESMD_INDEX_BYTES {len(idx)}\n')
             fh.write(f'#define TILESMD_BYTES {len(idx) + len(blocks)}\n')
-        print(f'wrote {pb}: index {len(idx)} B + {len(blocks)//4096} blocks '
-              f'({shared} shared) = {(len(idx)+len(blocks))/1024:.0f} KB; sh_src/tiles_md.h')
+        print(f'wrote {pb}: index {len(idx)} B + {len(blocks)//2048} x 2 KB '
+              f'({single} single-variant blocks, {shared} shared entries) = '
+              f'{(len(idx)+len(blocks))/1024:.0f} KB; sh_src/tiles_md.h')
 
 if __name__ == '__main__':
     main()
