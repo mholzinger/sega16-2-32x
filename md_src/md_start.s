@@ -210,7 +210,8 @@ _start:
 		 * FM-gated writer then branched into zeros. MAME watchpoint-proven.
 		 * 0xFF3FF0 sits in the audited free gap above .bss (md.ld asserts
 		 * .bss ends below 0xFF3000) and under the OBJ_LOG ring at 0xFF4000. */
-		lea		0xFF3FF0,sp			/* boot/shim stack, clear of game work RAM AND the thunk page */
+		lea		0xFF4FF0,sp			/* boot/shim stack (2026-09-21: moved up 4KB, .bss reached 0xFF3C00;
+									   0xFF4000-0xFF4FFF was the OBJ_LOG probe ring) */
 .ifdef BOOT_BEACON
 		move.l	#0xC0000000,(0xC00004).l
 		move.w	#0x0EEE,(0xC00000).l	/* white: into main */

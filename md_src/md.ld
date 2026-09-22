@@ -45,5 +45,5 @@ ASSERT(__bss_end <= 0x00FF6000,
  * .bss; keep at least 4KB. It used to live at 0xFFBFF0, 184 bytes above
  * the FM-gate thunk table, and the boot-time vint handler overwrote the
  * table's tail whenever its frame grew by 32 bytes (2026-09-19). */
-ASSERT(__bss_end <= 0x00FF3D00,
-       "68K .bss reached the boot stack region (top 0xFF3FF0, keep 752B: boot depth measured 202 bytes)")
+ASSERT(__bss_end <= 0x00FF4C00,
+       "68K .bss reached the boot stack region (top 0xFF4FF0, keep 1KB: boot depth measured 202 bytes)")
