@@ -1546,3 +1546,11 @@ RG2SHIFT=0` built with 36/40 (.build_flags), the ship list's literals;
 the MTASKINWIN probe measured nothing (master compose 0 bands). They
 are SHIPBANDSHIFT / SHIPRG2SHIFT now. ALWAYS read .build_flags for the
 value a probe was meant to change, not just for the define's presence.
+
+Addendum 01:25 (probe12): ROWGRP is DEAD as built -- the compose-frame
+FM drop went 108-112 -> 121-123 (the per-run uncached read-modify-write
+of the row's group mask, thousands a frame, costs more than the
+full-width row clears it saves; FBB[2] counts rows, so the "cleared
+bytes" did not even move). Knob kept off. If the clear is ever cut, mark
+with a cached per-CPU mask and publish once per band, or clear through
+the DMAC.
