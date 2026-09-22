@@ -11387,7 +11387,8 @@ static inline unsigned wp_idx(uint16_t c)
 {
     switch (c) { case 0x03E0: return 0; case 0x001F: return 1; case 0x03FF: return 2; case 0x7FE0: return 3;
                  case 0x7C1F: return 4; case 0x01FF: return 5; case 0x0200: return 6; case 0x7C0F: return 7;
-                 case 0x4210: return 8; case 0x6318: return 9; case 0x7FFF: return 10; default: return 15; }
+                 case 0x4210: return 8; case 0x6318: return 9; case 0x7FFF: return 10;
+                 case 0x0001: return 11; case 0x0002: return 12; default: return 15; }
 }
 __attribute__((noinline)) static void wp_mark(uint16_t col)   /* ROM: keeps .ramtext under its slot */
 {
@@ -12712,6 +12713,7 @@ RAMCODE void m_main(void)
             win_no++;
 #ifdef WIN_PROF
             if (disp_blank) PROF[6]++;
+            WSTAGE(0x0001);                      /* profile: window pickup */
 #endif
 #ifdef HS_SHIP
             HS_OFFS[6] = 0;              /* new window: nothing copied yet */
@@ -12981,6 +12983,9 @@ RAMCODE void m_main(void)
              * consume its flag INSTEAD of flipping, and the barrier
              * forces reloads of the page/dirty state the ISR
              * mutated behind the compiler's back. */
+#ifdef WIN_PROF
+            WSTAGE(0x0002);                      /* profile: at the flip block */
+#endif
 #ifdef VISR_FLIP
             {
                 uint8_t isr_flipped = 0;
@@ -13009,6 +13014,12 @@ RAMCODE void m_main(void)
                     DIAG[56]++; CEN[20]++;    /* body-fallback flip: the ISR
                                               * declined this cycle (bail
                                               * counters say why) */
+#ifdef BLANK_NO_FLIP
+                    /* 2026-09-21: no frame is shown while blanked, so the
+                     * body-fallback flip (22% of the FM-held span in the
+                     * eye's blank, WINPROF) is skipped; the banks stay put */
+                    if (!disp_blank)
+#endif
                     flip_span();
                     }
                 }

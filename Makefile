@@ -2724,6 +2724,10 @@ endif
 ifdef BLANKNOCOMPOSE
 SHCCFLAGS += -DBLANK_NO_COMPOSE
 endif
+# BLANKNOFLIP=1 = 2026-09-21: skip the body-fallback flip while blanked
+ifdef BLANKNOFLIP
+SHCCFLAGS += -DBLANK_NO_FLIP
+endif
 # WINPROF=1 = per-m_stage FRT ticks of the master window while blanked (SDRAM 0x26028FC0)
 ifdef WINPROF
 SHCCFLAGS += -DWIN_PROF
