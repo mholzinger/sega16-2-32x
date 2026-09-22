@@ -16,8 +16,9 @@ That is how the logs became unreadable.
                                 the OFF state keyed on the cut pages (the
                                 level stays intact until the switch).
                                 ares 18/19 (cut+10 still re-marks 762 FG
-                                cells at the cut bit -- open), palgate
-                                PASS, rig 3/3.
+                                cells at the cut bit -- eye7), palgate
+                                PASS, rig 3/3. MIKE 2026-09-22 19:20:
+                                "YES! You fixed the eyes animation!"
     rom/night/eye4.32x          previous line (2026-09-22 18:55)
                                 = eye2 + the attract cleanup (STATE "ATTRACT
                                 CLEANUP 2026-09-22", LESSONS same day):
