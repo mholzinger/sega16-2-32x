@@ -10,7 +10,16 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/eye9.32x          THE LINE = `make line` (2026-09-22 19:50)
+    rom/night/cut1.32x          THE LINE = `make line` (2026-09-22 21:20)
+                                = eye9 + CUTPREFETCH=1 (the cut's art
+                                prefetched on the cut bit; the scene
+                                install keeps prefetched slots clean and
+                                skips re-marking sets with no line). ares:
+                                19/19 anchors clean, palgate PASS, the
+                                cut's black period ~45 -> ~15 frames
+                                (LESSONS "the cut's transition is the
+                                scene install's re-mark"); rig 3/3.
+    rom/night/eye9.32x          previous line (2026-09-22 19:50)
                                 = eye8 + the glow keyed on the cut pages
                                 (harmless; ares 16/19 same transients);
                                 rig 3/3.
