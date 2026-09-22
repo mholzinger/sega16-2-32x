@@ -1162,3 +1162,24 @@ ares gate's anchor list by that name.
 a scene looks like at one frame; and a readout that carries BOTH the
 palette count and the stale-cell count turns "black" into one of two
 words in a single capture. Step 5 now maps to the round's table.
+
+### The splash's red logo drew a red outline over dark fill, and its fade to blue went black: pixels merged onto one pen (2026-09-22)
+
+Read in ares at boot frames 340/400 with the pen owners: the logo's ten
+sets (37-46) hold one palette, so sharing pens between the SETS is
+right. But the bake also merged PIXELS of a set onto one pen when their
+colours were equal in the harvest's majority frames (pixels 0, 3 and 4
+of set 37 are the same blue in the blue phase), and the game's red phase
+changes pixel 3 alone: a pen has one owner, so the fill pixel showed the
+outline's blue. The fade-out of the relief is the same thing per pixel
+(the arcade fades to plain blue; ours followed one owner to dark).
+Fix: `bake_tilecram.py` packs harvested scenes by per-PIXEL colour
+history -- a key is every colour a pixel showed across the dumps, and
+two pixels share a pen only with identical keys. Requires the harvest to
+cover every palette phase (21 dumps of the splash: boot and mid-attract,
+blue, red and white).
+
+**Rules:** a shared pen is a shared HISTORY, not a shared colour; a
+palette-animated scene must be harvested across its whole animation;
+and read palette RAM at 16 bytes per set (an analysis with a 32-byte
+stride spent an hour reading the wrong sets).
