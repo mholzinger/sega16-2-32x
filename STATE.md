@@ -10,7 +10,15 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract5.32x      THE LINE = `make line` (2026-09-21 16:40)
+    rom/night/attract6.32x      THE LINE = `make line` (2026-09-21 18:15)
+                                = attract5 with the 68K boot stack moved
+                                to 0xFF4FF0 (.bss headroom). Rig 3/3.
+                                OPEN: level 1's sky goes black on some
+                                launches (attract5 launch 2/3; the
+                                readout twin a5bc read 29 live entries on
+                                every level capture across 4 launches --
+                                not caught yet). AWAITING MIKE'S PLAY PASS.
+    rom/night/attract5.32x      previous (2026-09-21 16:40)
                                 = attract4 + ART_TAIL joined to the slim
                                 route (tile records ride every cell
                                 chunk's tail): the eye's hold 23 -> 9
@@ -110,7 +118,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                a5bc readout twin (from 2026-09-21 ~17:20); attract5 before it
+    rig (MiSTer)                a5bc readout twin sampling (8 launches from 18:20), then attract6
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
