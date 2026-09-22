@@ -7388,6 +7388,60 @@ __attribute__((noinline)) static void bp_mark(unsigned n)   /* ROM: .ramtext is 
 #define BP_START(t) ((void)0)
 #define BP(n) ((void)0)
 #endif
+
+#ifdef MTASK_INWIN
+/* MTASKINWIN (2026-09-23): the master's stage-1 strip (its owned rows of
+ * the current band: clear, sprites, cat-1, then the band's text) as a
+ * function, so the WINDOW can run the master's rows before its blit
+ * half instead of idling ~46 lines behind the slave's compose (BODYPROF
+ * probe8). The poll loop keeps calling it time-boxed as before. */
+static void nat_mchunk(void)
+{
+                if (nat_mphase == 3) {
+        if (NAT_TB(nat_mrg) < NAT_TE(nat_mrg))
+            compose_text(NAT_TB(nat_mrg), NAT_TE(nat_mrg),
+             nat_par);
+        nat_mphase = 0;
+        nat_my = 0;
+        if (++nat_mrg >= 3) {
+            nat_mrg = 0;
+            nat_mtask = 2;   /* bands done -> maps drain */
+        }
+    } else {
+        int lo = NAT_MLO(nat_mrg), hi = NAT_MHI(nat_mrg);
+        int y = lo + nat_my;
+        if (y >= hi) {
+            nat_mphase++;
+            nat_my = 0;
+        } else {
+            int ye = (y + 12 > hi) ? hi : y + 12;
+            switch (nat_mphase) {
+            case 0:          /* MD-through clear, mark-first */
+                for (int r = y; r < ye; r++) {
+        uint8_t *dp = &sbuf[(8 + r) * SBUF_W];
+        RL_ZERO(8 + r);
+        for (int x = 0; x < SBUF_W; x += 4)
+            *(uint32_t *)(dp + x) = 0;
+                }
+                break;
+            case 1:
+#ifdef BODY_PROF
+                { uint16_t mp_t0 = frt(); compose_sprites(y, ye, nat_par);
+                  ((volatile uint32_t *)0x26028FC0u)[2] += (uint16_t)(frt() - mp_t0); ((volatile uint32_t *)0x26028FC0u)[3]++; }   /* SPROF: the master's tail compose */
+#else
+                compose_sprites(y, ye, nat_par);
+#endif
+                break;
+            default:         /* FG cat1 over sprites */
+                compose_layer(y, ye, 0, 0, 0, nat_bank,
+                  nat_par, 2);
+                break;
+            }
+            nat_my = (uint8_t)(ye - lo);
+        }
+    }
+}
+#endif
 __attribute__((noinline)) static void disp_gate(void)
 {
 #ifdef CUT_PREFETCH
@@ -12566,6 +12620,9 @@ RAMCODE void m_main(void)
 #endif
                 uint16_t tq = frt();
                 TOK(0);                  /* busy: a master compose strip */
+#ifdef MTASK_INWIN
+                nat_mchunk();
+#else
                 if (nat_mphase == 3) {
                     if (NAT_TB(nat_mrg) < NAT_TE(nat_mrg))
                         compose_text(NAT_TB(nat_mrg), NAT_TE(nat_mrg),
@@ -12609,6 +12666,7 @@ RAMCODE void m_main(void)
                         nat_my = (uint8_t)(ye - lo);
                     }
                 }
+#endif
                 diag_add(12, tq);
                 PURGE_STRESS_TICK();
                 continue;
@@ -15217,6 +15275,9 @@ RAMCODE void m_main(void)
                 BP_START(t_vint);
                 nat_window_launch(par, bank1, t_vint, win_no, &tile_cmd, &pend_wait);
                 BP(0);
+#endif
+#ifdef MTASK_INWIN
+                while (nat_gen_open && nat_mtask == 1) nat_mchunk();   /* the master's rows, in-window */
 #endif
 #ifdef BLIT_CHASE
                 if (nat_ship_now) {      /* master's half, after the launch */

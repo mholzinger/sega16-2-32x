@@ -1526,3 +1526,11 @@ master's ack, 60-135), IRQ4 (~10), then the pass (~184 heavy / ~147
 light) from the loop top. One vint needs wait + 10 + pass <= 262: the
 window must end by ~line 68 on heavy frames (105 on light ones). On the
 line it ends at 112-135 on compose frames.
+
+Addendum 00:05 -- the 2-vint frame is a THRESHOLD, not a slope: spd1
+(window ~18 lines shorter on compose frames) still measures exactly
+50.0% game-frames per vint, because the game's frame-flag protocol
+grants a frame only when wait + IRQ4 + pass fit a vint; every cut short
+of that line reads as no change on the speed instrument. Judge window
+cuts by frame_timeline's FM drop / IRQ4-entry lines until the threshold
+(~68 on heavy frames) is crossed; then gameplay_speed jumps.

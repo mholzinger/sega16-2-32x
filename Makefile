@@ -2765,6 +2765,12 @@ endif
 ifdef ROWGRP
 SHCCFLAGS += -DROW_GRP
 endif
+# MTASKINWIN=1 = 2026-09-23: the master composes its owned rows (BANDSHIFT /
+# RG2SHIFT) inside the window before its blit half; pair with
+# BANDSHIFT=4 RG2SHIFT=0 (36+BS and 184+RS must be multiples of 8).
+ifdef MTASKINWIN
+SHCCFLAGS += -DMTASK_INWIN
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT
