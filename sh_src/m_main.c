@@ -7344,6 +7344,20 @@ __attribute__((noinline)) static void cutpf_step(void)
     cutpf_pos = (uint16_t)end;
 }
 #endif
+#ifdef BODY_PROF
+/* BODYPROF (2026-09-22): FRT ticks per stage of the master's window body,
+ * from the post pickup (t_vint) to the ack; 128 ticks = 1 line.
+ * [0] launch (records+hash+slave cmd) [1] master half [2] slave pickup
+ * wait [3] slave half wait [4] ph_ship+hs_promote [5] apply_cram
+ * [6] up to dreq_rearm [7] publish+P3 to the ack; [8] windows. */
+static uint32_t bprof[9];
+static uint16_t bp_t;
+#define BP_START(t) do { bp_t = (uint16_t)(t); } while (0)
+#define BP(n) do { uint16_t bp_now = frt(); bprof[n] += (uint16_t)(bp_now - bp_t); bp_t = bp_now; if ((n) == 7) bprof[8]++; } while (0)
+#else
+#define BP_START(t) ((void)0)
+#define BP(n) ((void)0)
+#endif
 __attribute__((noinline)) static void disp_gate(void)
 {
 #ifdef CUT_PREFETCH
@@ -15126,7 +15140,9 @@ RAMCODE void m_main(void)
                 CLAIM_DONE = 1;
                 BMT_AT_CLAIM[par & 1] = BMT_DONE[par & 1];
 #ifdef LAUNCH_EARLY
+                BP_START(t_vint);
                 nat_window_launch(par, bank1, t_vint, win_no, &tile_cmd, &pend_wait);
+                BP(0);
 #endif
 #ifdef BLIT_CHASE
                 if (nat_ship_now) {      /* master's half, after the launch */
@@ -15140,7 +15156,9 @@ RAMCODE void m_main(void)
 #endif
                     SYNC[14] = 224;      /* fence open */
                     guard = 2000000;
+                    BP(1);
                     while (SYNC[2] < 1 && --guard) ;   /* slave picked up */
+                    BP(2);
                     if (!guard) DIAG[21]++;
                     DIAG[28]++;
                     guard = 2000000;
@@ -15148,6 +15166,7 @@ RAMCODE void m_main(void)
                     { uint16_t tw = frt();
 #endif
                     while (SYNC[5] != scmd && --guard) ;  /* slave half done */
+                    BP(3);
                 WSTAGE(0x7FE0);                      /* CYAN: master blit + slave half done */
 #ifdef WAIT_PROBE
                     RG_COUNT[10] += (uint16_t)(frt() - tw); RG_COUNT[12]++; }
@@ -15160,6 +15179,7 @@ RAMCODE void m_main(void)
 #endif
 #ifdef HS_SHIP
                     hs_promote();
+                    BP(4);
 #endif
                     nat_shipped = 1;
                     nat_ship_now = 0;
@@ -15168,6 +15188,7 @@ RAMCODE void m_main(void)
 #endif
                 tp = frt();
                 apply_cram(par);
+                BP(5);
                 WSTAGE(0x7C1F);                      /* MAGENTA: palette painted */
                 diag_add(2, tp);
             }
@@ -15232,6 +15253,7 @@ RAMCODE void m_main(void)
 #ifndef K2_FREE
             WSTAGE(0x01FF);                      /* ORANGE: at the DREQ re-arm, before the ack path */
             dreq_rearm(k);
+            BP(6);
 #endif  /* K2FREE: the V-ISR armed at vblank, BEFORE the 68K's push —
          * a body rearm here would reset TCR under a completed landing
          * and erase `landed` for this vint's harvest. */
@@ -15578,6 +15600,7 @@ RAMCODE void m_main(void)
 #ifdef WIN_PROF
             if (disp_blank) { PROF[4] += (uint16_t)(frt() - t_vint); PROF[3]++; }   /* FM-up ticks per window, windows */
 #endif
+            BP(7);
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
 #ifdef STAMP5_CENSUS
             {   /* LOOP29 265: the window's span and where it sits in the vint,

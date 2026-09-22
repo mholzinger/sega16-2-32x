@@ -2731,6 +2731,11 @@ endif
 ifdef CUTPREFETCH
 SHCCFLAGS += -DCUT_PREFETCH
 endif
+# BODYPROF=1 = 2026-09-22 probe: FRT ticks per stage of the master's window
+# body (post pickup -> ack), bprof[9] in .bss (rom/s16.lst _bprof).
+ifdef BODYPROF
+SHCCFLAGS += -DBODY_PROF
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT

@@ -1419,3 +1419,37 @@ the row rotation (9 windows) plus the pre-switch scan finishing.
 anchor, never as a diff against a sparsely sampled arcade; and when a
 switch is slow, count what is DIRTY at the switch before speeding up
 the fetch.
+
+### The 60 Hz floor on the line, measured (2026-09-22, 21:00, ares level 1, eye9)
+
+The game runs at exactly 50% (scene timer: 1300 game frames in 2600
+vints) with ZERO IRQ4 frame misses, and the transport posts a window
+EVERY vint (60 posts in 60, no entry rejects, no defers). So neither the
+game's own pass nor the packet transport misses; the game's frame is
+two vints long by construction of the per-vint sequence (frame_timeline,
+play f3000-3011, lines from vblank):
+
+    0-17    68K: consume, blast, FM raise (16), post (17)
+    17-60   68K waits for the master's ack (odd frames: the ack comes
+            at 124-135 and the wait breaks at its cap)
+    55-90   the game's IRQ4 entry (71 odd / 83-90 even)
+    100-126 odd frames: the game's pass spins 22-26 lines in a gated
+            store while FM is still up (drop 124-135)
+    ~166    even frames: the pass ends (idle); the game then waits a
+            whole vint for its next flag
+
+The pass itself is ~184 lines (heavy); with the 68K's 55-90 lines
+before IRQ4, IRQ4's ~35 and the spin, a frame is ~327 lines. The
+master's FM-held window is 45-55 lines on even frames and 108-118 on
+odd (the frames whose sprites changed). Cut of one vint needs the
+window under ~25 lines AND no spin, or the game's FB writers taken off
+the gate.
+
+Dead on this question: TEXTCAPOFF (the ISR's 3.7 KB text snapshot) --
+FM drop lines identical with it off. The ISR's own flip path is 6-10
+lines (STAMPCENSUS). Windows/frame stays 1.00 on the eye's pan too.
+
+**Rules:** speed on this port is the LENGTH OF THE FM-HELD WINDOW as
+seen by the game's gated writers, not any per-vint counter; measure it
+with frame_timeline's raise/drop/irq4 columns before and after every
+change.
