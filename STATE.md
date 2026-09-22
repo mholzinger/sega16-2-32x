@@ -10,7 +10,14 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/spd1.32x          THE LINE = `make line` (2026-09-23 00:20)
+    rom/night/spd2.32x          THE LINE = `make line` (2026-09-23 00:50)
+                                = spd1 + PUBNORB=1 (the publish's replay
+                                copies built from SDRAM, not read back
+                                from the framebuffer). Compose-frame FM
+                                drop 108-112, gate spins 6-14 (line at
+                                the day's start: 124-135 / 22-26). ares
+                                palgate PASS, 18/19, rig 3/3.
+    rom/night/spd1.32x          previous line (2026-09-23 00:20)
                                 = cut1 + CRAMISR=1 (the 32X CRAM painted
                                 at the flip in vblank, off the FM window)
                                 + BLITAUDITDIV=4 (the blit audits one
