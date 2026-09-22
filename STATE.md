@@ -10,6 +10,17 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
+    rom/night/attract7.32x      CANDIDATE (2026-09-22 14:35) = attract6 +
+                                attract step 5 mapped to the round (the
+                                second level-1 demo; its black sky was
+                                scene 7's table, read through the
+                                barcode). ares: second demo's sky full at
+                                +150. Rig 3/3 level demos; ONE capture
+                                (launch 3, ~113 s) showed the SCORE TABLE
+                                without its tiled backdrop -- the same
+                                shape (a scene's table not landing on one
+                                launch). Readout twin a7bc running x4 on
+                                the score screen; then attract7 is pushed.
     rom/night/attract6.32x      THE LINE = `make line` (2026-09-21 18:15)
                                 = attract5 with the 68K boot stack moved
                                 to 0xFF4FF0 (.bss headroom). Rig 3/3.
@@ -118,7 +129,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                a5bc readout twin sampling (8 launches from 18:20), then attract6
+    rig (MiSTer)                a7bc readout twin x4 (2026-09-22 14:40), then attract7
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
