@@ -85,6 +85,14 @@ def layer_masks(nrounds):
                 if x: out[r][int(x)] = out[r].get(int(x), 0) | 1
             for x in m.group(4).split(','):
                 if x: out[r][int(x)] = out[r].get(int(x), 0) | 2
+    # ROUNDS 0-4: BOTH variants, always (2026-09-22, Mike's level-1 boss
+    # capture on eye6: the audit samples three scenes of a round and
+    # missed the boss gate, where a set it lists as BG-only draws on the
+    # FG; the BG variant's pixel 0 is the set's colour 0, opaque -- the
+    # "transparency shows as purple". The rounds' pages are the whole
+    # level; only a harvested scene's masks come from what was seen.)
+    for r in range(min(ROUNDS, nrounds)):
+        out[r] = {}
     for r in range(ROUNDS, nrounds):
         fn = os.path.join(LIVE, f's{r}_sets.txt')
         if not os.path.exists(fn): continue

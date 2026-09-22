@@ -19,6 +19,12 @@ That is how the logs became unreadable.
                                 cells at the cut bit -- eye7), palgate
                                 PASS, rig 3/3. MIKE 2026-09-22 19:20:
                                 "YES! You fixed the eyes animation!"
+                                REGRESSION (Mike, 19:30): purple through
+                                the FG at the level-1 boss gate = the
+                                single-variant blob's round masks from the
+                                three-scene audit (sets 81/83/84 BG-only
+                                there, FG at the gate; colour 0 purple).
+                                eye8 = rounds bake both variants.
     rom/night/eye4.32x          previous line (2026-09-22 18:55)
                                 = eye2 + the attract cleanup (STATE "ATTRACT
                                 CLEANUP 2026-09-22", LESSONS same day):

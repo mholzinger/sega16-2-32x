@@ -3834,7 +3834,12 @@ __attribute__((noinline)) static int bm_scan_baked_ok(void)   /* ROM (noinline: 
 #ifdef MD_STATE
     {
         uint16_t sw = md_state_word();
-        if (!MD_STATE_OK(sw) || MD_STATE_CUT(sw)) return 0;
+        /* 2026-09-22: the cut BIT no longer disqualifies the baked scan --
+         * it rises ~15 frames before the page switch with the level's
+         * pages still mapped (the pq >= 10 test above catches the switch
+         * itself), and dropping to the live scan there flipped the claim
+         * mix: ares cut+10 re-marked 762-901 FG cells in view. */
+        if (!MD_STATE_OK(sw)) return 0;
         if (!MD_STATE_PLAY(sw)) {
             unsigned st = MD_STATE_STEP(sw);
             if (!((st == 1 || st == 3 || st == 5) && ((sw >> 8) & 1u))) return 0;

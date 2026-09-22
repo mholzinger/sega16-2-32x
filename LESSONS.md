@@ -1356,3 +1356,21 @@ eye) and the cut's (f1503-1535 still the level).
 the build it was taken on (tools/scenegate: `anchors ...`); re-check
 the anchors whenever loads get faster, and prefer frames deep inside a
 scene to frames near its edges.
+
+### The single-variant blob drew purple through the FG at the level-1 boss gate: round masks came from a three-scene audit (2026-09-22, 19:30)
+
+Mike's gameplay captures on eye6 (score 8000, the boss area with the
+short grass): the temple gate's transparent pixels show purple. The
+audit (docs/audit/mdpen_scene_sets.txt) lists sets 81, 83, 84 as BG-only
+for round 0 because it sampled three scenes and never the boss gate,
+where they draw on the FG. Their single-variant block holds the BG
+pattern, whose pixel 0 is the set's colour 0 -- (4,0,7), purple --
+where the FG variant has transparent. Rounds 0-4 now bake both
+variants regardless (~560 KB, inside the gap); only harvested scenes
+take single-variant blocks, from what the mirror saw.
+
+**Rules:** a bake that drops a variant needs proof the layer never uses
+it -- the ROM's page tables for a level, the mirror for a harvested
+scene -- never a sampled audit; and a gameplay regression check belongs
+in the gate (the level-1 play script exists: discover/inputs/
+play_level1.csv).
