@@ -10,7 +10,15 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/eye4.32x          THE LINE = `make line` (2026-09-22 18:55)
+    rom/night/eye6.32x          THE LINE = `make line` (2026-09-22 19:15)
+                                = eye4 + scene 5 harvested inside the mid
+                                splash (sets 65/66 no longer overflow) +
+                                the OFF state keyed on the cut pages (the
+                                level stays intact until the switch).
+                                ares 18/19 (cut+10 still re-marks 762 FG
+                                cells at the cut bit -- open), palgate
+                                PASS, rig 3/3.
+    rom/night/eye4.32x          previous line (2026-09-22 18:55)
                                 = eye2 + the attract cleanup (STATE "ATTRACT
                                 CLEANUP 2026-09-22", LESSONS same day):
                                 per-cell cat-1 mask slots (the pupil
@@ -388,9 +396,16 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   visit (rotation 9 windows) -- transport
                                   floor. Windows/frame measured 1.00 (0.50-
                                   0.88 across the game's page switch).
-                                  OPEN, pre-existing: scene 5's bake
-                                  overflows sets 65/66 (99+82 harvested
-                                  cells of the splash's plane B).
+                                  (4) eye5: scene 5's harvest frames moved
+                                  inside the mid splash (4530-4600 were
+                                  level 2's demo: sets 64-73 in the splash,
+                                  65/66 overflowed) -- overflow gone, 18/19.
+                                  (5) eye6: the OFF state (pictures) keyed
+                                  on the cut pages like scene 9, so the
+                                  level stays intact until the switch (rig
+                                  capture: black bottom band during the
+                                  transformation start; ares cut+10 had
+                                  901 dirty FG cells). Rig pending.
     transformation screen         zigzag + ornaments DRAW under
                                   CHEVFIX=1 (not on the line).
                                   Colours wrong: 3 distinct against
