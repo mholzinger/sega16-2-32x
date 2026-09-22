@@ -10,7 +10,7 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract7.32x      CANDIDATE (2026-09-22 14:35) = attract6 +
+    rom/night/attract7.32x      THE LINE = `make line` (2026-09-22 14:45) = attract6 +
                                 attract step 5 mapped to the round (the
                                 second level-1 demo; its black sky was
                                 scene 7's table, read through the
@@ -19,9 +19,13 @@ That is how the logs became unreadable.
                                 (launch 3, ~113 s) showed the SCORE TABLE
                                 without its tiled backdrop -- the same
                                 shape (a scene's table not landing on one
-                                launch). Readout twin a7bc running x4 on
-                                the score screen; then attract7 is pushed.
-    rom/night/attract6.32x      THE LINE = `make line` (2026-09-21 18:15)
+                                launch). Readout twin a7bc, 8 score-screen
+                                captures over 4 launches: backdrop palette
+                                landed (6 entries), 0 stale cells -- not
+                                caught; OPEN, rarer than 1/8. The level-1
+                                sky loss is CLOSED (it was the step map).
+                                On the rig for Mike's pass.
+    rom/night/attract6.32x      previous line (2026-09-21 18:15)
                                 = attract5 with the 68K boot stack moved
                                 to 0xFF4FF0 (.bss headroom). Rig 3/3.
                                 OPEN: level 1's sky goes black on some
@@ -129,7 +133,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                a7bc readout twin x4 (2026-09-22 14:40), then attract7
+    rig (MiSTer)                attract7 (pushed 2026-09-22 14:45)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
