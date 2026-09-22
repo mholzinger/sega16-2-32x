@@ -2723,6 +2723,14 @@ endif
 ifdef PALQUANT
 SHCCFLAGS += -DPAL_QUANT_RAMP
 endif
+# CUTPREFETCH=1 = 2026-09-22: on the cut bit, before the game switches to
+# pages 10/11, claim free slot ways for the cut's tiles from the staging
+# tile RAM and ship their art under scene 9's table (bit 30 of md_tag),
+# so the switch finds its art resident (LESSONS "cut+10 is already the
+# switch": ~800 new tiles at the switch = the transition).
+ifdef CUTPREFETCH
+SHCCFLAGS += -DCUT_PREFETCH
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT
@@ -3209,7 +3217,7 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
               TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
-             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1 C1MASKTAB=1
+             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1 C1MASKTAB=1 CUTPREFETCH=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
 # pipeline: docs/design/SLIM-PIPELINE.md 1b.

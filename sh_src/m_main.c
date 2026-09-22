@@ -3596,6 +3596,18 @@ static void mds_install(unsigned sc, uint8_t stamp)
              * re-walked (36-51 such cells 50 frames into the eye, ares).
              * Marking the slot dirty re-ships the SAME tile under the new
              * pen map and every cell stays valid. */
+#ifdef CUT_PREFETCH
+            /* 2026-09-22 (cutpf3 trace: 965 dirty at the cut's switch for a
+             * cut whose sets hold 150 slots): a slot prefetched under THIS
+             * table (bit 30) already carries the right pens -- keep it
+             * clean; a slot whose set has NO line in the new table would
+             * re-ship junk (map zero) for cells the switch rewrites anyway
+             * -- leave it as it is (not freed: the stale-patch rule above);
+             * only a set that stays in the table with a changed map needs
+             * the re-ship. */
+            if (md_tag[i] & 0x40000000u) { md_tag[i] &= ~0x40000000u; continue; }
+            if (!mdp_s_line[(md_tag[i] >> 16) & 0x7F]) continue;
+#endif
             if (!(md_dirty[i >> 5] & (1u << (i & 31)))) md_pending++;
             MD_MARK(i);
             MDA(12);
@@ -7253,8 +7265,90 @@ static unsigned md_screen_complete(void)
 
 /* DISPLAY GATE decision (ROM-resident: called once per vint from the
  * latch point; keeping it out of RAMCODE bought ARTTAIL its region room) */
+#ifdef CUT_PREFETCH
+/* CUT-ART PREFETCH (2026-09-22). The transformation cut is a page switch
+ * the game announces ~10 frames ahead: the state word's cut bit rises
+ * while the level is still on screen and pages 10/11 already hold the
+ * cut (LESSONS "cut+10 is already the switch"). At the switch ~800
+ * tiles are new and the transition is their fetch (SLIM_CAP a vint) plus
+ * the row rotation. So while the bit is up and the pages are not yet
+ * 0xAAAA, walk pages 10/11 from the staging tile RAM and claim FREE ways
+ * (never a victim: the level is still in view) for their tiles, tagged
+ * with bit 30 = "bake under scene 9's table" so md_emit_art ships the
+ * right pens before mds_install(9) runs; at the switch the marker is
+ * cleared so the walker's plain key compare hits the prefetched slots.
+ * 1024 words per window: the two pages take four windows. */
+static uint16_t cutpf_pos;               /* words scanned so far (0..4096) */
+static uint8_t  cutpf_state;             /* 0 idle, 1 scanning/done pre-switch, 2 cleared */
+static uint32_t cutpf_win;               /* the caller's window counter (md_ref stamp) */
+static uint16_t cutpf_ctr[4];            /* [0] claimed free, [1] hits, [2] claimed by evicting a stale way, [3] no way */
+__attribute__((noinline)) static void cutpf_step(void)
+{
+    uint16_t sw = md_state_word();
+    if (cutpf_state == 1 && TEXT_C[0x740] == 0xAAAAu) {
+        /* the switch: mds_install(9) clears the markers as it keeps the
+         * prefetched slots clean; nothing to do here */
+        cutpf_state = 2;
+        return;
+    }
+    if (!MD_STATE_OK(sw) || !MD_STATE_CUT(sw)) {
+        if (cutpf_state) {                    /* the cut is over: any leftover marker goes */
+            for (unsigned i = 0; i < NSETS * NWAYS; i++)
+                if (md_tag[i] != 0xFFFFFFFFu) md_tag[i] &= ~0x40000000u;
+            cutpf_state = 0; cutpf_pos = 0;
+        }
+        return;
+    }
+    if (cutpf_state == 2 || md_round != 0u || TEXT_C[0x740] == 0xAAAAu) return;
+    cutpf_state = 1;
+    if (cutpf_pos >= 4096u) return;
+    uint16_t bank1 = MARS_SYS_COMM2 & 7;
+    unsigned end = cutpf_pos + 1024u;
+    for (unsigned q = cutpf_pos; q < end; q++) {
+        unsigned page = 10u + (q >> 11);
+        uint16_t w = FB_STAGING[page * 0x800u + (q & 0x7FFu)];
+        if (w == 0) continue;
+        unsigned code = w & 0x1FFF;
+        if (code & 0x1000) code = (code & 0xFFF) + (unsigned)bank1 * 0x1000u;
+        GAME_TILE_REMAP(code);
+        unsigned cset = ((unsigned)w >> 6) & 0x7F;
+        int isfg = (page == 10u);
+        uint32_t key = MD_KEY(code, cset) | (isfg ? 0x80000000u : 0u);
+        unsigned s4m = MD_SET(code) * NWAYS;
+        int hit = 0; unsigned freeway = MD_BLANK_SLOT, oldway = MD_BLANK_SLOT; unsigned oldage = 0;
+        for (unsigned w2 = 0; w2 < NWAYS; w2++) {
+            unsigned i2 = s4m + w2;
+            uint32_t t = md_tag[i2];
+            if ((t & ~0x40000000u) == key) { hit = 1; break; }
+            if (i2 == MD_BLANK_SLOT) continue;
+            if (t == 0xFFFFFFFFu) { if (freeway == MD_BLANK_SLOT) freeway = i2; continue; }
+            if (t & 0x40000000u) continue;                 /* another prefetched tile */
+            unsigned age = (uint8_t)((uint8_t)cutpf_win - md_ref[i2]);
+            if (age >= oldage) { oldage = age; oldway = i2; }
+        }
+        if (hit) { cutpf_ctr[1]++; continue; }
+        unsigned way = freeway;
+        if (way == MD_BLANK_SLOT) {
+            /* the level fills the ways (42 free at the cut, cutpf1 trace):
+             * take a way nobody has touched for 32 windows -- three
+             * rotations off screen, what the walker's own LRU victim
+             * would take at the switch anyway */
+            if (oldway != MD_BLANK_SLOT && oldage >= 32u) { way = oldway; cutpf_ctr[2]++; }
+            else { cutpf_ctr[3]++; continue; }
+        } else cutpf_ctr[0]++;
+        md_tag[way] = key | 0x40000000u;
+        md_ref[way] = (uint8_t)cutpf_win;
+        if (!(md_dirty[way >> 5] & (1u << (way & 31)))) md_pending++;
+        MD_MARK(way);
+    }
+    cutpf_pos = (uint16_t)end;
+}
+#endif
 __attribute__((noinline)) static void disp_gate(void)
 {
+#ifdef CUT_PREFETCH
+    cutpf_step();
+#endif
 #if defined(MD_STATIC) && defined(MD_ROUND)
     {   /* 209: the claim mix of the window just closed.
          * 212: HYSTERESIS. Going OFF needs the non-table cells to outnumber
@@ -10515,7 +10609,11 @@ static int md_emit_art(volatile uint16_t *dst, int bmax, int *scan,
              * it exactly as the refuse rule does (191/209) so a stale or
              * unpublished round falls through to the converter below
              * instead of indexing past the table. */
+#ifdef CUT_PREFETCH
+            unsigned rd_ = (mkey & 0x40000000u) ? 9u : (unsigned)md_round;   /* prefetched for the cut */
+#else
             unsigned rd_ = (unsigned)md_round;
+#endif
             unsigned blk_ = (rd_ < MDROUND_N)
                 ? ((const uint16_t *)altbeast_tiles_md)[rd_ * 128u + cs_]
                 : 0xFFFFu;
@@ -15164,6 +15262,9 @@ RAMCODE void m_main(void)
              * UNCONSUMED — defer (pend stays, the builder holds off) and
              * count. Nothing is ever lost, only late. */
             if (k == 2) {
+#ifdef CUT_PREFETCH
+                cutpf_win = win_no;
+#endif
                 disp_gate();                 /* DISPLAY GATE, ROM-resident:
                                               * decided before the publish so
                                               * the packets carry this vint's

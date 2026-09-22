@@ -1391,3 +1391,26 @@ prefetching the cut's art (sets 19-21, pinned) before the switch.
 **Rules:** before attributing a dirty count to a cause, dump the page
 words at that frame; an anchor named "cut+N" is only pre-switch if the
 pages say so.
+
+### The cut's transition is the scene install's re-mark, not the cut's tiles (2026-09-22, 20:30)
+
+Anchor-relative measurement (scratch cutcmp.py: the state word's cut
+bit from --trace-comm, then black 8x8 cells in rows 4-23 per frame):
+eye9 shows ~350-600 black cells from the switch (+10) to +55. A cut-art
+prefetch (CUTPREFETCH: on the cut bit, claim ways for pages 10/11's
+tiles from the staging RAM and ship them under scene 9's table via a
+bit-30 tag marker) changed nothing, and the trace says why: the level
+leaves 42-108 free ways, the pre-switch window is 4-6 frames on this
+build, and at the switch the dirty count jumps to 965 while the cut's
+sets hold 150 slots -- mds_install(9) re-marks EVERY resident slot
+whose set's mapping changed, which is every slot (the level's sets fall
+out of the table, the cut's come in), and the walker blanks a cell
+whose slot is dirty. ~965 re-ships at SLIM_CAP a vint is the black.
+cutpf4 keeps prefetched slots clean and skips the re-mark for sets with
+no line in the new table (left resident, not freed: LESSONS 2026-09-21
+on wiped tags).
+
+**Rules:** measure a transition as black cells against the scene's own
+anchor, never as a diff against a sparsely sampled arcade; and when a
+switch is slow, count what is DIRTY at the switch before speeding up
+the fetch.
