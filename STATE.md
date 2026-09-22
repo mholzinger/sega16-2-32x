@@ -484,6 +484,27 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           Rig: pad-5 0/6 -> 3/3, line 3/3; ares gate
                           PASS on eight layouts. Mike's pass pending.
 
+    TRANSPORT FLOOR       MEASURED 2026-09-21 (LESSONS "The transport floor,
+                          measured" + the two dead levers). ART_TAIL on
+                          the line took the eye's hold 23 -> 9 vints.
+                          Dead: compose skip, flip skip, page budget --
+                          the load is bound by the game's own gated
+                          tilemap writes and the walk's rotation.
+                          NEXT DESIGN (not built): PRE-SWITCH WALK. The
+                          arcade shows the transformation complete on
+                          its first frame because the game writes the
+                          cut's pages (10/11) during the level and only
+                          switches page pointers. Walk a scene's pages
+                          into the SECOND half of each 64x32 name table
+                          (rows 28-31 + the unused columns cannot hold
+                          it; use plane A/B's alternate 0x2000 tables:
+                          VRAM has room for a second pair) while the
+                          current scene shows, then switch the VDP's
+                          table registers with the game's pointer
+                          switch. Cost: a second walker pass per window
+                          during play; the tile slots are shared.
+                          Gate: cut+1 non-black == arcade's.
+
     ATTRACT BAKE          DONE 2026-09-21 14:10 (LESSONS "The attract
                           bake"). Open residue: (a) the ~0.3-0.5 s hold
                           after a picture's blank = the load (1120 cells
