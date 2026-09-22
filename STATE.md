@@ -685,6 +685,32 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           f1540-1575 (eye4), the pan's end is the same
                           class (pages 0101 -> 0000 with a new page 0).
 
+    60 Hz FLOOR           MEASURED 2026-09-22 21:00-23:00 (LESSONS "The
+                          60 Hz floor on the line, measured" + addenda).
+                          The game runs a 2-vint frame at 50% with ZERO
+                          misses and the transport posts every vint; the
+                          frame is ~327 lines because the game's IRQ4
+                          waits for the master's FM-held window (45 lines
+                          on frames whose sprites did not change, ~110
+                          where they did) and its pass then spins 22-26
+                          lines in gated stores. BODYPROF (FRT = 45.8
+                          ticks/line, NOT 128): the window body on a
+                          compose frame = launch 15 + blit/compose half
+                          66 + apply_cram 10 + publish 16; the master
+                          then idles 130-160 lines. Cuts measured on
+                          ares: BLITAUDITDIV=4 (66 -> 58), CRAMISR
+                          (apply_cram 10 -> 0, paints at the flip in
+                          vblank), PUBNORB (the 2 x 368 FB read-backs
+                          -> SDRAM copies, ~8 lines). FM drop on compose
+                          frames 124-135 -> 112-120 with the first two;
+                          spd1 = cut1 + CRAMISR + BLITAUDITDIV=4 is in
+                          the gates/rig. Dead: TEXTCAPOFF (no change),
+                          BLITSHIFT=48 (does not move the half: the
+                          half is compose-bound, not copy-bound). NEXT:
+                          the compose itself (slave in-window + master
+                          tail; SPROF stamps in probe8), the launch's
+                          15 lines (records from the FB + hash), then
+                          the 68K side (consume 17, post-ack tail 15-20).
     ATTRACT BAKE          DONE 2026-09-21 14:10 (LESSONS "The attract
                           bake"). Open residue: (a) the ~0.3-0.5 s hold
                           after a picture's blank = the load (1120 cells
