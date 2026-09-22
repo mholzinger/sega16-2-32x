@@ -10,7 +10,18 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract7.32x      THE LINE = `make line` (2026-09-22 14:45) = attract6 +
+    rom/night/attract8b.32x     THE LINE = `make line` (2026-09-22 16:30)
+                                = attract7 + the splash re-harvested across
+                                its whole palette animation and packed by
+                                per-pixel colour history (the logo's red
+                                and white phases drew an outline over a
+                                dark fill: a pen shared by pixels that
+                                animate apart). ares: the logo's pens equal
+                                the game's palette at the red frame; rig
+                                3/3. OPEN: the relief-to-logo fade shows
+                                black where the arcade shows plain blue
+                                (page 7 lag under investigation).
+    rom/night/attract7.32x      previous line (2026-09-22 14:45) = attract6 +
                                 attract step 5 mapped to the round (the
                                 second level-1 demo; its black sky was
                                 scene 7's table, read through the
@@ -133,7 +144,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                attract7 (pushed 2026-09-22 14:45)
+    rig (MiSTer)                attract8b (pushed 2026-09-22 16:30)
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
