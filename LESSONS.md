@@ -1540,3 +1540,9 @@ lines when the packet was copied this window (the unconsumed-defer path
 keeps the FB read-back: 4.4); B similar. ~3 lines on compose windows.
 With CRAMISR + BLITAUDITDIV=4 + PUBNORB the compose frames' FM drop is
 107-120, even frames 64-71; IRQ4 entry 67-71 / 83-90.
+
+Addendum 01:10 -- second knob trap of the day: `make line BANDSHIFT=4
+RG2SHIFT=0` built with 36/40 (.build_flags), the ship list's literals;
+the MTASKINWIN probe measured nothing (master compose 0 bands). They
+are SHIPBANDSHIFT / SHIPRG2SHIFT now. ALWAYS read .build_flags for the
+value a probe was meant to change, not just for the define's presence.

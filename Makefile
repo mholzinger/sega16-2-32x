@@ -3252,8 +3252,13 @@ all: release
 # `make ship-us SHIPBLITSHIFT=N` — a bare BLITSHIFT=N on the command line
 # loses to the literal in this list inside the sub-make).
 SHIPBLITSHIFT ?= 24
+# SHIPBANDSHIFT / SHIPRG2SHIFT: the slave/master compose row split of the
+# ship line (2026-09-23; a bare BANDSHIFT=N on the command line lost to
+# the literal here, like BLITSHIFT). 36+BS and 184+RS must be multiples of 8.
+SHIPBANDSHIFT ?= 36
+SHIPRG2SHIFT ?= 40
 SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
-              CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 \
+              CUTBLANK=1 BANDSHIFT=$(SHIPBANDSHIFT) RG2SHIFT=$(SHIPRG2SHIFT) BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
               TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
