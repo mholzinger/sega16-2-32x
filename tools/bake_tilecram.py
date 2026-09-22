@@ -214,7 +214,14 @@ def main():
     # too. Live dumps are the only correct source above 63.
     # per-scene live colours: {scene: {pal: set(colours)}} and a
     # representative per-pixel list for the pen map
-    slive, slivepix = {}, {}
+    slive, slivepix, slivehist = {}, {}, {}
+    # HARVESTED scenes pack by per-pixel KEY: a key is the tuple of every
+    # colour that pixel showed across the dumps, and its packing colour is
+    # the pixel's mode; pixels with different histories never share a pen
+    # (the runtime refreshes each pen from its one owner, so a pen shared
+    # by pixels that animate apart can only follow one of them)
+    pkeys = {}          # (scene, palette) -> [8 keys]
+    keycol = {}         # key -> representative colour
     if a.live_dir:
         import glob as _glob
         # every scene id with dumps: the ROM rounds 0-4 and the harvested
@@ -226,7 +233,7 @@ def main():
                                                 's%d_f*.bin' % sc)))
             if not fs:
                 continue
-            u, px = {}, {}
+            u, px, pxhist = {}, {}, {}
             for fn in fs:
                 d = open(fn, 'rb').read()
                 if len(d) < 0x800:
@@ -254,10 +261,19 @@ def main():
                     key = tuple(md(w16(d, pp * 16 + 2 * k))
                                 for k in range(0, 8))
                     px[pp][key] = px[pp].get(key, 0) + 1
+                    # per-PIXEL colour history (2026-09-22): two pixels of
+                    # a set may share a pen only if they agree in EVERY
+                    # dump -- the title logo's fill and outline are the
+                    # same blue in most frames and different in the red
+                    # ones, and a shared pen can show only one of them
+                    ph = pxhist.setdefault(pp, [set() for _ in range(8)])
+                    for k in range(8):
+                        ph[k].add(md(w16(d, pp * 16 + 2 * k)))
             # collapse each palette's tally to its most common vector
             px = {pp: list(max(v.items(), key=lambda kv: kv[1])[0])
                   for pp, v in px.items()}
             slive[sc], slivepix[sc] = u, px
+            slivehist[sc] = pxhist
             print('live scene %d: %d gated dumps' % (sc, len(fs)))
     live = None
     livepix = {}
@@ -309,6 +325,15 @@ def main():
             base, words = 0, None
 
         def cols(p, _b=base, _s=s):
+            if _s >= SCENES and _s in slivehist and p in slivehist[_s]:
+                if (_s, p) not in pkeys:
+                    ks = []
+                    for k in range(8):
+                        key = tuple(sorted(slivehist[_s][p][k]))
+                        keycol.setdefault(key, slivepix[_s][p][k])
+                        ks.append(key)
+                    pkeys[(_s, p)] = ks
+                return frozenset(pkeys[(_s, p)])
             if _s in slive:
                 return frozenset(slive[_s][p])
             if live is not None and _s == a.live_scene:
@@ -423,7 +448,9 @@ def main():
             c = cols(p)
             for li, g in enumerate(groups):
                 if c <= g:
-                    if s in slive:
+                    if (s, p) in pkeys:
+                        assign[p] = (li, [slot[li][k] for k in pkeys[(s, p)]])
+                    elif s in slive:
                         assign[p] = (li, [slot[li][c] for c in slivepix[s][p]])
                     elif live is not None and s == a.live_scene:
                         # BUG FIXED (LOOP29 176): this read `sorted(live[p])`,
@@ -442,6 +469,8 @@ def main():
             for c, i in slot[li].items():
                 row[i] = c
             line_cols.append(row)
+            row = [keycol.get(c, c) if isinstance(c, tuple) and c and isinstance(c[0], tuple) else c for c in row]
+            line_cols[-1] = row
             line_words.append([0 if c is None else md_word(c) for c in row])
         out_bin.append(line_words)
         out_col.append(line_cols)
