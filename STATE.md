@@ -24,10 +24,15 @@ That is how the logs became unreadable.
                                 refusals 37,000 -> 0, palgate PASS; eye
                                 vs the arcade phase-matched 239 -> 223
                                 cells (yellow), ~105 (blue); rig 3/3.
-                                Residual: the 5-bit quantiser rounds one
-                                MD level bright on 16 of 32 inputs
-                                (PALQUANT=1 built for Mike's A/B, not on
-                                the line); the blue-to-yellow switch is
+                                MIKE'S PASS 2026-09-22: "eye2. easily."
+                                PALQUANT=1 (ramp-nearest quantiser, one
+                                MD level darker on 16/32 inputs; ares
+                                eye 223 -> 38 cells vs MAME) was A/B'd
+                                on the rig and REJECTED by eye: MAME's
+                                tone is not the cabinet's, and the
+                                "correct" ramp is ares's, unmeasured on
+                                the FPGA. Knob kept, off; a rig ramp
+                                probe would settle it. The blue-to-yellow switch is
                                 the switch-in-view class (600+ cells for
                                 ~40 frames, both builds).
     rom/night/attract8b.32x     previous line (2026-09-22 16:30)
