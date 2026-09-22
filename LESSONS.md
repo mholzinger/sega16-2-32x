@@ -1142,3 +1142,23 @@ and the walk's rotation. The arcade side-steps both -- it writes the
 next scene's pages during the current one and switches pointers in one
 frame. The matching design: walk a scene's pages into a SECOND name
 table bank before the switch (a design card, not a knob).
+
+### The black sky on the second level-1 demo was a wrong scene map, and the barcode read it in one capture (2026-09-22)
+
+Mike's rig capture on the readout twin, 47 s in: level 1 with a black
+sky. Decoded: attract step 5, 10 live palette entries, 0 stale cells.
+So: palette, not cells -- and step 5 is not a picture. NOTES-FROM-
+DECOMPILE 23 already says "1/3/5 = the level's tilemap on screen";
+the attract bake mapped step 5 to "the second picture" from an ares
+trace read too fast (the gate's "pic_150 nonblack 0.52" WAS this
+black-sky frame and was read as a picture still loading). Scene 7's
+harvest was that demo's ground sets without the sky's, so its install
+left the sky pens unassigned. It looked like the hardware race because
+the first level-1 demo (step 3) is fine and the second (step 5) comes
+only after the eye -- past the 12-capture windows, and never in the
+ares gate's anchor list by that name.
+
+**Rules:** name the game's state from the decompile notes, not from what
+a scene looks like at one frame; and a readout that carries BOTH the
+palette count and the stale-cell count turns "black" into one of two
+words in a single capture. Step 5 now maps to the round's table.
