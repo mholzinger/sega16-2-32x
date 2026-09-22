@@ -1183,3 +1183,18 @@ blue, red and white).
 palette-animated scene must be harvested across its whole animation;
 and read palette RAM at 16 bytes per set (an analysis with a 32-byte
 stride spent an hour reading the wrong sets).
+
+### The relief-to-logo "fade to black" is the page clear shown in view (2026-09-22)
+
+Measured on the diagnostic build across the switch (allocator counters,
+the walker's mirror, the page copy, the layer snapshot): no refusals, no
+evictions, no cat-1 pressure, snapshot unchanged; the walker blanked the
+800 relief cells because it read w == 0 for them -- the game's scene
+change (routine 0x36b0) CLEARS the page and refills it with set 11's
+solid blue tiles within one frame, and our copy-and-walk pipeline (a
+page capture per window, a 4-chunk rotation) shipped the cleared state,
+then needed a rotation to replace it: ~20-30 black frames where the
+arcade shows the refilled page at once. Same class as the transformation
+cut. Not a palette bug: set 11's colour 0 is the blue and its pens are
+right once the cells arrive. Fix is the PRE-SWITCH / atomic-walk design
+card (STATE), not a bake or table change.

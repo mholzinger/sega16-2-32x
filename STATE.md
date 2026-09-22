@@ -18,9 +18,11 @@ That is how the logs became unreadable.
                                 dark fill: a pen shared by pixels that
                                 animate apart). ares: the logo's pens equal
                                 the game's palette at the red frame; rig
-                                3/3. OPEN: the relief-to-logo fade shows
-                                black where the arcade shows plain blue
-                                (page 7 lag under investigation).
+                                3/3. The relief-to-logo switch still
+                                shows ~20-30 black frames: the game's
+                                page clear+refill shown in view (LESSONS
+                                2026-09-22) -- the transport-floor
+                                design card, not a bug in this build.
     rom/night/attract7.32x      previous line (2026-09-22 14:45) = attract6 +
                                 attract step 5 mapped to the round (the
                                 second level-1 demo; its black sky was
