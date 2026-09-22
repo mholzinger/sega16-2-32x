@@ -2,4 +2,4 @@
  * shared by the SH-2 (index stride) and the 68K (slim_fetch bounds). */
 #define TILESMD_SCENES 10
 #define TILESMD_INDEX_BYTES 2560
-#define TILESMD_BYTES 426496
+#define TILESMD_BYTES 403968

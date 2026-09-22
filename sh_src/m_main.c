@@ -1875,7 +1875,12 @@ static inline unsigned md_state_on(void)
 #endif
     uint16_t w = md_state_word();
     if (!MD_STATE_OK(w)) return 2;                 /* no word yet: undecided */
-    if (MD_STATE_CUT(w)) return 0;
+    /* 2026-09-22: OFF only once the game has switched to the cut's pages
+     * (page word 0xAAAA, as md_scene_raw keys scene 9). The cut bit rises
+     * ~15 frames earlier with the level still on screen; going OFF then
+     * re-marked the level (ares cut+10: 901 dirty FG cells) and the
+     * bottom band went black under cut mode (rig capture, eye4). */
+    if (MD_STATE_CUT(w) && TEXT_C[0x740] == 0xAAAAu) return 0;
     /* vi88 (LOOP29 234): 0xFFF026 bit 0 reads 1 through the attract's
      * demos too (the demo IS the game started with scripted input), and
      * step 1 covers the SEGA/wave screen at boot -- "play or step 1/3/5

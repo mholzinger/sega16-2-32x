@@ -603,6 +603,22 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           switch. Cost: a second walker pass per window
                           during play; the tile slots are shared.
                           Gate: cut+1 non-black == arcade's.
+                          VRAM CHECK 2026-09-22: plane bases step 8 KB
+                          (reg 82/84), so alternates need 0x8000/0xA000
+                          -- the MD sprite art lives there (0x8000-
+                          0xAE40 for the boss set, md_sprart_info.h)
+                          and the free pieces (0xB000 window, 0xD000,
+                          0xF400) total 10 KB against its 11.5 KB. The
+                          cheaper form: PREFETCH the next scene's art
+                          (the cut's sets 19-21 are known and pinned)
+                          while the level shows, then on the page-word
+                          change walk all 28 rows as full 64-cell rows
+                          in 3 windows (28 x 65 words over three 688-
+                          word packets) instead of the 9-window
+                          rotation: ~4 frames of transition instead of
+                          ~30. Measured today: the cut's transition is
+                          f1540-1575 (eye4), the pan's end is the same
+                          class (pages 0101 -> 0000 with a new page 0).
 
     ATTRACT BAKE          DONE 2026-09-21 14:10 (LESSONS "The attract
                           bake"). Open residue: (a) the ~0.3-0.5 s hold

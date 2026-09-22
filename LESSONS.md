@@ -1340,3 +1340,19 @@ switch (f1540-1575) stays, same class.
 **Rules:** size a scroll lead from the scroll SPEED and the rotation
 length, not from "one column"; and measure the fetch pipeline (records
 fetched per frame, pending, windows per frame) before raising a cap.
+
+### Harvest frames drift with the build: scene 5's "mid splash" frames were level 2's demo (2026-09-22, late)
+
+`bake` reported scene 5 overflowing sets 65/66 on every build since the
+attract bake; the mirrors say those cells sit on FG rows 18-26 at
+frames 4530-4600 -- level 2's ground, because the mid-splash anchor
+moved from ~4885 (attract2) to 4570 (eye4) as loads got faster, and the
+harvest's absolute frame list did not move with it. Sets 64-73 rode
+into the splash's bake for nothing. Now 4650-4950. The eye's
+harvest had the same drift (f1640 was still the cut; f1980 still the
+eye) and the cut's (f1503-1535 still the level).
+
+**Rules:** a harvest frame list is only valid against the anchors of
+the build it was taken on (tools/scenegate: `anchors ...`); re-check
+the anchors whenever loads get faster, and prefer frames deep inside a
+scene to frames near its edges.
