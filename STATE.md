@@ -10,7 +10,17 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/eye6.32x          THE LINE = `make line` (2026-09-22 19:15)
+    rom/night/eye8.32x          THE LINE (2026-09-22 19:40) = eye6 + rounds
+                                bake both tile variants (the level-1 boss
+                                gate's purple: LESSONS "single-variant blob
+                                drew purple"); ares palgate PASS, scenegate
+                                16/19 (cut+10/+30 = the switch, pic+60 one
+                                untagged cell in the blank), rig 3/3. Mike
+                                to confirm at the boss gate. `make line`
+                                now builds eye9 = eye8 + the glow keyed on
+                                the cut pages (harmless, ares same); its
+                                rig run is in progress.
+    rom/night/eye6.32x          previous line (2026-09-22 19:15)
                                 = eye4 + scene 5 harvested inside the mid
                                 splash (sets 65/66 no longer overflow) +
                                 the OFF state keyed on the cut pages (the
