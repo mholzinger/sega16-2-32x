@@ -1129,3 +1129,16 @@ Rules: (1) a record the 68K cannot stage is lost art -- the emitter
 caps at SLIM_CAP per packet and the 68K buffer holds two packets;
 (2) `md_pending` and a dirty bit are one fact; (3) profile before
 building: the compose skip was the obvious lever and it was dead.
+
+**Two more dead levers (2026-09-21 17:00, ares holds eye/pic/mid/cut):**
+BLANKNOFLIP cut the master's FM-held span per window from 8192 to 2889
+ticks and changed nothing (11/20/32/22 vs 9/19/30/17); the window count
+stayed 20 in 37 vints. BLANKBUDGET=3 "shortened" the mid splash's hold
+to 8 by releasing it UNLOADED (0.00 non-black at +50: the settle test
+saw less dirt, not a faster load); 7 = 13. So: FM, the compose, the flip
+and the page budget are all off the critical path of a scene load. What
+is on it: the game's own tilemap writes (one gated store per FM window)
+and the walk's rotation. The arcade side-steps both -- it writes the
+next scene's pages during the current one and switches pointers in one
+frame. The matching design: walk a scene's pages into a SECOND name
+table bank before the switch (a design card, not a knob).
