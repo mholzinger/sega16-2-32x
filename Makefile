@@ -2663,6 +2663,12 @@ endif
 ifdef C1RTALL
 SHCCFLAGS += -DC1_RT_ALL
 endif
+# C1RTN=<slots> = 2026-09-22: size of the runtime cat-1 mask cache (default
+# 64). The eye's pupil notch was this cache thrashing on a harvested
+# scene's ~500 priority codes; 1024 is collision-free for the eye.
+ifdef C1RTN
+SHCCFLAGS += -DC1_RT_N=$(C1RTN)
+endif
 # BGBOTTOM=1 = 2026-09-21: the BG bottom-band backstop (2026-08-25) blanks
 # a BG cell in view rows 24-27 only where the FG tile over it is fully
 # OPAQUE; level 2's foreground has holes there and the arcade shows the
@@ -3203,7 +3209,7 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
               TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
-             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1
+             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1 C1MASKTAB=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
 # pipeline: docs/design/SLIM-PIPELINE.md 1b.

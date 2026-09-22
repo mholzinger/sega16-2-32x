@@ -929,13 +929,62 @@ static unsigned fg_tile_opaque(unsigned code13, unsigned art)
  * an unbaked page gets a mask computed from the tile art into a 64-slot
  * direct-mapped cache appended to the baked table; the slave's c1_hit
  * indexes both the same way. */
-#ifdef C1_RT_ALL
+#if defined(C1_RT_N)
+#define C1RT_N C1_RT_N                    /* C1RTN=<slots>: 2026-09-22, the eye's pupil
+                                           * notch. A harvested scene's 1120 priority
+                                           * cells span ~500 codes; a 64-slot cache
+                                           * indexed by code & 63 is rewritten many
+                                           * times per generation, so the slave read
+                                           * another tile's mask through cat1code and
+                                           * punched the pupil sprite out of the
+                                           * iris cells' transparent pixels. 1024
+                                           * slots = no collision for any code span
+                                           * under 1024 (the eye: 0x580-0x93F). */
+#elif defined(C1_RT_ALL)
 #define C1RT_N 256                        /* every priority cell may classify here */
 #else
 #define C1RT_N 64
 #endif
+/* PER-CELL RUNTIME MASK SLOTS (2026-09-22, the eye's pupil notch). The
+ * runtime classifier's 64-slot cache is indexed by code & 63 and shared
+ * by every priority code of the pass, so on a harvested scene (~500
+ * priority codes) a class-2 cell's mask was overwritten by later codes
+ * before the slave read it through cat1code, and the pupil sprite was
+ * punched out of the iris cells' transparent pixels (Mike's red lines).
+ * A class-2 runtime cell now OWNS a mask slot for as long as it stays
+ * class 2 (256 slots; the eye needs 46, the transformation cut 163);
+ * the mask is written together with cat1code, so the slave always reads
+ * the pair the master wrote for that cell. */
+#define C1CELL_N 256
 static uint16_t c1mask_codes[CAT1MASK_MAX];
-static uint8_t  c1mask_bits[(CAT1MASK_MAX + C1RT_N) * 8];
+static uint8_t  c1mask_bits[(CAT1MASK_MAX + C1RT_N + C1CELL_N) * 8];
+static uint8_t  c1cell_slot[28][40];      /* 0xFF = none; else CAT1MASK_MAX + C1RT_N + slot */
+static uint8_t  c1cell_free[C1CELL_N];
+static unsigned c1cell_nfree;
+static unsigned c1cell_init;
+static void c1cell_release(unsigned row, unsigned col)
+{
+    unsigned sl = c1cell_slot[row][col];
+    if (sl != 0xFFu) { c1cell_free[c1cell_nfree++] = (uint8_t)sl; c1cell_slot[row][col] = 0xFFu; }
+}
+/* give (row,col) a mask slot holding the 8 mask bytes at src; 0xFFFF = none free */
+static unsigned c1cell_claim(unsigned row, unsigned col, const uint8_t *src)
+{
+    if (!c1cell_init) {
+        for (unsigned r = 0; r < 28; r++) for (unsigned c = 0; c < 40; c++) c1cell_slot[r][c] = 0xFFu;
+        for (unsigned i = 0; i < C1CELL_N; i++) c1cell_free[i] = (uint8_t)(C1CELL_N - 1u - i);
+        c1cell_nfree = C1CELL_N; c1cell_init = 1;
+    }
+    unsigned sl = c1cell_slot[row][col];
+    if (sl == 0xFFu) {
+        if (!c1cell_nfree) return 0xFFFFu;
+        sl = c1cell_free[--c1cell_nfree];
+        c1cell_slot[row][col] = (uint8_t)sl;
+    }
+    uint8_t *dst = c1mask_bits + (CAT1MASK_MAX + C1RT_N + sl) * 8u;
+    for (unsigned i = 0; i < 8; i++) dst[i] = src[i];
+    return CAT1MASK_MAX + C1RT_N + sl;
+}
 static uint16_t c1mask_n;
 static uint16_t c1rt_tag[C1RT_N];         /* code13 | 0x8000 (0 = empty) */
 static uint8_t  c1rt_cls[C1RT_N];         /* 0 no hole, 1 whole, 2 per pixel */
@@ -1666,6 +1715,26 @@ static uint8_t nat_genbit;       /* generation parity bit (cmd bit 3,
 #define MDP_LAST_SET(s, l) (mdp_s_last[(s) >> 2] = (uint8_t)((mdp_s_last[(s) >> 2] & ~(3u << (((s) & 3) * 2))) | ((l) << (((s) & 3) * 2))))
 #endif
 #ifdef EDGE42
+static int e42_fullrow;          /* this window ships whole plane rows (pan mode) */
+/* ROM, out of line: .ramtext is 464 bytes from its slot (pan1) */
+__attribute__((noinline)) static int e42_pan_mode(int vx0, unsigned pl, uint32_t win_no, int harvested)
+{
+    static int e42_prevx[2];
+    static uint32_t e42_prevw[2];
+    int dx = ((vx0 - e42_prevx[pl] + 512) & 1023) - 512;
+    uint32_t dw = win_no - e42_prevw[pl];
+    if (dx < 0) dx = -dx;
+    if (dw > 1u) dx = (int)((unsigned)dx / dw);
+    e42_prevx[pl] = vx0; e42_prevw[pl] = win_no;
+    if (dw != 0u && dx >= 3) return 1;
+    /* a harvested picture ALWAYS ships whole rows: the pan to the beast
+     * eye enters ~1500 new tiles in ~35 vints, so the 24 off-screen
+     * columns' art must be requested while the picture is still static
+     * (the 68K fetches SLIM_CAP a vint; rows are revisited every 9).
+     * ares pan1: rows shipped, cells black for want of art. */
+    if (harvested) return 1;
+    return 0;
+}
 static uint32_t e42_pend[2];     /* per plane, bit row: last edge pair sent
                                   * art-pending -> resend once resolved */
 #endif
@@ -1862,7 +1931,14 @@ static inline uint8_t md_scene_raw(void)     /* the scene the state word names, 
     r = (w >> 4) & 7u;
     if (MD_STATE_PLAY(w)) return (uint8_t)r;
 #ifdef MD_SCENE_CUT
-    if (MD_STATE_CUT(w) && r == 0) return 9;
+    /* 2026-09-22: the cut's table only once the game has SWITCHED to the
+     * cut pages (FG page word 0xAAAA = page 10 in all four quadrants,
+     * TEXT_C[0x740]). The cut bit rises ~15 frames earlier while the
+     * level is still on screen; keying on the bit alone made scene 9
+     * carry the level's ground sets too (seeded from round 0, 44 of 45
+     * pens) and its own blue -- set 19, colour-cycling -- overflowed
+     * to nothing: the black around the flames (Mike's capture). */
+    if (MD_STATE_CUT(w) && r == 0 && TEXT_C[0x740] == 0xAAAAu) return 9;
 #endif
     /* (scene 9, the transformation cut, is baked but not selected: its
      * install inside the level demo wiped the level in view and the attract
@@ -16225,6 +16301,24 @@ RAMCODE void m_main(void)
 #endif
                     int cell0 = ((isfg ? md_phase - 5 : md_phase - 1)) * 280;
                     volatile uint16_t *o = sc + 8;
+#ifdef EDGE42
+                    /* FULL-ROW PAN MODE (2026-09-22, the eye's pan to the
+                     * beast eye, Mike's capture 180548): the picture pans
+                     * 9-12 px a frame and a row is revisited every 9
+                     * windows, so the edge pair's one-column lead left
+                     * 10-13 stale columns entering the view (ares f1850-
+                     * 1870: columns 0-11 stale). When a plane's scroll
+                     * moves >= 3 px per window, every row of this window
+                     * ships as the WHOLE 64-cell plane row (header bit
+                     * 15; one DMA on the 68K): 24 columns of lead. */
+                    e42_fullrow = e42_pan_mode(wl->vx0, isfg ? 1u : 0u, win_no,
+#ifdef MD_SCENES
+                        (md_round >= 5u && md_round < MDROUND_N)
+#else
+                        0
+#endif
+                        );
+#endif
                     for (int row = cell0 / 40; row < cell0 / 40 + 7; row++) {
                         const uint8_t *pqb = wl->pq;
                         int vxr = wl->vx0, vyr = wl->vy0;
@@ -16260,8 +16354,8 @@ RAMCODE void m_main(void)
                          * moved, when either cell is art-pending, on the
                          * row after a pending send, and on the backstop
                          * window. cbrow[j] holds col j-1. */
-                        uint16_t cbrow[42];
-#define CB(col) cbrow[(col) + 1]
+                        uint16_t cbrow[64];                /* view cols -12..51: the whole plane row */
+#define CB(col) cbrow[(col) + 12]
 #else
                         uint16_t cbrow[40];
 #define CB(col) cbrow[col]
@@ -16403,7 +16497,7 @@ RAMCODE void m_main(void)
 #endif
 #ifdef EDGE42
                         unsigned e_pend = 0;     /* an edge cell is art-pending */
-                        for (int col = -1; col <= 40; col++) {
+                        for (int col = e42_fullrow ? -12 : -1; col <= (e42_fullrow ? 51 : 40); col++) {
 #else
                         for (int col = 0; col < 40; col++) {
 #endif
@@ -16434,8 +16528,11 @@ RAMCODE void m_main(void)
                                             if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
                                             GAME_TILE_REMAP(c2);
                                             hv = c1rt_class(w & 0x1FFFu, c2);
-                                            if (hv == 2)
-                                                cat1code[row][col] = (uint16_t)(CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1)));
+                                            if (hv == 2) {
+                                                unsigned mi2 = c1cell_claim((unsigned)row, (unsigned)col,
+                                                    c1mask_bits + (CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1))) * 8u);
+                                                if (mi2 == 0xFFFFu) hv = 1; else cat1code[row][col] = (uint16_t)mi2;
+                                            }
                                         }
                                     }
                                     if (0) {
@@ -16464,13 +16561,18 @@ RAMCODE void m_main(void)
                                         if (c2 & 0x1000) c2 = (c2 & 0xFFF) + (unsigned)bank1 * 0x1000u;
                                         GAME_TILE_REMAP(c2);
                                         hv = c1rt_class(w & 0x1FFFu, c2);
-                                        if (hv == 2)
-                                            cat1code[row][col] = (uint16_t)(CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1)));
+                                        if (hv == 2) {
+                                            unsigned mi2 = c1cell_claim((unsigned)row, (unsigned)col,
+                                                c1mask_bits + (CAT1MASK_MAX + ((w & 0x1FFFu) & (C1RT_N - 1))) * 8u);
+                                            if (mi2 == 0xFFFFu) hv = 1; else cat1code[row][col] = (uint16_t)mi2;
+                                        }
 #else
                                         hv = 1;         /* no bake for this page: whole cell */
 #endif
                                     }
                                 }
+                                if (!(hv == 2 && cat1code[row][col] >= CAT1MASK_MAX + C1RT_N))
+                                    c1cell_release((unsigned)row, (unsigned)col);
                                 cat1scr[row][col] = (uint8_t)hv;
 #ifdef C1_STAMP
                                 if (hv) { if (col < 32) hb0 |= 1u << col; else hb1 |= 1u << (col - 32); }
@@ -16813,6 +16915,22 @@ RAMCODE void m_main(void)
 #else
                             const uint16_t eflag = 0;
 #endif
+#ifdef EDGE42
+                            if (e42_fullrow) {
+                                /* whole plane row, plane column order:
+                                 * plane col p shows view col (p - c0w) mod 64,
+                                 * folded to -12..51 */
+                                o[-1] = (uint16_t)(hdr | 0x8000u);   /* the row header, rewritten */
+                                for (int p = 0; p < 64; p++) {
+                                    int vc = (p - c0w) & 63;
+                                    if (vc > 51) vc -= 64;
+                                    *o++ = CB(vc);
+                                }
+                                for (int i2 = 0; i2 < 40; i2++) mrow[i2] = cb[i2];
+                                if (e_pend) *epend |= ebit; else *epend &= ~ebit;
+                                (void)eflag; (void)st; (void)en;
+                            } else
+#endif
                             if (st < 40) {
                                 while (cb[en] == mrow[en]) en--;
                                 *o++ = (uint16_t)((st << 8) | (en - st + 1) | eflag);
@@ -16824,9 +16942,9 @@ RAMCODE void m_main(void)
                                 *o++ = eflag;            /* nothing changed */
                             }
 #ifdef EDGE42
-                            if (e_send) {
-                                *o++ = cbrow[0];         /* col -1 */
-                                *o++ = cbrow[41];        /* col 40 */
+                            if (!e42_fullrow && e_send) {
+                                *o++ = CB(-1);           /* col -1 */
+                                *o++ = CB(40);           /* col 40 */
                             }
 #endif
                             md_dbg_base[(isfg ? 28 : 0) + row] = hdr;

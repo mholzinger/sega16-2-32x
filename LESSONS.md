@@ -1266,3 +1266,77 @@ harvest change (make line fails loudly at .tilesmd); a "hardware
 offset" measured from screenshots is a crop until the RTL agrees; and
 when a blob outgrows its gap, measure what the layout wastes before
 cutting content.
+
+### The eye's pupil notch was the cat-1 mask cache thrashing; the transformation's black flames were a bake overflow keyed one step early (2026-09-22, evening)
+
+Mike's red lines (rig capture 180046): three cells at the pupil's
+top-right edge show iris where the pupil should be. The framebuffer
+dump at that frame has the pupil sprite's pixels under those cells
+(32X palette 0x81 = black), so the sprite exists and is hidden: the
+S16 draws it between BG and FG, and our FB layer sits below both MD
+planes. That case is cat-1 (a priority FG cell whose transparent pixels
+must show the sprite) and the punch handles it per pixel from a mask --
+but on a harvested scene the mask comes from the runtime classifier's
+64-slot cache indexed by tile code & 63, shared by every priority code
+of the pass (the eye has ~500), so by the time the slave read the cell's
+mask through cat1code another tile's mask sat in the slot, and the
+sprite was punched out of the whole cell. Fix: a runtime class-2 cell
+owns a mask slot while it stays class 2 (256 slots; the eye needs 46,
+the cut 163), written together with cat1code. On the way: C1_MASKTAB
+was OFF the line although C1_STAMP assumes it (the stamp indexes the
+mask table with whatever cat1code holds; without the table that is the
+ART code, an out-of-bounds read); it is on LINE_FLAGS now.
+
+The transformation cut (rig capture 180039; ares f1550-1630 against the
+arcade's 4448-4552): the arcade's solid blue around the flames is BG set
+19, colour-cycling; scene 9's bake reported `OVERFLOW ... [0, 19]` --
+seeded from round 0 (44 of 45 pens taken by the level's ground) because
+the scene was keyed on the state word's cut bit, which rises ~15 frames
+before the game switches to the cut pages, so the harvest saw the level
+too. Now scene 9 keys on the page word (TEXT_C[0x740] == 0xAAAA), is
+harvested after the switch, packs alone, and gets per-pixel keys (set
+20's flame blues cycle as well).
+
+Outcome (eye3): ares eye yellow phase 223 -> 210 cells vs the arcade,
+pupil round with its glint (scratch notch_ab.png), 18/19 anchors clean
+(cut+10 carries 12 dirty cells, the switch), palgate PASS, rig 3/3.
+
+**Rules:** a shared cache between the master's classification and the
+slave's read is only safe if nothing can rewrite the slot in between --
+size it by the WORST scene's distinct keys or key it by cell; a knob one
+flag "implies" must be on the line with it (grep .build_flags for both);
+and a scene keyed on a state bit that leads the picture by frames
+harvests the wrong picture.
+
+### The pan to the beast eye: the edge pair's one-column lead against a 9-12 px/frame pan, then art (2026-09-22, late)
+
+Mike's capture 180548 (and ares eye2 f1850-1870, columns 0-13 stale
+against the arcade's 4720-4728): the picture pans 9-12 px a frame
+(TEXT_C xs 0x164 -> 0x1e8 over 12 frames) while a row is revisited
+every 9 windows, so the EDGE42 pair's one-column lead left 10-13
+columns entering the view with whatever the name table held. Change:
+when a plane's scroll moves >= 3 px per window -- and always on a
+harvested scene -- every row of the window ships as the WHOLE 64-cell
+plane row in plane order (row header bit 15; the 68K plays it as one
+64-word DMA): 24 columns of lead. Measured (pan2): the stale tiles are
+gone; what remains is BLACK cells whose art is not resident yet: the
+68K fetched 22-28 tiles a frame in bursts with md_pending mostly 0, and
+the packet sequence ran 1.00 windows a frame (0.50-0.88 across the
+game's page switch at ~f1860). The remaining lag is structural: a cell
+entering the 64-column window has its art requested at its row's next
+visit (<= 9 windows) and is rewritten at the visit after (<= 9 more)
+against 16 windows of lead at this speed. It is the transport floor
+(rotation length), not a bake or a table. Note the game maps page 1
+(the beast eye) only when the pan starts (pages 0000 -> 0101), so
+nothing can be prefetched before it, and snaps back to page 0 with the
+new picture at the pan's end (a second full rewrite, the switch-in-view
+class).
+
+The transformation cut with scene 9 keyed on the cut pages and packed
+alone (eye4): f1580 299 -> 14 cells against the arcade, the flames'
+blue and the cycling set 19 right; the ~30-frame transition at the page
+switch (f1540-1575) stays, same class.
+
+**Rules:** size a scroll lead from the scroll SPEED and the rotation
+length, not from "one column"; and measure the fetch pipeline (records
+fetched per frame, pending, windows per frame) before raising a cap.

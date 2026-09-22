@@ -52,11 +52,11 @@ def _scene_sets():
 SCENE_SETS = _scene_sets()
 # harvested attract scene -> the ROM round whose packing seeds it (shared
 # sets keep the round's pen maps, so their tile blocks dedup)
-HARVEST_BASE = {5: 0, 7: 0, 8: 0, 9: 0}
+HARVEST_BASE = {5: 0, 7: 0, 8: 0}   # 9 (the cut) packs alone since 2026-09-22: seeded from round 0 it overflowed set 19, the cycling blue
 # scenes that ANIMATE their palette pack by per-pixel colour history (the
 # splash's logo, the eye's fade); seeded scenes keep colour keys so their
 # blocks dedup against the base round's
-PIXKEY_SCENES = {5, 6}
+PIXKEY_SCENES = {5, 6, 9}   # 9 added 2026-09-22: set 19 colour-cycles under the flames
 base_lines = {}
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')

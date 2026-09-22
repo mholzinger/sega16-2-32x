@@ -32,7 +32,7 @@ SCENES = {
     6: [1660, 1700, 1760, 1850, 1900, 1950],   # 1640 is still the cut (eye anchor 1652)
     7: [2030, 2050, 2150, 2300, 2500, 2800],   # 1980 is still the eye (picture anchor 2004)
     8: [2930, 3000, 3100, 3300, 3500],
-    9: [1503, 1510, 1520, 1535, 1550, 1570, 1590, 1605],
+    9: [1545, 1550, 1556, 1562, 1570, 1580, 1590, 1600, 1605],   # after the page switch (~1540); before it the level's own table shows
 }
 
 def run(rom, f, d):

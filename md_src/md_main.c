@@ -1684,10 +1684,27 @@ static void md_consume(uint32_t pkt_base) {
 #endif
 					for (uint16_t r = 0; r < 7; r++) {
 						uint16_t hdr = *e++;
-						uint16_t w1  = *e++;
-						uint16_t c0 = hdr & 63u;
 						uint32_t rb = nbase
 							+ (uint32_t)((hdr >> 8) & 31u) * 128u;
+						if (hdr & 0x8000u) {
+							/* FULL ROW (2026-09-22, the eye's pan): the plane
+							 * pans faster than the edge pair's one-column
+							 * lead covers (9-12 px a frame against a 9-window
+							 * row rotation), so the master ships the whole
+							 * 64-cell plane row in plane order: one DMA. */
+							uint32_t src = ((uint32_t)e) >> 1;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+							*vdp_ctrl_wide = ((uint32_t)(0x4000u | (rb & 0x3FFFu)) << 16)
+								| (((rb >> 14) & 3u) | 0x80u);
+							e += 64;
+							continue;
+						}
+						uint16_t w1  = *e++;
+						uint16_t c0 = hdr & 63u;
 						uint16_t st = (uint16_t)((w1 >> 8) & 0x7F);   /* bit 15: EDGE42 pair follows */
 						uint16_t nc2 = (uint16_t)(w1 & 0xFF);
 						if (nc2) {
@@ -2069,10 +2086,27 @@ static void md_consume(uint32_t pkt_base) {
 					uint32_t nbase = isa ? 0xC000u : 0xE000u;
 					for (uint16_t r = 0; r < 7; r++) {
 						uint16_t hdr = *e++;
-						uint16_t w1  = *e++;
-						uint16_t c0 = hdr & 63u;
 						uint32_t rb = nbase
 							+ (uint32_t)((hdr >> 8) & 31u) * 128u;
+						if (hdr & 0x8000u) {
+							/* FULL ROW (2026-09-22, the eye's pan): the plane
+							 * pans faster than the edge pair's one-column
+							 * lead covers (9-12 px a frame against a 9-window
+							 * row rotation), so the master ships the whole
+							 * 64-cell plane row in plane order: one DMA. */
+							uint32_t src = ((uint32_t)e) >> 1;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+							*vdp_ctrl_wide = ((uint32_t)(0x4000u | (rb & 0x3FFFu)) << 16)
+								| (((rb >> 14) & 3u) | 0x80u);
+							e += 64;
+							continue;
+						}
+						uint16_t w1  = *e++;
+						uint16_t c0 = hdr & 63u;
 						uint16_t st = (uint16_t)((w1 >> 8) & 0x7F);   /* bit 15: EDGE42 pair follows */
 						uint16_t nc2 = (uint16_t)(w1 & 0xFF);
 						while (nc2) {
