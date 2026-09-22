@@ -10,7 +10,23 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/attract4.32x      THE LINE = `make line` (2026-09-21 14:45)
+    rom/night/attract5.32x      THE LINE = `make line` (2026-09-21 16:40)
+                                = attract4 + ART_TAIL joined to the slim
+                                route (tile records ride every cell
+                                chunk's tail): the eye's hold 23 -> 9
+                                vints, picture 26 -> 19, splash 34 -> 30,
+                                no dropped records. Rig: tail4 (same
+                                bytes but the stamp) 3/3; attract5 itself
+                                2/3 -- launch 2 lost LEVEL 1'S SKY
+                                (screenshots/rig_attract5, captures
+                                2-4 and 12: black behind the ruins, the
+                                sky present in capture 1) = Mike's
+                                "revisiting level one shows black
+                                background tiles", seen here on the
+                                FIRST visit too. Launch-dependent, ares
+                                clean: the hardware race class. Readout
+                                twin (a5bc) queued x4 to catch it.
+    rom/night/attract4.32x      previous line (2026-09-21 14:45)
                                 = attract3 + md_pending at file scope (the
                                 re-mark paths bump it: orphaned dirty
                                 slots had left the transformation's red
@@ -94,7 +110,7 @@ That is how the logs became unreadable.
                                 "background fixed, presentation tighter,
                                 frames feel slower, one Zeus glyph left".
     rom/s16.32x                 line-equivalent (stamp bytes only)
-    rig (MiSTer)                attract4 (launched 2026-09-21 14:35)
+    rig (MiSTer)                a5bc readout twin (from 2026-09-21 ~17:20); attract5 before it
 
     rom/night/slim25.32x        previous line. Mike: score table fixed
                                 (14:20), then "black background" (18:24,
