@@ -407,6 +407,13 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   inside the mid splash (4530-4600 were
                                   level 2's demo: sets 64-73 in the splash,
                                   65/66 overflowed) -- overflow gone, 18/19.
+                                  (5b) eye7/eye9: the cut bit no longer
+                                  disables the baked scan or stops the
+                                  glow (keyed on the cut pages) -- harmless
+                                  but NOT the cut+10 count: by cut+10 the
+                                  pages are already 10/11 (LESSONS "cut+10
+                                  is already the switch"); the pre-switch
+                                  window is ~10 frames.
                                   (5) eye6: the OFF state (pictures) keyed
                                   on the cut pages like scene 9, so the
                                   level stays intact until the switch (rig

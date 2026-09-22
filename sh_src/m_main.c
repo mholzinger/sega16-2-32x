@@ -1845,6 +1845,9 @@ static uint16_t md_pending;
 #define MD_STATE_W()   (MARS_SYS_COMM14)
 #define MD_STATE_OK(w) (((w) & 0xF000u) == 0xE000u)
 #define MD_STATE_CUT(w) (((w) >> 7) & 1u)
+/* the cut bit AND the game has switched to the cut's pages (2026-09-22):
+ * the bit leads the switch by ~15 frames with the level still on screen */
+#define MD_CUT_PAGES(w) (MD_STATE_CUT(w) && TEXT_C[0x740] == 0xAAAAu)
 #define MD_STATE_PLAY(w) (((w) >> 3) & 1u)
 #define MD_STATE_STEP(w) ((w) & 7u)
 /* NOTES-FROM-DECOMPILE 23: the level's tilemap is on screen in credited
@@ -15750,7 +15753,7 @@ RAMCODE void m_main(void)
                  * so this gate never fires and bldQ's palette is
                  * identical to bldP's. A different signal is needed;
                  * the decompile thread has the player-object state. */
-                if (glow_on && MD_STATE_CUT(md_state_word())) {
+                if (glow_on && MD_CUT_PAGES(md_state_word())) {   /* 2026-09-22: not on the bit alone (625 FG cells re-marked in view) */
                     glow_pause = 8;
                     glow_on = 0;
                     glow_post = 3;
@@ -15772,7 +15775,7 @@ RAMCODE void m_main(void)
                         && !glow_chev
 #endif
 #ifdef GLOW_CUT
-                        && !MD_STATE_CUT(md_state_word())
+                        && !MD_CUT_PAGES(md_state_word())
 #endif
                         && (glow_on = (uint8_t)glow_reseed()) != 0)
                         glow_post = 4;       /* grant the mask ON */

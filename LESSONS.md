@@ -1374,3 +1374,20 @@ it -- the ROM's page tables for a level, the mirror for a harvested
 scene -- never a sampled audit; and a gameplay regression check belongs
 in the gate (the level-1 play script exists: discover/inputs/
 play_level1.csv).
+
+### cut+10 is already the switch (2026-09-22, 19:45)
+
+Three builds chased "the cut bit re-marks the level in view" (md_state_on,
+bm_scan_baked_ok, the glow -- each keyed on the cut pages instead; all
+harmless, none changed the count). Measured with dumps at cut+0 and
+cut+10 (eye9): at cut+10 the page words are already AAAA/BBBB, xs/ys 0,
+every FG view cell's word changed (sets 20/21/0), 823 dirty slots. The
+bit leads the switch by ~10 frames, so the scene gate's cut+10 anchor
+sits INSIDE the transition and its dirty count measures the new pages'
+art loading (~800 tiles at SLIM_CAP a vint), which is the switch-in-view
+class. The pre-switch window is ~10 frames: that is the budget for
+prefetching the cut's art (sets 19-21, pinned) before the switch.
+
+**Rules:** before attributing a dirty count to a cause, dump the page
+words at that frame; an anchor named "cut+N" is only pre-switch if the
+pages say so.
