@@ -28,7 +28,7 @@ ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/h
 OUT = os.path.join(ROOT, "discover", "cram", "wide")
 MD_TAG = 0x0603B400            # m_main.c: md_tag, NSETS*NWAYS longs
 SCENES = {
-    5: [60, 120, 200, 300, 400, 480, 4530, 4560, 4600, 4650, 4700, 4750, 4800, 4850, 4900, 4950],
+    5: [60, 120, 200, 300, 400, 480, 4650, 4700, 4750, 4800, 4850, 4900, 4950],   # mid splash from ~4600 on eye4 (anchor 4570); 4530-4600 was level 2's demo
     6: [1660, 1700, 1760, 1850, 1900, 1950],   # 1640 is still the cut (eye anchor 1652)
     7: [2030, 2050, 2150, 2300, 2500, 2800],   # 1980 is still the eye (picture anchor 2004)
     8: [2930, 3000, 3100, 3300, 3500],

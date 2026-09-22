@@ -10,7 +10,22 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/eye2.32x          THE LINE = `make line` (2026-09-22 18:00)
+    rom/night/eye4.32x          THE LINE = `make line` (2026-09-22 18:55)
+                                = eye2 + the attract cleanup (STATE "ATTRACT
+                                CLEANUP 2026-09-22", LESSONS same day):
+                                per-cell cat-1 mask slots (the pupil
+                                notch), C1MASKTAB=1 on LINE_FLAGS, scene 9
+                                keyed on the cut pages and packed alone
+                                (the cut's blue), full-row shipping on fast
+                                pans and harvested scenes, harvest layer
+                                masks. ares: 17/19 anchors (cut+10/+30 are
+                                the switch), palgate PASS, eye 223 -> 210,
+                                cut f1580 299 -> 14; rig 3/3. Mike saw the
+                                notch fixed on eye3. Next: eye5 = scene 5
+                                re-harvested inside the mid splash (its
+                                old frames were level 2's demo: sets 64-73
+                                in the splash, 65/66 overflowed).
+    rom/night/eye2.32x          previous line (2026-09-22 18:00)
                                 = attract8b + the attract harvest reading
                                 plane B at its real address (0xE000; it
                                 read 0xD000, empty, so scenes 5-9 had no
@@ -345,6 +360,37 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                                   BAKED TILE TRANSPORT below, and the
                                   black-cell count is the honest
                                   instrument for that card.
+    ATTRACT CLEANUP 2026-09-22    Mike's three rig captures on eye2:
+    (evening)                     (1) eye pupil notch (three iris cells
+                                  showing iris where the pupil sprite is):
+                                  FIXED in eye3 -- the runtime cat-1 mask
+                                  cache (64 slots by code & 63) thrashed on
+                                  the harvested scene; class-2 cells now own
+                                  a mask slot; C1MASKTAB=1 joined LINE_FLAGS
+                                  (C1_STAMP assumed it). ares 223 -> 210
+                                  cells, rig 3/3.
+                                  (2) transformation cut: black/stipple
+                                  around the flames = scene 9's blue (set
+                                  19, colour-cycling) OVERFLOWED the bake,
+                                  keyed on the cut bit ~15 frames before the
+                                  page switch: FIXED in eye4 (keyed on
+                                  TEXT_C[0x740] == 0xAAAA, harvested after
+                                  the switch, packed alone, per-pixel keys):
+                                  f1580 299 -> 14 cells. The ~30-frame
+                                  transition at the switch remains (switch-
+                                  in-view class). Rig pending.
+                                  (3) the pan to the beast eye (9-12 px a
+                                  frame): stale entering columns FIXED by
+                                  full-row shipping (64-cell plane rows on
+                                  fast scrolls and harvested scenes, 24
+                                  columns of lead); the remaining black
+                                  cells are art requested at the row's next
+                                  visit (rotation 9 windows) -- transport
+                                  floor. Windows/frame measured 1.00 (0.50-
+                                  0.88 across the game's page switch).
+                                  OPEN, pre-existing: scene 5's bake
+                                  overflows sets 65/66 (99+82 harvested
+                                  cells of the splash's plane B).
     transformation screen         zigzag + ornaments DRAW under
                                   CHEVFIX=1 (not on the line).
                                   Colours wrong: 3 distinct against
