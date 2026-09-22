@@ -2718,6 +2718,12 @@ endif
 ifdef SLIMWORDCAP
 SHCCFLAGS += -DSLIM_WORDCAP
 endif
+# BLANKNOCOMPOSE=1 = 2026-09-21: while the 32X display is blanked the
+# master skips the compose launches, so its window is short and the MD
+# builder runs every vint (a scene load is bound by windows per vint).
+ifdef BLANKNOCOMPOSE
+SHCCFLAGS += -DBLANK_NO_COMPOSE
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set

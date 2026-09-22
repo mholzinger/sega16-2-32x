@@ -15668,6 +15668,16 @@ RAMCODE void m_main(void)
             {
                 static uint8_t r60_skip_run; /* consecutive k2 skips */
                 if (k == 2) {
+#ifdef BLANK_NO_COMPOSE
+                    /* NO COMPOSE UNDER A BLANK (2026-09-21, the transport
+                     * floor): the display is off, so the frame the chain
+                     * would compose is never seen; every window spent on
+                     * it is a window the MD builder did not get. Skip the
+                     * launches while blank (the chain drains its leftover
+                     * first, as the bounded hold does), and let the 68K
+                     * post a window every vint. */
+                    if (disp_blank) { r60_launch = 0; r60_skip_run = 0; }
+#endif
                     if (!r60_launch && ++r60_skip_run >= 3) {
                         r60_launch = 1;
                         r60_skip_run = 0;
