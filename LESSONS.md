@@ -1099,3 +1099,33 @@ stayed dirty and black for 100 frames while set 21, marked by the normal
 path, drained. File scope now, bumped per newly dirtied slot. Rule: a
 dirty bit and the pending count are one fact; never set one without the
 other.
+
+### The transport floor, measured (2026-09-21, 15:00-16:30)
+
+A scene load = packets per vint x items per packet, and both were
+measured on the eye's blank in ares (scratch loadprobe/fmprof):
+
+    line (attract4)  37-vint blank, 25 packets, one item each, two walk
+                     rotations + 416 baked tiles: hold 23 vints after
+                     display-on
+    + ART_TAIL joined to the slim route (tile records ride every cell
+      chunk's tail, mixed 2/17-word records, the 68K walks batch and
+      tail with one slim_walk): hold 9 vints (eye), 19 (picture), 30
+      (mid splash), 17 (cut). Rig 3/3. ON THE LINE (attract5).
+    + BLANKNOCOMPOSE (skip the compose while blanked): NO measurable
+      gain -- the master's FM-held span is still 1.2 vints per window
+      with nothing to compose, and it gets only 11 windows in 37 vints,
+      idle 65% of the blank waiting for the 68K's announce.
+
+What the 68K is doing meanwhile (the game-PC ring): parked in the
+FM-gate SPIN thunk on 10 of 36 vints, i.e. the game's own tilemap load
+waits out our windows one gated store at a time, and the vint handler
+enters late (V outside the DF-E8 gate) on 5 of 36. The arcade shows the
+transformation cut COMPLETE on its first frame (MAME 4440->4441): the
+game pre-writes the cut's pages during the level and only switches page
+pointers; our walk re-walks both planes after the switch = 8 windows.
+
+Rules: (1) a record the 68K cannot stage is lost art -- the emitter
+caps at SLIM_CAP per packet and the 68K buffer holds two packets;
+(2) `md_pending` and a dirty bit are one fact; (3) profile before
+building: the compose skip was the obvious lever and it was dead.

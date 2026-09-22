@@ -11389,7 +11389,13 @@ static inline unsigned wp_idx(uint16_t c)
                  case 0x7C1F: return 4; case 0x01FF: return 5; case 0x0200: return 6; case 0x7C0F: return 7;
                  case 0x4210: return 8; case 0x6318: return 9; case 0x7FFF: return 10; default: return 15; }
 }
-#define WSTAGE(col) do { uint16_t t9 = frt(); if (disp_blank) WPROF[wp_idx(wp_col)] += (uint16_t)(t9 - wp_t); wp_t = t9; wp_col = (col); } while (0)
+__attribute__((noinline)) static void wp_mark(uint16_t col)   /* ROM: keeps .ramtext under its slot */
+{
+    uint16_t t9 = frt();
+    if (disp_blank) WPROF[wp_idx(wp_col)] += (uint16_t)(t9 - wp_t);
+    wp_t = t9; wp_col = col;
+}
+#define WSTAGE(col) wp_mark(col)
 #else
 #define WSTAGE(col) do { } while (0)
 #endif
