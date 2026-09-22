@@ -779,8 +779,13 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           each band as nat_mtask stage 1) but runs in
                           the post-ack tail, one window late for the
                           blit; running the stage-1 chunks inside the
-                          window before BLIT_HALF, with BANDSHIFT=0,
-                          halves the compose wall (~-25 lines). The
+                          window before BLIT_HALF, with the master
+                          owning rows (SHIPBANDSHIFT=4 SHIPRG2SHIFT=0;
+                          the bare BANDSHIFT/RG2SHIFT lose to the ship
+                          list's literals, LESSONS 01:10), halves the
+                          compose wall (~-25 lines). BUILT as
+                          MTASKINWIN (nat_mchunk factored); probe13
+                          measures it with the real split. The
                           chunk body is inline in the poll loop
                           (m_main.c ~12530-12600) and time-boxed; it
                           needs factoring (RAMCODE budget: ~300 B free
