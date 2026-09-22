@@ -10,7 +10,20 @@ That is how the logs became unreadable.
 
 ## THE LINE
 
-    rom/night/cut1.32x          THE LINE = `make line` (2026-09-22 21:20)
+    rom/night/spd1.32x          THE LINE = `make line` (2026-09-23 00:20)
+                                = cut1 + CRAMISR=1 (the 32X CRAM painted
+                                at the flip in vblank, off the FM window)
+                                + BLITAUDITDIV=4 (the blit audits one
+                                skipping row in four per window). Speed
+                                work only: the game-visible FM window on
+                                compose frames 124-135 -> 112-120 lines,
+                                gate spins 22-26 -> 10-18; game speed
+                                still 50.0% (threshold, LESSONS 00:05).
+                                ares palgate PASS, 18/19 anchors, rig 3/3.
+                                RISK for Mike's eyes: the blit's mask
+                                audit heals a lie in <= 8 frames instead
+                                of 2 (the purple-band class).
+    rom/night/cut1.32x          previous line (2026-09-22 21:20)
                                 = eye9 + CUTPREFETCH=1 (the cut's art
                                 prefetched on the cut bit; the scene
                                 install keeps prefetched slots clean and
