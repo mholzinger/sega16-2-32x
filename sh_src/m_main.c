@@ -5523,7 +5523,7 @@ static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
         }
         if (drew)
             for (int y = l0; y < l1; y++)
-                RL_MARK(by + y); RG_MARKALL(by + y);
+                { RL_MARK(by + y); RG_MARKALL(by + y); }
     }
 }
 
