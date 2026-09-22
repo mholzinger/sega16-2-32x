@@ -2728,6 +2728,10 @@ endif
 ifdef BLANKNOFLIP
 SHCCFLAGS += -DBLANK_NO_FLIP
 endif
+# BLANKBUDGET=N = page-capture budget per window while blanked (default 13)
+ifdef BLANKBUDGET
+SHCCFLAGS += -DMD_BLANK_BUDGET=$(BLANKBUDGET)
+endif
 # WINPROF=1 = per-m_stage FRT ticks of the master window while blanked (SDRAM 0x26028FC0)
 ifdef WINPROF
 SHCCFLAGS += -DWIN_PROF

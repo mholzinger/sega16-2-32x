@@ -14646,7 +14646,13 @@ RAMCODE void m_main(void)
                      * spread of transition bursts; the k2 pre-flip drain
                      * is the correctness point.) */
                     int budget = (pg_pending >= 0x0FFF) ? 7 : 3;
-                    if (disp_blank) budget = 13;         /* DISPLAY GATE: load, nobody watches */
+#ifndef MD_BLANK_BUDGET
+#define MD_BLANK_BUDGET 13
+#endif
+                    if (disp_blank) budget = MD_BLANK_BUDGET;   /* DISPLAY GATE: load, nobody watches
+                                                                 * (13 since 2026-09-06; BLANKBUDGET=N to test:
+                                                                 * it sits in the post-ack tail that delays
+                                                                 * the next window, WINPROF 2026-09-21) */
 #ifdef PG_ROTOR
                     /* Background truth re-verify: cap_page is compare-
                      * and-copy, so a clean page costs one read pass and
