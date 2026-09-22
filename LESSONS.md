@@ -1453,3 +1453,48 @@ lines (STAMPCENSUS). Windows/frame stays 1.00 on the eye's pan too.
 seen by the game's gated writers, not any per-vint counter; measure it
 with frame_timeline's raise/drop/irq4 columns before and after every
 change.
+
+Addendum 21:30 (BODYPROF, ares level 1): the master's window BODY -- from
+the post pickup to the ack -- is 24 lines: launch 3, master half 10-12,
+apply_cram 3.5-3.8, publish+P3 5.5, slave waits ~0. The FM-held window
+the game sees is 45-110 lines, so 20-85 lines of it are the master
+ARRIVING at the post: its post-ack tail (the walker's slice, the art
+emit, the packet build for the next window) overruns into the next
+vint. The lever is the tail, or raising FM only when the master is at
+the post.
+
+Addendum 21:50 -- CALIBRATION: the SH-2 FRT runs at 45.8 ticks per line
+here (12,000 ticks per 262-line vint, measured pickup-to-pickup with
+60 windows in 60 vints), NOT the 128 per line the NOTES-47 census
+assumed (its "1650 ticks = 12.9 lines"). Every FRT-derived line count
+in the record before this addendum is 2.8x too small. The master's
+window in real lines (ares, level 1 play, mean over 60 windows):
+launch 9.4, master half (compose) 32.2, apply_cram 9.9, publish+P3 to
+the ack 15.5 -- the body is ~67 lines; ack to the walker slice end
+57.8; then 137.6 lines IDLE waiting for the next post. So the FM-held
+window the game sees is the body itself (45 lines on frames whose
+sprites did not change, ~110 where they did), and the master has more
+than half the vint spare. Levers, in order: the compose's master
+half, the publish, apply_cram (32X CRAM writes need no FM: move them
+after the ack), the launch.
+
+Addendum 22:05 -- the blit's group skip WORKS on the line: FBCLEAR's
+per-bank zero masks hold 1392 of 2240 groups (62%, 70 rows fully
+zero) and the per-row audit found 0 lies in 60 vints (DIAG[42]). The
+NOTES-78 "0.004% skipped" is stale. The master half's cost is the
+examine loop over the 154 partly-live rows, the stores, and the audit's
+8 uncached FB reads per skipping row.
+
+Addendum 22:40 (probe5): CRAMISR (the 32X CRAM paint at the flip, in
+vblank) takes apply_cram out of the window (10 lines); FM drop on the
+compose frames 124-135 -> 117. A `make line BLITSHIFT=48` is NOT a
+split change: the ship list carries BLITSHIFT=$(SHIPBLITSHIFT) and the
+sub-make's literal wins -- use SHIPBLITSHIFT=N. The 66-line "master
+half" did not move with the row count, which says it is not the row
+copy; the compose (slave in-window, master in the tail) is the pole.
+
+Addendum 22:50 (probe6, ares play): BLITAUDITDIV=4 + CRAMISR=1: the
+compose frames' master half 66 -> 58, apply_cram 10 -> 0 in the window,
+FM drop on compose frames 124-135 -> 112-120, the game's gate spin
+22-26 -> 10-18 lines. IRQ4 entry 71/90 unchanged. Candidate for the
+line (spd1) pending the ares gates and the rig.

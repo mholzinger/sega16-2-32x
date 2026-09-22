@@ -3687,7 +3687,11 @@ static inline void decode_pages(uint16_t pages, uint8_t *pq)
     p = (pages >> 12) & 0xF; pq[3] = p > 12 ? 12 : p;
 }
 
+#ifdef BODY_PROF
+__attribute__((noinline)) static void latch_layer_regs(void)   /* probe builds: ROM (noinline, or it folds into m_main's .ramtext) */
+#else
 RAMCODE static void latch_layer_regs(void)
+#endif
 {
     for (int which = 0; which < 2; which++) {
         layer_regs *lr = &snap[which];
@@ -5076,6 +5080,9 @@ RAMCODE static void cram_paint_spr(int par, unsigned sc)
     }
 }
 
+#ifdef CRAM_ISR
+static uint8_t cram_isr_par, cram_isr_pend;
+#endif
 RAMCODE static void apply_cram(int par)
 {
     /* Undo the k2 debug-bar hijack of entry 255 from the mirror (which
@@ -7350,10 +7357,16 @@ __attribute__((noinline)) static void cutpf_step(void)
  * [0] launch (records+hash+slave cmd) [1] master half [2] slave pickup
  * wait [3] slave half wait [4] ph_ship+hs_promote [5] apply_cram
  * [6] up to dreq_rearm [7] publish+P3 to the ack; [8] windows. */
-static uint32_t bprof[9];
+static uint32_t bprof[16];               /* [8] ack -> walker slice end, [9] slice end -> next pickup, [11] windows */
 static uint16_t bp_t;
+__attribute__((noinline)) static void bp_mark(unsigned n)   /* ROM: .ramtext is full */
+{
+    uint16_t bp_now = frt();
+    bprof[n] += (uint16_t)(bp_now - bp_t); bp_t = bp_now;
+    if (n == 7u) bprof[11]++;
+}
 #define BP_START(t) do { bp_t = (uint16_t)(t); } while (0)
-#define BP(n) do { uint16_t bp_now = frt(); bprof[n] += (uint16_t)(bp_now - bp_t); bp_t = bp_now; if ((n) == 7) bprof[8]++; } while (0)
+#define BP(n) bp_mark(n)
 #else
 #define BP_START(t) ((void)0)
 #define BP(n) ((void)0)
@@ -8263,7 +8276,17 @@ LOCKCODE static void blit_half(int ylo, int yhi)
              * per skipping row): on a lie, drop the row's whole mask —
              * the row rewrites honestly next frame. Lies heal in <=2
              * frames; the audit count lands in DIAG[42]. */
+#if defined(BLIT_NOAUDIT)
+            if (0) {                         /* probe: the per-row uncached audit off */
+#elif defined(BLIT_AUDIT_DIV)
+            /* 2026-09-22: audit one row in BLIT_AUDIT_DIV per window (rotating),
+             * ~13 of the compose frame's 66 blit lines were the audit's 8
+             * uncached reads per skipping row; a lie now heals in <= 2 x DIV
+             * frames instead of 2. */
+            if (vfy_i >= 0 && (((unsigned)y + (unsigned)vseq) % (unsigned)BLIT_AUDIT_DIV) == 0u) {
+#else
             if (vfy_i >= 0) {
+#endif
                 /* pick a ROTATING member of the skipped set (fall back
                  * to the first skip when the rotation misses) */
                 unsigned cand = ((unsigned)y + vseq) % 10u;
@@ -8576,6 +8599,9 @@ RAMCODE static void tp_text_restore(void)
 }
 #endif
 #ifdef PG_SKIP_PKT
+#ifdef PUB_NORB
+static uint8_t pub_copiedA, pub_copiedB;
+#endif
 static uint32_t tp_lastA[368], tp_lastB[368];   /* the plane packets exactly as
                                                  * the FB holds them (149) */
 static uint32_t tp_lastPal[8], tp_lastSat[64];  /* MDSPR palette + SAT likewise */
@@ -9111,6 +9137,12 @@ static int flip_span(void)
          * it), and a late latch that toggled late would hand the
          * slave the wrong label for a whole window. */
         fb_draw_par ^= 1;
+#endif
+#ifdef CRAM_ISR
+        /* CRAMISR (2026-09-22): the 32X CRAM paint for the frame just
+         * flipped, here in vblank (PEN) instead of inside the FM-held
+         * window (BODYPROF: 10 lines of the game-visible window). */
+        if (cram_isr_pend) { cram_isr_pend = 0; apply_cram(cram_isr_par); }
 #endif
 #ifdef PAL_PEN
         /* Second drain, AFTER the flip: this is inside vblank, where PEN
@@ -10357,7 +10389,12 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
                                               * of tall zoomed actors */
         int ye = (y + 12 > hi) ? hi : y + 12;
         st_s(10);                        /* 255: strip clear -> STB[0] */
+#ifdef BODY_PROF
+        { uint16_t sp_t0 = frt(); compose_sprites(y, ye, par);
+          ((volatile uint32_t *)0x26028FC0u)[0] += (uint16_t)(frt() - sp_t0); ((volatile uint32_t *)0x26028FC0u)[1]++; }   /* SPROF: the slave's sprite compose */
+#else
         compose_sprites(y, ye, par);
+#endif
         st_s(11);                        /* 255: strip sprites -> STB[1] */
         slave_service_stream();
     }
@@ -12529,7 +12566,12 @@ RAMCODE void m_main(void)
                             }
                             break;
                         case 1:
+#ifdef BODY_PROF
+                            { uint16_t mp_t0 = frt(); compose_sprites(y, ye, nat_par);
+                              ((volatile uint32_t *)0x26028FC0u)[2] += (uint16_t)(frt() - mp_t0); ((volatile uint32_t *)0x26028FC0u)[3]++; }   /* SPROF: the master's tail compose */
+#else
                             compose_sprites(y, ye, nat_par);
+#endif
                             break;
                         default:         /* FG cat1 over sprites */
                             compose_layer(y, ye, 0, 0, 0, nat_bank,
@@ -12939,6 +12981,10 @@ RAMCODE void m_main(void)
             }
 #endif
             t_vint = tw;
+            BP(9);
+#ifdef BODY_PROF
+            { static uint16_t bp_last; bprof[10] += (uint16_t)(tw - bp_last); bp_last = tw; }   /* pickup -> pickup: the cycle */
+#endif
 #ifdef STAMP5_CENSUS
             s5_pick = tw; s5_isr = DIAG[49]; s5_pick_off = (uint16_t)(tw - visr_t0);   /* LOOP29 265: the window's pickup */
 #endif
@@ -15187,7 +15233,12 @@ RAMCODE void m_main(void)
                 }
 #endif
                 tp = frt();
+#ifdef CRAM_ISR
+                cram_isr_par = (uint8_t)par;     /* painted at the flip, in vblank (PEN-safe), off the FM window */
+                cram_isr_pend = 1;
+#else
                 apply_cram(par);
+#endif
                 BP(5);
                 WSTAGE(0x7C1F);                      /* MAGENTA: palette painted */
                 diag_add(2, tp);
@@ -15253,7 +15304,6 @@ RAMCODE void m_main(void)
 #ifndef K2_FREE
             WSTAGE(0x01FF);                      /* ORANGE: at the DREQ re-arm, before the ack path */
             dreq_rearm(k);
-            BP(6);
 #endif  /* K2FREE: the V-ISR armed at vblank, BEFORE the 68K's push —
          * a body rearm here would reset TCR under a completed landing
          * and erase `landed` for this vint's harvest. */
@@ -15287,7 +15337,9 @@ RAMCODE void m_main(void)
 #ifdef CUT_PREFETCH
                 cutpf_win = win_no;
 #endif
+                BP(6);
                 disp_gate();                 /* DISPLAY GATE, ROM-resident:
+                BP(12);
                                               * decided before the publish so
                                               * the packets carry this vint's
                                               * hold state to the 68K */
@@ -15312,6 +15364,7 @@ RAMCODE void m_main(void)
                     } else {
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
+                        BP(13);
 #ifdef RIG_BARCODE
                         /* the counters ride the header AFTER the copy (words 4/6 high bytes) */
                         d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
@@ -15327,6 +15380,9 @@ RAMCODE void m_main(void)
 #endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendA = 0;
+#ifdef PUB_NORB
+                        pub_copiedA = 1;
+#endif
 #ifdef TILE_VERIFY
                         tv_pubA = 1;
                         for (int i2 = 4; i2 < 368; i2++) tv_copy[i2] = ssrc[i2];
@@ -15338,7 +15394,23 @@ RAMCODE void m_main(void)
                 /* LOOP29 149: keep the FB bytes exactly (hs_patch edits
                  * the FB copy in place, so the staging is not it) for the
                  * mirror to replay into the other bank after a flip. */
+#ifdef PUB_NORB
+                /* PUBNORB (2026-09-22): the read-back of the packet just
+                 * written was 368 framebuffer reads (3.9 lines, BODYPROF);
+                 * the FB holds exactly the SDRAM packet plus the two header
+                 * words patched above, so build the replay copy from SDRAM
+                 * and read only those two. The unconsumed-defer path keeps
+                 * the read-back (the FB then holds the OLD packet). */
+                if (pub_copiedA) {
+                    pub_copiedA = 0;
+                    for (int i2 = 1; i2 < 368; i2++) tp_lastA[i2] = ssrc[i2];
+                    tp_lastA[0] = d[0]; tp_lastA[2] = d[2];
+                } else
+                    for (int i2 = 0; i2 < 368; i2++) tp_lastA[i2] = d[i2];
+#else
                 for (int i2 = 0; i2 < 368; i2++) tp_lastA[i2] = d[i2];
+#endif
+                BP(14);
 #ifdef TILE_VERIFY
                 /* payload longs 4.. (words 8..) are untouched by hs_patch:
                  * the FB read-back must equal the staging just copied */
@@ -15351,6 +15423,7 @@ RAMCODE void m_main(void)
 #ifdef TILE_VERIFY
                 TV_BLANK_LATCH();
 #endif
+                BP(15);
                 d = (volatile uint32_t *)0x2401E800u;
                 ssrc = (const uint32_t *)md_pkt;
 #ifdef HS_SHIP
@@ -15373,10 +15446,22 @@ RAMCODE void m_main(void)
 #endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendB = 0;
+#ifdef PUB_NORB
+                        pub_copiedB = 1;
+#endif
                     }
                 }
 #ifdef PG_SKIP_PKT
+#ifdef PUB_NORB
+                if (pub_copiedB) {
+                    pub_copiedB = 0;
+                    for (int i2 = 1; i2 < 368; i2++) tp_lastB[i2] = ssrc[i2];
+                    tp_lastB[0] = d[0]; tp_lastB[2] = d[2];
+                } else
+                    for (int i2 = 0; i2 < 368; i2++) tp_lastB[i2] = d[i2];
+#else
                 for (int i2 = 0; i2 < 368; i2++) tp_lastB[i2] = d[i2];
+#endif
 #endif
                 WSTAGE(0x7C0F);                      /* PURPLE: B copy done */
 #ifdef HS_SHIP
@@ -17300,6 +17385,7 @@ RAMCODE void m_main(void)
 #endif
                     md_phase++;
                     if (md_phase > 8) { md_phase = 0; md_rot++; }   /* 1 tile + 4 B + 4 A */
+                    BP(8);
 #ifdef CUT_BLANK
                     /* arm/decay: >=80 claims in ONE chunk only happens at
                      * scene cuts (panning claims edge strips, <80). 12

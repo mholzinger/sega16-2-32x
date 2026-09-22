@@ -2736,6 +2736,30 @@ endif
 ifdef BODYPROF
 SHCCFLAGS += -DBODY_PROF
 endif
+# BLITNOAUDIT=1 = 2026-09-22 probe (never a ship by itself): the blit's
+# per-row uncached readback audit of one skipped group is skipped, to
+# price it against BODYPROF's master-half stage.
+ifdef BLITNOAUDIT
+SHCCFLAGS += -DBLIT_NOAUDIT
+endif
+# CRAMISR=1 = 2026-09-22: paint the 32X CRAM at the flip in the V-ISR
+# (vblank, PEN-safe) instead of inside the FM-held window: -10 lines of
+# the window the game's gated writers wait on (BODYPROF).
+ifdef CRAMISR
+SHCCFLAGS += -DCRAM_ISR
+endif
+# BLITAUDITDIV=N = 2026-09-22: the blit audits one skipping row in N per
+# window (rotating) instead of every row; the audit was ~13 lines of a
+# compose frame's 66-line master half (BLITNOAUDIT probe).
+ifdef BLITAUDITDIV
+SHCCFLAGS += -DBLIT_AUDIT_DIV=$(BLITAUDITDIV)
+endif
+# PUBNORB=1 = 2026-09-22: the publish builds its replay copies (tp_lastA/B)
+# from the SDRAM packet instead of reading the framebuffer copy back
+# (2 x 368 FB reads, ~8 lines of the window; BODYPROF probe7).
+ifdef PUBNORB
+SHCCFLAGS += -DPUB_NORB
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT
