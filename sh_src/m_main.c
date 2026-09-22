@@ -1095,6 +1095,22 @@ static uint8_t dfb_curbank;
 #define RL_MARK(sr)  (ROWLIVE[(sr)] = 1)
 #endif
 #define RL_ZERO(sr)  (ROWLIVE[(sr)] = 0)
+#ifdef ROW_GRP
+/* ROWGRP (2026-09-22): which 32-byte GROUPS of an sbuf row were drawn
+ * since its last clear -- the baked sprite runs mark exactly their span,
+ * every other drawer marks all ten; the slave's clear zeroes only the
+ * marked groups (FBB: ~58 KB of full-width clears a generation before).
+ * Shared between the CPUs through the uncached alias. */
+static uint16_t rowgrp_s[232];
+#define ROWGRP_U ((volatile uint16_t *)(0x20000000u | (uint32_t)rowgrp_s))
+#define RL_MARKROW(sr) RL_MARK(sr)
+#define RG_MARKALL(sr) (ROWGRP_U[(sr)] = 0x3FFu)
+#define RG_MARKSPAN(sr, a, b) (ROWGRP_U[(sr)] |= (uint16_t)((((2u << (b)) - 1u) & ~((1u << (a)) - 1u)) & 0x3FFu))
+#else
+#define RL_MARKROW(sr) RL_MARK(sr)
+#define RG_MARKALL(sr) ((void)0)
+#define RG_MARKSPAN(sr, a, b) ((void)0)
+#endif
 #ifdef ROW_GEN
 /* ROWGEN v2 (SESSION 7, 2026-09-07): WRITE-KNOWLEDGE ROW SKIP FOR THE
  * SHIP ONLY. The blit is LOAD-bound (BLITHASH skipped 384 group
@@ -5366,7 +5382,7 @@ static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
                     (void)a0; (void)b1;                                     \
                 }
             for (int y = l0; y < l1; y++) {
-                RL_MARK(by + y);
+                RL_MARK(by + y); RG_MARKALL(by + y);
                 uint32_t *dst = (uint32_t *)DROW(by + y);
                 const uint32_t *t0 = (const uint32_t *)(tptr[0] + y * 8);
                 uint32_t a0 = t0[0] + tbase[0], a1 = t0[1] + tbase[0];
@@ -5507,7 +5523,7 @@ static void compose_layer_regs(int ylo, int yhi, int cpu, int which,
         }
         if (drew)
             for (int y = l0; y < l1; y++)
-                RL_MARK(by + y);
+                RL_MARK(by + y); RG_MARKALL(by + y);
     }
 }
 
@@ -6400,7 +6416,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                 uint16_t td_ = frt();
 #endif
                 for (int y = top; y < bottom; y++) {
-                    RL_MARK(8 + y);
+                    RL_MARKROW(8 + y);
                     const uint8_t *sp = fr + *(const uint16_t *)
                                         (rt + ((unsigned)(y - (int)otop) << 1));
                     unsigned ns = *(const uint16_t *)sp;
@@ -6421,6 +6437,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
                         if (hi > 504)
                             hi = 504;
                         if (hi > lo) {
+                            RG_MARKSPAN(8 + y, (unsigned)(lo - 184) >> 5, (unsigned)(hi - 185) >> 5);
                             const uint8_t *s = sp + (lo - x);
                             uint8_t *d = row + (lo - 184);
                             int m = hi - lo;
@@ -6533,7 +6550,7 @@ RAMCODE static void compose_sprites(int ymin, int ymax, int par)
         }
 #endif
         for (int y = top; y < bottom; y++) {
-            RL_MARK(8 + y);
+            RL_MARK(8 + y); RG_MARKALL(8 + y);   /* non-baked path: no span marks */
             addr = (uint16_t)(addr + pitch);
             yacc = (uint16_t)(yacc + (vzoom << 10));
             if (yacc & 0x8000) {
@@ -6820,7 +6837,7 @@ RAMCODE static void compose_text(int row0, int row1, int par_text)
             uint8_t base = (uint8_t)(g << 3);
             uint8_t *dst = DROW(8 + row * 8) + (col - 24) * 8;
             for (int y = 0; y < 8; y++) {
-                RL_MARK(8 + row * 8 + y);
+                RL_MARK(8 + row * 8 + y); RG_MARKALL(8 + row * 8 + y);
                 if (tp[0]) dst[0] = (uint8_t)(base + tp[0]);
                 if (tp[1]) dst[1] = (uint8_t)(base + tp[1]);
                 if (tp[2]) dst[2] = (uint8_t)(base + tp[2]);
@@ -10327,8 +10344,19 @@ RAMCODE void slave_concurrent_k(uint16_t cmd)
 #ifdef NO_CLEAR
             (void)d;                        /* LOOP29 169 ablation */
 #else
+#ifdef ROW_GRP
+            {   unsigned gm = ROWGRP_U[8 + r]; ROWGRP_U[8 + r] = 0;
+                for (unsigned g = 0; g < 10u; g++)
+                    if (gm & (1u << g)) {
+                        uint32_t *q = (uint32_t *)(d + g * 32u);
+                        q[0] = 0; q[1] = 0; q[2] = 0; q[3] = 0; q[4] = 0; q[5] = 0; q[6] = 0; q[7] = 0;
+                    }
+                if (gm) { uint32_t *q = (uint32_t *)(d + 320); for (int x = 320; x < SBUF_W; x += 4) *q++ = 0; }
+            }
+#else
             for (int x = 0; x < SBUF_W; x += 4)
                 *(uint32_t *)(d + x) = 0;
+#endif
 #ifdef FB_BYTES
             FBB[2] += SBUF_W;            /* SDRAM, not the framebuffer */
 #endif
@@ -15280,7 +15308,7 @@ RAMCODE void m_main(void)
                     int len = lens[j];
                     if (len > 300) len = 300;
                     uint8_t *b = DROW(8 + 2 + 2 * j);
-                    RL_MARK(8 + 2 + 2 * j);
+                    RL_MARK(8 + 2 + 2 * j); RG_MARKALL(8 + 2 + 2 * j);
                     for (int i = 0; i < len; i++)
                         b[i] = 0xFF;
                 }

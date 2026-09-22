@@ -711,6 +711,60 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           tail; SPROF stamps in probe8), the launch's
                           15 lines (records from the FB + hash), then
                           the 68K side (consume 17, post-ack tail 15-20).
+                          DESIGN (23:40, not built): PASS-END STRIKE.
+                          The game's IRQ4 is 1-11 lines (ISR-exit V
+                          ring); the frame is wait-for-ack + ~10 +
+                          pass (147 light / 184 heavy). One vint needs
+                          the FM window to end by ~68 (heavy) / ~105
+                          (light). The window's cost on compose frames
+                          is the slave's sprite compose + the chase
+                          blit (~66) because records arrive at the
+                          vint. Strike the sprite RAM the moment the
+                          game's pass ends (a gate thunk at the idle-
+                          loop entry 0x903982, GAMEGATE-style) through
+                          the DREQ FIFO into SDRAM (the FB is the 68K's
+                          at FM=0, but sbuf is SDRAM), compose on both
+                          CPUs while FM is still low, and leave the
+                          window = blit + publish (~30-45 lines). The
+                          master idles 130-160 lines a vint today, so
+                          the compose has room before the vint.
+                          REFINED 23:50: the sprite records already
+                          reach SDRAM through the DREQ FIFO (r60_push
+                          at the post -> SPR_LAND); they are final at
+                          the END OF THE GAME'S IRQ4 (its upload), ~90
+                          lines after vblank, and today they wait until
+                          the next vint's post (170 lines idle). EARLY
+                          PUSH: call the records push at fmgate_ret
+                          (IRQ4 exit; POST_LATE's site, but ONLY the
+                          push -- no raise, no window), let the SH-2
+                          poll the DMAC landing in its idle loop and
+                          launch the compose on landing; the vint's
+                          window then only blits + publishes. No FM is
+                          needed for any of it (FIFO + SDRAM).
+                          CORRECTION 23:55: on the line (FB_XPORT) the
+                          records do NOT ride the FIFO -- r60_push and
+                          the SPR_LAND landing are #ifndef FB_XPORT; the
+                          68K strikes them into FB_SPR at the vint top
+                          (FM=0) and the master reads them at FM=1. So
+                          an early compose needs the records over the
+                          FIFO again (EARLYREC: the FIFO code exists
+                          behind the ifdefs; the FIFO's partial-landing
+                          hazards are in memory lost-push-belt /
+                          ARMGATE) -- or a different split:
+                          MTASK IN-WINDOW: the master composes its own
+                          rows before its blit half instead of idling
+                          46 lines behind the slave's compose. The row
+                          ownership machinery exists (BANDSHIFT /
+                          RG2SHIFT: the master owns [lo+36+BS, hi) of
+                          each band as nat_mtask stage 1) but runs in
+                          the post-ack tail, one window late for the
+                          blit; running the stage-1 chunks inside the
+                          window before BLIT_HALF, with BANDSHIFT=0,
+                          halves the compose wall (~-25 lines). The
+                          chunk body is inline in the poll loop
+                          (m_main.c ~12530-12600) and time-boxed; it
+                          needs factoring (RAMCODE budget: ~300 B free
+                          after BODYPROF's latch trick).
     ATTRACT BAKE          DONE 2026-09-21 14:10 (LESSONS "The attract
                           bake"). Open residue: (a) the ~0.3-0.5 s hold
                           after a picture's blank = the load (1120 cells

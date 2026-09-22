@@ -2760,6 +2760,11 @@ endif
 ifdef PUBNORB
 SHCCFLAGS += -DPUB_NORB
 endif
+# ROWGRP=1 = 2026-09-22: per-row 32-byte-group marks from the sprite runs;
+# the slave clears only marked groups of a live row (was the full 336 B).
+ifdef ROWGRP
+SHCCFLAGS += -DROW_GRP
+endif
 # MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
 # cut) from the state word's cut bit; off until its install is proven
 ifdef MDSCENECUT

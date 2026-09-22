@@ -1498,3 +1498,31 @@ compose frames' master half 66 -> 58, apply_cram 10 -> 0 in the window,
 FM drop on compose frames 124-135 -> 112-120, the game's gate spin
 22-26 -> 10-18 lines. IRQ4 entry 71/90 unchanged. Candidate for the
 line (spd1) pending the ares gates and the rig.
+
+Addendum 23:10 (probe8, SPROF stamps): the SLAVE composes the whole
+frame in-window (7-12 twelve-row bands a window, 20-27K of its FRT
+ticks -- its prescaler is not the master's, so raw) and the master's
+nat_mtask compose runs ZERO bands; the master's in-window "half" is the
+chase: SHIPBLITSHIFT=48 took it 66 -> 42 but the master then waited 46
+lines for the slave's half. The wall of a compose frame is the slave's
+compose + the master's blit of the rows behind it. Levers: the
+compose's per-row clears (ROWLIVE knows which rows carry pixels), then
+composing on both CPUs.
+
+Addendum 23:30 -- ROWGRP built (knob): the slave clears ~58 KB of sbuf a
+generation because ROWLIVE is per ROW and ~180 of 224 rows carry a
+sprite pixel somewhere; the baked sprite runs know their [lo,hi) per
+row, so a 10-bit per-row group mask now says which 32-byte groups were
+drawn and the clear zeroes only those (other drawers mark all ten).
+Probe10 measures it against the base (sbuf cleared bytes, the slave's
+compose ticks, FM drop, pixel identity at f999).
+
+Addendum 23:35 -- the game's IRQ4 handler is SHORT: the ISR-exit V ring
+(0xFFA300, the V counter at fmgate_ret every vint) reads 79-91 lines
+from vblank start while frame_timeline puts the IRQ4 ENTRY at 71-90, so
+the handler itself is 1-11 lines, not the ~35 the 2026-09-07 note
+assumed. The game's frame is: the 68K's window wait (ends at the
+master's ack, 60-135), IRQ4 (~10), then the pass (~184 heavy / ~147
+light) from the loop top. One vint needs wait + 10 + pass <= 262: the
+window must end by ~line 68 on heavy frames (105 on light ones). On the
+line it ends at 112-135 on compose frames.
