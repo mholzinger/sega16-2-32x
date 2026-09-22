@@ -1871,10 +1871,15 @@ static inline uint8_t md_scene_raw(void)     /* the scene the state word names, 
      * 2's demo); step 1 and 3 = a level demo of the published round
      * (2026-09-21 trace: "round 1 step 1" IS level 2's demo); 4 eye; 5
      * second picture; 0/7 the score table. */
+    /* 2026-09-22 (Mike's black sky on the second level-1 demo, read
+     * through the barcode: step 5, 10 live palette entries, 0 stale
+     * cells): step 5 is the SECOND LEVEL-1 DEMO (NOTES-FROM-DECOMPILE 23:
+     * 1/3/5 = the level's tilemap on screen), not a picture. Scene 7's
+     * harvest was that demo's ground without its sky; it is no longer
+     * selected -- the round's table is. */
     switch (MD_STATE_STEP(w)) {
         case 2:         return 5;
         case 4:         return 6;
-        case 5:         return 7;
         case 0: case 7: return 8;
         default:        return (uint8_t)r;
     }
