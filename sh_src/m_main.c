@@ -15071,7 +15071,7 @@ RAMCODE void m_main(void)
 #ifdef RIG_BARCODE
                         /* the counters ride the header AFTER the copy (words 4/6 high bytes) */
                         d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
-                        d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
+                        /* d[3] high byte = the stale-cell count stamped at the publish (2026-09-22) */
 #endif
 #if defined(FBX_ECHO) && defined(FB_XPORT)
                         /* FBX ECHO (2026-09-21, the level-start race): the sequence
@@ -15122,7 +15122,7 @@ RAMCODE void m_main(void)
                             d[i2] = ssrc[i2];
 #ifdef RIG_BARCODE
                         d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
-                        d[3] = (d[3] & 0x00FFFFFFu) | ((uint32_t)(cz_pal & 0xFFu) << 24);
+                        /* d[3] high byte = the stale-cell count stamped at the publish (2026-09-22) */
 #endif
 #if defined(FBX_ECHO) && defined(FB_XPORT)
                         d[2] = (d[2] & 0xFFFF0FFFu) | ((uint32_t)(fbx_seq_seen & 15u) << 12);
@@ -17319,7 +17319,24 @@ RAMCODE void m_main(void)
                  * high bytes -- sc[4]/sc[6] are plane vy (8 bits); the
                  * 68K masks them (BC_LO) before VSRAM under this flag. */
                 sc[4] = (uint16_t)((sc[4] & 0xFFu) | ((cz_pub & 0xFFu) << 8));
-                sc[6] = (uint16_t)((sc[6] & 0xFFu) | ((cz_pal & 0xFFu) << 8));
+                {
+                    /* STALE CELLS (2026-09-22, the level-1 sky loss): visible
+                     * mirror cells whose slot is untagged or still dirty, /4,
+                     * in place of the palette count (it always equals the
+                     * 68K's). A black sky with 29 live palette entries is
+                     * cells, and this says so. */
+                    static uint16_t bc_stale; static uint8_t bc_tick;
+                    if ((++bc_tick & 7) == 0) {
+                        unsigned n9 = 0;
+                        for (unsigned q = 0; q < 2240; q++) {
+                            unsigned sl = md_dbg_nt[q] & 0x7FFu;
+                            if (sl == MD_BLANK_SLOT || sl >= NSETS * NWAYS) continue;
+                            if (md_tag[sl] == 0xFFFFFFFFu || (md_dirty[sl >> 5] & (1u << (sl & 31)))) n9++;
+                        }
+                        bc_stale = (uint16_t)n9;
+                    }
+                    sc[6] = (uint16_t)((sc[6] & 0xFFu) | (((bc_stale >> 2) > 255u ? 255u : (bc_stale >> 2)) << 8));
+                }
 #endif
                 sc[0] = 0xB6B6;              /* magic LAST: header valid */
 #ifdef K2_FREE
