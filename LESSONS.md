@@ -1534,3 +1534,9 @@ grants a frame only when wait + IRQ4 + pass fit a vint; every cut short
 of that line reads as no change on the speed instrument. Judge window
 cuts by frame_timeline's FM drop / IRQ4-entry lines until the threshold
 (~68 on heavy frames) is crossed; then gameplay_speed jumps.
+
+Addendum 00:30 (probe9): PUBNORB takes packet A's read-back 3.9 -> 1.4
+lines when the packet was copied this window (the unconsumed-defer path
+keeps the FB read-back: 4.4); B similar. ~3 lines on compose windows.
+With CRAMISR + BLITAUDITDIV=4 + PUBNORB the compose frames' FM drop is
+107-120, even frames 64-71; IRQ4 entry 67-71 / 83-90.
