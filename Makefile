@@ -2724,6 +2724,10 @@ endif
 ifdef BLANKNOCOMPOSE
 SHCCFLAGS += -DBLANK_NO_COMPOSE
 endif
+# WINPROF=1 = per-m_stage FRT ticks of the master window while blanked (SDRAM 0x26028FC0)
+ifdef WINPROF
+SHCCFLAGS += -DWIN_PROF
+endif
 # GAMEGATE=1 = LOOP29 141, THE PIVOT. The game's frame release (IRQ4 at
 # 0x2AB8, LOOP-DECOMPILE 22) is patched to consult a shim token at WRAM
 # 0xFFA0F5: the main loop advances one frame per token, the token is set
@@ -3181,7 +3185,7 @@ SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
               TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
-             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1
+             MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
 # pipeline: docs/design/SLIM-PIPELINE.md 1b.

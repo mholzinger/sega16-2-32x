@@ -7089,6 +7089,10 @@ static uint8_t  fbx_seq_seen;            /* tentative: defined again with the li
 static volatile uint8_t r60_disp_on;     /* from the packet, bit 15 of word 20 */
 static uint8_t r60_seq_prev = 0xFF;      /* lost-push belt v3: last landed push sequence */
 static uint8_t disp_blank;               /* 32X layer currently blanked */
+#ifdef WIN_PROF
+#define PROF ((volatile uint32_t *)0x26028FC0)   /* per-stage FRT ticks while blanked; [6] windows */
+static uint16_t prof_t; static uint8_t prof_st;
+#endif
 #ifdef HOLD_FROM_BLANK
 static uint8_t disp_rot_set;             /* disp_rot_on latched at the blank's start */
 #endif
@@ -11060,6 +11064,22 @@ RAMCODE __attribute__((noinline)) static void tok_set(uint16_t v)
  * the gate. Written only by the master. 0 = idle/poll — a late pickup
  * at stage 0 means the MD posted late, not us. */
 static uint8_t m_stage;
+#ifdef WIN_PROF
+/* WINDOW PROFILE (2026-09-21, the transport floor): FRT ticks the
+ * master spends in each m_stage while the display is BLANKED, summed
+ * into PROF[stage] (SDRAM 0x26028FC0, 8 longs; [7] = ticks, [6] = windows)
+ * so a scene load's window can be read as a split. */
+static inline void mstage_set(unsigned st)
+{
+    uint16_t t = frt();
+    if (disp_blank) PROF[prof_st & 7] += (uint16_t)(t - prof_t);
+    prof_t = t; prof_st = (uint8_t)st; m_stage = (uint8_t)st;
+}
+#define MSTAGE_SET(x) mstage_set(x)
+#else
+#define MSTAGE_SET(x) (m_stage = (x))
+#endif
+
 #endif
 
 #ifdef FLICK_FUSE
@@ -11358,6 +11378,18 @@ __attribute__((noinline)) static void nat_ph_flip(void)
 #endif
 #ifdef BOOT_WSTAGE
 #define WSTAGE(col) do { ((volatile uint16_t *)0x20004200)[0] = (col); } while (0)
+#elif defined(WIN_PROF)
+/* WIN_PROF: ticks between consecutive markers, keyed by the marker just
+ * LEFT, into WPROF[16] (SDRAM 0x26028F00; [15] = unknown marker) */
+#define WPROF ((volatile uint32_t *)0x26028F00)
+static uint16_t wp_t, wp_col;
+static inline unsigned wp_idx(uint16_t c)
+{
+    switch (c) { case 0x03E0: return 0; case 0x001F: return 1; case 0x03FF: return 2; case 0x7FE0: return 3;
+                 case 0x7C1F: return 4; case 0x01FF: return 5; case 0x0200: return 6; case 0x7C0F: return 7;
+                 case 0x4210: return 8; case 0x6318: return 9; case 0x7FFF: return 10; default: return 15; }
+}
+#define WSTAGE(col) do { uint16_t t9 = frt(); if (disp_blank) WPROF[wp_idx(wp_col)] += (uint16_t)(t9 - wp_t); wp_t = t9; wp_col = (col); } while (0)
 #else
 #define WSTAGE(col) do { } while (0)
 #endif
@@ -12111,7 +12143,7 @@ RAMCODE void m_main(void)
             }
 #endif
 #ifdef SPAN_PROBE
-            m_stage = 0;                     /* nothing in flight at poll */
+            MSTAGE_SET(0);                     /* nothing in flight at poll */
 #endif
 #if defined(WIN_TWO) && !defined(NATIVE_FRAME)
             /* slave-launch chain: R1 then R2 go out as soon as the
@@ -12138,7 +12170,7 @@ RAMCODE void m_main(void)
                                      * skips on ares vs 31% baseline */
                     TOK(0);                  /* busy: long, uninterruptible */
 #ifdef SPAN_PROBE
-                    m_stage = 1;
+                    MSTAGE_SET(1);
 #endif
                     if (build_maps_chunk(owed_par))
                         maps_owed = 0;
@@ -12160,7 +12192,7 @@ RAMCODE void m_main(void)
 #endif
                     TOK(0);                  /* busy: a LUT chunk */
 #ifdef SPAN_PROBE
-                    m_stage = 2;
+                    MSTAGE_SET(2);
 #endif
                     shadow_lut_chunk();
                 }
@@ -12191,7 +12223,7 @@ RAMCODE void m_main(void)
                 if (dt <= 4000) {
                     TOK(0);                  /* busy: a maintenance chunk */
 #ifdef SPAN_PROBE
-                    m_stage = 3;
+                    MSTAGE_SET(3);
 #endif
                     if (maps_owed) {
                         if (build_maps_chunk(owed_par))
@@ -12378,7 +12410,7 @@ RAMCODE void m_main(void)
                 uint16_t tq = frt();
                 TOK(0);                          /* busy: a compose strip */
 #ifdef SPAN_PROBE
-                m_stage = (b->phase == 2) ? 5 : (b->phase >= 3 ? 6 : 4);
+                MSTAGE_SET((b->phase == 2) ? 5 : (b->phase >= 3 ? 6 : 4));
 #endif
                 /* ---- YIELDABLE STRIP (LOOP 11, interrupt pickup) ----
                  * A 12-row strip runs 6-22 scanlines, and the master's
@@ -12672,6 +12704,9 @@ RAMCODE void m_main(void)
 #endif
             shadow_stole = 0;
             win_no++;
+#ifdef WIN_PROF
+            if (disp_blank) PROF[6]++;
+#endif
 #ifdef HS_SHIP
             HS_OFFS[6] = 0;              /* new window: nothing copied yet */
 #endif
@@ -15295,6 +15330,9 @@ RAMCODE void m_main(void)
             *(volatile uint16_t *)0x2000402A = SPR_LAND[R60_W_BM - 1];   /* landed word 19 */
             *(volatile uint16_t *)0x20004028 = SPR_LAND[R60_W_BM + 1];   /* landed word 21 (tag) */
 #endif
+#ifdef WIN_PROF
+            if (disp_blank) { PROF[4] += (uint16_t)(frt() - t_vint); PROF[3]++; }   /* FM-up ticks per window, windows */
+#endif
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
 #ifdef STAMP5_CENSUS
             {   /* LOOP29 265: the window's span and where it sits in the vint,
@@ -15323,7 +15361,7 @@ RAMCODE void m_main(void)
              * polling on the 68K push instead — deterministic, and
              * paid out of the 68K's own wrap win.) */
 #ifdef SPAN_PROBE
-            m_stage = 7;                     /* v3: post-ack window tail */
+            MSTAGE_SET(7);                     /* v3: post-ack window tail */
 #endif
 
             /* ---- POST-ACK, game running (FM=0, RV=0): SDRAM-only ---- */
