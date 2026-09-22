@@ -53,6 +53,10 @@ SCENE_SETS = _scene_sets()
 # harvested attract scene -> the ROM round whose packing seeds it (shared
 # sets keep the round's pen maps, so their tile blocks dedup)
 HARVEST_BASE = {7: 0, 9: 0}
+# scenes that ANIMATE their palette pack by per-pixel colour history (the
+# splash's logo, the eye's fade); seeded scenes keep colour keys so their
+# blocks dedup against the base round's
+PIXKEY_SCENES = {5, 6}
 base_lines = {}
 GAME = os.environ.get('GAME', 'altbeast')
 ROM = os.path.join(ROOT, 'roms', GAME, 'prog68k.bin')
@@ -325,7 +329,7 @@ def main():
             base, words = 0, None
 
         def cols(p, _b=base, _s=s):
-            if _s >= SCENES and _s in slivehist and p in slivehist[_s]:
+            if _s in PIXKEY_SCENES and _s in slivehist and p in slivehist[_s]:
                 if (_s, p) not in pkeys:
                     ks = []
                     for k in range(8):
