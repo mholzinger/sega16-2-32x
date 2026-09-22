@@ -974,6 +974,7 @@ endif
 # decides: raise N until the screen dies and that is the budget.
 ifdef SLIMCAP
 MDCCFLAGS += -DSLIM_CAP=$(SLIMCAP)
+SHCCFLAGS += -DSLIM_CAP=$(SLIMCAP)   # the emitter caps records per packet at the 68K's per-vint fetch
 endif
 # `make ... MDBATCHBLANK=N` = the batch used while the display is BLANKED
 # or off, which measurement shows is where EVERY large batch happens --

@@ -16783,7 +16783,12 @@ RAMCODE void m_main(void)
                             /* mixed records: budget in WORDS, advance to
                              * where the emitter stopped (2026-09-21) */
                             md_emit_budget = (unsigned)(sc + 688 - o);
-                            int n = md_emit_art(o, 999, &sli, &md_pending, &fs);
+#ifndef SLIM_CAP
+#define SLIM_CAP 40
+#endif
+                            /* at most what the 68K fetches in a vint: a
+                             * record it cannot stage is LOST art (2026-09-21) */
+                            int n = md_emit_art(o, SLIM_CAP, &sli, &md_pending, &fs);
                             md_emit_budget = 680;
                             md_scan = (uint16_t)sli;
                             *na = (uint16_t)n;
