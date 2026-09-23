@@ -764,9 +764,16 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           measurement (LESSONS "Two tile palette lines
                           do not hold level 1": 33 distinct colours,
                           3-4 sets overflow at every frame); BLITHASH
-                          has no 18 KB home. Left: an SDRAM home for
-                          BLITHASH, EARLYREC (mixed cadence), or a
-                          different sprite route.
+                          has no 18 KB home, and its potential is
+                          7-13% while walking (dead). REGIME MAP
+                          (LESSONS): level 1 already runs one vint per
+                          frame outside the zombie fight (f600-1100,
+                          f4400-5900); the fight (f1200-4100) runs 50%;
+                          71% overall. The heavy pass (~184) needs the
+                          window under ~68; it is ~108 there. Next
+                          lever: EARLYREC (compose before the vint, the
+                          window = blit + publish), priced on the
+                          crowded frames and on the FPGA.
                           DESIGN (23:40, not built): PASS-END STRIKE.
                           The game's IRQ4 is 1-11 lines (ISR-exit V
                           ring); the frame is wait-for-ack + ~10 +

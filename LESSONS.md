@@ -1715,3 +1715,9 @@ frames, the fixed loop matters on all.
 **Rules:** price a cadence question per regime (a regime map from the
 scene timer, 100-vint bins, is one ares loop); a single play window
 is not the game.
+
+Regime map (2026-09-23, spd2, level-1 play script, scene timer per
+100-vint bin): 100% (one vint per frame) f600-1100 and f4400-5900;
+50% f1200-4100 (the zombie fight) with 57-73% at its edges; 71.3%
+overall f600-6000. The crowded regime is ~half the play run and the
+whole of the 30 Hz complaint.
