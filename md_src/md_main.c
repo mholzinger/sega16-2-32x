@@ -43,6 +43,9 @@ volatile uint16_t fmgate_posted;     /* part B posted last vint       */
 uint16_t fmgate_belt;                /* overrun-belt entries (diag)   */
 uint16_t fmgate_defer;               /* part-B defers (diag)          */
 #ifdef FBX_ECHO
+#ifdef EARLY_REC
+static uint8_t erec_arm_seen, erec_arm_pushed;
+#endif
 static uint8_t  fbx_echo;                /* master's last lifted sequence (packet word 5 >> 12) */
 static uint8_t  fbx_age;                 /* vints since the last blast(1) */
 static uint8_t  fbx_rb_age;              /* vints since the last re-blast */
@@ -1097,7 +1100,11 @@ void partb_hook(void)
 #ifdef RIG_BARCODE
 #define BC_LO(x) ((uint16_t)((x) & 0xFFu))   /* SH-2 counters ride sc[4]/sc[6] bits 8-15 */
 #else
+#ifdef EARLY_REC
+#define BC_LO(x) ((uint16_t)((x) & 0x0FFFu))   /* EARLYREC: the arm sequence rides sc[4] bits 12-15 */
+#else
 #define BC_LO(x) (x)
+#endif
 #endif
 __attribute__((section(".data"), noinline))
 static void md_consume(uint32_t pkt_base) {
@@ -1214,6 +1221,9 @@ static void md_consume(uint32_t pkt_base) {
 #endif
 #ifdef FBX_ECHO
 				fbx_echo = (uint8_t)(sc[5] >> 12);            /* FBX ECHO: master's lifted seq */
+#ifdef EARLY_REC
+				erec_arm_seen = (uint8_t)(sc[4] >> 12);       /* EARLYREC: the master's arm sequence */
+#endif
 				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = (uint16_t)(sc[5] & 0x0FFFu);
 #else
 				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = sc[5];
@@ -3636,9 +3646,13 @@ void earlyrec_push(void)
 	uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
 	if (vc == last_vc) return;                           /* once per vint (the idle loop calls every pass) */
 	last_vc = vc;
+	if (!erec_arm_seen || erec_arm_seen == erec_arm_pushed) return;   /* push only into a channel the master armed since our last push */
+	erec_arm_pushed = erec_arm_seen;
 	if (boot_wait < 240) { boot_wait++; return; }        /* the master's ISR must be arming */
-	uint16_t sr_;
-	__asm__ __volatile__("move.w %%sr,%0\n\tori.w #0x700,%%sr" : "=d"(sr_) : : "memory");
+	/* interrupts stay ENABLED: the FIFO drains at ~5 us a word on ares, so a
+	 * masked push (erec10: ~2,500 polls) delayed the vint entry past the
+	 * shim's post window; a vint mid-push is fine -- the master's ISR does
+	 * not re-arm over a transfer in progress. */
 	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
 	volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
 	const uint16_t *s = (const uint16_t*)0xFF7000;
@@ -3649,6 +3663,7 @@ void earlyrec_push(void)
 		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
 	const uint16_t len = 276u;            /* 2 + 20 + 60 + 24*8 + 2 */            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
 	uint16_t spin = 3000;
+	*ctrl = 0;                                           /* 68S off: resets the FIFO pointers (erec12: an aborted push left 8 words in the FIFO and every later landing was offset by them) */
 	*(volatile uint16_t*)0xA15110 = len;
 	*ctrl = 4;                                           /* 68S: DREQ on */
 #define EP(w) do { while (*ctrl < 0 && --spin) ; if (!spin) goto out; fifo[0] = (w); } while (0)
@@ -3658,11 +3673,11 @@ void earlyrec_push(void)
 	for (uint16_t i = 0; i < 24u * 8u; i++) EP(s[i]);
 	EP(0x5AA5); EP(0xA55A);
 #undef EP
-	__asm__ __volatile__("move.w %0,%%sr" : : "d"(sr_) : "memory");
+	(*(volatile uint16_t*)0xFFA0E4)++;                   /* diag: pushes completed */
+	(*(volatile uint16_t*)0xFFA0E6) = spin;              /* diag: poll budget left */
 	return;
 out:
-	__asm__ __volatile__("move.w %0,%%sr" : : "d"(sr_) : "memory");
-	(*(volatile uint16_t*)0xFFA0F2)++;                   /* diag: pushes aborted (FIFO full; shares a diag word) */
+	(*(volatile uint16_t*)0xFFA0E2)++;                   /* diag: pushes aborted (FIFO full) */
 }
 #endif
 #ifdef POST_LATE

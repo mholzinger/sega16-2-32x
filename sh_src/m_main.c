@@ -9480,7 +9480,8 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
 #define EREC_MAX (82u + 24u * 8u + 2u)   /* 276 words: tag, nrec, 20 regs, 60 rowscroll, 24 records, 2 tail */
 static uint16_t erec_land[EREC_MAX] __attribute__((aligned(16)));
 #define EREC_U ((volatile uint16_t *)(0x20000000u | (uint32_t)erec_land))
-static uint8_t erec_armed, erec_launched;
+static uint8_t erec_armed, erec_launched, erec_seq, erec_stale;   /* erec_seq: arm sequence 1..15, echoed in packet header word 4 bits 12-15 */
+static uint32_t erec_tcr_last;
 uint16_t erec_ring_ext[64][5];
 #define erec_ring erec_ring_ext
 static void erec_stamp_ready(void) { erec_ring[DIAG[49] & 63][3] = (uint16_t)((uint16_t)(frt() - visr_t0) / 46u + 1u); }          /* per vint: [0] landed line [1] launch line [2] slave bands done [3] ready [4] post; 0 = not this vint */
@@ -9497,12 +9498,15 @@ static void erec_arm(void)
     SH2_DMA_CHCR0 = 0x44E1;
     EREC_U[0] = 0; EREC_U[1] = 0;
     erec_armed = 1; erec_ctr[0]++;
+    erec_seq = (uint8_t)((erec_seq & 15u) + 1u); if (erec_seq > 15u) erec_seq = 1;
+    erec_stale = 0; erec_tcr_last = EREC_MAX;
 }
 /* landed this vint? returns nrec (>0) once, 0 otherwise */
 static unsigned erec_take(void)
 {
     if (!erec_armed) return 0;
     unsigned left = SH2_DMA_TCR0 & 0xFFFFFFu;
+    erec_ctr[11] = left; erec_ctr[10] = SH2_DMA_CHCR0;   /* diag: last seen TCR / CHCR */
     if (EREC_U[0] != 0xE1ECu) return 0;
     unsigned nrec = EREC_U[1];
     if (nrec < 1 || nrec > 24) { erec_ctr[3]++; erec_armed = 0; return 0; }
@@ -9545,7 +9549,17 @@ LOCKCODE_ROM void visr_vbi(void)
         return;
     DIAG[49]++;
 #ifdef EARLY_REC
-    erec_arm();
+    /* re-arm only once the previous landing was consumed (erec_take clears
+     * erec_armed); an armed channel with a transfer in flight or a landing
+     * waiting for the idle poll is left alone */
+    if (!erec_armed) erec_arm();
+    else {
+        /* staleness: a transfer that has not moved for 4 vints (an aborted
+         * push, a missed echo) is re-armed with a fresh sequence */
+        uint32_t t_ = SH2_DMA_TCR0 & 0xFFFFFFu;
+        if (t_ == erec_tcr_last) { if (++erec_stale >= 4u) { erec_arm(); erec_ctr[9]++; } }
+        else { erec_tcr_last = t_; erec_stale = 0; }
+    }
 #endif
 #ifdef BOOT_FRTCHK
     { static uint16_t t_last; uint16_t t = frt(); *(volatile uint16_t *)0x2000402C = (uint16_t)(t - t_last); t_last = t; }
@@ -11087,6 +11101,9 @@ static void hs_stub(void)
     fp[1] = 0; fp[2] = 0; fp[5] = 0;
 #if defined(FBX_ECHO) && defined(FB_XPORT)
     fp[5] = (uint16_t)((fbx_seq_seen & 15u) << 12);   /* FBX ECHO: last lifted sequence */
+#ifdef EARLY_REC
+    fp[4] = (uint16_t)((fp[4] & 0x0FFFu) | ((unsigned)erec_seq << 12));
+#endif
 #endif
     fp[3] = HS_CLOSED[0];
     fp[7] = HS_CLOSED[28];
@@ -15575,6 +15592,9 @@ RAMCODE void m_main(void)
                          * the echo has not confirmed -- a flip between its blast
                          * and our lift left the packet in the other bank. */
                         d[2] = (d[2] & 0xFFFF0FFFu) | ((uint32_t)(fbx_seq_seen & 15u) << 12);
+#ifdef EARLY_REC
+                        d[2] = (d[2] & 0x0FFFFFFFu) | ((uint32_t)erec_seq << 28);   /* EARLYREC arm sequence, word 4 bits 12-15 */
+#endif
 #endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendA = 0;
@@ -15641,6 +15661,9 @@ RAMCODE void m_main(void)
 #endif
 #if defined(FBX_ECHO) && defined(FB_XPORT)
                         d[2] = (d[2] & 0xFFFF0FFFu) | ((uint32_t)(fbx_seq_seen & 15u) << 12);
+#ifdef EARLY_REC
+                        d[2] = (d[2] & 0x0FFFFFFFu) | ((uint32_t)erec_seq << 28);   /* EARLYREC arm sequence, word 4 bits 12-15 */
+#endif
 #endif
                         d[0] = ssrc[0] | (disp_blank ? 0x2000u : 0u) | TV_BITS;   /* bit 13: SH-2 holding blank */
                         k2f_pendB = 0;
@@ -15885,16 +15908,6 @@ RAMCODE void m_main(void)
 #endif
             BP(7);
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
-#ifdef EARLY_REC
-            /* EARLYREC: the records land ~5 lines after the game's IRQ4 exit
-             * (55-90); wait for them here, before the tail, so the compose
-             * launches by ~line 118 and closes before the drain cut. */
-            while (!erec_launched && (uint16_t)(frt() - visr_t0) < 118u * 46u) {
-                EREC_TRY();
-                if (erec_launched) break;
-                { uint16_t tq_ = frt(); while ((uint16_t)(frt() - tq_) < 46u) ; }
-            }
-#endif
 #ifdef STAMP5_CENSUS
             {   /* LOOP29 265: the window's span and where it sits in the vint,
                  * ticks >> 10 on the channel (a vint = 11.8); [3] = ISR entries

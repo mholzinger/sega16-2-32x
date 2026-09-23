@@ -1748,3 +1748,29 @@ constant; (2) nothing with interrupts masked may run in the vint path
 beyond a few lines -- the post's entry window is nine lines wide; (3)
 "the transport died" is diagnosed from the FM-read V in the access
 trace (entry late) before anything on the SH-2 is suspected.
+
+Addendum (erec9-11): the idle-loop push (thunk at 0x3982 via the vector
+at 0xFFA0E8) runs and completes on the 68K (erec10: +100 pushes per 100
+vints, ~2,500 polls each = ~24 lines) but the SH-2 saw ONE landing:
+re-arming at every vblank reset the DMA under a transfer in flight.
+With the push unmasked and the re-arm conditional on consumption
+(erec11) the transport lives (posts every vint, the game starts at the
+script's press) but the channel deadlocks after the first transfer
+(arms 0, landings 0), speed 40.3%, palgate CRAM 16-47 nz 9. Without an
+arm/echo handshake the 68K cannot know whether its push will drain; the
+FIFO route solved this with ARMGATE (COMM4 0xA001 echo). EARLYREC
+needs the same: the master's arm sequence in the FB packet header the
+68K already consumes, push only when it advanced.
+
+Addendum (erec12, the FIFO residue): with the arm-sequence handshake the
+transport is healthy (50.5%, gates pass) and every push completes on
+the 68K while the SH-2's DMA also completes (TCR 0, TE set) -- yet the
+tag is never at word 0: the landed buffer starts with the PREVIOUS
+push's tail (5AA5 A55A at words 6-7) and the tag sits at word 8. One
+aborted push left 8 words -- the FIFO's depth -- in the FIFO, and since
+each DMA counts exactly the pushed length, those 8 ride at the head of
+every later landing forever. The 68K must reset the FIFO before each
+push: 68S 0 -> 4 clears the pointers (md_main.c's own mdspr note).
+**Rule:** a FIFO transport needs a reset at the start of every
+transfer, not just an exact length; a residue offsets every landing
+that follows and no length check sees it.
