@@ -825,6 +825,26 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           at the post; no push at all. Predictor hit-
                           rate study from per-frame sprite-table dumps
                           is the next measurement.
+                          CLOSED 2026-09-23 (rig + study): EARLYREC's
+                          IRQ4-exit push RUNS on the FPGA once the hook
+                          stays masked (rigerec2 boots, barcode reads)
+                          and is SLOWER: level-1 demo 31-35% game frames
+                          per vint vs the control's 38-42% (same scene
+                          step, same-capture pairs); the 68K's FIFO
+                          push is the cost on both machines. DEAD as a
+                          speed lever. SPECULATIVE COMPOSE (Mike's
+                          idea) measured on spd2 sprite tables: walking
+                          the whole frame repeats 77% / velocity-
+                          predicts 74% (already one-vint there); in the
+                          fight the whole frame predicts 0% (2/19
+                          identical), per-record velocity hits 83%.
+                          Whole-frame speculation buys nothing where
+                          the 2-vint frames are; per-record needs a
+                          miss-repair path that is compose-order-bound
+                          (overlaps) -- not built, Mike's call. Open
+                          lever after both: none priced; the byte
+                          budget (<= ~15 KB FB writes a frame on the
+                          FPGA) is the design question.
                           MTASK IN-WINDOW: the master composes its own
                           rows before its blit half instead of idling
                           46 lines behind the slave's compose. The row

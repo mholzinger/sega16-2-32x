@@ -1842,3 +1842,52 @@ on every push, and the rig is the only place that proves it.
 The rig game-rate readout (RIGGAME) also needs the timer's high byte:
 captures land ~390 vints apart and an 8-bit timer wraps (rigctl read
 44/32/22/11% -- meaningless). Byte 6 now carries it.
+
+### EARLYREC runs on the FPGA and is slower there (2026-09-23, rig)
+
+With the IRQ4-exit hook kept masked (no SR drop: the drop re-entered
+the ISR, ares vc stopped at 6, the FPGA showed the red screen),
+rom/night/rigerec2.32x boots on the rig and its barcode reads. The
+game-rate readout (RIGGAME, 16-bit scene timer on barcode bytes 5-6,
+same-scene capture pairs ~437 vints apart) gives, in game frames per
+vint:
+
+    level-1 demo (step 5)   control rigctl2 42, 38   rigerec2 35, 33, 31
+    attract step 1          control        45, 37, 38   rigerec2 41, 30, 30
+
+The early push is a net loss of ~7 points on hardware, as on ares: the
+68K pays the 276-word FIFO push in its own frame, and that push is
+larger than the compose time it moves out of the window. EARLYREC=1
+stays a knob, off the line; it is dead as a speed lever on both
+machines.
+
+**Rule:** the sending CPU's transport cost is the price of any early
+delivery, and the 68K's FIFO write is expensive on both machines.
+Measure it before building the receiver.
+
+### Speculative compose: the fight does not predict (2026-09-23, study)
+
+Mike's idea: predict the next frame's sprite records from the last
+two, compose them in the master's idle time, and ship if the real
+records match at the post. Measured on spd2's per-frame sprite-table
+dumps (spr_1000-1040 walking, spr_3000-3040 zombie fight; consecutive
+DISTINCT game frames by the scene timer; velocity predictor = x and
+top/bottom y extrapolated linearly, all other words held):
+
+    walking  39 steps, 1.2 records/frame: identical 77%, whole-frame
+             velocity hit 74%, per-record 82%
+    fight    19 steps, 20 records/frame: identical 11%, whole-frame
+             velocity hit 0%, per-record 83%
+
+Walking already runs one vint per frame (regime map), so the 74% buys
+nothing. The fight is where the 2-vint frames are, and no whole frame
+predicts there: one of twenty records changes animation phase or
+appears/disappears every frame. A per-record scheme would need a
+repair path for the ~17% misses, and sprite compose is order-dependent
+(a missed record can be overlapped by hits), so the repair is a
+partial recompose plus a re-blit of the touched cells on the FB-write-
+bound side. Not built; the numbers are the answer until Mike wants the
+per-record variant priced.
+
+**Rule:** price a prediction on the regime that is slow, not on the
+one that is easy to predict.
