@@ -625,10 +625,13 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                          Knob BLASTEM_FB_WAIT (SH-2 clocks per 16-bit FB
                          write): 3 = ares's stall model, 11 = the rig's
                          1.6x blit rate, held on three spans. Quote as
-                         "BlastEm, wait N". Models no CPU-to-CPU adapter
-                         bus contention. --dump sdram|wram; DUMPSTAT,
-                         FBXSTAT, M68KSTAT at exit. Rig launches still
-                         decide.
+                         "BlastEm, wait N". --dump sdram|wram; --trace-
+                         comm/flip/dreq (ares columns); BLASTEM_BUS_ARB
+                         cart-ROM arbiter from IF.sv (negligible on the
+                         line rom, BLASTEM.md 11); DUMPSTAT, FBXSTAT,
+                         M68KSTAT, ARBSTAT at exit. The rig's 1.6x is a
+                         BLIT-rate figure, not FB-write (BLASTEM.md 10).
+                         Rig launches still decide.
 
     RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
                             /dev/MiSTer_cmd tight loop: accepts 769

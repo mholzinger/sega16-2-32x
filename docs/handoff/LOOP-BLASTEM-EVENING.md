@@ -1,5 +1,17 @@
 # LOOP BRIEF — O-8 BlastEm evening queue (2026-09-23, unattended)
 
+**STATUS, loop ended 2026-09-23 evening: all three items done.** Item 3
+(BLASTEM.md 10): the RTL count reaches ~190 clk/group vs the rig's 336;
+the FB store path is ~80 of it, so the 1.6x is a blit-rate figure whose
+remainder is bracketed (instruction-fetch misses on a 5.4x oversubscribed
+cache, DDR3 latency, the shared ddram channel) with a rig probe recipe.
+Item 1 (BLASTEM.md 11, fork 8924e5e): cart-ROM arbiter from IF.sv behind
+BLASTEM_BUS_ARB; < 0.5% of either CPU's frame on the line rom; the
+FIFO-era poll figure is SH-2-internal CPU/DMAC sharing, not the adapter.
+Item 2 (BLASTEM.md 12, fork pushed): --trace-comm/flip/dreq with ares's
+columns, checked on bprof3 for 120 frames. sega16 commits are local only.
+The two mislabelled fork commits (417ee9c, 6277ac2) are untouched.
+
 Mike is away for the evening. This loop works the three open O-8 items in
 order, one at a time, and writes results into the record as it goes.
 Re-read this file at every wake. `docs/design/BLASTEM.md` sections 7-9

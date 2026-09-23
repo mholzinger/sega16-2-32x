@@ -461,3 +461,27 @@ other, and BlastEm leaves it as "TODO: DMAC/CPU contention" (sh7095.c
 386). Under FBXPORT there is no DMAC in the transport, so the effect is
 moot for the line. The knob stays, default off; nothing in the record
 should quote it as a cost.
+
+## 12. ares-style trace hooks in the fork (loop item 2, 2026-09-23 evening)
+
+Fork commit "headless: --trace-comm, --trace-flip, --trace-dreq FILE":
+the three CSVs with ares-headless's exact columns (its `--help` was the
+spec, and a 120-frame ares run on bprof3.32x the format sample:
+`frame,source,comm,value,v,h`; `frame,event,source,select,vcounter,
+deferred`; `frame,event,source,value,v,h`). Sources m68k/shm/shs; v,h
+are the MD beam at the event (BlastEm: `vcounter`, `hslot*2`; ares: its
+own V/H counter -- compare by frame and order, not by beam value).
+
+Check, bprof3.32x, 120 frames: comm 268,764 rows (ares 275,352), the
+slave's COMM3 heartbeat ~30K rows a frame on both, the master's writes
+on COMM0/1/4/7 present on both; flip 55 rows (ares 95) as write/flip
+pairs with the deferred flag; dreq empty on both (FBXPORT). BlastEm's
+timeline starts a few frames later than ares's (its boot handshake lands
+later; the slave heartbeat begins at frame 12 against ares's 4), the
+same offset the vint counter shows, so align traces on the game's own
+events (the first master COMM0 write, or the vint counter), never on N.
+
+Use: `blastem -b N -m 32x --trace-comm c.csv --trace-flip f.csv rom` from
+the eval dir; diff against `ares-headless --frames N --trace-comm ...`
+after aligning. This is the logic tie-breaker the record asked for in
+section 8; it does not make any timing claim.
