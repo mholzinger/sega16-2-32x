@@ -1554,3 +1554,21 @@ full-width row clears it saves; FBB[2] counts rows, so the "cleared
 bytes" did not even move). Knob kept off. If the clear is ever cut, mark
 with a cached per-CPU mask and publish once per band, or clear through
 the DMAC.
+
+### An ifdef count is not a measure of game coupling
+
+`grep -c GAME_ALTBEAST sh_src/m_main.c` returns **2**, which reads as
+"the engine is already game-agnostic". Both hits are actually
+`GAME_ALTBEASTJ` — region variants, not the game gate.
+
+The real coupling is **12 distinct Altered Beast WRAM addresses
+hardcoded across ~47 engine sites** (0xFFF142 round, 0xFFF148
+object/cut marker, 0xFFF031 attract step, 0xFFF026 credited play, and
+eight more). Measured 2026-09-23.
+
+*Rule:* measure coupling by the **constants that would have to change**,
+not by the conditional-compilation surface. The ifdef count answers a
+different question and flatters the answer.
+
+*Cost:* nearly quoted as evidence that the toolkit goal was already met.
+
