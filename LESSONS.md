@@ -1653,3 +1653,23 @@ quoted as a transport instrument for an emulator that runs no transport.
 **Rules:** "boots" means both CPUs past the handshake (COMM0 = M_OK and
 S_OK), proven by a dump, before an emulator is called an instrument;
 and an emulator's own todo list outranks its changelog.
+
+### Two tile palette lines do not hold level 1 (2026-09-23, measured, closes the second-sprite-line lever)
+
+Per-frame census from the walker's mirror + tags + the live pen tables
+(scratch pens/census.py), 6 play frames and 6 attract frames: level 1
+references 34 pens holding 33 DISTINCT colours at every frame (the
+2026-09-?? BGPACK2 note's "29-30" counted CRAM entries, not the pens
+the visible tiles use). A best-fit of the visible sets into two lines
+with the bake's rule (a set lives whole in one line) overflows 3-4 sets
+-- 85/86/96/97/98/101, 6-9 colours each -- = 208-250 of 2080 cells at
+every level-1 frame, which the refuse rule would draw in the
+framebuffer (MORE FB bytes) or the bake would merge colours (fidelity).
+Level 2's demo fits (26 colours, 0 overflow); the attract pictures fit
+easily. And an S16 sprite set is 14 pens, so one MD line holds exactly
+one sprite set: a second line buys one more set (0x0A or 0x0B), not
+all three.
+
+**Rules:** the byte-budget path through the MD VDP is closed for level
+1 on a static bake; left: a home for BLITHASH's 18 KB, EARLYREC (mixed
+cadence), or a different sprite route.

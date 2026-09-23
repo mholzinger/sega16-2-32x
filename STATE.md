@@ -761,8 +761,13 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           demo vs 45-47 in ares). Hardware one-vint
                           needs <= ~15 KB FB writes a frame; the MD
                           offload is capped by the single sprite
-                          palette line; BLITHASH has no 18 KB home. The
-                          byte budget is the design question now.
+                          palette line, and a SECOND line is closed by
+                          measurement (LESSONS "Two tile palette lines
+                          do not hold level 1": 33 distinct colours,
+                          3-4 sets overflow at every frame); BLITHASH
+                          has no 18 KB home. Left: an SDRAM home for
+                          BLITHASH, EARLYREC (mixed cadence), or a
+                          different sprite route.
                           DESIGN (23:40, not built): PASS-END STRIKE.
                           The game's IRQ4 is 1-11 lines (ISR-exit V
                           ring); the frame is wait-for-ack + ~10 +
