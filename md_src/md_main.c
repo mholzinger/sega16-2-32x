@@ -3658,10 +3658,12 @@ void earlyrec_push(void)
 	const uint16_t *s = (const uint16_t*)0xFF7000;
 	const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
 	const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
-	uint16_t nrec = 24;
-	for (uint16_t i = 0; i < 24; i++)
+	uint16_t nrec = 23;
+	for (uint16_t i = 0; i < 23; i++)
 		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
-	const uint16_t len = 276u;            /* 2 + 20 + 60 + 24*8 + 2 */            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
+	const uint16_t len = 276u;            /* 268 payload (2 + 20 + 60 + 23*8 + 2) + 8 trailing zeros: the FIFO path
+	                                       * delivers 8 words late (erec13: every landing began with the previous
+	                                       * push's last 8 words), so the zeros are what rides ahead of the next payload */            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
 	uint16_t spin = 3000;
 	*ctrl = 0;                                           /* 68S off: resets the FIFO pointers (erec12: an aborted push left 8 words in the FIFO and every later landing was offset by them) */
 	*(volatile uint16_t*)0xA15110 = len;
@@ -3670,8 +3672,9 @@ void earlyrec_push(void)
 	EP(0xE1EC); EP(nrec);
 	for (uint16_t g = 0; g < 20; g++) EP(lr[g]);
 	for (uint16_t g = 0; g < 60; g++) EP(rs[g]);
-	for (uint16_t i = 0; i < 24u * 8u; i++) EP(s[i]);
+	for (uint16_t i = 0; i < 23u * 8u; i++) EP(s[i]);
 	EP(0x5AA5); EP(0xA55A);
+	for (uint16_t i = 0; i < 8; i++) EP(0);
 #undef EP
 	(*(volatile uint16_t*)0xFFA0E4)++;                   /* diag: pushes completed */
 	(*(volatile uint16_t*)0xFFA0E6) = spin;              /* diag: poll budget left */

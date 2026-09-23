@@ -9480,7 +9480,7 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
 #define EREC_MAX (82u + 24u * 8u + 2u)   /* 276 words: tag, nrec, 20 regs, 60 rowscroll, 24 records, 2 tail */
 static uint16_t erec_land[EREC_MAX] __attribute__((aligned(16)));
 #define EREC_U ((volatile uint16_t *)(0x20000000u | (uint32_t)erec_land))
-static uint8_t erec_armed, erec_launched, erec_seq, erec_stale;   /* erec_seq: arm sequence 1..15, echoed in packet header word 4 bits 12-15 */
+static uint8_t erec_armed, erec_launched, erec_seq, erec_stale, erec_off;   /* erec_seq: arm sequence 1..15, echoed in packet header word 4 bits 12-15 */
 static uint32_t erec_tcr_last;
 uint16_t erec_ring_ext[64][5];
 #define erec_ring erec_ring_ext
@@ -9507,11 +9507,16 @@ static unsigned erec_take(void)
     if (!erec_armed) return 0;
     unsigned left = SH2_DMA_TCR0 & 0xFFFFFFu;
     erec_ctr[11] = left; erec_ctr[10] = SH2_DMA_CHCR0;   /* diag: last seen TCR / CHCR */
-    if (EREC_U[0] != 0xE1ECu) return 0;
-    unsigned nrec = EREC_U[1];
-    if (nrec < 1 || nrec > 24) { erec_ctr[3]++; erec_armed = 0; return 0; }
-    if (left != 0) return 0;                          /* still landing (fixed 278-word transfer) */
-    if (EREC_U[EREC_MAX - 2] != 0x5AA5u || EREC_U[EREC_MAX - 1] != 0xA55Au) { erec_ctr[4]++; erec_armed = 0; return 0; }
+    if (left != 0) return 0;                          /* still landing (fixed 276-word transfer) */
+    /* the payload is 268 words; on ares the FIFO path delivers 8 words late
+     * so it sits at [8] behind the previous push's trailing zeros; hardware
+     * may deliver it at [0] -- accept both */
+    unsigned off = (EREC_U[0] == 0xE1ECu) ? 0u : (EREC_U[8] == 0xE1ECu) ? 8u : 99u;
+    if (off == 99u) { erec_ctr[3]++; erec_armed = 0; return 0; }
+    unsigned nrec = EREC_U[off + 1];
+    if (nrec < 1 || nrec > 23) { erec_ctr[3]++; erec_armed = 0; return 0; }
+    if (EREC_U[off + 266] != 0x5AA5u || EREC_U[off + 267] != 0xA55Au) { erec_ctr[4]++; erec_armed = 0; return 0; }
+    erec_off = (uint8_t)off;
     erec_armed = 0; erec_ctr[1]++;
     erec_ring[DIAG[49] & 63][0] = (uint16_t)((uint16_t)(frt() - visr_t0) / 46u + 1u);
     return nrec;
@@ -9524,9 +9529,9 @@ __attribute__((noinline)) static void erec_try(int par, uint16_t t_vint, uint16_
 {
     unsigned en_ = erec_take();
     if (en_ && nat_rec0 && !erec_launched) {
-        for (unsigned i_ = 0; i_ < 20; i_++) TEXT_U[0x740 + i_] = EREC_U[2 + i_];
-        for (unsigned i_ = 0; i_ < 60; i_++) TEXT_U[0x7C0 + i_] = EREC_U[22 + i_];
-        for (unsigned i_ = 0; i_ < en_ * 8u; i_++) SPR_LAND[nat_rec0 + i_] = EREC_U[82 + i_];
+        for (unsigned i_ = 0; i_ < 20; i_++) TEXT_U[0x740 + i_] = EREC_U[erec_off + 2 + i_];
+        for (unsigned i_ = 0; i_ < 60; i_++) TEXT_U[0x7C0 + i_] = EREC_U[erec_off + 22 + i_];
+        for (unsigned i_ = 0; i_ < en_ * 8u; i_++) SPR_LAND[nat_rec0 + i_] = EREC_U[erec_off + 82 + i_];
         nat_nrec = (uint16_t)en_; nat_spr_ok = 1;
         { unsigned ln_ = (uint16_t)(frt() - visr_t0) / 46u; erec_ctr[6] += ln_; if (ln_ > erec_ctr[7]) erec_ctr[7] = ln_; if (ln_ > 200u) erec_ctr[10]++; erec_ring[DIAG[49] & 63][1] = (uint16_t)(ln_ + 1u); }
         nat_window_launch(par, (uint16_t)(MARS_SYS_COMM2 & 7), t_vint, win_no, erec_tcp, erec_pwp);

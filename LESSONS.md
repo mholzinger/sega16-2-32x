@@ -1774,3 +1774,12 @@ push: 68S 0 -> 4 clears the pointers (md_main.c's own mdspr note).
 **Rule:** a FIFO transport needs a reset at the start of every
 transfer, not just an exact length; a residue offsets every landing
 that follows and no length check sees it.
+
+Addendum (erec13, the lag is not a residue): with 68S reset before every
+push the landing is STILL the previous transfer's last 8 words then the
+new one -- on ares the DREQ FIFO path delivers 8 words (its depth) late
+and a transfer's tail stays in the pipe until the next push. No length
+or reset fixes that; the protocol must: every push ends with 8 zeros,
+the payload is 268 words, and the receiver finds the tag at word 0 (no
+lag: hardware, possibly) or word 8 (ares) and reads fields relative to
+it. The old FIFO route's 512-word pushes hid this behind their padding.
