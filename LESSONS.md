@@ -1683,3 +1683,23 @@ bytes). A content skip pays where speed is not the problem. Dead as a
 ~6.5 KB walking (200 groups) against ~28 KB on the crowded static
 segment -- the byte budget is scene-dependent and the threshold must be
 priced per regime.
+
+### Level 1 already runs at one vint per frame in the light regime; the 50% is the crowded regime (2026-09-23)
+
+frame_timeline on the walking segment (play f1000-1011, spd2): FM drop
+97-110, IRQ4 entry 55-66, gate spin 9-20, and the scene timer advances
+60 game frames in 60 vints. The 2-vint frame measured at f3000-3011 is
+the crowded segment (five zombies + the player, the heavy pass ~184
+lines). So the threshold is per REGIME: light pass ~147 fits with the
+window ending at ~105; heavy pass ~184 needs ~68. The blit's cost is
+not simply bytes either: walking, the master stores 3.7 KB per window
+in 34 lines (the examine loop over 2240 groups and the chase behind the
+slave), against 12 KB in 58 on the crowded frames. Correct the earlier
+"FB-write-bound at ~470 B/line" to: the window on a compose frame =
+launch ~15 + the slave's compose (in-window, ~30-50) + the master's
+examine+store loop (~30-60) + publish ~15; bytes matter on crowded
+frames, the fixed loop matters on all.
+
+**Rules:** price a cadence question per regime (a regime map from the
+scene timer, 100-vint bins, is one ares loop); a single play window
+is not the game.
