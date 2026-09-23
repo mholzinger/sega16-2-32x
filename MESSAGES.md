@@ -22,6 +22,8 @@ arithmetic corrections, or anything ending "no pixel changed."
 ## OPEN
 
 ### O-8  BlastEm as a THIRD instrument for the transport axis
+
+STATUS 2026-09-23: section-5 gate FAILED before a figure -- the SH-2 side never boots (BIOS trap 0x13C by frame 10, COMM zero, for every 32X rom). Handoff for a fresh thread: docs/handoff/HANDOFF-BLASTEM.md; result: docs/design/BLASTEM.md section 7.
     owner        BUILDER
     state        READY (evaluation done 2026-09-23, decompile thread)
     why          O-1 is the live axis and we have NO usable instrument
