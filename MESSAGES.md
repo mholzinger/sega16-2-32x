@@ -94,7 +94,7 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ### O-8  BlastEm as a THIRD instrument for the transport axis
 
-STATUS 2026-09-23 (second pass): BOOTS after a three-line fix in BlastEm's sh2.cpu sh2_reset (stale prefetch across the 68K reset pulse). Section-5 cross-check RUN and FAILED on the figure: master half 20.0 lines (BlastEm) vs 26.6 (ares) vs 67-86 (rig); FRT clock and cadence agree. BlastEm undercharges FB writes, the opposite direction from the FPGA. NOT AN INSTRUMENT for O-1. Result: docs/design/BLASTEM.md sections 7-8; handoff docs/handoff/HANDOFF-BLASTEM.md is now history.
+STATUS 2026-09-23 (third pass): USABLE, SCOPED. The section-8 rejection was measured on a frozen game: BlastEm stalled the 68K under FM on every VDP-window access (fixed in the fork, IF.sv cited). Picture now matches ares; BLASTEM_FB_WAIT 3 = ares, 11 = the rig's 1.6x, held on three spans. Quote as "BlastEm, wait N". No adapter-bus contention model. BLASTEM.md section 9.
     owner        BUILDER
     state        READY (evaluation done 2026-09-23, decompile thread)
     why          O-1 is the live axis and we have NO usable instrument

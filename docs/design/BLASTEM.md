@@ -265,3 +265,69 @@ timing. Section 3's costs are now measured, not hypotheses: the burst
 fill and FB wait models exist and are too cheap. `--profile` and the
 symbol loader (handoff section 6.3) were not built; the instrument did
 not earn them.
+
+## 9. Second cross-check, 2026-09-23 evening: the picture mismatch was a BlastEm 68K stall, and the fork now brackets ares and the rig
+
+Section 8's "BlastEm undercharges FB writes" was measured on a WRONG
+PICTURE. Chasing why BlastEm's slave stored zero sprite groups (sbuf rows
+0-144 empty and frozen across frames, DIAG[50] landed words half of
+ares's) went through and killed, in order: partial DREQ landings (the
+line's transport is FBXPORT, the FIFO is idle: FIFOSTAT all zero), the
+data cache (cache-off confounds timing), 68K FB writes dropped under FM
+(FBXSTAT: zero drops), an FM race. The 68K's program counter at exit
+(M68KSTAT) settled it: the 68K never left the port's vint shim, and the
+arcade program's work RAM was frozen (1150 bytes, unchanged 700->760).
+Cause: BlastEm spun the 68K until FM dropped on EVERY 68K access to the
+VDP registers, palette or framebuffer windows (32x.c `s32x_68k_read`,
+`s32x_fb_read_*`, `s32x_overwrite_write_*`: `while (FM) { m68k->cycles
++= MAX_SH2_CYCLES/3; sync }`). The shim polls FS at 0xA1518A and reads
+the FB staging under FM by design, so each such access cost the 68K the
+rest of the SH-2's window and the game starved. The adapter does not
+stall: IF.sv `MD_VDP_SEL && ADCR.FM -> VDP_DTACK_N <= 0` (cycle
+acknowledged at once, no VDP transaction); ares returns open bus. Fork
+commit "32x: never stall the 68K on FM". After it, frames 700-760:
+
+                        ares    BlastEm (any wait)
+    windows in 60 vints   60      59-60
+    master groups      10494      10250
+    slave groups       12328      11799
+    game RAM changing    292        333 bytes
+
+Same picture. Then the framebuffer-write knob (`BLASTEM_FB_WAIT`, SH-2
+clocks per 16-bit FB write, upstream = 0) moves a real figure. Master
+blit lines per call (BLITPROF ticks/calls/45.8), the RIGBLIT quantity:
+
+    wait      0     3     7    10    12    14  | ares | rig (LESSONS)
+    700-760  35.6  47.4  62.4  73.7  80.7  88.1 | 46.8 | 67-86
+    ratio    0.74  0.97  1.27  1.51  1.66  1.82 | 1.00 | ~1.6
+
+Wait 3 reproduces ares (its 13.6 cycles a longword). Wait 11 reproduces
+the rig, and holds on two more spans: 1500-1560 ratio 1.60 (ares 46.5 vs
+BlastEm 75.8 lines/call), 3400-3460 ratio 1.49 (45.3 vs 90.0 with more
+groups per call). Groups per call agree with ares within 3% on every
+span, so the same bytes are being moved.
+
+**What the knob is.** A proxy, not a model. The MiSTer RTL (VDP.sv
+`VDPFIFO` 4 entries, `FIFO_FB_WAIT` 5 -> 6 system clocks a word at 53.7
+MHz; SH7604 BSC.sv CS2 cycle T0/T1/TW/T2 with WCR1 = 0x0055 one wait;
+IF.sv SH_VDP handshake ~3 clocks) says the FPGA's framebuffer write path
+is FASTER than ares's stall model, not 1.6x slower. So the rig's 1.6x
+lives elsewhere: the blit's sprite-buffer reads through sdram.sv (CAS 2,
+tRCD 2 at 107 MHz, single-access writes) and the core's pipeline on
+external stores are the candidates, unmeasured. Wait 11 reproduces the
+EFFECT on the blit; it does not say which cycles the FPGA spends.
+LESSONS' "the FPGA's framebuffer write rate" should read "the FPGA's
+blit rate": the attribution to FB writes came from the same instrument
+and is not supported by the RTL.
+
+**Section-5 verdict, revised:** ares and BlastEm(wait 3) agree on the
+figure; BlastEm(wait 11) and the rig agree on it; and the rig-vs-ares
+ratio is reproduced on three spans. BlastEm is now a usable third
+instrument for the transport axis, SCOPED: quote it as "BlastEm, wait N"
+with N stated, use wait 3 to cross-check ares-side logic and wait 11 to
+rank FB-bound cards the rig's way, and take the rig's three launches
+before believing any ranking. Its `-b N` is real frames since fork
+commit a4be2d9. It still models NO adapter-bus contention between the
+CPUs (a COMM poll costs the other side nothing), so the 0.28 vs 0.063
+lines/word hardware figure is outside it until an arbiter derived from
+IF.sv exists.

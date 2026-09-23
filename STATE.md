@@ -617,22 +617,18 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## INSTRUMENT STATUS
 
-    BlastEm              CROSS-CHECKED AND REJECTED for the transport
-                         axis (O-8, 2026-09-23, BLASTEM.md sections 7-8).
-                         Boots both SH-2s after a three-line fix in its
-                         sh2.cpu sh2_reset (stale prefetch across the
-                         68K reset pulse). Fork: github.com/mholzinger/
-                         blastem (main; upstream base tagged
-                         hg-0c61d0d95463), tree ~/src/blastem-0c61d0d95463.
-                         On the BODYPROF figure aligned on the game's
-                         vint counter: FRT clock and one-window-per-vint
-                         cadence agree with ares; master half 20.0 lines
-                         vs ares 26.6 vs rig 67-86. It undercharges FB
-                         writes; the FPGA overcharges them 1.6x. Usable
-                         for logic cross-checks with --dump (sdram,
-                         wram); `-b N` counts real frames since fork
-                         commit a4be2d9 (was half-frames). No number
-                         from it goes into a card.
+    BlastEm              THIRD INSTRUMENT, SCOPED (O-8, 2026-09-23 evening,
+                         BLASTEM.md 9). Fork github.com/mholzinger/blastem
+                         main, tree ~/src/blastem-0c61d0d95463. Fixes:
+                         sh2_reset prefetch, headless -b real frames, 68K
+                         never stalls under FM (the picture-mismatch bug).
+                         Knob BLASTEM_FB_WAIT (SH-2 clocks per 16-bit FB
+                         write): 3 = ares's stall model, 11 = the rig's
+                         1.6x blit rate, held on three spans. Quote as
+                         "BlastEm, wait N". Models no CPU-to-CPU adapter
+                         bus contention. --dump sdram|wram; DUMPSTAT,
+                         FBXSTAT, M68KSTAT at exit. Rig launches still
+                         decide.
 
     RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
                             /dev/MiSTer_cmd tight loop: accepts 769

@@ -1666,6 +1666,29 @@ own counter before two runs are called the same scene; and an
 instrument that agrees on the clock and the cadence can still be wrong
 on the one term the axis needs -- check THAT term, not the easy ones.
 
+### BlastEm, second pass: the mismatch was a 68K stall under FM; the fork now brackets ares and the rig (2026-09-23 evening)
+
+The "BlastEm undercharges FB writes" verdict was measured on a frozen
+game. BlastEm spun the 68K until FM dropped on every 68K access to the
+VDP windows; our shim polls FS and reads FB staging under FM by design,
+so the 68K starved and the arcade program's RAM sat frozen while the shim
+posted empty packets. Five hypotheses died first (DREQ landings, cache,
+dropped FB writes, an FM race, the FIFO); the 68K program counter at exit
+settled it in one run. The adapter acknowledges an MD cycle at once
+under FM with no VDP transaction (IF.sv), as ares does. Fixed in the
+fork. After the fix the picture matches ares (groups within 3%), and the
+FB-write knob calibrates: wait 3 = ares, wait 11 = the rig's 1.6x, held on
+three attract spans. The RTL says the FPGA's FB write path itself is
+faster than ares's model, so the rig's 1.6x is a BLIT-rate figure whose
+cycles are not yet located (SDRAM reads, core stalls). BLASTEM.md 9.
+
+**Rules:** when two emulators disagree on a timing figure, prove they
+are running the same picture first (group counts, game RAM changing,
+the other CPU's program counter) -- every timing number taken before
+that here was void; read the emulator's OTHER CPU's stall paths before
+its bus models; and name the instrument's quantity by what it measures
+(blit lines), not by the mechanism assumed behind it (FB write rate).
+
 ### Two tile palette lines do not hold level 1 (2026-09-23, measured, closes the second-sprite-line lever)
 
 Per-frame census from the walker's mirror + tags + the live pen tables
