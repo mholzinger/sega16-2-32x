@@ -428,6 +428,11 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 		jsr		r60_late_post		/* post+push AFTER the game's vint */
 		movem.l	(sp)+,d0-d1/a0-a1
 .endif
+.ifdef EARLY_REC
+		movem.l	d0-d1/a0-a1,-(sp)	/* EARLYREC: records + regs over the FIFO at IRQ4 exit */
+		jsr		earlyrec_push
+		movem.l	(sp)+,d0-d1/a0-a1
+.endif
 		/* GAME-HANDLER LENGTH PROBE (2026-09-06): V at the game's rte,
 		 * ring[vint & 63] at 0xFFA300 (entry V | idle flag at 0xFFA380,
 		 * shim_vblank). The game runs its whole frame inside IRQ4, so

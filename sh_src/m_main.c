@@ -9463,6 +9463,46 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
                                           * consumed by the body at pickup
                                           * of the same k2 window */
 
+#ifdef EARLY_REC
+/* EARLYREC (2026-09-23), SH-2 side. erec_land is the FIFO landing buffer
+ * (uncached alias for the DMAC); the V-ISR arms channel 0 for it every
+ * vint (the FB transport leaves the channel free), the 68K pushes at its
+ * IRQ4 exit, and the master's idle loop takes the landing: regs into the
+ * text mirror, records into SPR_LAND's record area, then the compose
+ * launch that the next post would otherwise do inside the window. */
+#define EREC_MAX (84u + 24u * 8u + 2u)
+static uint16_t erec_land[EREC_MAX] __attribute__((aligned(16)));
+#define EREC_U ((volatile uint16_t *)(0x20000000u | (uint32_t)erec_land))
+static uint8_t erec_armed, erec_launched;
+static uint32_t erec_ctr[12];              /* [0] arms [1] landings [2] launches [3] bad tag [4] short [5] no rec0 [6] launch line sum [7] launch line max [8] posts with the early gen still open [9] posts with it ready [10] launches after line 200 */
+static void erec_arm(void)
+{
+    SH2_DMA_CHCR0 = 0x44E0;
+    (void)SH2_DMA_CHCR0;
+    SH2_DMA_SAR0 = 0x20004012;
+    SH2_DMA_DAR0 = 0x20000000u | (uint32_t)erec_land;
+    SH2_DMA_TCR0 = EREC_MAX;
+    SH2_DMA_DRCR0 = 0;
+    SH2_DMA_DMAOR = 1;
+    SH2_DMA_CHCR0 = 0x44E1;
+    EREC_U[0] = 0; EREC_U[1] = 0;
+    erec_armed = 1; erec_ctr[0]++;
+}
+/* landed this vint? returns nrec (>0) once, 0 otherwise */
+static unsigned erec_take(void)
+{
+    if (!erec_armed) return 0;
+    unsigned left = SH2_DMA_TCR0 & 0xFFFFFFu;
+    if (EREC_U[0] != 0xE1ECu) return 0;
+    unsigned nrec = EREC_U[1];
+    if (nrec < 1 || nrec > 24) { erec_ctr[3]++; erec_armed = 0; return 0; }
+    unsigned len = 84u + nrec * 8u;
+    if (EREC_MAX - left < len) return 0;              /* still landing */
+    if (EREC_U[len - 2] != 0x5AA5u || EREC_U[len - 1] != 0xA55Au) { erec_ctr[4]++; erec_armed = 0; return 0; }
+    erec_armed = 0; erec_ctr[1]++;
+    return nrec;
+}
+#endif
 LOCKCODE_ROM void visr_vbi(void)
 {
 #ifdef CACHE_LOCK_SHOW
@@ -9476,6 +9516,9 @@ LOCKCODE_ROM void visr_vbi(void)
     if (!visr_arm)
         return;
     DIAG[49]++;
+#ifdef EARLY_REC
+    erec_arm();
+#endif
 #ifdef BOOT_FRTCHK
     { static uint16_t t_last; uint16_t t = frt(); *(volatile uint16_t *)0x2000402C = (uint16_t)(t - t_last); t_last = t; }
 #endif
@@ -12526,6 +12569,21 @@ RAMCODE void m_main(void)
                 continue;                /* re-poll: pick the post up */
             }
 #endif
+#ifdef EARLY_REC
+            {
+                unsigned en = erec_take();
+                if (en && nat_rec0 && !erec_launched) {
+                    for (unsigned i = 0; i < 20; i++) TEXT_U[0x740 + i] = EREC_U[2 + i];
+                    for (unsigned i = 0; i < 60; i++) TEXT_U[0x7C0 + i] = EREC_U[22 + i];
+                    for (unsigned i = 0; i < en * 8u; i++) SPR_LAND[nat_rec0 + i] = EREC_U[82 + i];
+                    nat_nrec = (uint16_t)en;
+                    nat_spr_ok = 1;
+                    { unsigned ln = (uint16_t)(frt() - visr_t0) / 46u; erec_ctr[6] += ln; if (ln > erec_ctr[7]) erec_ctr[7] = ln; if (ln > 200u) erec_ctr[10]++; }
+                    nat_window_launch(par, (uint16_t)(MARS_SYS_COMM2 & 7), t_vint, win_no, &tile_cmd, &pend_wait);
+                    erec_launched = 1; erec_ctr[2]++;
+                } else if (en) erec_ctr[5]++;
+            }
+#endif
 #ifdef SPAN_PROBE
             MSTAGE_SET(0);                     /* nothing in flight at poll */
 #endif
@@ -15298,7 +15356,14 @@ RAMCODE void m_main(void)
                 BMT_AT_CLAIM[par & 1] = BMT_DONE[par & 1];
 #ifdef LAUNCH_EARLY
                 BP_START(t_vint);
+#ifdef EARLY_REC
+                if (erec_launched) { if (nat_gen_open) erec_ctr[8]++; else if (nat_gen_ready) erec_ctr[9]++; }
+                if (!erec_launched)
+                    nat_window_launch(par, bank1, t_vint, win_no, &tile_cmd, &pend_wait);
+                erec_launched = 0;
+#else
                 nat_window_launch(par, bank1, t_vint, win_no, &tile_cmd, &pend_wait);
+#endif
                 BP(0);
 #endif
 #ifdef MTASK_INWIN

@@ -1721,3 +1721,15 @@ Regime map (2026-09-23, spd2, level-1 play script, scene timer per
 50% f1200-4100 (the zombie fight) with 57-73% at its edges; 71.3%
 overall f600-6000. The crowded regime is ~half the play run and the
 whole of the 30 Hz complaint.
+
+### EARLYREC, first build (2026-09-23): records over the FIFO at IRQ4 exit, compose off the window
+
+Built as a knob (EARLYREC=1; md_main.c earlyrec_push at the fmgate_ret
+hook, m_main.c erec_arm in the V-ISR, erec_take + the early launch in
+the master's idle poll, the post's LAUNCH_EARLY suppressed when the
+early one ran). First ares run on the fight (f3000-3060): 60 arms, 54
+landings, 54 early launches; game frames per vint 50.0 -> 58.6% over
+f1500-4100; half the compose frames drop FM at 62-70 (the target), the
+other half at 128-179 (worse than the line's 108); the picture is sane.
+The 68K push counters at 0xFFA0BA/BC collide with something (negative
+deltas) -- do not read them.

@@ -3620,6 +3620,45 @@ static void r60_blast(int bump) {
 #endif
 
 
+#ifdef EARLY_REC
+/* EARLYREC (2026-09-23): the game's sprite table and scroll regs are final
+ * at its IRQ4 exit (LOOP-DECOMPILE 13: one writer, in IRQ4). Instead of
+ * waiting for the next vint's packet, push them NOW through the DREQ FIFO
+ * (unused on the FB transport; the master arms it every vint in its
+ * V-ISR): the master lands them in SDRAM and launches the compose in its
+ * idle time, so the next window is blit + publish only. Layout, words:
+ *   0 0xE1EC  1 nrec  2..21 layer regs 0x740-0x753  22..81 rowscroll
+ *   0x7C0-0x7FB  82.. nrec x 8 records  then 0x5AA5 0xA55A. */
+__attribute__((section(".data"), noinline))
+void earlyrec_push(void)
+{
+	static uint16_t boot_wait;
+	if (boot_wait < 240) { boot_wait++; return; }        /* the master's ISR must be arming */
+	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
+	volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
+	const uint16_t *s = (const uint16_t*)0xFF7000;
+	const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
+	const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
+	uint16_t nrec = 24;
+	for (uint16_t i = 0; i < 24; i++)
+		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
+	uint16_t len = (uint16_t)(84u + nrec * 8u);
+	uint16_t spin = 3000;
+	*(volatile uint16_t*)0xA15110 = len;
+	*ctrl = 4;                                           /* 68S: DREQ on */
+#define EP(w) do { while (*ctrl < 0 && --spin) ; if (!spin) goto out; fifo[0] = (w); } while (0)
+	EP(0xE1EC); EP(nrec);
+	for (uint16_t g = 0; g < 20; g++) EP(lr[g]);
+	for (uint16_t g = 0; g < 60; g++) EP(rs[g]);
+	for (uint16_t i = 0; i < nrec * 8u; i++) EP(s[i]);
+	EP(0x5AA5); EP(0xA55A);
+#undef EP
+	(*(volatile uint16_t*)0xFFA0BA)++;                   /* diag: early pushes */
+	return;
+out:
+	(*(volatile uint16_t*)0xFFA0BC)++;                   /* diag: pushes aborted (FIFO full) */
+}
+#endif
 #ifdef POST_LATE
 static uint8_t r60_late, r60_late_v;
 __attribute__((section(".data"), noinline))
