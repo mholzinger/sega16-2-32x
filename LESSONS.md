@@ -1599,3 +1599,23 @@ content-hash skip (BLITHASH, session-7 lever B) is off the line;
 (2) EARLYREC so the compose no longer sits inside the window and both
 CPUs blit at the floor rate the whole window; (3) the FPGA's own FB
 write rate, unmeasured -- the ares figure is the only one we have.
+
+Addendum (BLITHASH, 2026-09-23): cannot be built on the line -- its
+per-bank per-group hash table (2 x 224 x 10 longs = 17.9 KB .bss) puts
+.bss at 0x1C7E0 against the 0x19000 region base (3.6 KB free). A
+per-row variant would fit but only skips rows whose every group is
+unchanged, rare in gameplay. Parked. The MD sprite offload census is
+the byte lever: of 600 live sprite records in 60 vints on level 1, 330
+have NO BAKED MD KEY, 180 fail the single-palette-line anchor, 90 are
+claimed (MDSPR_WHY).
+
+Addendum (MD offload cap, 2026-09-23): of the 330 no-key records, 210
+are set 0x03 -- and set 0x03's palette differs from the anchor set
+0x09's at f3000, as do 0x0A and 0x0B (the 180 palette rejects, which
+DO have keys). The MD VDP has one sprite palette line (lines 1-3 hold
+the tile pens, all 15 used: "lines [15,14,14]"), so on level 1 only
+the anchor set's sprites can ever be offloaded: ~15% of records. The
+sprite bytes stay on the SH-2. The byte lever is closed on this design;
+the FB write floor is the floor, and the FPGA's own rate is the number
+that decides whether EARLYREC reaches one vint (ares: 28 KB / 470 B/line
+= 60 lines of blit + ~8 of publish = 68, the threshold exactly).
