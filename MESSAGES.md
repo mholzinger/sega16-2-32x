@@ -21,6 +21,78 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-8  BlastEm as a THIRD instrument for the transport axis
+    owner        BUILDER
+    state        READY (evaluation done 2026-09-23, decompile thread)
+    why          O-1 is the live axis and we have NO usable instrument
+                 for it. The rig is the only speed authority and its
+                 flip rate varies 6x between cold runs of the same rom.
+                 ares is slave-gated and charges instruction cycles
+                 only. BlastEm models the two things ares does not, and
+                 both are transport.
+
+    TESTED, not inferred
+                 binary  /Users/mikeholzinger/bin/blastem-osx-1.0.0/blastem
+                 source  ~/src/blastem-0c61d0d95463/
+                 `blastem -b 300 -m 32x s16.32x`
+                   -> 300 frames in 0.78s user (~385 fps), clean exit,
+                      no unimplemented-instruction errors, boots the
+                      line rom
+                 `-b N` = HEADLESS, run N frames, exit. Undocumented in
+                 -h; found at blastem.c:429. Direct analogue of ares
+                 --frames N.
+                 BIOS: all three already in mame/32x.zip (32x_m/s/g).
+                 BlastEm wants them CWD-relative as 32X_M_BIOS.bin,
+                 32X_S_BIOS.bin, 32X_G_BIOS.bin (plain fopen,
+                 32x.c:1416). Working copy already staged at
+                 <scratchpad>/blastem-eval/.
+
+    READ FROM SOURCE, not tested -- verify before trusting
+                 sh2_util.c:80   sh2_generic_burst_read charges
+                                 chunk->burst_cycles * clock_divider
+                                 = CACHE LINE BURST FILLS, which ares
+                                 does not model at all
+                 32x.c:1009      sh2->cycles += wait_cycles from
+                                 s32x_video_sh2_write = FB WRITE BUS
+                                 WAITS, which neither ares nor MAME
+                                 models
+                 debug.c:3180    `symbols <file>` loader -- loading
+                                 rom/s16.lst would let probes name
+                                 TEXT_C instead of hexing it, which
+                                 kills the wrong-base-address failure
+                                 class (cost 2 builds + 1 misread
+                                 census in the 2026-09-16 arc)
+
+    GAPS vs ares-headless
+                 no --dump region:addr:len:file
+                 no --profile
+                 no --input replay
+                 debugger NOT PIPEABLE: debug.c:2328 reads stdin via
+                 fgets_timeout with a progress callback. Piping
+                 "help\nquit\n" into `-b 600 -d` returned rc=124,
+                 ZERO bytes. Tested twice.
+                 gdb remote (-D) is 68K-ONLY: zero SH-2 references in
+                 gdb_remote.c. Not a path.
+
+    ask          (1) patch BlastEm for --dump and --profile. The
+                     codebase already has headless mode and a frame
+                     counter (exit_after), so both are small. Mike has
+                     the tree; it is open source.
+                 (2) CROSS-CHECK BEFORE TRUSTING ANY NUMBER. Take one
+                     already-settled figure and reproduce it on all
+                     three: ares, the rig, BlastEm. LESSONS lists eight
+                     instruments that lied in one arc; a new one gets
+                     no free pass.
+                 (3) only then point it at O-1.
+
+    scope        DO NOT replace ares. ares keeps exactness and the
+                 anchors. BlastEm is for the TRANSPORT axis, where its
+                 cache and FB-wait models make it better informed than
+                 either existing emulator.
+    gate         NONE for (1) and (2) -- no pixel, no rig, no
+                 direction. (3) inherits O-1's gate.
+
+
 ### O-7  Lift the per-title WRAM constants out of the engine
     owner        BUILDER
     state        READY
