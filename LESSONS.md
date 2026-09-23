@@ -1580,3 +1580,22 @@ and there is no .ramtext room -- and it serialises before the blit),
 FM drop 221-234, game speed 41.9%. A both-CPU compose needs the master's
 half in RAM code and overlapped with the slave's, not queued ahead of
 the blit. Knob kept off.
+
+### The window's floor is the framebuffer write rate (2026-09-23, BLITPROF on the line, ares level 1)
+
+Per compose window the master's blit stores ~393 32-byte groups (12.3
+KB) in ~58 lines while the slave stores ~513 (16 KB) concurrently: the
+two together push ~28 KB through the FB in ~60 lines, ~470 bytes a
+line, which is the ares FB stall floor (LOOP.md 20: 13.6 SH-2 cycles a
+longword, 6.76 MB/s; MAME charges nothing). Zero groups are already
+skipped (54-68%); the master pays ~2x per byte for cap_drain on the
+same bus. So on a compose frame the FM window cannot be shorter than
+FB bytes / 470 + publish (~15) + launch (~10-15): 28 KB -> ~85 lines,
+against the ~68 the 2-vint threshold needs on heavy frames (105 on
+light ones). The remaining levers are therefore BYTES, not scheduling:
+(1) fewer FB bytes per frame -- the MD VDP offload claims ZERO sprites
+on level 1 today (MDSPR_CNT: 0/60 vints; census running), and the
+content-hash skip (BLITHASH, session-7 lever B) is off the line;
+(2) EARLYREC so the compose no longer sits inside the window and both
+CPUs blit at the floor rate the whole window; (3) the FPGA's own FB
+write rate, unmeasured -- the ares figure is the only one we have.

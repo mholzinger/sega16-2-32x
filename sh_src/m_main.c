@@ -7907,6 +7907,9 @@ LOCKCODE static void blit_half(int ylo, int yhi)
 #else
 #define RG_DEFER_MARK(yy) ((void)0)
 #endif
+#ifdef BODY_PROF
+    uint16_t blp_t0 = frt(); unsigned blp_rows = 0;
+#endif
     for (int y = ylo; y < yhi; y++) {
 #ifdef BLIT_CHASE
         if (pub_) SYNC[14] = (uint16_t)y;   /* rows < y shipped */
@@ -8327,6 +8330,9 @@ LOCKCODE static void blit_half(int ylo, int yhi)
                     gh[i >> 3] = h;          /* the stores below ship it */
 #endif
                 }
+#ifdef BODY_PROF
+                blp_rows++;                          /* groups stored */
+#endif
                 dst[i + 0] = v0;
                 dst[i + 1] = v1;
                 dst[i + 2] = v2;
@@ -8421,6 +8427,12 @@ LOCKCODE static void blit_half(int ylo, int yhi)
         }
 #endif
     }
+#ifdef BODY_PROF
+    { volatile uint32_t *bl = (volatile uint32_t *)0x26028FD0u;   /* BLITPROF: [0] ticks [1] groups stored [2] calls; master 0-2, slave 3-5 */
+      uint32_t sp9; __asm__ __volatile__("mov r15,%0" : "=r"(sp9));
+      unsigned o9 = (sp9 & 0x000FFFFFu) >= 0x0003F800u ? 3u : 0u;
+      bl[o9] += (uint16_t)(frt() - blp_t0); bl[o9 + 1] += blp_rows; bl[o9 + 2]++; }
+#endif
 }
 
 #ifdef R60

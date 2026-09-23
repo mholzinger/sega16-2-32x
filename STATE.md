@@ -747,6 +747,14 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           tail; SPROF stamps in probe8), the launch's
                           15 lines (records from the FB + hash), then
                           the 68K side (consume 17, post-ack tail 15-20).
+                          FLOOR (2026-09-23, BLITPROF): the window is
+                          FB-write-bound at ~470 B/line aggregate; a
+                          compose frame writes ~28 KB -> ~85 lines
+                          minimum vs the 68 the threshold needs. LEVERS
+                          = BYTES: MD VDP sprite offload (claims 0 on
+                          level 1; MDSPR_WHY census running), BLITHASH
+                          (content skip), then EARLYREC. MTASKINWIN
+                          dead as built (LESSONS).
                           DESIGN (23:40, not built): PASS-END STRIKE.
                           The game's IRQ4 is 1-11 lines (ISR-exit V
                           ring); the frame is wait-for-ack + ~10 +
