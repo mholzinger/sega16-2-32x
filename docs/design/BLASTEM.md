@@ -198,7 +198,9 @@ the handoff were all wrong). Fix, in `sh2.cpu` `sh2_reset`, before
 The patch is kept as `docs/design/blastem-sh2-reset.patch`, and the tree is
 now a git fork, `github.com/mholzinger/blastem` (branch `main`; the
 upstream Mercurial snapshot is the base commit, tagged `hg-0c61d0d95463`;
-the fix and the `--dump` hook are the two commits on top). `make` regenerates `sh2.c` from `sh2.cpu` (Makefile:452; ~5 min, 31 MB
+the fix and the `--dump` hook are the first two commits on top; then the
+headless frame-count fix, a cache reset on SH-2 reset, and the sub-interrupt
+recompute typo, 2026-09-23, all verified by SDRAM dumps). `make` regenerates `sh2.c` from `sh2.cpu` (Makefile:452; ~5 min, 31 MB
 of generated C under LTO). With it, `-b 300 -m 32x`: bprof3 master at
 0x020474B2 (cart), slave at 0x06037Bxx (SDRAM), 54,426 non-zero SDRAM
 bytes; Space Harrier master 0x060015B8, slave 0x0600016C, COMM1-7 live,
@@ -209,7 +211,12 @@ Two more core defects seen in passing, NOT fixed, impact unmeasured:
 `s32x_68k_sysreg_write` (32x.c, `case S32X_INT_CTRL`) recomputes the
 SUB interrupt on `mars->main`.
 
-**`-b N` is not N frames.** Measured: between `-b 700` and `-b 760` the
+**`-b N` was not N frames -- FIXED in the fork (commit a4be2d9, "vdp:
+count one frame per frame in headless mode"): headless never set
+`pushed_frame`, so the frame-complete test fired twice a frame. New
+`-b 301` reproduces old `-b 600` byte for byte; `-b 700` now reads game
+vint 672 against ares 674. Every `-b` value quoted below section 8's
+table was taken on the old count. Original measurement: between `-b 700` and `-b 760` the
 SH-2 advanced 80.64 M cycles = 26.9 M MCLK = 30 NTSC frames, and the
 port's 68K vint counter (WRAM 0xFFB0F0) read 325 at `-b 700` where ares
 `--frames 700` reads 674. One `-b` unit is half a frame (genesis.c:642
@@ -236,7 +243,8 @@ Compare script: `/tmp/blastem-eval/xbp_compare.py`.
     ack->walker slice end (tail)               59.9         85.8
     slice end->next pickup (idle)             131.9        116.5
 
-The FRT tick rate agrees to 0.03% (the SH-2 clock is right). Cadence
+(Retaken on the fixed count, `-b 700`-`760`: identical per-window
+values, vints 672-732.) The FRT tick rate agrees to 0.03% (the SH-2 clock is right). Cadence
 agrees (one window per game vint on both). The FB-write-bound term
 does not: BlastEm's master half is 0.75x ares. The rig's reading of the
 same term on its own instrument (RIGBLIT, LESSONS 2026-09-23) is 67-86

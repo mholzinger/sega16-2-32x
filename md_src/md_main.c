@@ -3642,7 +3642,7 @@ void earlyrec_push(void)
 	uint16_t nrec = 24;
 	for (uint16_t i = 0; i < 24; i++)
 		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
-	uint16_t len = (uint16_t)(84u + nrec * 8u);
+	const uint16_t len = 278u;            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
 	uint16_t spin = 3000;
 	*(volatile uint16_t*)0xA15110 = len;
 	*ctrl = 4;                                           /* 68S: DREQ on */
@@ -3650,7 +3650,7 @@ void earlyrec_push(void)
 	EP(0xE1EC); EP(nrec);
 	for (uint16_t g = 0; g < 20; g++) EP(lr[g]);
 	for (uint16_t g = 0; g < 60; g++) EP(rs[g]);
-	for (uint16_t i = 0; i < nrec * 8u; i++) EP(s[i]);
+	for (uint16_t i = 0; i < 24u * 8u; i++) EP(s[i]);
 	EP(0x5AA5); EP(0xA55A);
 #undef EP
 	(*(volatile uint16_t*)0xFFA0BA)++;                   /* diag: early pushes */

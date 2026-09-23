@@ -1580,6 +1580,13 @@ static volatile uint32_t mt_done;          /* drains that completed */
 #endif
 static uint8_t nat_my;           /* strip cursor within the band */
 #define NAT_WALL ((volatile uint32_t *)0x26028F50)
+#ifdef EARLY_REC
+extern uint16_t erec_ring_ext[64][5];
+#define EREC_STAMP_READY() erec_stamp_ready()
+static void erec_stamp_ready(void);
+#else
+#define EREC_STAMP_READY() ((void)0)
+#endif
 #ifdef PHASE_CENSUS
 /* GEN PHASE-SPLIT CENSUS (pipelining arc datum #1, 2026-09-01): where
  * the ~1.4v per-generation wall goes. Scratch 0x28E40-0x28E7F = the
@@ -1619,7 +1626,7 @@ static void nat_ph_close(void);
 static void nat_ph_ship(uint16_t tv);
 static void nat_ph_flip(void);
 #define NAT_CLOSE() do { nat_ph_close(); FBB_GEN(); \
-        nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); } while (0)
+        nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); EREC_STAMP_READY(); } while (0)
 #define PHP (*(volatile uint32_t *)0x26028E7C)   /* sum launch->slave
                                                     * pickup (SYNC[13]) */
 static int nat_ph_check(uint16_t pw);   /* ROM: pickup/echo stamps;
@@ -1634,7 +1641,7 @@ static int nat_ph_check(uint16_t pw);   /* ROM: pickup/echo stamps;
         NAT_WALL[0] += wl_; NAT_WALL[1]++; FBB_GEN(); \
         BODY_GAP_CLOSE(); \
         if (wl_ > NAT_WALL[2]) NAT_WALL[2] = wl_; \
-        nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); } while (0)
+        nat_gen_open = 0; nat_gen_ready = 1; HS_PROMOTE(); EREC_STAMP_READY(); } while (0)
 /* the three close sites (gap poll, window entry, last-call) share this
  * so the census build changes ONE expression */
 #define NAT_CLOSE_CHECK() do { \
@@ -9474,6 +9481,9 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
 static uint16_t erec_land[EREC_MAX] __attribute__((aligned(16)));
 #define EREC_U ((volatile uint16_t *)(0x20000000u | (uint32_t)erec_land))
 static uint8_t erec_armed, erec_launched;
+uint16_t erec_ring_ext[64][5];
+#define erec_ring erec_ring_ext
+static void erec_stamp_ready(void) { erec_ring[DIAG[49] & 63][3] = (uint16_t)((uint16_t)(frt() - visr_t0) / 46u + 1u); }          /* per vint: [0] landed line [1] launch line [2] slave bands done [3] ready [4] post; 0 = not this vint */
 static uint32_t erec_ctr[12];              /* [0] arms [1] landings [2] launches [3] bad tag [4] short [5] no rec0 [6] launch line sum [7] launch line max [8] posts with the early gen still open [9] posts with it ready [10] launches after line 200 */
 static void erec_arm(void)
 {
@@ -9496,12 +9506,30 @@ static unsigned erec_take(void)
     if (EREC_U[0] != 0xE1ECu) return 0;
     unsigned nrec = EREC_U[1];
     if (nrec < 1 || nrec > 24) { erec_ctr[3]++; erec_armed = 0; return 0; }
-    unsigned len = 84u + nrec * 8u;
-    if (EREC_MAX - left < len) return 0;              /* still landing */
-    if (EREC_U[len - 2] != 0x5AA5u || EREC_U[len - 1] != 0xA55Au) { erec_ctr[4]++; erec_armed = 0; return 0; }
+    if (left != 0) return 0;                          /* still landing (fixed 278-word transfer) */
+    if (EREC_U[EREC_MAX - 2] != 0x5AA5u || EREC_U[EREC_MAX - 1] != 0xA55Au) { erec_ctr[4]++; erec_armed = 0; return 0; }
     erec_armed = 0; erec_ctr[1]++;
+    erec_ring[DIAG[49] & 63][0] = (uint16_t)((uint16_t)(frt() - visr_t0) / 46u + 1u);
     return nrec;
 }
+RAMCODE static void nat_window_launch(int par, uint16_t bank1, uint16_t t_vint, uint16_t win_no, uint16_t *tcp, uint16_t *pwp);
+/* the early launch, at the idle poll and right after the ack; ROM (noinline:
+ * inlined twice it overflowed .ramtext) -- it runs off the window */
+static uint16_t *erec_tcp, *erec_pwp;      /* the poll loop's tile_cmd / pend_wait */
+__attribute__((noinline)) static void erec_try(int par, uint16_t t_vint, uint16_t win_no)
+{
+    unsigned en_ = erec_take();
+    if (en_ && nat_rec0 && !erec_launched) {
+        for (unsigned i_ = 0; i_ < 20; i_++) TEXT_U[0x740 + i_] = EREC_U[2 + i_];
+        for (unsigned i_ = 0; i_ < 60; i_++) TEXT_U[0x7C0 + i_] = EREC_U[22 + i_];
+        for (unsigned i_ = 0; i_ < en_ * 8u; i_++) SPR_LAND[nat_rec0 + i_] = EREC_U[82 + i_];
+        nat_nrec = (uint16_t)en_; nat_spr_ok = 1;
+        { unsigned ln_ = (uint16_t)(frt() - visr_t0) / 46u; erec_ctr[6] += ln_; if (ln_ > erec_ctr[7]) erec_ctr[7] = ln_; if (ln_ > 200u) erec_ctr[10]++; erec_ring[DIAG[49] & 63][1] = (uint16_t)(ln_ + 1u); }
+        nat_window_launch(par, (uint16_t)(MARS_SYS_COMM2 & 7), t_vint, win_no, erec_tcp, erec_pwp);
+        erec_launched = 1; erec_ctr[2]++;
+    } else if (en_) erec_ctr[5]++;
+}
+#define EREC_TRY() do { erec_tcp = &tile_cmd; erec_pwp = &pend_wait; erec_try(par, t_vint, (uint16_t)win_no); } while (0)
 #endif
 LOCKCODE_ROM void visr_vbi(void)
 {
@@ -12570,19 +12598,7 @@ RAMCODE void m_main(void)
             }
 #endif
 #ifdef EARLY_REC
-            {
-                unsigned en = erec_take();
-                if (en && nat_rec0 && !erec_launched) {
-                    for (unsigned i = 0; i < 20; i++) TEXT_U[0x740 + i] = EREC_U[2 + i];
-                    for (unsigned i = 0; i < 60; i++) TEXT_U[0x7C0 + i] = EREC_U[22 + i];
-                    for (unsigned i = 0; i < en * 8u; i++) SPR_LAND[nat_rec0 + i] = EREC_U[82 + i];
-                    nat_nrec = (uint16_t)en;
-                    nat_spr_ok = 1;
-                    { unsigned ln = (uint16_t)(frt() - visr_t0) / 46u; erec_ctr[6] += ln; if (ln > erec_ctr[7]) erec_ctr[7] = ln; if (ln > 200u) erec_ctr[10]++; }
-                    nat_window_launch(par, (uint16_t)(MARS_SYS_COMM2 & 7), t_vint, win_no, &tile_cmd, &pend_wait);
-                    erec_launched = 1; erec_ctr[2]++;
-                } else if (en) erec_ctr[5]++;
-            }
+            EREC_TRY();
 #endif
 #ifdef SPAN_PROBE
             MSTAGE_SET(0);                     /* nothing in flight at poll */
@@ -13151,6 +13167,9 @@ RAMCODE void m_main(void)
 #endif
             t_vint = tw;
             BP(9);
+#ifdef EARLY_REC
+            erec_ring[DIAG[49] & 63][4] = (uint16_t)((uint16_t)(tw - visr_t0) / 46u + 1u); erec_ring[(DIAG[49] + 1) & 63][0] = erec_ring[(DIAG[49] + 1) & 63][1] = erec_ring[(DIAG[49] + 1) & 63][2] = erec_ring[(DIAG[49] + 1) & 63][3] = erec_ring[(DIAG[49] + 1) & 63][4] = 0;
+#endif
 #ifdef BODY_PROF
             { static uint16_t bp_last; bprof[10] += (uint16_t)(tw - bp_last); bp_last = tw; }   /* pickup -> pickup: the cycle */
 #endif
@@ -15866,6 +15885,16 @@ RAMCODE void m_main(void)
 #endif
             BP(7);
             MARS_SYS_COMM0 = 0;              /* ack: MD drops FM, game runs */
+#ifdef EARLY_REC
+            /* EARLYREC: the records land ~5 lines after the game's IRQ4 exit
+             * (55-90); wait for them here, before the tail, so the compose
+             * launches by ~line 118 and closes before the drain cut. */
+            while (!erec_launched && (uint16_t)(frt() - visr_t0) < 118u * 46u) {
+                EREC_TRY();
+                if (erec_launched) break;
+                { uint16_t tq_ = frt(); while ((uint16_t)(frt() - tq_) < 46u) ; }
+            }
+#endif
 #ifdef STAMP5_CENSUS
             {   /* LOOP29 265: the window's span and where it sits in the vint,
                  * ticks >> 10 on the channel (a vint = 11.8); [3] = ISR entries

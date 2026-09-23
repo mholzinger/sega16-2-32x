@@ -630,7 +630,8 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                          vs ares 26.6 vs rig 67-86. It undercharges FB
                          writes; the FPGA overcharges them 1.6x. Usable
                          for logic cross-checks with --dump (sdram,
-                         wram); its `-b N` is HALF-frames. No number
+                         wram); `-b N` counts real frames since fork
+                         commit a4be2d9 (was half-frames). No number
                          from it goes into a card.
 
     RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
