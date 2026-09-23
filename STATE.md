@@ -617,21 +617,20 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## INSTRUMENT STATUS
 
-    BlastEm              CANDIDATE, NOT YET TRUSTED (O-8, 2026-09-23).
-                         /Users/mikeholzinger/bin/blastem-osx-1.0.0/blastem
-                         `-b N -m 32x` = headless, N frames, exit
-                         (undocumented). TESTED: boots the line rom,
-                         300 frames in 0.78s, clean exit. BIOS in
-                         mame/32x.zip, CWD-relative as 32X_[MSG]_BIOS.bin.
-                         READ FROM SOURCE, UNVERIFIED: models SH-2
-                         cache burst fills (sh2_util.c:80) and FB write
-                         bus waits (32x.c:1009) -- neither modelled by
-                         ares. That is the TRANSPORT axis.
-                         MISSING: --dump, --profile, input replay.
-                         Debugger NOT pipeable (fgets_timeout);
-                         gdb remote is 68K-only.
-                         DO NOT quote a number from it until the
-                         three-way cross-check in O-8 is done.
+    BlastEm              CROSS-CHECKED AND REJECTED for the transport
+                         axis (O-8, 2026-09-23, BLASTEM.md sections 7-8).
+                         Boots both SH-2s after a three-line fix in its
+                         sh2.cpu sh2_reset (stale prefetch across the
+                         68K reset pulse; source tree
+                         ~/src/blastem-0c61d0d95463, patched, no VCS).
+                         On the BODYPROF figure aligned on the game's
+                         vint counter: FRT clock and one-window-per-vint
+                         cadence agree with ares; master half 20.0 lines
+                         vs ares 26.6 vs rig 67-86. It undercharges FB
+                         writes; the FPGA overcharges them 1.6x. Usable
+                         for logic cross-checks with --dump (sdram,
+                         wram); its `-b N` is HALF-frames. No number
+                         from it goes into a card.
 
     RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
                             /dev/MiSTer_cmd tight loop: accepts 769

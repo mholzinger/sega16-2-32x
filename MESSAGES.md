@@ -23,7 +23,7 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ### O-8  BlastEm as a THIRD instrument for the transport axis
 
-STATUS 2026-09-23: section-5 gate FAILED before a figure -- the SH-2 side never boots (BIOS trap 0x13C by frame 10, COMM zero, for every 32X rom). Handoff for a fresh thread: docs/handoff/HANDOFF-BLASTEM.md; result: docs/design/BLASTEM.md section 7.
+STATUS 2026-09-23 (second pass): BOOTS after a three-line fix in BlastEm's sh2.cpu sh2_reset (stale prefetch across the 68K reset pulse). Section-5 cross-check RUN and FAILED on the figure: master half 20.0 lines (BlastEm) vs 26.6 (ares) vs 67-86 (rig); FRT clock and cadence agree. BlastEm undercharges FB writes, the opposite direction from the FPGA. NOT AN INSTRUMENT for O-1. Result: docs/design/BLASTEM.md sections 7-8; handoff docs/handoff/HANDOFF-BLASTEM.md is now history.
     owner        BUILDER
     state        READY (evaluation done 2026-09-23, decompile thread)
     why          O-1 is the live axis and we have NO usable instrument

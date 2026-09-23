@@ -1,5 +1,10 @@
 # HANDOFF — BlastEm as a transport instrument (MESSAGES O-8)
 
+**DONE 2026-09-23 (same day).** Sections 6.1 and 6.2 are complete; 6.3 was
+not earned. Result in `docs/design/BLASTEM.md` sections 7-8. The bug was
+none of the three candidates in section 3: `sh2_reset` kept a stale
+prefetch across the 68K reset pulse. This file is history.
+
 Written 2026-09-23 for a fresh thread. Read this, `docs/design/BLASTEM.md`
 (the card; section 5 is the gate, section 7 the current result), then
 CLAUDE.md's START HERE. Nothing here is on the line; the rig holds spd2.

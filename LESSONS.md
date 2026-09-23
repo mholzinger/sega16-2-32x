@@ -1641,18 +1641,30 @@ home at 18 KB). EARLYREC + a dual blit gets a compose frame's window to
 it says "rig"; the rig's is 1.6x worse; and a frame-rate design must be
 priced in framebuffer BYTES per frame against ~300 B/line (rig).
 
-### BlastEm (MESSAGES O-8) fails the cross-check gate before a number exists (2026-09-23)
+### BlastEm (MESSAGES O-8): boots after a core fix, then fails the cross-check on the figure that mattered (2026-09-23)
 
-Its SH-2s never boot: the master lands in the BIOS's unused-exception
-trap (0x13C) within 10 frames on every 32X rom, COMM stays zero, SDRAM
-stays zero, and the "boots the line rom" claim was the 68K side only.
-Details and the repro in docs/design/BLASTEM.md section 7. The
-section-5 gate did its job: the 385 fps headless figure would have been
-quoted as a transport instrument for an emulator that runs no transport.
+First pass: the SH-2s never booted (master in the BIOS trap 0x13C by
+frame 10, every rom). Cause, found by a per-instruction trace in the
+generated core: `sh2_reset` in BlastEm's `sh2.cpu` keeps the stale
+prefetch across the 68K's reset pulse, so the restart at 0x140 executes
+the delay loop's `bf` and lands on 0x13C. Three lines fix it (BLASTEM.md
+section 7). None of the handoff's three ranked candidates (early
+interrupt, CPU exception, BIOS byte order) was it; the trace was cheaper
+than any of them.
 
-**Rules:** "boots" means both CPUs past the handshake (COMM0 = M_OK and
-S_OK), proven by a dump, before an emulator is called an instrument;
-and an emulator's own todo list outranks its changelog.
+Second pass, the section-4 figure aligned on the game's vint counter
+(BlastEm's `-b N` is HALF-frames: measured 30 frames of MCLK between
+`-b 700` and `-b 760`): FRT ticks/window 12004 vs ares 12001, 60
+windows in 60 vints on both, master half 20.0 lines vs ares 26.6, rig
+67-86 (RIGBLIT). BlastEm undercharges the framebuffer write below even
+ares's stall model, while the FPGA is 1.6x above it. It cannot explain
+the rig; it is not a transport instrument. BLASTEM.md section 8.
+
+**Rules:** "boots" means both CPUs past the handshake, proven by a dump;
+an emulator's frame count is a unit to be measured against the game's
+own counter before two runs are called the same scene; and an
+instrument that agrees on the clock and the cadence can still be wrong
+on the one term the axis needs -- check THAT term, not the easy ones.
 
 ### Two tile palette lines do not hold level 1 (2026-09-23, measured, closes the second-sprite-line lever)
 

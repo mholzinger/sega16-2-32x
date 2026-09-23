@@ -177,33 +177,81 @@ screen/keyboard rule in `CLAUDE.md`.
 Numbers from the two are not comparable without the section 5
 cross-check, and a BlastEm cycle count is not an ares cycle count.
 
-## 7. Section-5 result, 2026-09-23: FAILED before any figure — the SH-2 side never boots
+## 7. Section-5 result, 2026-09-23 (second pass): boots after a one-line core fix; the gate FAILS on the figure
 
-Built from `~/src/blastem-0c61d0d95463` (`version.inc`: 1.0.1-pre; `todo.txt`
-still lists 32X under future work) after `brew install glew`; the `--dump
-region:addr:len:file` hook (blastem.c `case '-'`, genesis.c `run_dumps` at
-both `exit_after` sites; regions sdram, wram; bytes in bus order) is in
-that tree, un-committed there. Repro in `/tmp/blastem-eval` with the three
-BIOS files beside the rom:
+The first pass (same day, earlier) stopped at "the SH-2 side never
+boots". The cause was found with a per-instruction trace patched into the
+generated core: BlastEm's `sh2_reset` (sh2.cpu, `sh2_reset`) does not
+clear the prefetch buffer. The 68K G-BIOS pulses the SH-2 reset
+(`0xA15100` 0x0082 -> 0x0081 -> 0x0083, at 68K MCLK 1127686 and 2673300)
+while the master is in the BIOS delay loop at 0x196-0x19A. On the
+restart at 0x140 the core consumed the stale `prefetch_next` = 0x8BFC,
+the loop's `bf`, which taken from 0x140 lands on 0x13C -- the BIOS
+trap. No interrupt was involved (none was ever due; candidates 1-3 of
+the handoff were all wrong). Fix, in `sh2.cpu` `sh2_reset`, before
+`ocall periph_reset`:
 
-    blastem -b 300 -m 32x --dump sdram:0x06000000:262144:sd.bin \
-        --dump wram:0xFF0000:65536:wr.bin bprof3.32x
+    prefetch_full = 0
+    delay_slot = 0
+    did_mem = 0
 
-SDRAM is ALL ZERO at 300 (and 1500) frames for our rom AND for Space
-Harrier; our 68K touches 7,927 RAM bytes (its own boot), Space Harrier's
-touches 6. A state print at the dump: master SH-2 pc=0x13C, slave
-0x1C4, reset clear, cycles advancing, COMM0-7 all zero, adapter 0x0083.
-0x13C in 32X_M_BIOS.bin is `bra 0x13C` -- the BIOS's trap for the
-unused exception vectors 64-78 (0x100-0x13B all point there) -- and the
-master is in it by frame 10 (at frame 2 it is still in the boot path at
-0x198). So an exception/interrupt fires while VBR is still the BIOS's,
-before the cart handshake, on every 32X rom: the SH-2 side does not
-boot, the 68K stalls waiting for M_OK, and "boots the line rom"
-(section 2) was the 68K only.
+The patch is kept as `docs/design/blastem-sh2-reset.patch` (the BlastEm
+tree has no VCS). `make` regenerates `sh2.c` from `sh2.cpu` (Makefile:452; ~5 min, 31 MB
+of generated C under LTO). With it, `-b 300 -m 32x`: bprof3 master at
+0x020474B2 (cart), slave at 0x06037Bxx (SDRAM), 54,426 non-zero SDRAM
+bytes; Space Harrier master 0x060015B8, slave 0x0600016C, COMM1-7 live,
+55,378 bytes. Both CPUs are past the handshake. "Boots" now holds.
 
-Consequence: no cross-check figure can be taken; BlastEm cannot model
-the transport for us until its 32X boot works, which is a BlastEm bug
-hunt (why an interrupt is delivered with VBR=0 at reset), not an
-instrument question. Section 3's costs stay hypotheses. STATUS: NOT AN
-INSTRUMENT. The `-b` speed (385 fps) is the speed of an SH-2 sitting in
-a two-instruction loop.
+Two more core defects seen in passing, NOT fixed, impact unmeasured:
+`sh7095_reset` (sh7095.c:11) leaves the cache enabled across a reset;
+`s32x_68k_sysreg_write` (32x.c, `case S32X_INT_CTRL`) recomputes the
+SUB interrupt on `mars->main`.
+
+**`-b N` is not N frames.** Measured: between `-b 700` and `-b 760` the
+SH-2 advanced 80.64 M cycles = 26.9 M MCLK = 30 NTSC frames, and the
+port's 68K vint counter (WRAM 0xFFB0F0) read 325 at `-b 700` where ares
+`--frames 700` reads 674. One `-b` unit is half a frame (genesis.c:642
+counts `elapsed` VDP frames; vdp.c increments `frame` at two sites,
+2254 and 3109; which one double-counts is unverified). Align on the
+game's own vint counter, never on N.
+
+## 8. The section-4 figure on all three, aligned on the game's vint counter
+
+Figure: master SH-2 window cycle, level-1 attract demo, BODYPROF rom
+`rom/night/bprof3.32x`, `bprof[]` at SDRAM 0x06003544, 60 game vints.
+ares frames 700-760 = vints 674-734; BlastEm `-b 1400`-`1520` = vints
+673-733 (same scene: display-gate mailbox 0xA0, 2 blanks on both).
+Compare script: `/tmp/blastem-eval/xbp_compare.py`.
+
+    per window (lines, 45.8 FRT ticks/line)   ares      BlastEm
+    windows in 60 vints                          60           60
+    cycle, ticks/window                       12001        12004
+    launch                                      7.3          8.3
+    master half (the FB blit)                  26.6         20.0
+    slave pickup wait                           9.4          7.2
+    apply_cram                                  9.8         13.6
+    publish->ack                               15.8         10.6
+    ack->walker slice end (tail)               59.9         85.8
+    slice end->next pickup (idle)             131.9        116.5
+
+The FRT tick rate agrees to 0.03% (the SH-2 clock is right). Cadence
+agrees (one window per game vint on both). The FB-write-bound term
+does not: BlastEm's master half is 0.75x ares. The rig's reading of the
+same term on its own instrument (RIGBLIT, LESSONS 2026-09-23) is 67-86
+lines against ares 45-47, i.e. 1.6x ares. BlastEm moves the OPPOSITE
+way from the hardware. Its FB write waits (32x.c:1006-1009) do not
+reproduce the FPGA's write rate; they undercharge even ares's stall
+model. 68K side at the same vint: packets consumed 596 (ares) vs 557,
+entry rejects 41 vs 84, held vints 41 vs 36 -- the transport also lands
+differently on the 68K side.
+
+**Verdict: disagreement, and the one that is wrong for our purpose is
+BlastEm.** ares and the rig bracket the truth from below and above on
+the FB write rate; BlastEm sits below ares. STATUS: NOT AN INSTRUMENT
+for the transport axis. It is a working third 32X emulator with a boot
+fix and a `--dump`, usable for logic cross-checks (it agrees with ares
+on the FRT clock, the cadence and the window count), not for FB-write
+timing. Section 3's costs are now measured, not hypotheses: the burst
+fill and FB wait models exist and are too cheap. `--profile` and the
+symbol loader (handoff section 6.3) were not built; the instrument did
+not earn them.
