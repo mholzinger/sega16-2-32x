@@ -1640,3 +1640,16 @@ home at 18 KB). EARLYREC + a dual blit gets a compose frame's window to
 **Rules:** every FB-throughput number in this record is ares's unless
 it says "rig"; the rig's is 1.6x worse; and a frame-rate design must be
 priced in framebuffer BYTES per frame against ~300 B/line (rig).
+
+### BlastEm (MESSAGES O-8) fails the cross-check gate before a number exists (2026-09-23)
+
+Its SH-2s never boot: the master lands in the BIOS's unused-exception
+trap (0x13C) within 10 frames on every 32X rom, COMM stays zero, SDRAM
+stays zero, and the "boots the line rom" claim was the 68K side only.
+Details and the repro in docs/design/BLASTEM.md section 7. The
+section-5 gate did its job: the 385 fps headless figure would have been
+quoted as a transport instrument for an emulator that runs no transport.
+
+**Rules:** "boots" means both CPUs past the handshake (COMM0 = M_OK and
+S_OK), proven by a dump, before an emulator is called an instrument;
+and an emulator's own todo list outranks its changelog.

@@ -176,3 +176,34 @@ screen/keyboard rule in `CLAUDE.md`.
 **It is a separate SH-2 timing model from ares, not a refinement of it.**
 Numbers from the two are not comparable without the section 5
 cross-check, and a BlastEm cycle count is not an ares cycle count.
+
+## 7. Section-5 result, 2026-09-23: FAILED before any figure — the SH-2 side never boots
+
+Built from `~/src/blastem-0c61d0d95463` (`version.inc`: 1.0.1-pre; `todo.txt`
+still lists 32X under future work) after `brew install glew`; the `--dump
+region:addr:len:file` hook (blastem.c `case '-'`, genesis.c `run_dumps` at
+both `exit_after` sites; regions sdram, wram; bytes in bus order) is in
+that tree, un-committed there. Repro in `/tmp/blastem-eval` with the three
+BIOS files beside the rom:
+
+    blastem -b 300 -m 32x --dump sdram:0x06000000:262144:sd.bin \
+        --dump wram:0xFF0000:65536:wr.bin bprof3.32x
+
+SDRAM is ALL ZERO at 300 (and 1500) frames for our rom AND for Space
+Harrier; our 68K touches 7,927 RAM bytes (its own boot), Space Harrier's
+touches 6. A state print at the dump: master SH-2 pc=0x13C, slave
+0x1C4, reset clear, cycles advancing, COMM0-7 all zero, adapter 0x0083.
+0x13C in 32X_M_BIOS.bin is `bra 0x13C` -- the BIOS's trap for the
+unused exception vectors 64-78 (0x100-0x13B all point there) -- and the
+master is in it by frame 10 (at frame 2 it is still in the boot path at
+0x198). So an exception/interrupt fires while VBR is still the BIOS's,
+before the cart handshake, on every 32X rom: the SH-2 side does not
+boot, the 68K stalls waiting for M_OK, and "boots the line rom"
+(section 2) was the 68K only.
+
+Consequence: no cross-check figure can be taken; BlastEm cannot model
+the transport for us until its 32X boot works, which is a BlastEm bug
+hunt (why an interrupt is delivered with VBR=0 at reset), not an
+instrument question. Section 3's costs stay hypotheses. STATUS: NOT AN
+INSTRUMENT. The `-b` speed (385 fps) is the speed of an SH-2 sitting in
+a two-instruction loop.
