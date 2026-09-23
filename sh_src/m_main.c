@@ -9477,7 +9477,7 @@ static volatile uint8_t visr_flip_done;  /* set by the ISR after the span,
  * IRQ4 exit, and the master's idle loop takes the landing: regs into the
  * text mirror, records into SPR_LAND's record area, then the compose
  * launch that the next post would otherwise do inside the window. */
-#define EREC_MAX (84u + 24u * 8u + 2u)
+#define EREC_MAX (82u + 24u * 8u + 2u)   /* 276 words: tag, nrec, 20 regs, 60 rowscroll, 24 records, 2 tail */
 static uint16_t erec_land[EREC_MAX] __attribute__((aligned(16)));
 #define EREC_U ((volatile uint16_t *)(0x20000000u | (uint32_t)erec_land))
 static uint8_t erec_armed, erec_launched;

@@ -1474,6 +1474,28 @@ if FMGATE:
                          0x4E90,                      #       jsr (a0)
                          0x4CDF, 0x7FFF,              #       movem.l (sp)+,d0-d7/a0-a6
                          0x4E75]                      # done: rts
+    if os.environ.get('EARLYREC'):
+        # EARLYREC (2026-09-23): the game's frame wait (LOOP-DECOMPILE 67)
+        #     3982  tst.b  $FFF01C   spin while zero
+        #     3986  beq.s  0x3982
+        # is the 68K's idle time. Replace the tst.b with a jsr to a thunk
+        # that calls the shim's earlyrec_push through the vector at
+        # 0xFFA0E8 (set by md_main at init; skipped while zero), then does
+        # the tst.b so the caller's beq sees the flag. The push itself runs
+        # once per vint and masks interrupts only for its own duration.
+        er_addr = fmgate_base + len(fmgate_words) * 2
+        want_tst = struct.pack('>HH', 0x4A38, 0xF01C)
+        assert hrom[0x3982:0x3986] == want_tst, hrom[0x3982:0x3986].hex()
+        struct.pack_into('>HH', hrom, 0x3982, 0x4EB8, er_addr)      # jsr (thunk).w
+        fmgate_words += [0x4AB9, 0x00FF, 0xA0E8,      # tst.l  (0xFFA0E8).l   vector set?
+                         0x6712,                      # beq.s  done (+18)
+                         0x48E7, 0xFFFE,              # movem.l d0-d7/a0-a6,-(sp)
+                         0x2079, 0x00FF, 0xA0E8,      # movea.l (0xFFA0E8).l,a0
+                         0x4E90,                      # jsr (a0)
+                         0x4CDF, 0x7FFF,              # movem.l (sp)+,d0-d7/a0-a6
+                         0x4A38, 0xF01C,              # done: tst.b (0xFFF01C).w
+                         0x4E75]                      # rts
+        pal_report.append(f"E {0x3982:06X}: EARLYREC idle-loop push -> {er_addr:04X}")
     fmgate_end = fmgate_base + len(fmgate_words) * 2
     assert fmgate_end <= 0xBFF0, \
         f"fmgate thunks overrun boot stack: end {fmgate_end:#x}"

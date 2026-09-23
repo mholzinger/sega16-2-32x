@@ -2742,9 +2742,9 @@ endif
 # over the DREQ FIFO at the game's IRQ4 exit; the master lands them and
 # launches the compose from its idle loop, so the window is blit+publish.
 ifdef EARLYREC
-SHCCFLAGS += -DEARLY_REC
+# SHCCFLAGS -DEARLY_REC (isolation B)
 MDCCFLAGS += -DEARLY_REC
-MDASFLAGS += -Wa,--defsym,EARLY_REC=1
+export EARLYREC
 endif
 # BODYPROF=1 = 2026-09-22 probe: FRT ticks per stage of the master's window
 # body (post pickup -> ack), bprof[9] in .bss (rom/s16.lst _bprof).

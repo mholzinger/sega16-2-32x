@@ -3632,8 +3632,13 @@ static void r60_blast(int bump) {
 __attribute__((section(".data"), noinline))
 void earlyrec_push(void)
 {
-	static uint16_t boot_wait;
+	static uint16_t boot_wait, last_vc;
+	uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+	if (vc == last_vc) return;                           /* once per vint (the idle loop calls every pass) */
+	last_vc = vc;
 	if (boot_wait < 240) { boot_wait++; return; }        /* the master's ISR must be arming */
+	uint16_t sr_;
+	__asm__ __volatile__("move.w %%sr,%0\n\tori.w #0x700,%%sr" : "=d"(sr_) : : "memory");
 	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
 	volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
 	const uint16_t *s = (const uint16_t*)0xFF7000;
@@ -3642,7 +3647,7 @@ void earlyrec_push(void)
 	uint16_t nrec = 24;
 	for (uint16_t i = 0; i < 24; i++)
 		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
-	const uint16_t len = 278u;            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
+	const uint16_t len = 276u;            /* 2 + 20 + 60 + 24*8 + 2 */            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
 	uint16_t spin = 3000;
 	*(volatile uint16_t*)0xA15110 = len;
 	*ctrl = 4;                                           /* 68S: DREQ on */
@@ -3653,10 +3658,11 @@ void earlyrec_push(void)
 	for (uint16_t i = 0; i < 24u * 8u; i++) EP(s[i]);
 	EP(0x5AA5); EP(0xA55A);
 #undef EP
-	(*(volatile uint16_t*)0xFFA0BA)++;                   /* diag: early pushes */
+	__asm__ __volatile__("move.w %0,%%sr" : : "d"(sr_) : "memory");
 	return;
 out:
-	(*(volatile uint16_t*)0xFFA0BC)++;                   /* diag: pushes aborted (FIFO full) */
+	__asm__ __volatile__("move.w %0,%%sr" : : "d"(sr_) : "memory");
+	(*(volatile uint16_t*)0xFFA0F2)++;                   /* diag: pushes aborted (FIFO full; shares a diag word) */
 }
 #endif
 #ifdef POST_LATE
@@ -6666,6 +6672,9 @@ window_done: ;
 
 __attribute__((section(".data")))
 void main(void) {
+#ifdef EARLY_REC
+	*(volatile uint32_t*)0xFFA0E8 = (uint32_t)earlyrec_push;   /* EARLYREC: the idle-loop thunk's vector */
+#endif
 	// BOOT-PHASE TRACER: Genesis backdrop colour is visible in ares no matter
 	// what the 32X side does (stage-A red flash proved it). BGR:
 	// RED=entered main; YELLOW=master SDRAM signal; CYAN=slave alive;

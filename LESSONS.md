@@ -1733,3 +1733,18 @@ f1500-4100; half the compose frames drop FM at 62-70 (the target), the
 other half at 128-179 (worse than the line's 108); the picture is sane.
 The 68K push counters at 0xFFA0BA/BC collide with something (negative
 deltas) -- do not read them.
+
+Addendum (EARLYREC iterations 2-8, 2026-09-23): what killed the
+transport in every EARLYREC build was the 68K's vint ENTRY going late:
+the shim refuses to post when it enters outside V=DF-E8, and the entry
+was 14-36 lines late every vint (the FM reads sit at V=0x004-0x00B in
+the access trace). The push at the IRQ4 exit runs with interrupts
+masked and the DREQ FIFO costs ~5 us a word on ares (the FIFO-route
+push measured 596 words in 45 lines), so 276 words is ~20 lines and a
+variable-length push under a fixed 278-word arm never completes (68S
+stays set, the FIFO stays full, the 68K spins its poll budget). Rules:
+(1) a FIFO transfer's 68K length and the SH-2's TCR must be the same
+constant; (2) nothing with interrupts masked may run in the vint path
+beyond a few lines -- the post's entry window is nine lines wide; (3)
+"the transport died" is diagnosed from the FM-read V in the access
+trace (entry late) before anything on the SH-2 is suspected.
