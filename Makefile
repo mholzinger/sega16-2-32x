@@ -2742,9 +2742,19 @@ endif
 # over the DREQ FIFO at the game's IRQ4 exit; the master lands them and
 # launches the compose from its idle loop, so the window is blit+publish.
 ifdef EARLYREC
-# SHCCFLAGS -DEARLY_REC (isolation B)
+SHCCFLAGS += -DEARLY_REC
 MDCCFLAGS += -DEARLY_REC
 export EARLYREC
+endif
+# ERECIRQ4=1 (with EARLYREC=1) = the push at the game's IRQ4 exit (records
+# final at ~line 90) instead of only the idle loop; costs 68K lines there.
+ifdef ERECIRQ4
+MDASFLAGS += -Wa,--defsym,EREC_IRQ4=1
+endif
+# RIGGAME=1 (with RIGBARCODE=1) = barcode byte 5 carries the game's scene
+# timer low byte (0xFFF02A): game frames per vint on the rig from two captures.
+ifdef RIGGAME
+MDCCFLAGS += -DRIG_GAME
 endif
 # BODYPROF=1 = 2026-09-22 probe: FRT ticks per stage of the master's window
 # body (post pickup -> ack), bprof[9] in .bss (rom/s16.lst _bprof).

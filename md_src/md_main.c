@@ -843,7 +843,11 @@ static void bc_emit(void)
 			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
 			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
 			by[4] = (uint8_t)pal_shadow_seen;
+#ifdef RIG_GAME
+			by[5] = (uint8_t)*(volatile uint16_t*)0xFFF02A;   /* RIGGAME: the game's scene timer low byte */
+#else
 			by[5] = bc_shpub;
+#endif
 			by[6] = bc_shpal;
 			/* bit 6: the MD display gate's hold (md_hold, from packet bit 13);
 			 * bit 7: the game's own video-enable (IO_MISC bit 5) */
