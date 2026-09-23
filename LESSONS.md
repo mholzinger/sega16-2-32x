@@ -1420,7 +1420,7 @@ anchor, never as a diff against a sparsely sampled arcade; and when a
 switch is slow, count what is DIRTY at the switch before speeding up
 the fetch.
 
-### The 60 Hz floor on the line, measured (2026-09-22, 21:00, ares level 1, eye9)
+### The 60 Hz floor on the line, measured (2026-09-22 evening, ares level 1, eye9)
 
 The game runs at exactly 50% (scene timer: 1300 game frames in 2600
 vints) with ZERO IRQ4 frame misses, and the transport posts a window
@@ -1454,7 +1454,7 @@ seen by the game's gated writers, not any per-vint counter; measure it
 with frame_timeline's raise/drop/irq4 columns before and after every
 change.
 
-Addendum 21:30 (BODYPROF, ares level 1): the master's window BODY -- from
+Addendum 1 (sequence; times below were narrated, git is the clock): the master's window BODY -- from
 the post pickup to the ack -- is 24 lines: launch 3, master half 10-12,
 apply_cram 3.5-3.8, publish+P3 5.5, slave waits ~0. The FM-held window
 the game sees is 45-110 lines, so 20-85 lines of it are the master
@@ -1463,7 +1463,7 @@ emit, the packet build for the next window) overruns into the next
 vint. The lever is the tail, or raising FM only when the master is at
 the post.
 
-Addendum 21:50 -- CALIBRATION: the SH-2 FRT runs at 45.8 ticks per line
+Addendum 2 -- CALIBRATION: the SH-2 FRT runs at 45.8 ticks per line
 here (12,000 ticks per 262-line vint, measured pickup-to-pickup with
 60 windows in 60 vints), NOT the 128 per line the NOTES-47 census
 assumed (its "1650 ticks = 12.9 lines"). Every FRT-derived line count
@@ -1478,14 +1478,14 @@ than half the vint spare. Levers, in order: the compose's master
 half, the publish, apply_cram (32X CRAM writes need no FM: move them
 after the ack), the launch.
 
-Addendum 22:05 -- the blit's group skip WORKS on the line: FBCLEAR's
+Addendum 3 -- the blit's group skip WORKS on the line: FBCLEAR's
 per-bank zero masks hold 1392 of 2240 groups (62%, 70 rows fully
 zero) and the per-row audit found 0 lies in 60 vints (DIAG[42]). The
 NOTES-78 "0.004% skipped" is stale. The master half's cost is the
 examine loop over the 154 partly-live rows, the stores, and the audit's
 8 uncached FB reads per skipping row.
 
-Addendum 22:40 (probe5): CRAMISR (the 32X CRAM paint at the flip, in
+Addendum 4: CRAMISR (the 32X CRAM paint at the flip, in
 vblank) takes apply_cram out of the window (10 lines); FM drop on the
 compose frames 124-135 -> 117. A `make line BLITSHIFT=48` is NOT a
 split change: the ship list carries BLITSHIFT=$(SHIPBLITSHIFT) and the
@@ -1493,13 +1493,13 @@ sub-make's literal wins -- use SHIPBLITSHIFT=N. The 66-line "master
 half" did not move with the row count, which says it is not the row
 copy; the compose (slave in-window, master in the tail) is the pole.
 
-Addendum 22:50 (probe6, ares play): BLITAUDITDIV=4 + CRAMISR=1: the
+Addendum 5: BLITAUDITDIV=4 + CRAMISR=1: the
 compose frames' master half 66 -> 58, apply_cram 10 -> 0 in the window,
 FM drop on compose frames 124-135 -> 112-120, the game's gate spin
 22-26 -> 10-18 lines. IRQ4 entry 71/90 unchanged. Candidate for the
 line (spd1) pending the ares gates and the rig.
 
-Addendum 23:10 (probe8, SPROF stamps): the SLAVE composes the whole
+Addendum 6: the SLAVE composes the whole
 frame in-window (7-12 twelve-row bands a window, 20-27K of its FRT
 ticks -- its prescaler is not the master's, so raw) and the master's
 nat_mtask compose runs ZERO bands; the master's in-window "half" is the
@@ -1509,7 +1509,7 @@ compose + the master's blit of the rows behind it. Levers: the
 compose's per-row clears (ROWLIVE knows which rows carry pixels), then
 composing on both CPUs.
 
-Addendum 23:30 -- ROWGRP built (knob): the slave clears ~58 KB of sbuf a
+Addendum 7 -- ROWGRP built (knob): the slave clears ~58 KB of sbuf a
 generation because ROWLIVE is per ROW and ~180 of 224 rows carry a
 sprite pixel somewhere; the baked sprite runs know their [lo,hi) per
 row, so a 10-bit per-row group mask now says which 32-byte groups were
@@ -1517,7 +1517,7 @@ drawn and the clear zeroes only those (other drawers mark all ten).
 Probe10 measures it against the base (sbuf cleared bytes, the slave's
 compose ticks, FM drop, pixel identity at f999).
 
-Addendum 23:35 -- the game's IRQ4 handler is SHORT: the ISR-exit V ring
+Addendum 8 -- the game's IRQ4 handler is SHORT: the ISR-exit V ring
 (0xFFA300, the V counter at fmgate_ret every vint) reads 79-91 lines
 from vblank start while frame_timeline puts the IRQ4 ENTRY at 71-90, so
 the handler itself is 1-11 lines, not the ~35 the 2026-09-07 note
@@ -1527,7 +1527,7 @@ light) from the loop top. One vint needs wait + 10 + pass <= 262: the
 window must end by ~line 68 on heavy frames (105 on light ones). On the
 line it ends at 112-135 on compose frames.
 
-Addendum 00:05 -- the 2-vint frame is a THRESHOLD, not a slope: spd1
+Addendum 9 -- the 2-vint frame is a THRESHOLD, not a slope: spd1
 (window ~18 lines shorter on compose frames) still measures exactly
 50.0% game-frames per vint, because the game's frame-flag protocol
 grants a frame only when wait + IRQ4 + pass fit a vint; every cut short
@@ -1535,19 +1535,19 @@ of that line reads as no change on the speed instrument. Judge window
 cuts by frame_timeline's FM drop / IRQ4-entry lines until the threshold
 (~68 on heavy frames) is crossed; then gameplay_speed jumps.
 
-Addendum 00:30 (probe9): PUBNORB takes packet A's read-back 3.9 -> 1.4
+Addendum 10: PUBNORB takes packet A's read-back 3.9 -> 1.4
 lines when the packet was copied this window (the unconsumed-defer path
 keeps the FB read-back: 4.4); B similar. ~3 lines on compose windows.
 With CRAMISR + BLITAUDITDIV=4 + PUBNORB the compose frames' FM drop is
 107-120, even frames 64-71; IRQ4 entry 67-71 / 83-90.
 
-Addendum 01:10 -- second knob trap of the day: `make line BANDSHIFT=4
+Addendum 11 -- second knob trap of the day: `make line BANDSHIFT=4
 RG2SHIFT=0` built with 36/40 (.build_flags), the ship list's literals;
 the MTASKINWIN probe measured nothing (master compose 0 bands). They
 are SHIPBANDSHIFT / SHIPRG2SHIFT now. ALWAYS read .build_flags for the
 value a probe was meant to change, not just for the define's presence.
 
-Addendum 01:25 (probe12): ROWGRP is DEAD as built -- the compose-frame
+Addendum 12: ROWGRP is DEAD as built -- the compose-frame
 FM drop went 108-112 -> 121-123 (the per-run uncached read-modify-write
 of the row's group mask, thousands a frame, costs more than the
 full-width row clears it saves; FBB[2] counts rows, so the "cleared
@@ -1572,3 +1572,11 @@ different question and flatters the answer.
 
 *Cost:* nearly quoted as evidence that the toolkit goal was already met.
 
+
+Addendum (probe13, MTASKINWIN with the master owning rows, SHIPBANDSHIFT=4
+SHIPRG2SHIFT=0): DEAD. The master's stage-1 strip took ~176 lines in
+the window (its chunk runs from cart ROM -- nat_mchunk is not RAMCODE
+and there is no .ramtext room -- and it serialises before the blit),
+FM drop 221-234, game speed 41.9%. A both-CPU compose needs the master's
+half in RAM code and overlapped with the slave's, not queued ahead of
+the blit. Knob kept off.
