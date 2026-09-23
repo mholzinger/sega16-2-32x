@@ -1673,3 +1673,13 @@ all three.
 **Rules:** the byte-budget path through the MD VDP is closed for level
 1 on a static bake; left: a home for BLITHASH's 18 KB, EARLYREC (mixed
 cadence), or a different sprite route.
+
+Addendum (BLITHASH potential from framebuffer dumps, 2026-09-23): the
+share of drawn groups a bank already holds is 86-100% when the picture
+is still (play f3000-3008), 34-79% on the attract demo, 7-13% while the
+player walks (play f1000-1008: the scroll moves every sprite's screen
+bytes). A content skip pays where speed is not the problem. Dead as a
+60 Hz lever. Also from the same dumps: the drawn bytes per frame are
+~6.5 KB walking (200 groups) against ~28 KB on the crowded static
+segment -- the byte budget is scene-dependent and the threshold must be
+priced per regime.
