@@ -429,10 +429,8 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 		movem.l	(sp)+,d0-d1/a0-a1
 .endif
 .ifdef EREC_IRQ4
-		movem.l	d0-d7/a0-a6,-(sp)	/* EARLYREC at the IRQ4 exit: records final here; the push is unmasked inside */
-		move.w	#0x2000,sr
+		movem.l	d0-d7/a0-a6,-(sp)	/* EARLYREC at the IRQ4 exit: records final here (masked: an SR drop here re-entered the ISR) */
 		jsr		earlyrec_push
-		move.w	#0x2700,sr
 		movem.l	(sp)+,d0-d7/a0-a6
 .endif
 		/* GAME-HANDLER LENGTH PROBE (2026-09-06): V at the game's rte,

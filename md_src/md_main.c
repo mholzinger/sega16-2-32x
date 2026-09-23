@@ -844,11 +844,14 @@ static void bc_emit(void)
 			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
 			by[4] = (uint8_t)pal_shadow_seen;
 #ifdef RIG_GAME
-			by[5] = (uint8_t)*(volatile uint16_t*)0xFFF02A;   /* RIGGAME: the game's scene timer low byte */
+			by[5] = (uint8_t)*(volatile uint16_t*)0xFFF02A;   /* RIGGAME: the game's scene timer, low byte ... */
+			by[6] = (uint8_t)(*(volatile uint16_t*)0xFFF02A >> 8);   /* ... and high byte (captures are ~390 vints apart) */
 #else
 			by[5] = bc_shpub;
 #endif
+#ifndef RIG_GAME
 			by[6] = bc_shpal;
+#endif
 			/* bit 6: the MD display gate's hold (md_hold, from packet bit 13);
 			 * bit 7: the game's own video-enable (IO_MISC bit 5) */
 			(void)sh; (void)magic;

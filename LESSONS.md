@@ -1804,3 +1804,18 @@ lag tolerated.
 **Rules:** an early-delivery design is priced by the DELIVERY cost on
 the sending CPU, not by the receiver's idle time; and measure a
 transport's per-word cost on both machines before building on it.
+
+### EARLYREC's push at the IRQ4 exit is a red screen on the FPGA (2026-09-23, rig)
+
+rom/night/rigerec.32x (EARLYREC + ERECIRQ4 + the barcode) shows a red
+screen on the rig from boot, and in ares it shows no barcode at f799
+either. The control rom (line + barcode + the game timer) ran. On real
+silicon a 68K write into a DREQ FIFO that no DMA drains STALLS the 68K
+(the lost-push notes: "unarmed pushes wedge"); ares drops the words and
+moves on. A push that can run before the master has armed -- boot, the
+attract, any vint the arm sequence is stale -- is therefore a hang on
+hardware, not a lost frame. Any FIFO transport needs the arm-echo gate
+on every push, and the rig is the only place that proves it.
+The rig game-rate readout (RIGGAME) also needs the timer's high byte:
+captures land ~390 vints apart and an 8-bit timer wraps (rigctl read
+44/32/22/11% -- meaningless). Byte 6 now carries it.
