@@ -21,6 +21,64 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-7  Lift the per-title WRAM constants out of the engine
+    owner        BUILDER
+    state        READY
+    why          INTENT.md says the deliverable is a reusable S16->32X
+                 kit, not this port. Today a SECOND title requires
+                 editing m_main.c, which makes it a fork rather than a
+                 kit. This is the one change that converts "edit the
+                 engine per title" into "write a declaration file".
+    premise      measured 2026-09-23, not estimated:
+                   engine            25,328 lines, generic
+                   bake scripts      10, rerun per title, automatic
+                   game_derive.py    549 lines with game_align.py;
+                                     translates a reference title's
+                                     TABLES through disassembly
+                                     alignment and BYTE-VERIFIES each
+                                     entry the way the patcher will
+                   per-title decl    game_<title>.py TABLES:
+                                     altbeast 35 keys / 0 None
+                                     goldnaxe 58 keys / 13 None
+                                     -> derive got ~78% on the one
+                                        cross-GAME datapoint
+    THE DEBT     12 distinct Altered Beast WRAM addresses are hardcoded
+                 in engine C across ~47 sites:
+                   0xFFF142 round                12 uses
+                   0xFFF148 object/cut marker     7
+                   0xFFF031 attract step          6
+                   0xFFF02A                       6
+                   0xFFF026 credited play         4
+                   0xFFF144 0xFFF0D2 0xFFF0C0 0xFFF095
+                   0xFFF029 0xFFF028 0xFFF018     1 each
+                 (m_main.c ~35 sites, md_main.c ~5)
+    PREMISE TRAP grep -c GAME_ALTBEAST on the engine returns 2, which
+                 reads as "already game-agnostic". BOTH are actually
+                 GAME_ALTBEASTJ -- region variants. The ifdef count is
+                 not a measure of game coupling; the hardcoded
+                 addresses are. Do not re-quote the 2.
+    ask          move the 12 into game_<title>.py TABLES and read them
+                 through the existing per-title mechanism. Mechanical,
+                 no behaviour change: the values for altbeast stay
+                 identical, so a byte-diff of the built rom against the
+                 line is the test.
+    verify       `make line` output must be byte-identical to the
+                 current line apart from the build stamp. If it is not,
+                 a constant was mistranscribed.
+    gate         NONE. No pixel, no rig, no direction. Byte-identical
+                 rom is the whole acceptance test.
+    after        with this done the per-title math is:
+                   engine edits   0
+                   decl keys      ~58, derive gets ~78%
+                   hand-derived   ~13 (the residue derive cannot
+                                  byte-verify, i.e. where titles
+                                  genuinely differ)
+                   bakes          10, automatic
+                 CAVEAT: 78% is ONE datapoint and the 13 leftovers are
+                 not a random sample -- they are what alignment could
+                 not verify.
+
+
 ### O-6  Leftover text glyphs -- the ONLY thing left on notag1
     owner        BUILDER
     state        DIAGNOSED, needs the oracle to confirm the direction
