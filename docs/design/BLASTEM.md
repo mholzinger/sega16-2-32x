@@ -331,3 +331,56 @@ commit a4be2d9. It still models NO adapter-bus contention between the
 CPUs (a COMM poll costs the other side nothing), so the 0.28 vs 0.063
 lines/word hardware figure is outside it until an arbiter derived from
 IF.sv exists.
+
+## 10. Where the rig's 1.6x lives, from the MiSTer RTL (loop item 3, 2026-09-23 evening, IN PROGRESS)
+
+Target: the master's blit costs ~10.5 FRT ticks a 32-byte group on the
+rig (RIGBLIT/BLITPROF) against 6.53 on ares; 1 tick = 32 SH-2 clocks, so
+~336 vs ~209 SH-2 clocks per group. Counted so far, with the source:
+
+**Framebuffer stores (fast).** VDP.sv 210-245: a 4-entry write FIFO
+(`VDPFIFO`, lpm_numwords 4) drains one 16-bit word per `FIFO_FB_WAIT`
+5 -> 6 system clocks at 53.7 MHz (32X.sv 76-104: CLK_CNT 0-5 per VCLK,
+CE_R at 1/3/5 = the 23 MHz SH-2 clock). IF.sv 973-993: the SH-2 access
+is latched on CE_F and released on `VDP_ACK_N`, ~3 clocks. BSC.sv
+250-290: a CS2 access is T0 -> T1 -> TW (WCR1 = 0x0055 from the BIOS
+table at 0x348: 1 wait, `GetAreaW` = 01 -> `WAIT_CNT` 0 then `WAIT_N`)
+-> T2, about 4 SH-2 clocks per 16-bit store when the FIFO is not full.
+A longword store is two bus cycles (CS2 is 16-bit, `AREA_SZ`).
+**And the core has no write buffer:** SH_core.sv 113 `PC_STALL =
+(MA_ACTIVE & BUS_WAIT) | ...` with `BUS_WAIT = CACHE_BUSY` (SH7604.sv
+240), and BSC.sv T1 clears `DBUSY` only when `!BUS_WE_LATCH`, so a store
+holds the data bus, the cache unit and the pipeline until T2. Eight
+longword stores a group = 16 cycles of ~5 clocks = ~80 clocks.
+
+**Sprite-buffer reads.** A data-cache miss is a 4-longword burst
+(CACHE.sv 565-578: `IBBURST <= 1`, `IBADDR` = line base + next long,
+`IBUS_READARRAY`). The SDRAM cycle (BSC.sv 330-420) with MCR = 0x0AB8
+decoded through SH7604_pkg.sv 151-166 (MSB first: TRP 0, RCD 0, TRWL 0,
+TRAS 01, BE 0, RASD 1, AMX2 1, SZ 0, AMX 11, RFSH 1, RMD 0): 16-bit
+SDRAM, page mode, `RCD_WAIT_CNT` = 1 + RCD = 1. A 16-byte line fill is
+TRAS + TRCAS (1 wait, then `WAIT_N`) + 8 x TRD = ~12 SH-2 clocks at the
+core, PLUS whatever `WAIT_N` adds: 32X.sv 360 `SHWAIT_N = IF_WAIT_N &
+~SDR_WAIT`, and S32X.sv 713-731 puts the 32X SDRAM in DDR3 through
+`ddram.sv` (`S32X_SDR_WAIT = ddr_busy`), which keeps one 16-byte line
+per channel (ddram.sv 53-54, 77-85; `mem_chan` 0 for both SH-2s). So a
+line fill is one DDR3 burst plus seven hits; the DDR3 access latency is
+board-side and not in this RTL. Two line fills a group.
+
+**Sum so far:** stores ~80 + reads 2 x (12 + DDR wait) + loop overhead
+~10. With a DDR wait of 10 clocks that is ~155 clocks a group: BELOW
+ares's 209 and less than half the rig's 336. The counted paths do not
+reach the measurement, by more than the 20% the brief allows. So the
+1.6x is NOT in the FB store path (confirmed) and, unless DDR3 latency is
+~90 clocks (3.9 us) per line, not in the data reads either.
+
+**Uncounted, next reads:** (1) instruction fetch -- the blit is LOCKCODE
+(m_main.c 7830); `cache_purge()` runs every window; if the locked way is
+purged too, every fetch of the loop is a line fill through DDR3, which
+ares never charges (it counts instruction cycles only); CACHE.sv
+`IBUS` path and CCR.TW handling decide it. (2) the slave's concurrent
+DDR3 traffic on the same `mem_chan` evicting the one-line cache between
+the master's bursts (ddram.sv 77). (3) refresh: BSC.sv `RFS_REQ` with
+MCR.RFSH = 1, TRFS1/2 (`RFS_WAIT_CNT` 3) per RTCOR = 0x59 period. (4)
+the actual DDR3 latency figure from the MiSTer framework (sys/ddram),
+which this tree does not contain.
