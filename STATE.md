@@ -816,6 +816,19 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           behind the ifdefs; the FIFO's partial-landing
                           hazards are in memory lost-push-belt /
                           ARMGATE) -- or a different split:
+                          BUILT 2026-09-23 as EARLYREC=1 (14 iterations;
+                          LESSONS "EARLYREC works end to end on ares and
+                          gains nothing there"): the transport is proven
+                          on ares (30/30 landings and early launches per
+                          60 vints, gates 19/19) but the push costs ~24
+                          68K lines there, which is the gain. Decides on
+                          the FPGA's FIFO rate (unmeasured) -- or on
+                          Mike's SPECULATIVE COMPOSE: predict the next
+                          frame's records from the last two, compose in
+                          the idle time, ship if the real records match
+                          at the post; no push at all. Predictor hit-
+                          rate study from per-frame sprite-table dumps
+                          is the next measurement.
                           MTASK IN-WINDOW: the master composes its own
                           rows before its blit half instead of idling
                           46 lines behind the slave's compose. The row

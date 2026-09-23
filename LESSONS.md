@@ -1783,3 +1783,24 @@ or reset fixes that; the protocol must: every push ends with 8 zeros,
 the payload is 268 words, and the receiver finds the tag at word 0 (no
 lag: hardware, possibly) or word 8 (ares) and reads fields relative to
 it. The old FIFO route's 512-word pushes hid this behind their padding.
+
+### EARLYREC works end to end on ares and gains nothing there (erec14, 2026-09-23)
+
+30 pushes, 30 landings, 30 early launches per 60 vints on the fight;
+scene gate 19/19, palgate PASS, the game starts on the script's press;
+speed 50.7% (line 50.0%). The launch fires at line 196 on average (max
+259): the idle-loop push happens when the game's pass ENDS, which on
+heavy frames is line 170-250, so the compose is still open at the next
+post and the window chases it as before. The records are final at the
+IRQ4 exit (~90), but a push there costs ~24 lines of 68K time on ares
+(the FIFO at ~5 us a word) and delays the pass by the same amount: the
+frame stays over 262 either way. So on ares the FIFO's own cost is the
+floor of this design; the FPGA's FIFO rate is unmeasured and decides
+whether an IRQ4-exit push wins there. Knob kept (EARLYREC=1, off the
+line); protocol proven: fixed 276-word transfer, arm sequence in the
+packet header, conditional re-arm with staleness, FIFO reset, 8-word
+lag tolerated.
+
+**Rules:** an early-delivery design is priced by the DELIVERY cost on
+the sending CPU, not by the receiver's idle time; and measure a
+transport's per-word cost on both machines before building on it.
