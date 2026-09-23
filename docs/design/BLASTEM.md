@@ -332,7 +332,7 @@ CPUs (a COMM poll costs the other side nothing), so the 0.28 vs 0.063
 lines/word hardware figure is outside it until an arbiter derived from
 IF.sv exists.
 
-## 10. Where the rig's 1.6x lives, from the MiSTer RTL (loop item 3, 2026-09-23 evening, IN PROGRESS)
+## 10. Where the rig's 1.6x lives, from the MiSTer RTL (loop item 3, 2026-09-23 evening)
 
 Target: the master's blit costs ~10.5 FRT ticks a 32-byte group on the
 rig (RIGBLIT/BLITPROF) against 6.53 on ares; 1 tick = 32 SH-2 clocks, so
@@ -384,3 +384,41 @@ the master's bursts (ddram.sv 77). (3) refresh: BSC.sv `RFS_REQ` with
 MCR.RFSH = 1, TRFS1/2 (`RFS_WAIT_CNT` 3) per RTCOR = 0x59 period. (4)
 the actual DDR3 latency figure from the MiSTer framework (sys/ddram),
 which this tree does not contain.
+
+**Instruction execution was missing from the sum above.** The group loop
+is ~40 instructions (blit_half is 544 B, 34 lines, `rom/s16.lst`); at
+one clock each with load-use stalls that is ~60 clocks, and on ares it
+is the whole non-FB cost (ares: ~209 = 13.6 x 8 FB-stall clocks (109) +
+~100 instruction clocks). Revised RTL count per group: instructions ~60
++ store stalls ~80 (16 CS2 cycles, pipeline held each time, no write
+buffer) + 2 line fills x (12 + L) with L the DDR3 latency in SH-2
+clocks (unknown; 5-10 plausible, doubled when the slave's fills queue on
+the same `ddram` channel) = ~175-195. Refresh is negligible: RTCSR 0x08
+(CKS = phi/4), RTCOR 0x59 -> one TRFS1/TRFS2 (~5 clocks) every ~356
+clocks, 1.4%.
+
+**Conclusion: not located by reading; bracketed.** The counted paths
+reach ~180-195 clocks a group. The rig measures ~336. The FB store path
+is ~80 of the total on the FPGA and is NOT where the extra ~150 lives.
+The candidates for the remainder, ranked by what the record already
+shows: (1) instruction-fetch misses -- the master's instruction working
+set is 5.4x the 4 KB cache (CARD-CACHELOCK.md, ares --profile), every
+fetch miss on the FPGA is a DDR3 line fill with the pipeline held
+(SH_core.sv 113), and ares charges nothing for fetches; the rig already
+showed presented frames drop 27 -> 21 when the cache is halved (TW only,
+CARD-CACHELOCK "RIG RESULT"), i.e. the rig IS miss-bound; (2) the DDR3
+latency L itself, unmeasured; (3) both CPUs' fills serialising on
+`ddram` channel 0. Consequence for the design record: LESSONS'
+"framebuffer write rate" floor is a BLIT-rate floor, and the lever the
+RTL points at is instruction locality (keep the group loop resident:
+CACHELOCK without its per-purge verification, or place the loop so its
+sets are not walked by the sbuf stream), not fewer FB bytes.
+
+**The measurement that settles it (rig, one launch each, not tonight):**
+`make line RIGBARCODE=1 BODYPROF=1 RIGBLIT=1` with (a) the loop in the
+locked ways (CACHELOCK=1 with cachelock_install's readback removed,
+CARD-CACHELOCK "What has to change" 1), (b) the READ-COST probe
+(m_main.c 8405: one load per row, same stores), (c) NOBLIT_PROBE. Barcode
+byte 5 (blit lines) on each against the 67-86 baseline decomposes the
+336 into fetch / data-read / store terms directly. Until then, wait 11 in
+the fork reproduces the rig's blit rate and nothing more.
