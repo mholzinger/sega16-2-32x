@@ -617,6 +617,22 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 ## INSTRUMENT STATUS
 
+    BlastEm              CANDIDATE, NOT YET TRUSTED (O-8, 2026-09-23).
+                         /Users/mikeholzinger/bin/blastem-osx-1.0.0/blastem
+                         `-b N -m 32x` = headless, N frames, exit
+                         (undocumented). TESTED: boots the line rom,
+                         300 frames in 0.78s, clean exit. BIOS in
+                         mame/32x.zip, CWD-relative as 32X_[MSG]_BIOS.bin.
+                         READ FROM SOURCE, UNVERIFIED: models SH-2
+                         cache burst fills (sh2_util.c:80) and FB write
+                         bus waits (32x.c:1009) -- neither modelled by
+                         ares. That is the TRANSPORT axis.
+                         MISSING: --dump, --profile, input replay.
+                         Debugger NOT pipeable (fgets_timeout);
+                         gdb remote is 68K-only.
+                         DO NOT quote a number from it until the
+                         three-way cross-check in O-8 is done.
+
     RIG FRAME CAPTURE     THERE IS NONE. Measured 2026-09-19:
                             /dev/MiSTer_cmd tight loop: accepts 769
                               req/s and COALESCES -- 30 requests in
