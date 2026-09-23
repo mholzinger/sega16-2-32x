@@ -21,6 +21,77 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-9  FBSPR under EARLYREC's FM model -- the recorded blocker may be lifted
+    owner        BUILDER
+    state        PREMISE CHECKED, needs the builder's judgement on one
+                 question before it is a card at all
+    origin       Mike, 2026-09-23: "how much of the game code could run
+                 on the SH-2" -> narrowed to "move the DATA, not the
+                 code" -> which is FBSPR, which already exists.
+
+    PREMISE CHECK -- this is why it is not a new idea
+      record says    Makefile:326-333, STRIKE S1, "TRIED AND REVERTED
+                     2026-08-22, three variants, all measured dead":
+                       (1) FBSPR=1 game-direct FB upload: ZERO sprites.
+                           The upload runs inside the MASTER'S FM=1
+                           SPAN and ares discards MD FB writes at FM=1.
+                       (2) shim copies records->FB pre-post: flips
+                           83% -> 70%. Any 68K work before the post
+                           delays the flip past the edge guard.
+                       (3) copy after post: sprites lag scroll by one
+                           frame. Fidelity kill, not built.
+                     VERDICT as written: "the DREQ push IS the minimal
+                     same-frame 68K->SH-2 record channel under R60. DO
+                     NOT RETRY WITHOUT CHANGING THE FM OWNERSHIP MODEL
+                     ITSELF."
+      flags on line  K2FREE is ON. Makefile:303 makes FBSPR a HARD
+                     BUILD ERROR alongside it ("sprites must live in
+                     the 0xFF7000 mirror"). R60 is also on, and
+                     Makefile:335 errors on R60+K2FREE. The flag
+                     interlocks need untangling before anything builds.
+      instrument     variant (1) died on an ARES observation (FB writes
+                     discarded at FM=1). ares is slave-gated and has
+                     lied about FB behaviour before (the DREQ 48x gap).
+                     Worth knowing whether that specific discard is
+                     real on the rig before it is treated as physics.
+      already dead?  YES, three ways, with a stated condition for retry.
+
+    THE QUESTION, and it is the builder's to answer
+                 The retry condition is "changing the FM ownership
+                 model itself". EARLYREC (STATE, 60 Hz design cards)
+                 moves the sprite-record handoff to the GAME'S IRQ4
+                 EXIT, so compose runs BEFORE the vint and the window
+                 becomes blit+publish only.
+                 **Does that change FM ownership in the way S1's
+                 verdict requires?** If the records cross before the
+                 master's FM=1 span opens, blocker (1) -- "the upload
+                 runs inside the master's FM=1 span" -- may simply not
+                 apply any more.
+                 If YES: FBSPR is worth re-costing, and the prize is
+                 the 48.6 lines of the 68K's ~64-line handler the DREQ
+                 push was measured to cost.
+                 If NO: close this to the LEDGER and stop. S1's
+                 verdict stands and the answer to Mike is "already
+                 tried, here is why".
+
+    ask          read S1's blocker (1) against EARLYREC's design and
+                 answer yes/no. NO BUILD. If the answer is yes, the
+                 flag interlocks (K2FREE, R60) are the next problem,
+                 not the physics.
+    gate         NONE to answer. A build would inherit the pixel gate.
+
+    NOT to be confused with
+                 "port the game logic to the SH-2". That is dead for
+                 three separate reasons and is NOT what this card is:
+                 fidelity (INTENT non-negotiable 1; 433 subroutines,
+                 87% unnamed, Archer skipped the enemy handlers), the
+                 toolkit deliverable (a new title costs ~58 declaration
+                 keys today vs a rewrite), and the 68000 is not the
+                 bottleneck (10.08 cyc/instr against the arcade's own
+                 bus-stalled ~45; 4,400-9,800 instructions of a ~12,400
+                 budget).
+
+
 ### O-8  BlastEm as a THIRD instrument for the transport axis
 
 STATUS 2026-09-23 (second pass): BOOTS after a three-line fix in BlastEm's sh2.cpu sh2_reset (stale prefetch across the 68K reset pulse). Section-5 cross-check RUN and FAILED on the figure: master half 20.0 lines (BlastEm) vs 26.6 (ares) vs 67-86 (rig); FRT clock and cadence agree. BlastEm undercharges FB writes, the opposite direction from the FPGA. NOT AN INSTRUMENT for O-1. Result: docs/design/BLASTEM.md sections 7-8; handoff docs/handoff/HANDOFF-BLASTEM.md is now history.
