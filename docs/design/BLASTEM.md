@@ -195,8 +195,10 @@ the handoff were all wrong). Fix, in `sh2.cpu` `sh2_reset`, before
     delay_slot = 0
     did_mem = 0
 
-The patch is kept as `docs/design/blastem-sh2-reset.patch` (the BlastEm
-tree has no VCS). `make` regenerates `sh2.c` from `sh2.cpu` (Makefile:452; ~5 min, 31 MB
+The patch is kept as `docs/design/blastem-sh2-reset.patch`, and the tree is
+now a git fork, `github.com/mholzinger/blastem` (branch `main`; the
+upstream Mercurial snapshot is the base commit, tagged `hg-0c61d0d95463`;
+the fix and the `--dump` hook are the two commits on top). `make` regenerates `sh2.c` from `sh2.cpu` (Makefile:452; ~5 min, 31 MB
 of generated C under LTO). With it, `-b 300 -m 32x`: bprof3 master at
 0x020474B2 (cart), slave at 0x06037Bxx (SDRAM), 54,426 non-zero SDRAM
 bytes; Space Harrier master 0x060015B8, slave 0x0600016C, COMM1-7 live,

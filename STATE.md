@@ -621,8 +621,9 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                          axis (O-8, 2026-09-23, BLASTEM.md sections 7-8).
                          Boots both SH-2s after a three-line fix in its
                          sh2.cpu sh2_reset (stale prefetch across the
-                         68K reset pulse; source tree
-                         ~/src/blastem-0c61d0d95463, patched, no VCS).
+                         68K reset pulse). Fork: github.com/mholzinger/
+                         blastem (main; upstream base tagged
+                         hg-0c61d0d95463), tree ~/src/blastem-0c61d0d95463.
                          On the BODYPROF figure aligned on the game's
                          vint counter: FRT clock and one-window-per-vint
                          cadence agree with ares; master half 20.0 lines
