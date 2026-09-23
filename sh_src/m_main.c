@@ -2039,6 +2039,14 @@ static inline unsigned chev_ix(unsigned s)
 static uint8_t mds_scene_cur = 0xFF;     /* scene whose MD tables are installed; 0xFF none */
 #if defined(CENSUS2) || defined(RIG_BARCODE)
 static uint16_t cz_pub, cz_pal, cz_stub;  /* 2026-09-21 publish census */
+#ifdef RIG_BLIT
+static volatile uint8_t rigblit_lines, rigblit_groups;   /* RIGBLIT (2026-09-23): the master's last blit_half, lines (FRT/46) and groups stored / 8; ride the barcode's bytes 5 and 6 */
+#define RIGB5 rigblit_lines
+#define RIGB6 rigblit_groups
+#else
+#define RIGB5 (cz_pub & 0xFFu)
+#define RIGB6 (cz_pal & 0xFFu)
+#endif
 #endif
 static uint8_t mds_loadgap;              /* vints since a PAL_SH image load during which
                                           * PAL_SH is the IMAGE, not the game (heal ~9 vints):
@@ -8431,7 +8439,12 @@ LOCKCODE static void blit_half(int ylo, int yhi)
     { volatile uint32_t *bl = (volatile uint32_t *)0x26028FD0u;   /* BLITPROF: [0] ticks [1] groups stored [2] calls; master 0-2, slave 3-5 */
       uint32_t sp9; __asm__ __volatile__("mov r15,%0" : "=r"(sp9));
       unsigned o9 = (sp9 & 0x000FFFFFu) >= 0x0003F800u ? 3u : 0u;
-      bl[o9] += (uint16_t)(frt() - blp_t0); bl[o9 + 1] += blp_rows; bl[o9 + 2]++; }
+      bl[o9] += (uint16_t)(frt() - blp_t0); bl[o9 + 1] += blp_rows; bl[o9 + 2]++;
+#ifdef RIG_BLIT
+      if (o9 == 0u) { unsigned ln = (uint16_t)(frt() - blp_t0) / 46u; rigblit_lines = (uint8_t)(ln > 255u ? 255u : ln);
+                      unsigned gr = blp_rows >> 3; rigblit_groups = (uint8_t)(gr > 255u ? 255u : gr); }
+#endif
+    }
 #endif
 }
 
@@ -11009,8 +11022,8 @@ static void hs_stub(void)
     fp[4] = HS_CLOSED[56];
     fp[6] = HS_CLOSED[57];
 #ifdef RIG_BARCODE
-    fp[4] = (uint16_t)((fp[4] & 0xFFu) | ((cz_pub & 0xFFu) << 8));
-    fp[6] = (uint16_t)((fp[6] & 0xFFu) | ((cz_pal & 0xFFu) << 8));
+    fp[4] = (uint16_t)((fp[4] & 0xFFu) | ((unsigned)RIGB5 << 8));
+    fp[6] = (uint16_t)((fp[6] & 0xFFu) | ((unsigned)RIGB6 << 8));
 #endif
     fp[0] = 0xB6B6u;                      /* magic LAST */
     HS_OFFS[3] = 0;
@@ -15468,7 +15481,7 @@ RAMCODE void m_main(void)
                         BP(13);
 #ifdef RIG_BARCODE
                         /* the counters ride the header AFTER the copy (words 4/6 high bytes) */
-                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
+                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)RIGB5 << 24);
                         /* d[3] high byte = the stale-cell count stamped at the publish (2026-09-22) */
 #endif
 #if defined(FBX_ECHO) && defined(FB_XPORT)
@@ -15539,7 +15552,7 @@ RAMCODE void m_main(void)
                         for (int i2 = 1; i2 < 368; i2++)
                             d[i2] = ssrc[i2];
 #ifdef RIG_BARCODE
-                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)(cz_pub & 0xFFu) << 24);
+                        d[2] = (d[2] & 0x00FFFFFFu) | ((uint32_t)RIGB5 << 24);
                         /* d[3] high byte = the stale-cell count stamped at the publish (2026-09-22) */
 #endif
 #if defined(FBX_ECHO) && defined(FB_XPORT)

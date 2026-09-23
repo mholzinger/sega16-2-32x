@@ -898,6 +898,13 @@ ifdef RIGBARCODE
 SHCCFLAGS += -DRIG_BARCODE
 MDCCFLAGS += -DRIG_BARCODE
 endif
+# RIGBLIT=1 (with RIGBARCODE=1 BODYPROF=1) = 2026-09-23: the barcode's byte 5
+# carries the master's last blit_half in lines (FRT ticks / 46) and byte 6
+# its groups stored / 8, instead of the publish census: the FPGA's own
+# framebuffer write rate, the number the 60 Hz floor turns on.
+ifdef RIGBLIT
+SHCCFLAGS += -DRIG_BLIT
+endif
 # bisect the barcode build's ingredients (it wins the level-start race on
 # every layout, 2026-09-21): BCNODMA=1 drops its 384-word DMA, BCDMAONLY=1
 # drops its CRAM reads/writes and FB reads and keeps the DMA

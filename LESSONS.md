@@ -1619,3 +1619,24 @@ sprite bytes stay on the SH-2. The byte lever is closed on this design;
 the FB write floor is the floor, and the FPGA's own rate is the number
 that decides whether EARLYREC reaches one vint (ares: 28 KB / 470 B/line
 = 60 lines of blit + ~8 of publish = 68, the threshold exactly).
+
+### The FPGA's framebuffer write rate, read off the rig (2026-09-23, RIGBLIT)
+
+Barcode byte 5 now carries the master's last blit_half in lines (FRT
+ticks / 46). ares reads 45-47 on level 1 (demo and play; the 60-window
+mean was 58). The rig, second level-1 demo (step 5), four captures:
+67, 71, 81, 86 lines; scores 46; level-2 demo 62-82 (low-vote rows).
+The FPGA pushes framebuffer bytes ~1.6x SLOWER than ares. With ~28 KB
+a compose frame that is ~100 lines of blit alone on hardware, against
+the ~68-line window the 2-vint threshold allows on heavy frames. So on
+the FPGA the FB-blit design cannot reach one vint per game frame at
+today's byte count: it needs <= ~15 KB of framebuffer writes a frame,
+i.e. a picture whose sprites mostly do not pass through the FB (the MD
+VDP renders them -- blocked by the single sprite palette line -- or a
+content skip against the bank's last ship, BLITHASH, which has no SDRAM
+home at 18 KB). EARLYREC + a dual blit gets a compose frame's window to
+~110 lines on hardware, not 68.
+
+**Rules:** every FB-throughput number in this record is ares's unless
+it says "rig"; the rig's is 1.6x worse; and a frame-rate design must be
+priced in framebuffer BYTES per frame against ~300 B/line (rig).

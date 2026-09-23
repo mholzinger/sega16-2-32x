@@ -755,6 +755,14 @@ whatever was BUILT LAST, which is usually a probe. At the start of
                           level 1; MDSPR_WHY census running), BLITHASH
                           (content skip), then EARLYREC. MTASKINWIN
                           dead as built (LESSONS).
+                          RIG (RIGBLIT, 2026-09-23): the FPGA's FB
+                          write rate is ~1.6x slower than ares (blit
+                          67-86 lines per compose window on the level-1
+                          demo vs 45-47 in ares). Hardware one-vint
+                          needs <= ~15 KB FB writes a frame; the MD
+                          offload is capped by the single sprite
+                          palette line; BLITHASH has no 18 KB home. The
+                          byte budget is the design question now.
                           DESIGN (23:40, not built): PASS-END STRIKE.
                           The game's IRQ4 is 1-11 lines (ISR-exit V
                           ring); the frame is wait-for-ack + ~10 +
