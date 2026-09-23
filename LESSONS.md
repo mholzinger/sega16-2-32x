@@ -1891,3 +1891,14 @@ per-record variant priced.
 
 **Rule:** price a prediction on the regime that is slow, not on the
 one that is easy to predict.
+
+Addendum (per-record speculation priced, 2026-09-23): with the same
+predictor, the records that must be recomposed at the post (misses plus
+any hit whose box overlaps a miss's old or new box, 32 px assumed
+width) are 71 of 380 in the fight (19%) and 18 of 47 walking (38%). So
+per-record speculation could take ~80% of the fight's compose out of
+the window on ares. It still cannot reach one vint on the FPGA: the
+blit ALONE measures 67-86 lines there (RIGBLIT), over the 68-line
+threshold with zero compose, and the repaired records must be re-blitted
+on that same FB-write-bound path. Not built: the FPGA's window is bytes,
+and speculation moves no bytes.
