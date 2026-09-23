@@ -422,3 +422,42 @@ CARD-CACHELOCK "What has to change" 1), (b) the READ-COST probe
 byte 5 (blit lines) on each against the 67-86 baseline decomposes the
 336 into fetch / data-read / store terms directly. Until then, wait 11 in
 the fork reproduces the rig's blit rate and nothing more.
+
+## 11. Adapter-bus arbiter from IF.sv (loop item 1, 2026-09-23 evening): built, and it finds almost nothing to arbitrate
+
+What IF.sv actually serialises between the CPUs: only the cart-ROM path
+(`ROM_ST`, 795-910: one state machine, SH-2 word ~2 clocks with burst
+words under one grant, MD access ~3 clocks + the board ROM wait, SH-2
+first at RS_IDLE). The system registers are NOT arbitrated -- the MD
+path (298-460) and the SH-2 path (486-640) are independent always-blocks
+with no wait, so an SH-2 COMM poll costs the 68K nothing in the adapter.
+The VDP port is shared (`VDP_A/VDP_DO/VDP_ACK_N`, 915-1000) but
+partitioned by FM: with FM set the MD is acknowledged without a
+transaction, without it the SH-2 never reaches the port.
+
+Fork commit "32x: cart-ROM arbiter behind BLASTEM_BUS_ARB": hooks on the
+68K's 0x880000/0x900000 windows and the SH-2's cart region share a
+busy-until timestamp (MCLK); occupancies 8 MCLK per MD access, 5 per SH-2
+word; a CPU never waits on its own burst nor on an access the slice
+scheduler stamped in its future. ARBSTAT prints accesses and waits.
+
+Result on the line rom (rigblit_bl, 760 frames, wait 11): 4.05M 68K cart
+accesses, 3.18M SH-2 cart words; 111 68K waits (403 MCLK total), 55 SH-2
+waits. Same picture as the knob off (master groups 9795 vs 10125, 60
+windows, blit 76.7 lines/call). Analytic bound from the traffic itself:
+SH-2 holds the path 4.2K words x 5 MCLK = 2.3% of a frame, the 68K 5.3K
+accesses x 8 = 4.7%; expected wait per access = other side's utilisation
+x half its mean hold, i.e. < 0.5% of either CPU's frame. The slice
+scheduler hides some collisions, but the bound is what the RTL allows.
+
+**Verdict:** adapter arbitration, as the RTL defines it, is negligible
+for this rom. The hardware figure the decompile thread cited (a tight
+COMM0 poll making the 68K's FIFO push 4.4x slower, 0.28 vs 0.063
+lines/word) is not adapter contention: COMM reads are not arbitrated at
+all. In the FIFO era it was most plausibly the SH-2's OWN external bus
+shared between its CPU (uncached COMM reads) and its DMAC draining the
+FIFO -- BSC.sv arbitrates CBUS/DBUS requests against `RFS_REQ` and each
+other, and BlastEm leaves it as "TODO: DMAC/CPU contention" (sh7095.c
+386). Under FBXPORT there is no DMAC in the transport, so the effect is
+moot for the line. The knob stays, default off; nothing in the record
+should quote it as a cost.
