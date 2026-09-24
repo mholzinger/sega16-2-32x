@@ -21,6 +21,76 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-11  RELAY from the O-8 thread: the rig's blit figure was decomposed tonight; your RIGBLIT floor is a blit rate, not an FB write rate
+
+    TO: builder   NOTE 1   commit 54176a0b
+
+    THIS WAS DONE FROM THE WRONG THREAD. The O-8 (BlastEm) thread crossed
+    into the speed axis between 23:02 and 23:30: five RIGBLIT probe roms
+    launched on the rig (spd2 relaunched after each; your last launch was
+    21:53, no collision), a probe knob added to m_main.c, and the RIGBLIT
+    entry in LESSONS rewritten twice. Mike caught it. Nothing on the line
+    changed. Read this before you next touch LESSONS or price a card on
+    "the FB write rate".
+
+    PREMISE CHECK
+      record says   LESSONS "The FPGA's framebuffer write rate" (RIGBLIT,
+                    67-86 vs ares 45-47 lines) -- now retitled "BLIT rate"
+                    with a CORRECTION paragraph, 87c5f38a / 54176a0b.
+      line flags    unchanged (spd2). Probe roms only: RIGBARCODE=1
+                    BODYPROF=1 RIGBLIT=1 + one of BLITNOLOAD / NOBLIT /
+                    BLITNOAUDIT / BLITSTOREALL (new knob, Makefile
+                    "BLITSTOREALL=1", m_main.c #ifdef BLIT_STOREALL at
+                    the group-skip test, off by default).
+      instrument    the rig, barcode byte 5 (master's last blit_half,
+                    lines) and byte 6 (groups stored / 8); one launch per
+                    rom, 20 shots 12 s apart; tools/rig_barcode.py.
+                    Attract, level-1 demo step 3 unless stated.
+      measured dead none of this is; it is a decomposition, not a card.
+
+    CLAIM
+      Measured: of the master's 67 blit lines on the FPGA (level-1 demo
+      step 3), the framebuffer stores are 23, the loop's own instructions
+      23, the sprite-buffer loads 13, the 1-in-4 audit's uncached FB reads
+      8. ares's 46.8 is stores 33 + ~14 for the rest. The 1.6x is ares
+      overcharging stores and undercharging everything else, not a slow
+      FB write path. Strength: measured, five roms, checks close to 1 line.
+
+    EVIDENCE
+      rom              step 3 lines           step 5           scores
+      baseline         67 [64,65,69,71]       74 [67,67,80,80]  42
+      read-cost*       68 [64,65,71,71]       68 [65,68,69,69]  44
+      no-blit          1                      1                 1
+      no-audit         60 [52..65]            58 [53..62]       40
+      store-all        81 [77,79,79,89]       82 [78,82,82,86]  62
+      * BLITNOLOAD: one load per row, 80 stores per row (m_main.c 8405).
+      store-all: 1,120 groups x 16 words in 59 lines = 4.8 SH-2 clocks a
+      16-bit store = the BSC CS2 cycle (srcref RTL BSC.sv 250-290 with
+      WCR1 0x0055; VDP.sv 210-245 FIFO drains a word per 6 system
+      clocks). loads = store-all - read-cost = 13 (~8.5 clocks a line
+      fill). audit = baseline - no-audit = 8. remainder 23 = instructions.
+      read-cost predicted 69 measured 68; store-all predicted 82
+      measured 81. Full table and arithmetic BLASTEM.md 13; the RTL
+      count that preceded it (and mis-guessed instruction-fetch misses)
+      BLASTEM.md 10. Baseline reproduces your 67/71/81/86 and is
+      deterministic per attract position (80/67 on both passes).
+
+      What this does to your current cards: "the blit alone is 67-86
+      lines against the 68-line threshold" still holds as a number, but
+      it is not FB-byte-bound: 676 of the 1,120 groups a half are visited
+      (8 loads + zero test) and then skipped, ~22 of the 67 lines. A per-
+      row or per-band emptiness word from the compose is the largest
+      single lever on hardware; FB bytes are ~0.5 lines per stored group
+      after that. Your auto-fill erase lever should be priced against the
+      4.8 clocks a word the stores actually cost on the FPGA, not ares's
+      13.6 a longword.
+
+    ASK
+      READ. Take or reject the decomposition, and own the LESSONS RIGBLIT
+      entry from here (rewrite it in your words if mine mislead). The
+      O-8 thread makes no further edits to LESSONS, STATE, m_main.c or
+      the rig; BlastEm instrument work only, on request.
+
 ### O-10  Encode the sprite records -- 42% of every record is padding, and the churn is unmeasured
     owner        BUILDER
     state        READY (two free reads before any design)
@@ -93,80 +163,6 @@ arithmetic corrections, or anything ending "no pixel changed."
     note         If (b) says churn is high, close to the LEDGER and
                  keep (a) if +C/+E are dead -- that half stands alone
                  and costs nothing.
-
-
-### O-8  BlastEm as a THIRD instrument for the transport axis
-
-STATUS 2026-09-23 (third pass): USABLE, SCOPED. The section-8 rejection was measured on a frozen game: BlastEm stalled the 68K under FM on every VDP-window access (fixed in the fork, IF.sv cited). Picture now matches ares; BLASTEM_FB_WAIT 3 = ares, 11 = the rig's 1.6x, held on three spans. Quote as "BlastEm, wait N". No adapter-bus contention model. BLASTEM.md section 9.
-    owner        BUILDER
-    state        READY (evaluation done 2026-09-23, decompile thread)
-    why          O-1 is the live axis and we have NO usable instrument
-                 for it. The rig is the only speed authority and its
-                 flip rate varies 6x between cold runs of the same rom.
-                 ares is slave-gated and charges instruction cycles
-                 only. BlastEm models the two things ares does not, and
-                 both are transport.
-
-    TESTED, not inferred
-                 binary  /Users/mikeholzinger/bin/blastem-osx-1.0.0/blastem
-                 source  ~/src/blastem-0c61d0d95463/
-                 `blastem -b 300 -m 32x s16.32x`
-                   -> 300 frames in 0.78s user (~385 fps), clean exit,
-                      no unimplemented-instruction errors, boots the
-                      line rom
-                 `-b N` = HEADLESS, run N frames, exit. Undocumented in
-                 -h; found at blastem.c:429. Direct analogue of ares
-                 --frames N.
-                 BIOS: all three already in mame/32x.zip (32x_m/s/g).
-                 BlastEm wants them CWD-relative as 32X_M_BIOS.bin,
-                 32X_S_BIOS.bin, 32X_G_BIOS.bin (plain fopen,
-                 32x.c:1416). Working copy already staged at
-                 <scratchpad>/blastem-eval/.
-
-    READ FROM SOURCE, not tested -- verify before trusting
-                 sh2_util.c:80   sh2_generic_burst_read charges
-                                 chunk->burst_cycles * clock_divider
-                                 = CACHE LINE BURST FILLS, which ares
-                                 does not model at all
-                 32x.c:1009      sh2->cycles += wait_cycles from
-                                 s32x_video_sh2_write = FB WRITE BUS
-                                 WAITS, which neither ares nor MAME
-                                 models
-                 debug.c:3180    `symbols <file>` loader -- loading
-                                 rom/s16.lst would let probes name
-                                 TEXT_C instead of hexing it, which
-                                 kills the wrong-base-address failure
-                                 class (cost 2 builds + 1 misread
-                                 census in the 2026-09-16 arc)
-
-    GAPS vs ares-headless
-                 no --dump region:addr:len:file
-                 no --profile
-                 no --input replay
-                 debugger NOT PIPEABLE: debug.c:2328 reads stdin via
-                 fgets_timeout with a progress callback. Piping
-                 "help\nquit\n" into `-b 600 -d` returned rc=124,
-                 ZERO bytes. Tested twice.
-                 gdb remote (-D) is 68K-ONLY: zero SH-2 references in
-                 gdb_remote.c. Not a path.
-
-    ask          (1) patch BlastEm for --dump and --profile. The
-                     codebase already has headless mode and a frame
-                     counter (exit_after), so both are small. Mike has
-                     the tree; it is open source.
-                 (2) CROSS-CHECK BEFORE TRUSTING ANY NUMBER. Take one
-                     already-settled figure and reproduce it on all
-                     three: ares, the rig, BlastEm. LESSONS lists eight
-                     instruments that lied in one arc; a new one gets
-                     no free pass.
-                 (3) only then point it at O-1.
-
-    scope        DO NOT replace ares. ares keeps exactness and the
-                 anchors. BlastEm is for the TRANSPORT axis, where its
-                 cache and FB-wait models make it better informed than
-                 either existing emulator.
-    gate         NONE for (1) and (2) -- no pixel, no rig, no
-                 direction. (3) inherits O-1's gate.
 
 
 ### O-7  Lift the per-title WRAM constants out of the engine
@@ -368,6 +364,16 @@ STATUS 2026-09-23 (third pass): USABLE, SCOPED. The section-8 rejection was meas
 ---
 
 ## LEDGER — closed, one line each
+
+    2026-09-23  O-8 CLOSED, USABLE SCOPED. BlastEm fork
+                (github.com/mholzinger/blastem main 8740c1d): four core
+                fixes (sh2_reset prefetch; headless -b real frames; the
+                68K stalled under FM on every VDP-window access, which
+                froze our game; cache/sub-int), --dump, --trace-comm/
+                flip/dreq (ares columns), BLASTEM_FB_WAIT (3 = ares, 11 =
+                the rig's blit rate on three spans), a cart-ROM arbiter
+                from IF.sv (negligible). Quote as "BlastEm, wait N"; no
+                CPU-to-CPU contention model. BLASTEM.md 7-12.
 
     2026-09-23  O-9 CLOSED, NO. S1's retry condition ("change the FM
                 ownership model") was met a fortnight ago by FBXPORT,
