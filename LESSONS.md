@@ -1656,11 +1656,17 @@ is stores at ~4.8 SH-2 clocks a 16-bit word (the BSC CS2 cycle, faster
 than ares's model) plus the cost of VISITING the ~60% of groups the loop
 then skips. Instruction-fetch misses were not needed to explain it.
 
+Five roms (store-all added) give the split on the FPGA, level-1 demo,
+67 lines: stores 23 (4.8 clk a word), the loop's own instructions 23,
+loads 13 (~8.5 clk a line fill), the audit 8; ares's 46.8 is stores 33
+and ~14 for everything else. BLASTEM.md 13.
+
 **Rules:** every blit-throughput number in this record is ares's unless
-it says "rig"; the rig's is 1.6x worse; on hardware the blit's lever is
-NOT visiting empty groups (a row/band emptiness mask), then FB bytes at
-~0.5 lines per stored group; ares mis-charges both terms in opposite
-directions, so rank blit cards on the rig.
+it says "rig"; the rig's is 1.6x worse; on hardware the blit's first
+lever is NOT VISITING empty groups (~22 of 67 lines: a row/band
+emptiness word from the compose), then the audit (8), then FB bytes at
+~0.5 lines per stored group; ares overcharges stores and undercharges
+the rest, so rank blit cards on the rig.
 
 ### BlastEm (MESSAGES O-8): boots after a core fix, then fails the cross-check on the figure that mattered (2026-09-23)
 

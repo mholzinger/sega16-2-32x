@@ -8270,7 +8270,11 @@ LOCKCODE static void blit_half(int ylo, int yhi)
                 FBB[0] += 32u;   /* examined; FBB[4] subtracts the skips */
 #endif
                 if (!(v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7)) {
+#ifdef BLIT_STOREALL
+                    if (0) {                 /* rig probe: never skip, store every group */
+#else
                     if (was & g) {
+#endif
 #ifdef BLIT_SKIP_COUNT
                         bc[1]++;
 #endif

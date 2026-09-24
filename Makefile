@@ -2767,6 +2767,12 @@ endif
 ifdef BLITNOAUDIT
 SHCCFLAGS += -DBLIT_NOAUDIT
 endif
+# BLITSTOREALL=1 = 2026-09-23 rig probe (never a ship): the blit stores every
+# group, skipping none, so the rig's blit lines read the store rate alone
+# against the baseline's visit-and-skip (BLASTEM.md 13).
+ifdef BLITSTOREALL
+SHCCFLAGS += -DBLIT_STOREALL
+endif
 # CRAMISR=1 = 2026-09-22: paint the 32X CRAM at the flip in the V-ISR
 # (vblank, PEN-safe) instead of inside the FM-held window: -10 lines of
 # the window the game's gated writers wait on (BODYPROF).

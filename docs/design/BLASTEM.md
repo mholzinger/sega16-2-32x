@@ -533,6 +533,32 @@ avoids visiting them would buy up to that, more than any store-side
 saving. Fewer FB bytes still helps at 4.8 clocks a word, i.e. ~0.5 lines
 per 32-byte group stored.
 
-**Not yet closed:** the store-all probe (store every group, skip none)
-would pin the visiting cost directly; it needs a knob in m_main.c. The
-cache-locked variant overflows .ramtext with the barcode flags on.
+**Closed with a fifth rom, BLITSTOREALL=1 (store every group, skip
+none; knob added to m_main.c/Makefile):** step 3 = 81 [77,79,79,89],
+step 5 = 82 [78,82,82,86], scores 62.5, level-2 62. Five roms, one
+decomposition (level-1 demo, step 3, lines of 262):
+
+    stores   1,120 groups x 16 words x 4.8 clk / 1465     = 59  (store-all)
+             444 stored in the baseline                    = 23
+    loads    store-all (81) - read-cost (68)               = 13  (~8.5 clk a line fill, 2,240 fills)
+    audit    baseline (67) - no-audit (60)                 =  8  (8 uncached FB reads on 1 skipping row in 4)
+    visiting the rest: baseline 67 - 23 - 13 - 8           = 23  (the loop's own instructions)
+    no-blit                                                =  1
+
+    read-cost check: 59 stores + 1 load + ~9 instr = 69 (measured 68)
+    store-all check: 59 + 13 + ~10 = 82 (measured 81)
+
+So on the FPGA the master's blit is stores 35% / instructions 35% /
+loads 20% / audit 12%. ares (46.8) charges the stores at 13.6 a
+longword = 33 lines and nearly nothing for the other three: it
+overcharges stores by 10 lines and undercharges loads, audit and
+instructions by ~30, which is the whole 1.6x. Neither emulator's split
+is right; BlastEm wait 11 reproduces the total only.
+
+**Levers, in order, from the split:** (1) do not VISIT empty groups: the
+676 skipped groups still cost their 8 loads and the zero test, ~22 of
+the 67 lines -- a per-row or per-band emptiness word from the compose
+removes it; (2) the audit, 8 lines, already rotated 1-in-4; (3) FB bytes
+at ~0.5 lines per 32-byte group stored. The cache-locked variant stays
+unmeasured (overflows .ramtext with the barcode flags on) and is no
+longer the leading hypothesis.
