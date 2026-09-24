@@ -3801,7 +3801,13 @@ static void bm_check_cmp(const struct bm_state *x, const struct bm_state *y)   /
 #define txt_lvl (a->txt_lvl)
 #define amb_col (a->amb_col)
 
+#if defined(RIG_BLIT) && defined(ROW_GEN)
+/* rig probe: ROWGEN + the barcode overflow .ramtext by 76 bytes; bm_reset
+ * runs at scene changes, not in the window, so it goes to ROM here. */
+__attribute__((noinline)) static void bm_reset(struct bm_state *a)
+#else
 RAMCODE static void bm_reset(struct bm_state *a)
+#endif
 {
     for (int i = 0; i < 128; i++) { tcount[i] = 0; col_lvl[i] = 0; amb_col[i] = 0; }
     for (int i = 0; i < 64; i++) sused[i] = 0;

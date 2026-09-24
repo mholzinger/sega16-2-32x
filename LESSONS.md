@@ -1955,3 +1955,12 @@ table was bank A's upper half, the packet staging area).
 
 **Rule:** a 32X framebuffer bank is 0x20000 bytes; dump both banks
 before naming one.
+
+Addendum (the 50% regime sampled, 8 points f1300-4000, bank A ship to
+ship): live rows 85-166 (8-30 KB live), unchanged live rows 28 / 52 /
+41 / 15 / 88 / 31 / 48 / 77% -- the fight is not still, it is
+half-still: on a typical crowded frame about half the live rows carry
+the same bytes the bank already holds. ROWGEN (write-tracked, sprite
+spans of the last two snapshots) skipped 184,977 rows in 4,100 frames
+under the play script with 0 mismatches against sbuf (ROWGENVERIFY,
+every skipped row read back uncached), ~45 rows a vint.
