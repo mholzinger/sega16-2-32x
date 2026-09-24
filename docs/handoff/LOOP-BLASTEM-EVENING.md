@@ -5,12 +5,12 @@
 the FB store path is ~80 of it, so the 1.6x is a blit-rate figure whose
 remainder is bracketed (instruction-fetch misses on a 5.4x oversubscribed
 cache, DDR3 latency, the shared ddram channel) with a rig probe recipe.
-Item 1 (BLASTEM.md 11, fork 8924e5e): cart-ROM arbiter from IF.sv behind
+Item 1 (BLASTEM.md 11, fork fa7550d): cart-ROM arbiter from IF.sv behind
 BLASTEM_BUS_ARB; < 0.5% of either CPU's frame on the line rom; the
 FIFO-era poll figure is SH-2-internal CPU/DMAC sharing, not the adapter.
 Item 2 (BLASTEM.md 12, fork pushed): --trace-comm/flip/dreq with ares's
 columns, checked on bprof3 for 120 frames. sega16 commits are local only.
-The two mislabelled fork commits (417ee9c, 6277ac2) are untouched.
+The two mislabelled fork commits were rewritten afterwards on Mike's call (now 2febe53 fix / cd3a5f7 knob / 9f980a6 diagnostics; tree verified identical; force-pushed).
 
 Mike is away for the evening. This loop works the three open O-8 items in
 order, one at a time, and writes results into the record as it goes.
@@ -22,8 +22,7 @@ names it.
 
 - sega16-2-32x: commit locally, NEVER push. Fork
   (`~/src/blastem-0c61d0d95463`, github.com/mholzinger/blastem): commit
-  and `git push origin main` are allowed; NEVER force-push, never rewrite
-  the two mislabelled commits (417ee9c, 6277ac2) -- Mike decides that.
+  and `git push origin main` are allowed; NEVER force-push without Mike.
 - No rig launches, no MAME windows, nothing interactive. BlastEm runs
   headless only: `-b N -m 32x` from `/tmp/blastem-eval` (BIOS files live
   there). ares: `~/src/ares-debug/build_macos/headless-ui/Release/ares-headless`.
