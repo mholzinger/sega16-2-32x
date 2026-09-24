@@ -485,3 +485,54 @@ Use: `blastem -b N -m 32x --trace-comm c.csv --trace-flip f.csv rom` from
 the eval dir; diff against `ares-headless --frames N --trace-comm ...`
 after aligning. This is the logic tie-breaker the record asked for in
 section 8; it does not make any timing claim.
+
+## 13. The rig probe: where the master's blit lines go (2026-09-23 late, four roms, one launch each)
+
+Recipe from section 10, run self-service (tools/mister_push.sh, 20
+screenshots 12 s apart per rom, tools/rig_barcode.py; spd2 relaunched
+after). Barcode byte 5 = the master's last blit_half in lines, byte 6 =
+groups stored / 8. Values per attract scene, all captures listed:
+
+    scene            baseline           read-cost (1 load/row, 80 stores/row)   no-blit   no-audit
+    level-1 demo 3   67 [64,65,69,71]   68 [64,65,71,71]                        1         60 [52..65]
+    level-1 demo 5   74 [67,67,80,80]   68 [65,68,69,69]                        1         58 [53..62]
+    scores           42 [42,42]         44 [43,45]                              1         40 [37,42]
+    level-2 demo     59 [31..81]        61 [46..81]                             1         59 [40..74]
+
+The baseline reproduces the record (step 5: 80/67 on both attract
+passes, deterministic per position; scores 42; level-2 31-81).
+
+What the four say:
+1. **Loads are not the term.** Replacing 80 sprite-buffer loads a row by
+   one changes nothing (67 -> 68). The sbuf line fills through DDR3 that
+   section 10 suspected are not where the lines go.
+2. **The row body is the whole cost.** Skipping it leaves 1 line.
+3. **The audit reads are ~15%.** BLITNOAUDIT: 67 -> 60, 74 -> 58.
+4. **Stores at the RTL rate explain the read-cost rom.** 112 rows x 80
+   longwords = 17,920 word writes in ~59 lines (67 minus the audit) is
+   4.8 SH-2 clocks a 16-bit store, the BSC CS2 cycle of section 10.
+5. **The baseline stores 2.5x fewer words yet takes the same time**, so
+   the work it does INSTEAD costs the same: visiting every group (8
+   loads, the zero test, the mask bookkeeping) for the ~60% of groups it
+   then skips. 1,120 groups visited a half x ~35 clocks + 444 stored x 16
+   words x 4.8 clocks + audit ~10 lines = ~70 lines. That is the rig's
+   67-74.
+
+So on the FPGA the blit is stores (at ~4.8 clocks a word, FASTER than
+ares's 6.8) plus per-group visiting overhead plus the audit, and the
+"1.6x slower than ares" is not one slow path: ares charges the stores
+more and the visiting less (no fills, no store-stall on the pipeline),
+and the two mis-charges do not cancel. The RTL count in section 10 was
+right per stored group and wrong about how many groups the loop
+touches. Instruction-fetch misses are NOT needed to explain the number
+and are back to "unmeasured", not "likely".
+
+**Lever, from the measurement:** the visited-but-skipped groups are ~40%
+of the blit on hardware; a row-level (or band-level) emptiness mask that
+avoids visiting them would buy up to that, more than any store-side
+saving. Fewer FB bytes still helps at 4.8 clocks a word, i.e. ~0.5 lines
+per 32-byte group stored.
+
+**Not yet closed:** the store-all probe (store every group, skip none)
+would pin the visiting cost directly; it needs a knob in m_main.c. The
+cache-locked variant overflows .ramtext with the barcode flags on.

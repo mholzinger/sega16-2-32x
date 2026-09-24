@@ -1649,11 +1649,18 @@ working set is 5.4x the cache; halving the cache already cost the rig
 and both CPUs' fills on one ddram channel. The numbers above stand as
 blit lines; the mechanism they were pinned on does not.
 
+MEASURED the same night (BLASTEM.md 13, four probe roms on the rig):
+loads are not the term (1 load a row instead of 80: 67 -> 68 lines);
+the audit's uncached FB reads are ~15% (BLITNOAUDIT 67 -> 60); the rest
+is stores at ~4.8 SH-2 clocks a 16-bit word (the BSC CS2 cycle, faster
+than ares's model) plus the cost of VISITING the ~60% of groups the loop
+then skips. Instruction-fetch misses were not needed to explain it.
+
 **Rules:** every blit-throughput number in this record is ares's unless
-it says "rig"; the rig's is 1.6x worse; and the lever the RTL points at
-is instruction locality (keep the group loop resident), with "fewer FB
-bytes" unproven as a lever until the rig probe in BLASTEM.md 10
-decomposes the 336.
+it says "rig"; the rig's is 1.6x worse; on hardware the blit's lever is
+NOT visiting empty groups (a row/band emptiness mask), then FB bytes at
+~0.5 lines per stored group; ares mis-charges both terms in opposite
+directions, so rank blit cards on the rig.
 
 ### BlastEm (MESSAGES O-8): boots after a core fix, then fails the cross-check on the figure that mattered (2026-09-23)
 
