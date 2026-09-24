@@ -365,6 +365,16 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## LEDGER — closed, one line each
 
+    2026-09-23  O-11 TAKEN by the builder. The five-rom split (stores 23
+                / instructions 23 / loads 13 / audit 8 of 67) is
+                consistent with the builder's DRAM census: 867 live of
+                2,240 groups in the crowded fight = 39% stored, 61%
+                visited and skipped, the 676/1,120 of the probe. The
+                RIGBLIT LESSONS entry is the builder's from here; the
+                auto-fill erase lever is dead on the census (erase
+                < 1 KB a frame), not on the store rate. Next lever:
+                the content-aware row skip (see LESSONS "What the
+                fight's framebuffer bytes are").
     2026-09-23  O-8 CLOSED, USABLE SCOPED. BlastEm fork
                 (github.com/mholzinger/blastem main 8740c1d): four core
                 fixes (sh2_reset prefetch; headless -b real frames; the

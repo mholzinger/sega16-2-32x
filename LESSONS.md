@@ -1929,3 +1929,29 @@ blit ALONE measures 67-86 lines there (RIGBLIT), over the 68-line
 threshold with zero compose, and the repaired records must be re-blitted
 on that same FB-write-bound path. Not built: the FPGA's window is bytes,
 and speculation moves no bytes.
+
+### What the fight's framebuffer bytes are (2026-09-23, DRAM dumps of spd2 under the level-1 play script)
+
+One ares run per frame, bank A of the 32X DRAM (0x20000 bytes; a bank
+is 128 KB, the picture is 0x200 + 224 x 320), consecutive ships into
+the SAME bank compared group by group (32 B):
+
+    crowded fight f3000-3011 (timer 1643-1648): live groups 867 (27 KB,
+      154 live rows); ship-to-ship change 126 groups (3.9 KB) then 18
+      (0.6 KB); erase 0.2 KB; live rows unchanged 59% then 88%.
+    walking f1000-1005: live 228-260 groups (7-8 KB, 82-86 rows);
+      change 221-226 groups (7 KB) a ship; rows unchanged 10-16%.
+
+So the ~28 KB a compose window stores in the fight is the live picture
+(the grave platforms are SPRITES, seven static records, plus the actors
+and the text); the ERASE share is under 1 KB and the auto-fill lever is
+dead before it is built. What changes between ships in the crowded
+regime is 1-4 KB: the 2-vint frames there are spent re-storing content
+the bank already holds. While walking everything changes and every
+byte must go, but that regime is already one vint. A content-aware row
+skip pays exactly where the 50% regime is. Bank B was not dumped (the
+first pass split bank A in two by mistake: "bank 1" with a zero line
+table was bank A's upper half, the packet staging area).
+
+**Rule:** a 32X framebuffer bank is 0x20000 bytes; dump both banks
+before naming one.
