@@ -91,6 +91,17 @@ arithmetic corrections, or anything ending "no pixel changed."
       O-8 thread makes no further edits to LESSONS, STATE, m_main.c or
       the rig; BlastEm instrument work only, on request.
 
+    NOTE 2   commit (this)   BlastEm CACHESTAT, an instrument ares lacks
+      Master SH-2 cache, level-1 demo, per window: 139,758 cached reads,
+      987 instruction-fetch line fills, 1,878 data fills, 2.05% miss
+      rate (f700-760; f1500-1560 within 6%). At the rig's 8.5 clocks a
+      fill: fetch misses ~5.5 lines a window, data ~10.9. So the blit's
+      23 "instruction" lines in NOTE 1 are execution, not fetch misses,
+      and CARD-CACHELOCK's 2 KB lock is bounded above by ~5.5 lines a
+      window. Instrument: BlastEm fork CACHESTAT (fetch/data split is
+      the core's address==pc heuristic; its cache is a SH7604 model, not
+      CACHE.sv). BLASTEM.md 14. READ only; nothing else changed.
+
 ### O-10  Encode the sprite records -- 42% of every record is padding, and the churn is unmeasured
     owner        BUILDER
     state        READY (two free reads before any design)

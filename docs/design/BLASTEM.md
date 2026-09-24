@@ -562,3 +562,29 @@ removes it; (2) the audit, 8 lines, already rotated 1-in-4; (3) FB bytes
 at ~0.5 lines per 32-byte group stored. The cache-locked variant stays
 unmeasured (overflows .ramtext with the barcode flags on) and is no
 longer the leading hypothesis.
+
+## 14. CACHESTAT: the SH-2 cache miss count ares cannot give (2026-09-24)
+
+Fork commit "diagnostics: CACHESTAT": cached reads and line fills per
+SH-2, split instruction fetch (address == pc) / data, printed at the -b
+exit; difference two runs for a per-window figure. rigblit_bl, wait 11,
+same picture as ares (section 9), 60 windows per span:
+
+                      reads/window  fetch fills  data fills  miss   fills at 8.5 clk (rig, section 13)
+    master f700-760     139,758          987        1,878   2.05%   16.6 lines (fetch 5.7, data 10.9)
+    master f1500-1560   145,554          929        1,837   1.90%   16.0 lines (fetch 5.4, data 10.7)
+    slave  f700-760     136,544          455        1,844   1.68%   13.3 lines (fetch 2.6, data 10.7)
+
+What it settles: instruction-fetch misses cost the master ~5.5 lines a
+window on FPGA terms, not the 23 lines section 10 guessed and section
+13 could not split. The blit's 23 "instruction" lines are execution
+(~40 instructions a visited group x 1,120 groups = ~30 lines at one a
+clock). The CARD-CACHELOCK working set is 5.4x the cache, but the hot
+loop hits: a 2 KB lock can recover at most part of 5.5 lines a window.
+The data fills (~1,850 a window, 10.9 lines at the rig's fill cost)
+agree in size with section 13's measured 13-line load term.
+
+Caveats: BlastEm's fetch/data split is the core's `address == pc`
+heuristic; its cache is a model of the SH7604's (4-way, 16 B lines,
+LRU), not the FPGA's CACHE.sv; the fill cost is the rig's measured 8.5
+clocks, not BlastEm's own charge. Relayed to the builder as O-11 NOTE 2.
