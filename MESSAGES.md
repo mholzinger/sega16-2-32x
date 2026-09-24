@@ -21,6 +21,80 @@ arithmetic corrections, or anything ending "no pixel changed."
 
 ## OPEN
 
+### O-10  Encode the sprite records -- 42% of every record is padding, and the churn is unmeasured
+    owner        BUILDER
+    state        READY (two free reads before any design)
+    why          The R60 packet's largest remaining raw payload is the
+                 sprite records: n x 8 words, live mean 12.5, max 21
+                 measured = ~168 words a vint. Everything else large in
+                 the packet is ALREADY encoded and every one of those
+                 paid well. This is the last uncompressed thing.
+
+    PRECEDENT -- the same move, three times, all measured wins
+      SPR_TRUNC   push only LIVE records, not all 64 slots.
+                  "the dead padding is the single most expensive thing
+                  the 68K does." handler mean 83.8 -> 65.4 lines,
+                  ~18 lines/vint back. ON THE LINE.
+      PAL_DELTA   palette ships WORD DELTAS vs a 2048-word shadow at
+                  0xFF6000: 2 mask words + changed entries only, raw
+                  escape when a delta would exceed 29 words, ids packed
+                  2/word. ON THE LINE.
+      R60_RS_BIT  rowscroll omitted entirely on frames the game does
+                  not row-effect: 60 words, ~14 lines, most frames.
+                  ON THE LINE.
+
+    THE TWO OBSERVATIONS, from the arcade's own field map
+      (srcref .../altered_beast.asm:58263-58277, Archer's annotation)
+        +0  bottom scanline (8) | top scanline (8)
+        +2  X position (9 bits)                    7 unused
+        +4  end(1) hide(1) hflip(1) | pitch (8)    5 unused
+        +6  offset within sprite bank (16)
+        +8  bank (4) | priority (2) | colour (6)   4 unused
+        +A  vzoom (5) | hzoom (5)                  6 unused
+        +C  UNDOCUMENTED
+        +E  "Scratch space for current address"  <- HARDWARE WORKING
+                                                    STATE, not
+                                                    information
+
+      (1) STRUCTURAL: defined fields total ~74 bits in a 128-bit
+          record. ~42% padding. +C and +E together are 25% of every
+          record and may carry nothing from the game to us at all.
+      (2) TEMPORAL: at 0.5 px/frame camera and normal animation rates,
+          a typical sprite changes X and Y by small deltas between
+          consecutive frames and changes NOTHING else -- same bank,
+          same offset most frames, same colour, zoom, pitch.
+          PAL_DELTA's shadow+mask+changed-words machinery is exactly
+          the codec this wants, and it already exists in the repo.
+
+    ask -- TWO FREE READS FIRST, no design, no build
+      (a) Does anything in our pipeline READ record words +C and +E?
+          Grep the harvest/compose side. Archer's comment says +E is
+          the sprite chip's scratch; whether OUR path reads it is a
+          different question and must not be inferred from his
+          annotation. If both are dead: 25% off every record for the
+          cost of not copying two words.
+      (b) Measure real per-frame record CHURN on a gameplay dump:
+          for each live record, which of the 8 words actually change
+          frame to frame. That number decides whether a delta codec
+          pays at all.
+
+    THE CAVEAT that could kill it
+      A delta codec moves cost from the BUS to the 68K -- it has to
+      diff 21 records x 8 words against a shadow at pack time. And the
+      68K's margin is 14%, not fourfold (ARCHITECTURE, corrected
+      2026-09-12: our allowance is 13.3 cyc/instr against the game's
+      own 11.7 mix; the old "45 cyc/instr, bus-bound" figure was a
+      MAME loop-collapsing artefact). PAL_DELTA won this trade on
+      SPARSE blocks. Sprite records are dense and every one is live.
+      **Do not assume it transfers. (b) is what says whether it does.**
+
+    gate         NONE for (a) and (b) -- both are reads. A codec build
+                 would inherit the pixel gate.
+    note         If (b) says churn is high, close to the LEDGER and
+                 keep (a) if +C/+E are dead -- that half stands alone
+                 and costs nothing.
+
+
 ### O-8  BlastEm as a THIRD instrument for the transport axis
 
 STATUS 2026-09-23 (third pass): USABLE, SCOPED. The section-8 rejection was measured on a frozen game: BlastEm stalled the 68K under FM on every VDP-window access (fixed in the fork, IF.sv cited). Picture now matches ares; BLASTEM_FB_WAIT 3 = ares, 11 = the rig's 1.6x, held on three spans. Quote as "BlastEm, wait N". No adapter-bus contention model. BLASTEM.md section 9.
