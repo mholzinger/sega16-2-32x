@@ -1620,7 +1620,7 @@ the FB write floor is the floor, and the FPGA's own rate is the number
 that decides whether EARLYREC reaches one vint (ares: 28 KB / 470 B/line
 = 60 lines of blit + ~8 of publish = 68, the threshold exactly).
 
-### The FPGA's framebuffer write rate, read off the rig (2026-09-23, RIGBLIT)
+### The FPGA's BLIT rate, read off the rig (2026-09-23, RIGBLIT; attribution corrected the same evening)
 
 Barcode byte 5 now carries the master's last blit_half in lines (FRT
 ticks / 46). ares reads 45-47 on level 1 (demo and play; the 60-window
@@ -1637,9 +1637,23 @@ content skip against the bank's last ship, BLITHASH, which has no SDRAM
 home at 18 KB). EARLYREC + a dual blit gets a compose frame's window to
 ~110 lines on hardware, not 68.
 
-**Rules:** every FB-throughput number in this record is ares's unless
-it says "rig"; the rig's is 1.6x worse; and a frame-rate design must be
-priced in framebuffer BYTES per frame against ~300 B/line (rig).
+CORRECTION (same evening, BLASTEM.md 10): the instrument measures the
+master's BLIT, not its framebuffer writes. Counting the MiSTer RTL puts
+the FB store path at ~80 of the ~336 SH-2 clocks a group the rig spends
+(VDP.sv write FIFO 6 system clocks a word; BSC.sv CS2 cycle ~4 clocks
+with WCR1 0x0055; the core holds the pipeline through each store,
+SH_core.sv 113), so the 1.6x over ares is NOT a framebuffer write rate.
+The remainder is bracketed to instruction-fetch misses (the master's
+working set is 5.4x the cache; halving the cache already cost the rig
+27 -> 21 presented frames), DDR3 latency on the sprite-buffer line fills,
+and both CPUs' fills on one ddram channel. The numbers above stand as
+blit lines; the mechanism they were pinned on does not.
+
+**Rules:** every blit-throughput number in this record is ares's unless
+it says "rig"; the rig's is 1.6x worse; and the lever the RTL points at
+is instruction locality (keep the group loop resident), with "fewer FB
+bytes" unproven as a lever until the rig probe in BLASTEM.md 10
+decomposes the 336.
 
 ### BlastEm (MESSAGES O-8): boots after a core fix, then fails the cross-check on the figure that mattered (2026-09-23)
 
