@@ -1,0 +1,6 @@
+# harvested from eye2.32x at frames [1545, 1550, 1556, 1562, 1570, 1580, 1590, 1600, 1605]
+# set cells layermask (1 = plane B / S16 BG, 2 = plane A / FG, 3 = both)
+0 2880 1
+19 3989 1
+20 6551 2
+21 648 2

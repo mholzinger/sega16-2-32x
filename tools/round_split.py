@@ -1,0 +1,620 @@
+#!/usr/bin/env python3
+"""Split one round's tile table on a work-RAM key and emit the extra sub-table.
+
+THE ATTRACT IS ONE ROUND WITH TWO HALVES THAT NEVER SHARE A SCREEN. All 497 arcade dumps
+read round 0 at 0xFFF142, but 431 of their frames draw the demos' art and 58 draw the
+title/high-score art, and NOT ONE draws both (tools/round_sets.py). Round 0's table was
+harvested from three sampled gameplay scenes, so it carries only the demo half's 30 sets and
+every static-half set renders as BACKDROP -- "a set absent here is REFUSED an MD line"
+(pal_rounds_md.h). That is why the eye scene draws its iris and nothing else.
+
+The halves cannot share one table: together they want 61 MD colours and a round has 3 lines
+of 16, 15 usable each. Apart they fit -- the static half needs 31 (lines 15/14/6).
+
+So this emits the static half as its OWN table at the end of pal_rounds_md.h and leaves
+every existing table BYTE FOR BYTE. The renderer picks it when the round is 0 and the key
+byte says static; see MD_ATTRACT_SPLIT in m_main.c.
+
+NOTHING IS INVENTED. Every set's pen map, its colours and its ring flags come from the
+harvested attract tables (rounds 5-9) that already describe it; this re-packs them into
+three lines and renumbers the pens to match. Where two tables describe a set differently the
+lowest-numbered wins, and it says so.
+
+    python3 tools/round_split.py                 # report
+    python3 tools/round_split.py --emit          # write sh_src/pal_rounds_md.h
+"""
+import argparse
+import glob
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from collections import defaultdict
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARCADE = os.path.join(ROOT, 'tests', 'demo-b', 'arcade')
+PAL = os.path.join(ROOT, 'sh_src', 'pal_rounds_md.h')
+KEY_OFF = 0x3022          # 0xFFF022 inside a 0xFFC000 work-RAM dump
+KEY_STATIC = 0x0C
+ROUND_OFF = 0x3142
+TILE_BASE, TILE_LEN, SHADOW = 0x400000, 0x10000, 0xD000
+LINES, PER_LINE = int(os.environ.get('SPLIT_LINES', '3')), 16
+# SPLIT_LINES=4 TAKES THE MD SPRITE LINE, and it is legal under the PORT ONLY: the census
+# (tools/mdspr_census.py, 2026-10-08) read ZERO drawn sprite-attribute-table entries and
+# MDSPR_CNT 0 claims over the whole attract and both demos, so the line the MDSPR offload
+# owns is painted and never referenced. A build that takes it needs MDLINES4=1 MDSPROFF=1.
+# On a NATIVE build the warning at tools/bake_tilecram.py:78 still stands: sets would be
+# assigned to a line the background allocator does not own.
+# The sets the demos reference that round 0's table does not carry, from
+# tools/round_sets.py --round 0: set 19 = 337,562 cells, 20 = 306,930, 21 = 30,359.
+# DEMO_SETS trims the list when the ART BLOB does not fit -- adding all three took
+# sh_src/tiles_md.bin 518,656 -> 551,424 bytes against a 540,672-byte gap to .porttest
+# (mars.ld, 2026-10-09), and set 21 is 4.5% of the cells.
+DEMO_ADD = [int(x) for x in os.environ.get('DEMO_SETS', '19,20,21').split(',')]
+
+
+def width(src, name):
+    m = re.search(name + r'\[MDROUND_N\]\[(\d+)\]', src)
+    if not m:
+        sys.exit('round_split: %s not declared' % name)
+    return int(m.group(1))
+
+
+LIVE = os.path.join(ROOT, 'discover', 'cram', 'wide')
+
+
+def harvested_masks():
+    """round id -> {set: layer mask}, from the files bake_tiles_md.py reads."""
+    out = {}
+    for fn in sorted(glob.glob(os.path.join(LIVE, 's*_sets.txt'))):
+        r = int(os.path.basename(fn)[1:-9])
+        m = {}
+        for ln in open(fn):
+            if ln.startswith('#') or not ln.strip():
+                continue
+            parts = ln.split()
+            if len(parts) >= 3:
+                m[int(parts[0])] = int(parts[2]) & 3 or 3
+        out[r] = m
+    return out
+
+
+def emit_masks(table, desc):
+    """THE LAYER-MASK INHERITANCE (2026-10-10), and without it this table costs DOUBLE.
+
+    bake_tiles_md.py takes a set's layer mask from discover/cram/wide/s<round>_sets.txt and
+    only for round ids >= ROUNDS(5); a table with no such file gets NO entries, every set
+    defaults to mask 3 (both variants, 2 blocks of 2 KB instead of 1) and the static half
+    costs 78 blocks = 159,744 B instead of 42 = 86,016 B. STATE has promised this recovery
+    since 2026-10-08 as something that 'comes with the split'; it was never written.
+
+    Nothing is invented here either: each set's mask is the one the table it was DESCRIBED
+    from already carries, which is the same table its pen map and colours come from. A set
+    whose source is a ROM round (0-4) has no harvested mask and keeps 3 -- those rounds are
+    deliberately both-variant (bake_tiles_md.py:88, the boss-gate purple)."""
+    hm = harvested_masks()
+    rows, both = [], 0
+    for s in sorted(desc):
+        src = desc[s]['src']
+        mk = hm.get(src, {}).get(s, 3)
+        if mk == 3:
+            both += 1
+        rows.append((s, mk, src))
+    fn = os.path.join(LIVE, 's%d_sets.txt' % table)
+    with open(fn, 'w') as fh:
+        fh.write('# GENERATED by tools/round_split.py: table %d, the attract\'s static half.\n'
+                 % table)
+        fh.write('# Each mask INHERITED from the table the set was described from (col 4),\n')
+        fh.write('# which is the table its pen map and colours come from.\n')
+        fh.write('# set cells layermask (1 = plane B / S16 BG, 2 = plane A / FG, 3 = both) src\n')
+        for s, mk, src in rows:
+            fh.write('%d 0 %d %d\n' % (s, mk, src))
+    single = len(rows) - both
+    print('  layer masks -> %s: %d sets, %d single-variant + %d both = %d blocks of 2 KB '
+          '(%d B); without this file it would be %d blocks (%d B)'
+          % (os.path.relpath(fn, ROOT), len(rows), single, both, single + 2 * both,
+             (single + 2 * both) * 2048, 2 * len(rows), 2 * len(rows) * 2048))
+    return single + 2 * both
+
+
+def arr(src, name, n):
+    m = re.search(name + r'\[MDROUND_N\]\[%d\]\s*=\s*\{(.*?)\n\};' % n, src, re.S)
+    if not m:
+        sys.exit('round_split: %s not found' % name)
+    rows = [[int(x, 0) for x in re.findall(r'0x[0-9a-fA-F]+|\d+', r)]
+            for r in re.findall(r'\{([^{}]*)\}', m.group(1))]
+    return m, [r for r in rows if len(r) == n]
+
+
+def corpus_static_sets():
+    key = {}
+    for p in sorted(glob.glob(os.path.join(ARCADE, 'aw_*.bin'))):
+        b = open(p, 'rb').read()
+        if len(b) > ROUND_OFF and (b[ROUND_OFF] & 7) == 0:
+            key[int(os.path.basename(p).rsplit('_', 1)[1][:-4])] = b[KEY_OFF]
+    frames = sorted(f for f, v in key.items() if v == KEY_STATIC)
+    if not frames:
+        sys.exit('round_split: no round-0 frames with key 0x%02X' % KEY_STATIC)
+    out = set()
+    with tempfile.TemporaryDirectory() as td:
+        env = dict(os.environ, WD_FRAMES=','.join(map(str, frames)),
+                   WD_ADDR=hex(TILE_BASE), WD_LEN=hex(TILE_LEN), WD_OUTDIR=td)
+        with tempfile.TemporaryDirectory() as nv:
+            subprocess.run(['mame', 'altbeast', '-rompath', './mame', '-skip_gameinfo',
+                            '-video', 'none', '-sound', 'none', '-nothrottle', '-window',
+                            '-resolution', '160x120', '-keyboardprovider', 'none',
+                            '-nomouse', '-nojoystick', '-bench', str(max(frames) // 60 + 10),
+                            '-nvram_directory', nv,
+                            '-autoboot_script', 'tools/wram_dump.lua'],
+                           cwd=ROOT, env=env,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for p in sorted(glob.glob(os.path.join(td, 'aw_*.bin'))):
+            b = open(p, 'rb').read()[:SHADOW]
+            for i in range(0, len(b) - 1, 2):
+                w = (b[i] << 8) | b[i + 1]
+                if w:
+                    out.add((w & 0x1FFF) >> 6)
+    return frames, sorted(out)
+
+
+def describe(src, sets):
+    """set -> (source table, line, pens, colours per pen, ring per pen)."""
+    W = width(src, 'mdr_line_c')
+    _, lc = arr(src, 'mdr_line_c', W)
+    _, sl = arr(src, 'mdr_s_line', 128)
+    _, su = arr(src, 'mdr_s_used', 128)
+    _, mp = arr(src, 'mdr_s_map', 1024)
+    _, pr = arr(src, 'mdr_pen_ring', width(src, 'mdr_pen_ring'))
+    out, clash, orphan = {}, [], []
+    for s in sets:
+        src_rounds = [ri for ri in range(len(sl)) if su[ri][s]]
+        if not src_rounds:
+            orphan.append(s)
+            continue
+        if len({(tuple(mp[ri][s*8:s*8+8]), sl[ri][s]) for ri in src_rounds}) > 1:
+            clash.append(s)
+        ri = src_rounds[0]
+        ln = sl[ri][s]
+        base = (ln - 1) * PER_LINE if ln else 0
+        pens = mp[ri][s*8:s*8+8]
+        out[s] = dict(src=ri, used=su[ri][s],
+                      pens=pens,
+                      col=[lc[ri][base + p] if p else None for p in pens],
+                      ring=[pr[ri][base + p] if p else 0 for p in pens])
+    return out, clash, orphan
+
+
+def pack(desc):
+    """Group sets by their colour set, then exact-search 3 lines of 15."""
+    groups = defaultdict(list)
+    for s, d in desc.items():
+        groups[frozenset(c for c in d['col'] if c is not None)].append(s)
+    gs = sorted(groups, key=lambda g: -len(g))
+    best = [None]
+
+    def rec(i, bins):
+        if best[0]:
+            return
+        if i == len(gs):
+            best[0] = [set(b) for b in bins]
+            return
+        g, tried = gs[i], set()
+        for j in range(LINES):
+            fz = frozenset(bins[j])
+            if fz in tried:
+                continue
+            tried.add(fz)
+            if len(bins[j] | g) <= PER_LINE - 1:
+                bins[j] |= g
+                rec(i + 1, bins)
+                bins[j] -= (g - fz)
+                if best[0]:
+                    return
+    rec(0, [set() for _ in range(LINES)])
+    if not best[0]:
+        sys.exit('round_split: this set does not pack into %d lines of %d'
+                 % (LINES, PER_LINE - 1))
+    # WHICH LINE EACH GROUP WENT TO. A colour may sit in two lines -- groups overlap -- so a
+    # set's line comes from its GROUP, never from a colour, and the pen index is looked up
+    # per line. Assigning from the first colour straddled set 22 across two lines.
+    gline = {}
+    for g in gs:
+        for j, b in enumerate(best[0]):
+            if g <= b:
+                gline[g] = j + 1
+                break
+        else:
+            sys.exit('round_split: group %s landed in no line' % sorted(g))
+    return best[0], groups, gs, gline
+
+
+def build(desc, bins, gline):
+    line_c = [0xFFFF] * (LINES * PER_LINE)
+    ring = [0] * (LINES * PER_LINE)
+    pos = {}                       # (line, colour) -> index within that line
+    for li, b in enumerate(bins):
+        for k, c in enumerate(sorted(b)):
+            line_c[li * PER_LINE + 1 + k] = c
+            pos[(li + 1, c)] = 1 + k
+    s_line = [0] * 128
+    s_used = [0] * 128
+    s_map = [0] * 1024
+    for s, d in desc.items():
+        g = frozenset(c for c in d['col'] if c is not None)
+        li = gline[g] if g else 1
+        s_line[s] = li
+        s_used[s] = d['used']
+        for p in range(8):
+            c = d['col'][p]
+            if c is None:
+                s_map[s*8+p] = 0
+                continue
+            k = pos[(li, c)]
+            s_map[s*8+p] = k
+            if d['ring'][p]:
+                ring[(li - 1) * PER_LINE + k] = 1
+    return line_c, s_line, s_used, s_map, ring
+
+
+def round0_sets(src):
+    _, su = arr(src, 'mdr_s_used', 128)
+    return sorted(s for s in range(128) if su[0][s])
+
+
+def widen(src, name, n_new):
+    """Grow every row of an [MDROUND_N][n] table to n_new, padding with 0xFFFF for
+    mdr_line_c (a free pen) and 0 for mdr_pen_ring (no ring)."""
+    n_old = width(src, name)
+    if n_old == n_new:
+        return src
+    pad = 0xFFFF if name == 'mdr_line_c' else 0
+    m, rows = arr(src, name, n_old)
+    rows = [r + [pad] * (n_new - n_old) for r in rows]
+    body = ',\n'.join('    { ' + ', '.join(str(v) for v in r) + ' }' for r in rows)
+    src = src[:m.start(1)] + '\n' + body + '\n' + src[m.end(1):]
+    return src.replace('%s[MDROUND_N][%d]' % (name, n_old),
+                       '%s[MDROUND_N][%d]' % (name, n_new), 1)
+
+
+def replace_row(src, name, n, idx, row):
+    m, rows = arr(src, name, n)
+    rows[idx] = row
+    body = ',\n'.join('    { ' + ', '.join(str(v) for v in r) + ' }' for r in rows)
+    return src[:m.start(1)] + '\n' + body + '\n' + src[m.end(1):]
+
+
+def demo_half(src, emit):
+    """Re-pack ROUND 0's table into LINES lines WITH the sets the demos reference and it
+    does not carry. This REWRITES table 0 -- every round-0 set's pen numbering changes --
+    which is safe only because line_c, s_map, s_line, pen_ring and s_used are regenerated
+    together from one description, and is the opposite of the static half's rule of leaving
+    every existing table byte for byte."""
+    have = round0_sets(src)
+    want = sorted(set(have) | set(DEMO_ADD))
+    print('demo half: round 0 carries %d sets, adding %s -> %d sets, into %d lines of %d'
+          % (len(have), [s for s in DEMO_ADD if s not in have], len(want), LINES, PER_LINE - 1))
+    desc, clash, orphan = describe(src, want)
+    if orphan:
+        sys.exit('round_split: no pen map anywhere for %s' % orphan)
+    if clash:
+        print('  described differently by two tables, lowest wins: %s' % clash)
+    for s in DEMO_ADD:
+        if s in desc:
+            print('  set %3d: pen map from table %d, %d colours %s'
+                  % (s, desc[s]['src'],
+                     len({c for c in desc[s]['col'] if c is not None}),
+                     ['0x%03X' % c for c in sorted({c for c in desc[s]['col']
+                                                    if c is not None})]))
+    bins, groups, gs, gline = pack(desc)
+    ncol = sum(len(b) for b in bins)
+    print('  %d colour groups -> %d colours in lines %s of %d  (was [14, 14, 15] of 15)'
+          % (len(gs), ncol, [len(b) for b in bins], PER_LINE - 1))
+    line_c, s_line, s_used, s_map, ring = build(desc, bins, gline)
+    if not emit:
+        print('\n(report only; --emit to write %s)' % os.path.relpath(PAL, ROOT))
+        return 0
+    W = LINES * PER_LINE
+    src = widen(src, 'mdr_line_c', W)
+    src = widen(src, 'mdr_pen_ring', W)
+    src = replace_row(src, 'mdr_line_c', W, 0, line_c)
+    src = replace_row(src, 'mdr_pen_ring', W, 0, ring)
+    src = replace_row(src, 'mdr_s_line', 128, 0, s_line)
+    src = replace_row(src, 'mdr_s_used', 128, 0, s_used)
+    src = replace_row(src, 'mdr_s_map', 1024, 0, s_map)
+    open(PAL, 'w').write(src)
+    print('\nwrote %s: table 0 re-packed into %d lines, every other table widened to %d'
+          % (os.path.relpath(PAL, ROOT), LINES, W))
+    return 0
+
+
+def splice(src, name, n, row):
+    m, rows = arr(src, name, n)
+    body = ',\n'.join('    { ' + ', '.join(str(v) for v in r) + ' }' for r in rows + [row])
+    return src[:m.start(1)] + '\n' + body + '\n' + src[m.end(1):]
+
+
+# DEMO A's OWN SETS, measured 2026-10-13 from the name table (tools/nt_dump_ares.py ->
+# THE TILEMAP, not md_tag) over the WHOLE of demo A -- frames 520, 580, 640, 700, 780, 860, 940, 1020 and
+# 1090, the span where the step byte 0xFFF031 reads 0x0C. 30 csets at every frame but the
+# last, 33 at f1090 as the phase turns over, union 34.
+#
+# TWO ERRORS PAID FOR HERE, 2026-10-13. The cset is `(md_tag >> 16) & 0x7F` -- the port's
+# own extraction at m_main.c:3676 -- and a 0x7FFF mask let a second flag bit through and
+# invented csets. And a first pass sampled only 680-780, a 100-frame window of a 600-frame
+# phase, which missed sets 0, 19, 20 and 21 entirely: the table built from it left them
+# with no MD line, and the rom ran 37 game ticks behind the line by f700.
+DEMOA_ONSCREEN = [19, 20, 21, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88,
+                  89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101]
+# ... of which these six have NO MD line in the shipped table and ALREADY render as
+# backdrop. Keeping them backdropped is the status quo, so a table built from the other 24
+# costs NOTHING that is not already lost -- and 24 sets are 37 colours, which fit THREE
+# lines [15, 14, 15] where all 30 need 42 colours and four lines.
+DEMOA_BACKDROP = []   # the tilemap union carries only tile sets; the sprite/text csets
+                      # md_tag listed (0, 37-40, 44, 45) are not tiles and want no tile line
+# PER-SET LAYER MASKS, MEASURED, not inherited. emit_masks() takes each set's mask from the
+# table it was described from and defaults to 3 (both planes); for demo A that is wrong and
+# expensive -- 48 blocks of 2 KB, which overran .tilesmd into .palscenes by 11,263 bytes.
+# The name table knows the truth: md_tag's bit 15 is the plane, so the same six dumps that
+# gave the set list give each set's planes. 17 of the 24 are SINGLE-plane: 31 blocks,
+# 63,488 bytes, 34,816 less than the all-both assumption. 1 = plane B / S16 BG,
+# 2 = plane A / FG, 3 = both.
+DEMOA_MASK = {74: 3, 75: 3, 76: 3, 78: 3, 80: 3, 81: 3, 83: 3,
+              77: 2, 79: 2, 82: 2, 84: 1, 85: 2, 86: 2, 87: 2, 88: 2, 89: 2,
+              92: 1, 93: 1, 95: 1, 96: 1, 97: 1, 98: 1, 100: 1, 101: 1}
+
+
+def demo_a_preserve(src, emit):
+    """Demo A's table built by PRESERVING table 0's pen numbering, not by repacking.
+
+    A baked tile block is keyed (set, pen map, layer mask) and the bake already shares
+    blocks across tables on that key (bake_tiles_md.py:191). So a table whose sets keep
+    table 0's pen NUMBERS costs NO new blocks at all -- and a fresh three-line repack,
+    which renumbers every set, cost 31 blocks and overran .palscenes by 11,263 bytes.
+
+    The construction, all of it measured:
+      - demo A's 24 table sets occupy 43 colour slots in table 0;
+      - the 9 table-0 sets demo A never shows occupy 11 slots NOBODY ELSE USES, 7 on line 1
+        and 4 on line 2, which are therefore free to reuse;
+      - exactly three of demo A's sets sit on line 4 (92, 93, 100) and need 11 colours;
+      - 11 needed against 13 free (2 already spare + 11 freed), so they fit on lines 1-3
+        and LINE 4 EMPTIES.
+    Only those three sets are renumbered, so only their blocks are new."""
+    PER = PER_LINE
+    W = width(src, 'mdr_line_c')
+    _, lc = arr(src, 'mdr_line_c', W)
+    _, sl = arr(src, 'mdr_s_line', 128)
+    _, su = arr(src, 'mdr_s_used', 128)
+    _, mp = arr(src, 'mdr_s_map', 1024)
+    _, rg = arr(src, 'mdr_pen_ring', W)
+    nold = int(re.search(r'#define MDROUND_N (\d+)', src).group(1))
+    T_lc, T_sl, T_su, T_mp, T_rg = lc[0][:], sl[0][:], su[0][:], mp[0][:], rg[0][:]
+    want = set(s2 for s2 in DEMOA_ONSCREEN if s2 not in DEMOA_BACKDROP)
+    # every colour slot each assigned set occupies
+    def set_slots(s2):
+        L = T_sl[s2]
+        if not L:
+            return set()
+        return {(L - 1) * PER + T_mp[s2 * 8 + p] for p in range(8) if T_su[s2] & (1 << p)}
+    assigned = [s2 for s2 in range(128) if T_sl[s2]]
+    mine = set().union(*[set_slots(s2) for s2 in assigned if s2 in want]) or set()
+    theirs = set().union(*[set_slots(s2) for s2 in assigned if s2 not in want]) or set()
+    freeable = theirs - mine
+    movers = ([] if os.environ.get('DEMOA_KEEP4') == '1'
+              else sorted(s2 for s2 in assigned if s2 in want and T_sl[s2] == LINES + 1))
+    print('demo A, numbering PRESERVED: %d sets, %d colour slots; %d slots freed by the %d '
+          'sets demo A never shows' % (len(want), len(mine), len(freeable),
+                                       len([s2 for s2 in assigned if s2 not in want])))
+    # drop the sets demo A never shows, and the colours only they used
+    for s2 in assigned:
+        if s2 not in want:
+            T_sl[s2] = 0
+            T_su[s2] = 0
+            for p in range(8):
+                T_mp[s2 * 8 + p] = 0
+    for sl_ in freeable:
+        T_lc[sl_] = 0xFFFF
+        T_rg[sl_] = 0
+    # relocate the line-(LINES+1) sets into free slots on lines 1..LINES
+    free = [i for L in range(LINES) for i in range(L * PER + 1, L * PER + PER)
+            if T_lc[i] == 0xFFFF]
+    need = sorted(set().union(*[set_slots(s2) for s2 in movers])) if movers else []
+    print('  line %d sets %s need %d colours; %d slots free on lines 1-%d'
+          % (LINES + 1, movers, len(need), len(free), LINES))
+    # NO EARLY REFUSAL HERE: the count that matters is the NEW colours, not all of them,
+    # and the reuse below decides that. The loop stops if it genuinely runs out.
+    # REUSE A COLOUR THAT IS ALREADY ON LINES 1..LINES. The movers' colours are not all new:
+    # measured 2026-10-13, demo A's 27 lined sets occupy 47 SLOTS but only 41 DISTINCT
+    # COLOURS, because the shipped table repeats six colours across lines. Four of the 11
+    # colours sets 92/93/100 need are already present on lines 1-3, so allocating a fresh
+    # slot for each was asking for 11 when only 7 are new -- that, and not capacity, is why
+    # the first attempt reported "11 colours do not fit 9 free slots".
+    have = {}
+    for L in range(LINES):
+        for i in range(L * PER + 1, L * PER + PER):
+            if T_lc[i] != 0xFFFF:
+                have.setdefault(T_lc[i], i)
+    remap, reused = {}, 0
+    for old_slot in need:
+        col = T_lc[old_slot]
+        if col in have:
+            remap[old_slot] = have[col]
+            reused += 1
+            continue
+        if not free:
+            sys.exit('round_split: out of free slots with %d colours still to place'
+                     % (len(need) - len(remap)))
+        dst = free.pop(0)
+        T_lc[dst] = col
+        T_rg[dst] = T_rg[old_slot]
+        have[col] = dst
+        remap[old_slot] = dst
+    print('  of %d colours, %d already existed on lines 1-%d and were REUSED; %d new slots '
+          'taken, %d still free' % (len(need), reused, LINES, len(need) - reused, len(free)))
+    for s2 in movers:
+        L = T_sl[s2]
+        newline = None
+        for p in range(8):
+            if not (T_su[s2] & (1 << p)):
+                continue
+            dst = remap[(L - 1) * PER + T_mp[s2 * 8 + p]]
+            T_mp[s2 * 8 + p] = dst % PER
+            newline = dst // PER + 1
+        T_sl[s2] = newline
+    for sl_ in need:
+        T_lc[sl_] = 0xFFFF
+        T_rg[sl_] = 0
+    occ = [sum(1 for i in range(L * PER + 1, L * PER + PER) if T_lc[i] != 0xFFFF)
+           for L in range(W // PER)]
+    print('  lines now %s of %d -- line %d is EMPTY' % (occ, PER - 1, W // PER))
+    print('  RENUMBERED: %s (%d sets) -- only these cost new baked blocks' % (movers, len(movers)))
+    if not emit:
+        print('\n(report only; --emit to write %s)' % os.path.relpath(PAL, ROOT))
+        return 0
+    src = splice(src, 'mdr_line_c', W, T_lc)
+    src = splice(src, 'mdr_s_line', 128, T_sl)
+    src = splice(src, 'mdr_s_map', 1024, T_mp)
+    src = splice(src, 'mdr_pen_ring', W, T_rg)
+    src = splice(src, 'mdr_s_used', 128, T_su)
+    src = src.replace('#define MDROUND_N %d' % nold, '#define MDROUND_N %d' % (nold + 1), 1)
+    src = src.replace('#define MDROUND_N %d\n' % (nold + 1),
+                      '#define MDROUND_N %d\n'
+                      '/* table %d is DEMO A\'s OWN table. Table 0 with the 9 sets demo A\n'
+                      ' * never shows removed and its three line-4 sets relocated into the\n'
+                      ' * colours they freed, so LINE 4 IS EMPTY and free for an MD sprite\n'
+                      ' * set. Pen numbering is PRESERVED for the other 21 sets, so their\n'
+                      ' * baked blocks are shared with table 0 and only three sets cost new\n'
+                      ' * art. Selected on the attract step byte 0xFFF031 == 0x0C. */\n'
+                      '#define MDR_DEMOA_TABLE %d\n' % (nold + 1, nold, nold), 1)
+    open(PAL, 'w').write(src)
+    print('\nwrote %s' % os.path.relpath(PAL, ROOT))
+    return 0
+
+
+def demo_a(src, emit):
+    """Demo A's OWN table, packed into THREE lines so the fourth is free for a sprite set.
+
+    This APPENDS a table (the static half's rule) rather than rewriting table 0, because
+    table 0 still serves demo B, whose sets are not these. The header is already four lines
+    wide (mdr_line_c[MDROUND_N][64]), so the pack is padded to width with line 4 EMPTY --
+    that emptiness is the whole point of the table."""
+    want = [s for s in DEMOA_ONSCREEN if s not in DEMOA_BACKDROP]
+    nold = int(re.search(r'#define MDROUND_N (\d+)', src).group(1))
+    print('demo A: %d on-screen sets, %d backdropped already, packing %d into %d lines of %d'
+          % (len(DEMOA_ONSCREEN), len(DEMOA_BACKDROP), len(want), LINES, PER_LINE - 1))
+    desc, clash, orphan = describe(src, want)
+    if orphan:
+        sys.exit('round_split: no pen map anywhere for %s' % orphan)
+    if clash:
+        print('  described differently by two tables, lowest wins: %s' % clash)
+    bins, groups, gs, gline = pack(desc)
+    ncol = sum(len(b) for b in bins)
+    print('  %d colour groups -> %d colours in lines %s of %d'
+          % (len(gs), ncol, [len(b) for b in bins], PER_LINE - 1))
+    line_c, s_line, s_used, s_map, ring = build(desc, bins, gline)
+    W = width(src, 'mdr_line_c')
+    if len(line_c) > W:
+        sys.exit('round_split: pack is %d wide, header is %d' % (len(line_c), W))
+    # pad the unused lines to EMPTY -- 0xFFFF is "no colour", 0 is "no ring"
+    line_c = line_c + [0xFFFF] * (W - len(line_c))
+    ring = ring + [0] * (W - len(ring))
+    print('  padded to the header width %d: lines %d..%d are EMPTY and free for sprites'
+          % (W, LINES + 1, W // PER_LINE))
+    if not emit:
+        print('\n(report only; --emit to write %s)' % os.path.relpath(PAL, ROOT))
+        return 0
+    src = splice(src, 'mdr_line_c', W, line_c)
+    src = splice(src, 'mdr_s_line', 128, s_line)
+    src = splice(src, 'mdr_s_map', 1024, s_map)
+    src = splice(src, 'mdr_pen_ring', W, ring)
+    src = splice(src, 'mdr_s_used', 128, s_used)
+    # the measured masks, written where emit_masks would have written inherited 3s
+    if True:
+        fn = os.path.join(LIVE, 's%d_sets.txt' % nold)
+        rows = [(s2, DEMOA_MASK.get(s2, 3), desc[s2]['src']) for s2 in sorted(desc)]
+        with open(fn, 'w') as fh:
+            fh.write('# GENERATED by tools/round_split.py --demoa: table %d, DEMO A.\n' % nold)
+            fh.write('# Masks are MEASURED from the name table (md_tag bit 15 = plane) over\n')
+            fh.write('# frames 680-780, not inherited: 17 of 24 sets are single-plane, which\n')
+            fh.write('# is 31 blocks of 2 KB instead of 48 and is what keeps .tilesmd inside\n')
+            fh.write('# its slot (the all-both assumption overran .palscenes by 11,263 B).\n')
+            fh.write('# set cells layermask (1 = plane B / S16 BG, 2 = plane A / FG, 3 = both) src\n')
+            for s2, mk, sr in rows:
+                fh.write('%d 0 %d %d\n' % (s2, mk, sr))
+        nb = sum(1 if m == 3 else 0 for _, m, _ in rows)
+        print('  layer masks -> %s: %d sets, %d single + %d both = %d blocks of 2 KB (%d B)'
+              % (os.path.relpath(fn, ROOT), len(rows), len(rows) - nb, nb,
+                 len(rows) - nb + 2 * nb, (len(rows) - nb + 2 * nb) * 2048))
+    src = src.replace('#define MDROUND_N %d' % nold, '#define MDROUND_N %d' % (nold + 1), 1)
+    src = src.replace('#define MDROUND_N %d\n' % (nold + 1),
+                      '#define MDROUND_N %d\n'
+                      '/* table %d is DEMO A\'s OWN table, packed into three lines so the\n'
+                      ' * fourth is free for an MD sprite set. Its 24 sets are demo A\'s\n'
+                      ' * measured on-screen union minus the six that already render as\n'
+                      ' * backdrop, so it costs no colour that is not already lost.\n'
+                      ' * Selected on the attract step byte 0xFFF031 == 0x0C. */\n'
+                      '#define MDR_DEMOA_TABLE %d\n' % (nold + 1, nold, nold), 1)
+    open(PAL, 'w').write(src)
+    print('\nwrote %s' % os.path.relpath(PAL, ROOT))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--emit', action='store_true')
+    ap.add_argument('--demo', action='store_true',
+                    help="re-pack ROUND 0's table with the sets the demos reference")
+    ap.add_argument('--demoa', action='store_true',
+                    help="append DEMO A's own table, three lines, fourth left free")
+    ap.add_argument('--preserve', action='store_true',
+                    help="build it from table 0 keeping pen numbering (no new baked blocks)")
+    a = ap.parse_args()
+    src = open(PAL).read()
+    if a.demoa:
+        return (demo_a_preserve if a.preserve else demo_a)(src, a.emit)
+    if a.demo:
+        return demo_half(src, a.emit)
+    nold = int(re.search(r'#define MDROUND_N (\d+)', src).group(1))
+    frames, sets = corpus_static_sets()
+    print('static half: %d corpus frames (key 0xFFF022 == 0x%02X), %d colour sets'
+          % (len(frames), KEY_STATIC, len(sets)))
+    print('  sets: %s' % sets)
+    desc, clash, orphan = describe(src, sets)
+    if orphan:
+        sys.exit('round_split: no pen map anywhere for %s' % orphan)
+    if clash:
+        print('  described differently by two tables, lowest wins: %s' % clash)
+    bins, groups, gs, gline = pack(desc)
+    ncol = sum(len(b) for b in bins)
+    print('  %d colour groups -> %d colours in lines %s of %d'
+          % (len(gs), ncol, [len(b) for b in bins], PER_LINE - 1))
+    line_c, s_line, s_used, s_map, ring = build(desc, bins, gline)
+    print('  new table index %d (MDROUND_N %d -> %d)' % (nold, nold, nold + 1))
+    if not a.emit:
+        print('\n(report only; --emit to write %s)' % os.path.relpath(PAL, ROOT))
+        return 0
+    W = width(src, 'mdr_line_c')
+    if len(line_c) != W:
+        sys.exit('round_split: header is %d wide, this pack is %d -- run --demo first '
+                 'or match SPLIT_LINES' % (W, len(line_c)))
+    src = splice(src, 'mdr_line_c', W, line_c)
+    src = splice(src, 'mdr_s_line', 128, s_line)
+    src = splice(src, 'mdr_s_map', 1024, s_map)
+    src = splice(src, 'mdr_pen_ring', W, ring)
+    src = splice(src, 'mdr_s_used', 128, s_used)
+    emit_masks(nold, desc)
+    src = src.replace('#define MDROUND_N %d' % nold, '#define MDROUND_N %d' % (nold + 1), 1)
+    src = src.replace('#define MDROUND_N %d\n' % (nold + 1),
+                      '#define MDROUND_N %d\n'
+                      '/* table %d is ROUND 0\'s STATIC HALF -- the title, high-score and\n'
+                      ' * post-demo screens, which run at round 0 but share no screen with\n'
+                      ' * the demos. Generated by tools/round_split.py from the arcade\n'
+                      ' * corpus; selected by MD_ATTRACT_SPLIT in m_main.c. */\n'
+                      '#define MDR_ATTRACT_TABLE %d\n' % (nold + 1, nold, nold), 1)
+    open(PAL, 'w').write(src)
+    print('\nwrote %s' % os.path.relpath(PAL, ROOT))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

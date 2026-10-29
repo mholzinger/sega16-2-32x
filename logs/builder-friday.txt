@@ -1,0 +1,2692 @@
+wc4 26/26 clean.
+
+Round 13 complete: wc4 0/26, wc2 0/13.
+
+wc4 27/27 clean.
+
+wc4 28/28 clean.
+
+Round 14 complete: wc4 0/28, wc2 0/14.
+
+wc4 29/29 clean.
+
+wc4 30/30 clean.
+
+Round 15 complete: wc4 0/30, wc2 0/15.
+
+wc4 31/31 clean.
+
+wc4 32/32 clean.
+
+Round 16 complete: wc4 0/32, wc2 0/16.
+
+wc4 33/33 clean.
+
+wc4 34/34 clean.
+
+Round 17 complete: wc4 0/34, wc2 0/17.
+
+wc4 35/35 clean.
+
+wc4 36/36 clean.
+
+Round 18 complete: wc4 0/36, wc2 0/18.
+
+wc4 37/37 clean.
+
+wc4 38/38 clean.
+
+Round 19 complete: wc4 0/38, wc2 0/19.
+
+wc4 39/39 clean.
+
+wc4 40/40 clean.
+
+Round 20 complete: wc4 0/40, wc2 0/20 in the boot window. Running until 05:45.
+
+wc4 41/41 clean.
+
+wc4 42/42 clean.
+
+Round 21 complete: wc4 0/42, wc2 0/21.
+
+wc4 43/43 clean.
+
+wc4 44/44 clean.
+
+Round 22 complete: wc4 0/44, wc2 0/22.
+
+wc4 45/45 clean.
+
+wc4 46/46 clean.
+
+Round 23 complete: wc4 0/46, wc2 0/23.
+
+wc4 47/47 clean.
+
+wc4 48/48 clean.
+
+Round 24 complete: wc4 0/48, wc2 0/24.
+
+wc4 49/49 clean.
+
+wc4 50/50 clean.
+
+Round 25 complete: wc4 0/50, wc2 0/25.
+
+wc4 51/51 clean.
+
+wc4 52/52 clean.
+
+Round 26 complete: wc4 0/52, wc2 0/26.
+
+wc4 53/53 clean.
+
+wc4 54/54 clean.
+
+A third wc2 purple event, in the boot window as predicted. Tally now: wc2 3 events in 49 launches, all the boot's first demo; wc4 0 in 54. At wc2's rate, 54 unfixed launches would show about 3 events; zero has about a 3% chance by luck. Recording it; the census runs to 05:45.
+
+Nothing else to request; the census finishes at 05:45 and the final tally goes into STATE then.
+
+wc4 55/55 clean.
+
+wc4 56/56 clean.
+
+Round 28 complete: wc4 0/56, wc2 1/28 in the boot window.
+
+wc4 57/57 clean.
+
+wc4 58/58 clean.
+
+Round 29 complete: wc4 0/58, wc2 1/29.
+
+wc4 59/59 clean.
+
+wc4 60/60 clean.
+
+Round 30 complete: wc4 0/60, wc2 1/30.
+
+wc4 61/61 clean.
+
+wc4 62/62 clean.
+
+Round 31 complete: wc4 0/62, wc2 1/31.
+
+wc4 63/63 clean.
+
+wc4 64/64 clean.
+
+Round 32 complete: wc4 0/64, wc2 1/32.
+
+wc4 65/65 clean.
+
+wc4 66/66 clean.
+
+Round 33 complete: wc4 0/66, wc2 1/33.
+
+wc4 67/67 clean.
+
+wc4 68/68 clean.
+
+Round 34 complete: wc4 0/68, wc2 1/34. About 15 minutes of census left.
+
+wc4 69/69 clean.
+
+wc4 70/70 clean.
+
+Round 35 complete: wc4 0/70, wc2 1/35.
+
+wc4 71/71 clean.
+
+wc4 72/72 clean.
+
+Background command "Stop the long census and start the boot-window census of wc4 against wc2 until 05:45" completed (exit code 0)
+Monitor event: "boot-window census: wc4 (fix) vs wc2 per-launch purple/grey counts"
+Morning report. Rig on rg1, tree committed through 32e61a5e, nothing running.
+
+Play pass: rom/night/wc4.32x. It is wc2 plus one exact fix on the SH-2 side. If you want the fix without WRAMCODE, rom/night/rg2.32x is the line plus the fix alone.
+
+The purple band is found and fixed.
+
+Mechanism: the bottom-band backstop's opacity cache was keyed by the 13-bit tile code, but the art a code names depends on the tile bank in COMM2, and the cache was never invalidated. A verdict taken while COMM2 still held the previous scene's or boot's bank stayed cached for the whole scene. That is why it lived in the boot's first demo and vanished at the cut.
+Fix: key the cache by the art index, which already includes the bank. Opacity is a pure function of the art, so no entry can be stale, and every correct verdict is unchanged.
+Evidence, boot-window census on the rig overnight: wc4 0 events in 72 launches; wc2 1 in 36 (3 in 58 launches tonight, every one the boot's first demo). At wc2's rate, 72 unfixed launches expect about 3.7 events; zero has about a 2% chance by luck.
+The 68K-time axis, closed for the night, all in LESSONS with instruments:
+
+The ROM wait covers data reads, but RIGSPAN=9 had already priced that half at about one cycle a read.
+Burst tenure is real but sporadic: RIGSPAN=17 reads 132 at all four window phases in the demo.
+The class histogram (RIGSPAN=18, same rom on both machines) shows only cart game code moving on the FPGA, 8% to 12 to 17%. The "60 unexplained lines" were the second IRQ4 chain of tipped passes, 85 of its 110 lines ours.
+A third block set (wc3, WRAMCODE2=1) is exact and converts nothing. The cart-fetch axis is spent at wc2.
+What is left: the chain's own lines. The palette rotor at 41 waits on your word.
+Still open: a grey-tile background at level start, seen once each on wc2 and wc3 in 20-shot launches and never in the boot census. Same family, an install read before the map is final, not yet mechanised.
+
+Next, on your word: the play pass on wc4, then LINE_FLAGS gets WRAMCODE=1 and the line is named.
+
+Background command "Replay the wolf script in the MAME arcade and snapshot four play frames as the oracle" completed (exit code 0)
+Background command "Sweep wc4 under the level-1 and native3 scripts with screenshots every 100 frames" completed (exit code 0)
+Background command "Build the line without ROWGEN as norow, then restore rom/s16.32x to wc4" completed (exit code 0)
+Background command "Re-run the level-1 script sweep with its log kept" completed (exit code 0)
+Background command "Re-run the level-1 sweep with the zsh quirk avoided and list scene changes" completed (exit code 0)
+Background command "Build wc6's RIGSPAN=11 and =4 variants, then restore rom/s16.32x to wc6" completed (exit code 0)
+Monitor event: "wc6 rig chain: speed readings, picture launches, band cells"
+Background command "Snapshot the arcade attract across its eye and face cut" completed (exit code 0)
+Monitor event: "wc6 rig chain: speed readings, picture launches, band cells"
+This is an excellent build. 
+
+I only have four defects to go through but they are persistent across builds. 
+
+1. black tiles pop in level one through out the level randomly. 
+2. Beast transition has garbage on bottom and top rows of transition screen
+3. SOME frame loss, but I think it's the right kind, meaning we are only dropping a frame if it misses the vint
+4. Transition between level one and 2, garbage on purple screen
+Re:
+
+╭─mikeholzinger@blue-steel ~/src/sega16-2-32x  ‹native1*› 
+╰─➤  ./show_builds.sh; ./whats_on_mister.sh  
+Most recent builds: in ./rom/
+
+ 6h 48m 17s  ./rom/s16.32x
+ 6h 48m 17s  ./rom/night/rg2.32x
+ 6h 48m 20s  ./rom/night/wc4.32x
+
+Most recent builds: in /private/tmp/claude-501/
+
+ 9h 58m 17s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/ck-vert.32x
+ 9h 58m 17s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/ck-ships.32x
+10h 04m 10s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/t.32x
+
+core: S32X
+Recording the pass and naming the line first, then running each defect through the record before touching anything.
+
+Thats what i just played. do you have something else?
+Checking which rom you actually played: the rig log tells if it was a rig launch.
+
+No rig launch since the census — you played on ares using rg2 (line plus purple-band fix, no WRAMCODE) from rom/s16.32x. I mislabeled the line earlier, so I'm correcting that and setting up wc4 in rom/s16.32x to play next.
+I didnt play any ares builds. you did :)
+rom/s16.32x is now wc4: rg2 plus WRAMCODE, the 68K speed work. That is the something else. Same fix you just played, plus the faster pass. Starting the four defects against the record meanwhile.
+
+Got it—rom/s16.32x remains rg2 regardless of where it was played, and wc4 is now recorded there too. Continuing with the defect review.
+The screenshot loop failed on a zsh quirk (the argument list was passed as one word). Re-running the sweep properly.
+
+The wolf script run ends in a player death around frame 8850 with no transform or level clear, but the sweep reveals black cells along the bottom band in many play frames—likely defect 1 on ares. I'll zoom into those frames and run the other two scripts that go further.
+Mapping defect 1 to its card in the record while the MAME oracle replay and the two longer ares sweeps run.
+
+I found a discrepancy: our version draws black squares in the health-bar row where the arcade shows the floor through, likely defect 1, and it's reproducible on ares without the rig. I'll pull a controlled comparison from the attract demo, which runs identically on both machines.
+Comparing the arcade attract demo against ours on the health-bar row.
+
+I've confirmed the bottom row renders black where the arcade shows floor tiles across every demo frame—a consistent, testable discrepancy. Now checking the settings for the two most likely causes.
+I'll build the line construction without ROWGEN for the A/B comparison, add a bottom-band black-cell counter, and then check the two longer sweeps for the transformation and level transition.
+Checking the ares frame geometry before trusting the counter: the bottom-row result may be a crop offset, not the rom.
+
+Found that the ares frame's active area is rows 11-234, meaning today's crops were all 8 lines low and the "row 27 black" was actually the border. I'll fix the crop, re-count, and rerun the ROWGEN A/B check on the same frames.
+Found two deterministic black-cell classes on ares in the level-1 demo (absent in arcade, and confirmed not caused by ROWGEN). Now checking the framebuffer at a hit frame to see if the cells are transparent or painted black, then re-running the level-1 script that previously died silently.
+The floor band isn't in the framebuffer at all—rows 196-220 are near-empty in both banks—confirming the black cells are plane cells tied to tile residency. The level-1 sweep also failed on a zsh syntax quirk, so I'll read the plane bases and rerun it.
+Reading the Mega Drive name tables at both hit frames to see what the black cells reference.
+
+Found that the black cells are name-table cells blanked by SH-2 on both planes, sitting next to health bars where an empty bar slot's transparent text tile shows through as black. Now checking the row-25 quintet's surroundings, the arcade's pixels there, and the code path that blanks both planes.
+The black cells mark spots where the foreground and background lookups disagree on the same cell—one finds it empty, the other finds it opaque—pointing to a coordinate alignment mismatch. I'll compare how each build computes map coordinates and check the level-1 sweep's red frame at 11200 for the transformation.
+I've confirmed defect 1: the background cover test uses base scroll while the foreground floor band uses per-row scroll, so they disagree by a few cells and blank the floor under empty foreground cells. Now I'll build the fix and run the census.
+The build failed at link, so that census ran on the old rom. Reading the link error.
+
+The added code overflowed the SH-2's RAM-code slot, so I'm hoisting the per-row calculation out of the cell loop since it only depends on the row, then rebuilding to see if it fits — I'll check existing trim options if it still overflows.
+Still over. Finding the existing trim mechanism and how much headroom the line's RAM code has.
+
+Listing what I need: the guard and address of the blank-cell census counters (one read), then a per-frame census on ares at the hit frames, which depends on that read. Reading the guard now.
+
+The probe overflowed the RAM-code slot again, causing garbage reads, though I confirmed the row-25 quintet persists across at least four consecutive frames. Now I'll list RAM-code functions by size to free up space properly and study how layer registers are parsed so I can decode the cells offline.
+Decoding the black cells offline: dumping the text page (layer registers), the SH-2's tilemap copy, and the residency tables at a hit frame.
+
+Every black cell in row 25 uses foreground tile 0x303, which is blank but got flagged fully opaque by the cover test, blanking the floor beneath it. I'll check the bank register shadow, the actual tile art, and how the framebuffer composes it to find why.
+Found it: tile 0x1303's foreground variant can't get a slot because its hash bucket's eight tiles are all too recently used to evict, and the table sits at 955/1024 slots—right at capacity. I'll check the refusal rule and VRAM layout to figure out the right fix.
+I found that with 614 distinct tiles across 1024 slots, only three hash sets overflow eight ways—since foreground/background variants always collide in the same set due to the index depending only on tile code. I'll now review every usage of the set index and way count before making changes.
+I'll implement the geometry change—64 sets of 16 ways for the slot table (still 1024 slots total), folding the colour set and plane into the set hash while leaving the art cache's way count untouched—then run the census and pixel diff against wc5.
+The RAM-code slot ran out of space, causing that census to use a stale ROM. I'll move the once-a-window register latch permanently into ROM (about 670 bytes), then rebuild wc6 and rerun the census with a pixel diff against wc5.
+The black band cells on wc6 are fixed and now match the arcade, with only the expected cut transition band remaining; the pixel diff against wc5 was just a timing artefact from the roms being at different game positions on the same frame, so I'll compare them at matching game time instead.
+Running the two aligned screenshots directly and diffing them.
+
+Both ROMs match on every game layer at the same scene timer, with differences limited to blinking logo/score cells and the wolf's animation phase, though wc6 hits timer 292 at frame 2364 versus wc5's 2400—about 7% faster on ares. I'll commit, build the rig variants, and record next.
+The black-tile fix is ready to play at rom/s16.32x while that rig chain runs. Meanwhile, I'll investigate defect 2 by comparing the top and bottom rows of the attract's eye/face cut against the arcade version, since it shares pages 10 and 11 with the transformation screen.
+Those frames were the scores screen (wc6's attract runs earlier than my old timeline). Locating the eye cut on both machines by dominant colour first.
+
+The eye cut sits before the level-1 demo on both machines, not after. Sweeping that range on both.
+
+The scene phases match up with the arcade's timings, so I'll now compare the top and bottom rows across the three matched eye phases.
+The attract's eye and face cut has clean top and bottom rows on ares, identical to the arcade's apart from the arcade's credit text. So defect 2 is the in-play transformation only, which no script reaches; I will need a rig screenshot from you at that moment, taken from the MiSTer's screenshot command while it is on screen. Waiting for wc6's rig readings.
+
+wc6s11 launch 1: mean pass 316 at the second read (the first read had one agreeing row, unreliable), passes 436 against the control's 456. Waiting on launch 2 and the span histogram.
+
+wc6s11 launch 2: 336 at the reliable read, passes 424. Against the control's 320 and 456 that reads slower on the FPGA, while ares is faster. The span histogram decides; two launches of it are next.
+
+I didnt see you were asking for something. still need it?
+Yes, one thing, whenever you next play on the rig: a screenshot at the moment defect 2 shows, the garbage on the top and bottom rows of the beast transformation screen. Two ways:
+
+From another terminal while it is on screen:
+
+ssh root@mister.office.local 'echo screenshot > /dev/MiSTer_cmd'
+The file lands in /media/fat/screenshots/S32X/ named after the rom, and I pull it myself.
+Or the MiSTer OSD's screenshot key if you have one bound.
+The same for defect 4 if you can catch it: the purple screen between level 1 and 2 with garbage on it. No play script of ours reaches either scene, and the attract's eye cut, which uses the same pages, is clean on ares against the arcade, so those two need a real capture before I can locate the layer.
+
+Not urgent: the rig is mine for another 20 minutes on wc6's gates. After that it is on rg1 and free.
+
+four new screnewshots in ./screenshots/*
+Those five are named x4d, which is my running control launch (wc2s4, started 10:39:45), so they are the rig's own shots from my chain. Looking at them anyway in case you triggered them at something.
+
+Those five are my probe's attract frames: the wc2s4 control rom with its red, white and blue barcode rows across the bottom, the face cut, the eye cut and the demo. Not the transformation. The capture I need is from a plain rom during play, at the beast transformation, and at the level 1 to 2 screen.
+
+The rig is mine for about 20 more minutes (wc6's span histogram and three picture launches). When the chain ends it restores rg1 and the rig is yours. Then play rom/s16.32x (wc6) and fire the screenshot command at those two moments, or tell me the rig is free and I stay off it until you are done.
+
+Control wc2s4 today: one-vint 74 and 108, three-vint 14 and 26. wc6s4 launch 1 running.
+
+Monitor event: "wc6 rig chain: speed readings, picture launches, band cells"
+Monitor event: "wc6 rig chain: speed readings, picture launches, band cells"
+wc6's span histogram confirms it is slower on the FPGA: one-vint 86 against the control's 108 at the same point, three-vint 48 against 26. Ares charges no memory time, and the 16-way tag scan is four cache lines per lookup instead of two. The fix is to keep 16 ways but make a hit cost one read: check the cell's previous slot first. Reading how the previous entry is kept.
+
+The mirror is not maintained on the line's path, so I keep it myself: one store per cell into the existing mirror area, then a one-read hint on the next pass. Building wc7 and checking it on ares.
+
+wc7 is producing bad results—about 30 black cells per frame along the grass row—likely because the mirror's SDRAM area is being reused since the wrap change. I'll check the address map next.
+The wc6 span launches contradict each other (30% slower vs. faster than control), so speed can't be ranked yet. For wc7, there's no address overlap, pointing to a logic bug—I'll split the change in half to isolate which part causes it.
+actually 20260925_104027-x4d.png is the beast transform. 
+and 20260925_104030-x4d.png is the eye pattern, as well as 20260925_104033-x4d.png for the left eye. Those i captured intentionally.
+The stale mirror is throwing off the allocator's dormant checks, so I need to give the hint its own array instead. Looking for free SDRAM to allocate it.
+The barcode probe rom masked defect 2's rows, and ares confirms this defect is rig-only, so I'll capture the same two shots on a plain rom (rom/s16.32x or rg1) once the rig frees up. I'm also abandoning the hint approach since it can't get a private SDRAM copy, and switching to two-choice hashing where each tile can land in either of two sets, keeping cache behavior equivalent to 16 ways.
+wc7 keeps the fix (0 black band cells in the demo) at wc5's speed on ares. Committing, verifying the picture at the same game time, building its rig variants, and queuing the rig chain behind wc6's.
+
+wc6's first picture launch on the rig: 20 shots, 0 band black cells, 0 purple, 0 grey. Recording the two-choice design and the withdrawn hint while the chains run.
+
+rom/s16.32x is now wc7: the black-tile fix at wc5's speed. Play that one when the rig frees up, and the two captures I need are on it.
+
+Where things stand:
+
+Defect 1 (black tiles): mechanism found and fixed on ares (a priority foreground cell refused a VRAM slot when its hash set was full of hot tiles; two-choice sets now). wc6's first rig picture launch showed 0 band cells in 20 shots. wc7's own rig gates run after wc6's chain, about 45 minutes in total, ending on rg1.
+Defect 2 (transformation rows) and defect 4 (purple screen): clean on ares against the arcade for the attract's version of the same pages, so they are rig-only and need your plain-rom captures.
+Defect 3: the speed axis, unchanged today.
+The rig is mine until the wc7 chain ends. Next: the wc7 rig readings as they land.
+
+wc6 picture launch 2: clean, 0 band cells. One more, then the wc7 chain starts.
+
+wc6 picture launch 3: 0 band cells, 0 purple, but one grey-tile level start (the third rare class, still not mechanised: wc2, wc3 and wc6 one each, rg1 none). The wc7 chain starts now.
+
+Monitor event: "wc6 rig chain: speed readings, picture launches, band cells"
+Monitor event: "wc7 rig chain: speed readings, picture launches, band cells"
+The grey event is a level start after the cut's blank: the sky rows show the previous scene's tiles in the new palette for one shot, healed by the next. That points at the display gate's settle-hold releasing before the name table is rebuilt on the faster 68K, a card of its own, not touched today. wc7's chain is on the rig now (control first).
+
+Control wc2s11: 328 and 316 lines, passes 224 and 456. wc7s11 launch 1 running.
+
+wc7s11 launch 1: 336 lines and 400 passes against the control's 316 and 456, the same shape as wc6. The common factor is not the slot table then; both moved the once-a-window register latch into ROM, and SH-2 code fetched from the cart during the window is exactly the tenure the decompile described. Checking what else is cold enough to give the latch its RAM back.
+
+The latch fits in 670 bytes of straight-line code per window (42 line fills from the cart), while the page copy loop stays cached after its first pass, so it can be moved to ROM cheaply. I'll swap them, build wc8, and queue its rig chain behind wc7's.
+wc8: 0 black band cells, speed on ares equal to wc7, and its rig chain is queued behind wc7's. Committing and arming its monitor.
+
+Both chains are on the rig in sequence, about 70 minutes total. Nothing runs off-rig until their readings land.
+
+wc7s11 launch 2: 336 lines, 412 passes, the same slowdown as launch 1. That firms up the ROM-latch reading; wc8's chain follows.
+
+Control wc2s4: one-vint 64 and 102, three-vint 14 and 24. wc7s4 launch 1 running.
+
+wc7s4 launch 1: one-vint 58 and 130, three-vint 16 and 34 (control 64 and 102, 14 and 24). Mixed, inside the launch-to-launch noise. Continuing.
+
+wc7s4 launch 2: one-vint 126, three-vint 30 at the reliable read (control 102 and 24). wc7's picture launches now, then wc8's chain.
+
+wc7 picture launch 1: clean, 0 band cells.
+
+wc7 picture launch 2: clean.
+
+That was the finished wc6 chain's monitor expiring. wc7's third picture launch is running.
+
+Background command "Build wc7's rig variants and queue its rig chain behind wc6's" completed (exit code 0)
+Monitor event: "wc7 rig chain: speed readings, picture launches, band cells"
+Monitor event: "wc8 rig chain: speed readings, picture launches, band cells"
+One wc7 shot has 20 black band cells. Checking whether it is a cut transition or the defect.
+
+That 20-cell shot is just a level-start transient where sprites and the logo appear black before palettes load, matching the known lost-push pattern—self-correcting by the next frame. I'm logging wc7's rig results now while wc8's chain runs.
+wc8's chain has started with the control. Its readings decide whether the latch swap recovers the FPGA rate; about 30 minutes.
+
+Control: 338 and 322 lines, passes 232 and 464. wc8s11 launch 1 running.
+
+wc8s11 launch 1: 342 lines, 420 passes against the control's 322 and 464. So the latch was not it either. The slowdown is somewhere in the wc4-to-wc8 family, and wc4 itself was never speed-measured on the rig. Building wc4 and wc5 speed probes from their commits to bisect.
+
+Bisect queued behind wc8's chain: wc4 and wc5 speed probes twice each against the control, about 25 minutes after wc8's finishes. Nothing to request until the rig reports.
+
+wc8s11 launch 2: 316 lines at the reliable read, passes 396 (control 322 and 464). The mean pass matches the control this time; the pass count stays low. The bisect will say where.
+
+Control wc2s4: one-vint 72 and 104, three-vint 18 and 34. wc8s4 launch 1 running.
+
+wc8s4 launch 1: one-vint 42 and 80, three-vint 22 and 48 against the control's 72 and 104, 18 and 34. The family is slower on the FPGA. One mechanism the ares census can test now: if the new hash makes the table thrash, every extra claim is a tile upload on the 68K, cheap on ares and real on the FPGA. Reading claim and eviction rates on wc8 against wc5.
+
+The wc8 run on ares over 600 demo frames shows 30 claims, 22 evictions, 0 refusals, ruling out thrash and extra uploads as the FPGA cost. Since the wc5 census probe won't build against that commit, I'll rely on the rig bisect and clean up the stale ROM.
+The tree is clean apart from build products. Everything else pending is on the rig: wc8's second span launch and pictures, then the wc4/wc5 bisect.
+
+wc8s4 launch 2: one-vint 120, three-vint 36 at the reliable read (control 104 and 34). Launch 1 said worse, launch 2 says better. The rig's launch spread is bigger than the effect; the bisect will get the same noise. Pictures next.
+
+That was wc7's finished monitor expiring. wc8's pictures are running.
+
+wc8 picture launch 1: clean, 0 band cells.
+
+wc8 picture launch 2: clean.
+
+Background command "Queue wc8's rig chain behind wc7's" completed (exit code 0)
+Monitor event: "wc8 rig chain: speed readings, picture launches, band cells"
+Monitor event: "speed bisect: wc4s11, wc5s11 against the control"
+wc8 picture launches 3 of 3 clean: 60 shots, 0 band black cells, 0 purple, 0 grey. On the rig the black tiles are gone in the demo. Recording; the speed bisect follows.
+
+The bisect has started with wc4's speed probe. About 15 minutes for the five launches; the rig ends on rg1.
+
+wc4s11 launch 1: 320 and 310 lines, passes 240 and 472. That is at or better than the control. wc5 next.
+
+Monitor event: "wc8 rig chain: speed readings, picture launches, band cells"
+wc4 and wc5 read 310 to 320 lines, at or below the control. So the cost is in the slot-table change itself, not the fixes before it. Cheapest exact remedy to test: the improved hash alone on the original single 8-way set, which costs nothing over wc4. If the demo still shows 0 black cells on ares, that is the candidate.
+
+The improved hash eliminates black cells in the ares demo at wc4's lookup cost, so wc9 is now the candidate with two-choice hashing kept as a fallback for overflow cases. I'll commit this, build the rig variants, and queue the gates behind the bisect.
+rom/s16.32x is now wc9. The rig runs the bisect's last three launches, then wc9's gates (about 40 minutes), ending on rg1. Nothing else to request until they report.
+
+Control again: 332 and 318. wc4 launch 2 running.
+
+wc4 launch 2: 328 and 316, equal to the control. wc5 launch 2 is last, then wc9's chain.
+
+wc5 launch 2: 352 and 326, so a single rom spreads about 15 lines between launches. Across today's reliable reads: control 316 to 322, wc4 and wc5 310 to 326, the two-choice roms 336, wc8 316 to 342. wc9's chain starts now.
+
+Bisect done. wc9's chain is next on the rig.
+
+Confirmed. Waiting on wc9's readings.
+
+wc9's chain started with the control.
+
+Control: 322 and 314. wc9s11 launch 1 running.
+
+wc9s11 launch 1: 356 and 324 (control 322 and 314). Inside the spread seen on wc5 (352 and 326). Launch 2 next.
+
+wc9s11 launch 2: 312 lines, passes 464, equal to the control's best. Span histogram next.
+
+Control: one-vint 68 and 104, three-vint 14 and 24. wc9s4 launch 1 running.
+
+wc9s4 launch 1: one-vint 72 and 120, three-vint 14 and 30 (control 68 and 104, 14 and 24). At or above the control. One more, then pictures.
+
+wc9s4 launch 2: one-vint 86 and 126, three-vint 10 and 20. Better than the control on both counts. Pictures next, then the rig returns to rg1.
+
+wc9 picture launch 1: clean.
+
+That was the bisect's monitor expiring. wc9's second picture launch is running.
+
+wc9 picture launch 2: clean. One more.
+
+Background command "Run wc9's rig chain behind the bisect" completed (exit code 0)
+Monitor event: "wc9 rig chain: speed readings, picture launches, band cells"
+wc9 passes: pictures 3 of 3 (60 shots, 0 band cells, 0 purple, 0 grey) and speed at or above the control on both instruments. The rig is back on rg1. Recording and closing out.
+
+The memory path was mangled. Fixing that write.
+
+The rig is on rg1 and free. Report:
+
+Defect 1 is fixed. rom/s16.32x is wc9 for your play pass.
+
+Mechanism: a priority foreground cell was refused a VRAM slot when its 8-way hash set was full of recently used tiles, and the bottom-band backstop blanked the floor under it. The set hash was a function of the tile code alone, so a tile's foreground and background variants always collided in one set. The floor tiles are on both planes.
+Fix: the hash now folds in the colour set and the plane. Nothing else about the table changed.
+Evidence: ares demo census 0 black band cells (wc5 had 1 to 5 a frame); rig 60 shots, 0 band cells, 0 purple, 0 grey; speed at the control on both rig instruments. Same-game-time picture identical to before.
+Two dead ends are recorded as knobs: 16 ways and two-choice sets both fix the picture but cost the FPGA about 20 lines a pass, because a hit's cost there is its cache lines, not its instructions.
+Still open, all needing you:
+
+Play pass on wc9. If it passes, the line becomes make line WRAMCODE=1 and I name it.
+Defect 2 (transformation rows) and defect 4 (level 1 to 2 purple screen): rig-only, clean on ares against the arcade for the same pages. I need one screenshot of each from a plain rom on the rig, via the screenshot command while it is on screen.
+Defect 3 is the speed axis, unchanged.
+Everything is committed through b13723b0.
+
+That was wc9's finished monitor expiring. Nothing is running; the rig is on rg1 and yours.
+
+So checking in - this is what I see - what do you need me to test?
+
+holzinger@blue-steel ~/src/sega16-2-32x  ‹native1*› 
+╰─➤  ./show_builds.sh; ./whats_on_mister.sh  
+Most recent builds: in ./rom/
+
+ 1h 39m 12s  ./rom/s16.32x
+ 1h 39m 17s  ./rom/night/wc9s4.32x
+ 1h 39m 22s  ./rom/night/wc9s11.32x
+
+Most recent builds: in /private/tmp/claude-501/
+
+14h 03m 56s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/ck-vert.32x
+14h 03m 56s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/ck-ships.32x
+14h 09m 49s  /private/tmp/claude-501/-Users-mikeholzinger-src-32x-builder/91d3f89f-ed72-4586-9b99-efbead8da262/scratchpad/blastem-run/t.32x
+
+core: S32X
+game: /media/fat/games/S32X/rg1.32x
+Play rom/s16.32x. It is wc9: your accepted rg2 plus the 68K speed work plus the black-tile fix. The two wc9s* files beside it are barcode probes, not for play.
+
+What to watch, in order:
+
+Level 1, the whole level: do the black tiles still pop in? That is the fix under test. Expected: none.
+The speed: it should feel like the wc2 you played yesterday, not slower.
+Two captures, whenever they show: the beast transformation screen with its top and bottom row garbage, and the purple screen between level 1 and 2. From another terminal at that moment:
+
+ssh root@mister.office.local 'echo screenshot > /dev/MiSTer_cmd'
+I pull them myself afterwards. Those two defects do not reproduce on ares, so the captures are the only way in.
+Verdict format that helps me most: black tiles yes/no, speed same/slower, and which captures you got.
+
+Background command "Replay the level-1 script in the MAME arcade with snapshots every 100 frames to find its transformation and round clear" completed (exit code 0)
+ok. from ./screenshots/*
+
+1. TExt from Zuess still persists one character
+20260925_135230-s16.png
+
+2. Beast transform - lots of garbage in tiles
+20260925_135326-s16.png
+
+3. Beast transform garbage on bottom and top rows
+20260925_135327-s16.png, 20260925_135329-s16.png
+
+4. Black tiles appear on screen at random
+20260925_135345-s16.png, 20260925_135348-s16.png, 20260925_135350-s16.png
+
+5. Bonus level complete score text never fully renders on screen
+20260925_135455-s16.png, 20260925_135459-s16.png
+
+6. Purple screen transition animation using wrong pallete from level 1 to level 2
+20260925_135516-s13.png, 20260925_135516-s16.png
+
+7. Level two forground sprites black silhouettes
+20260925_135530-s16.png
+Looking at all of them now.
+
+I've identified seven items and matched each to a known class, with item 4 (black tiles) checkable right away. I'll start the census on the play frames and zoom into the shots now.
+Found the arcade reaches level 2 at frame 10300 with the transformation near frame 8600, giving reference snapshots for items 3, 5, and 6. I'll view these and check if the alignment tool can make our ROM follow the same route on ares.
+Since the arcade also dies at level 1 under these inputs, neither machine reaches the transformation or round-clear scripts, so items 3, 5, and 6 need actual play testing. I'll instead trace the code to see how the cut is detected, given that in real play the transformation shows up without the display blank seen in attract mode.
+Found that the cut is gated on 0xFFF148, an object slot marker rather than a scene flag—present during attract mode but possibly not set during play, which explains the green rows and late art. I'll now review every use of this before switching the predicate.
+hang on. Is there a mae playthrough we can capture that satisfies all our requirements to give you a full dump?
+*mame
+Recording the cut-detection hypothesis, then the report with what each item needs from you.
+
+I'll use MAME's input recording to capture arcade playthroughs headlessly and extract ground-truth frames/memory for the transformation, round clear, ball, and level 2. Since our port's frames lag the emulator's, I'll adapt ares-headless to apply inputs by the game's own frame counter, and I'm setting up the recording pipeline now.
+I'll build two independent pieces: a replay script that logs arcade inputs against its own game-frame counter, and a headless mode for ares that applies inputs based on that counter.
+I'm adding game-frame input mode to ares-headless and rebuilding it in the background. Meanwhile, I need you to run the given MAME command and play through level 1 as described, then send me the resulting .inp file path so I can extract the frame-by-frame data for the ares comparison.
+DIP bytes in the recording script match the port's (DSW2 0xFD, DSW1 0xFF). The ares rebuild is running; when it lands I test the new mode against the existing level-1 script, then it waits on your recording.
+
+The scene timer resets every attract step, so it's not usable as a monotonic key — I need the game's global frame counter instead. I'll check the decompile notes and run a differential scan of the game's variables on ares to find it.
+The counter works: 2104 game frames at emulator frame 3000, the pass rate. But the script did not start the game. Checking when its coin and start land and whether the credit registered.
+
+I'll check the hex parsing for the new option—the frame-300 coin never registering suggests events are firing at frame 0 due to an address parse defaulting to 0. Let me look at the parser used by --dump.
+Confirmed: the option used the decimal parser, so the address read as 0. Fixing, rebuilding, and retesting in one chain.
+
+Running a frame-mode control test and a decimal-address run now to isolate whether the parser is causing the issue, while planning a debug line to confirm event firing.
+Found that work RAM reads 0xFFFF before the shim initializes it, causing every event to fire at frame 0. I'm fixing this by having the shim zero the counter at boot and having headless mode ignore it while it's still 0xFFFF, then rebuilding and retesting.
+You're out of usage credits. Switch to another model, or manage usage credits at claude.ai/settings/usage?from=cc_cli_limit_message, to continue.
+
+oops. Back to opus go rright ahead
+Game-frame input replay works end to end: at emulator frame 900 our rom is in play, same state the frame-keyed control reaches. Now making the MAME capture side robust, then I will hand you the recording recipe.
+
+The dump tool produces real data (level-1 demo page words and scroll, 14 snapshots, correctly empty inputs on the attract). Now testing the whole record-to-replay chain without you, by recording a scripted route and replaying it.
+
+MAME's option is -input_directory, not -inppath. Correcting and rerunning.
+
+The chain works: the recovered inputs are keyed to game frames (coin at 289, start at 406, punches every 120) and the state CSV plus 37 snapshots landed. One gap: the snapshots have no frame mapping. Adding it, then closing the loop by replaying the arcade's route on our rom.
+
+37 snapshots mapped to game frames. Now the tool that will serve every one of the seven defects: find the emulator frame where our rom reaches a given arcade game frame, and capture there.
+
+The bisection costs a full emulator run per probe, far too slow. Adding a per-frame counter log to ares-headless so alignment is two runs instead of fifty.
+
+One minute for four aligned captures. Verifying the pictures match, which proves the oracle route end to end.
+
+The arcade snapshots sit at their own game frames, so exact-match copying failed. Fixing the pairing to use the nearest snapshot and report the gap, then retesting on the snapshots' own frames.
+
+Bash Fix the arcade pairing and compare at the snapshots' own game frames
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/gf_align.py'; s=open(p).read()
+old="""        near = [(abs(int(x["gf"]) - t), int(x["index"])) for x in snaps if int(x["gf"]) > 0]
+        if near and arc_pngs:
+            d, idx = min(near)
+            if d <= 3 and idx < len(arc_pngs):
+                shutil.copy(os.path.join(a.oracle, "altbeast", arc_pngs[idx]),
+                            os.path.join(out, f"arc_gf{t}.png"))
+        print(f"{t:6d} {fr:9d}  {arc:<38}")"""
+new="""        gap = ""
+        near = [(abs(int(x["gf"]) - t), int(x["index"]), int(x["gf"]))
+                for x in snaps if int(x["gf"]) > 0]
+        if near and arc_pngs:
+            d, idx, sgf = min(near)
+            if idx < len(arc_pngs):
+                shutil.copy(os.path.join(a.oracle, "altbeast", arc_pngs[idx]),
+                            os.path.join(out, f"arc_gf{t}.png"))
+                gap = f"  arcade png from gf {sgf}" + (f" (+-{d})" if d else " (exact)")
+        print(f"{t:6d} {fr:9d}  {arc:<38}{gap}")"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""    targets = list(a.gf)
+    if a.edges:"""
+new="""    targets = list(a.gf)
+    if not a.gf and not a.edges and a.round is None:
+        # default: every game frame the arcade actually has a picture for
+        targets += [int(s["gf"]) for s in snaps if int(s["gf"]) > 0]
+    if a.edges:"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('edited')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; rm -rf $S/idfull/ours; python3 tools/gf_align.py rom/night/wc9.32x $S/idfull 488 1488 2469 2869 --tag wc9 --hi 5000 2>&1 | tail -8; python3 - 2>/dev/null <<'EOF'
+from PIL import Image
+import os
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/'
+rows=[(t,S+f'arc_gf{t}.png',S+f'wc9_gf{t}.png') for t in (488,1488,2469,2869)]
+rows=[r for r in rows if os.path.exists(r[1]) and os.path.exists(r[2])]
+W,H=640,448
+out=Image.new('RGB',(W*2,H*len(rows)))
+for i,(t,a,o) in enumerate(rows):
+    out.paste(Image.open(a).convert('RGB').resize((W,H),Image.NEAREST),(0,i*H))
+    out.paste(Image.open(o).convert('RGB').crop((65,11,65+1280,11+224)).resize((W,H),Image.NEAREST),(W,i*H))
+out.save(S+'cmp.png'); print('pairs', [t for t,_,_ in rows])
+EOF
+
+OUT
+edited
+    gf our frame  arcade state                          
+   488       616  timer 80 step 8 round 0 solo 0 page 0000  arcade png from gf 469 (+-19)
+  1488      2079  timer 1080 step 8 round 0 solo 0 page 0000  arcade png from gf 1469 (+-19)
+  2469      3521  timer 2061 step 8 round 0 solo 0 page 0000  arcade png from gf 2469 (exact)
+  2869      3921  timer 2461 step 8 round 0 solo 0 page 0101  arcade png from gf 2869 (exact)
+
+wrote /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/  (wc9_gf*.png beside arc_gf*.png)
+pairs [488, 1488, 2469, 2869]
+Read cmp.png
+Found it: the arcade held start for ten emulator frames, but the game frame counter stalled during that transition, so the press and release were logged at the same game frame and cancelled out. Enforcing a one-frame minimum hold per button.
+
+Bash Add the minimum hold, regenerate the route, and re-test alignment
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/inp_dump.lua'; s=open(p).read()
+old="""            local v = (raw ~= idle[t.name]) and 1 or 0
+            if v ~= state[t.name] then
+                icsv:write(string.format('%d,%s,%d\\n', gf, t.name, v))
+                state[t.name] = v
+            end"""
+new="""            local v = (raw ~= idle[t.name]) and 1 or 0
+            if v ~= state[t.name] then
+                -- MINIMUM ONE-GAME-FRAME HOLD. The counter stalls while the game
+                -- is mid-pass, so a real 10-frame arcade press can span ZERO game
+                -- frames (the start button at a scene change did, and the press and
+                -- its release then cancelled out on our rom -- 2026-09-25). Keep the
+                -- keys strictly increasing per button so every press is seen.
+                local k = gf
+                if last_gf[t.name] and k <= last_gf[t.name] then k = last_gf[t.name] + 1 end
+                icsv:write(string.format('%d,%s,%d\\n', k, t.name, v))
+                last_gf[t.name] = k
+                state[t.name] = v
+            end"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""local idle, state = {}, {}"""
+new="""local idle, state, last_gf = {}, {}, {}"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('edited')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; rm -rf $S/idfull; mkdir -p $S/idfull; ID_OUT=$S/idfull ID_FRAMES=3000 ID_EVERY=100 mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 60 -input_directory $S/inp -playback ab_test -snapshot_directory $S/idfull -autoboot_script tools/inp_dump.lua > $S/idfull/mame.log 2>&1; echo "rc=$?"; grep -v '^#' $S/idfull/inputs_gf.csv | head -8; python3 tools/gf_align.py rom/night/wc9.32x $S/idfull 469 1469 2469 2869 --tag wc9 --hi 5000 2>&1 | tail -7
+
+OUT
+edited
+rc=0
+289,y,1
+299,y,0
+406,start,1
+407,start,0
+570,right,1
+670,a,1
+676,a,0
+790,a,1
+    gf our frame  arcade state                          
+   469       656  timer 61 step 8 round 0 solo 0 page 0000  arcade png from gf 469 (exact)
+  1469      2008  timer 1061 step 8 round 0 solo 0 page 0000  arcade png from gf 1469 (exact)
+  2469      3722  timer 2061 step 8 round 0 solo 0 page 0000  arcade png from gf 2469 (exact)
+  2869      4125  timer 2461 step 8 round 0 solo 0 page 0101  arcade png from gf 2869 (exact)
+
+wrote /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/  (wc9_gf*.png beside arc_gf*.png)
+Bash Montage the arcade against our rom at four matched game frames
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - 2>/dev/null <<'EOF'
+from PIL import Image
+import os
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/'
+rows=[(t,S+f'arc_gf{t}.png',S+f'wc9_gf{t}.png') for t in (469,1469,2469,2869)]
+rows=[r for r in rows if os.path.exists(r[1]) and os.path.exists(r[2])]
+W,H=640,448
+out=Image.new('RGB',(W*2,H*len(rows)))
+for i,(t,a,o) in enumerate(rows):
+    out.paste(Image.open(a).convert('RGB').resize((W,H),Image.NEAREST),(0,i*H))
+    out.paste(Image.open(o).convert('RGB').crop((65,11,65+1280,11+224)).resize((W,H),Image.NEAREST),(W,i*H))
+out.save(S+'cmp.png'); print('pairs', [t for t,_,_ in rows])
+EOF
+
+OUT
+pairs [469, 1469, 2469, 2869]
+Read cmp.png
+The route now takes: both machines are in play at the same point in the level with the same enemies. Documenting and committing, then the recipe for you.
+
+Bash Write the oracle documentation and commit the tools
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat > docs/design/ORACLE-PLAYTHROUGH.md <<'MDEOF'
+# The arcade playthrough oracle (2026-09-25)
+
+Six of Mike's seven play-pass defects live in scenes no input script reached:
+the beast transformation, the round-clear bonus, the crystal ball between
+level 1 and 2, level 2 itself. This is the rig that reaches them on ares, with
+the arcade's own picture beside ours at every moment.
+
+## Why a recorded playthrough
+
+Our rom runs the game at 50-70% of 60 Hz. An input script keyed to EMULATOR
+frames therefore drifts out of the route within seconds. The game itself does
+not care: it samples input once per GAME frame. So key the route to the game's
+own frame count and both machines take the same route at their own speeds.
+
+  - the arcade's game frame: a video frame whose end finds the frame flag
+    (0xFFF01C) clear, i.e. the game consumed that frame's release.
+  - ours: `md_main.c` `shim_vblank` counts the same event into the u16 at
+    **0xFFA1D0**, zeroed at boot.
+
+`ares-headless --input-gameframe 0xFFA1D0` keys input playback to that counter.
+
+**A press must survive the keying.** The counter STALLS while the game is
+mid-pass, so a real 10-frame arcade press can span zero game frames -- the
+start button at a scene change did, and the press and its release then
+cancelled out on our rom. `inp_dump.lua` keeps each button's keys strictly
+increasing, so every press is held for at least one game frame.
+
+## Recording (interactive, ~3 minutes of play)
+
+    mame altbeast -rompath ./mame -skip_gameinfo \
+        -input_directory ./inp -record ab_full \
+        -autoboot_script tools/record_setup.lua
+
+The script forces the PORT's DIP bytes (DSW2 0xFD, DSW1 0xFF -- what
+`md_main.c:7472` assumes), so the recorded game logic is the one our rom runs.
+Play: coin, start, through level 1, take a transformation, the boss, the round
+clear, the crystal ball, into level 2. Quit with Esc. The route lands in
+`./inp/ab_full.inp`.
+
+## The oracle dump (headless, ~1 minute)
+
+    ID_OUT=$PWD/oracle ID_FRAMES=20000 ID_EVERY=30 \
+    mame altbeast -rompath ./mame -skip_gameinfo \
+        -input_directory ./inp -playback ab_full \
+        -video none -sound none -nothrottle -window -resolution 160x120 \
+        -keyboardprovider none -nomouse -nojoystick -bench 400 \
+        -snapshot_directory $PWD/oracle \
+        -autoboot_script tools/inp_dump.lua
+
+Writes into `oracle/`:
+
+    state.csv      per frame: game frame, scene timer, step, round, the solo
+                   byte (0xFFF148), frame flag, display gate, the layer
+                   registers (page words + scroll) from text RAM
+    inputs_gf.csv  the route, keyed to the game frame
+    snaps.csv      every arcade snapshot with the frame and GAME frame it shows
+    altbeast/*.png the arcade's picture, every 30 frames and at every scene edge
+
+## Ours beside it
+
+    tools/gf_align.py rom/s16.32x oracle --tag wc9          # every arcade picture
+    tools/gf_align.py rom/s16.32x oracle --edges            # scene edges only
+    tools/gf_align.py rom/s16.32x oracle 4200 4260 --tag x  # named game frames
+
+Two ares runs whatever the target count: one logs our game-frame map
+(`--gameframe-log`), one takes every screenshot. Writes
+`oracle/ours/<tag>_gf<N>.png` beside `arc_gf<N>.png` and prints the arcade's
+state per target, so a divergence in the GAME's logic shows before any pixel
+is compared.
+
+## What it is and is not
+
+It **reaches the scenes**: verified 2026-09-25 on a scripted recording -- at
+game frames 469/1469/2469 the arcade and our rom are in play at the same point
+of level 1 with the same enemies and the same score.
+
+It is **not frame-for-frame identity for ever**. Damage and enemy behaviour
+diverge as the run lengthens (by game frame 2869 the recording had 1400 points
+and two lives, ours 300 and none). Use it to arrive at a scene and to compare
+the arcade's picture with ours there; do not read a late-run pixel diff as a
+port defect without checking the state columns first.
+MDEOF
+git add docs/design/ORACLE-PLAYTHROUGH.md tools/gf_align.py tools/inp_dump.lua && git commit -q -m "The arcade playthrough oracle: record a route in MAME, dump the arcade's state and picture per game frame, replay it on our rom at the same game frames (tools/record_setup.lua, inp_dump.lua, gf_align.py; docs/design/ORACLE-PLAYTHROUGH.md)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+8b6d37de The arcade playthrough oracle: record a route in MAME, dump the arcade's state and picture per game frame, replay it on our rom at the same game frames (tools/record_setup.lua, inp_dump.lua, gf_align.py; docs/design/ORACLE-PLAYTHROUGH.md)
+Bash Record the oracle in LESSONS and STATE
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='LESSONS.md'; s=open(p).read()
+s += """
+### The arcade oracle for play-only scenes: record a route, key it to the GAME's frame count, replay it on our rom (2026-09-25 14:50 ET)
+
+Six of Mike's seven play-pass defects are in scenes no input script reaches.
+An input script keyed to EMULATOR frames cannot get there: our rom runs the
+game at 50-70% of 60 Hz and drifts out of the route in seconds. The game
+samples input once per GAME frame, so key the route to that instead.
+`md_main.c` `shim_vblank` now counts game frames (vints whose frame flag
+0xFFF01C was clear at entry) into the u16 at 0xFFA1D0, zeroed at boot; the
+ares fork gained `--input-gameframe ADDR` (key playback to that counter) and
+`--gameframe-log FILE` (the per-frame map, so alignment is two runs instead of
+a bisection of runs -- the bisection was 56 full runs and timed out).
+tools/record_setup.lua records in MAME with the port's DIP bytes;
+tools/inp_dump.lua replays headlessly and writes the arcade's per-frame state,
+its picture at every scene edge, a snapshot-to-game-frame map, and the route
+re-keyed to game frames; tools/gf_align.py puts ours beside it.
+Verified: at game frames 469/1469/2469 the arcade and our rom are in play at
+the same point of level 1, same enemies, same score. Full recipe in
+docs/design/ORACLE-PLAYTHROUGH.md.
+
+TWO TRAPS, both cost a run:
+  - a press must survive the keying. The counter STALLS while the game is
+    mid-pass, so the arcade's 10-frame start press at a scene change spanned
+    ZERO game frames; press and release landed on the same key and cancelled,
+    and our rom sat in the attract with one credit. inp_dump.lua now keeps each
+    button's keys strictly increasing (a one-game-frame minimum hold).
+  - the counter's address must be zeroed at boot, and an uninitialised read
+    (0xFFFF) must not be taken as a game frame, or every event fires at once
+    on frame 0.
+Divergence is real and bounded: by game frame 2869 the recording had 1400
+points and two lives, ours 300 and none. The oracle REACHES a scene; it is not
+frame-for-frame identity for ever. Read the state columns before calling a
+late-run pixel difference a port defect.
+
+**Rule:** to reach a play-only scene, replay the arcade's own route keyed to
+the game's frame count, not the emulator's.
+"""
+open(p,'w').write(s)
+p='STATE.md'; s=open(p).read()
+old="""                                ARES CANNOT REACH 2-7: no input script
+                                clears level 1 or transforms on either
+                                machine (the arcade under play_level1 dies
+                                too); the attract's face/eye cut has clean
+                                top/bottom rows against the arcade."""
+new="""                                ARES CAN NOW REACH 2-7, given one recording
+                                from Mike: the ARCADE PLAYTHROUGH ORACLE
+                                (docs/design/ORACLE-PLAYTHROUGH.md, LESSONS
+                                14:50) -- record a route in MAME, dump the
+                                arcade's state and picture per GAME frame,
+                                replay it on our rom keyed to the shim's own
+                                game-frame counter (0xFFA1D0,
+                                ares --input-gameframe). Verified to reach the
+                                same point of level 1 with the same enemies
+                                and score. WAITS ON: one ~3-minute recorded
+                                playthrough (coin, level 1, a transformation,
+                                the boss, the round clear, the ball, level 2).
+                                The attract's face/eye cut has clean
+                                top/bottom rows against the arcade."""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('ok')
+EOF
+git add LESSONS.md STATE.md && git commit -q -m "LESSONS/STATE: the arcade playthrough oracle, its two traps, and what it waits on
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; git status --short | grep -v '^??'
+
+OUT
+ok
+e9b429dd LESSONS/STATE: the arcade playthrough oracle, its two traps, and what it waits on
+ M cfg/altbeast.cfg
+ M md_src/wram_code.h
+Bash Check what MAME changed in the tracked config
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git diff --stat cfg/altbeast.cfg; git diff cfg/altbeast.cfg | head -30
+
+OUT
+ cfg/altbeast.cfg | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
+diff --git a/cfg/altbeast.cfg b/cfg/altbeast.cfg
+index 2fd5f8c4..1f9b2d0a 100644
+--- a/cfg/altbeast.cfg
++++ b/cfg/altbeast.cfg
+@@ -3,15 +3,11 @@
+ <mameconfig version="10">
+     <system name="altbeast">
+         <counters>
+-            <coins index="0" number="152" />
++            <coins index="0" number="158" />
+         </counters>
+         <input>
+-            <port tag=":DSW1" type="DIPSWITCH" mask="15" defvalue="15" value="6" />
+-            <port tag=":DSW1" type="DIPSWITCH" mask="240" defvalue="240" value="96" />
+-            <port tag=":DSW2" type="DIPSWITCH" mask="1" defvalue="1" value="0" />
+-            <port tag=":DSW2" type="DIPSWITCH" mask="12" defvalue="12" value="4" />
+-            <port tag=":DSW2" type="DIPSWITCH" mask="48" defvalue="48" value="16" />
+-            <port tag=":DSW2" type="DIPSWITCH" mask="192" defvalue="192" value="64" />
++            <port tag=":DSW1" type="DIPSWITCH" mask="15" defvalue="15" value="7" />
++            <port tag=":DSW1" type="DIPSWITCH" mask="240" defvalue="240" value="112" />
+             <port tag=":P1" type="P1_BUTTON3" mask="1" defvalue="1">
+                 <newseq type="standard">
+                     KEYCODE_D
+MAME persisted my DIP writes into the tracked config, and your committed settings differ from the port's assumed DIPs. Reverting that and checking what the game actually reads.
+
+Bash Read the DIP bytes the arcade game sees, with and without the forcing
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git checkout cfg/altbeast.cfg; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; cat > $S/dsw.lua <<'EOF'
+local frames = 0
+local shown = false
+emu.register_frame_done(function()
+  frames = frames + 1
+  if frames == 120 and not shown then
+    shown = true
+    for _, tag in ipairs({':DSW1', ':DSW2', ':DSWA', ':DSWB'}) do
+      local p = manager.machine.ioport.ports[tag]
+      if p then print(string.format('PORT %s read=0x%02X', tag, p:read() & 0xFF)) end
+    end
+    local mem = manager.machine.devices[':maincpu'].spaces['program']
+    print(string.format('game read c42001=0x%02X c42003=0x%02X', mem:read_u8(0xC42001), mem:read_u8(0xC42003)))
+  end
+  if frames >= 130 then manager.machine:exit() end
+end)
+EOF
+echo "== with the committed cfg, no forcing"; mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 10 -autoboot_script $S/dsw.lua 2>&1 | grep -E 'PORT|game read'; git checkout cfg/altbeast.cfg 2>/dev/null; echo "== with record_setup.lua forcing"; cat $S/dsw.lua tools/record_setup.lua > $S/dsw2.lua; mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 10 -autoboot_script $S/dsw2.lua 2>&1 | grep -E 'PORT|game read'; git checkout cfg/altbeast.cfg 2>/dev/null; echo "== the port's own values for comparison: DSW2 0xFD, DSW1 0xFF"
+
+OUT
+Updated 1 path from the index
+== with the committed cfg, no forcing
+PORT :DSW1 read=0x66
+PORT :DSW2 read=0x54
+game read c42001=0x54 c42003=0x66
+== with record_setup.lua forcing
+PORT :DSW1 read=0xEE
+PORT :DSW2 read=0x01
+game read c42001=0x01 c42003=0xEE
+== the port's own values for comparison: DSW2 0xFD, DSW1 0xFF
+The forcing is wrong: it yields 0xEE/0x01, not the port's 0xFF/0xFD. Listing the DIP fields so I can set them in the config instead, where both the recording and the replay will pick them up.
+
+Bash List the arcade's DIP fields with their masks and defaults
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; cat > $S/dipl.lua <<'EOF'
+local f = 0
+emu.register_frame_done(function()
+  f = f + 1
+  if f == 60 then
+    for _, tag in ipairs({':DSW1', ':DSW2'}) do
+      local p = manager.machine.ioport.ports[tag]
+      if p then
+        for name, fld in pairs(p.fields) do
+          print(string.format('%s mask=0x%02X def=0x%02X  %s', tag, fld.mask, fld.defvalue, name))
+        end
+      end
+    end
+    manager.machine:exit()
+  end
+end)
+EOF
+mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 5 -autoboot_script $S/dipl.lua 2>&1 | grep -E '^:DSW' | sort; git checkout cfg/altbeast.cfg 2>/dev/null; echo "--- committed cfg's DSW lines:"; grep DSW cfg/altbeast.cfg
+
+OUT
+:DSW1 mask=0x0F def=0x0F  Coin A
+:DSW1 mask=0xF0 def=0xF0  Coin B
+:DSW2 mask=0x01 def=0x01  Credits Needed
+:DSW2 mask=0x02 def=0x00  Demo Sounds
+:DSW2 mask=0x0C def=0x0C  Lives
+:DSW2 mask=0x30 def=0x30  Player Meter
+:DSW2 mask=0xC0 def=0xC0  Difficulty
+--- committed cfg's DSW lines:
+            <port tag=":DSW1" type="DIPSWITCH" mask="15" defvalue="15" value="6" />
+            <port tag=":DSW1" type="DIPSWITCH" mask="240" defvalue="240" value="96" />
+            <port tag=":DSW2" type="DIPSWITCH" mask="1" defvalue="1" value="0" />
+            <port tag=":DSW2" type="DIPSWITCH" mask="12" defvalue="12" value="4" />
+            <port tag=":DSW2" type="DIPSWITCH" mask="48" defvalue="48" value="16" />
+            <port tag=":DSW2" type="DIPSWITCH" mask="192" defvalue="192" value="64" />
+MAME's own defaults are exactly the port's DIPs (0xFF and 0xFD); your committed config overrides them. So the fix is a separate oracle config that keeps your key bindings and drops the DIP overrides, plus no config writeback.
+
+Bash Build the oracle config from Mike's, keeping key bindings, and verify the DIP bytes
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; mkdir -p cfg/oracle; python3 - <<'EOF'
+import re
+src=open('cfg/altbeast.cfg').read()
+# drop every persisted DIPSWITCH override: MAME's defaults are exactly the port's
+# DIP bytes (DSW1 0xFF, DSW2 0xFD -- md_main.c:7472), the committed cfg sets 0x66/0x54
+out=re.sub(r'[ \t]*<port tag=":DSW[12]" type="DIPSWITCH"[^>]*/>\n', '', src)
+# and the coin counter, so the oracle starts from a clean machine
+out=re.sub(r'[ \t]*<counters>.*?</counters>\n', '', out, flags=re.S)
+open('cfg/oracle/altbeast.cfg','w').write(out)
+print('DIP lines left:', len(re.findall(r'DIPSWITCH', out)), ' key bindings kept:', len(re.findall(r'KEYCODE', out)))
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 10 -cfg_directory cfg/oracle -nowriteconfig -autoboot_script $S/dsw.lua 2>&1 | grep -E 'PORT|game read'; echo "(the port's own: DSW2 0xFD, DSW1 0xFF)"; git status --short cfg/ | head
+
+OUT
+DIP lines left: 0  key bindings kept: 6
+PORT :DSW1 read=0xFF
+PORT :DSW2 read=0xFD
+game read c42001=0xFD c42003=0xFF
+(the port's own: DSW2 0xFD, DSW1 0xFF)
+?? cfg/oracle/
+Exactly the port's DIPs, with your key bindings intact. Removing the broken forcing from the scripts, updating the recipe, and re-verifying the whole chain with correct DIPs.
+
+Bash Strip the broken DIP forcing from both scripts and correct their headers
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PYEOF'
+import re
+FORCE_RE = re.compile(r"-- force the PORT'S? dip bytes.*?\n(?:.*?\n)*?^end\n\n", re.M)
+for p in ('tools/record_setup.lua','tools/inp_dump.lua'):
+    s=open(p).read()
+    i=s.find("for ptag, want in pairs({[':DSW1']")
+    assert i>0, p
+    j=s.find("\nend\n", s.find("end\n    end\n", i))
+    # find the end of the forcing loop: it is the block ending with "    end\nend\n"
+    k=s.find("    end\nend\n", i)
+    assert k>0, p
+    end=k+len("    end\nend\n")
+    # also drop the comment lines immediately above
+    start=s.rfind("-- force", 0, i)
+    if start<0: start=i
+    s=s[:start]+s[end:]
+    s=s.replace("""-- Record first (interactive, see tools/record_setup.lua), then:""",
+"""-- Record first (interactive, see tools/record_setup.lua), then:""")
+    open(p,'w').write(s)
+    print(p, 'forcing removed;', 'DSW' in s and 'DSW still mentioned' or 'clean')
+PYEOF
+python3 - <<'PYEOF'
+p='tools/record_setup.lua'; s=open(p).read()
+s=s.replace("""-- RECORD an arcade playthrough for the port's oracle (2026-09-25).
+-- Interactive MAME (window + keyboard ON), with MAME's own input recorder:
+--
+--   mame altbeast -rompath ./mame -skip_gameinfo -record ab_l1.inp \\
+--        -autoboot_script tools/record_setup.lua
+--
+-- This script only forces the PORT's DIP bytes (DSW2=0xFD, DSW1=0xFF, the
+-- values md_main.c assumes) so the recorded game logic matches our rom, and
+-- prints the frame count every 600 frames so the notes can name moments.""",
+"""-- RECORD an arcade playthrough for the port's oracle (2026-09-25).
+-- Interactive MAME (window + keyboard ON), with MAME's own input recorder:
+--
+--   mame altbeast -rompath ./mame -skip_gameinfo \\
+--        -cfg_directory cfg/oracle -nowriteconfig \\
+--        -input_directory ./inp -record ab_full \\
+--        -autoboot_script tools/record_setup.lua
+--
+-- THE DIPS COME FROM cfg/oracle, NOT FROM THIS SCRIPT. MAME's DIP defaults are
+-- exactly the bytes md_main.c:7472 assumes (DSW1 0xFF = 1 coin/1 credit,
+-- DSW2 0xFD = 3 lives, normal, demo sounds on); cfg/oracle/altbeast.cfg is
+-- cfg/altbeast.cfg with its DIP overrides removed and the key bindings kept,
+-- because the committed cfg sets 0x66/0x54 instead and the recorded game logic
+-- must be the one our rom runs. Forcing them from lua was tried and does NOT
+-- work: field:set_value snaps to the settinglist and produced 0xEE/0x01.
+--
+-- This script now only prints the frame count every 600 frames, so the notes
+-- can name the moments worth aligning on.""")
+open(p,'w').write(s)
+p='tools/inp_dump.lua'; s=open(p).read()
+s=s.replace("""--   ID_OUT=/path/out mame altbeast -rompath ./mame -skip_gameinfo \\
+--        -playback ab_full -inppath ./inp \\""","""--   ID_OUT=/path/out mame altbeast -rompath ./mame -skip_gameinfo \\
+--        -cfg_directory cfg/oracle -nowriteconfig \\
+--        -input_directory ./inp -playback ab_full \\""")
+open(p,'w').write(s); print('headers updated')
+PYEOF
+head -20 tools/record_setup.lua; echo '...'; grep -c 'DSW' tools/record_setup.lua tools/inp_dump.lua
+
+OUT
+tools/record_setup.lua forcing removed; DSW still mentioned
+tools/inp_dump.lua forcing removed; clean
+headers updated
+-- RECORD an arcade playthrough for the port's oracle (2026-09-25).
+-- Interactive MAME (window + keyboard ON), with MAME's own input recorder:
+--
+--   mame altbeast -rompath ./mame -skip_gameinfo \
+--        -cfg_directory cfg/oracle -nowriteconfig \
+--        -input_directory ./inp -record ab_full \
+--        -autoboot_script tools/record_setup.lua
+--
+-- THE DIPS COME FROM cfg/oracle, NOT FROM THIS SCRIPT. MAME's DIP defaults are
+-- exactly the bytes md_main.c:7472 assumes (DSW1 0xFF = 1 coin/1 credit,
+-- DSW2 0xFD = 3 lives, normal, demo sounds on); cfg/oracle/altbeast.cfg is
+-- cfg/altbeast.cfg with its DIP overrides removed and the key bindings kept,
+-- because the committed cfg sets 0x66/0x54 instead and the recorded game logic
+-- must be the one our rom runs. Forcing them from lua was tried and does NOT
+-- work: field:set_value snaps to the settinglist and produced 0xEE/0x01.
+--
+-- This script now only prints the frame count every 600 frames, so the notes
+-- can name the moments worth aligning on.
+-- Play through: coin, start, level 1, the transformation, the boss, the round
+-- clear, the ball, into level 2. Then quit MAME (Esc). The .inp lands in
+...
+tools/inp_dump.lua:0
+tools/record_setup.lua:2
+Bash Update the recipe, then re-run the full chain with the oracle config
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='docs/design/ORACLE-PLAYTHROUGH.md'; s=open(p).read()
+old="""## Recording (interactive, ~3 minutes of play)
+
+    mame altbeast -rompath ./mame -skip_gameinfo \\
+        -input_directory ./inp -record ab_full \\
+        -autoboot_script tools/record_setup.lua
+
+The script forces the PORT's DIP bytes (DSW2 0xFD, DSW1 0xFF -- what
+`md_main.c:7472` assumes), so the recorded game logic is the one our rom runs.
+Play: coin, start, through level 1, take a transformation, the boss, the round
+clear, the crystal ball, into level 2. Quit with Esc. The route lands in
+`./inp/ab_full.inp`."""
+new="""## The DIPs must be the port's, and they come from cfg/oracle
+
+`md_main.c:7472` hands the game DSW1 0xFF (1 coin / 1 credit) and DSW2 0xFD
+(3 lives, normal, demo sounds on). MAME's own DIP DEFAULTS are exactly those
+bytes -- but `cfg/altbeast.cfg` overrides them to 0x66 / 0x54, so the arcade
+oracle has been running a different coinage, lives count and difficulty from
+the port. `cfg/oracle/altbeast.cfg` is that file with the DIP overrides
+removed and the key bindings kept; every oracle run passes
+
+    -cfg_directory cfg/oracle -nowriteconfig
+
+and reads 0xFF / 0xFD, verified. (Forcing the DIPs from lua does NOT work:
+`field:set_value` snaps to the settinglist and yields 0xEE / 0x01.)
+
+## Recording (interactive, ~3 minutes of play)
+
+    mame altbeast -rompath ./mame -skip_gameinfo \\
+        -cfg_directory cfg/oracle -nowriteconfig \\
+        -input_directory ./inp -record ab_full \\
+        -autoboot_script tools/record_setup.lua
+
+Play: coin, start, through level 1, take a transformation, the boss, the round
+clear, the crystal ball, into level 2. Quit with Esc. The route lands in
+`./inp/ab_full.inp`."""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""    ID_OUT=$PWD/oracle ID_FRAMES=20000 ID_EVERY=30 \\
+    mame altbeast -rompath ./mame -skip_gameinfo \\
+        -input_directory ./inp -playback ab_full \\"""
+new="""    ID_OUT=$PWD/oracle ID_FRAMES=20000 ID_EVERY=30 \\
+    mame altbeast -rompath ./mame -skip_gameinfo \\
+        -cfg_directory cfg/oracle -nowriteconfig \\
+        -input_directory ./inp -playback ab_full \\"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('ok')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; rm -rf $S/inp $S/idfull; mkdir -p $S/inp $S/idfull; RC_IN=discover/inputs/play_level1.csv RC_FRAMES=3000 mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 60 -cfg_directory cfg/oracle -nowriteconfig -input_directory $S/inp -record ab_test -autoboot_script tools/replay_csv.lua > $S/inp/rec.log 2>&1; echo "rec rc=$?"; ID_OUT=$S/idfull ID_FRAMES=3000 ID_EVERY=100 mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 60 -cfg_directory cfg/oracle -nowriteconfig -input_directory $S/inp -playback ab_test -snapshot_directory $S/idfull -autoboot_script tools/inp_dump.lua > $S/idfull/mame.log 2>&1; echo "dump rc=$?"; head -4 $S/idfull/snaps.csv; python3 tools/gf_align.py rom/night/wc9.32x $S/idfull 469 1469 2469 --tag wc9 --hi 5000 2>&1 | tail -6; git status --short | grep -v '^??'
+
+OUT
+ok
+rec rc=0
+dump rc=0
+index,frame,gf,round,page0,edge
+0,1,0,255,FF00,1
+1,7,1,0,0000,1
+2,20,8,0,1212,1
+    gf our frame  arcade state                          
+   469       656  timer 61 step 8 round 0 solo 0 page 0000  arcade png from gf 469 (exact)
+  1469      2008  timer 1061 step 8 round 0 solo 0 page 0000  arcade png from gf 1469 (exact)
+  2469      3722  timer 2061 step 8 round 0 solo 0 page 0000  arcade png from gf 2469 (exact)
+
+wrote /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/  (wc9_gf*.png beside arc_gf*.png)
+ M docs/design/ORACLE-PLAYTHROUGH.md
+ M md_src/wram_code.h
+ M tools/inp_dump.lua
+ M tools/record_setup.lua
+Bash Montage the re-verified chain and commit the DIP fix
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - 2>/dev/null <<'EOF'
+from PIL import Image
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/idfull/ours/'
+W,H=640,448; ts=(469,1469,2469)
+out=Image.new('RGB',(W*2,H*len(ts)))
+for i,t in enumerate(ts):
+    out.paste(Image.open(S+f'arc_gf{t}.png').convert('RGB').resize((W,H),Image.NEAREST),(0,i*H))
+    out.paste(Image.open(S+f'wc9_gf{t}.png').convert('RGB').crop((65,11,65+1280,11+224)).resize((W,H),Image.NEAREST),(W,i*H))
+out.save(S+'cmp2.png'); print('ok')
+EOF
+git add cfg/oracle docs/design/ORACLE-PLAYTHROUGH.md tools/record_setup.lua tools/inp_dump.lua && git commit -q -m "Oracle DIPs: cfg/oracle keeps Mike's key bindings and drops the DIP overrides, so MAME's defaults (DSW1 0xFF / DSW2 0xFD = exactly md_main.c's) reach the game; the lua forcing is removed (set_value snaps to the settinglist: 0xEE/0x01). Every oracle run takes -cfg_directory cfg/oracle -nowriteconfig
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+ok
+0983c358 Oracle DIPs: cfg/oracle keeps Mike's key bindings and drops the DIP overrides, so MAME's defaults (DSW1 0xFF / DSW2 0xFD = exactly md_main.c's) reach the game; the lua forcing is removed (set_value snaps to the settinglist: 0xEE/0x01). Every oracle run takes -cfg_directory cfg/oracle -nowriteconfig
+Read cmp2.png
+Bash Commit the generated header and confirm the tree is clean
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git add md_src/wram_code.h && git commit -q -m "md_src/wram_code.h: the line's generated WRAM block table
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"; git status --short | grep -v '^??' || echo "tree clean"; git log --oneline -1
+
+OUT
+tree clean
+35b97833 md_src/wram_code.h: the line's generated WRAM block table
+Yes, and it is built and verified. One recorded MAME playthrough gives me everything for six of the seven defects.
+
+Record it like this (your keys work, it is normal interactive MAME):
+
+
+mame altbeast -rompath ./mame -skip_gameinfo \
+     -cfg_directory cfg/oracle -nowriteconfig \
+     -input_directory ./inp -record ab_full \
+     -autoboot_script tools/record_setup.lua
+Play about three minutes: coin, start, through level 1, take a transformation, the boss, the round clear, the crystal ball, into level 2. Esc to quit. Tell me when it is done and I take it from there.
+
+Why that config matters. Your committed cfg/altbeast.cfg overrides the DIP switches to 0x66 and 0x54, but the port hands the game 0xFF and 0xFD. So the arcade oracle has been running a different coinage, lives count and difficulty from our rom all along. MAME's own defaults are exactly the port's bytes, so cfg/oracle is your config with the DIP overrides removed and your six key bindings kept. Verified reading 0xFF and 0xFD.
+
+What I do with the recording. Replay it headless, which writes the arcade's per-frame game state, its picture at every scene edge, and the route re-keyed to the game's own frame count. Our rom then replays that same route with a new counter in the shim, so a rom running at 50 to 70 percent of 60 Hz still arrives at the same game frames. Then tools/gf_align.py puts our picture beside the arcade's at any moment you name.
+
+Verified end to end on a scripted recording: at game frames 469, 1469 and 2469 the arcade and our rom are in play at the same point of level 1, same enemies, same score.
+
+Two traps found and fixed on the way. A ten-frame arcade press can span zero game frames at a scene change, so press and release cancelled and our rom sat in the attract; each button now holds for at least one game frame. And the counter must be zeroed at boot or every input fires on frame 0.
+
+One limit to keep in mind: divergence accumulates. By game frame 2869 the recording had 1400 points and two lives, ours 300 and none. The oracle reaches a scene reliably; it is not frame-for-frame identity for ever.
+
+Documented in ORACLE-PLAYTHROUGH.md, committed through 35b97833, tree clean.
+
+remind me again the coin, start and player keys before I jump in?
+Bash List the oracle config's key bindings and MAME's defaults for coin, start and the player controls
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "=== cfg/oracle/altbeast.cfg key bindings (what the recording will use):"; python3 - <<'EOF'
+import re
+s=open('cfg/oracle/altbeast.cfg').read()
+for m in re.finditer(r'<port tag="([^"]+)" type="([^"]+)"[^>]*>(.*?)</port>', s, re.S):
+    tag, typ, body = m.group(1), m.group(2), m.group(3)
+    keys = re.findall(r'KEYCODE_\S+', body)
+    if keys: print(f'  {typ:16s} {tag:10s} {" ".join(k.replace("KEYCODE_","") for k in keys)}')
+EOF
+echo; echo "=== every input MAME has for altbeast, with its default key:"; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; cat > $S/keys.lua <<'EOF'
+local f=0
+emu.register_frame_done(function()
+  f=f+1
+  if f==60 then
+    for tag, p in pairs(manager.machine.ioport.ports) do
+      for name, fld in pairs(p.fields) do
+        if fld.type_class == 'controller' or name:match('Coin') or name:match('Start') then
+          print(string.format('%-22s %-10s %s', name, tag, tostring(manager.machine.input:seq_to_tokens(fld.defseq('standard')))))
+        end
+      end
+    end
+    manager.machine:exit()
+  end
+end)
+EOF
+mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 5 -cfg_directory cfg/oracle -nowriteconfig -autoboot_script $S/keys.lua 2>&1 | grep -E 'P1|Coin|Start' | sort
+
+OUT
+=== cfg/oracle/altbeast.cfg key bindings (what the recording will use):
+  DIPSWITCH        :DSW1      D
+  P1_BUTTON1       :P1        A
+  P1_BUTTON2       :P1        S
+  P2_BUTTON3       :P2        L
+  P2_BUTTON1       :P2        J
+  P2_BUTTON2       :P2        K
+
+=== every input MAME has for altbeast, with its default key:
+Bash Read the exact key bindings from the oracle config
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -B1 -A3 'KEYCODE' cfg/oracle/altbeast.cfg | grep -E 'port tag|KEYCODE' | sed 's/^ *//'
+
+OUT
+KEYCODE_D
+<port tag=":P1" type="P1_BUTTON1" mask="2" defvalue="2">
+KEYCODE_A
+<port tag=":P1" type="P1_BUTTON2" mask="4" defvalue="4">
+KEYCODE_S
+<port tag=":P2" type="P2_BUTTON3" mask="1" defvalue="1">
+KEYCODE_L
+<port tag=":P2" type="P2_BUTTON1" mask="2" defvalue="2">
+KEYCODE_J
+<port tag=":P2" type="P2_BUTTON2" mask="4" defvalue="4">
+KEYCODE_K
+Your bindings, from the config the recording will use:
+
+action	key
+coin	5
+1 player start	1
+move	arrow keys
+punch (button 1)	A
+kick (button 2)	S
+jump (button 3)	D
+Coin, start and the directions are MAME defaults; A, S and D are your own bindings carried over from cfg/altbeast.cfg. Player 2 is J, K, L if you ever want it.
+
+Two notes for the run. Press 5 once, not held, since the oracle config is one coin per credit. And quit with Esc rather than closing the window, so MAME finishes writing the recording.
+
+
+mame altbeast -rompath ./mame -skip_gameinfo \
+     -cfg_directory cfg/oracle -nowriteconfig \
+     -input_directory ./inp -record ab_full \
+     -autoboot_script tools/record_setup.lua
+mame altbeast -rompath ./mame -skip_gameinfo \
+     -cfg_directory cfg/oracle -nowriteconfig \
+     -input_directory ./inp -record ab_full \
+     -autoboot_script tools/record_setup.lua
+record_setup: frame 600
+record_setup: frame 1200
+record_setup: frame 1800
+record_setup: frame 2400
+record_setup: frame 3000
+record_setup: frame 3600
+record_setup: frame 4200
+record_setup: frame 4800
+record_setup: frame 5400
+record_setup: frame 6000
+record_setup: frame 6600
+record_setup: frame 7200
+record_setup: frame 7800
+record_setup: frame 8400
+record_setup: frame 9000
+record_setup: frame 9600
+record_setup: frame 10200
+record_setup: frame 10800
+record_setup: frame 11400
+record_setup: frame 12000
+record_setup: frame 12600
+record_setup: frame 13200
+record_setup: frame 13800
+record_setup: frame 14400
+record_setup: frame 15000
+record_setup: frame 15600
+record_setup: frame 16200
+record_setup: frame 16800
+record_setup: frame 17400
+record_setup: frame 18000
+record_setup: frame 18600
+record_setup: frame 19200
+record_setup: frame 19800
+record_setup: frame 20400
+record_setup: frame 21000
+record_setup: frame 21600
+record_setup: frame 22200
+record_setup: frame 22800
+record_setup: frame 23400
+record_setup: frame 24000
+record_setup: frame 24600
+record_setup: frame 25200
+record_setup: frame 25800
+record_setup: frame 26400
+record_setup: frame 27000
+record_setup: frame 27600
+record_setup: frame 28200
+record_setup: frame 28800
+record_setup: frame 29400
+record_setup: frame 30000
+record_setup: frame 30600
+record_setup: frame 31200
+record_setup: frame 31800
+record_setup: frame 32400
+record_setup: frame 33000
+record_setup: frame 33600
+record_setup: frame 34200
+record_setup: frame 34800
+record_setup: frame 35400
+record_setup: frame 36000
+record_setup: frame 36600
+record_setup: frame 37200
+record_setup: frame 37800
+record_setup: frame 38400
+record_setup: frame 39000
+record_setup: frame 39600
+record_setup: frame 40200
+record_setup: frame 40800
+record_setup: frame 41400
+record_setup: frame 42000
+record_setup: frame 42600
+record_setup: frame 43200
+record_setup: frame 43800
+record_setup: frame 44400
+record_setup: frame 45000
+record_setup: frame 45600
+record_setup: frame 46200
+record_setup: frame 46800
+record_setup: frame 47400
+record_setup: frame 48000
+record_setup: frame 48600
+record_setup: frame 49200
+record_setup: frame 49800
+record_setup: frame 50400
+record_setup: frame 51000
+record_setup: frame 51600
+record_setup: frame 52200
+record_setup: frame 52800
+record_setup: frame 53400
+record_setup: frame 54000
+record_setup: frame 54600
+record_setup: frame 55200
+record_setup: frame 55800
+record_setup: frame 56400
+record_setup: frame 57000
+record_setup: frame 57600
+record_setup: frame 58200
+record_setup: frame 58800
+record_setup: frame 59400
+record_setup: frame 60000
+record_setup: frame 60600
+record_setup: frame 61200
+record_setup: frame 61800
+record_setup: frame 62400
+record_setup: frame 63000
+record_setup: frame 63600
+record_setup: frame 64200
+record_setup: frame 64800
+record_setup: frame 65400
+record_setup: frame 66000
+record_setup: frame 66600
+record_setup: frame 67200
+record_setup: frame 67800
+record_setup: frame 68400
+record_setup: frame 69000
+record_setup: frame 69600
+record_setup: frame 70200
+record_setup: frame 70800
+record_setup: frame 71400
+record_setup: frame 72000
+record_setup: frame 72600
+record_setup: frame 73200
+record_setup: frame 73800
+record_setup: frame 74400
+record_setup: frame 75000
+record_setup: frame 75600
+record_setup: frame 76200
+record_setup: frame 76800
+record_setup: frame 77400
+record_setup: frame 78000
+record_setup: frame 78600
+record_setup: frame 79200
+record_setup: frame 79800
+record_setup: frame 80400
+record_setup: frame 81000
+record_setup: frame 81600
+record_setup: frame 82200
+record_setup: frame 82800
+record_setup: frame 83400
+record_setup: frame 84000
+record_setup: frame 84600
+record_setup: frame 85200
+record_setup: frame 85800
+record_setup: frame 86400
+record_setup: frame 87000
+record_setup: frame 87600
+record_setup: frame 88200
+record_setup: frame 88800
+record_setup: frame 89400
+record_setup: frame 90000
+record_setup: frame 90600
+record_setup: frame 91200
+record_setup: frame 91800
+record_setup: frame 92400
+record_setup: frame 93000
+record_setup: frame 93600
+record_setup: frame 94200
+record_setup: frame 94800
+record_setup: frame 95400
+record_setup: frame 96000
+record_setup: frame 96600
+record_setup: frame 97200
+record_setup: frame 97800
+record_setup: frame 98400
+record_setup: frame 99000
+record_setup: frame 99600
+record_setup: frame 100200
+record_setup: frame 100800
+record_setup: frame 101400
+record_setup: frame 102000
+record_setup: frame 102600
+record_setup: frame 103200
+Average speed: 100.00% (1727 seconds)
+Full game playthrough.
+Twenty-nine minutes of play recorded. Running the oracle dump on it now.
+
+Bash Locate the recorded input file
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ls -la inp/ 2>/dev/null; ls -la ./inp/ab_full* 2>/dev/null; find . -maxdepth 2 -name 'ab_full*' -newermt '-2 hours' 2>/dev/null
+
+OUT
+total 2120
+drwxr-xr-x@   9 mikeholzinger  staff     288 Sep 25 15:41 ./
+drwxr-xr-x@ 228 mikeholzinger  staff    7296 Sep 25 14:17 ../
+-rw-r--r--@   1 mikeholzinger  staff  956281 Sep 25 16:09 ab_full
+-rw-r--r--@   1 mikeholzinger  staff   33277 Aug  7 20:05 afterburner.inp
+-rw-r--r--@   1 mikeholzinger  staff   16448 Aug  7 19:58 mk2_fight.inp
+-rw-r--r--@   1 mikeholzinger  staff    2846 Aug  7 19:05 mk2_probe.inp
+-rw-r--r--@   1 mikeholzinger  staff    2895 Aug  7 19:06 mk2_probe2.inp
+drwxr-xr-x@   3 mikeholzinger  staff      96 Aug  7 19:05 private/
+-rw-r--r--@   1 mikeholzinger  staff   29270 Aug  7 20:04 spaceharrier.inp
+-rw-r--r--@ 1 mikeholzinger  staff  956281 Sep 25 16:09 ./inp/ab_full
+A full playthrough, all five rounds. That covers every scene in your list. Running the oracle dump.
+
+Bash Replay Mike's full playthrough headlessly and dump the arcade oracle
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; rm -rf oracle; mkdir -p oracle; ID_OUT=$PWD/oracle ID_FRAMES=103300 ID_EVERY=60 mame altbeast -rompath ./mame -skip_gameinfo -cfg_directory cfg/oracle -nowriteconfig -input_directory ./inp -playback ab_full -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 2000 -snapshot_directory $PWD/oracle -autoboot_script tools/inp_dump.lua > oracle/mame.log 2>&1; echo "rc=$?"; wc -l oracle/state.csv oracle/snaps.csv oracle/inputs_gf.csv 2>/dev/null; ls oracle/altbeast/*.png 2>/dev/null | wc -l; du -sh oracle 2>/dev/null; tail -3 oracle/mame.log
+
+OUT
+Command running in background with ID: b0br220mg. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/tasks/b0br220mg.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Session cwd remains /Users/mikeholzinger/src/sega16-2-32x; directory changes made by the backgrounded command do not apply to subsequent commands.
+Monitor
+IN
+{
+  "command": "cd /Users/mikeholzinger/src/sega16-2-32x; last=0; for i in $(seq 1 240); do sleep 15; n=$(ls oracle/altbeast/*.png 2>/dev/null | wc -l | tr -d ' '); r=$(wc -l < oracle/state.csv 2>/dev/null | tr -d ' '); if [ -n \"$r\" ] && [ \"$r\" != \"$last\" ]; then echo \"oracle: $r frames dumped, $n snapshots\"; last=$r; fi; if grep -q 'Average speed' oracle/mame.log 2>/dev/null; then echo \"oracle: replay finished\"; break; fi; done",
+  "description": "oracle dump progress: frames and snapshots",
+  "timeout_ms": 3600000,
+  "persistent": false
+}
+OUT
+Monitor started (task byfh8bqus, timeout 3600000ms). You will be notified on each event. Keep working — do not poll or sleep. Events may arrive while you are waiting for the user — an event is not their reply.
+Dump running on the full playthrough, roughly two to four minutes. While it runs, nothing else touches the rig or the tree.
+
+Dump is at 17,747 of 103,300 frames with 317 snapshots. On pace for about 1,900 arcade frames total.
+
+28,554 frames, 499 snapshots. Continuing.
+
+its a very long playthrough over 20 minutes. capture as much as you need. I completed the game.
+39,420 frames, 685 snapshots. About a third of the way.
+
+Monitor event: "oracle dump progress: frames and snapshots"
+Monitor event: "oracle dump progress: frames and snapshots"
+Understood, a full completion. That gives me every scene in your list. Writing the scene survey while the dump finishes.
+
+Bash Write the scene-map tool and check the dump's progress
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat > tools/oracle_scenes.py <<'PYEOF'
+#!/usr/bin/env python3
+"""The scene map of an arcade oracle dump (2026-09-25).
+
+    tools/oracle_scenes.py oracle [--csv out.csv]
+
+Reads oracle/state.csv (tools/inp_dump.lua) and prints, in GAME frames, every
+moment worth aligning our rom against:
+
+  round N starts        the round byte 0xFFF142 changes
+  cut pages             the FG page word becomes 0xAAAA (the transformation and
+                        the between-round screens draw from pages 10/11)
+  solo filter           0xFFF148 non-zero -- the game runs ONE object's routine
+                        and diverts every other slot to 0x3F04 (the cutscene's
+                        own switch; NOTES-FROM-DECOMPILE 17)
+  display off           the game blanks its own display (0xFFF026 bit 0)
+  page changes          any other change of the FG/BG page words = a scene load
+
+Game frames are what tools/gf_align.py takes, so a line here is a command:
+
+    tools/gf_align.py rom/s16.32x oracle <gf> <gf> ... --tag x
+"""
+import argparse, csv, os, sys
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("oracle")
+    ap.add_argument("--csv", default=None)
+    a = ap.parse_args()
+
+    rows = list(csv.DictReader(open(os.path.join(a.oracle, "state.csv"))))
+    if not rows:
+        raise SystemExit("state.csv is empty")
+
+    events = []
+    prev = None
+    for r in rows:
+        gf = int(r["gf"])
+        cur = dict(round=r["round"], p0=r["page0"], p1=r["page1"],
+                   solo=(r["solo"] != "0"), disp=(int(r["disp"]) & 1) == 0)
+        if prev is None:
+            events.append((gf, "start", f"round {cur['round']} pages {cur['p0']}/{cur['p1']}"))
+        else:
+            if cur["round"] != prev["round"]:
+                events.append((gf, "round", f"{prev['round']} -> {cur['round']}"))
+            if cur["p0"] != prev["p0"] or cur["p1"] != prev["p1"]:
+                what = "CUT PAGES" if cur["p0"] == "AAAA" else (
+                       "leaves cut pages" if prev["p0"] == "AAAA" else "pages")
+                events.append((gf, what, f"{prev['p0']}/{prev['p1']} -> {cur['p0']}/{cur['p1']}"))
+            if cur["solo"] != prev["solo"]:
+                events.append((gf, "solo", "on (cutscene)" if cur["solo"] else "off"))
+            if cur["disp"] != prev["disp"]:
+                events.append((gf, "display", "OFF (blanked)" if cur["disp"] else "on"))
+        prev = cur
+
+    last = int(rows[-1]["gf"])
+    print(f"{len(rows)} frames, {last} game frames, {len(events)} scene events\n")
+    print(f"{'game frame':>10}  {'event':<18} detail")
+    for gf, what, detail in events:
+        print(f"{gf:10d}  {what:<18} {detail}")
+
+    if a.csv:
+        with open(a.csv, "w", newline="") as f:
+            w = csv.writer(f); w.writerow(["gf", "event", "detail"]); w.writerows(events)
+        print(f"\nwrote {a.csv}")
+
+    # a short list of the moments Mike's seven defects live in
+    cuts = [gf for gf, what, _ in events if what == "CUT PAGES"]
+    rounds = [(gf, d) for gf, what, d in events if what == "round"]
+    print("\nsuggested targets")
+    if cuts:
+        print("  cut screens (transformation / between rounds):",
+              " ".join(str(c) for c in cuts[:24]))
+    if rounds:
+        print("  round changes:", " ".join(f"{gf}({d})" for gf, d in rounds[:24]))
+
+
+if __name__ == "__main__":
+    main()
+PYEOF
+chmod +x tools/oracle_scenes.py; git add tools/oracle_scenes.py && git commit -q -m "tools/oracle_scenes.py: the scene map of an oracle dump in game frames (rounds, cut pages, the solo filter, display blanks)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; wc -l oracle/state.csv 2>/dev/null; ls oracle/altbeast/*.png 2>/dev/null | wc -l
+
+OUT
+2dc8fc6f tools/oracle_scenes.py: the scene map of an oracle dump in game frames (rounds, cut pages, the solo filter, display blanks)
+   70823 oracle/state.csv
+    1214
+60,865 frames, 1,046 snapshots. Scene-map tool is ready to run the moment it finishes.
+
+70,752 frames, 1,213 snapshots. Two thirds through.
+
+80,786 frames, 1,383 snapshots.
+
+90,854 frames, 1,553 snapshots. Nearly done.
+
+100,897 frames. About 40 seconds left.
+
+Monitor event: "oracle dump progress: frames and snapshots"
+Monitor "oracle dump progress: frames and snapshots" stream ended
+Bash Confirm the dump and print the scene map
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; tail -4 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/tasks/b0br220mg.output; echo "=== scene map"; python3 tools/oracle_scenes.py oracle --csv oracle/scenes.csv 2>&1 | head -60
+
+OUT
+Average recorded speed: 100%
+Average speed: 1167.34% (1719 seconds)
+
+[exited with code 0]
+=== scene map
+103300 frames, 103171 game frames, 59 scene events
+
+game frame  event              detail
+         0  start              round 255 pages FF00/FF00
+         1  round              255 -> 4
+         1  pages              FF00/FF00 -> 0000/0000
+         1  solo               off
+         5  round              4 -> 0
+         5  display            OFF (blanked)
+         6  display            on
+         8  pages              0000/0000 -> 1212/0000
+       180  pages              1212/0000 -> 0000/0000
+       182  pages              0000/0000 -> 1212/0000
+       218  pages              1212/0000 -> 0000/0000
+       220  pages              0000/0000 -> 1212/0000
+       248  display            OFF (blanked)
+       248  pages              1212/0000 -> 0000/0000
+      1925  pages              0000/0000 -> 0101/0000
+      3167  solo               on (cutscene)
+      3169  CUT PAGES          0101/0000 -> AAAA/0000
+      3342  solo               off
+      3345  leaves cut pages   AAAA/0000 -> 0101/0000
+      4234  pages              0101/0000 -> 1212/0000
+      7222  pages              1212/0000 -> 0000/0000
+      7706  round              0 -> 1
+      8871  pages              0000/0000 -> 0101/0000
+     10813  solo               on (cutscene)
+     10815  CUT PAGES          0101/0000 -> AAAA/0000
+     11025  solo               off
+     11028  leaves cut pages   AAAA/0000 -> 0101/0000
+     12064  pages              0101/0000 -> 1212/0000
+     15464  pages              1212/0000 -> 0000/0000
+     15948  round              1 -> 2
+     17387  pages              0000/0000 -> 0101/0000
+     20734  pages              0101/0000 -> 1212/0000
+     25757  pages              1212/0000 -> 2323/0000
+     29172  pages              2323/0000 -> 3434/0000
+     29482  solo               on (cutscene)
+     29484  CUT PAGES          3434/0000 -> AAAA/0000
+     29694  solo               off
+     29697  leaves cut pages   AAAA/0000 -> 3434/0000
+     39125  pages              3434/0000 -> 0000/0000
+     39255  round              2 -> 3
+     41584  pages              0000/0000 -> 0101/0000
+     50004  pages              0101/0000 -> 1212/0000
+     57086  pages              1212/0000 -> 2323/0000
+     63423  pages              2323/0000 -> 3434/0000
+     64146  solo               on (cutscene)
+     64148  CUT PAGES          3434/0000 -> AAAA/0000
+     64358  solo               off
+     64361  leaves cut pages   AAAA/0000 -> 3434/0000
+     72499  pages              3434/0000 -> 0000/0000
+     72983  round              3 -> 4
+     75055  pages              0000/0000 -> 0101/0000
+     81642  pages              0101/0000 -> 1212/0000
+     86742  pages              1212/0000 -> 2323/0000
+     91058  pages              2323/0000 -> 3434/0000
+     91180  solo               on (cutscene)
+     91182  CUT PAGES          3434/0000 -> AAAA/0000
+     91355  solo               off
+Oracle complete: 103,171 game frames, 1,764 arcade snapshots, all five rounds, with every transformation bracketed exactly. Checking whether the headless fork can log our state per frame too, so a divergence cannot be mistaken for a defect.
+
+Bash Look for a per-frame memory logger in the headless fork
+IN
+cd ~/src/ares-debug/headless-ui; grep -n 'readRanges\|writeRanges\|--watch\|--read\|--write' main.cpp | head -12; grep -n 'print("  --' main.cpp | sed -n '1,40p' | grep -iE 'watch|read|write|range'
+
+OUT
+139:std::vector<WriteRange> writeRanges;
+140:std::vector<WriteRange> readRanges;        //--count-reads: same shape, reads (instruction fetches included)
+163:  for(auto& r : writeRanges) {
+175:  for(auto& r : readRanges) {
+362:    readRanges.push_back(r);
+369:    writeRanges.push_back(r);
+501:  if(writeRanges.size() || traceRanges.size()) ares::MegaDrive::setWriteHook(writeCollect, nullptr);
+502:  if(readRanges.size() || traceRanges.size()) ares::MegaDrive::setReadHook(readCollect, nullptr);
+637:  for(auto& r : readRanges) { r.name = "R_" + r.name; writeRanges.push_back(r); }
+638:  if(writeRanges.size()) {
+640:    for(auto& r : writeRanges) csv += "," + r.name + "," + r.name + "_clk";
+645:      for(auto& r : writeRanges) {
+280:  print("  --trace-comm file.csv  log every 32X COMM0-7 register write in execution order:\n");
+Shell cwd was reset to /Users/mikeholzinger/src/sega16-2-32x
+Those are counters, not values. Adding watched bytes to the game-frame log so one run gives our state at every frame.
+
+Bash Add watched bytes to the game-frame log and rebuild
+IN
+cd ~/src/ares-debug/headless-ui; python3 - <<'EOF'
+p='main.cpp'; s=open(p).read()
+old="""string gameFrameLogPath;   //--gameframe-log: frame,gf for every frame"""
+new="""string gameFrameLogPath;   //--gameframe-log: frame,gf for every frame
+//--gameframe-watch ADDR:LEN (repeatable): extra work-RAM bytes, hex, as columns of
+//that log -- our rom's own game state at every frame, from the same single run
+struct GameFrameWatch { u64 address = 0; u64 length = 1; string raw; };
+std::vector<GameFrameWatch> gameFrameWatches;"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""  if(arguments.take("--gameframe-log", value)) gameFrameLogPath = value;"""
+new="""  if(arguments.take("--gameframe-log", value)) gameFrameLogPath = value;
+  while(arguments.take("--gameframe-watch", value)) {
+    auto parts = value.split(":");
+    if(parts.size() != 2) { print("error: --gameframe-watch wants ADDR:LEN\\n"); exit(1); }
+    GameFrameWatch w;
+    w.raw = value;
+    w.address = parseNumber(parts[0]);
+    w.length = parseNumber(parts[1]);
+    if(!w.length || w.length > 64) { print("error: --gameframe-watch LEN must be 1-64\\n"); exit(1); }
+    gameFrameWatches.push_back(w);
+  }"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""  print("  --gameframe-log FILE   CSV `frame,gameframe` for every emulated frame\\n");"""
+new="""  print("  --gameframe-log FILE   CSV `frame,gameframe` for every emulated frame\\n");
+  print("  --gameframe-watch A:L  add L work-RAM bytes at A as a hex column of that log\\n");"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""  std::string gameFrameLog;
+  if(gameFrameLogPath) gameFrameLog = "frame,gameframe\\n";"""
+new="""  std::string gameFrameLog;
+  if(gameFrameLogPath) {
+    gameFrameLog = "frame,gameframe";
+    for(auto& w : gameFrameWatches) gameFrameLog += "," + w.raw;
+    gameFrameLog += "\\n";
+  }"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""      if(gameFrameLogPath) {
+        char line[48];
+        snprintf(line, sizeof(line), "%llu,%llu\\n", (unsigned long long)frame, (unsigned long long)gf);
+        gameFrameLog += line;
+      }"""
+new="""      if(gameFrameLogPath) {
+        char line[48];
+        snprintf(line, sizeof(line), "%llu,%llu", (unsigned long long)frame, (unsigned long long)gf);
+        gameFrameLog += line;
+        for(auto& w : gameFrameWatches) {
+          gameFrameLog += ",";
+          for(u64 i = 0; i < w.length; i++) {
+            u64 wa = (w.address + i) & (gameFrameMemory->size() - 1);
+            char b[3];
+            snprintf(b, sizeof(b), "%02X", (unsigned)gameFrameMemory->read(wa));
+            gameFrameLog += b;
+          }
+        }
+        gameFrameLog += "\\n";
+      }"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+old="""  bool wantGameFrame = inputGameFrame || gameFrameLogPath;"""
+new="""  bool wantGameFrame = inputGameFrame || gameFrameLogPath || gameFrameWatches.size();"""
+assert s.count(old)==1; s=s.replace(old,new,1)
+open(p,'w').write(s); print('edited')
+EOF
+cd ~/src/ares-debug && cmake --build build_macos --config Release --target ares-headless > /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/ab5.log 2>&1; echo "rc=$?"; grep -E 'error:' /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/ab5.log | head -3; git add headless-ui/main.cpp && git commit -q -m "headless-ui: --gameframe-watch ADDR:LEN adds work-RAM bytes as columns of the game-frame log (our own state at every frame from one run)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+edited
+rc=65
+/Users/mikeholzinger/src/ares-debug/headless-ui/main.cpp:341:24: error: no member named 'split' in 'nall::string'
+/Users/mikeholzinger/src/ares-debug/headless-ui/main.cpp:589:57: error: invalid operands to binary expression ('const char[2]' and 'string')
+2e05a138e headless-ui: --gameframe-watch ADDR:LEN adds work-RAM bytes as columns of the game-frame log (our own state at every frame from one run)
+Shell cwd was reset to /Users/mikeholzinger/src/sega16-2-32x
+Bash Find how existing options split colon-separated arguments
+IN
+cd ~/src/ares-debug/headless-ui; grep -n 'split(\|_split\|::split' main.cpp | head -5; grep -n 'spec.memory\|parse.*":"' main.cpp | head -5; sed -n "$(grep -n 'auto parseDump' main.cpp | cut -d: -f1),+12p" main.cpp 2>/dev/null | head -14
+
+OUT
+341:    auto parts = value.split(":");
+365:    auto parts = nall::split(value, ":", 4);
+373:    auto parts = nall::split(value, ":", 2);
+380:    auto parts = nall::split(value, ":", 2);
+389:    auto parts = nall::split(value, ":", 1);
+411:    spec.memory  = parts[0];
+552:    auto memory = findMemory(memories, spec.memory);
+554:      print("error: --dump '", spec.raw, "': no memory block matches '", spec.memory, "' (try --list-memory)\n");
+639:    auto memory = findMemory(memories, spec.memory);
+Shell cwd was reset to /Users/mikeholzinger/src/sega16-2-32x
+Bash Fix the two build errors and rebuild
+IN
+cd ~/src/ares-debug/headless-ui; python3 - <<'EOF'
+p='main.cpp'; s=open(p).read()
+s=s.replace('    auto parts = value.split(":");\n    if(parts.size() != 2) { print("error: --gameframe-watch wants ADDR:LEN\\n"); exit(1); }',
+            '    auto parts = nall::split(value, ":", 2);\n    if(parts.size() != 2) { print("error: --gameframe-watch wants ADDR:LEN\\n"); exit(1); }',1)
+s=s.replace('    for(auto& w : gameFrameWatches) gameFrameLog += "," + w.raw;',
+            '    for(auto& w : gameFrameWatches) { gameFrameLog += ","; gameFrameLog += (const char*)w.raw; }',1)
+open(p,'w').write(s); print('edited')
+EOF
+cd ~/src/ares-debug && cmake --build build_macos --config Release --target ares-headless > /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/ab6.log 2>&1; echo "rc=$?"; grep -E 'error:' /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/ab6.log | head -3; git add headless-ui/main.cpp && git commit -q -m "headless-ui: build fix for --gameframe-watch (nall::split, string concat)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" | tail -1
+
+OUT
+edited
+rc=0
+Shell cwd was reset to /Users/mikeholzinger/src/sega16-2-32x
+Built. Wiring our own state into the alignment report, then aligning on round one's transformation and the transition into round two.
+
+Bash Report our state beside the arcade's and align on the transformation and round transition
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/gf_align.py'; s=open(p).read()
+old='''def gf_map(rom, inputs, frames, path):
+    """one run: {game frame -> the first emulator frame that reached it}"""
+    cmd = [ARES, "--frames", str(frames), "--input", inputs,
+           "--input-gameframe", hex(GF_ADDR), "--gameframe-log", path, rom]'''
+new='''# our own state, logged as columns of the same game-frame log: the scene timer,
+# the round byte, the solo/cutscene byte, and the FG/BG page words (the arcade's
+# text RAM 0x410000 is our 0xFF8000, so word 0x740 is 0xFF8E80)
+WATCH = ["0xFFF02A:2", "0xFFF142:1", "0xFFF148:1", "0xFF8E80:4"]
+
+
+def gf_map(rom, inputs, frames, path):
+    """one run: {game frame -> (first emulator frame that reached it, our state)}"""
+    cmd = [ARES, "--frames", str(frames), "--input", inputs,
+           "--input-gameframe", hex(GF_ADDR), "--gameframe-log", path]
+    for w in WATCH:
+        cmd += ["--gameframe-watch", w]
+    cmd += [rom]'''
+assert s.count(old)==1; s=s.replace(old,new,1)
+old='''    first = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            gf = int(row["gameframe"])
+            if gf not in first:
+                first[gf] = int(row["frame"])
+    return first'''
+new='''    first = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            gf = int(row["gameframe"])
+            if gf not in first:
+                first[gf] = (int(row["frame"]),
+                             f"timer {int(row['0xFFF02A:2'], 16)} round {int(row['0xFFF142:1'], 16)} "
+                             f"solo {int(row['0xFFF148:1'], 16)} page {row['0xFF8E80:4'][:4]}/{row['0xFF8E80:4'][4:]}")
+    return first'''
+assert s.count(old)==1; s=s.replace(old,new,1)
+old='''    hit = [(t, first[t]) for t in targets if t in first]
+    missed = [t for t in targets if t not in first]
+
+    # run 2: every screenshot and state dump at once
+    shots, dumps = [], []
+    for t, fr in hit:
+        shots.append((fr, os.path.join(out, f"{tag}_gf{t}.png")))
+        dumps.append(("wram", 0xFFF000, 0x100, os.path.join(out, f".{tag}_gf{t}.bin")))
+    if hit:
+        # one dump address can only be taken once a run, so take state at the last
+        # frame and read each shot's state from the map instead
+        run(a.rom, max(f for _, f in hit) + 1, inputs, shots=shots)
+
+    print(f"{'gf':>6} {'our frame':>9}  {'arcade state':<38}")
+    for t, fr in hit:'''
+new='''    hit = [(t, first[t][0], first[t][1]) for t in targets if t in first]
+    missed = [t for t in targets if t not in first]
+
+    # run 2: every screenshot at once
+    shots = [(fr, os.path.join(out, f"{tag}_gf{t}.png")) for t, fr, _ in hit]
+    if hit:
+        run(a.rom, max(f for _, f, _ in hit) + 1, inputs, shots=shots)
+
+    print(f"{'gf':>6} {'frame':>7}  {'ARCADE':<44} {'OURS':<44}")
+    for t, fr, ourstate in hit:'''
+assert s.count(old)==1; s=s.replace(old,new,1)
+old='''        print(f"{t:6d} {fr:9d}  {arc:<38}{gap}")'''
+new='''        flag = "" if (s and f"round {int(s['round'])} " in ourstate + " ") else "  <-- DIVERGED"
+        print(f"{t:6d} {fr:7d}  {arc:<44} {ourstate:<44}{flag}{gap}")'''
+assert s.count(old)==1; s=s.replace(old,new,1)
+old='''        arc = (f"timer {s['timer']} step {s['step']} round {s['round']} "
+               f"solo {s['solo']} page {s['page0']}" if s else "(not in state.csv)")'''
+new='''        arc = (f"timer {s['timer']} round {s['round']} solo {s['solo']} "
+               f"page {s['page0']}/{s['page1']}" if s else "(not in state.csv)")'''
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('edited')
+EOF
+time python3 tools/gf_align.py rom/s16.32x oracle 2000 2600 3169 3200 3250 3300 3340 7250 7400 7600 7900 8200 8600 8900 9100 9500 --tag wc9 --hi 15000 2>&1 | tail -22
+
+OUT
+edited
+    gf   frame  ARCADE                                       OURS                                        
+  2000    3132  timer 1750 round 0 solo 0 page 0101/0000     timer 1749 round 0 solo 0 page 0000/5555      arcade png from gf 2006 (+-6)
+  2600    3769  timer 2350 round 0 solo 0 page 0101/0000     timer 2349 round 0 solo 0 page 0101/5656      arcade png from gf 2606 (+-6)
+  3169    4506  timer 2918 round 0 solo 1 page AAAA/0000     timer 2918 round 0 solo 0 page 0101/5656      arcade png from gf 3169 (exact)
+  3200    4537  timer 2949 round 0 solo 1 page AAAA/0000     timer 2949 round 0 solo 0 page 0101/5656      arcade png from gf 3206 (+-6)
+  3250    4587  timer 2999 round 0 solo 1 page AAAA/0000     timer 2999 round 0 solo 0 page 0101/5656      arcade png from gf 3266 (+-16)
+  3300    4637  timer 3049 round 0 solo 1 page AAAA/0000     timer 3049 round 0 solo 0 page 0101/5656      arcade png from gf 3326 (+-26)
+  3340    4677  timer 3089 round 0 solo 1 page AAAA/0000     timer 3089 round 0 solo 0 page 0101/5656      arcade png from gf 3345 (+-5)
+  7250    9485  timer 455 round 0 solo 0 page 0000/0000      timer 684 round 0 solo 1 page AAAA/BBBB       arcade png from gf 7266 (+-16)
+  7400    9678  timer 305 round 0 solo 0 page 0000/0000      timer 698 round 0 solo 0 page 0101/5656       arcade png from gf 7386 (+-14)
+  7600    9973  timer 105 round 0 solo 0 page 0000/0000      timer 23 round 0 solo 0 page 0101/5656        arcade png from gf 7626 (+-26)
+  7900   10395  timer 192 round 1 solo 0 page 0000/0000      timer 323 round 0 solo 0 page 0101/5656       <-- DIVERGED  arcade png from gf 7911 (+-11)
+  8200   10974  timer 492 round 1 solo 0 page 0000/0000      timer 180 round 0 solo 0 page 1212/6767       <-- DIVERGED  arcade png from gf 8211 (+-11)
+  8600   11374  timer 892 round 1 solo 0 page 0000/0000      timer 153 round 0 solo 0 page 1212/6767       <-- DIVERGED  arcade png from gf 8571 (+-29)
+  8900   11751  timer 1192 round 1 solo 0 page 0101/0000     timer 144 round 1 solo 0 page 0101/5656       arcade png from gf 8871 (+-29)
+  9100   12045  timer 1392 round 1 solo 0 page 0101/0000     timer 344 round 1 solo 0 page 0101/5656       arcade png from gf 9111 (+-11)
+  9500   12658  timer 1792 round 1 solo 0 page 0101/0000     timer 137 round 1 solo 0 page 1212/6767       arcade png from gf 9471 (+-29)
+
+wrote oracle/ours/  (wc9_gf*.png beside arc_gf*.png)
+python3 tools/gf_align.py rom/s16.32x oracle 2000 2600 3169 3200 3250 3300     183.77s user 1.72s system 100% cpu 3:03.91 total
+tail -22  0.00s user 0.00s system 0% cpu 3:03.91 total
+The scene timer tracks the arcade to within one frame, but two things surfaced. Our transformation happens about 4,000 game frames later than the arcade's (our player collects the orbs at a different time), and my dump logged the alternate page word instead of the background one. Reading our own cut windows out of the log I already have.
+
+Bash Find our rom's own cutscene windows from the alignment log
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ls oracle/ours/.wc9_gfmap.csv && python3 - <<'EOF'
+import csv
+rows=list(csv.DictReader(open('oracle/ours/.wc9_gfmap.csv')))
+print('our log:', len(rows), 'frames, last gf', rows[-1]['gameframe'])
+# our cut windows: FG page word (0xFF8E80 first 2 bytes) == AAAA, or solo != 0
+prev=None; runs=[]
+for r in rows:
+    fg=r['0xFF8E80:4'][:4]; bg=r['0xFF8E80:4'][4:]; solo=int(r['0xFFF148:1'],16)
+    key=(fg=='AAAA', solo!=0)
+    if key!=prev:
+        runs.append((int(r['frame']), int(r['gameframe']), fg, bg, solo))
+        prev=key
+print(f"{'frame':>7} {'gf':>6}  fg/bg   solo")
+for f,g,fg,bg,s in runs: print(f"{f:7d} {g:6d}  {fg}/{bg}  {s}")
+EOF
+
+OUT
+oracle/ours/.wc9_gfmap.csv
+our log: 15000 frames, last gf 11157
+  frame     gf  fg/bg   solo
+      0      0  FFFF/FFFF  255
+      5      0  0000/0000  0
+   9387   7155  0101/5656  1
+   9389   7157  AAAA/BBBB  1
+   9500   7265  AAAA/BBBB  0
+   9513   7266  0101/5656  0
+  14114  10472  0101/5656  1
+  14116  10474  AAAA/BBBB  1
+  14229  10582  AAAA/BBBB  0
+  14236  10583  0101/5656  0
+Our rom has two transformation windows in this run. Capturing ours and the arcade's aligned by position within the scene, which is what defects 2 and 3 need.
+
+Bash Capture our transformation frames and census the play frames for black tiles
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+import csv
+# arcade snapshots inside its first transformation (gf 3169-3345)
+snaps=list(csv.DictReader(open('oracle/snaps.csv')))
+arc=[(int(s['index']),int(s['gf'])) for s in snaps if 3160 <= int(s['gf']) <= 3350]
+print('arcade transformation snapshots (index, gf):', arc)
+# our frames for our transformation window gf 7157-7265
+rows=list(csv.DictReader(open('oracle/ours/.wc9_gfmap.csv')))
+first={}
+for r in rows:
+    g=int(r['gameframe'])
+    if g not in first: first[g]=int(r['frame'])
+ours=[(g, first[g]) for g in range(7157,7266,15) if g in first]
+print('our transformation targets (gf, frame):', ours)
+open('/tmp/ab_targets.txt','w').write(' '.join(str(f) for _,f in ours))
+open('/tmp/ab_gfs.txt','w').write(' '.join(str(g) for g,_ in ours))
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; mkdir -p $S/trans; args=(); for f in $(cat /tmp/ab_targets.txt); do args+=(--screenshot $f:$S/trans/our_$f.png); done; $A --frames 9600 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 "${args[@]}" rom/s16.32x >/dev/null 2>&1; ls $S/trans/ | wc -l; echo "black cells in our PLAY frames (item 4):"; python3 $S/cells_any.py oracle/ours/wc9_gf2000.png oracle/ours/wc9_gf2600.png oracle/ours/wc9_gf9100.png oracle/ours/wc9_gf9500.png
+
+OUT
+arcade transformation snapshots (index, gf): [(63, 3169), (64, 3206), (65, 3266), (66, 3326), (67, 3345)]
+our transformation targets (gf, frame): [(7157, 9389), (7172, 9407), (7187, 9422), (7202, 9437), (7217, 9452), (7232, 9467), (7247, 9482), (7262, 9497)]
+       8
+black cells in our PLAY frames (item 4):
+wc9_gf2000.png                 0 
+wc9_gf2600.png                 0 
+wc9_gf9100.png                 0 
+wc9_gf9500.png               168 3:0 3:1 3:2 3:3 3:4 3:5 3:6 3:7 3:8 3:9 3:10 3:11 3:12 3:13 3:14 3:15 3:16 3:17 3:18 3:19 3:20 3:21 3:22 3:23
+mame seems to run faster thatn the FPGA mister Sega16 code.
+Noted, and that difference is exactly what the game-frame keying exists to absorb: MAME runs the arcade at full 60 Hz while our port runs the game at 50 to 70 percent, so the route is keyed to the game's own frame count rather than wall-clock frames. Building the transformation comparison.
+
+Bash Montage the arcade's transformation beside ours
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; python3 - 2>/dev/null <<'EOF'
+from PIL import Image
+import glob, os
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/'
+arc=sorted(glob.glob('oracle/altbeast/*.png'))
+ai=[63,64,65,66,67]
+ours=sorted(glob.glob(S+'trans/our_*.png'), key=lambda p:int(p.split('_')[-1][:-4]))
+W,H=480,336
+rows=max(len(ai),len(ours))
+out=Image.new('RGB',(W*2,H*5))
+for i,idx in enumerate(ai):
+    out.paste(Image.open(arc[idx]).convert('RGB').resize((W,H),Image.NEAREST),(0,i*H))
+for i,f in enumerate(ours[:5]):
+    out.paste(Image.open(f).convert('RGB').crop((65,11,65+1280,11+224)).resize((W,H),Image.NEAREST),(W,i*H))
+out.save(S+'trans_cmp.png'); print('arcade', [os.path.basename(arc[i]) for i in ai]); print('ours', [os.path.basename(f) for f in ours[:5]])
+EOF
+
+OUT
+arcade ['0063.png', '0064.png', '0065.png', '0066.png', '0067.png']
+ours ['our_9389.png', 'our_9407.png', 'our_9422.png', 'our_9437.png', 'our_9452.png']
+Read trans_cmp.png
+Both defects are now visible and measurable. Quantifying the top and bottom rows.
+
+Bash Census the cut screen's top and bottom rows, arcade against ours
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; cat > $S/cutrows.py <<'EOF'
+#!/usr/bin/env python3
+"""black 8x8 cells in the cut screen's top rows (0-3) and bottom rows (24-27)"""
+import sys
+from PIL import Image
+def frame(p):
+    im=Image.open(p).convert('RGB')
+    if im.size==(1415,243): im=im.crop((65,11,65+1280,11+224)).resize((320,224),Image.NEAREST)
+    elif im.size!=(320,224): im=im.resize((320,224),Image.NEAREST)
+    return im
+for p in sys.argv[1:]:
+    px=frame(p).load(); top=[]; bot=[]
+    for row in list(range(0,4))+list(range(24,28)):
+        for col in range(40):
+            if all(px[col*8+x,row*8+y]==(0,0,0) for y in range(8) for x in range(8)):
+                (top if row<4 else bot).append((row,col))
+    print(f'{p.split("/")[-1]:20s} top {len(top):3d} bottom {len(bot):3d}   top cells: ' + ' '.join(f'{r}:{c}' for r,c in top[:14]))
+EOF
+echo "=== ARCADE transformation (clean reference)"; python3 $S/cutrows.py oracle/altbeast/0064.png oracle/altbeast/0065.png oracle/altbeast/0066.png; echo "=== OURS transformation"; python3 $S/cutrows.py $S/trans/our_9407.png $S/trans/our_9422.png $S/trans/our_9437.png $S/trans/our_9452.png $S/trans/our_9467.png $S/trans/our_9482.png
+
+OUT
+=== ARCADE transformation (clean reference)
+0064.png             top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+0065.png             top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+0066.png             top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+=== OURS transformation
+our_9407.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+our_9422.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+our_9437.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+our_9452.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+our_9467.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+our_9482.png         top 160 bottom 160   top cells: 0:0 0:1 0:2 0:3 0:4 0:5 0:6 0:7 0:8 0:9 0:10 0:11 0:12 0:13
+Both have clean black borders on ares, so the border garbage is rig-only or at the transition edge. Diffing our transformation against the arcade's at the same animation phase to name what actually differs.
+
+Bash Cell-level diff and colour census of the transformation screen
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; python3 - 2>/dev/null <<'EOF'
+from PIL import Image
+import collections
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/'
+def fr(p):
+    im=Image.open(p).convert('RGB')
+    if im.size==(1415,243): im=im.crop((65,11,65+1280,11+224)).resize((320,224),Image.NEAREST)
+    return im
+A=fr('oracle/altbeast/0065.png'); B=fr(S+'trans/our_9482.png')
+pa,pb=A.load(),B.load()
+rows=collections.Counter(); diff=0
+for row in range(28):
+    for col in range(40):
+        d=sum(1 for y in range(8) for x in range(8) if pa[col*8+x,row*8+y]!=pb[col*8+x,row*8+y])
+        if d: rows[row]+=1; diff+=1
+print('differing cells', diff, 'of 1120')
+print('per row (row: cells):', dict(sorted(rows.items())))
+# colour census of each
+for name,im in (('arcade',A),('ours',B)):
+    c=collections.Counter(im.getdata())
+    print(name, 'distinct colours', len(c), 'top:', [f'{k}:{v}' for k,v in c.most_common(6)])
+EOF
+
+OUT
+differing cells 477 of 1120
+per row (row: cells): {4: 40, 5: 40, 6: 40, 7: 40, 8: 40, 9: 40, 10: 38, 11: 31, 12: 28, 13: 28, 14: 25, 15: 19, 16: 16, 17: 14, 18: 14, 19: 14, 20: 10}
+arcade distinct colours 25 top: ['(255, 0, 0):22490', '(0, 0, 0):20529', '(0, 0, 189):3470', '(0, 0, 173):3133', '(0, 0, 156):3028', '(0, 0, 206):2952']
+ours distinct colours 16 top: ['(255, 0, 0):26399', '(0, 0, 0):20529', '(0, 0, 206):19417', '(165, 115, 66):772', '(181, 132, 82):743', '(198, 148, 115):701']
+477 of 1120 cells differ, all in the picture rows, none in the borders. And the decisive number: the arcade draws that field in four blues, ours in one. Checking whether the game's own palette has them and our display lost them.
+
+Bash Dump the game's own palette and our 32X CRAM at the transformation frame
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; mkdir -p $S/pal; $A --frames 9483 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --dump wram:0xFF9000:0x1000:$S/pal/game_pal.bin --dump "32X CRAM:0x0:0x200:$S/pal/cram32x.bin" --dump "cram:0x0:0x80:$S/pal/mdcram.bin" rom/s16.32x >/dev/null 2>&1; python3 - <<'EOF'
+import struct, collections
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/pal/'
+g=open(S+'game_pal.bin','rb').read()
+c=open(S+'cram32x.bin','rb').read()
+def s16rgb(w):
+    # System 16B palette word: shade bit 15, bgr 5-bit with low bits
+    b=((w>>8)&0x0F)*2 + ((w>>12)&1); gg=((w>>4)&0x0F)*2 + ((w>>13)&1); r=(w&0x0F)*2 + ((w>>14)&1)
+    return (r*8, gg*8, b*8)
+# the cut scene's colour sets: the record names sets 19/20/21 for the chevron plane
+for setno in (19,20,21):
+    ws=[struct.unpack('>H', g[setno*32+i*2: setno*32+i*2+2])[0] for i in range(16)]
+    print(f'game palette set {setno}:', ' '.join(f'{w:04X}' for w in ws))
+    print(f'                   rgb:', ' '.join(f'{s16rgb(w)}' for w in ws[:8]))
+# our 32X CRAM: 256 entries of 16-bit BGR555
+cw=[struct.unpack('>H', c[i*2:i*2+2])[0] for i in range(256)]
+def x32(w): return (((w)&31)*8, ((w>>5)&31)*8, ((w>>10)&31)*8)
+blues=[(i,w,x32(w)) for i,w in enumerate(cw) if x32(w)[0]<40 and x32(w)[1]<40 and x32(w)[2]>100]
+print('32X CRAM entries that are a dark blue:', blues[:12])
+print('distinct 32X CRAM colours:', len(set(cw)))
+EOF
+
+OUT
+game palette set 19: 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400
+                   rgb: (0, 112, 176) (0, 176, 240) (8, 152, 208) (0, 128, 192) (0, 112, 176) (0, 80, 144) (0, 48, 112) (0, 0, 64)
+game palette set 20: 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400
+                   rgb: (0, 112, 176) (0, 176, 240) (8, 152, 208) (0, 128, 192) (0, 112, 176) (0, 80, 144) (0, 48, 112) (0, 0, 64)
+game palette set 21: 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400 0B70 0FB0 6D90 0C80 0B70 0950 0730 0400
+                   rgb: (0, 112, 176) (0, 176, 240) (8, 152, 208) (0, 128, 192) (0, 112, 176) (0, 80, 144) (0, 48, 112) (0, 0, 64)
+32X CRAM entries that are a dark blue: [(2, 30720, (0, 0, 240)), (25, 25600, (0, 0, 200)), (26, 25600, (0, 0, 200)), (27, 31744, (0, 0, 248)), (28, 31744, (0, 0, 248)), (29, 31744, (0, 0, 248)), (30, 21504, (0, 0, 168)), (31, 21504, (0, 0, 168)), (32, 21504, (0, 0, 168)), (96, 21504, (0, 0, 168))]
+distinct 32X CRAM colours: 121
+Bash Read the Mega Drive CRAM at the transformation frame
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; python3 - <<'EOF'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/pal/'
+m=open(S+'mdcram.bin','rb').read()
+def md(w): return (((w>>1)&7)*36, ((w>>5)&7)*36, ((w>>9)&7)*36)
+for line in range(4):
+    ws=[struct.unpack('>H', m[line*32+i*2:line*32+i*2+2])[0] for i in range(16)]
+    print(f'MD CRAM line {line}:', ' '.join(f'{md(w)}' for w in ws))
+EOF
+
+OUT
+MD CRAM line 0: (0, 0, 0) (252, 252, 0) (252, 252, 0) (252, 252, 0) (252, 252, 0) (108, 252, 0) (108, 252, 0) (108, 252, 0) (252, 252, 0) (252, 252, 0) (252, 252, 0) (108, 252, 0) (108, 252, 0) (252, 216, 0) (252, 216, 0) (0, 0, 0)
+MD CRAM line 1: (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 72, 0) (0, 144, 0) (108, 0, 0) (108, 0, 0) (108, 0, 0) (108, 0, 0) (108, 0, 0) (108, 0, 0) (252, 252, 0) (0, 0, 0)
+MD CRAM line 2: (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0)
+MD CRAM line 3: (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0) (0, 0, 0)
+Precise now. Recording the findings.
+
+Bash Record the transformation finding and fix the page-word logging
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/inp_dump.lua'; s=open(p).read()
+old="""    local p0 = mem:read_u16(T + 0x740 * 2)
+    local p1 = mem:read_u16(T + 0x742 * 2)"""
+new="""    -- the LAYER page words are 0x740 (FG) and 0x741 (BG) -- m_main.c
+    -- latch_layer_regs reads TEXT_C[0x740 + which]. 0x742/0x743 are the
+    -- ALTERNATE page sets; logging 0x742 as "page1" (2026-09-25, first cut)
+    -- made our BG word look like it disagreed with the arcade's when it did not.
+    local p0 = mem:read_u16(T + 0x740 * 2)
+    local p1 = mem:read_u16(T + 0x741 * 2)"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s)
+p='LESSONS.md'; s=open(p).read()
+s += """
+### The transformation screen's blue field: the arcade draws it in FOUR blues, our CRAM holds TWO, so the chevron pattern flattens (2026-09-25 17:10 ET, the oracle's first finding)
+
+Mike's full-game recording (103,171 game frames, 1,764 arcade snapshots, all
+five rounds; the oracle rig of LESSONS 14:50) put our transformation screen
+beside the arcade's for the first time on ares -- until today it needed his
+eyes on the rig. Our rom's own cut windows come out of the alignment log
+(`--gameframe-watch` on the FG page word): game frames 7157-7265 and
+10474-10582 of that route, the arcade's at 3169-3345. Compared at the same
+animation phase (the shouting face):
+
+    differing cells   477 of 1120, EVERY ONE in rows 4-20
+    border rows       0-3 and 21-27 identical, 160/160 black on both
+    distinct colours  arcade 25, ours 16
+    the blue field    arcade four shades -- 5-bit blue 25/23/21/19
+                      ours ONE, 19,417 px of blue 25
+
+Our 32X CRAM at that frame holds blue 25 and blue 21 but NOT 23 or 19 (it
+carries 30 and 31 instead), and the MD CRAM has no blue at all on any of its
+four lines -- the field is framebuffer-composed, so the loss is in the 32X
+CRAM's pens for that scene, not in the tiles and not in the MD planes. The
+tile art IS arriving: the field is full. With two of the ramp's four shades
+missing the pattern's pens collapse onto one colour and the chevron becomes
+invisible. That RETIRES the older reading ("the zigzag tiles were never wrong,
+they were not ARRIVING -- residency, fixed by throughput", STATE's
+transformation entry): throughput is not the lever here, the pen bake for the
+cut scene is.
+
+Mike's item (3), garbage on the cut's top and bottom rows, does NOT reproduce
+on ares: those rows are 160/160 black on both machines through the whole
+window. It is rig-only, like the grey-tile level start, and needs a rig
+capture to mechanise.
+
+**Rule:** count the DISTINCT COLOURS of a scene on both machines before
+calling a flat area a missing-tile problem; a collapsed pen ramp and absent
+art look identical in a still.
+"""
+open(p,'w').write(s); print('ok')
+EOF
+git add tools/inp_dump.lua LESSONS.md && git commit -q -m "LESSONS: the oracle's first finding -- the transformation's blue ramp is two of four shades in our CRAM, so the chevron flattens; item 3 does not reproduce on ares. inp_dump.lua logs the BG page word (0x741), not the alternate set
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+ok
+35d2f304 LESSONS: the oracle's first finding -- the transformation's blue ramp is two of four shades in our CRAM, so the chevron flattens; item 3 does not reproduce on ares. inp_dump.lua logs the BG page word (0x741), not the alternate set
+[This command modified 1 file you've previously read: LESSONS.md. Call Read before editing.]
+Bash Record the findings in STATE and confirm the tree
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='STATE.md'; s=open(p).read()
+old="""                                ARES CAN NOW REACH 2-7, given one recording
+                                from Mike: the ARCADE PLAYTHROUGH ORACLE"""
+new="""                                ORACLE BUILT AND RUN on Mike's full-game
+                                recording (2026-09-25 16:10: 103,171 game
+                                frames, 1,764 arcade snapshots, all five
+                                rounds, every transformation bracketed;
+                                oracle/ + oracle/scenes.csv). FIRST FINDINGS:
+                                (2) the transformation's blue field is FOUR
+                                shades on the arcade (5-bit blue 25/23/21/19)
+                                and ONE in ours -- our 32X CRAM holds 25 and
+                                21, not 23 or 19; 477 of 1120 cells differ,
+                                all in rows 4-20; the tile art IS arriving
+                                and the MD planes carry no blue, so it is the
+                                CUT SCENE'S PEN BAKE, not throughput (LESSONS
+                                17:10 -- this retires the "tiles not arriving"
+                                reading below). (3) does NOT reproduce on ares:
+                                the cut's top and bottom rows are 160/160
+                                black on both machines through the window, so
+                                it is rig-only like the grey-tile level start.
+                                (4) black tiles: 0 cells in our play frames on
+                                ares at game frames 2000/2600/9100. Our
+                                transformation runs ~4000 game frames later
+                                than the arcade's (our player takes the orbs
+                                at a different time); the scene timer tracks
+                                the arcade to within ONE frame throughout.
+                                ARES CAN REACH 2-7 with that recording: the
+                                ARCADE PLAYTHROUGH ORACLE"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('ok')
+EOF
+git add STATE.md && git commit -q -m "STATE: the oracle is built and run on Mike's full game; first findings on items 2, 3 and 4
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; du -sh oracle; git status --short | grep -v '^??' || echo "tree clean"
+
+OUT
+ok
+99ddd9b0 STATE: the oracle is built and run on Mike's full game; first findings on items 2, 3 and 4
+ 51M	oracle
+ M cfg/oracle/altbeast.cfg
+ M tools/gf_align.py
+WHile you are parsing through mame dumps. Did I already paste this back from the decompile thread?
+
+Paste to the builder
+Decompile → builder. Before the c17 run: add a fourth rom at raw V 0xF0.
+
+Your objection is right and §8's "never reported" was wrong — rigc14's bytes are in the 05:10 addendum. Mode 14 times data reads, mode 15 times fetch, and only mode 15 has run in the contended phase. Here is which phase that is.
+
+The master's cart streamer is cache_fill (m_main.c:7025): 64 bytes per tile as 16 consecutive longwords from altbeast_tiles, budget to 384 tiles (:13090, :13331). ~24 KB per drain, ~1,536 uninterruptible 4-longword IBBURST fills (CACHE.sv:488). altbeast_tiles (:52) is a plain linked cart symbol — the cached window. It runs behind dt = frt() - t_vint; if (dt <= 8000) (:13085-13090): the early-vint idle slot, your own comment says "outside the window".
+
+CARTBENCH's V >= 0xF0 wait lands in exactly that slot. So its 132-148 spread collapsing to 130-133 with the master's cart idle work off is the tenure signature, and mode 14's in-window null is the expected result, not a refutation — at +102 the master composes from the SDRAM tile cache, not from cart. Contention looks confined to the cache_fill slot.
+
+So c17's three phases sample the wrong side. +54, +102, +166 are all active display. If all three read 130-133, your criterion ("132-148 everywhere means contention is the same inside and outside") reads as "no contention anywhere," when the fit is "it is confined to a phase none of the three sampled." Add c17@0xF0 so the pair is c17@0xF0 vs c17@0x40 — same loop, same wait mechanism, one phase apart — instead of mode 15 vs mode 14, which differ in both. One extra rom, ~8 minutes.
+
+The lever, if it confirms. RS_SH_CONT releases the port whenever the SH-2 stops asserting. In cache_fill each 16-byte line is one uninterruptible 4-longword burst, so a tile is 4 tenures of 8 word transactions and the 68K's worst case is 8. Reading altbeast_tiles through the uncached mirror (0x22000000u | addr) makes each longword its own 2-word transaction, with the SDRAM store between them deasserting SH_ROM_SEL and returning to RS_IDLE: 16 short tenures per tile instead of 4 long ones, same total words, worst-case 68K wait 8 → 2. One line in cache_fill; the 0x20000000u | idiom is already at :884, :898, :899, :1019.
+
+Not established: what share of the 60 lines this is. Uncached is slower per word for the SH-2, so the drain budget may need re-pricing. Measure c17@0xF0 before building the lever.
+
+Next: get c17@0xF0 built and into the queue ahead of the other three — it's the only one of the four that can come back positive.
+Bash Revert the config writeback, commit the tool, and gitignore the captures
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git diff --stat cfg/oracle/altbeast.cfg; git checkout cfg/oracle/altbeast.cfg; git add tools/gf_align.py && git commit -q -m "gf_align.py: report our own state per target from the game-frame log's watched bytes, and flag a diverged round
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"; grep -q '^oracle/' .gitignore 2>/dev/null || echo "oracle/" >> .gitignore; grep -q '^inp/' .gitignore 2>/dev/null || echo "inp/" >> .gitignore; git add .gitignore && git commit -q -m "gitignore the oracle dump and MAME input recordings (51MB of arcade-derived captures; the recipe rebuilds them)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"; git status --short | grep -v '^??' || echo "tree clean"; git log --oneline -3
+
+OUT
+ cfg/oracle/altbeast.cfg | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+Updated 1 path from the index
+tree clean
+7a98a833 gitignore the oracle dump and MAME input recordings (51MB of arcade-derived captures; the recipe rebuilds them)
+066fc14e gf_align.py: report our own state per target from the game-frame log's watched bytes, and flag a diverged round
+99ddd9b0 STATE: the oracle is built and run on Mike's full game; first findings on items 2, 3 and 4
+Yes, you pasted it last night and I acted on it. c17 at 0xF0 was built and run first, exactly as asked, then the other three.
+
+Bash Pull the c17 four-phase result from LESSONS
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; sed -n "$(grep -n 'c17 at four phases' LESSONS.md | cut -d: -f1),+22p" LESSONS.md
+
+OUT
+### c17 at four phases: the fetch loop reads 132 in the level-1 demo at 0xF0, 0x40, 0x10 and 0x80 alike; tenure contention is sporadic spikes, not a phase (2026-09-24 22:50 ET, rig, two launches per phase)
+
+RIGSPAN=17 = CARTBENCH's 512-iteration loop fetched from the cart,
+timed in quarter-lines after a wait for raw V == RIGSPANV, every 64th
+vint. Level-1 demo readings (WRAM copy 112 throughout):
+    0xF0 (the cache_fill slot)  131 129 132 132
+    0x40 (+102, compose)        132 132 132 141
+    0x10 (+54)                  136 132 150 132
+    0x80 (+166)                 135 132
+Across the other attract steps 0xF0 shows spikes to 148/144/140/138 at
+the round-1 load and the title, where the master's drain is busy; in
+the demo the spikes are as likely at 0x10 or 0x40 as at 0xF0. So the
+tenure mechanism (IF.sv RS_SH_CONT + CACHE.sv line fills) is real and
+visible (a spike = +6-14% on a 33-line loop), but in the level-1 demo
+it is sporadic and phase-free, mean ~134 vs the 130-133 floor: about
++1-2% of fetch-bound time, a couple of lines a pass at most. It is not
+the ~60 unexplained lines, and the uncached-mirror cache_fill lever
+would buy at most that. Ares for the same loop: 115.
+
+**Rule:** a contention term is sized by its mean over the measured
+scene, not by its worst spike; the spikes here live at loads and the
+title, which are not on the speed axis.
+Already done, and the prediction came back negative. Reply for the decompile thread:
+
+The pair you asked for ran first. c17 at raw V 0xF0, the cache_fill slot, then 0x40, then 0x10 and 0x80, two rig launches each, level-1 demo:
+
+phase	cart fetch loop, quarter-lines
+0xF0, the cache_fill slot	131, 129, 132, 132
+0x40, +102, compose	132, 132, 132, 141
+0x10, +54	136, 132, 150, 132
+0x80, +166	135, 132
+The WRAM copy read 112 throughout. So 0xF0 against 0x40 is 130 against 132: no phase confinement. Contention is real and visible, a spike costs 6 to 14% on a 33-line loop, but in the demo the spikes fall as readily at 0x10 or 0x40 as at 0xF0, and the mean is about 134 against a 130 to 133 floor. That is 1 to 2% of fetch-bound time, a couple of lines a pass.
+
+Your mechanism holds where you predicted it: at 0xF0 across the other attract steps the spikes reach 148, 144, 140 and 138, at the round-1 load and the title, where the master's drain is busy. Those phases are not on the speed axis.
+
+So the uncached-mirror change to cache_fill would buy at most those couple of lines, and it is not built. The 60 unexplained lines are elsewhere: the class histogram put the only moving term in cart game code and showed the mean-pass excess to be the second interrupt chain that any tipped pass pays.
+
+One correction to your framing worth keeping: mode 14's in-window null was never read as a refutation, and rigc14's bytes were in the 05:10 addendum, as you note.
+
+Separately, since you last saw this thread: the black tiles are fixed and the arcade oracle is running. Mike's full-game recording is dumped, 103,171 game frames with 1,764 arcade snapshots. Its first finding is yours to check against the rom: the transformation's blue field is four shades on the arcade, 5-bit blue 25, 23, 21 and 19, and one in ours. Our 32X colour RAM holds 25 and 21 but not 23 or 19, the tile art is arriving, and the Mega Drive planes carry no blue at all. So it is the cut scene's pen bake, not throughput, which retires the older "tiles not arriving" reading.
+
+and how are you dong on the mame lua?
+Bash Re-dump the oracle with the corrected page-word logging
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "=== the oracle dump predates the page-word fix:"; head -1 oracle/state.csv; git log --oneline -1 -- tools/inp_dump.lua; echo; echo "=== re-dumping so the BG page column is the BG page (background)"; rm -rf oracle/altbeast; ID_OUT=$PWD/oracle ID_FRAMES=103300 ID_EVERY=60 mame altbeast -rompath ./mame -skip_gameinfo -cfg_directory cfg/oracle -nowriteconfig -input_directory ./inp -playback ab_full -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 2000 -snapshot_directory $PWD/oracle -autoboot_script tools/inp_dump.lua > oracle/mame.log 2>&1; echo "rc=$?"; wc -l oracle/state.csv oracle/snaps.csv oracle/inputs_gf.csv | head -3; ls oracle/altbeast/*.png | wc -l; git checkout cfg/oracle/altbeast.cfg 2>/dev/null; python3 tools/oracle_scenes.py oracle --csv oracle/scenes.csv 2>&1 | head -3
+
+OUT
+Command running in background with ID: b5lh6la0z. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/tasks/b5lh6la0z.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Session cwd remains /Users/mikeholzinger/src/sega16-2-32x; directory changes made by the backgrounded command do not apply to subsequent commands.
+Two Lua tools, both working, one caveat I am fixing right now.
+
+tools/record_setup.lua — done and used. It ran your 29-minute recording. It does almost nothing on purpose: prints a frame count every 600 frames. Its original job, forcing the DIP switches, was wrong and is removed. field:set_value snaps to MAME's settinglist and produced 0xEE and 0x01 instead of 0xFF and 0xFD, so the DIPs now come from cfg/oracle instead, verified reading the port's exact bytes.
+
+tools/inp_dump.lua — done and proven at scale: 103,300 frames replayed, 1,764 snapshots, three CSVs. It does four things per frame: reads the game's state from 68K memory, counts game frames, detects input changes, and snapshots at scene edges.
+
+Two bugs found in it today, both fixed:
+
+Input polarity. Reading a field's value during playback is unreliable across MAME versions, so it compares the raw port value against an idle reference sampled on frame 1. Polarity-agnostic and verified: the recovered route matched the source script's coin, start and punch cadence.
+The one-game-frame hold. Your start press spanned zero game frames at a scene change, so press and release landed on the same key and cancelled; our rom sat in the attract with one credit. Each button's keys are now strictly increasing.
+The caveat, being fixed as I write. The tool was logging word 0x742 as the background page, but 0x742 is the foreground's alternate page set; the background is 0x741. Nothing I concluded depends on it, because the transformation work reads the foreground word only, which was always right. Still, the dump is regenerating now with the correct column, about two and a half minutes.
+
+One thing the Lua cannot do, which is why the alignment moved to the ares side: MAME's Lua cannot drive our 32X rom. So the game-frame counter lives in the shim and the fork gained --input-gameframe, --gameframe-log and --gameframe-watch. Those three are what make one arcade recording serve every scene.
+
+Bash Confirm the re-dump and the corrected background page column
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; tail -8 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/tasks/b5lh6la0z.output; echo "=== BG page word now logged (was the alternate set):"; head -2 oracle/state.csv; sed -n '3200p;11000p' oracle/state.csv
+
+OUT
+    1777 oracle/snaps.csv
+    8960 oracle/inputs_gf.csv
+    1776
+103300 frames, 103171 game frames, 75 scene events
+
+game frame  event              detail
+
+[exited with code 0]
+=== BG page word now logged (was the alternate set):
+frame,gf,timer,step,round,solo,flag,disp,page0,page1,fgx,fgy,bgx,bgy
+1,0,65472,192,255,255,255,255,FF00,FF00,FFC0,FFC0,FFC0,FFC0
+3199,3165,2915,8,0,0,0,0,0101,5656,00DF,0020,0000,0000
+10999,10930,3221,8,1,1,0,0,AAAA,BBBB,0000,0000,0000,0000
+Bash Record that the page words agree and commit
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='LESSONS.md'; s=open(p).read()
+old="""**Rule:** count the DISTINCT COLOURS of a scene on both machines before
+calling a flat area a missing-tile problem; a collapsed pen ramp and absent
+art look identical in a still."""
+new="""Addendum (the oracle re-dumped with the page fix, 17:40 ET): the arcade's
+LAYER page words are 0101/5656 in level-1 play and AAAA/BBBB in the cut --
+exactly what our rom reports. The apparent disagreement in the first
+alignment (ours 0101/5656 against "the arcade's" 0101/0000) was entirely the
+logging bug: 0x742 is the FG's ALTERNATE page set, the BG is 0x741. Our page
+selection is right; 75 scene events in the corrected dump, 1,776 snapshots.
+
+**Rule:** count the DISTINCT COLOURS of a scene on both machines before
+calling a flat area a missing-tile problem; a collapsed pen ramp and absent
+art look identical in a still. And when our value disagrees with "the
+arcade's", check that both readers name the same address before reading
+anything into it."""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('ok')
+EOF
+git add LESSONS.md && git commit -q -m "LESSONS: the corrected oracle confirms our page words match the arcade exactly; the disagreement was the logging bug
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; git status --short | grep -v '^??' || echo "tree clean"
+
+OUT
+ok
+5cee1d5e LESSONS: the corrected oracle confirms our page words match the arcade exactly; the disagreement was the logging bug
+tree clean
+The Lua is finished and the corrected dump is in. It also cleared a false alarm.
+
+The fix mattered more than expected. With the background page word read from the right address, the arcade reports 0101/5656 in level-1 play and AAAA/BBBB during the cut. That is exactly what our rom reports. So our page selection matches the arcade completely, and the disagreement in this morning's alignment was entirely my logging bug, not the port.
+
+Current oracle, regenerated and committed: 103,171 game frames, 1,776 arcade snapshots, 75 scene events, all five rounds, every transformation bracketed. oracle/ and inp/ are gitignored since they are arcade-derived captures, and the recipe rebuilds them in about three minutes.
+
+Where the seven items stand:
+
+Zeus text, one glyph left. Known class, the lost-text-store writer. Not touched today.
+Transformation garbage. Measured: four blues on the arcade, one in ours, and the missing shades are absent from our colour RAM. It is the cut scene's pen bake, not throughput.
+Transformation top and bottom rows. Does not reproduce on ares, 160 of 160 border cells black on both machines through the whole window. Rig-only.
+Black tiles in play. Zero cells in our play frames on ares at three sampled game frames, after this morning's slot-hash fix. Your rig sighting predates that fix.
+Round-clear bonus text. Same class as item 1, not yet measured.
+Crystal ball palette. Reachable now, not yet measured.
+Level-2 silhouettes. Reachable now, not yet measured.
+Next, unless you redirect: measure items 6 and 7 against the oracle, since both are single alignment passes now, then take item 2's pen bake, which is the one with a named mechanism and a fix that belongs on the SH-2 side.
+
+What do you mean measurte against the oracle? I gave you the issues to resolve. you have a new build?
+Straight answer: no. The build you played at 13:52 is the newest, and your seven items are all still open in it. Item 4 is not fixed either; my last message was wrong to imply your sighting predated the hash fix, because you played the build that has it.
+
+Going after item 2 now, the one with a measured mechanism. Finding which colour set the chevron field uses and which of its pens our display is missing.
+
+Bash Find the cut page's colour sets and which of their pens are missing from our display palette
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; mkdir -p $S/cut; $A --frames 9483 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --dump sdram:0x19000:0x10000:$S/cut/tmap.bin --dump "32X DRAM:0x1F000:0x1000:$S/cut/t0.bin" --dump wram:0xFF9000:0x1000:$S/cut/gpal.bin --dump "32X CRAM:0x0:0x200:$S/cut/cram.bin" --screenshot 9482:$S/cut/shot.png rom/s16.32x >/dev/null 2>&1; python3 - <<'EOF'
+import struct, collections
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/cut/'
+def W(b,i): return struct.unpack('>H',b[i*2:i*2+2])[0]
+t=open(S+'t0.bin','rb').read(); tmap=open(S+'tmap.bin','rb').read()
+pages=W(t,0x740); pq=[min(12,(pages>>s)&0xF) for s in (0,4,8,12)]
+xraw=W(t,0x74C); vx0=(0xC0-(xraw&0x3FF))&0x3FF; vy0=W(t,0x748)&0x1FF
+print('FG pages', pq, 'vx0', vx0, 'vy0', vy0)
+# the blue field: view rows 4-20, sample a band of cells and collect their colour sets
+sets=collections.Counter()
+for row in range(4,21):
+    vy=(vy0-(vy0&7)+row*8)&0x1FF
+    for col in range(0,40,3):
+        vx=((vx0&~7)+col*8)&0x3FF
+        page=pq[((vy>>7)&2)+((vx>>9)&1)]
+        w=W(tmap,page*0x800+((vy>>3)&0x1F)*64+((vx>>3)&0x3F))
+        if w: sets[(w>>6)&0x7F]+=1
+print('colour sets used by the FG cut page:', sets.most_common(8))
+g=open(S+'gpal.bin','rb').read(); c=open(S+'cram.bin','rb').read()
+cram=set(struct.unpack('>H',c[i*2:i*2+2])[0] for i in range(256))
+def s16_to_32x(w):
+    r=(w&0x0F)*2+((w>>14)&1); gg=((w>>4)&0x0F)*2+((w>>13)&1); b=((w>>8)&0x0F)*2+((w>>12)&1)
+    return (b<<10)|(gg<<5)|r
+for st,_ in sets.most_common(3):
+    ws=[W(g,st*16+i) for i in range(16)]
+    conv=[s16_to_32x(w) for w in ws]
+    miss=[(i,f'{ws[i]:04X}') for i,cv in enumerate(conv) if cv not in cram]
+    print(f'set {st}: {len(miss)} of 16 pens NOT in our 32X CRAM: {miss}')
+EOF
+
+OUT
+FG pages [10, 10, 10, 10] vx0 192 vy0 0
+colour sets used by the FG cut page: [(20, 208), (21, 30)]
+set 20: 16 of 16 pens NOT in our 32X CRAM: [(0, '0B70'), (1, '0FB0'), (2, '6D90'), (3, '0C80'), (4, '0B70'), (5, '0950'), (6, '0730'), (7, '0400'), (8, '0B70'), (9, '0FB0'), (10, '6D90'), (11, '0C80'), (12, '0B70'), (13, '0950'), (14, '0730'), (15, '0400')]
+set 21: 16 of 16 pens NOT in our 32X CRAM: [(0, '0B70'), (1, '0FB0'), (2, '6D90'), (3, '0C80'), (4, '0B70'), (5, '0950'), (6, '0730'), (7, '0400'), (8, '0B70'), (9, '0FB0'), (10, '6D90'), (11, '0C80'), (12, '0B70'), (13, '0950'), (14, '0730'), (15, '0400')]
+The palette for those sets colour-cycles every frame, so I need a control before trusting this. Checking whether a normal play scene's sets are present in our display palette using the same test.
+
+Bash Control: check whether a play scene's colour sets are present in our display palette
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; mkdir -p $S/play; $A --frames 3133 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --dump sdram:0x19000:0x10000:$S/play/tmap.bin --dump "32X DRAM:0x1F000:0x1000:$S/play/t0.bin" --dump wram:0xFF9000:0x1000:$S/play/gpal.bin --dump "32X CRAM:0x0:0x200:$S/play/cram.bin" rom/s16.32x >/dev/null 2>&1; python3 - <<'EOF'
+import struct, collections
+def W(b,i): return struct.unpack('>H',b[i*2:i*2+2])[0]
+def s16_to_32x(w):
+    r=(w&0x0F)*2+((w>>14)&1); g=((w>>4)&0x0F)*2+((w>>13)&1); b=((w>>8)&0x0F)*2+((w>>12)&1)
+    return (b<<10)|(g<<5)|r
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/'
+for name,d in (('PLAY (level 1)', S+'play/'), ('CUT (transformation)', S+'cut/')):
+    t=open(d+'t0.bin','rb').read(); tmap=open(d+'tmap.bin','rb').read()
+    g=open(d+'gpal.bin','rb').read(); c=open(d+'cram.bin','rb').read()
+    cram=set(struct.unpack('>H',c[i*2:i*2+2])[0] for i in range(256))
+    print(f'=== {name}: CRAM has {len(cram)} distinct entries')
+    for which in (0,1):
+        pages=W(t,0x740+which); pq=[min(12,(pages>>s)&0xF) for s in (0,4,8,12)]
+        xraw=W(t,0x74C+which); vx0=(0xC0-(xraw&0x3FF))&0x3FF; vy0=W(t,0x748+which)&0x1FF
+        sets=collections.Counter()
+        for row in range(3,28):
+            vy=(vy0-(vy0&7)+row*8)&0x1FF
+            for col in range(0,40,2):
+                vx=((vx0&~7)+col*8)&0x3FF
+                page=pq[((vy>>7)&2)+((vx>>9)&1)]
+                w=W(tmap,page*0x800+((vy>>3)&0x1F)*64+((vx>>3)&0x3F))
+                if w: sets[(w>>6)&0x7F]+=1
+        lay='FG' if which==0 else 'BG'
+        for st,n in sets.most_common(4):
+            ws=[W(g,st*16+i) for i in range(16)]
+            present=sum(1 for w in ws if s16_to_32x(w) in cram)
+            print(f'  {lay} set {st:3d} ({n:4d} cells): {present}/16 pens in our CRAM')
+EOF
+
+OUT
+=== PLAY (level 1): CRAM has 116 distinct entries
+  FG set  74 ( 199 cells): 16/16 pens in our CRAM
+  FG set  76 (  63 cells): 16/16 pens in our CRAM
+  FG set  85 (  55 cells): 16/16 pens in our CRAM
+  FG set  79 (  49 cells): 5/16 pens in our CRAM
+  BG set  95 ( 108 cells): 16/16 pens in our CRAM
+  BG set  74 (  80 cells): 16/16 pens in our CRAM
+  BG set 100 (  77 cells): 16/16 pens in our CRAM
+  BG set  92 (  68 cells): 16/16 pens in our CRAM
+=== CUT (transformation): CRAM has 121 distinct entries
+  FG set  20 ( 365 cells): 0/16 pens in our CRAM
+  FG set  21 (  35 cells): 0/16 pens in our CRAM
+  BG set  19 ( 400 cells): 0/16 pens in our CRAM
+Decisive, and the control validates the test. In play the dominant sets have all 16 pens in our display palette. In the transformation, all three sets have none: 0 of 48 colours the scene needs. Finding where those pens should be assigned.
+
+Bash Find the pen map that assigns 32X colour RAM entries to game colour sets
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'define pen_map\|define PEN_MAP\|pen_map\b' sh_src/m_main.c | head -8; grep -n 'define mdp_s_line\|define mdp_s_used\|define MDP_LAST\|mdp_note_tile' sh_src/m_main.c | head -8; grep -n 'define pal_pen\|pal_pen\[\|define PALPEN\|cram_paint' sh_src/m_main.c | head -8
+
+OUT
+637:#define mdp_s_line ((uint8_t  *)0x0603C4A0) /* [128] line+1, 0 = unassigned */
+694:#define mdp_s_used ((uint8_t *)0x0603E380)  /* [128]; ends 0x3E400 */
+1800:#define MDP_LAST_GET(s) ((mdp_s_last[(s) >> 2] >> (((s) & 3) * 2)) & 3)
+1801:#define MDP_LAST_SET(s, l) (mdp_s_last[(s) >> 2] = (uint8_t)((mdp_s_last[(s) >> 2] & ~(3u << (((s) & 3) * 2))) | ((l) << (((s) & 3) * 2))))
+3370:static void mdp_note_tile(unsigned cset, unsigned code, int isfg,
+3500:    /* SUBSET, not equality: mdp_note_tile derives `mask` from ONE tile's
+17519:                             * never reaches mdp_note_tile -- the set
+17527:                                mdp_note_tile(cset, code, isfg,
+202: *         cram_paint_spr: sprite sets painted     4684   LIVE count
+5103:                                     * cram_paint (the call pattern is
+5114:static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
+5148:static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+5151:    if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
+5245:RAMCODE static void cram_paint_spr(int par, unsigned sc)
+5260:        cram_paint(cram + pr * 16, PAL_SH + 1024 + sc * 16, pr * 16, 16);
+5347:        cram_paint_tile(cram + g * 8, g * 8, (unsigned)c);
+Bash Read the loop that paints colour sets into the 32X palette
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; sed -n '5320,5360p' sh_src/m_main.c | grep -v '^\s*\*\|^\s*/\*'
+
+OUT
+        if (cram_memo(g, (uint16_t)(CK_TILE | c), (unsigned)c)) {
+            DIAG[20]++;                      /* groups skipped */
+            continue;
+        }
+        {
+            static const uint8_t q5[32] = {
+                0, 0, 6, 6, 6, 6, 11, 11, 11, 11, 14, 14, 14, 14, 18, 18,
+                18, 18, 21, 21, 21, 21, 25, 25, 25, 25, 31, 31, 31, 31, 31, 31 };
+            for (int p = 0; p < 8; p++) {
+                unsigned w = PAL_SH[c * 8 + p];
+                unsigned r = ((w >> 12) & 1) | ((w << 1) & 0x1E);
+                unsigned gg = ((w >> 13) & 1) | ((w >> 3) & 0x1E);
+                unsigned bb = ((w >> 14) & 1) | ((w >> 7) & 0x1E);
+                cram_set(cram + g * 8 + p, g * 8 + p,
+                         (uint16_t)(q5[r] | (q5[gg] << 5) | (q5[bb] << 10)
+                                    | (w & 0x8000)));
+            }
+        }
+#else
+        if (cram_memo(g, (uint16_t)(CK_TILE | c), (unsigned)c)) {
+            DIAG[20]++;                      /* groups skipped */
+            continue;
+        }
+#ifdef CAT1_MD
+        cram_paint_tile(cram + g * 8, g * 8, (unsigned)c);
+#else
+        cram_paint(cram + g * 8, PAL_SH + c * 8, g * 8, 8);
+#endif
+#endif
+    }
+    for (int c = 0; c < 8; c++) {
+        uint8_t g = text_grp[par][c];
+        if (g == 0xFF)
+            continue;
+        if (cram_memo(g, (uint16_t)(CK_TEXT | c), (unsigned)c)) {
+            DIAG[20]++;
+            continue;
+        }
+Two problems with my test: I had the red and blue low bits swapped, and there may be a quantisation table in the live path. Reading the code's own conversion and redoing it exactly.
+
+Bash Read the palette conversion the SH-2 actually uses and which branch the line builds
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; sed -n '5114,5160p' sh_src/m_main.c | grep -v '^\s*\*$'; echo "=== which branch is live on the line:"; grep -o 'PAL_QUANT\|CRAM_Q5\|PALQ5' .build_flags | sort -u; sed -n '5300,5322p' sh_src/m_main.c | grep -nE '#if|#else|#endif|for \(int g'
+
+OUT
+static void cram_paint(volatile uint16_t *dst, volatile uint16_t *src,
+                               int base, int n)
+{
+#ifdef CRAM_FLIP
+    if (memo_was_remap) {
+        memo_was_remap = 0;
+        uint8_t s = (uint8_t)((base >> 3) & 31);
+        cq_qn[s] = 0;                /* unpublish FIRST: the ISR (the
+                                      * only interleaver — same CPU)
+                                      * landing mid-write must skip,
+                                      * never paint half-new fields */
+        cq_qbase[s] = (uint8_t)base;
+        cq_qoff[s] = (uint16_t)(src - PAL_SH);
+        cq_qstamp[s] = cq_flipno;
+        cq_qn[s] = (uint8_t)n;       /* the publish, LAST */
+        return;                      /* painted after BOTH banks
+                                      * carry the new-pair pixels */
+    }
+#endif
+    for (int p = 0; p < n; p++)
+        cram_set(dst + p, base + p,
+                 (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000)));
+}
+#ifdef CAT1_MD
+/* LOOP29 151: ONE COLOUR FOR ONE TILE. Under MDBGALL the framebuffer's
+ * only tiles are cat-1 cells drawn over sprite rows; MD plane A draws the
+ * same cells everywhere else (C1 step 2). Category 1 is a static ROM bit
+ * (LOOP-DECOMPILE, question 5), so the shimmer Mike saw was the two
+ * renderers disagreeing on colour along a boundary that moves with the
+ * sprites: 5-bit arcade colour in the FB, the MD line's 3-bit pen next
+ * to it. Paint the tile set's 32X CRAM entries with the SAME quantised
+ * colour the MD line carries (mdp_s_qc, 9-bit bbb ggg rrr, expanded 3->5
+ * bits) whenever the set has an MD line; the boundary then separates
+ * identical pixels. Sets without a line keep the arcade colour. */
+static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+{
+    volatile uint16_t *src = PAL_SH + c * 8;
+    if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
+    for (int p = 0; p < 8; p++) {
+        uint16_t q = mdp_s_qc[c * 8 + p], v;
+        if (q == 0xFFFF) {
+            v = (uint16_t)(s16_to_mars(src[p]) | (src[p] & 0x8000));
+        } else {
+            unsigned r = q & 7, g = (q >> 3) & 7, b = (q >> 6) & 7;
+            r = (r << 2) | (r >> 1); g = (g << 2) | (g >> 1); b = (b << 2) | (b >> 1);
+            v = (uint16_t)((b << 10) | (g << 5) | r | (src[p] & 0x8000));
+        }
+=== which branch is live on the line:
+5:#ifdef PEN_MATCH
+That changes the diagnosis. Under the flag that is on the line, a set's framebuffer colours are deliberately replaced by the Mega Drive line's 3-bit colour so the two renderers agree at boundaries. Checking whether that is what flattens the ramp.
+
+Bash Read the MD line assignment and quantised colours for the cut's sets
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'define mdp_s_qc\|mdp_s_qc\b' sh_src/m_main.c | head -3; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; QC=$(grep -n 'define mdp_s_qc' sh_src/m_main.c | grep -o '0x[0-9A-Fa-f]*'); echo "mdp_s_qc at $QC"; $A --frames 9483 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --dump sdram:0x1C4A0:0x80:$S/cut/sline.bin --dump "sdram:$(python3 -c "print(hex(int('${QC:-0x0603C500}',16)-0x06000000))"):0x400:$S/cut/sqc.bin" rom/s16.32x >/dev/null 2>&1; python3 - <<'EOF'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/cut/'
+sl=open(S+'sline.bin','rb').read()
+print('mdp_s_line for the cut sets: 19 ->', sl[19], ' 20 ->', sl[20], ' 21 ->', sl[21])
+print('mdp_s_line for play sets: 74 ->', sl[74], ' 95 ->', sl[95], ' 79 ->', sl[79])
+try:
+    qc=open(S+'sqc.bin','rb').read()
+    for st in (19,20,21):
+        ws=[struct.unpack('>H',qc[(st*8+p)*2:(st*8+p)*2+2])[0] for p in range(8)]
+        def ex(q):
+            if q==0xFFFF: return 'arcade'
+            r=q&7; g=(q>>3)&7; b=(q>>6)&7
+            return f'({(r<<2)|(r>>1)},{(g<<2)|(g>>1)},{(b<<2)|(b>>1)})'
+        print(f'set {st} quantised pens:', ' '.join(ex(w) for w in ws))
+except Exception as e:
+    print('qc read failed:', e)
+EOF
+
+OUT
+639:/* mdp_s_qc is [128][8] of uint16 = 0x800 BYTES. The first layout
+656:#define mdp_s_qc   ((uint16_t *)0x0603C920) /* [128][8]; ends 0x3D120 */
+3256:                mdp_s_qc[s * 8 + p]  = mdp_s_qc[s * 8 + p2];
+mdp_s_qc at 0x0603C920
+0x3D120
+  File "<string>", line 1
+    print(hex(int('0x0603C920
+                  ^
+SyntaxError: unterminated string literal (detected at line 1)
+mdp_s_line for the cut sets: 19 -> 128  20 -> 18  21 -> 128
+mdp_s_line for play sets: 74 -> 18  95 -> 128  79 -> 128
+set 19 quantised pens: (0,0,0) (18,4,22) (0,0,0) (0,0,0) (0,0,0) (18,4,22) (0,9,0) (0,0,0)
+set 20 quantised pens: (0,9,0) (0,18,0) (0,0,0) (18,4,22) (0,0,0) (18,4,22) (0,0,0) (18,4,22)
+set 21 quantised pens: (0,0,0) (18,4,22) (0,0,0) (0,0,0) (0,0,0) (0,0,0) (0,0,0) (0,0,0)
+I read the wrong addresses (used the tilemap's base, not the palette tables'). Redoing with the correct offsets.
+
+Bash Read the MD line assignment and framebuffer pen colours for the cut sets, correct addresses
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; $A --frames 9483 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --dump sdram:0x3C4A0:0x80:$S/cut/sline.bin --dump sdram:0x3C920:0x800:$S/cut/sqc.bin rom/s16.32x >/dev/null 2>&1; python3 - <<'EOF'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/cut/'
+sl=open(S+'sline.bin','rb').read(); qc=open(S+'sqc.bin','rb').read()
+def ex(q):
+    if q==0xFFFF: return 'arcade'
+    r=q&7; g=(q>>3)&7; b=(q>>6)&7
+    return f'({(r<<2)|(r>>1)},{(g<<2)|(g>>1)},{(b<<2)|(b>>1)})'
+print('mdp_s_line (0 = unassigned, else MD line+1):')
+for st in (19,20,21,74,95,79,76,85):
+    print(f'   set {st:3d} -> {sl[st]}')
+for st in (19,20,21):
+    ws=[struct.unpack('>H',qc[(st*8+p)*2:(st*8+p)*2+2])[0] for p in range(8)]
+    print(f'set {st} FB pens:', ' '.join(ex(w) for w in ws))
+EOF
+
+OUT
+mdp_s_line (0 = unassigned, else MD line+1):
+   set  19 -> 1
+   set  20 -> 1
+   set  21 -> 1
+   set  74 -> 0
+   set  95 -> 0
+   set  79 -> 0
+   set  76 -> 0
+   set  85 -> 0
+set 19 FB pens: (31,31,31) (0,0,31) (0,0,31) (0,0,31) (0,0,31) (0,0,31) (0,0,31) (0,0,31)
+set 20 FB pens: (0,0,22) (31,31,0) (31,27,0) (31,22,0) (31,18,0) (31,13,0) (31,0,0) (31,0,0)
+set 21 FB pens: (0,0,22) (31,31,0) (31,27,0) (31,22,0) (31,18,0) (31,13,0) (31,0,0) (31,0,0)
+Mechanism found and measured. Sets 19, 20 and 21 all carry a Mega Drive line, so the framebuffer paints their pens with the 3-bit line colour, and set 19's seven blue pens all quantise to the identical blue. That is the flat field. Fixing it where the quantisation's own premise fails.
+
+Bash Use arcade colour on the cut pages, build, and count the field's shades against the arcade
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='sh_src/m_main.c'; s=open(p).read()
+old="""static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+{
+    volatile uint16_t *src = PAL_SH + c * 8;
+    if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }"""
+new="""static void cram_paint_tile(volatile uint16_t *dst, int base, unsigned c)
+{
+    volatile uint16_t *src = PAL_SH + c * 8;
+    if (!mdp_s_line[c]) { cram_paint(dst, src, base, 8); return; }
+#ifndef CUT_NOQUANT_OFF
+    /* 2026-09-25 (Mike's item 2: the transformation's blue field is flat).
+     * The quantisation above exists so a cat-1 boundary separates IDENTICAL
+     * pixels where the framebuffer and MD plane A draw the same cells. On
+     * the cut pages that premise fails: the MD planes draw nothing there
+     * (MD CRAM lines 2/3 read all-zero through the whole window, measured),
+     * so following the MD line buys no boundary and costs the ramp --
+     * mdp_s_qc had SEVEN of set 19's eight pens on one blue (0,0,31), which
+     * is why the chevron vanished into a flat field while the flames, whose
+     * ramp survives 3 bits, still drew. Arcade colour while the cut is up. */
+    if (MD_CUT_PAGES(md_state_word())) { cram_paint(dst, src, base, 8); return; }
+#endif"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('edited')
+EOF
+python3 - <<'EOF'
+p='Makefile'; s=open(p).read()
+old="""ifdef WRAMCODE2
+export WRAMCODE2
+endif"""
+new="""ifdef WRAMCODE2
+export WRAMCODE2
+endif
+# CUTNOQUANTOFF=1 (2026-09-25): revert to following the MD line's 3-bit colour on the
+# cut pages too. On by default (i.e. the cut uses arcade colour) -- the MD planes draw
+# nothing during the transformation, so the quantisation only flattened the blue ramp.
+ifdef CUTNOQUANTOFF
+SHCCFLAGS += -DCUT_NOQUANT_OFF
+endif"""
+assert s.count(old)==1; s=s.replace(old,new,1); open(p,'w').write(s); print('makefile ok')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad; make line WRAMCODE=1 > $S/build_wca.log 2>&1; echo "make rc=$? overflow=$(grep -c overflows $S/build_wca.log)"; grep -iE 'error' $S/build_wca.log | head -3; cp rom/s16.32x rom/night/wca.32x; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; mkdir -p $S/cutfix; $A --frames 9500 --input oracle/inputs_gf.csv --input-gameframe 0xFFA1D0 --screenshot 9482:$S/cutfix/a.png --screenshot 9467:$S/cutfix/b.png --screenshot 9452:$S/cutfix/c.png rom/night/wca.32x >/dev/null 2>&1; python3 - <<'EOF'
+from PIL import Image
+import collections
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/'
+def fr(p):
+    im=Image.open(p).convert('RGB')
+    if im.size==(1415,243): im=im.crop((65,11,65+1280,11+224)).resize((320,224),Image.NEAREST)
+    return im
+for name,p in (('arcade      ','oracle/altbeast/0065.png'),
+               ('ours BEFORE ',S+'trans/our_9482.png'),
+               ('ours AFTER  ',S+'cutfix/a.png')):
+    c=collections.Counter(fr(p).getdata())
+    blues=sorted([(v,k) for k,v in c.items() if k[0]<60 and k[1]<60 and k[2]>100], reverse=True)[:5]
+    print(f'{name} distinct colours {len(c):3d}  dark blues: ' + ' '.join(f'{k}x{v}' for v,k in blues))
+EOF

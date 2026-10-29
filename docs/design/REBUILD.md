@@ -27,6 +27,30 @@ the silicon wants what we built.
 
 ## 1. THE ONE REAL CONSTRAINT (why we can't copy Cannonball verbatim)
 
+> **SUPERSEDED IN PART, 2026-09-26 — read this before §1.** The premise
+> below (68K binary on the MD 68K) was the plan when this document was
+> written on 2026-08-21. Five weeks later two overnight measurements
+> changed it: LESSONS.md "THE CUTS PATH CANNOT REACH 60Hz, AND THE FULL
+> PORT FITS AT 3.1%". The cuts inventory is ~46 lines against a ~68-line
+> threshold with none of it individually rankable, so **60Hz does not come
+> from 68K micro-optimisation and the cadence stack should stop being
+> planned**; and the full port's performance question is CLOSED favourably
+> on measured SH-2 cycles/instruction (1.125 cache-resident, 5.125-8.75
+> all-miss, on the rig). §1's constraint still describes the SHIPPING
+> architecture and the fidelity argument for it, which is why it is kept
+> in full. It no longer describes the target.
+>
+> **AND THE CONSEQUENCE IS BIGGER THAN THE PREMISE, 2026-09-27.** With the game
+> logic on the SH-2 and work RAM in SDRAM, the SH-2 can READ THE GAME'S STATE
+> DIRECTLY -- so the entire feed pipeline goes, not just the cadence stack. It
+> exists only because the SH-2 cannot see MD work RAM: DREQ packets and partial
+> landings, the lost-push belt, staging pages, the 2-word sprite record (a
+> COMPRESSION FORMAT chosen to fit a packet), the 512-words/vint ceiling (a
+> TRANSPORT limit). That is 2,882 instructions/vint against the game's own 2,780.
+> See `SPRITE-PIPELINE-AFTER-PORT.md`, and `FULL-PORT.md` §9-10 for the size
+> (241 KB of 410 reachable functions, and it fits) and the gate (a frame changes
+> 40 of 16,384 bytes).
+
 Every reference runs its game logic ON the SH-2. We run the original
 System 16 68K binary on the MD 68K — that is the project's premise
 and its fidelity asset. Consequences that no reference had to face:
@@ -2752,3 +2776,16 @@ bound stays as a belt. Mike's boss run arbitrates; claim: the
 smoke's bottom third animates. His black vertical MD-side bands
 remain filed with the storm arc (plane-cell transport saturation,
 64.6k cells at the entrance).
+
+2026-10-12, port build: blit both halves in one vint measured 6.8% of the vint (ares,
+worst CPU, across a scene cut) and ~20% rig-scaled for the memory traffic ares does not
+charge. The two-window cycle IS the 30 Hz -- measured 30 updates per 60 frames against the
+arcade's 59 at a matched window, with MOTION already at parity (8 against 8). P2 on the
+port build opened: FRAME = ONE VINT. Not built -- the 68K k1/k2 walk returned three NEEDS
+CHANGE and two UNKNOWN. CORRECTED THE SAME DAY: that walk was over code the port build does
+not compile. Makefile:341-346 gives the 68K only -DR60 under R60; WIN_TWO, K2_FREE, SNAP_ONE,
+CUT_30 and VISR_FLIP are SH-2-only, confirmed against build/port/.build_flags and by
+preprocessing md_main.c with that flag half. Five of the six sites strip; the two that
+survive are SAFE. ZERO NEEDS CHANGE are compiled, and the live shim_vblank is already one
+window per vint. The 30 Hz is therefore entirely SH-2-side, so P2 here is a renderer card.
+The compose-closes-in-the-launch-vint share remains the one unmeasured gate.

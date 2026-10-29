@@ -6,6 +6,9 @@ __attribute__((section(".ramtext"))) void amb_dma_handler(void)
 }
 
 #define SYNC        ((volatile uint16_t *)0x26028800)
+#if defined(PORT_LOAD) && (PORT_LOAD == 2)
+#include "port_load.h"
+#endif
 
 /* Per-CPU FRT (same register addresses, this CPU's counter). Used by
  * the paced idle below; on-chip, zero external bus traffic. */
@@ -19,6 +22,39 @@ static inline uint16_t frt_s(void)
  * in LOOP 8 — the master owns all three now, off the DREQ packet.) */
 
 extern void slave_window_k(uint16_t cmd);    /* m_main.c .ramtext */
+#ifdef CHAIN_METER
+/* NOTES 78 / LOOP29 292: THE SLAVE CHAIN METER, RELOCATED AND SELF-CALIBRATING.
+ *
+ * WHY THE OLD ONE WAS VOID: it accumulated at 0x2603A7D8, which is also
+ * SPRLATE's lean base (m_main.c ~915) -- and the shipping line carries
+ * -DSPR_LATE.  Worse, SPRLATE writes the CACHED alias 0x0603A7D8 from
+ * the master while this wrote the UNCACHED 0x2603A7D8 from the slave, so
+ * a master writeback silently reverted the slave's sums.  Measured on
+ * the attract: busy ticks 0 against 3817 links.  A zero that is a
+ * collision, not a measurement.  The 0x3A790 slice meter shares the
+ * boot-benchmark's block ([0..4]) for the same reason.
+ *
+ * HERE: the audited-free PH scratch (0x28E38-0x28E7F, m_main.c ~1157),
+ * which is PROBE-ONLY and unused unless PHASE_CENSUS is on -- verified
+ * zero across a 4000-frame attract on the line build before use.
+ *   [0] slave_concurrent_k busy ticks   [1] links
+ *   [2] entry-to-entry ticks            [3] intervals
+ *   [4] slave_window_k pickup ticks     [5] pickups
+ * [2]/[3] CALIBRATES THE SLAVE TICK against a period the run already
+ * knows (frames / generations), so nothing here assumes the phi/8
+ * prescale the way a ticks->vints conversion otherwise would. */
+#if defined(PHASE_CENSUS)
+#error "CHAIN_METER's SCM shares PHASE_CENSUS's PH scratch - build them separately"
+#endif
+#define SCM ((volatile uint32_t *)0x26028E40)
+static uint16_t scm_prev;
+static uint8_t  scm_have;
+#define SCM_ENTRY() do { \
+        uint16_t e_ = frt_s(); \
+        if (scm_have) { SCM[2] += (uint16_t)(e_ - scm_prev); SCM[3] += 1; } \
+        scm_prev = e_; scm_have = 1; } while (0)
+#endif
+
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
 extern void text_capture(void);              /* m_main.c .ramtext */
 #endif
@@ -45,6 +81,9 @@ volatile uint8_t slave_in_compose;
  * accumulated here from the band stamps (2 = band0 start, 3 = band end)
  * so the dispatch site pays only the calls (region guard). */
 #define STB ((volatile uint32_t *)0x2603992C)
+#ifndef CEN
+#define CEN ((volatile uint32_t *)0x2602C000)   /* the phase census slots (m_main.c); moved 2026-10-04 out of the port's work RAM */
+#endif
 static uint16_t st_last;
 static uint8_t st_band;
 /* (the one-generation event ring that lived here is retired — the
@@ -52,8 +91,9 @@ static uint8_t st_band;
 __attribute__((section(".ramtext"), noinline)) void st_s(unsigned ev)
 {
     uint16_t now = frt_s();
-    /* pass sums (all bands): 11 = clear+sprites done, 12 = cat1 done;
-     * text = band remainder. 2/3 (band start/end) re-base the clock */
+    /* pass sums (all bands): 10 = strip clear, 11 = strip sprites (and the
+     * band's compose remainder), 12 = cat1 done, 13 = text + service to the
+     * band end (LOOP29 255). 2/3 (band start/end) re-base the clock */
     if (ev >= 10)
         STB[ev - 10] += (uint16_t)(now - st_last);
     st_last = now;
@@ -75,6 +115,24 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
 #if defined(FB_TEXT_READ) && defined(TEXTCAP_SLAVE)
     if (bc == 0x4000) {                  /* k2 text capture (LOOP 20) */
         SYNC[4] = 0;
+#ifdef VB_SPAN
+        SYNC[7] = 0x4001;                /* LOOP28 96: PICKED IT UP. The
+                                          * master's join is its single
+                                          * biggest vblank term; this
+                                          * splits it into our latency
+                                          * and our copy. */
+#endif
+#ifdef TEXTCAP_EARLY
+        /* LOOP29 145: posted at the master's ISR entry, BEFORE the 68K
+         * has raised FM. An FB read at FM=0 is garbage, so wait for FM
+         * (the 68K's post follows within ~25 lines); if it never comes
+         * this vint, say so and let the master decide. */
+        {
+            uint32_t g = 60000;          /* ~40 lines */
+            while (!(MARS_SYS_INTMSK & 0x8000) && --g) ;
+            if (!g) { SYNC[6] = 0x4002; return; }
+        }
+#endif
         text_capture();
         SYNC[6] = 0x4000;                /* echo AFTER the copy lands */
         return;
@@ -89,9 +147,8 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
         {
             uint16_t bt = frt_s();
             slave_window_k(bc);
-            ((volatile uint32_t *)0x2603A790)[6] +=
-                (uint16_t)(frt_s() - bt);    /* slice-blit pickup time */
-            ((volatile uint32_t *)0x2603A790)[7] += 1;
+            SCM[4] += (uint16_t)(frt_s() - bt);   /* slice-blit pickup time */
+            SCM[5] += 1;
             SYNC[4] = 0;
             SYNC[5] = bc;
             return;
@@ -181,10 +238,50 @@ __attribute__((section(".ramtext"))) void slave_service_stream(void)
  * master became the only publisher; the counter went for RAM). */
 /* 2026-09-05: cart ROM — a SYNC poll loop the I-cache holds (84B of SDRAM
  * freed for the scroll sync; region guard). */
-static void slave_fence(unsigned row)
+#ifdef GEN_RING
+/* THE SLAVE HALF OF THE GENERATION STAMP RING (2026-10-12). The master's ring stamps
+ * PHS[0], which is the master's FIRST POLL seeing SYNC[1] -- an observation, not the
+ * slave's completion. That cannot tell a slave taking 1.66 vints from a slave finishing
+ * at 0.9 and not being looked at until 1.66. This carries the slave's own split.
+ *   [0] the master's launch count latched at pickup (+1; 0 = slot unset)
+ *   [1] band 0 done   [2] fence 1 wait   [3] band 1 done
+ *   [4] fence 2 wait  [5] band 2 done = chain complete   [6] echo written
+ *   [7] fence timeouts in this chain (0-2)
+ * Every field but [0] and [7] is LINES since pickup. The slave's FRT is phi/8 =
+ * 48208/vint (s_main.c:283's calibration), so 184 ticks = 1 line and a u16 of raw
+ * ticks WRAPS at 1.36 vints -- longer than a chain is allowed to be. The stamps
+ * therefore accumulate per-interval deltas into a u32 instead of differencing from
+ * pickup, which is correct as long as no single interval exceeds 1.36 vints.
+ * 0x38A00, 1024 bytes, to 0x38E00 (RG_COUNT). Shares that base with ROWSHIP_PROBE's
+ * RSIDENT, which GEN_RING already refuses in m_main.c. */
+#define GRS ((volatile uint16_t *)0x26038A00)
+#define GR_M ((volatile uint16_t *)0x26038000)   /* the master's ring: [448] = gr_n */
+#define GRS_TMO (GR_M[449])                      /* fence timeouts, ever */
+static uint32_t gs_acc;          /* ticks since pickup, wrap-safe */
+static uint16_t gs_last;         /* previous frt_s() sample */
+static uint8_t  gs_slot;         /* this chain's ring slot */
+static uint8_t  gs_tmo;          /* timeouts in this chain */
+#define GS_PICK() do { gs_last = frt_s(); gs_acc = 0; gs_tmo = 0; \
+        gs_slot = (uint8_t)((GR_M[448] - 1u) & 63u); \
+        { volatile uint16_t *r_ = GRS + (unsigned)gs_slot * 8u; \
+          r_[1] = r_[2] = r_[3] = r_[4] = r_[5] = r_[6] = r_[7] = 0; \
+          r_[0] = GR_M[448]; } } while (0)
+#define GS_TICK() do { uint16_t n_ = frt_s(); \
+        gs_acc += (uint16_t)(n_ - gs_last); gs_last = n_; } while (0)
+#define GS_PUT(f) do { GS_TICK(); \
+        GRS[(unsigned)gs_slot * 8u + (f)] = (uint16_t)(gs_acc / 184u); } while (0)
+#define GS_DUR(f, t) do { GRS[(unsigned)gs_slot * 8u + (f)] = (uint16_t)((t) / 184u); } while (0)
+#else
+#define GS_PICK()     ((void)0)
+#define GS_TICK()     ((void)0)
+#define GS_PUT(f)     ((void)0)
+#define GS_DUR(f, t)  ((void)0)
+#endif
+static unsigned slave_fence(unsigned row)
 {
     uint16_t t0 = frt_s();
     while (SYNC[14] < row && (uint16_t)(frt_s() - t0) < 24000) ;
+    return (unsigned)(uint16_t)(frt_s() - t0);
 }
 #endif
 
@@ -230,11 +327,21 @@ __attribute__((section(".ramtext"))) void s_main(void)
              * utilization. */
             uint16_t gw0 = frt_s();
             st_s(1);
+            GS_PICK();
+#ifdef PHASE_CENSUS
+            CEN[53]++;                                   /* 255d: slave commands */
+            if ((cmd & 0xF000) == 0x3000) CEN[55]++;     /* window commands */
+            else if (cmd & 0x0040) CEN[54]++;            /* chain commands (3 bands) */
+#endif
             if ((cmd & 0xF000) == 0x3000) {
 #ifndef DIRECT_FB
                 slave_window_k(cmd);         /* slice blit + row-region compose */
 #endif
+
             } else if (cmd & 0x0040) {
+#ifdef SPR_LIST
+                { extern volatile uint8_t spr_chain_id; spr_chain_id++; }   /* card J (a): a new chain, a new list */
+#endif
                 SYNC[13] = 1;            /* SNAP LATCH (2026-08-26): a
                                           * compose chain is reading
                                           * SPR_SNAP — text_capture must
@@ -262,36 +369,66 @@ __attribute__((section(".ramtext"))) void s_main(void)
 #endif
                 st_s(2);
                 slave_concurrent_k((uint16_t)(cmd & ~0x0070));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
 #ifdef BLIT_CHASE
-                slave_fence(108 + BAND_SHIFT);   /* band 1 ends inside
+                GS_PUT(1);                       /* band 0 done */
+                { unsigned w_ = slave_fence(108 + BAND_SHIFT);   /* band 1 ends inside
                                                   * the master's half */
+                  (void)w_; GS_TICK(); GS_DUR(2, w_);
+#ifdef GEN_RING
+                  if (w_ >= 24000u) { gs_tmo++; GRS[(unsigned)gs_slot * 8u + 7] = gs_tmo;
+                                      GRS_TMO++; }
+#endif
+                }
 #endif
                 slave_concurrent_k((uint16_t)((cmd & ~0x0070) | 0x10));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
 #ifdef BLIT_CHASE
-                slave_fence(224);
+                GS_PUT(3);                       /* band 1 done */
+                { unsigned w_ = slave_fence(224);
+                  (void)w_; GS_TICK(); GS_DUR(4, w_);
+#ifdef GEN_RING
+                  if (w_ >= 24000u) { gs_tmo++; GRS[(unsigned)gs_slot * 8u + 7] = gs_tmo;
+                                      GRS_TMO++; }
+#endif
+                }
 #endif
                 slave_concurrent_k((uint16_t)((cmd & ~0x0070) | 0x20));
+                st_s(13);                /* 255: text + service since cat1 -> STB[3] */
                 st_s(3);
+                GS_PUT(5);               /* band 2 done = the chain's own completion */
             } else {
                 /* master-relaunched chain: the latch must span the
                  * WHOLE chain, not one link — the k2 refresh lands in
                  * the gap BETWEEN links. Open at R0, close after R2. */
                 if (((cmd >> 4) & 3) == 0)
-                    SYNC[13] = 1;
+    #ifdef SPR_LIST
+                { extern volatile uint8_t spr_chain_id; spr_chain_id++; }   /* card J (a): a new chain, a new list */
+#endif
+                SYNC[13] = 1;
 #ifdef CHAIN_METER
                 {
                     uint16_t bt0 = frt_s();
+                    SCM_ENTRY();
                     slave_concurrent_k(cmd);
-                    ((volatile uint32_t *)0x2603A7D8)[6] +=
-                        (uint16_t)(frt_s() - bt0);   /* true busy ticks */
-                    ((volatile uint32_t *)0x2603A7D8)[7] += 1;
+                    SCM[0] += (uint16_t)(frt_s() - bt0);   /* true busy ticks */
+                    SCM[1] += 1;
                 }
 #else
                 slave_concurrent_k(cmd);     /* concurrent band compose */
 #endif
             }
+#if defined(PORT_LOAD) && (PORT_LOAD == 2)
+            /* F0(c): the game's vint on the SLAVE. Gated to the R0 link so it
+             * runs ONCE A VINT, not once per region command.
+             * THE FIRST ATTEMPT HOOKED (cmd & 0xF000) == 0x3000 (CMD_BLIT) and
+             * never ran: this line only ever issues CMD_TILE (0x2000) --
+             * every slave_cmd call passes tile_cmd. A 10x load moved the rate
+             * not at all, which is how that was caught. */
+            if (((cmd >> 4) & 3) == 0) port_load();
+#endif
             ((volatile uint32_t *)0x26028C80)[0] +=
                 (uint16_t)(frt_s() - gw0);
             if ((cmd & 0xF000) == 0x2000
@@ -327,10 +464,10 @@ __attribute__((section(".ramtext"))) void s_main(void)
 #ifdef CHAIN_METER
                     {
                         uint16_t bt0 = frt_s();
+                        SCM_ENTRY();
                         slave_concurrent_k(nc);
-                        ((volatile uint32_t *)0x2603A7D8)[6] +=
-                            (uint16_t)(frt_s() - bt0);
-                        ((volatile uint32_t *)0x2603A7D8)[7] += 1;
+                        SCM[0] += (uint16_t)(frt_s() - bt0);
+                        SCM[1] += 1;
                     }
 #else
                     slave_concurrent_k(nc);
@@ -344,6 +481,7 @@ __attribute__((section(".ramtext"))) void s_main(void)
                 SYNC[1] = cmd;               /* non-chain cmds echo as ever */
 #else
             SYNC[1] = cmd;                   /* done */
+            GS_PUT(6);                       /* echo written */
 #endif
             /* (launch-latency meter retired 2026-08-26: its number is
              * banked — 161-176 lines/link across three runs — and the

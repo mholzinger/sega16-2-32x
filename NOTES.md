@@ -359,7 +359,7 @@ Tried, none fixed the black screen (ares: black s16/Mega32X/60VPS window,
 game running):
 - CRAM writes gated on FBCTL VBLK bit — no change.
 - CRAM writes synced to the 68K vblank counter COMM12 (backrooms' proven
-  pattern, m_main.c:1005 "wait for first vblank — palette is writable now")
+  pattern, m_main.c:1199 "wait for first vblank — palette is writable now")
   — no change.
 - 32X display priority set to 32X-over-MD (MARS_VDP_PRIO_32X) so the game's
   unused-but-enabled MD VDP layer doesn't cover the 32X layer — no change.

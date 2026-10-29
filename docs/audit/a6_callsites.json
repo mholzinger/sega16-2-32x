@@ -1,0 +1,191 @@
+[
+ {
+  "caller": "caseD_0",
+  "callee": "FUN_000024ec",
+  "a6": 16760832,
+  "at": 7992,
+  "call": 7996
+ },
+ {
+  "caller": "caseD_8",
+  "callee": "request_palette_update",
+  "a6": 16760832,
+  "at": 8130,
+  "call": 8184
+ },
+ {
+  "caller": "FUN_00003716",
+  "callee": "FUN_0000374a",
+  "a6": 16769024,
+  "at": 14116,
+  "call": 14126
+ },
+ {
+  "caller": "FUN_00003716",
+  "callee": "FUN_0000374a",
+  "a6": 16769152,
+  "at": 14136,
+  "call": 14146
+ },
+ {
+  "caller": "FUN_00004178",
+  "callee": "FUN_00004178",
+  "a6": 16776192,
+  "at": 16760,
+  "call": 16768
+ },
+ {
+  "caller": "FUN_00004178",
+  "callee": "FUN_00004178",
+  "a6": 16776250,
+  "at": 16778,
+  "call": 16782
+ },
+ {
+  "caller": "FUN_00004254",
+  "callee": "FUN_00004276",
+  "a6": 16773160,
+  "at": 16992,
+  "call": 16996
+ },
+ {
+  "caller": "FUN_00004254",
+  "callee": "FUN_00004212",
+  "a6": 16773161,
+  "at": 17010,
+  "call": 17028
+ },
+ {
+  "caller": "FUN_000047cc",
+  "callee": "FUN_00004870",
+  "a6": 16760832,
+  "at": 18380,
+  "call": 18414
+ },
+ {
+  "caller": "FUN_000047cc",
+  "callee": "FUN_00004832",
+  "a6": 16761344,
+  "at": 18420,
+  "call": 18424
+ },
+ {
+  "caller": "FUN_00004806",
+  "callee": "FUN_00004870",
+  "a6": 16761856,
+  "at": 18438,
+  "call": 18472
+ },
+ {
+  "caller": "FUN_00005efc",
+  "callee": "FUN_00005f16",
+  "a6": 16767360,
+  "at": 24318,
+  "call": 24326
+ },
+ {
+  "caller": "FUN_000063cc",
+  "callee": "request_palette_update",
+  "a6": 16762880,
+  "at": 25552,
+  "call": 25654
+ },
+ {
+  "caller": "FUN_0000d80e",
+  "callee": "FUN_0000d868",
+  "a6": 16766976,
+  "at": 55330,
+  "call": 55356
+ },
+ {
+  "caller": "FUN_0000e052",
+  "callee": "FUN_0000e0f4",
+  "a6": 16762880,
+  "at": 57444,
+  "call": 57520
+ },
+ {
+  "caller": "FUN_00016b6a",
+  "callee": "request_palette_update",
+  "a6": 16765952,
+  "at": 93034,
+  "call": 93076
+ },
+ {
+  "caller": "FUN_00016eee",
+  "callee": "FUN_00016f06",
+  "a6": 16766976,
+  "at": 93944,
+  "call": 93952
+ },
+ {
+  "caller": "FUN_0001769e",
+  "callee": "FUN_00017774",
+  "a6": 16765952,
+  "at": 95904,
+  "call": 95922
+ },
+ {
+  "caller": "FUN_00017fe2",
+  "callee": "FUN_000180c2",
+  "a6": 16765952,
+  "at": 98276,
+  "call": 98294
+ },
+ {
+  "caller": "FUN_0001892a",
+  "callee": "request_palette_update",
+  "a6": 16765952,
+  "at": 100698,
+  "call": 100760
+ },
+ {
+  "caller": "FUN_000191de",
+  "callee": "request_palette_update",
+  "a6": 16765952,
+  "at": 102926,
+  "call": 103032
+ },
+ {
+  "caller": "FUN_00019a04",
+  "callee": "request_palette_update",
+  "a6": 16765952,
+  "at": 104964,
+  "call": 105102
+ },
+ {
+  "caller": "FUN_0001a59e",
+  "callee": "request_palette_update",
+  "a6": 16760832,
+  "at": 107934,
+  "call": 107976
+ },
+ {
+  "caller": "FUN_0001a800",
+  "callee": "FUN_0001abc6",
+  "a6": 16776960,
+  "at": 108544,
+  "call": 108622
+ },
+ {
+  "caller": "FUN_0001a88c",
+  "callee": "FUN_0001a8fe",
+  "a6": 16777088,
+  "at": 108688,
+  "call": 108692
+ },
+ {
+  "caller": "FUN_0001a88c",
+  "callee": "FUN_0001a8fe",
+  "a6": 16776960,
+  "at": 108698,
+  "call": 108706
+ },
+ {
+  "caller": "FUN_0001a88c",
+  "callee": "FUN_0001a8fe",
+  "a6": 16776960,
+  "at": 108760,
+  "call": 108790
+ }
+]

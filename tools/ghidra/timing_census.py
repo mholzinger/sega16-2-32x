@@ -20,13 +20,14 @@ from ghidra.program.model.address import AddressSet
 
 args = getScriptArgs()
 out_path = args[0] if args else '/tmp/timing_census.json'
+game = args[1] if len(args) > 1 else 'altbeast'
 
 listing = currentProgram.getListing()
 fm = currentProgram.getFunctionManager()
 refmgr = currentProgram.getReferenceManager()
 mem = currentProgram.getMemory()
 
-HW = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
+HW_ALTBEAST = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
     (0x3F0000, 0x3FFFFF, 'tilebank'),
     (0x400000, 0x40FFFF, 'tileram'),
     (0x410000, 0x410FFF, 'textram'),
@@ -39,6 +40,27 @@ HW = [  # (lo, hi, label) ? arcade addresses (NOTES.md decoded map)
     (0xFFF144, 0xFFF145, 'misscounter'),
     (0xFFC000, 0xFFFFFF, 'workram'),
 ]
+# Golden Axe (goldnaxe, 171-5797 board): the map the i8751 programs into the
+# 315-5195 at runtime, captured on the arcade with tools/s16b_map_probe.lua
+# (LOOP-DECOMPILE-GOLDNAXE 2). NOT the table at MCU ROM 0xFEA. Region 4
+# (sprite RAM) is MOVED by the MCU between 0x20/0x50/0x60/0x70/0x80/0x90
+# pages and published to the 68K in 0xFFECC4, so its writes are indirect.
+HW_GOLDNAXE = [
+    (0x1F0000, 0x1FFFFF, 'bank_math'),     # 5797: tile bank at +0x2001/3, multiplier +0x0000, cmp/timer +0x1000
+    (0x1E0000, 0x1EFFFF, 'rgn2'),          # 5797 region 2 (MAME: unknown_rgn2)
+    (0x100000, 0x10FFFF, 'tileram'),
+    (0x110000, 0x110FFF, 'textram'),
+    (0x200000, 0x20FFFF, 'spriteram'),     # base at boot; see above
+    (0x500000, 0x50FFFF, 'spriteram_alt'), # one of the MCU's alternative sprite bases
+    (0x140000, 0x140FFF, 'palette'),
+    (0xC40000, 0xC43FFF, 'io'),
+    (0xFE0000, 0xFE003F, 'mapper'),
+    (0xFFECC4, 0xFFECC7, 'sprite_base_var'),
+    (0xFFEC1C, 0xFFEC1F, 'frameflag_cand'), # IRQ4 tests 0xFFEC1C/1E first; hypothesis until read
+    (0xFFC000, 0xFFFFFF, 'workram'),
+]
+HW = HW_GOLDNAXE if game == 'goldnaxe' else HW_ALTBEAST
+
 
 def hw_label(a):
     a &= 0xFFFFFF                      # 68000: 24-bit bus; short absolute
@@ -53,10 +75,34 @@ def func_of(addr):
     return f.getName() if f else None
 
 # ---- functions ----
+# Edges are computed here, not via Function.getCallingFunctions/getCalledFunctions.
+# Ghidra 11.2.1 counted EVERY reference that lands on a function entry (data
+# pointers, jump-table entries, thunk jumps, calls); 12.x counts only CALL-typed
+# references (FunctionDB.java, both versions read 2026-10-23). The census baseline
+# docs/audit/timing_census.json has the 11.2.1 semantics, and those pointer and
+# jump-table edges are exactly how S16 handlers are reached, so keep that rule
+# explicitly: identical JSON under 11.2.1 (Jython) and 12.x (PyGhidra).
+def callers_of(f):
+    s = set()
+    for r in refmgr.getReferencesTo(f.getEntryPoint()):
+        g = fm.getFunctionContaining(r.getFromAddress())
+        if g is not None:
+            s.add(str(g.getName()))
+    return sorted(s)
+
+def callees_of(f):
+    s = set()
+    for src in refmgr.getReferenceSourceIterator(f.getBody(), True):
+        for r in refmgr.getReferencesFrom(src):
+            g = fm.getFunctionAt(r.getToAddress())
+            if g is not None:
+                s.add(str(g.getName()))
+    return sorted(s)
+
 funcs = []
 for f in fm.getFunctions(True):
-    callers = sorted(set(str(c.getName()) for c in f.getCallingFunctions(monitor)))
-    callees = sorted(set(str(c.getName()) for c in f.getCalledFunctions(monitor)))
+    callers = callers_of(f)
+    callees = callees_of(f)
     funcs.append({'entry': '0x%X' % f.getEntryPoint().getOffset(), 'name': f.getName(),
                   'size': f.getBody().getNumAddresses(), 'callers': callers, 'callees': callees})
 
@@ -105,6 +151,10 @@ for n, name in ((0x64, 'irq1'), (0x68, 'irq2'), (0x6C, 'irq3'), (0x70, 'irq4'), 
     except Exception:
         pass
 
+# sort_keys + explicit separators: Jython 2.7 hash-orders dict keys and emits a
+# trailing space after each comma, CPython 3 keeps insertion order and does not;
+# without both the same census is a different byte stream per interpreter.
 json.dump({'program': str(currentProgram.getName()), 'functions': funcs, 'loops': loops,
-           'hw_refs': hw_refs, 'vectors': vectors}, open(out_path, 'w'), indent=1)
+           'hw_refs': hw_refs, 'vectors': vectors}, open(out_path, 'w'),
+          indent=1, sort_keys=True, separators=(',', ': '))
 print('timing_census: %d functions, %d backward branches, %d hw refs -> %s' % (len(funcs), len(loops), len(hw_refs), out_path))

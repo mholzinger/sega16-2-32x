@@ -52,8 +52,12 @@ class State:
         # VRAM: md_sprart.bin bytes 0x40.. sit at VRAM 0x8040 (word-swapped in the state)
         art = open(os.path.join(ROOT, 'sh_src', 'md_sprart.bin'), 'rb').read()
         hits = list(find_all(raw, swap(art[0x40:0x60])))
-        if len(hits) != 1:
-            sys.exit(f'VRAM anchor: expected one md_sprart hit, got {hits}')
+        # the art can recur inside VRAM (the same 32 bytes uploaded at more
+        # than one tile address); the VRAM base is the LOWEST hit past the
+        # CPU RAM block, and every later hit must lie inside that 64K.
+        hits = [h for h in hits if h - 0x8040 > SD + 0x40000 + 0x80000]
+        if not hits or any(h - hits[0] >= 0x10000 for h in hits):
+            sys.exit(f'VRAM anchor: no consistent md_sprart hit, got {hits}')
         self.vram = swap(raw[hits[0] - 0x8040: hits[0] - 0x8040 + 0x10000])
         # MD CRAM: the SH-2's line-1 pens 2..7 (mdp_line_c) appear in the CRAM as LE u16
         lc = struct.unpack_from('>48H', self.sdram, MDP_LINE_C)

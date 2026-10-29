@@ -1,0 +1,42 @@
+00E16A  lea        (-0x3800).w,A6
+00E16E  movea.w    A6w,A5
+00E170  move.b     #-0x1,D0b
+00E174  move.w     #0x17,D2w
+00E178  move.b     D0b,(0x8,A6)
+00E17C  lea        (0x80,A6),A6
+00E180  dbf        D2w,0x0000e178
+00E184  movea.w    A5w,A6
+00E186  moveq      #0x0,D0
+00E188  move.b     D0b,D2b
+00E18A  move.b     #0x10,D1b
+00E18E  tst.b      (0x8,A6)
+00E192  bpl.b      0x0000e1b8
+00E194  tst.w      (0x0,A6)
+00E198  bpl.b      0x0000e1be
+00E19A  move.b     D1b,(0x8,A6)
+00E19E  addq.b     #0x1,D0b
+00E1A0  cmpi.b     #0x18,D0b
+00E1A4  bcc.b      0x0000e1da
+00E1A6  addq.b     #0x1,D1b
+00E1A8  cmpi.w     #-0x1,(0x78,A6)
+00E1AE  bne.b      0x0000e1dc
+00E1B0  tst.b      D2b
+00E1B2  beq.b      0x0000e1b8
+00E1B4  clr.b      D2b
+00E1B6  movea.w    A5w,A6
+00E1B8  lea        (0x80,A6),A6
+00E1BC  bra.b      0x0000e18e
+00E1BE  move.b     D1b,(0x8,A6)
+00E1C2  addq.b     #0x1,D1b
+00E1C4  movem.w    {  D1w D0w},-(SP)
+00E1C8  jsr        0x00003f04.l
+00E1CE  movem.w    (SP)+,{ D0 D1}
+00E1D2  addq.b     #0x1,D0b
+00E1D4  cmpi.b     #0x18,D0b
+00E1D8  bcs.b      0x0000e18e
+00E1DA  rts        
+00E1DC  tas        D2b
+00E1DE  bne.b      0x0000e1e2
+00E1E0  movea.w    A6w,A5
+00E1E2  movea.w    (0x78,A6),A6
+00E1E6  bra.b      0x0000e18e

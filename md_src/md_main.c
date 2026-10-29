@@ -1,6 +1,59 @@
 #include "common.h"
+#if defined(R60) && defined(NT_WRAP) && defined(PAL_FIRST)
+/* A's fat consume can put B's palette-first DMA in the visible picture. Keep
+ * all four lines in allocated WRAM until a safe blank, rather than painting
+ * CRAM DAC dots. The legacy fixed hold at FFA100 has room for only 48 words. */
+static volatile uint16_t r60_palette_hold[64], r60_palette_pending;
+#endif
+/* the odd-parity direct hold packet's 68K address (sh_src/r60/r60_main.c R60_PKT_A_ALT): off the
+ * 32X canvas under R60PKTODDHI, where it no longer leaves its words on lines 222-223 */
+#ifdef R60_PKTODDHI
+#define R60_PKTODD_68K 0x851E00uL
+#else
+#define R60_PKTODD_68K 0x851800uL
+#endif
+#ifdef RIG_SPAN
+extern volatile uint16_t span_v; extern volatile uint8_t span_len;   /* RIGSPAN, defined before main() */
+#if RIG_SPAN == 3 || RIG_SPAN == 4 || RIG_SPAN == 5 || RIG_SPAN == 8 || RIG_SPAN == 10 || RIG_SPAN == 11 || RIG_SPAN == 16
+extern volatile uint16_t span_h2; extern volatile uint16_t span_h1; extern volatile uint16_t span_h0;
+#endif
+#if RIG_SPAN == 5
+extern volatile uint16_t span_vp, span_vw; void span_vint(void);
+#endif
+#if RIG_SPAN == 8
+extern volatile uint16_t span_spin_full; void span_vint8(void);
+#endif
+#if RIG_SPAN == 10 || RIG_SPAN == 11
+extern volatile uint16_t span_hA, span_hB, span_mean;
+#endif
+#if RIG_SPAN == 9
+extern volatile uint16_t span_t_cart, span_t_wram; void span_bench(void);
+#endif
+#if RIG_SPAN == 13
+extern volatile uint16_t span_t_fbw, span_t_fbr; void span_bench13(void);
+#endif
+#if RIG_SPAN == 14
+extern volatile uint16_t span_t14c, span_t14w; void span_bench14(void);
+#endif
+#if RIG_SPAN == 15 || RIG_SPAN == 17
+extern volatile uint16_t span_t15c, span_t15w; void span_bench15(void);
+#endif
+#if RIG_SPAN == 18
+extern volatile uint16_t span_cls[4], span_cls_tot; void span_class(void);
+#endif
+#if RIG_SPAN == 16
+extern volatile uint16_t span_c_mid, span_c_fresh; void span_vint16(void);
+#endif
+#if RIG_SPAN == 2
+void span_fold(void);
+#endif
+#endif
 #include "tile_thunks.h"
+#include "wram_code.h"
 #include "pal_thunks.h"
+#ifdef MD_HSCROLL_DIRECT
+#include "hscr_thunks.h"
+#endif
 #include "packet_fmt.h"
 /* PAL32 (LOOP 22) and the generated thunks must agree on the dirty-
  * state layout — a mismatch reads garbage as dirt or misses all of it.
@@ -39,12 +92,38 @@ uint32_t fmgate_pc;                  /*   around the trampoline       */
 volatile uint16_t fmgate_posted;     /* part B posted last vint       */
 uint16_t fmgate_belt;                /* overrun-belt entries (diag)   */
 uint16_t fmgate_defer;               /* part-B defers (diag)          */
+#ifdef FBX_ECHO
+#ifdef EARLY_REC
+static uint8_t erec_arm_seen, erec_arm_pushed;
+#endif
+static uint8_t  fbx_echo;                /* master's last lifted sequence (packet word 5 >> 12) */
+static uint8_t  fbx_age;                 /* vints since the last blast(1) */
+static uint8_t  fbx_rb_age;              /* vints since the last re-blast */
+static uint16_t fbx_keep_n;              /* words of the last blasted packet, kept for a re-blast */
+static uint8_t  fbx_keep_live;           /* the kept packet is whole (not being rebuilt) */
+static uint16_t fbx_reblasts;            /* diag: re-blasts issued */
+static uint16_t fbx_remarks;             /* diag: unechoed pushes re-marked */
+static uint16_t fbx_stage[];             /* tentative: the packet stage (defined with FBX_STAGE) */
+static uint8_t  fbx_seq_pub;             /* tentative: last published sequence */
+#endif
 const uint32_t fmgate_spans[] = FMGATE_SPANS;
 #endif
 
-// MD-side shim for the arcade game. Runs entirely from work RAM (.data):
-// once RV=1 the low ROM map belongs to the game and the 0x880000 window
-// must stay untouched.
+// MD-side shim for the arcade game. Runs entirely from work RAM (.data).
+//
+// RV STAYS 0 FOREVER. The authority is the UNPAIR MODEL block below (search
+// "RV stays 0 FOREVER", NOTES.md "REBASE DESIGN v2"): the game executes its
+// REBASED copy through the banked 0x900000 cart window, which is the standard
+// commercial-32X memory model and lets the SH-2s touch cart ROM at any time.
+// MEASURED 2026-09-27, TESTCART T25 reads the DREQ control register back as
+// 0x0000 on ares and BlastEm, and no code in this tree writes bit 0 of
+// 0xA15107 at all -- every write is 0 (68S off) or 4 (68S on).
+//
+// SO EVERY "RV=1" COMMENT IN THIS FILE IS FROM THE SUPERSEDED DESIGN. They are
+// left where they explain why something is shaped the way it is, each tagged
+// [RV=1: SUPERSEDED]. Do not act on one: 32X Technical Bulletin #9 forbids
+// taking any 68000 interrupt while RV=1, and this port's whole heartbeat is
+// IRQ4 -- setting RV would break it, which is precisely why v2 dropped it.
 //
 // Stage B: replicate the i8751 MCU (see NOTES.md "MCU FULLY REVERSE-
 // ENGINEERED") and run the game's own boot from its RAM copy at 0xFFB400.
@@ -64,6 +143,9 @@ static volatile uint16_t* const mars_comm8  = (uint16_t*) MARS_COMM8;
 #define mdspr_up_voff (*(volatile uint16_t*)0xFFA0E0)
 static volatile uint16_t* const mars_comm10 = (uint16_t*) MARS_COMM10;
 static volatile uint16_t* const mars_comm12 = (uint16_t*) MARS_COMM12;
+#ifdef RIG_RATE
+static uint32_t rr_vints, rr_gframes;   /* whole-run, never reset */
+#endif
 static volatile uint16_t* const mars_comm14 = (uint16_t*) MARS_COMM14;
 
 // Palette lives in FB staging now (game 0x840000 -> MD 0x85F000), read
@@ -80,6 +162,20 @@ extern uint16_t read_joypad(uint8_t player);
 #define IO_DSW1     (*(volatile uint8_t*)0xFFB023)  // c42003
 #define IO_C43007   (*(volatile uint8_t*)0xFFB037)
 #define BANK_SHADOW (*(volatile uint8_t*)0xFFB043)  // 3F0002 low byte
+#ifdef TWO_POST
+#define TP_ECHO_OK 0xF104   /* LOOP29 149: the ISR flipped, handed the FB back, ate post A */
+#define TP_ECHO_NO 0xF1FE   /* declined, same hand-back */
+#else
+#define TP_ECHO_OK 0xF102
+#define TP_ECHO_NO 0xF1FF
+#endif
+#ifdef ECHO_CENSUS
+/* NOTES 45: the master tags its declines 0xF1F1 (past the edge), 0xF1F2
+ * (nothing drawn), 0xF1F3 (nothing shipped); the waits accept them too */
+#define ECHO_SEEN(c) ((c) == TP_ECHO_OK || (c) == TP_ECHO_NO || (((c) & 0xFFFCu) == 0xF1F0u && ((c) & 3u)))
+#else
+#define ECHO_SEEN(c) ((c) == TP_ECHO_OK || (c) == TP_ECHO_NO)
+#endif
 // MCU mailboxes are per-game (game_irq.h: US 0xFFF0C0/C2/C4, JP
 // 0xFFF0D2/D0/D4 — the 68K program reads only its own MCU's addresses)
 #define MCU_COINS   (*(volatile uint8_t*)GAME_MCU_COINS)  // MCU posts inverted SERVICE
@@ -396,7 +492,13 @@ static void md_stage_play(void) {
 }
 #endif
 
-__attribute__((section(".data")))
+/* THE SECTION ATTRIBUTE THAT USED TO BE HERE decorated the first function AFTER this
+ * point, which under MDSPR is mdspr_upload_pump and NOT the consume its comment describes
+ * (md_consume carries its own at :1316). With MDSPROFF=1 the MDSPR block vanishes and the
+ * attribute fell through onto `md_hold`, a VARIABLE: "md_hold causes a section type
+ * conflict with md_to_arcade in section .data", m68k-elf-gcc, 2026-10-09. A latent bug in
+ * the MDSPROFF path, never hit because MDSPROFF had never been built with MD_BG. It now
+ * sits on the function it actually decorates, so the line's codegen is unchanged. */
 #ifdef MD_BG
 /* PACKET CONSUME, extracted (LOOP 23 v4): called post-window as
  * always, and ALSO pre-window on k2 vints under FM_GATE — the k1
@@ -417,6 +519,7 @@ __attribute__((section(".data")))
  * outside the handler — and the window is restored to bank 3 before
  * the handler returns. */
 
+__attribute__((section(".data")))
 static void mdspr_upload_pump(void) {
 #ifdef MDCONSUME_OFF
 	/* SESSION 7 CALIBRATION: after the boot/attract loads (vint 900),
@@ -433,6 +536,15 @@ static void mdspr_upload_pump(void) {
 		(0x900000ul + MDSPR_CART_WINOFF) + mdspr_up_woff;
 	uint32_t va = (uint32_t)MDSPR_VRAM_BASE + ((uint32_t)mdspr_up_voff << 1);
 	*(volatile uint16_t*)0xA15104 = MDSPR_CART_BANK;
+#ifdef DMA_CENSUS
+	/* DOES THIS EVER RUN, AND DOES THE READ RETURN ANYTHING? The whole
+	 * "68K cart reads are proven on hardware" argument rests on this
+	 * function, and nobody checked that it EXECUTES. 0xFFB330 counts
+	 * word-moving calls; 0xFFB334 keeps the first word actually read, so
+	 * a zero there means the read came back empty even when it ran. */
+	(*(volatile uint32_t*)0xFFB330)++;
+	*(volatile uint16_t*)0xFFB334 = src[0];
+#endif
 	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
 	*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 	                 | ((va >> 14) & 3u);
@@ -444,7 +556,44 @@ static void mdspr_upload_pump(void) {
 	mdspr_up_left -= n;
 }
 
+/* CLEAN TILE COUNTER (2026-09-19). 0xFFB200, in the middle of the
+ * untouched 0xFFB100-0xFFB33F gap -- verified by surveying every
+ * 0xFFBxxx literal in both CPUs.
+ * The old DMACENSUS counters cannot be used for this:
+ *   0xFFA246 is a uint16_t and WRAPS -- the slim route ships >65536
+ *     tiles in 3000 frames, so its readings there are garbage;
+ *   0xFFA248 sits in the 0xFFA240 block that md_main.c:848 itself
+ *     calls CLOBBERED, and it reports ~198 tiles/vint for every config
+ *     including the line, which is nonsense.
+ * A throughput number is the whole basis of the slim-pipeline design,
+ * so it does not get to rest on a counter the source says is broken. */
+#define TILECNT ((volatile uint32_t *)0xFFB200)
+/* A SECOND counter at a DIFFERENT free address, incremented at the
+ * IDENTICAL site. Three counters have now given three different answers
+ * for tiles/vint, so the address is under suspicion as much as the
+ * code. If TILECNT and TILECNT2 agree, the address class is sound and
+ * the number is real; if they disagree, one of them is being clobbered
+ * and neither may be quoted. */
+#define TILECNT2 ((volatile uint32_t *)0xFFB300)
+/* And a SENTINEL: written once at the first consume, never touched
+ * again. If it reads back as anything but 0xA5A5A5A5 the region is not
+ * ours and every number from it is void. */
+#define TILESENT ((volatile uint32_t *)0xFFB308)
+/* PEAK, not mean. The trustworthy mean is ~1.07 tiles/vint and is FLAT
+ * across MDBATCH and across the slim record -- a mostly-static level
+ * does not need new art most frames, so the mean cannot see a cap and
+ * never could. Black tiles arrive in BURSTS (a scene cut, the flame
+ * wipe) and a cap only bites at the peak. One insertion point before
+ * the route split, so FB and SLIM are counted identically. */
+#define TILEMAX  ((volatile uint16_t *)0xFFB310)
+#ifndef SLIM_CAP
+#define SLIM_CAP 8
+#endif
+#define TILEHIST ((volatile uint16_t *)0xFFB320)   /* 0,1-2,3-4,5-8,9-16,17-32,33-64,65+ */
 static void mdspr_consume(void) {
+#ifdef MD_QUIET
+	return;                                  /* MDQUIET probe: no 68K DMA/fetch traffic in the vint */
+#endif
 #ifdef MDCONSUME_OFF
 	/* SESSION 7 CALIBRATION: after the boot/attract loads (vint 900),
 	 * no MD-plane / sprite / art upload at all (the VDP planes and
@@ -498,8 +647,710 @@ static uint16_t bm_pushed;               /* probe: last word 20 as pushed */
 /* RAMCODE (2026-09-06): the consume ran from cart ROM under the master's
  * compose traffic (nm: 0x8c0b48) — a 4-6x fetch-stall on every
  * instruction; consume B measured 14 lines for a 280-word chunk. */
+#ifdef CART_READ_AT
+/* RIG BISECT (2026-09-19): 64 back-to-back 68K reads of the cart window
+ * at the baked tile blob's cart address (bank 2), results discarded.
+ * CART_READ_AT selects the position in the vint:
+ *   18 = top of md_consume (early vblank, before the packet walk)
+ *   17 = partb_hook, the top of fmgate_partb (md_start.s): after the
+ *        game's IRQ4 has returned, on the LINE's own path
+ * The slim walk's reads at position 18 black-screen the FPGA whatever the
+ * bank, cap or spacing; the game's own fetches from the same window at
+ * position 17 are fine every frame (rig, 2026-09-20). WHEN, not WHAT. */
+__attribute__((section(".data"), noinline))
+static void cart_read_burst(void) {
+#ifndef CART_READ_ADDR
+#ifndef CART_READ_ADDR
+#define CART_READ_ADDR TILESMD_BANKED
+#endif
+#define CART_READ_BANK 2
+#endif
+#ifndef CART_READ_BANK
+#define CART_READ_BANK 3                   /* a 0x9xxxxx address at the resting bank */
+#endif
+	const volatile uint16_t *cw = (const volatile uint16_t *)CART_READ_ADDR;
+	volatile uint16_t sink;
+	*(volatile uint16_t*)0xA15104 = CART_READ_BANK;
+	for (uint16_t k = 0; k < 64; k++) sink = cw[k];
+	*(volatile uint16_t*)0xA15104 = 3;
+	(void)sink;
+}
+#endif
+#ifdef TILE_SLIM
+/* SLIM PIPELINE STATE. Three steps, one vint apart, each where the
+ * hardware allows it (rig-measured 2026-09-19/20):
+ *   1. md_consume (top of vblank, FM=0): copy the 2-word records out of
+ *      the FB packet -> slim_rec.            [the only step that needs FM]
+ *   2. still in md_consume, right after staging: 68K reads the art from
+ *      cart -> slim_art (WRAM). [slim28; the earlier "cart reads at the
+ *      top of vblank collapse the FPGA" was a title-screen misread]
+ *   3. slim_dma, FIRST THING in partb_hook (after the game's IRQ4,
+ *      before the FM raise): 68K->VDP DMA from slim_art -> VRAM. The
+ *      only placement the FPGA accepts (slim18-20/26/27 lost the
+ *      background at the consume top, after the fetch, after the raise).
+ *      Same vint as the name-table entry: no one-frame black flash.
+ * Payload copies: cart -> WRAM -> VRAM, two, the same count as the
+ * port-write walk, and the SH-2 never touches the tile bytes. */
+/* DIAG IN NAMED STATICS (2026-09-21). These lived at the hard-coded
+ * WRAM addresses 0xFF3400-0xFF347F and 0xFF3500-0xFF3561 -- which, once
+ * .bss grew past 0xFF3200, sat INSIDE slim_art (the tile art buffer)
+ * and slim_va: every diag increment corrupted fetched art, and the
+ * palette shadow copy overwrote 96 bytes of it. Placement moved with
+ * every build, which is one face of the "layout lottery". */
+static uint16_t slim_diag[8];             /* [0] fetch calls [1] tiles fetched [2] DMA'd
+                                           * [3] stray records [5] inline tiles [6] DMA wait [7] baked staged */
+static volatile uint16_t slim_ring[32];   /* first 16 stray (w0,w1). VOLATILE: write-only statics are dead-store-eliminated -- 2026-10-04 the lst had no symbol and the ring was never recorded */
+#ifdef MDP_LINES4
+static uint16_t pal_shadow_w[64];         /* last BG palette block consumed (four lines) */
+#else
+static uint16_t pal_shadow_w[48];         /* last BG palette block consumed */
+#endif
+static uint16_t pal_shadow_seen;          /* palette-flagged consumes */
+#include "../sh_src/tiles_md.h"          /* TILESMD_SCENES / INDEX_BYTES / BYTES, generated by the bake */
+
+/* THE BAKED TILE BLOB'S CART ADDRESS, AND IT MOVES UNDER PORTFULL.
+ *
+ * .ramtext's ROM image grows past 0x26A000 once the SH-2 port's driver joins .text,
+ * so sh_src/mars.ld places .tilesmd at 0x26C000 for a PORTFULL rom and leaves it at
+ * 0x26A000 for every other build. The move is CONDITIONAL because the accepted line
+ * must stay byte-identical: shifting a 506 KB blob changes the cart address of
+ * everything after it, and this project has MEASURED 64 bytes of dead .data moving
+ * the level-1 speed ladder 18 points (LESSONS, "speed gate resolution floor").
+ *
+ * DEFINED AT FILE SCOPE, not inside the `#ifndef CART_READ_ADDR` guard further down:
+ * a build that already defines CART_READ_ADDR skipped that block and left
+ * TILESMD_CART undeclared at its two unconditional uses, which is a compile error --
+ * the good kind, but only because the uses are unconditional.
+ *
+ * Both literals are spelled out rather than derived, because
+ * tools/check_tilesmd_addr.py greps md_main.c for them and compares against mars.ld
+ * in BOTH cases. A computed form would make that guard blind. */
+#ifdef PORT_FULL
+#define TILESMD_CART    0x26C000uL
+#define TILESMD_BANKED  0x96C000uL         /* bank 2 maps cart 0x2xxxxx -> 0x9xxxxx */
+#else
+#define TILESMD_CART    0x26A000uL
+#define TILESMD_BANKED  0x96A000uL
+#endif
+static uint16_t slim_rec[SLIM_CAP * 4];   /* step 1: staged records; TWO packets' worth (2026-09-21): a packet may
+                                           * land while last vint's remainder waits */
+static uint16_t slim_n;                   /* records staged this vint */
+static uint16_t slim_art[SLIM_CAP * 16];  /* step 2: art in WRAM */
+static uint16_t slim_va[SLIM_CAP];        /* step 2: VRAM address per tile */
+static uint16_t slim_ready;               /* tiles waiting for step 3 */
+#ifdef R60_FSPROBE
+uint16_t fsp_fs0;                         /* FS at the start of the A consume (probe 2026-10-16) */
+#endif
+static void slim_dma(void);
+
+/* MIXED-RECORD WALKER (2026-09-21, shared by the tile batch and the
+ * chunk's ART_TAIL). Bit 14 of the slot word = an inline 17-word record
+ * (an unbaked set's pixels): DMA its art from the FB now, at FM=0.
+ * Otherwise a 2-word baked record: stage it for slim_fetch. */
+__attribute__((section(".data"), noinline))
+static void slim_walk(volatile uint16_t *e, uint16_t cnt)
+{
+	for (uint16_t i = 0; i < cnt; i++) {
+		uint16_t w0 = e[0];
+		if (w0 & 0x4000u) {
+			uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+			if (va + 32u <= 0xB000u) {
+				uint32_t src = ((uint32_t)(e + 1)) >> 1;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+				*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+				*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+				*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+					| (((va >> 14) & 3u) | 0x80u);
+				slim_diag[5]++;
+			}
+			e += 17;
+		} else {
+			if (slim_n < 2u * SLIM_CAP) {
+				slim_rec[slim_n * 2u] = w0;
+				slim_rec[slim_n * 2u + 1u] = e[1];
+				slim_n++;
+				slim_diag[7]++;
+			} else slim_diag[4]++;            /* dropped: buffer full */
+			e += 2;
+		}
+	}
+}
+__attribute__((section(".data"), noinline))
+static void slim_fetch(void)              /* step 2 */
+{
+#ifdef MD_QUIET
+	return;                                  /* MDQUIET probe: no 68K DMA/fetch traffic in the vint */
+#endif
+	uint16_t n = slim_ready;                 /* APPEND: both consumes fetch */
+	/* NEVER DISCARD (2026-09-20): art not yet landed stays in slim_art
+	 * and new art appends behind it; slim_dma at the start of partb_hook
+	 * lands all of it. (The first cut zeroed slim_ready on an empty
+	 * fetch and the FPGA lost the level's first load.) */
+	if (!slim_n) return;
+	if (n >= SLIM_CAP) return;               /* art buffer full: the records stay staged for the next vint (2026-09-21) */
+	slim_diag[0]++;       /* diag: fetch calls */
+	*(volatile uint16_t*)0xA15104 = 2;       /* .tilesmd lies entirely in bank 2 */
+	uint16_t i;
+	for (i = 0; i < slim_n && n < SLIM_CAP; i++) {
+		uint16_t w0 = slim_rec[i * 2u], w1 = slim_rec[i * 2u + 1u];
+		uint32_t va = (uint32_t)(w0 & 0x03FFu) * 32u;
+		if (va + 32u > 0xB000u) continue;
+		/* TILESMD_CART_BASE: MUST EQUAL the AT() address of .tilesmd in
+		 * sh_src/mars.ld -- `make tilesmd-addr` greps both. */
+		/* record word (bake_tiles_md.py LAYOUT, m_main.c emitter): bit 15
+		 * = single-variant block (one 32 B pattern per code, either
+		 * layer), bits 6-14 = block base in 2 KB units, bits 0-5 = code. */
+		uint32_t src = TILESMD_CART + (uint32_t)TILESMD_INDEX_BYTES
+			+ ((uint32_t)((w1 >> 6) & 0x1FFu)) * 2048u
+			+ ((w1 & 0x8000u)
+			   ? ((uint32_t)(w1 & 63u)) * 32u
+			   : ((uint32_t)(w1 & 63u)) * 64u + ((w0 & 0x8000u) ? 32u : 0u));
+		/* HARD BOUND (2026-09-20). A record whose block field is stray
+		 * would send this read past the 1MB bank window: 0xA00000+ is
+		 * I/O and 0xC00000+ the VDP/PSG mirrors, and a 68K read there
+		 * LOCKS the machine ON THE FPGA while ares and MAME shrug (never
+		 * tested on real 32X hardware -- none was available until 2026-09.
+		 * The
+		 * blob ends below 0x2C7000, so anything outside is not art. */
+		if (src < TILESMD_CART || src >= TILESMD_CART + (uint32_t)TILESMD_BYTES) {
+			uint16_t k9 = slim_diag[3]++;   /* diag: stray records */
+			if (k9 < 16) {                        /* diag ring: first 16 stray (w0,w1) */
+				slim_ring[k9 * 2] = w0;
+				slim_ring[k9 * 2 + 1] = w1;
+			}
+			continue;
+		}
+		const volatile uint16_t *cw =
+			(const volatile uint16_t *)(0x900000uL + (src - 0x200000uL));
+		uint16_t *d = slim_art + n * 16u;
+		for (uint16_t k = 0; k < 16; k++) d[k] = cw[k];
+		slim_va[n++] = (uint16_t)va;
+	}
+	*(volatile uint16_t*)0xA15104 = 3;
+	slim_diag[1] += n;    /* diag: tiles fetched */
+	slim_ready = n;
+	if (i < slim_n) {                        /* remainder: keep for the next vint (2026-09-21) */
+		uint16_t k;
+		for (k = 0; i + k < slim_n; k++) {
+			slim_rec[k * 2u] = slim_rec[(i + k) * 2u];
+			slim_rec[k * 2u + 1u] = slim_rec[(i + k) * 2u + 1u];
+		}
+		slim_n = k;
+	} else
+		slim_n = 0;
+}
+
+__attribute__((section(".data"), noinline))
+static void slim_dma(void)                /* step 3 */
+{
+#ifdef MD_QUIET
+	return;                                  /* MDQUIET probe: no 68K DMA/fetch traffic in the vint */
+#endif
+	if (!slim_ready) return;
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+	for (uint16_t i = 0; i < slim_ready; i++) {
+		uint32_t src = ((uint32_t)(slim_art + i * 16u)) >> 1;
+		uint32_t va = slim_va[i];
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+		*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
+		               | (((va >> 14) & 3u) | 0x80u);
+	}
+	slim_diag[2] += slim_ready;   /* diag: tiles DMA'd */
+#ifdef SLIM_VERIFY
+	/* RIG VERDICT (2026-09-20): did the first tile of this batch land in
+	 * VRAM as the bytes in slim_art? Sticky, painted into CRAM 32-63:
+	 * GREEN match, RED mismatch, BLUE VRAM read back all zero. */
+	{
+		static uint16_t sv_bad, sv_zero, sv_ran;
+		uint16_t g9 = 0;
+		while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {}
+		{
+			uint32_t va = slim_va[0]; uint16_t z9 = 1;
+			*vdp_ctrl_wide = ((uint32_t)(va & 0x3FFFu) << 16) | ((va >> 14) & 3u);
+			for (uint16_t k = 0; k < 16; k++) {
+				uint16_t v9 = *vdp_data_port;
+				if (v9) z9 = 0;
+				if (v9 != slim_art[k]) sv_bad = 1;
+			}
+			if (z9) sv_zero = 1;
+			sv_ran = 1;
+		}
+		{
+			uint16_t col = !sv_ran ? 0x0E00u : sv_zero ? 0x0E00u : sv_bad ? 0x000Eu : 0x00E0u;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0u;
+			for (uint16_t k = 0; k < 32; k++) *vdp_data_port = col;
+		}
+	}
+#endif
+	slim_ready = 0;
+}
+#endif
+#ifdef RIG_BARCODE
+static uint8_t bc_shpub, bc_shpal;   /* SH-2 counters, taken from the header at consume */
+#endif
+#if defined(TILE_SLIM) || defined(CART_READ_AT)
+#ifdef RIG_BARCODE
+#ifndef BC_ROWS
+#define BC_ROWS 6
+#endif
+#define BC_VA (0xC000u + (28u - BC_ROWS) * 128u)
+__attribute__((section(".data"), noinline))
+static void bc_emit(void)
+{
+	/* RIG BARCODE (docs/design/RIG-READOUT.md, 2026-09-21). 80 bits per
+	 * capture, written INTO the picture through the MD WINDOW plane (never
+	 * scrolled): name-table rows 22-27 (VRAM 0xCB00, 64-cell stride) each
+	 * carry the SAME 80 bits as 40 four-colour cells, 2 bits per cell:
+	 *   00 blank (0x03FF, the reserved slot)   01 WHITE  tile 0x7C0 pen 15
+	 *   10 RED   tile 0x7C1 pen 14             11 BLUE   tile 0x7C2 pen 13
+	 * (solid tiles at VRAM 0xF800-0xF85F, free space above the SAT; CRAM
+	 * 61-63 forced blue/red/white every vint). Six rows = six votes per
+	 * bit: the text layer covers the bottom-right cells and sprites cross
+	 * the band, and a majority survives both. The window (reg 0x12 down
+	 * from row 22, table reg 0x03 = plane A's 0xC000) draws the rows at
+	 * screen rows 22-27 unscrolled. One 384-word WRAM->VRAM DMA here,
+	 * before the FM raise, next to slim_dma.
+	 *   byte 0  0xA5 marker            byte 5  SH-2 packets published (sc[4]>>8 at consume)
+	 *   byte 1-2 vint count 0xFFB0F0   byte 6  SH-2 palette-flagged (sc[6]>>8 at consume)
+	 *   byte 3  packets consumed       byte 7  [5:0] CRAM 16-47 non-zero,
+	 *   byte 4  palette-flagged                [6] shadow non-zero, [7] magic in FB
+	 *           consumed (pal_shadow_seen) byte 8  [2:0] round [3] cut [6:4] step [7] play
+	 *                                  byte 9  XOR of bytes 0-8 */
+	{
+		static uint16_t bc_nt[BC_ROWS * 64];
+		static uint8_t bc_init;
+		uint8_t by[10];
+		if (!bc_init) {
+			bc_init = 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xF800u & 0x3FFFu)) << 16) | ((0xF800u >> 14) & 3u);
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xFFFF;
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xEEEE;
+			for (uint16_t k = 0; k < 16; k++) *vdp_data_port = 0xDDDD;
+			for (uint16_t k = 0; k < BC_ROWS * 64; k++) bc_nt[k] = 0x03FF;
+		}
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8330;
+		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9100;
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9280u | (28u - BC_ROWS));
+#ifndef BC_DMAONLY
+		/* CRAM 61 blue, 62 red, 63 white (pal 3 pens 13-15) */
+		*vdp_ctrl_wide = ((uint32_t)(0xC000u | 122u) << 16) | 0u;
+		*vdp_data_port = 0x0E00; *vdp_data_port = 0x000E; *vdp_data_port = 0x0EEE;
+#endif
+		{
+			uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+			uint16_t n = 0, sh = 0, magic = 0;
+#ifdef BC_EVERY
+			/* RIGBCEVERY=n (2026-09-24 17:30): build + DMA the barcode only every
+			 * n-th vint. The 384-word VRAM DMA runs in active display (partb is
+			 * at ~+90) and halts the 68K for ~48 lines -- enough to tip a pass
+			 * that ends near the vint line. The plane keeps the last barcode. */
+			if (vc & (BC_EVERY - 1)) return;
+#endif
+#ifndef BC_DMAONLY
+			if (*(volatile uint16_t*)0x857000uL == 0xB6B6 || *(volatile uint16_t*)0x85E800uL == 0xB6B6) magic = 1;
+			for (uint16_t i = 16; i < 48; i++) {
+				*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
+				if (*vdp_data_port & 0x0EEEu) n++;
+			}
+			for (uint16_t i = 0; i < 32; i++) if (pal_shadow_w[i] & 0x0EEEu) sh = 1;
+#endif
+			by[0] = 0xA5;
+			by[1] = (uint8_t)(vc >> 8); by[2] = (uint8_t)vc;
+			by[3] = (uint8_t)*(volatile uint16_t*)0xFFB0E2;
+			by[4] = (uint8_t)pal_shadow_seen;
+#if defined(RIG_SPAN) && RIG_SPAN == 12
+			{   /* RIGSPAN=12: the IRQ4 chain split from the CHAINPRICE stamps (build with CHAINPRICE=1):
+			     * byte 5 = lines from the chain's entry to the shim's end, byte 6 = entry to part B's end;
+			     * the entry V is the previous vint's ring slot (this vint's chain is in flight at emit) */
+				uint16_t vc2 = *(volatile uint16_t*)0xFFB0F0;
+				uint8_t ve = (uint8_t)(((volatile uint16_t*)0xFFA380)[(vc2 - 1) & 63] & 0xFF);
+				uint8_t vs = (uint8_t)(*(volatile uint16_t*)0xFFA3C0 >> 8), vp = (uint8_t)(*(volatile uint16_t*)0xFFA3C2 >> 8);
+				uint16_t le = (uint16_t)(ve >= 0xE0u ? ve - 0xE0u : ve + 38u);
+				uint16_t ls = (uint16_t)(vs >= 0xE0u ? vs - 0xE0u : vs + 38u), lp = (uint16_t)(vp >= 0xE0u ? vp - 0xE0u : vp + 38u);
+				by[5] = (uint8_t)((ls - le) & 0xFF); by[6] = (uint8_t)((lp - le) & 0xFF);
+			}
+#elif defined(RIG_SPAN) && RIG_SPAN == 18
+			{   /* RIGSPAN=18: the PC sampler's class histogram (PCSAMP=1 PCSAMPN=15: 13 samples a
+			     * vint), per attract step. byte 5 = class k's share of all samples x255,
+			     * byte 6 = k in bits 7-6 | total samples / 256 (cap 63) in bits 5-0;
+			     * k rotates with the barcode (every 8th vint): 0 idle loop, 1 our shim/thunks,
+			     * 2 WRAM-resident game code, 3 cart game code. Same rom on ares (screenshots
+			     * decode with tools/rig_barcode.py) and on the rig: WHERE the FPGA's extra
+			     * 68K time sits. Samples taken while IRQ4 is masked land at the mask's lift. */
+				uint8_t k = (uint8_t)((vc >> 3) & 3);
+				uint16_t tot = span_cls_tot;
+				by[5] = (uint8_t)(tot ? ((uint32_t)span_cls[k] * 255u) / tot : 0u);
+				by[6] = (uint8_t)((k << 6) | ((tot >> 8) > 63u ? 63u : (tot >> 8)));
+			}
+#elif defined(RIG_SPAN) && RIG_SPAN == 16
+			by[5] = (uint8_t)(span_c_mid >> 1);    /* RIGSPAN=16: chains entered with the game mid-pass / 2 */
+			by[6] = (uint8_t)(span_c_fresh >> 1);  /* chains entered with a fresh frame / 2 */
+#elif defined(RIG_SPAN) && (RIG_SPAN == 15 || RIG_SPAN == 17)
+			by[5] = (uint8_t)(span_t15c > 255u ? 255u : span_t15c);   /* RIGSPAN=15: the loop fetched from the cart, quarter-lines (=17: inside the window at RIG_SPAN_V) */
+			by[6] = (uint8_t)(span_t15w > 255u ? 255u : span_t15w);   /* the same loop from WRAM */
+#elif defined(RIG_SPAN) && RIG_SPAN == 14
+			by[5] = (uint8_t)(span_t14c > 255u ? 255u : span_t14c);   /* RIGSPAN=14: 256 cart reads inside the window, quarter-lines */
+			by[6] = (uint8_t)(span_t14w > 255u ? 255u : span_t14w);   /* 256 WRAM iterations inside the window */
+#elif defined(RIG_SPAN) && RIG_SPAN == 13
+			by[5] = (uint8_t)(span_t_fbw > 255u ? 255u : span_t_fbw);   /* RIGSPAN=13: 256 FB word writes, quarter-lines */
+			by[6] = (uint8_t)(span_t_fbr > 255u ? 255u : span_t_fbr);   /* 256 FB word reads */
+#elif defined(RIG_SPAN) && RIG_SPAN == 10
+			by[5] = (uint8_t)(span_hA >> 1);   /* RIGSPAN=10: span-1 passes ending in lines 0-130 of their 2nd vint / 2 */
+			by[6] = (uint8_t)(span_hB >> 1);   /* ... ending in 131-261 / 2 */
+#elif defined(RIG_SPAN) && RIG_SPAN == 11
+			by[5] = (uint8_t)(span_mean >> 1 > 255u ? 255u : span_mean >> 1);   /* RIGSPAN=11: mean pass lines / 2 */
+			by[6] = (uint8_t)((span_h0 + span_h1 + span_h2) >> 2);           /* passes / 4 */
+#elif defined(RIG_SPAN) && RIG_SPAN == 9
+			by[5] = (uint8_t)(span_t_cart > 255u ? 255u : span_t_cart);   /* RIGSPAN=9: 256 cart reads, quarter-lines */
+			by[6] = (uint8_t)(span_t_wram > 255u ? 255u : span_t_wram);   /* 256 WRAM loop iterations, quarter-lines */
+#elif defined(RIG_SPAN) && RIG_SPAN == 8
+			by[5] = (uint8_t)(span_spin_full >> 1 > 255u ? 255u : span_spin_full >> 1);   /* RIGSPAN=8: wait-loop arrivals in the last fully idle vint / 2 */
+			by[6] = (uint8_t)(span_h0 >> 1);
+#elif defined(RIG_SPAN) && RIG_SPAN == 6
+			{   /* RIGSPAN=6: the interrupted-PC ring (0xFFA200, 64 vints) classified:
+			     * byte 5 = vints whose PC was in OUR 68K code (WRAM: shim + thunks),
+			     * byte 6 = vints in the game's idle loop; the rest = game code */
+				const volatile uint32_t *ring = (const volatile uint32_t*)0xFFA200;
+				uint8_t ours = 0, idle = 0;
+				for (int q = 0; q < 64; q++) {
+					uint32_t pc = ring[q];
+					if (pc >= 0xFF0000u) ours++;
+					else if (pc >= 0x903980u && pc <= 0x903990u) idle++;
+				}
+				by[5] = ours; by[6] = idle;
+			}
+#elif defined(RIG_SPAN) && RIG_SPAN == 7
+			by[5] = (uint8_t)(*(volatile uint32_t*)0xFFB0F8 >> 8);   /* RIGSPAN=7: the 68K PC the IRQ4 interrupted this vint (md_start.s stamp), bits 15..0 */
+			by[6] = (uint8_t)(*(volatile uint32_t*)0xFFB0F8);
+#elif defined(RIG_SPAN) && RIG_SPAN == 5
+			by[5] = (uint8_t)(span_vp >> 2);   /* RIGSPAN=5: vints inside passes / 4, vints waiting / 4 */
+			by[6] = (uint8_t)(span_vw >> 2);
+#elif defined(RIG_SPAN) && RIG_SPAN == 4
+			by[5] = (uint8_t)(span_h2 >> 1);   /* RIGSPAN=4: span >= 2 / 2, span 0 / 2 */
+			by[6] = (uint8_t)(span_h0 >> 1);
+#elif defined(RIG_SPAN) && RIG_SPAN == 3
+			by[5] = (uint8_t)(span_h2 >> 1);   /* frames of span >= 2 / 2, this attract step */
+			by[6] = (uint8_t)(span_h1 >> 1);   /* frames of span 1 / 2 */
+#elif defined(RIG_SPAN)
+			/* RIGSPAN: byte 5 = raw V at the game's pass end (idle-loop re-entry), byte 6 = vints the pass spanned */
+			by[5] = (uint8_t)(span_v >> 8);
+			by[6] = span_len;
+#elif defined(RIG_WIN)
+			{	/* RIGWIN: previous vint's IRQ4-exit V (window end + handler) and the shim's vblank-entry V, raw counter bytes */
+				uint16_t ri = (uint16_t)(*(volatile uint16_t*)0xFFB0F0 - 1u) & 63u;
+#if defined(RIG_WIN4)
+				/* RIGWIN4: the game's frame span. byte 5 = raw V at the game's rte (ring 0xFFA300 high byte),
+				 * byte 6 = vblank count at the rte minus the count at the shim's vblank entry of the SAME
+				 * ring slot (0xFFA380 high byte): vints the frame spanned. */
+				by[5] = (uint8_t)(((volatile uint16_t*)0xFFA300)[ri] >> 8);
+				by[6] = (uint8_t)((((volatile uint16_t*)0xFFA300)[ri] & 0xFFu) - (((volatile uint16_t*)0xFFA380)[ri] >> 8));
+#elif defined(RIG_WIN3)
+				by[5] = *(volatile uint8_t*)0xFFA0A0;   /* RIGWIN3: V at the post -- the live post (0x2020, ~line 3730) already stamps 0xFFA0A0 */
+				by[6] = *(volatile uint8_t*)0xFFA0EC;
+#else
+				by[5] = (uint8_t)(((volatile uint16_t*)0xFFA300)[ri] >> 8);
+				by[6] = *(volatile uint8_t*)0xFFA0EC;   /* V at the first gate that waited on FM this vint = the window end (patch_game.py RIGWIN) */
+#endif
+			}
+#elif defined(RIG_GAME)
+			by[5] = (uint8_t)*(volatile uint16_t*)0xFFF02A;   /* RIGGAME: the game's scene timer, low byte ... */
+			by[6] = (uint8_t)(*(volatile uint16_t*)0xFFF02A >> 8);   /* ... and high byte (captures are ~390 vints apart) */
+#else
+			by[5] = bc_shpub;
+			by[6] = bc_shpal;
+#endif
+			/* bit 6: the MD display gate's hold (md_hold, from packet bit 13);
+			 * bit 7: the game's own video-enable (IO_MISC bit 5) */
+			(void)sh; (void)magic;
+			by[7] = (uint8_t)((n & 63) | ((md_hold ? 1u : 0u) << 6) | (((IO_MISC & 0x20) ? 1u : 0u) << 7));
+			by[8] = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7)
+			      | (*(volatile uint8_t*)0xFFF148 ? 8 : 0)
+			      | ((*(volatile uint8_t*)0xFFF031 >> 2) & 7) << 4
+			      | ((~*(volatile uint8_t*)0xFFF026 & 1) << 7));
+						#ifdef RIG_RATE
+						/* byte 5 = GAME frames per vint x 255 over the WHOLE RUN (255 = 60 Hz,
+						 * 128 = every other vint); byte 6 = vints elapsed / 256, so a reader can
+						 * see the figure has settled before quoting it. */
+						by[5] = (uint8_t)(rr_vints ? (rr_gframes * 255u) / rr_vints : 0u);
+						#endif
+						by[9] = 0;
+			for (uint16_t i = 0; i < 9; i++) by[9] ^= by[i];
+		}
+		for (uint16_t c = 0; c < 40; c++) {
+			uint16_t sym = (uint16_t)((by[c >> 2] >> (6 - 2 * (c & 3))) & 3u);
+			uint16_t cell = (uint16_t)(sym ? (0xE7C0u + sym - 1u) : 0x03FFu);
+			for (uint16_t r = 0; r < BC_ROWS; r++) bc_nt[r * 64u + c] = cell;
+		}
+#ifndef BC_NODMA
+		{
+			uint32_t src = ((uint32_t)bc_nt) >> 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9300u | ((BC_ROWS * 64u) & 0xFFu));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9400u | ((BC_ROWS * 64u) >> 8));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+			*vdp_ctrl_wide = ((uint32_t)(0x4000u | (BC_VA & 0x3FFFu)) << 16) | (((BC_VA >> 14) & 3u) | 0x80u);
+		}
+#endif
+	}
+}
+#endif
+#if defined(FBX_STAGE) && defined(FBX_ECHO)
+/* FBX ECHO BELT (2026-09-21, the level-start race). The master's
+ * packet header carries the sequence it last lifted. Its ISR lifts
+ * BEFORE it flips, and a blast still in progress at that moment leaves
+ * the finished packet in the bank that just became the DISPLAYED one:
+ * unreadable by either CPU until the next flip, and the master's scene
+ * fill erases it first (ares, boot packet 2 of the losing layouts,
+ * docs/design/RIG-READOUT.md). So: two vints after a blast, if the echo
+ * has not caught up, write the kept packet again, same sequence, into
+ * whatever bank is draw now. Runs from partb_hook, every vint, at FM=0.
+ * (Its first home, the pre-post slot, is not on the boot-time path.) */
+__attribute__((section(".data"), noinline))
+static void fbx_echo_belt(void)
+{
+	if (*(volatile uint16_t*)0xA15100 & 0x8000) return;   /* FM up: a write would be dropped */
+	if (fbx_age < 255) fbx_age++;
+	if (fbx_rb_age < 255) fbx_rb_age++;
+	if (fbx_keep_live && fbx_rb_age >= 2
+	    && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
+		const uint32_t *sp = (const uint32_t*)fbx_stage;
+		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
+		uint16_t n = fbx_keep_n, nl = (uint16_t)(n >> 1);
+		while (nl--) *dp++ = *sp++;
+		if (n & 1) ((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
+		{
+			volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+			pub[1] = n;
+			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+		}
+		fbx_rb_age = 0;                      /* spacing between re-blasts only:
+		                                      * fbx_age keeps counting from the
+		                                      * ORIGINAL blast, so the re-mark
+		                                      * half (age >= 2 at the next build)
+		                                      * still fires (ares: it never did,
+		                                      * the re-blast reset the age) */
+		fbx_reblasts++;
+	}
+}
+#endif
+/* PART-B END HOOK: md_start.s calls this at the END of fmgate_partb,
+ * after the window post and the FM raise. */
+__attribute__((section(".data")))
+void partb_end_hook(void)
+{
+#if defined(CART_READ_AT) && CART_READ_AT == 20
+	cart_read_burst();
+#endif
+#if defined(RIG_BARCODE) && defined(BC_END)
+	bc_emit();      /* the barcode AFTER the raise: does it still cure? */
+#endif
+	/* (slim26 landed the art HERE, after the FM raise and the post, and
+	 * the FPGA lost the level background -- the slim18-20 shape; ares was
+	 * fine. A WRAM->VRAM DMA burst after the raise breaks the frame on
+	 * silicon; before the raise it does not. Moved into partb_hook.) */
+}
+/* PART-B HOOK. md_start.s calls this at the top of fmgate_partb, i.e.
+ * after the game's IRQ4 has returned and before FM is raised -- the one
+ * place on the line's vint path that runs late in vblank from C. The
+ * cart -> VRAM walk lives here because 68K cart reads at the TOP of
+ * vblank collapse the FPGA's frame (see slim_fetch / CART_READ_AT). */
+__attribute__((section(".data")))
+void partb_hook(void)
+{
+#if defined(FBX_STAGE) && defined(FBX_ECHO)
+	fbx_echo_belt();
+#endif
+#if defined(CART_READ_AT) && CART_READ_AT == 17
+	cart_read_burst();
+#endif
+#if defined(CART_READ_AT) && CART_READ_AT == 19
+	/* pure delay, no bus traffic beyond WRAM: CART_READ_DELAY x ~12 cycles */
+#ifndef CART_READ_DELAY
+#define CART_READ_DELAY 64
+#endif
+	{ volatile uint16_t d = 0; while (++d < CART_READ_DELAY) {} }
+#endif
+#if defined(TILE_SLIM) && !defined(SLIM_NODMA)
+	/* THE ONE SPOT THE FPGA ACCEPTS THE DMA: first thing after the game's
+	 * IRQ4, before the FM raise (slim21-25 landed here and worked; the
+	 * consume top, after the fetch, and after the raise all lost the
+	 * background ON THE FPGA while ares rendered every one; real 32X
+	 * hardware has not been tried). */
+	slim_dma();
+#endif
+#ifdef DMA_WAIT
+	/* RACE CANDIDATE (2026-09-21): the barcode build's 384-word DMA here
+	 * wins the level-start race on every layout (12/12; pad-5 0/6 without
+	 * it, 3/3 with the DMA alone). Does the raise overtake slim_dma's
+	 * last DMA on the FPGA? Wait for the VDP's DMA-busy bit, no traffic. */
+	{ uint16_t g9 = 0; while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} slim_diag[6] = g9; }
+#endif
+#ifdef DMA_DELAY
+	/* RACE CANDIDATE: a pure delay of about the DMA's length, no traffic */
+	{ volatile uint16_t d = 0; while (++d < DMA_DELAY) {} }
+#endif
+#ifdef RIG_BARCODE
+#ifndef BC_END
+	bc_emit();
+#endif
+#endif
+#if defined(TILE_SLIM) && defined(SLIM_SAMEVINT)
+	/* the slim27 shape under test: fetch then DMA, here */
+	slim_fetch();
+	slim_dma();
+#endif
+#ifdef CRAM_PROBE
+	/* PALETTE READBACK WITHOUT LOSING THE PICTURE (2026-09-20). For 64 of
+	 * every 512 vints, flood CRAM with a value byte; on the vint after,
+	 * DMA the BG palette back from the WRAM shadow and black entry 0.
+	 * Value: bit 6 = field (0 = non-zero CRAM entries 16-47, read back;
+	 * 1 = non-zero words in the shadow, what we last landed), bits 0-5 =
+	 * count (0-32) + 1. Bit 7 tags a flood frame. */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t ph = (uint16_t)(vc & 0x1FF);
+#ifdef CENSUS2
+		/* relay the SH-2's census byte (COMM6, bit 15) as the value */
+		{
+			static uint8_t cz_byte;
+			uint16_t w = *(volatile uint16_t*)0xA1512C;   /* COMM6 */
+			if (w & 0x8000) { cz_byte = (uint8_t)((((w >> 8) & 3) << 6) | (w & 63)); *(volatile uint16_t*)0xA1512C = 0; }
+			if (ph < 0xC0) {
+				uint16_t col = (uint16_t)(((cz_byte & 7) << 1) | (((cz_byte >> 3) & 7) << 5) | (((cz_byte >> 6) & 3) << 9));
+				*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+				for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+			}
+		}
+		if (0) {
+#else
+		if (ph < 0x40) {
+#endif
+			uint16_t n = 0, f = (uint16_t)((vc >> 9) & 1u);
+			if (f == 0) {
+				for (uint16_t i = 16; i < 48; i++) {
+					*vdp_ctrl_wide = ((uint32_t)(i * 2u) << 16) | 0x20u;   /* CRAM read */
+					if (*vdp_data_port & 0x0EEEu) n++;
+				}
+			} else {
+				volatile uint16_t *sh = pal_shadow_w;
+				for (uint16_t i = 0; i < 32; i++) if (sh[i] & 0x0EEEu) n++;
+			}
+			if (n > 62) n = 62;
+			{
+				uint16_t v = (uint16_t)(0x80u | (f << 6) | (n + 1));
+				uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+				*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+				for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+			}
+		} else if (ph == 0xC0 || ph == 0x40) {
+			uint32_t src = ((uint32_t)pal_shadow_w) >> 1;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
+			*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+			*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+			*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+			*vdp_data_port = 0;                                        /* entry 0 black */
+		}
+	}
+#endif
+#ifdef BG_VALUE
+	/* RIG READOUT: which part of the MD background is missing? One byte,
+	 * field id in bits 6-7 rotating every 128 vints, value in bits 0-5:
+	 *   0 CRAM entry 17 (BG line 1, pen 1), packed 9-bit colour >> 3
+	 *   1 NT-A entry at row 12 col 20: tile index bits 5-10
+	 *   2 VRAM art word 0 of THAT tile, >> 10
+	 *   3 VRAM art word 0 of slot 1 (0x0020), >> 10
+	 * +1 so 0 never reads as "did not run". */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t f = (uint16_t)((vc >> 4) & 3u), v = 0, w;
+		if (f == 0) {
+			*vdp_ctrl_wide = ((uint32_t)(0x0000u | 34u) << 16) | 0x20u;   /* CRAM read, entry 17 */
+			w = *vdp_data_port; v = (uint16_t)((((w >> 9) & 7) << 6 | ((w >> 5) & 7) << 3 | ((w >> 1) & 7)) >> 3);
+		} else if (f == 1) {
+			uint32_t a = 0xC000u + 12u * 128u + 20u * 2u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; v = (uint16_t)((w >> 5) & 0x3F);
+		} else if (f == 2) {
+			uint32_t a = 0xC000u + 12u * 128u + 20u * 2u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; a = (uint32_t)(w & 0x7FFu) * 32u;
+			*vdp_ctrl_wide = ((uint32_t)(a & 0x3FFFu) << 16) | ((a >> 14) & 3u);
+			w = *vdp_data_port; v = (uint16_t)(w >> 10);
+		} else {
+			*vdp_ctrl_wide = ((uint32_t)0x0020u << 16) | 0u;
+			w = *vdp_data_port; v = (uint16_t)(w >> 10);
+		}
+		if (v > 62) v = 62;
+		v = (uint16_t)((f << 6) | (v + 1));
+		{
+			uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+			*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+			for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+		}
+	}
+#endif
+#ifdef SLIM_VALUE
+	/* RIG READOUT (SILICON.md 4, the value instrument): flood MD CRAM with
+	 * one byte, field id in bits 6-7 rotating every 128 vints, value+1 in
+	 * bits 0-5 (never 0, so "did not run" reads as black):
+	 *   1 baked records staged / 16   2 tiles landed by DMA / 16
+	 *   3 inline tiles DMA'd / 64     0 BG palette deferrals / 16
+	 * decode d = (b>>5 << 6) | (g>>5 << 3) | (r>>5) from the top colour. */
+	{
+		uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+		uint16_t f = (uint16_t)((vc >> 7) & 3u), v;
+		if (f == 1)      v = (uint16_t)(slim_diag[7] >> 4);
+		else if (f == 2) v = (uint16_t)(slim_diag[2] >> 4);
+		else if (f == 3) v = (uint16_t)(slim_diag[5] >> 6);
+		else             v = (uint16_t)(*(volatile uint16_t*)0xFFA162 >> 4);   /* BG palette deferrals / 16 */
+		if (v > 62) v = 62;
+		v = (uint16_t)((f << 6) | (v + 1));
+		uint16_t col = (uint16_t)(((v & 7) << 1) | (((v >> 3) & 7) << 5) | (((v >> 6) & 3) << 9));
+		*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+		for (uint16_t q = 0; q < 64; q++) *vdp_data_port = col;
+	}
+#endif
+}
+#endif /* TILE_SLIM || CART_READ_AT: the hooks exist only when something uses them */
+#ifdef RIG_BARCODE
+#define BC_LO(x) ((uint16_t)((x) & 0xFFu))   /* SH-2 counters ride sc[4]/sc[6] bits 8-15 */
+#else
+#ifdef EARLY_REC
+#define BC_LO(x) ((uint16_t)((x) & 0x0FFFu))   /* EARLYREC: the arm sequence rides sc[4] bits 12-15 */
+#else
+#define BC_LO(x) (x)
+#endif
+#endif
 __attribute__((section(".data"), noinline))
 static void md_consume(uint32_t pkt_base) {
+#if defined(CART_READ_AT) && CART_READ_AT == 21
+	/* pure delay at the top of the consume: ~64 x 12 cycles */
+	{ volatile uint16_t d = 0; while (++d < 64) {} }
+#endif
+	/* (slim step 3 used to run HERE, at the consume's top. On the FPGA the
+	 * extra DMAs pushed the consume's end -- where the BG palette DMA is
+	 * vblank-gated -- past line 0xFF on every load vint, and the palette
+	 * deferred for the whole level: art in VRAM, black pens (Mike,
+	 * 2026-09-20: "the palette swap at Neff is what triggers the
+	 * background"). The fetch drains it in partb_hook instead.) */
+#if defined(CART_READ_AT) && CART_READ_AT == 18
+	if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) cart_read_burst();
+#endif
 #ifdef MDCONSUME_OFF
 	/* SESSION 7 CALIBRATION: after the boot/attract loads (vint 900),
 	 * no MD-plane / sprite / art upload at all (the VDP planes and
@@ -543,18 +1394,34 @@ static void md_consume(uint32_t pkt_base) {
 			// and push_aborts read as garbage. FOURTH slot collision this
 			// era. All MD_BG push_aborts figures before this line are void.
 			(*(volatile uint16_t*)0xFFA020) = live[0];    // diag: last magic seen
+#ifdef R60_PKT_PROBE
+			/* PROBE: 0xFFA020 is written by BOTH consume calls and B runs second, so
+			 * it can never witness A. Per-buffer, unconditional, before any test. */
+			if (pkt_base == 0x857000uL || pkt_base == R60_PKTODD_68K) {
+				*(volatile uint16_t*)0xFFA07E = live[0];
+				(*(volatile uint16_t*)0xFFA172)++;      /* A bodies entered */
+			}
+#endif
 			// SPAN-SPLIT PROBES (write-budget design): V at each stage,
 			// packed per type so lua can attribute the cost.
 			(*(volatile uint16_t*)0xFFB0B0) =
 				*(volatile uint16_t*)0xC00008;            // V at entry
 			if (live[0] == 0xB6B6) {
 				(*(volatile uint16_t*)0xFFB0E2)++;        // diag: packets consumed
+#ifdef RIG_BARCODE
+				bc_shpub = (uint8_t)(live[4] >> 8); bc_shpal = (uint8_t)(live[6] >> 8);
+#endif
 #ifdef R60
 				/* per-buffer census (0xFFA076+, free): who consumes,
 				 * carrying what */
-				if (pkt_base == 0x851A00uL) {
+				if (pkt_base == 0x857000uL || pkt_base == R60_PKTODD_68K) {
 					(*(volatile uint16_t*)0xFFA076)++;
 					*(volatile uint16_t*)0xFFA078 = live[1];
+#ifdef R60_FSPROBE
+					fsp_fs0 = (uint16_t)(*(volatile uint16_t*)0xA1518A & 1u);   /* FS as the A consume starts */
+					*(volatile uint16_t*)0xFFA080 = fsp_fs0;
+					(*(volatile uint16_t*)0xFFA082)++;
+#endif
 				} else {
 					(*(volatile uint16_t*)0xFFA07A)++;
 					*(volatile uint16_t*)0xFFA07C = live[1];
@@ -595,15 +1462,78 @@ static void md_consume(uint32_t pkt_base) {
 				if (r60_isB) *(volatile uint16_t*)0xFFA090 =
 					*(volatile uint16_t*)0xC00008;   /* B: post-census */
 #endif
+#ifdef FBX_ECHO
+				fbx_echo = (uint8_t)(sc[5] >> 12);            /* FBX ECHO: master's lifted seq */
+#ifdef EARLY_REC
+				erec_arm_seen = (uint8_t)(sc[4] >> 12);       /* EARLYREC: the master's arm sequence */
+#endif
+				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = (uint16_t)(sc[5] & 0x0FFFu);
+#ifdef NO_GAMEHIGH   /* PORT diag only: 0xFFB0B8 is a live cell on the line */
+				(*(volatile uint16_t*)0xFFB0BE) = sc[1];
+				if (sc[1] & 0x8000u) (*(volatile uint16_t*)0xFFB0C6)++;
+#endif
+#else
 				uint16_t typ = (uint16_t)(sc[1] & 0xFF), cnt = sc[5];
+#endif
 				if (sc[1] & 0x2000u) md_hold_seen = 2;
 				else if (!md_hold_seen) md_hold_seen = 1;
+#ifdef R60
+				{	/* THE DISPLAY GATE'S HOLD, applied here in the port build (the k1/k2 block
+					 * that mirrored IO_MISC into reg 1 is not compiled): bit 13 = MD display
+					 * off, keeping the port's reg-1 value 0x74 (IE0 on, DMA on) otherwise. */
+					static uint8_t hold_last = 0xFF;
+					uint8_t h = (uint8_t)((sc[1] >> 13) & 1u);
+					if (h != hold_last) { *(volatile uint16_t*)VDP_CTRL_PORT = h ? 0x8134 : 0x8174; hold_last = h; }
+				}
+#endif
 #ifdef NT_WRAP
 				uint16_t palp = (uint16_t)(sc[1] & 0x8000u);
+#if defined(CRAM_PROBE) || defined(RIG_BARCODE)
+				/* shadow of every BG palette block this consume will land */
+				if (palp) {
+					volatile uint16_t *sh = pal_shadow_w;
+					for (uint16_t i = 0; i < 48; i++) sh[i] = sc[688 + i];
+					pal_shadow_seen++;              /* palettes seen */
+				}
+#endif
+#ifdef PAL_FIRST
+				/* PALETTE FIRST (2026-09-20). The BG palette DMA used to sit at
+				 * the END of the consume behind a vblank gate; anything that
+				 * lengthened the consume or the vint on the FPGA deferred it,
+				 * and a deferred palette ON THE FPGA showed as a black level
+				 * background (Mike: "the palette swap at Neff is what triggers
+				 * the background"). Land it before any tile or name-table
+				 * work when the blank budget allows. R60's A consume may
+				 * already have run into the picture before B starts, so its
+				 * late palette is queued for the next safe blank instead. */
+				if (palp) {
+#ifdef R60
+                    uint16_t pv = (uint16_t)(*(volatile uint16_t*)0xC00008 >> 8);
+                    if (pv >= 0xE0u && pv < 0xF8u) {
+                        r60_palette_pending = 0u; /* this newer palette supersedes a queued one */
+#endif
+					uint32_t src = ((uint32_t)(sc + 688)) >> 1;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+					*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+					*vdp_ctrl_wide = ((uint32_t)(0xC000u | 0u) << 16) | 0x80u;
+					(*(volatile uint16_t*)0xFFA164)++;                 /* diag: palettes landed first */
+#ifdef R60
+                    } else {
+                        for (uint16_t i = 0; i < 64u; i++) r60_palette_hold[i] = sc[688u + i];
+                        r60_palette_pending = 1u;
+                    }
+#endif
+					palp = 0;                                          /* the gated block below is skipped */
+				}
+#endif
 #endif
 				if (typ == 0) (*(volatile uint16_t*)0xFFB0E4)++;   // tile batches
 				else          (*(volatile uint16_t*)0xFFB0E6)++;   // name chunks
-				(*(volatile uint16_t*)0xFFB0E8) = sc[5];  // last count
+				(*(volatile uint16_t*)0xFFB0E8) = (uint16_t)(sc[5] & 0x0FFFu);  // last count
 				// vertical fine scroll, every window and nearly free
 				// (horizontal is per-strip now: cell-mode hscroll words
 				// ride each name-table chunk)
@@ -627,13 +1557,155 @@ static void md_consume(uint32_t pkt_base) {
 				 * delay: measured +3..+40 beam lines (f703 blew the
 				 * 1748-tick flip guard outright), 26%% flips declined. */
 				{
+#ifdef CART_DMA_PROBE
+				/* CART CPU-READ HARNESS (2026-09-19). The DMA question is
+				 * closed -- the VDP will not read cart (LESSONS, with an
+				 * on-screen control). So the slimmest pipeline available
+				 * is cart -> 68K -> VRAM, TWO payload copies instead of
+				 * today's three (cart -> SH-2 -> FB -> VRAM), and the
+				 * record collapses 17 words -> 2.
+				 *
+				 * That design has ONE load-bearing unknown: can the 68K
+				 * CPU-READ the blob through the RV=1 identity map?
+				 * mdspr_upload reads cart, but through the 0x900000 BANK
+				 * WINDOW, not the identity map, and nobody wrote down
+				 * why.
+				 *
+				 * Same harness shape that settled the DMA question --
+				 * control and test in ONE frame, no readback, nothing to
+				 * film:
+				 *   entries  0-31 <- immediate GREEN, written by the 68K.
+				 *                    Proves the CRAM write path works at
+				 *                    all. POSITIVE CONTROL.
+				 *   entries 32-63 <- words the 68K READ from cart
+				 *                    0x200000, which holds 0x0707 =
+				 *                    PURPLE. THE TEST.
+				 *
+				 *   green + purple -> 68K cart reads WORK on the identity
+				 *       map. Build the 2-word record.
+				 *   green, no purple -> reads return junk; use the
+				 *       0x900000 bank window like mdspr_upload does.
+				 *   no green -> harness broken, believe nothing. */
+				if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
+					/* THE BANK WINDOW, not the identity map. ares says
+					 * a plain read of 0x200000 returns nothing useful,
+					 * and mdspr_upload has always gone through the
+					 * window -- now we know why. Convention, from
+					 * MDSPR_CART_BANK=2 + MDSPR_CART_WINOFF=0xF9100
+					 * landing on .mdsprart at cart 0x2F9100:
+					 *     cart addr = bank * 0x100000 + winoff
+					 *     read at     0x900000 + winoff
+					 * So cart 0x200000 is bank 2, winoff 0. Bank 3 is
+					 * the resting value the other sites restore. */
+					/* IDENTITY MAP, not the bank window (2026-09-19).
+					 * The rig says the BANK WINDOW read returns NOTHING:
+					 * control green landed, cart purple did not. ares
+					 * said the opposite (identity 0/32, window 32/32),
+					 * so this is an ares divergence and the rig wins.
+					 * [RV=1: SUPERSEDED, AND THIS PARAGRAPH IS THE
+					 * REASON THE TAG EXISTS. It argues from a premise
+					 * that is false -- nothing in this tree sets RV
+					 * (TESTCART T25 measures 0x0000) and it is the
+					 * REBASE, not an identity map, that resolves the
+					 * arcade binary's ROM self-references (see the
+					 * UNPAIR MODEL block, "RV stays 0 FOREVER"). So the
+					 * experiment below tests a map that does not exist,
+					 * and its null result means nothing. Kept as the
+					 * worked example of a stale comment steering a
+					 * probe.]
+					 * And the identity map is what SHOULD work here --
+					 * holding RV=1 is the whole reason the arcade
+					 * binary's ROM self-references resolve, which means
+					 * the cart really is at 0x000100-0x3FFFFF for the
+					 * 68K. Test that directly, no bank switch at all. */
+					const volatile uint16_t *cart =
+						(const volatile uint16_t *)0x200000uL;
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+					for (uint16_t q = 0; q < 32; q++)
+						*vdp_data_port = 0x00E0u;          /* control: GREEN */
+					*vdp_ctrl_wide = ((uint32_t)0xC040u << 16) | 0u;
+					for (uint16_t q = 0; q < 32; q++)
+						*vdp_data_port = cart[q];          /* test: 68K cart read */
+				}
+#endif
+#ifdef TILE_VERIFY
+				uint16_t tv_fs0 = *(volatile uint16_t*)0xA1518A;   /* FS: FB control, was 0xA1510A (DREQ dst) -- vi77's 0 is void */
+				*(volatile uint16_t*)0xFFA1EC = sc[1];   /* SH-2 verdict bits 8-12 */
+#endif
 				(*(volatile uint16_t*)0xFFB0B2) =
 					*(volatile uint16_t*)0xC00008;
 				*vdp_ctrl_wide = ((uint32_t)(0x4000u | 2u) << 16) | 0x10u;
-				*vdp_data_port = sc[4];           /* VSRAM 2 = plane B vy */
+				*vdp_data_port = BC_LO(sc[4]);    /* VSRAM 2 = plane B vy */
 				*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
-				*vdp_data_port = sc[6];           /* VSRAM 0 = plane A vy */
+				*vdp_data_port = BC_LO(sc[6]);    /* VSRAM 0 = plane A vy */
 				if (typ == 0) {
+#ifdef BANK_POKE
+					/* ISOLATE THE BANK SWITCH (2026-09-19). The slim
+					 * build black-screens on the FPGA and renders fine
+					 * in ares, so the fault is hardware-only. This is
+					 * the LINE's working FB tile route with ONE thing
+					 * added: the 0xA15104 bank switch and restore, every
+					 * vint, at the same point the slim path does it.
+					 * Nothing else changes -- tiles still ship the old
+					 * way, so a black screen here CANNOT be blamed on
+					 * missing art.
+					 *   black screen -> the bank switch is the fault.
+					 *     0xA15104 is the 32X cart bank register and the
+					 *     SH-2 reads cart too; mdspr_upload gets away
+					 *     with switching it only because it runs during
+					 *     scene loads while the SH-2 is quiet.
+					 *   renders fine -> the switch is safe and the slim
+					 *     build dies on VOLUME instead: 40 tiles x 32
+					 *     bus operations inside the vint, with cart wait
+					 *     states ares does not charge. */
+					*(volatile uint16_t*)0xA15104 = 2;
+					*(volatile uint16_t*)0xA15104 = 3;
+#endif
+#ifdef DMA_CENSUS
+					{
+						uint16_t c9 = cnt;
+						if (c9 > TILEMAX[0]) TILEMAX[0] = c9;
+						TILEHIST[c9 == 0 ? 0 : c9 <= 2 ? 1 : c9 <= 4 ? 2
+						        : c9 <= 8 ? 3 : c9 <= 16 ? 4 : c9 <= 32 ? 5
+						        : c9 <= 64 ? 6 : 7]++;
+					}
+#endif
+#ifdef TILE_SLIM
+				/* SLIM PIPELINE (docs/design/SLIM-PIPELINE.md): the SH-2
+				 * ships a 2-WORD record (slot|fg<<15, blk*64+code) and the
+				 * 68K fetches the art from cart itself. cart -> 68K -> VRAM
+				 * is two payload copies against the FB route's three.
+				 *
+				 * STAGE HERE, SHIP LATER (2026-09-19, rig-proven). This
+				 * consume runs at the TOP of vblank, and 68K cart-window
+				 * reads here collapse the FPGA's picture (64 reads on the
+				 * line: 7-11% non-black) while the same 64 reads after the
+				 * game's IRQ4 has returned are clean (99%). The master's
+				 * V-ISR needs the cart bus in early vblank and the adapter
+				 * gives a pending 68K access priority (S32X_MiSTer IF.sv,
+				 * the ROM arbiter). ares charges instruction cycles only and
+				 * cannot see it: every slim build rendered there. So this
+				 * branch only COPIES the records to WRAM; slim_fetch() reads
+				 * the art after the game's IRQ4 and slim_dma() lands it
+				 * next vint -- see the SLIM PIPELINE STATE comment. */
+					{
+					volatile uint16_t *e = sc + 8;
+					slim_walk(e, cnt);
+					}
+					{
+#if !defined(SLIM_NOFETCH) && !defined(SLIM_SAMEVINT)
+					/* FETCH HERE (slim28, 2026-09-20): cart -> slim_art now, so
+					 * the DMA at the start of partb_hook lands this vint's art
+					 * in this vint. The FPGA accepts the DMA only at that spot
+					 * (slim18-20, 26, 27 lost the background elsewhere); the
+					 * "cart reads in the consume kill the FPGA" reading was a
+					 * title-screen misread (LESSONS 2026-09-20). */
+					slim_fetch();
+#endif
+					}
+#else
+					{
 					/* tile pixels: 16 contiguous FB words per record */
 					volatile uint16_t *e = sc + 8;
 					for (uint16_t i = 0; i < cnt; i++, e += 17) {
@@ -648,29 +1720,285 @@ static void md_consume(uint32_t pkt_base) {
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (va & 0x3FFFu)) << 16)
 							| (((va >> 14) & 3u) | 0x80u);
 #ifdef DMA_CENSUS
-						(*(volatile uint16_t*)0xFFA246)++;      /* tile-record DMAs */
-						(*(volatile uint32_t*)0xFFA248) += 16;  /* words */
+						TILECNT[0]++; TILECNT2[0]++; TILESENT[0] = 0xA5A5A5A5u;
 #endif
 					}
 					(*(volatile uint16_t*)0xFFB0B4) =
 						*(volatile uint16_t*)0xC00008;
+#ifdef TILE_VERIFY
+					/* LOOP29 231 rig instrument: the FPGA shows whole
+					 * tile sets black where ares shows art (vi75 attract
+					 * demo, 195726). Read every record's 16 VRAM words
+					 * back right after its DMA and classify:
+					 *   0xFFA1E0 records checked   0xFFA1E2 VRAM all-zero
+					 *   0xFFA1E4 VRAM != FB source 0xFFA1E6 FB source all-zero
+					 * (the source re-read at FM=0 -- if the DMA read a
+					 * different bank than this re-read, E4 counts it). */
+					e = sc + 8;
+					for (uint16_t i = 0; i < cnt; i++, e += 17) {
+						uint32_t va = (uint32_t)e[0] * 32u;
+						if (va + 32u > 0xB000u) {
+							(*(volatile uint16_t*)0xFFA1EA)++;   /* slot out of range */
+							continue;
+						}
+						uint16_t vz = 1, sz = 1, mm = 0;
+						*vdp_ctrl_wide = ((uint32_t)(va & 0x3FFFu) << 16)
+							| ((va >> 14) & 3u);
+						for (uint16_t k = 0; k < 16; k++) {
+							uint16_t v = *vdp_data_port, s = e[1 + k];
+							if (v) vz = 0;
+							if (s) sz = 0;
+							if (v != s) mm = 1;
+						}
+						(*(volatile uint16_t*)0xFFA1E0)++;
+						if (vz) {
+							(*(volatile uint16_t*)0xFFA1E2)++;
+							/* vi81: where in the packet the zeros sit */
+							*(volatile uint16_t*)0xFFA1EE = i;
+							*(volatile uint16_t*)0xFFA1F0 = cnt;
+						}
+						if (mm) (*(volatile uint16_t*)0xFFA1E4)++;
+						if (sz) (*(volatile uint16_t*)0xFFA1E6)++;
+					}
+					/* 0xFFA1E8: consumes where the 68K's FB bank (FS,
+					 * 0xA1510A bit 0) changed between entry and here --
+					 * a flip landing while the tile DMAs read the FB. */
+					if ((tv_fs0 ^ *(volatile uint16_t*)0xA1518A) & 1u)
+						(*(volatile uint16_t*)0xFFA1E8)++;
+#endif
+					}
+#endif
+					/* THE SCROLL RUNS ON BOTH PATHS. It used to sit
+					 * inside the FB branch, and the first TILE_SLIM cut
+					 * spliced that branch out with `} else if (0) {` --
+					 * which silently took the hscroll table write with
+					 * it. Under slim the planes therefore never got a
+					 * scroll value at all, which is a black screen, not
+					 * a tile defect. That is why the failure survived
+					 * SLIMCAP=8, the stride fix, and every read-route
+					 * experiment: none of them were the bug. */
 					{	/* scroll rides the tile chunk too: sc[3]/sc[7] */
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
 						*vdp_data_port = sc[3];
 						*vdp_data_port = sc[7];
 					}
+#ifdef DELIV_TEST
+				/* ===================================================
+				 * FRAME DELIVERY TEST HARNESS (2026-09-19, Mike's ask)
+				 * ===================================================
+				 * Validate ONE delivery method against a KNOWN SAMPLE
+				 * before any of it is banked. Four slim builds failed
+				 * tonight because the whole path was written and then
+				 * debugged backwards; every ISOLATED probe with a
+				 * control gave a clean answer first time.
+				 *
+				 * METHOD (-DDELIV_TEST=n):
+				 *   0  DMA from the FB window   -- the shipping route.
+				 *      MUST PASS. If it fails, the harness is broken.
+				 *   1  port writes, immediate data
+				 *   2  port writes, cart via the BANK WINDOW
+				 *   3  port writes, cart via the IDENTITY MAP
+				 *   4  DMA sourced from CART    -- known BROKEN on the
+				 *      rig. MUST FAIL. If it passes, the harness cannot
+				 *      detect failure and no pass from it means anything.
+				 *
+				 * Sample: 16 words into VRAM 0xF800, free space above
+				 * the SAT (line VRAM reads 0/32 non-zero there), read by
+				 * nothing, so a wrong result cannot move a pixel.
+				 *
+				 * VERDICT IS STICKY AND STABLE -- never flashing. The rig
+				 * has no fast capture (screenshots are ~1 per 6.8s and
+				 * /dev/fb0 is the OSD), so a per-frame value is
+				 * unreadable. Once a mismatch is seen it stays failed.
+				 *   GREEN  every checked word matched
+				 *   RED    delivered, wrong bytes
+				 *   BLUE   VRAM read back all zero: nothing delivered
+				 * Painted into CRAM 0-31 every vint so it dominates. */
+				{
+					static uint16_t dv_bad, dv_zero, dv_ran;
+					const uint32_t dv_va = 0xF800uL;
+					uint16_t exp[16], k9;
+					/* the sample the method must deliver */
+					for (k9 = 0; k9 < 16; k9++)
+						exp[k9] = (uint16_t)(0xA000u + k9);
+#if DELIV_TEST == 1
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+					               | ((dv_va >> 14) & 3u);
+					for (k9 = 0; k9 < 16; k9++) *vdp_data_port = exp[k9];
+#elif DELIV_TEST == 2 || DELIV_TEST == 3
+					/* KNOWN CONSTANT, not self-comparison. Reading the
+					 * cart and comparing it against itself tests only
+					 * delivery: a cart read returning garbage would
+					 * still pass. cart 0x200000 holds 64 IDENTICAL words
+					 * of 0x0707 (verified in the rom image), so expect
+					 * that literal and the test covers the READ and the
+					 * DELIVERY together. */
+					{
+#if DELIV_TEST == 2
+						const volatile uint16_t *cw =
+							(const volatile uint16_t *)0x900000uL;
+						*(volatile uint16_t*)0xA15104 = 2;
+#else
+						const volatile uint16_t *cw =
+							(const volatile uint16_t *)0x200000uL;
+#endif
+						uint16_t got[16];
+						for (k9 = 0; k9 < 16; k9++) got[k9] = cw[k9];
+						for (k9 = 0; k9 < 16; k9++) exp[k9] = 0x0707u;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | ((dv_va >> 14) & 3u);
+						for (k9 = 0; k9 < 16; k9++) *vdp_data_port = got[k9];
+#if DELIV_TEST == 2
+						*(volatile uint16_t*)0xA15104 = 3;
+#endif
+					}
+#elif DELIV_TEST == 4
+					{
+						const uint32_t sc9 = 0x200000uL >> 1;
+						for (k9 = 0; k9 < 16; k9++) exp[k9] = 0x0707u;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (sc9 & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((sc9 >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((sc9 >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | (((dv_va >> 14) & 3u) | 0x80u);
+					}
+#else
+					/* method 0: stage the sample in WRAM, DMA it in --
+					 * the shipping idiom, and the harness's own control */
+					{
+						volatile uint16_t *st = (volatile uint16_t *)0xFFB340;
+						uint32_t sc9;
+						for (k9 = 0; k9 < 16; k9++) st[k9] = exp[k9];
+						sc9 = 0xFFB340uL >> 1;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9310;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (sc9 & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((sc9 >> 8) & 0xFF));
+						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((sc9 >> 16) & 0x7F));
+						*vdp_ctrl_wide = ((uint32_t)(0x4000u | (dv_va & 0x3FFFu)) << 16)
+						               | (((dv_va >> 14) & 3u) | 0x80u);
+					}
+#endif
+					/* wait out any DMA before reading back -- a readback
+					 * racing a DMA returns undefined data, which is what
+					 * made three earlier probes unreadable */
+					{ uint16_t g9 = 0;
+					  while ((*(volatile uint16_t*)0xC00004 & 2u) && ++g9 < 20000) {} }
+					*vdp_ctrl_wide = ((uint32_t)(dv_va & 0x3FFFu) << 16)
+					               | ((dv_va >> 14) & 3u);
+					{
+						uint16_t z9 = 1;
+						for (k9 = 0; k9 < 16; k9++) {
+							uint16_t v9 = *vdp_data_port;
+							if (v9) z9 = 0;
+							if (v9 != exp[k9]) dv_bad = 1;
+						}
+						if (z9) dv_zero = 1;
+						dv_ran = 1;
+					}
+					{
+						uint16_t col = !dv_ran ? 0x0E00u
+						             : dv_zero ? 0x0E00u      /* BLUE  */
+						             : dv_bad  ? 0x000Eu      /* RED   */
+						                       : 0x00E0u;     /* GREEN */
+						/* ALSO to WRAM, and this is what makes the
+						 * harness self-checkable. A CRAM dump reads the
+						 * END state, which is the game's own palette
+						 * upload -- my paint lands mid-frame and is
+						 * gone by then, so ares always read 0x000 and
+						 * could not tell pass from fail. WRAM 0xFFB350
+						 * is in the verified-free 0xFFB100-0xFFB33F
+						 * neighbourhood's tail and nothing overwrites
+						 * it, so `--dump wram:0xFFB350:2` is a
+						 * deterministic local verdict. The CRAM paint
+						 * stays for the rig, which has no dump. */
+						*(volatile uint16_t*)0xFFB350 = col;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+						*vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0u;
+						for (k9 = 0; k9 < 32; k9++) *vdp_data_port = col;
+					}
+				}
+#endif
+#ifdef PORT_POKE
+					/* PORT WRITES, MOVED TO THE END (2026-09-19). The slim
+					 * build black-screens on hardware and renders in
+					 * ares. Ruled out with controls: the cart read route
+					 * (BOTH work on the rig), the bank switch (BANKPOKE
+					 * plays identically), volume (fails at SLIMCAP=8 as
+					 * at 40), the record stride, and the missing hscroll
+					 * write. The ONE structural difference left is that
+					 * slim writes VRAM through the DATA PORT where the
+					 * FB route uses DMA.
+					 * Placed at the END of the block, AFTER the scroll.
+					 * At the HEAD it moved 76,900 pixels in ares while
+					 * writing only 16 words to free VRAM -- so it is not
+					 * the writes, it is the VDP ADDRESS LATCH and AUTO-
+					 * INCREMENT they leave behind, which everything after
+					 * them inherits. slim does this PER TILE.
+					 *   black screen -> port writes to VRAM here are the
+					 *     fault, and the slim 68K side must use DMA from
+					 *     a staged buffer instead of writing directly.
+					 *   renders fine -> port writes are safe and the bug
+					 *     is elsewhere in my slim code. */
+					*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+					/* MASK THE ADDRESS. 0x4000 | 0xF800 is 0xFC00, which
+					 * is the HSCROLL TABLE -- the first cut of this probe
+					 * wrote 16 words of 0x1234 over it and moved 77,000
+					 * pixels, which I nearly read as "port writes are
+					 * unsafe". The low 14 bits go in the first word, the
+					 * top 2 in the second, exactly as the slim path and
+					 * every other site here already do it. */
+					*vdp_ctrl_wide = ((uint32_t)(0x4000u | (0xF800u & 0x3FFFu)) << 16)
+					               | (((0xF800u >> 14) & 3u));
+					for (uint16_t q = 0; q < 16; q++)
+						*vdp_data_port = 0x1234u;
+#endif
+
 				} else {
 					/* NT_WRAP chunk: mirror-diffed rows; each span's
 					 * cells are contiguous in the FB — DMA per span. */
 					volatile uint16_t *e = sc + 8;
 					uint16_t isa = (uint16_t)(sc[2] & 0x8000u ? 1 : 0);
 					uint32_t nbase = isa ? 0xC000u : 0xE000u;
-					for (uint16_t r = 0; r < 7; r++) {
+					/* THE ROW COUNT RIDES sc[5] AS rows*64 (sw168): 448 = 7 rows with the display up,
+					 * 896 = 14 under the game's blank; 2048 = 32 short entering-edge spans. */
+					uint16_t nrows = (uint16_t)(sc[5] >> 6);
+					if (nrows == 0 || nrows > 32) nrows = 7;
+#ifdef DMA_CENSUS
+					(*(volatile uint16_t*)0xFFA1FE)++;   /* LOOP29 261a: chunk consumes */
+#endif
+#ifdef CONSUME_CENSUS
+					if (r60_isB) *(volatile uint16_t*)0xFFA1FC = *(volatile uint16_t*)0xC00008;   /* LOOP29 262: V before the row loop */
+#endif
+					for (uint16_t r = 0; r < nrows; r++) {
 						uint16_t hdr = *e++;
-						uint16_t w1  = *e++;
-						uint16_t c0 = hdr & 63u;
 						uint32_t rb = nbase
 							+ (uint32_t)((hdr >> 8) & 31u) * 128u;
+						if (hdr & 0x8000u) {
+							/* FULL ROW (2026-09-22, the eye's pan): the plane
+							 * pans faster than the edge pair's one-column
+							 * lead covers (9-12 px a frame against a 9-window
+							 * row rotation), so the master ships the whole
+							 * 64-cell plane row in plane order: one DMA. */
+							uint32_t src = ((uint32_t)e) >> 1;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+							*vdp_ctrl_wide = ((uint32_t)(0x4000u | (rb & 0x3FFFu)) << 16)
+								| (((rb >> 14) & 3u) | 0x80u);
+							e += 64;
+							continue;
+						}
+						uint16_t w1  = *e++;
+						uint16_t c0 = hdr & 63u;
 						uint16_t st = (uint16_t)((w1 >> 8) & 0x7F);   /* bit 15: EDGE42 pair follows */
 						uint16_t nc2 = (uint16_t)(w1 & 0xFF);
 						if (nc2) {
@@ -700,6 +2028,7 @@ static void md_consume(uint32_t pkt_base) {
 							 * them. 0xFFA240 spans, 0xFFA242 words. */
 							(*(volatile uint16_t*)0xFFA240)++;
 							(*(volatile uint32_t*)0xFFA242) += l1;
+							(*(volatile uint16_t*)0xFFA1FC)++;   /* LOOP29 261a: span DMAs (0xFFA240 block is clobbered, LOOP27 2466) */
 #endif
 							e += l1;
 							st = (uint16_t)(st + l1);
@@ -721,17 +2050,42 @@ static void md_consume(uint32_t pkt_base) {
 					*(volatile uint16_t*)0xFFA08A =
 						*(volatile uint16_t*)0xC00008;   /* V after spans */
 					*(volatile uint16_t*)0xFFA170 = *(volatile uint16_t*)0xC00008;   /* fine: spans done */
+#ifdef CONSUME_CENSUS
+					if (r60_isB) { *(volatile uint16_t*)0xFFA1FE = *(volatile uint16_t*)0xC00008; *(volatile uint8_t*)0xFFA1F7 = 1; }   /* LOOP29 262: V after the rows; flag = the chunk path ran */
+#endif
 					{	/* full-screen hscroll: reg 0x0B = 00 (init), so only
 						 * 0xFC00 (A) and 0xFC02 (B) matter — two header words,
 						 * sc[3] and sc[7], in EVERY packet (2026-09-05). The 56-
 						 * word per-strip DMAs wrote a table the VDP ignored. */
+#ifdef MD_HSCROLL_DIRECT
+						/* MDHSCR phase 2 (LOOP-DECOMPILE 26): the GAME writes
+						 * both entries itself, from its own scroll stores in
+						 * IRQ4, one vint fresher than this packet. Doing it
+						 * again here would only overwrite the newer value with
+						 * the older one. sc[3]/sc[7] are still carried; only
+						 * this write is dropped. */
+#else
 						*vdp_ctrl_wide = ((uint32_t)(0x4000u | 0x3C00u) << 16) | 3u;
 						*vdp_data_port = sc[3];
 						*vdp_data_port = sc[7];
+						/* VSRAM: plane A vy (sc[6]) then plane B vy (sc[4]); the R60 direct
+						 * path never wrote them, so a plane's vertical page half was fixed. */
+						*vdp_ctrl_wide = ((uint32_t)0x4000u << 16) | 0x10u;
+						*vdp_data_port = sc[6];
+						*vdp_data_port = sc[4];
+#endif
 					}
 #ifdef ART_TAIL
 					if (sc[1] & 0x4000u) {   /* art tail: [n] n x [slot][16 words] */
 						uint16_t na = *e++;
+#ifdef TILE_SLIM
+						slim_walk(e, na);        /* mixed records (2026-09-21) */
+						(*(volatile uint16_t*)0xFFA0F0) += na;
+						na = 0;
+#if !defined(SLIM_NOFETCH) && !defined(SLIM_SAMEVINT)
+						slim_fetch();            /* fetch the tail's art this vint too, not at the next batch */
+#endif
+#endif
 						for (uint16_t i = 0; i < na; i++, e += 17) {
 							uint32_t va = (uint32_t)e[0] * 32u;
 							if (va + 32u > 0xB000u) continue;
@@ -879,6 +2233,14 @@ static void md_consume(uint32_t pkt_base) {
 					}
 #endif
 #endif
+#if defined(CART_READ_AT) && CART_READ_AT == 22
+					/* probe: burn ~CART_READ_DELAY x 12 cycles right before the
+					 * palette gate, to force the deferral path on the line */
+#ifndef CART_READ_DELAY
+#define CART_READ_DELAY 1024
+#endif
+					{ volatile uint16_t d = 0; while (++d < CART_READ_DELAY) {} }
+#endif
 					uint16_t vnow = *(volatile uint16_t*)0xC00008;
 					*(volatile uint16_t*)0xFFA090 = vnow;              /* V at pal DMA */
 #ifdef BOOT_CRAMCHK
@@ -944,7 +2306,7 @@ static void md_consume(uint32_t pkt_base) {
 					 * cheap — the flood already does 64 every vint. */
 					{
 						*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;   /* autoinc 2 */
-						*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+						*vdp_ctrl_wide = ((uint32_t)(0xC000u | 0u) << 16) | 0x80u;
 						for (uint16_t i = 0; i < 48; i++)
 							*vdp_data_port = sc[688 + i];
 					}
@@ -969,12 +2331,40 @@ static void md_consume(uint32_t pkt_base) {
 					if ((vnow >> 8) >= 0xE0u) {
 #endif
 						uint32_t src = ((uint32_t)(sc + 688)) >> 1;
-						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9330;
+						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
 						*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
 						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
 						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
 						*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
-						*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
+						*vdp_ctrl_wide = ((uint32_t)(0xC000u | 0u) << 16) | 0x80u;
+#ifdef MDP_LINES4
+						/* THE FOURTH LINE (2026-10-09). Lines 1-3 are the 48 words above;
+						 * line 0 is the block the SH-2 publishes at FB 0x1EDC0, which is
+						 * where the MD sprite palette used to live and which MDSPROFF
+						 * frees. 15 words from 0x85EDC2 = entries 1-15, so CRAM entry 0
+						 * stays the backdrop and is never written -- pen 0 of a line is
+						 * the baker's permanently-free 0xFFFF slot, so nothing is lost.
+						 * Byte for byte the DMA mdspr_consume used to issue. VBLANK ONLY,
+						 * the same rule and for the same reason: the block re-ships every
+						 * window, so a skipped frame just keeps the last colours. */
+						{
+							uint32_t s4 = 0x85EDC2uL >> 1;
+							/* AUTOINC TO 2 FIRST, 2026-10-10. The hunk this came from left
+							 * this line out and the 15 words never landed: CRAM line 0 read
+							 * zero in every dump. mdspr_consume sets it before the same DMA
+							 * (:595, and the reason at :496 -- "the hscroll DMA leaves 32
+							 * behind on some paths"). The 48-word DMA just above does not
+							 * set it either; the only 0x8F02 near it is in the direct-store
+							 * test branch at :2248, which ends `if (0)`. */
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x930F;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (s4 & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((s4 >> 8) & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((s4 >> 16) & 0x7F));
+							*vdp_ctrl_wide = ((uint32_t)0xC002u << 16) | 0x80u;
+						}
+#endif
 					} else {
 						volatile uint16_t *pb = (volatile uint16_t*)0xFFA100;  /* 48-word hold */
 						for (uint16_t i = 0; i < 48; i++) pb[i] = sc[688 + i];
@@ -988,8 +2378,8 @@ static void md_consume(uint32_t pkt_base) {
 				volatile uint16_t *stg = (volatile uint16_t*)0xFFA400;
 				volatile uint16_t *sp = stg + 8;
 				uint16_t nrec = 0;
-				stg[1] = sc[4];               // VSRAM 2 = plane B vy
-				stg[2] = sc[6];               // VSRAM 0 = plane A vy
+				stg[1] = BC_LO(sc[4]);        // VSRAM 2 = plane B vy
+				stg[2] = BC_LO(sc[6]);        // VSRAM 0 = plane A vy
 				stg[5] = 1;
 				(*(volatile uint16_t*)0xFFB0B2) =
 					*(volatile uint16_t*)0xC00008;    // V after scroll stage
@@ -1021,12 +2411,31 @@ static void md_consume(uint32_t pkt_base) {
 					volatile uint16_t *e = sc + 8;
 					uint16_t isa = (uint16_t)(sc[2] & 0x8000u ? 1 : 0);
 					uint32_t nbase = isa ? 0xC000u : 0xE000u;
-					for (uint16_t r = 0; r < 7; r++) {
+					uint16_t nrows = (uint16_t)(sc[5] >> 6);   /* sw168: rows*64 in sc[5] */
+					if (nrows == 0 || nrows > 32) nrows = 7;
+					for (uint16_t r = 0; r < nrows; r++) {
 						uint16_t hdr = *e++;
-						uint16_t w1  = *e++;
-						uint16_t c0 = hdr & 63u;
 						uint32_t rb = nbase
 							+ (uint32_t)((hdr >> 8) & 31u) * 128u;
+						if (hdr & 0x8000u) {
+							/* FULL ROW (2026-09-22, the eye's pan): the plane
+							 * pans faster than the edge pair's one-column
+							 * lead covers (9-12 px a frame against a 9-window
+							 * row rotation), so the master ships the whole
+							 * 64-cell plane row in plane order: one DMA. */
+							uint32_t src = ((uint32_t)e) >> 1;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+							*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+							*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+							*vdp_ctrl_wide = ((uint32_t)(0x4000u | (rb & 0x3FFFu)) << 16)
+								| (((rb >> 14) & 3u) | 0x80u);
+							e += 64;
+							continue;
+						}
+						uint16_t w1  = *e++;
+						uint16_t c0 = hdr & 63u;
 						uint16_t st = (uint16_t)((w1 >> 8) & 0x7F);   /* bit 15: EDGE42 pair follows */
 						uint16_t nc2 = (uint16_t)(w1 & 0xFF);
 						while (nc2) {
@@ -1211,10 +2620,50 @@ static uint8_t glow_live;
  * length, tag and tear rule downstream still holds. */
 static uint16_t fbx_i;                   /* word cursor into the FB packet */
 static uint8_t  fbx_seq_pub;             /* publish sequence */
+#ifdef FBX_STAGE
+/* STAGE THE PACKET IN WRAM, BLAST IT AT THE TAIL (LOOP28 89).
+ *
+ * The bind (HANDOFF-PIPELINE section 3): the 68K cannot touch the
+ * framebuffer at FM=1, so today the WHOLE packet build — rotor, palette
+ * compare, record packing, ~56 scanlines of it — has to sit in an FM=0
+ * window. Before the post it drives V-at-post to 43 and the flip dies
+ * (0.3 Hz); at the tail (FBX_TAIL) it runs ahead of the game's IRQ4 and
+ * costs 33 points of game speed.
+ *
+ * Neither placement is wrong about the window. What is wrong is that the
+ * BUILD is in it at all: only the FB WRITES need FM=0, and they are ~2
+ * lines of the 56. So the build writes into WRAM, where FM does not
+ * apply and it can overlap the master's blit, and a straight-line copy
+ * moves it into the framebuffer in the FM=0 window at the tail.
+ *
+ * The buffer is R60_ARM words = 1872 bytes of the 15,916 free between
+ * __bss_end and PAL_SHADOW (LOOP28 84); md.ld's ASSERT is the fence.
+ * One vint of packet latency, which the harvest already tolerates: a
+ * stale publish yields landed = 0 and last frame's records stand. */
+static uint16_t fbx_stage[R60_ARM];      /* packet under construction */
+static uint16_t fbx_stage_n;             /* words staged, 0 = nothing */
+#ifdef TXT_MASK
+#define txt_mask (*(volatile uint8_t*)0xFFA1A6)   /* LOOP29 147: 4-row groups the
+                                                    * game's text writers touched */
+#endif
+#ifdef FBX_PEND
+/* tail blast skipped (FM up): a WRAM word the generated gate spin
+ * (patch_game.py, FMGATE_SPIN_ADDR) tests before calling fbx_late_blast
+ * through the vector at 0xFFA0F8. 0xFFA0FC counts late blasts. */
+#define fbx_pend (*(volatile uint16_t*)0xFFA0FE)
+#endif
+#ifdef FBX_BOTH
+static uint8_t  fbx_stage_live;          /* the staged packet is worth
+                                          * writing into the other bank */
+#endif
+#define FBX_DST  fbx_stage
+#else
+#define FBX_DST  ((volatile uint16_t*)FBX_PKT_MD)
+#endif
 __attribute__((section(".data"), noinline))
 static uint16_t r60_ship_words(const uint16_t *src, uint16_t nw)
 {
-	volatile uint16_t *d = (volatile uint16_t*)FBX_PKT_MD + fbx_i;
+	volatile uint16_t *d = FBX_DST + fbx_i;
 	for (uint16_t i = 0; i < nw; i++) d[i] = src[i];
 	fbx_i = (uint16_t)(fbx_i + nw);
 	return 0;                            /* an FB write cannot fall short */
@@ -1267,6 +2716,31 @@ __attribute__((noinline, section(".text.burn"))) static void shim_burn_rom(void)
 	for (bi = 0; bi < (uint16_t)(SHIM_BURN * 40u); bi++) ;
 }
 #endif
+#ifdef R60_TIGHT
+/* R60_TIGHT (2026-09-12, LOOP-DECOMPILE 97): the two equality scans in
+ * r60_push -- the 16-long palette pre-scan (502 instructions a vint at
+ * its loop head, 23% of the routine) and the 30-long rowscroll compare
+ * (170) -- compiled to 7 instructions / 64 cycles a long. cmpm.l + dbne
+ * is 2 / 30. Returns the number of longs REMAINING from the first
+ * mismatch (n - its index), 0 iff all equal -- the same value the C
+ * `while (eq && *qa++ == *qb++) eq--` left in eq, so the mask walk can
+ * start at the first difference (LOOP-DECOMPILE 102). What is shipped
+ * does not change. always_inline keeps it in .data with its caller (a
+ * .text copy would fetch from the cart under FM). */
+static inline __attribute__((always_inline))
+uint16_t r60_ne_longs(const uint32_t *a, const uint32_t *b, uint16_t n)
+{
+	uint16_t cnt = (uint16_t)(n - 1);
+	__asm volatile(
+		"1:\n\t"
+		"cmpm.l (%[a])+,(%[b])+\n\t"
+		"dbne %[cnt],1b\n\t"
+		: [a] "+a" (a), [b] "+a" (b), [cnt] "+d" (cnt)
+		:
+		: "cc", "memory");
+	return (uint16_t)(cnt + 1u);         /* dbne leaves -1 when exhausted */
+}
+#endif
 __attribute__((section(".data"), noinline))
 static void r60_push(void) {
 	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
@@ -1274,6 +2748,13 @@ static void r60_push(void) {
 	uint16_t spin = 2600;
 	static uint8_t pal_retry[8];
 	static uint8_t pal_next;
+#ifdef LAYOUT_PROBE
+	/* LOOP28 88 control: 64 bytes of unreferenced .data, present only to
+	 * SHIFT the code below it. Changes no behaviour whatsoever. */
+	static volatile uint8_t layout_probe_pad[64] = {1};
+	(void)layout_probe_pad;
+#endif
+#ifdef PAL_DIET
 	static uint8_t pal_streak[64];       /* consecutive equal compares
 	                                      * per block — the chronic
 	                                      * redundant writers (census:
@@ -1282,6 +2763,13 @@ static void r60_push(void) {
 	                                      * the rotor+cmp stamp read
 	                                      * 30-33 LINES/vint mostly
 	                                      * re-proving equality */
+#ifndef PAL_STREAK_N
+#define PAL_STREAK_N 4               /* equal visits before backing off */
+#endif
+#ifndef PAL_BACKOFF_M
+#define PAL_BACKOFF_M 3              /* visit 1 vint in (M+1) once backed off */
+#endif
+#endif	/* PAL_DIET */
 	uint8_t ids[16];
 	uint16_t K = 0, nrec = 1;
 	volatile uint8_t *pd = (volatile uint8_t*)0xFFBA00;
@@ -1300,7 +2788,33 @@ static void r60_push(void) {
 #define PSTAMP(a) (*(volatile uint16_t*)(a) = *(volatile uint16_t*)0xC00008)
 	PSTAMP(0xFFA0B4);                    /* entry */
 #ifdef FB_XPORT
+#ifdef FBX_ECHO
+	/* ECHO BELT, SECOND HALF (2026-09-21, rig att1 launch 2/3 black): a
+	 * lost packet whose SUCCESSOR is built before the master's echo can
+	 * catch up is never re-blasted -- the belt compares against the newer
+	 * sequence. So before overwriting the stage with a new packet, if the
+	 * kept one is two vints old and still unechoed, put its palette ids
+	 * back on the dirty map (force raw, the BAD1 rule) so they ship again
+	 * in this packet. Costs nothing when the echo is on time. */
+	if (fbx_keep_live && fbx_age >= 2 && ((uint8_t)(fbx_seq_pub - fbx_echo) & 15u)) {
+		volatile uint8_t *lp9 = (volatile uint8_t*)0xFFA0C0;
+		volatile uint8_t *pd9 = (volatile uint8_t*)0xFFBA00;
+		uint8_t lk9 = lp9[0];
+		if (lk9 <= 15)
+			for (uint8_t j9 = 0; j9 < lk9; j9++) {
+				uint8_t idb = lp9[1 + j9];
+				if (idb < 64) {
+					pd9[idb >> 3] |= (uint8_t)(1u << (idb & 7));
+					pal_force[idb >> 3] |= (uint8_t)(1u << (idb & 7));
+				}
+			}
+		fbx_remarks++;
+	}
+#endif
 	fbx_i = 0;
+#ifdef FBX_ECHO
+	fbx_keep_live = 0;                   /* the stage is being rebuilt: nothing to repeat */
+#endif
 #endif
 	/* (busy-loop calibration retired: loop1 vblank 7 lines, loop2
 	 * active-line-87 9 lines — both FULL SPEED, no ambient bus tax
@@ -1447,24 +2961,54 @@ static void r60_push(void) {
 				 * detection is <=3 vints late on a slow pulse);
 				 * retry transitions are exempt (ship-twice must
 				 * finish) and storms bypass via the open clamp. */
+#ifdef PAL_DIET
+				/* OFF unless PALSTREAK=/PALBACKOFF= asks for it
+				 * (LOOP28 85).  The counter below was never
+				 * written until 2026-09-08, so this branch had
+				 * never fired in a shipped rom; turning it on by
+				 * default would change colour timing under the
+				 * accepted hardware base without a play pass. */
 				if ((pd[by] & bit) && !(pal_retry[by] & bit)
-				    && pal_streak[r] >= 4 && kcap == 8
-				    && (uint8_t)((fr2 + r) & 3)) {
+				    && pal_streak[r] >= PAL_STREAK_N && kcap == 8
+				    && (uint8_t)((fr2 + r) & PAL_BACKOFF_M)) {
 					r = (uint8_t)((r + 1) & 63);
 					n++;
 					continue;
 				}
+#endif
 				ncmp++;
 				const uint32_t *mp4 = (const uint32_t*)
 					((const uint16_t*)0xFF9000 + ((uint16_t)r << 5));
 				uint32_t *sp4 = (uint32_t*)
 					((uint16_t*)PAL_SHADOW + ((uint16_t)r << 5));
+#ifdef PAL_NOCMP
+				/* NO DISCOVERY ON THE 68K (LOOP27 81). Ship the marked
+				 * block raw and let the SH-2 be the one that knows what
+				 * changed. v1 of this measured WORSE (74.1% vs 82.0%)
+				 * because it still maintained the shadow — a 16-long
+				 * copy per block, about what the compare it replaced
+				 * cost. With no compare there is no shadow: no copy, no
+				 * scan, no mask walk, just the block id. */
+				(void)mp4; (void)sp4;
+				pal_force[by] &= (uint8_t)~bit;
+				ids[K++] = (uint8_t)(r | R60_PAL_RAW);
+				palw += 32;
+				if (pd[by] & bit) {
+					pd[by] &= (uint8_t)~bit;
+					pal_retry[by] |= bit;
+				} else {
+					pal_retry[by] &= (uint8_t)~bit;
+				}
+#else
 				if (pal_force[by] & bit) {
 					for (uint16_t i = 0; i < 16; i++)
 						*sp4++ = *mp4++;
 					pal_force[by] &= (uint8_t)~bit;
 					ids[K++] = (uint8_t)(r | R60_PAL_RAW);
 					palw += 32;
+#ifdef PAL_DIET
+					pal_streak[r] = 0;
+#endif
 				} else {
 					/* FAST PRE-SCAN (unattended slice 1): retry
 					 * blocks compare EQUAL end to end (~half of
@@ -1473,12 +3017,55 @@ static void r60_push(void) {
 					 * walk entirely. Changed blocks pay the scan
 					 * up to the first difference, then the walk
 					 * resumes from block start. */
+#ifdef R60_TIGHT
+					uint16_t first_ne = 0;       /* longs to skip in the walk */
+#endif
 					{
+#ifdef R60_TIGHT
+						uint16_t eq = r60_ne_longs(mp4, sp4, 16);
+#ifdef R60_TIGHT_CHECK
+						/* probe: run the C scan too, count disagreements
+						 * at 0xFFA1B0, and let the C result decide */
+						{
+							static uint8_t chk_init;
+							const uint32_t *qa = mp4;
+							const uint32_t *qb = sp4;
+							uint16_t eqc = 16;
+							if (!chk_init) {
+								chk_init = 1;
+								*(volatile uint16_t*)0xFFA1B0 = 0;
+								*(volatile uint16_t*)0xFFA1B2 = 0;
+								*(volatile uint16_t*)0xFFA1B4 = 0;
+								*(volatile uint16_t*)0xFFA1B6 = 0;
+								*(volatile uint16_t*)0xFFA1B8 = 0;
+							}
+							while (eqc && *qa++ == *qb++) eqc--;
+							(*(volatile uint16_t*)0xFFA1B4)++;
+							if (!eqc) (*(volatile uint16_t*)0xFFA1B6)++;
+							if (eqc != eq)   /* exact: same remaining count */
+								(*(volatile uint16_t*)0xFFA1B0)++;
+							eq = eqc;
+						}
+#endif
+						first_ne = (uint16_t)(16u - eq);
+#else
 						const uint32_t *qa = mp4;
 						const uint32_t *qb = sp4;
 						uint16_t eq = 16;
 						while (eq && *qa++ == *qb++) eq--;
+#endif
 						if (!eq) {
+							/* THE STREAK COUNTER (2026-09-08).
+							 * It was declared and READ at the
+							 * backoff test but never written, so
+							 * PALSTREAK/PALBACKOFF were inert for
+							 * every N >= 1 — a 16-point sweep read
+							 * one number.  This is the increment
+							 * the diet was designed around. */
+#ifdef PAL_DIET
+							if (pal_streak[r] != 255)
+								pal_streak[r]++;
+#endif
 							if (pd[by] & bit) {
 								pd[by] &= (uint8_t)~bit;
 								pal_retry[by] |= bit;
@@ -1491,7 +3078,15 @@ static void r60_push(void) {
 						}
 					}
 					uint16_t m0 = 0, m1 = 0, cnt = 0;
+#ifdef R60_TIGHT
+					/* the pre-scan proved longs [0, first_ne) equal: they
+					 * contribute no bits and need no shadow store */
+					mp4 += first_ne;
+					sp4 += first_ne;
+					for (uint16_t i2 = (uint16_t)(first_ne * 2u); i2 < 32; i2 += 2) {
+#else
 					for (uint16_t i2 = 0; i2 < 32; i2 += 2) {
+#endif
 						uint32_t a = *mp4++;
 						if (a != *sp4) {
 							uint32_t o = *sp4;
@@ -1509,6 +3104,9 @@ static void r60_push(void) {
 						}
 						sp4++;
 					}
+#ifdef PAL_DIET
+					if (cnt) pal_streak[r] = 0;
+#endif
 					if (cnt > R60_PAL_DMAX) {
 						ids[K++] = (uint8_t)(r | R60_PAL_RAW);
 						palw += 32;
@@ -1526,6 +3124,7 @@ static void r60_push(void) {
 				} else {
 					pal_retry[by] &= (uint8_t)~bit;
 				}
+#endif
 			}
 			r = (uint8_t)((r + 1) & 63);
 			n++;
@@ -1572,8 +3171,24 @@ static void r60_push(void) {
 		 * loop measured 8 lines/vint; 30 longs is ~1.5) */
 		const uint32_t *ra = (const uint32_t*)((const uint16_t*)0xFF8000 + 0x7C0);
 		const uint32_t *rb = (const uint32_t*)0xFFA400;
+#ifdef R60_TIGHT
+		uint16_t k = r60_ne_longs(ra, rb, 30);
+#ifdef R60_TIGHT_CHECK
+		{
+			const uint32_t *xa = ra;
+			const uint32_t *xb = rb;
+			uint16_t kc = 30;
+			while (kc && *xa++ == *xb++) kc--;
+			if (kc) (*(volatile uint16_t*)0xFFA1B8)++;
+			if ((kc != 0) != (k != 0))
+				(*(volatile uint16_t*)0xFFA1B2)++;
+			k = kc;
+		}
+#endif
+#else
 		uint16_t k = 30;
 		while (k && *ra++ == *rb++) k--;
+#endif
 		if (k) {
 			rs_ship = 1;
 			ra = (const uint32_t*)((const uint16_t*)0xFF8000 + 0x7C0);
@@ -1602,9 +3217,18 @@ static void r60_push(void) {
 		 * costs at most one redundant raw re-ship. 0xFFA044..0xFFA054
 		 * (17 bytes; 0xFFA040 is the window-span word). */
 		{
+#ifdef R60_TIGHT
+			/* 17 bytes = 4 longs + 1: 85 instructions a vint -> 6 */
+			volatile uint32_t *lq4 = (volatile uint32_t*)0xFFA044;
+			const volatile uint32_t *lp4 = (const volatile uint32_t*)0xFFA0C0;
+			lq4[0] = lp4[0]; lq4[1] = lp4[1];
+			lq4[2] = lp4[2]; lq4[3] = lp4[3];
+			((volatile uint8_t*)0xFFA044)[16] = lp[16];
+#else
 			volatile uint8_t *lq = (volatile uint8_t*)0xFFA044;
 			for (uint16_t j7 = 0; j7 < 17; j7++)
 				lq[j7] = lp[j7];
+#endif
 		}
 		lp[0] = (uint8_t)K;
 		for (uint16_t j4 = 0; j4 < K; j4++)
@@ -1639,11 +3263,11 @@ static void r60_push(void) {
 	 * this hardware. If an FB write is materially cheaper than a FIFO
 	 * write, the packet could cross that way instead and the master
 	 * could read it from the FB — no DREQ at all.
-	 * Time 20 writes into the FB packet hole (0x851A00, the buffer the
+	 * Time 20 writes into the FB packet hole (0x857000, the buffer the
 	 * master already consumes from) and report with the value
 	 * instrument, directly comparable to the 48-line regs stage. */
 	{
-		volatile uint16_t *fb = (volatile uint16_t*)0x851A00;
+		volatile uint16_t *fb = (volatile uint16_t*)0x857000;
 		PSTAMP(0xFFA182);
 		for (uint16_t q = 0; q < 20; q++) fb[q] = q;
 		PSTAMP(0xFFA184);
@@ -1735,9 +3359,108 @@ static void r60_push(void) {
 #elif defined(BOOT_FBTIME)
 		uint8_t p0 = (uint8_t)(*(volatile uint16_t*)0xFFA182 >> 8);
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA184 >> 8);
+#elif defined(BOOT_BURN_W) || defined(BOOT_BURN_R)
+		/* LOOP29 142: the stamps are the raw V counter, which runs
+		 * 0xE0..0xEA then JUMPS BACK to 0xE5..0xFF inside vblank, so a
+		 * burn straddling the jump read negative (clamped 127). Convert
+		 * both to lines from vblank start before subtracting.
+		 * W: the SHIM_BURN loop from 68K WRAM; R: the same loop from
+		 * cart ROM. R minus W is the adapter's fetch tax. */
+#define VLINE(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		/* stamps moved to 0xFFA1A0/A2/A4: 0xFFA186 and 0xFFA188 are written
+		 * by the landing diag and the rate probe, which clobbered p0. */
+#ifdef BOOT_BURN_W
+		uint8_t p0 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A0 >> 8));
+		uint8_t p2 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A2 >> 8));
+#else
+		uint8_t p0 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A2 >> 8));
+		uint8_t p2 = VLINE((uint8_t)(*(volatile uint16_t*)0xFFA1A4 >> 8));
+#endif
 #elif defined(BOOT_GAMERATE)
 		uint8_t p0 = 0;
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA188 & 0xFF);
+#elif defined(BOOT_FLIPRATE)
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA18A & 0xFF);
+#elif defined(BOOT_TILEVER)
+		/* LOOP29 231: the consume's VRAM readback (TILE_VERIFY).
+		 * vi76 read on the rig: checked, VRAM-zero 7 (sat), mismatch 0
+		 * -> the SOURCE words read zero. vi77 encodes the next question:
+		 * bit 7 bias | bit 6 any slot out of range | bits 5-3 VRAM
+		 * all-zero records (sat 7) | bits 2-0 consumes where FS changed
+		 * mid-consume (sat 7).
+		 * vi77 read on the rig: no slot out of range, VRAM-zero 7, FS
+		 * never changed mid-consume. vi78 carries the SH-2's own
+		 * read-backs (m_main.c TV_BITS, packet word 1 bits 8-12):
+		 * bit 7 bias | bit 6 FS changed (any) | bit 5 VRAM-zero (any)
+		 * | bits 4-3 replay read-back != tp_lastA (sat 3)
+		 * | bits 2-0 publish read-back != staging (sat 7)
+		 * vi78 on the rig: both read-backs 0. vi79 re-uses the same
+		 * five bits for m_main.c's tv_rep0 (2-0) and tv_pub0 (4-3):
+		 * SH-2 FB writes made while the SH-2 sees FM=0.
+		 * vi79 on the rig: both 0. vi80: bits 2-0 tv_alt (packet A
+		 * payload changed between publish and the next window, sat 7),
+		 * bits 4-3 first differing long index >> 7.
+		 * vi80: tv_alt saturates on ares too (the bank alternates under
+		 * d, so the compare is not a corruption test) -- withdrawn.
+		 * vi81: bit 7 bias | bits 6-5 record count >> 3 of the last
+		 * consume that read a zero record | bits 4-0 that record's
+		 * index (31 = none yet).
+		 * vi81 on the rig: zero records at indices 5, 8, 25 of 24-40.
+		 * vi82: bit 7 bias | bit 6 FS changed | bit 5 VRAM-zero any |
+		 * bits 4-3 emitter records with all-zero output (sat 3) |
+		 * bits 2-0 emitter records for a set with no MD line (sat 7),
+		 * both from m_main.c md_emit_art via packet word 1.
+		 * vi82 on the rig: zout saturated, noline 6. vi83: bit 7 bias |
+		 * bit 6 VRAM-zero any | bit 5 pen map all zero (any) | bits 4-3
+		 * zero-output records whose ROM source reads zero UNCACHED (sat
+		 * 3) | bits 1-0 ... reads zero CACHED (sat 3).
+		 * vi83 on the rig: both saturate, map-zero later. vi84 (same
+		 * layout): bit 5 md_tag re-read differs (any) | bits 4-3 code
+		 * outside the bank (sat 3) | bits 1-0 real nonzero code that
+		 * read zero (sat 3).
+		 * vi76-vi84's zero-record readings RETRACTED (ares' attract emits
+		 * the level's blank tiles too; the saturating counters hid it).
+		 * vi85: bit 7 bias | bit 6 more than 31 | bits 4-0 zero-output
+		 * records whose tile is NON-BLANK in the bank (m_main.c tv_real),
+		 * expected 0 wherever SH-2 ROM reads are sound.
+		 * vi85 confounded too. vi92 (LOOP29 237): bits 5-0 = m_main.c's
+		 * blank-cell census, cells emitted as the blank slot because
+		 * their slot was DIRTY outside cut mode, summed over 64 windows,
+		 * >> 2, sat 63. */
+		/* 2026-09-17: three blanking reasons, 2 bits each, so ONE rig
+		 * screenshot names which path makes Mike's black tiles.
+		 * p2 = 0x80 | noslot<<3 | cut<<1        (bits: n n c c)
+		 * p0 =        dirty                     (0..3)
+		 * Decode: R=d&7 G=(d>>3)&7 B=(d>>6)&3 per BOOTVALUE. */
+		uint16_t tw = *(volatile uint16_t*)0xFFA1EC;
+		uint8_t n3 = (uint8_t)((tw >> 8) & 3);
+		uint8_t c3 = (uint8_t)((tw >> 10) & 3);
+		uint8_t d3 = (uint8_t)(((tw >> 12) & 1) | (((tw >> 14) & 1) << 1));
+		/* ALL THREE IN p2, p0 = 0. The instrument paints d = p2 - p0
+		 * (a SPAN), so splitting independent counters across p0 and p2
+		 * aliases them: the first cut read 0x80 for both (0,0,0) and
+		 * (0,1,2) and could not rank anything. bias<<7 | n<<4 | c<<2 | d
+		 * fits all six bits under the bias and decodes uniquely. */
+		uint8_t p0 = 0;
+		uint8_t p2 = (uint8_t)(0x80 | (n3 << 4) | (c3 << 2) | d3);
+#elif defined(BOOT_CONSV)
+		/* LOOP29 148: the consumes' span, V at cons.mark (0xFFB0B6) minus
+		 * V at cons.entry (0xFFB0B0), in lines */
+#define VLINE3(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		uint8_t p0 = VLINE3((uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8));
+		uint8_t p2 = VLINE3((uint8_t)(*(volatile uint16_t*)0xFFB0B6 >> 8));
+#elif defined(BOOT_ENTRYV) || defined(BOOT_POSTV)
+		/* LOOP29 146: the 68K's own timeline on hardware, in lines from
+		 * vblank start: ENTRYV = the vint handler's consume entry stamp
+		 * (0xFFB0B0), POSTV = the V at post (0xFFA0A0). */
+#define VLINE2(v) ((uint8_t)((v) < 0xE0 ? (v) + 38 : ((v) <= 0xEA ? (v) - 0xE0 : (v) - 0xE5 + 11)))
+		uint8_t p0 = 0;
+#ifdef BOOT_ENTRYV
+		uint8_t p2 = VLINE2((uint8_t)(*(volatile uint16_t*)0xFFB0B0 >> 8));
+#else
+		uint8_t p2 = VLINE2((uint8_t)(*(volatile uint16_t*)0xFFA0A0 >> 8));
+#endif
 #elif defined(BOOT_VALUE_SEL)
 		/* the SELECTION phase alone: entry -> selection/compare done.
 		 * Under FB_XPORT the whole push read 217 lines against the FIFO
@@ -1755,12 +3478,30 @@ static void r60_push(void) {
 		uint8_t p2 = (uint8_t)(*(volatile uint16_t*)0xFFA0B8 >> 8);
 #endif
 		uint8_t d  = (uint8_t)(p2 - p0);
+#if defined(BOOT_BURN_W) || defined(BOOT_BURN_R)
+		/* bias off zero: an unbiased 0 floods black, which is also what
+		 * a probe that never ran looks like (the trap from LOOP27 67) */
+		d = (uint8_t)(0x80 | (d > 127 ? 127 : d));
+#endif
 		uint16_t col = (uint16_t)((((d >> 6) & 3) << 9)
 		                        | (((d >> 3) & 7) << 5)
 		                        | (( d       & 7) << 1));
+#if defined(ECHO_CENSUS) || defined(STAMP_CENSUS) || defined(TAIL_CENSUS) || defined(CONSUME_CENSUS) || defined(TRIP_CENSUS) || defined(BODY_CENSUS) || defined(CACHE_LOCK_SHOW)
+		{	/* nine bits: tag in blue, count in green+red */
+			uint16_t d9 = *(volatile uint16_t*)0xFFA18A & 0x1FF;
+			col = (uint16_t)((((d9 >> 6) & 7) << 9) | (((d9 >> 3) & 7) << 5) | ((d9 & 7) << 1));
+		}
+#endif
+#ifdef MDS_VALUE
+		/* alternate 4-second windows: value flood / the picture itself, so
+		 * one run reads the SH-2's install state AND shows the background */
+		if (*(volatile uint16_t*)0xFFB0F0 & 0x100)
+#endif
+		{
 		*(volatile uint32_t*)0xC00004 = 0xC0000000u;
 		for (int q = 0; q < 64; q++)
 			*(volatile uint16_t*)0xC00000 = col;
+		}
 	}
 #endif
 #ifdef BOOT_PUSHDELAY
@@ -1811,7 +3552,7 @@ static void r60_push(void) {
 #ifdef FB_XPORT
 /* no FIFO to poll and no word can be dropped: the FB is memory */
 #define R60G() do { } while (0)
-#define R60P(w) do { ((volatile uint16_t*)FBX_PKT_MD)[fbx_i++] = (uint16_t)(w); } while (0)
+#define R60P(w) do { FBX_DST[fbx_i++] = (uint16_t)(w); } while (0)
 #else
 #define R60G() do { while (*ctrl < 0 && --spin) ;                      if (!spin) ok = 0; } while (0)
 #define R60P(w) do { R60G(); if (ok) fifo[0] = (w); } while (0)
@@ -2012,10 +3753,27 @@ static void r60_push(void) {
 		 * A master that reads a stale sequence simply keeps last
 		 * frame's records, which is the existing no-packet path. */
 		if (ok) {
+#ifdef FBX_STAGE
+			/* Nothing reaches the framebuffer here: the packet is in
+			 * WRAM and r60_blast() moves it at the tail, at FM=0.
+			 * Handing over the length is the whole handover — a
+			 * non-zero fbx_stage_n IS the "a packet is ready" flag. */
+			fbx_stage_n = fbx_i;
+#else
 			volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
 			pub[1] = fbx_i;              /* exact word count */
 			fbx_seq_pub++;
 			pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+#ifdef FLIP_CENSUS
+			/* what the 68K believes it published, for the delivery
+			 * census: count, last sequence, last length, and the
+			 * publish word READ BACK through the same window */
+			(*(volatile uint16_t*)0xFFA190)++;
+			*(volatile uint16_t*)0xFFA192 = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+			*(volatile uint16_t*)0xFFA194 = fbx_i;
+			*(volatile uint16_t*)0xFFA196 = pub[0];   /* read-back */
+#endif
+#endif
 		}
 #endif
 		PSTAMP(0xFFA0BC);                /* records+tail shipped */
@@ -2090,12 +3848,12 @@ static void r60_push(void) {
 #endif
 #ifdef SHIM_BURN
 		{	/* sensitivity probe: burn ~SHIM_BURN lines of 68K time */
-			PSTAMP(0xFFA186);
+			PSTAMP(0xFFA1A0);
 			volatile uint16_t bi;
 			for (bi = 0; bi < (uint16_t)(SHIM_BURN * 40u); bi++) ;
-			PSTAMP(0xFFA188);
+			PSTAMP(0xFFA1A2);
 			shim_burn_rom();                 /* same loop, ROM-resident */
-			PSTAMP(0xFFA18A);
+			PSTAMP(0xFFA1A4);
 		}
 #endif
 		if (!ok) (*(volatile uint16_t*)0xFFB0E0)++;
@@ -2120,12 +3878,130 @@ static void r60_push(void) {
 #undef R60G
 	}
 }
+#ifdef FBX_STAGE
+/* THE BLAST (LOOP28 89). The only part of the packet path that must run
+ * at FM=0, and the only part that touches the framebuffer. It is a
+ * straight copy of what r60_push staged in WRAM plus the publish word,
+ * so its cost is the packet's length and nothing else: ~150 words on a
+ * play frame, under 2 scanlines.
+ *
+ * Ordering is the same contract the FIFO route had. The 68000 completes
+ * writes in program order, so the publish written last cannot precede
+ * its own payload, and a master that reads a stale sequence keeps last
+ * frame's records — the existing no-packet path.
+ *
+ * Longs, not words: the packet is word-aligned by construction and the
+ * FB window takes long writes, which halves the bus transactions. An
+ * odd trailing word is copied on its own. */
+__attribute__((section(".data"), noinline))
+static void r60_blast(int bump) {
+	uint16_t n = fbx_stage_n;
+	if (!n) return;                      /* no packet staged this vint */
+#ifdef FBX_BOTH
+	/* THE PACKET LIVES IN THE FRAMEBUFFER, AND THE FRAMEBUFFER SWAPS
+	 * (LOOP28 91). Measured: with flips running, the master's lift finds
+	 * an already-seen sequence on 1180 of 2921 windows — one lost packet
+	 * per flip — because the bank it reads is not the bank the blast
+	 * wrote. So write BOTH: once at the tail, once before the next post,
+	 * with a flip possibly in between. The second write carries the SAME
+	 * sequence, so a master that already lifted it correctly skips it;
+	 * what it buys is that whichever bank the master reads carries the
+	 * latest packet. Two ~2-line copies instead of one. */
+	if (!bump) {
+		if (!fbx_stage_live) return;     /* nothing worth repeating */
+	} else {
+		fbx_stage_live = 1;
+	}
+#else
+	(void)bump;
+	fbx_stage_n = 0;
+#endif
+	{
+		const uint32_t *sp = (const uint32_t*)fbx_stage;
+		volatile uint32_t *dp = (volatile uint32_t*)FBX_PKT_MD;
+		uint16_t nl = (uint16_t)(n >> 1);
+		while (nl--) *dp++ = *sp++;
+		if (n & 1)
+			((volatile uint16_t*)FBX_PKT_MD)[n - 1] = fbx_stage[n - 1];
+	}
+#ifdef FBX_ECHO
+	if (bump) { fbx_keep_n = n; fbx_keep_live = 1; fbx_age = 0; fbx_rb_age = 0; }
+#endif
+	{
+		volatile uint16_t *pub = (volatile uint16_t*)FBX_PUB_MD;
+		pub[1] = n;                      /* exact word count */
+		if (bump) fbx_seq_pub++;
+		pub[0] = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+#ifdef FLIP_CENSUS
+		(*(volatile uint16_t*)0xFFA190)++;
+		*(volatile uint16_t*)0xFFA192 = (uint16_t)(FBX_MAGIC | fbx_seq_pub);
+		*(volatile uint16_t*)0xFFA194 = n;
+		*(volatile uint16_t*)0xFFA196 = pub[0];   /* read-back */
+#endif
+	}
+	*(volatile uint16_t*)0xFFA186 =
+		*(volatile uint16_t*)0xC00008;   /* V after the blast */
+}
+#endif
 #endif /* R60 */
 #if defined(K2_FREE) && defined(IDLE_TOKEN)
 #error K2_FREE claims COMM4 for the arm echo; IDLE_TOKEN also lives there
 #endif
 
 
+#ifdef EARLY_REC
+/* EARLYREC (2026-09-23): the game's sprite table and scroll regs are final
+ * at its IRQ4 exit (LOOP-DECOMPILE 13: one writer, in IRQ4). Instead of
+ * waiting for the next vint's packet, push them NOW through the DREQ FIFO
+ * (unused on the FB transport; the master arms it every vint in its
+ * V-ISR): the master lands them in SDRAM and launches the compose in its
+ * idle time, so the next window is blit + publish only. Layout, words:
+ *   0 0xE1EC  1 nrec  2..21 layer regs 0x740-0x753  22..81 rowscroll
+ *   0x7C0-0x7FB  82.. nrec x 8 records  then 0x5AA5 0xA55A. */
+__attribute__((section(".data"), noinline))
+void earlyrec_push(void)
+{
+	static uint16_t boot_wait, last_vc;
+	uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+	if (vc == last_vc) return;                           /* once per vint (the idle loop calls every pass) */
+	last_vc = vc;
+	if (!erec_arm_seen || erec_arm_seen == erec_arm_pushed) return;   /* push only into a channel the master armed since our last push */
+	erec_arm_pushed = erec_arm_seen;
+	if (boot_wait < 240) { boot_wait++; return; }        /* the master's ISR must be arming */
+	/* interrupts stay ENABLED: the FIFO drains at ~5 us a word on ares, so a
+	 * masked push (erec10: ~2,500 polls) delayed the vint entry past the
+	 * shim's post window; a vint mid-push is fine -- the master's ISR does
+	 * not re-arm over a transfer in progress. */
+	volatile uint16_t *fifo = (volatile uint16_t*)0xA15112;
+	volatile int8_t  *ctrl = (volatile int8_t*)0xA15107;
+	const uint16_t *s = (const uint16_t*)0xFF7000;
+	const uint16_t *lr = (const uint16_t*)0xFF8000 + 0x740;
+	const uint16_t *rs = (const uint16_t*)0xFF8000 + 0x7C0;
+	uint16_t nrec = 23;
+	for (uint16_t i = 0; i < 23; i++)
+		if (s[i * 8 + 2] & 0x8000) { nrec = (uint16_t)(i + 1); break; }
+	const uint16_t len = 276u;            /* 268 payload (2 + 20 + 60 + 23*8 + 2) + 8 trailing zeros: the FIFO path
+	                                       * delivers 8 words late (erec13: every landing began with the previous
+	                                       * push's last 8 words), so the zeros are what rides ahead of the next payload */            /* FIXED: the SH-2 arms exactly this many words; a shorter push leaves the DMA incomplete and 68S set */
+	uint16_t spin = 3000;
+	*ctrl = 0;                                           /* 68S off: resets the FIFO pointers (erec12: an aborted push left 8 words in the FIFO and every later landing was offset by them) */
+	*(volatile uint16_t*)0xA15110 = len;
+	*ctrl = 4;                                           /* 68S: DREQ on */
+#define EP(w) do { while (*ctrl < 0 && --spin) ; if (!spin) goto out; fifo[0] = (w); } while (0)
+	EP(0xE1EC); EP(nrec);
+	for (uint16_t g = 0; g < 20; g++) EP(lr[g]);
+	for (uint16_t g = 0; g < 60; g++) EP(rs[g]);
+	for (uint16_t i = 0; i < 23u * 8u; i++) EP(s[i]);
+	EP(0x5AA5); EP(0xA55A);
+	for (uint16_t i = 0; i < 8; i++) EP(0);
+#undef EP
+	(*(volatile uint16_t*)0xFFA0E4)++;                   /* diag: pushes completed */
+	(*(volatile uint16_t*)0xFFA0E6) = spin;              /* diag: poll budget left */
+	return;
+out:
+	(*(volatile uint16_t*)0xFFA0E2)++;                   /* diag: pushes aborted (FIFO full) */
+}
+#endif
 #ifdef POST_LATE
 static uint8_t r60_late, r60_late_v;
 __attribute__((section(".data"), noinline))
@@ -2136,7 +4012,24 @@ void r60_late_post(void)
 	*(volatile uint16_t*)0xA15100 |= 0x8000;
 	*mars_comm2 = BANK_SHADOW;
 	*mars_comm12 = (uint16_t)(0xD000 | r60_late_v);
-	*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+	#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 	*mars_comm4 = 0;
 	*mars_comm0 = 0x2020;
 	*(volatile uint16_t*)0xFFA0A0 = *(volatile uint16_t*)0xC00008;   /* V at post */
@@ -2147,11 +4040,127 @@ void r60_late_post(void)
 	*(volatile uint16_t*)0xFFA09E = *(volatile uint16_t*)0xC00008;
 }
 #endif
+#if defined(FBX_PEND) && defined(FBX_STAGE)
+/* GAME CONTEXT (LOOP29 137): reached from the shared FM-gate spin the
+ * moment FM reads 0, every register saved by the caller. FM can only
+ * rise again from our own vint handler, so a blast that starts at FM=0
+ * completes at FM=0 provided no vint fires inside it: skip the last ~31
+ * active lines and vblank itself, and the pre-post slot picks those up. */
+__attribute__((section(".data"), noinline))
+void fbx_late_blast(void)
+{
+	uint8_t vv = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+	if (vv >= 0xC0) return;
+	if (*(volatile uint16_t*)0xA15100 & 0x8000) return;
+	fbx_pend = 0;
+	r60_blast(1);
+	(*(volatile uint16_t*)0xFFA0FC)++;
+}
+#endif
 /* RAMCODE (2026-09-06): the whole vint shim executed from the cart
  * window (nm: 0x8c1150) under SH-2 contention; only r60_push had been
  * moved. 2.4KB of .data. */
 __attribute__((section(".data"), noinline))
+#ifdef R60_NEW
+/* R60: the cadence shim is replaced wholesale (md_src/r60_shim.h). This body is the
+ * 68K-era renderer's and nothing calls it; it is renamed rather than deleted so the
+ * line's build is untouched and its DMA bodies stay readable beside the new one. */
+#define shim_vblank shim_vblank_legacy
+#endif
 void shim_vblank(void) {
+	/* GAME-FRAME COUNTER (2026-09-25, u16 at 0xFFA1D0): the game's own frame
+	 * count has no monotonic home in its WRAM (0xFFF02A resets per attract
+	 * step), so the shim counts the vints at which the frame flag 0xFFF01C
+	 * was CLEAR at entry -- the game consumed the previous release, i.e. a
+	 * pass started in the previous vint = one game frame. Read by
+	 * ares-headless --input-gameframe 0xFFA1D0 to replay an arcade-recorded
+	 * route (tools/inp_dump.lua keys the inputs the same way) at the same
+	 * game frames whatever our pass rate. ~12 cycles a vint. */
+	if (!*(volatile uint8_t*)0xFFF01C) (*(volatile uint16_t*)0xFFA1D0)++;
+#if defined(RIG_BARCODE) && defined(NO_GAMEHIGH) && (defined(TILE_SLIM) || defined(CART_READ_AT))
+	/* THE BARCODE HAS TO BE EMITTED FROM HERE IN A PORT BUILD. bc_emit() is called from
+	 * partb_hook(), which is part of the GAME's own 68K IRQ4 chain -- and NO_GAMEHIGH means
+	 * the 68K does not run the game, so the hook never fires and the plane keeps whatever
+	 * was in it: measured 2026-10-06, three launches of a RIGBARCODE+RIGRATE port rom read
+	 * NO BARCODE in all three while the counters it carries were being counted right here.
+	 * The shim's vblank is the one 68K path a port build still runs every vint, and it is
+	 * the same place the record already puts a per-64-vint DMA (FM=0 at the top). */
+	bc_emit();
+#endif
+#ifdef RIG_RATE
+	/* WHOLE-RUN RATE (2026-09-26). Every rig speed reading in the record is a
+	 * per-step accumulator sampled once or twice a launch, so the ~15-line
+	 * per-launch spread swamps whatever is being measured. These two counters
+	 * never reset, so byte 5 below CONVERGES: any screenshot taken late in a
+	 * launch reads the same number, and four launches give four numbers
+	 * instead of twenty-four samples of six accumulators. */
+	rr_vints++;
+	if (!*(volatile uint8_t*)0xFFF01C) rr_gframes++;
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 2
+	span_fold();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 5
+	span_vint();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 8
+	span_vint8();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 9
+	span_bench();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 13
+	span_bench13();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 14
+	span_bench14();
+#endif
+#if defined(RIG_SPAN) && (RIG_SPAN == 15 || RIG_SPAN == 17)
+	span_bench15();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 18
+	span_class();
+#endif
+#if defined(RIG_SPAN) && RIG_SPAN == 16
+	span_vint16();
+#endif
+#ifdef MD_STATE
+	/* FOLD 4 (PLAN-SINGLE-VINT, LOOP29 233): ONE STATE WORD, ONE WRITER.
+	 * Posted here, once per vint, from IRQ4's own top, on COMM14 -- a
+	 * channel free after the boot handshake (68K B007 -> master B008):
+	 *   [15:12] tag 0xE      [11:8] sequence (wraps)
+	 *   [7]     cutscene     0xFFF148 != 0 (NOTES-FROM-DECOMPILE 17/23:
+	 *                        the transformation object only)
+	 *   [6:4]   round        0xFFF142 & 7
+	 *   [3]     play         0xFFF026 bit 0 (credited game running)
+	 *   [2:0]   attract step 0xFFF031 bits 2-4 (NOTES-FROM-DECOMPILE 23:
+	 *                        1/3/5 = the level's tilemap on screen, 3
+	 *                        with the logo over it; 0/2/4 = pictures)
+	 * Nothing here is shared with the tile-dirty mask, so the round can
+	 * no longer read as dirt by phase (217/226) and the SH-2 gets the
+	 * cutscene a frame ahead of the page words instead of detecting it
+	 * from the claim mix (209). Starts only once the master has answered
+	 * the beacon, so the boot wait on B007 is untouched. */
+	{
+		static uint8_t st_seq, st_on;
+		uint16_t c14 = *mars_comm14;
+		/* the master answers the beacon with 0xB1xx every window (the
+		 * boot hold below waits for it); take the channel after that */
+		if (!st_on && ((c14 & 0xFF00) == 0xB100 || c14 == 0xB008)) st_on = 1;
+		if (st_on) {
+			/* 240 (NOTES 29): [11:9] seq, [8] demo running (f028|f029 & 1:
+			 * 0 with step 1 = the SEGA card), [7] cut, [6:4] round,
+			 * [3] credited = the game's attract bit CLEAR, [2:0] step */
+			st_seq = (uint8_t)((st_seq + 1) & 7);
+			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 9)
+				| ((uint16_t)((*(volatile uint8_t*)0xFFF028 | *(volatile uint8_t*)0xFFF029) & 1) << 8)
+				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4)
+				| ((uint16_t)(~*(volatile uint8_t*)0xFFF026 & 1) << 3)
+				| ((uint16_t)(*(volatile uint8_t*)0xFFF031 >> 2) & 7));
+		}
+	}
+#endif
 #ifdef BOOT_PRECONSUME
 	/* WHERE DOES THE TIME GO BEFORE THE CONSUME? (2026-09-08, LOOP27 53)
 	 * s16_span2 on hardware: the consume itself takes 8-24 lines (YELLOW,
@@ -2185,7 +4194,20 @@ void shim_vblank(void) {
 	{
 		static uint16_t gr_base, gr_vc;
 		static uint8_t  gr_val;
-		uint16_t t = *(volatile uint16_t*)0xFFA18E;   /* game IRQ4
+		/* LOOP29 140: IRQ4 COMPLETIONS run at vint rate on every build
+		 * (a missed frame takes IRQ4's short path and still completes),
+		 * so this read 64 everywhere. Use the game's own missed-frame
+		 * counter instead: value = 64 - misses per 64 vints = game frames
+		 * per 64 vints, the same number gameplay_speed.py reports. */
+#ifdef GAME_GATE
+		/* under GAMEGATE the game never overruns; its rate is the
+		 * release count (0xFFA0F6) -- report releases per 64 vints */
+		uint16_t t = (uint16_t)(0 - *(volatile uint16_t*)0xFFA0F6);   /* negated: the
+		                     * subtraction below yields 64 - (-releases)... see gr_val */
+#else
+		uint16_t t = *(volatile uint16_t*)0xFFF144;
+#endif
+		(void)*(volatile uint16_t*)0xFFA18E;          /* was: game IRQ4
 		                     * completions, counted in md_start.s at
 		                     * fmgate_ret — the game's own scene timer
 		                     * runs at scene-dependent rates and in both
@@ -2196,12 +4218,289 @@ void shim_vblank(void) {
 			/* the scene timer runs in either direction depending on the
 			 * scene (the first read clamped at 127 on the ship line —
 			 * a countdown, not a fast game); magnitude is the rate */
-			uint16_t sd = (uint16_t)(t - gr_base);
-			gr_val = (uint8_t)(sd > 127 ? 127 : sd);
+			uint16_t sd = (uint16_t)(t - gr_base);        /* misses in 64 vints */
+#ifdef GAME_GATE
+			sd = (uint16_t)(0 - sd);                      /* releases in 64 vints */
+			gr_val = (uint8_t)(sd > 64 ? 64 : sd);
+#else
+			gr_val = (uint8_t)(sd > 64 ? 0 : 64 - sd);    /* game frames in 64 vints */
+#endif
 			gr_base = t;
 			gr_vc = 0;
 		}
 		*(volatile uint16_t*)0xFFA188 = (uint16_t)(0xF000 | 0x80 | gr_val);
+	}
+#endif
+#ifdef BOOT_FLIPRATE
+	/* PICTURE FRAMES PER 64 VINTS ON HARDWARE (LOOP29 232). GAMERATE
+	 * reads 64 on every build under GAMEGATE (the game never waits), so
+	 * it cannot rank what Mike sees. Count the 32X frame-buffer bank
+	 * (FS, 0xA1518A bit 0 -- the 68K view of the 32X VDP's FB control
+	 * register, readable at FM=0 only) CHANGING between vint tops: one
+	 * change = one presented frame. 64 = 60 Hz, 32 = 30 Hz. Bias bit 7,
+	 * cap 127. The first cut read 0xA1510A (DREQ destination) and
+	 * counted 0 everywhere; TILE_VERIFY's "FS changed mid-consume"
+	 * (vi77) read the same wrong register and is void. */
+	{
+		static uint16_t fr_vc, fr_n, fr_last;
+		static uint8_t  fr_val;
+		if (!(*(volatile uint16_t*)0xA15100 & 0x8000u)) {
+			uint16_t fs = *(volatile uint16_t*)0xA1518A & 1u;
+			if (fs != fr_last) fr_n++;
+			fr_last = fs;
+		}
+		if (++fr_vc >= 64) {
+			fr_val = (uint8_t)(fr_n > 127 ? 127 : fr_n);
+			fr_n = 0;
+			fr_vc = 0;
+		}
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | 0x80 | fr_val);
+	}
+#endif
+#ifdef ECHO_CENSUS
+	/* NOTES 45 / LOOP29 258: WHY 46 OF 64 VINTS PRESENT NO FRAME. At each
+	 * vint top classify the echo word the master left for the previous
+	 * vint's post (the 68K pre-writes 0xF000 at every post and 0xF001
+	 * here after reading, so "no echo" and "no post" are told apart):
+	 *   0 OK (F102/F103)  1 past the edge (F1F1)  2 nothing drawn (F1F2)
+	 *   3 nothing shipped (F1F3)  4 posted, no echo (F000)  5 no post (F001)
+	 *   6 GAMEGATE fallbacks (0xFFA0F4 delta)  7 posts with V >= 0xE0 at post
+	 * Per 64 vints; the value channel carries tag (3 bits) | count (6 bits,
+	 * cap 63), the tag stepping every 8 vints, so each capture reads one
+	 * of the eight for the previous window. Decode: 9-bit CRAM colour. */
+	{
+		static uint8_t ec_vc, ec_cnt[8], ec_val[8], ec_fb_last;
+		uint16_t c4 = *mars_comm4;
+		uint8_t posted = (c4 != 0xF001);
+		if (c4 == 0xF102 || c4 == 0xF103) ec_cnt[0]++;
+		else if (c4 == 0xF1F1) ec_cnt[1]++;
+		else if (c4 == 0xF1F2) ec_cnt[2]++;
+		else if (c4 == 0xF1F3) ec_cnt[3]++;
+		else if (c4 == 0xF000) ec_cnt[4]++;
+		else if (c4 == 0xF001) ec_cnt[5]++;
+		if (posted && (uint8_t)(*(volatile uint16_t*)0xFFA0A0 >> 8) >= 0xE0) ec_cnt[7]++;
+		*mars_comm4 = 0xF001;
+		if (++ec_vc >= 64) {
+			uint8_t fb = *(volatile uint8_t*)0xFFA0F4;
+			ec_cnt[6] = (uint8_t)(fb - ec_fb_last);
+			ec_fb_last = fb;
+			/* NOTES 65: TOKEN releases are the delta of 0xFFA0F6
+			 * MINUS the delta of 0xFFA0F4 -- a second site bumps
+			 * both, so F6 alone over-counts. Tag 5 carried "no post"
+			 * and has read 0 on every build measured (258, 268, 271),
+			 * so it carries the token count instead; a non-zero "no
+			 * post" would have shown up as OK+edge+noship < 64
+			 * anyway. */
+			{
+				/* 0xFFA0F6 IS A UINT16 (bumped at 3476 and 3761).
+				 * Read as a byte it is the big-endian HIGH half and
+				 * ticks once per 256 releases, which read 0 and,
+				 * subtracted from the fallback's 37, wrapped to a
+				 * saturated 63. Both earlier cuts were that bug. */
+				static uint16_t ec_tk_last;
+				uint16_t tk = *(volatile uint16_t*)0xFFA0F6;
+				uint16_t dtk = (uint16_t)(tk - ec_tk_last);
+				ec_tk_last = tk;
+				/* NOTES 65: TOKEN releases are dF6 MINUS dF4 -- the
+				 * site at 3475-3477 bumps both. Floor at 0 so a
+				 * window that straddles a reset cannot wrap. */
+				uint16_t fbd = ec_cnt[6];
+				ec_cnt[5] = (uint8_t)(dtk > fbd ? dtk - fbd : 0);
+			}
+			for (int k = 0; k < 8; k++) { ec_val[k] = ec_cnt[k] > 63 ? 63 : ec_cnt[k]; ec_cnt[k] = 0; }
+			ec_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((ec_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | ec_val[tag]);
+		}
+	}
+#endif
+#ifdef GLOW_RATE
+	/* NOTES 67 / LOOP29 276: the master counts, per 64 vints, the vints
+	 * in which the chevron ramp's words changed, and hands it over COMM6
+	 * with bit 15 SET. Post it on the value channel. A live ramp reads
+	 * near the push rate; Mike's flat chevron would read 0. */
+	{
+		static uint8_t gr_val;
+		uint16_t w = *mars_comm6;
+		if (w & 0x8000) { gr_val = (uint8_t)(w & 63); *mars_comm6 = 0; }
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | 0x80 | gr_val);
+	}
+#endif
+#ifdef STAMP_CENSUS
+	/* NOTES 47 / LOOP29 259: the master's four pre-flip stamps (FRT ticks
+	 * from ISR entry: post seen, after the truth drain, after the slave
+	 * capture wait, at the guard), two a vint on COMM6 in 128-tick steps
+	 * (bit 14 = the pair, bit 15 clear), read here every vint before the
+	 * body's own 0xB101 announce and zeroed. Per 64 vints the channel
+	 * carries tags 0-3 = the MEAN of each stamp over the vints that
+	 * carried it and 4-7 = its MAX (6 bits, 128-tick steps; 1650 ticks =
+	 * 12.9, one line = 0.36). */
+	{
+		static uint8_t st_vc, st_val[8], st_max[4], st_n[2];
+		static uint16_t st_sum[4];
+		uint16_t w = *mars_comm6;
+		if (w && !(w & 0x8000)) {
+			uint8_t pr = (uint8_t)((w >> 14) & 1), v0 = (uint8_t)((w >> 7) & 127), v1 = (uint8_t)(w & 127);
+			st_sum[pr * 2] += v0; st_sum[pr * 2 + 1] += v1;
+			if (v0 > st_max[pr * 2]) st_max[pr * 2] = v0;
+			if (v1 > st_max[pr * 2 + 1]) st_max[pr * 2 + 1] = v1;
+			st_n[pr]++;
+			*mars_comm6 = 0;
+		}
+		if (++st_vc >= 64) {
+			for (int k = 0; k < 4; k++) {
+				uint8_t n = st_n[k >> 1];
+				unsigned mean = n ? st_sum[k] / n : 0;
+				st_val[k] = (uint8_t)(mean > 63 ? 63 : mean);
+				st_val[4 + k] = (uint8_t)(st_max[k] > 63 ? 63 : st_max[k]);
+				st_sum[k] = 0; st_max[k] = 0;
+			}
+			st_n[0] = st_n[1] = 0; st_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((st_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | st_val[tag]);
+		}
+	}
+#endif
+#if defined(BODY_CENSUS) || defined(CACHE_LOCK_SHOW)
+	/* NOTES 85 / LOOP29 295: the master's body split, relayed verbatim.
+	 * Under CACHE_LOCK_SHOW the same relay carries the cache lock's
+	 * readback instead: tag 0 = ways locked, tag 1 = tag slots verified.
+	 * The master owns the accounting and the tag (it is the only side that
+	 * can see DIAG); this just moves its word onto the value channel.
+	 *   tag 0 window span  1 ship  2 maps drain  3 whole generation
+	 * in master FRT ticks per generation >> 8 (a vint = 47). RESIDUAL =
+	 * tag3 - (tag0 + tag1 + tag2) is the number the card exists to find.
+	 * A rejected read (the 68K's own 0xB101 announce, which HAS bit 15
+	 * set) keeps the last good word; the master re-posts every vint. */
+	{
+		static uint16_t bd_word = 0xA000;
+		uint16_t w = *mars_comm6;
+		if ((w & 0xF000u) == 0xA000u) { bd_word = w; *mars_comm6 = 0; }
+		*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | (bd_word & 0x1FFu));
+	}
+#endif
+#ifdef TRIP_CENSUS
+	/* NOTES 78 / LOOP29 292: THE GENERATION TRIPLE. Under GAMEGATE the
+	 * 68000 only advances when we release it, so
+	 *     generations/sec <= releases/sec <= presented + fallbacks
+	 * and "the generation takes 2.4 vints" may be a CONSEQUENCE of
+	 * presenting 26 of 64 rather than a cause. Three numbers settle it.
+	 * Per 64 vints, on four tags (16 vints each, so the rig's rate-limited
+	 * screenshots get twice the samples per tag an 8-tag census gets):
+	 *   0 GENERATIONS LAUNCHED  (master's count, over COMM6 tagged 0xA000)
+	 *   1 68K RELEASES          (0xFFA0F6 delta: token releases + fallbacks)
+	 *   2 GAMEGATE FALLBACKS    (0xFFA0F4 delta; token releases = tag1 - tag2)
+	 *   3 FRAMES PRESENTED      (FS bank changes, BOOT_FLIPRATE's method)
+	 * Reading:
+	 *   0 ~ 1 > 3   we compose frames nobody sees; the wall is presentation
+	 *   0 ~ 3 < 1   the game runs ahead; generations are being skipped
+	 *   all equal   self-gating loop -- 2.47 is an equilibrium, not a cost
+	 * ENCODING, and it is NOT the 8-tag census layout: the nine-bit word
+	 * is [8:7] tag, [6:0] value, so the value carries the FULL 0..64 range
+	 * a per-64-vint count can take. The first cut used the 3-bit tag and a
+	 * 6-bit value, and BOTH gens and releases came back as a flat 63 --
+	 * saturation reading exactly like a measurement. Nothing real can
+	 * reach 127 here, so a 127 is a fault, not a fast machine.
+	 *
+	 * VALIDATION BEFORE USE (the decompile thread's rule, NOTES 77): tag 3
+	 * must equal what BOOTFLIPRATE alone reports on the same build and
+	 * scene, and tag 1 what BOOTGAMERATE reports under GAMEGATE. Both
+	 * answers are already known. Tag 0 checks against nat_score's gens. */
+	{
+		static uint8_t  tr_vc, tr_val[4], tr_fbbase;
+		static uint16_t tr_relbase, tr_n, tr_fslast;
+		/* presented: count the FB bank changing, readable at FM=0 only */
+		if (!(*(volatile uint16_t*)0xA15100 & 0x8000u)) {
+			uint16_t fs = *(volatile uint16_t*)0xA1518A & 1u;
+			if (fs != tr_fslast) tr_n++;
+			tr_fslast = fs;
+		}
+		{	/* generations: the master re-posts every vint, so a rejected
+			 * read (the 68K's own 0xB101 announce, which HAS bit 15 set
+			 * and is what a bare `w & 0x8000` reader would claim) simply
+			 * keeps the last good value instead of reporting garbage */
+			uint16_t w = *mars_comm6;
+			if ((w & 0xF000u) == 0xA000u) { tr_val[0] = (uint8_t)(w & 127); *mars_comm6 = 0; }
+		}
+		if (++tr_vc >= 64) {
+			uint16_t rel = *(volatile uint16_t*)0xFFA0F6;
+			uint8_t  fbk = *(volatile uint8_t*)0xFFA0F4;
+			uint16_t rd  = (uint16_t)(rel - tr_relbase);
+			uint8_t  fd  = (uint8_t)(fbk - tr_fbbase);
+			tr_relbase = rel; tr_fbbase = fbk;
+			tr_val[1] = (uint8_t)(rd > 127 ? 127 : rd);
+			tr_val[2] = (uint8_t)(fd > 127 ? 127 : fd);
+			tr_val[3] = (uint8_t)(tr_n > 127 ? 127 : tr_n);
+			tr_n = 0; tr_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((tr_vc >> 4) & 3);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 7) | tr_val[tag]);
+		}
+	}
+#endif
+#ifdef TAIL_CENSUS
+	/* LOOP29 264b: WHERE IN THE FRAME. Four lines past 224, each as a mean
+	 * (tags 0-3) and a MAX (tags 4-7) per 64 vints: the 68K vint top (this
+	 * block), the shim body's entry (0xFFA1F2), the post (0xFFA0A0), and
+	 * the B consume's end (0xFFA086). The earlier tail stages are in 262c. */
+	{
+		static uint8_t tc_vc, tc_val[8], tc_max[4];
+		static uint16_t tc_sum[4];
+#define TCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
+		uint8_t vt = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+		uint8_t l[4] = { (uint8_t)(vt - 0xE0u), (uint8_t)(TCV(0xFFA1F2) - 0xE0u), (uint8_t)(TCV(0xFFA0A0) - 0xE0u), (uint8_t)(TCV(0xFFA086) - 0xE0u) };
+#undef TCV
+		for (int k = 0; k < 4; k++) { uint8_t v = l[k] > 63 ? 63 : l[k]; tc_sum[k] += v; if (v > tc_max[k]) tc_max[k] = v; }
+		if (++tc_vc >= 64) {
+			for (int k = 0; k < 4; k++) { tc_val[k] = (uint8_t)(tc_sum[k] >> 6); tc_val[4 + k] = tc_max[k]; tc_sum[k] = 0; tc_max[k] = 0; }
+			tc_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((tc_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | tc_val[tag]);
+		}
+	}
+#endif
+#ifdef CONSUME_CENSUS
+	/* LOOP29 262: the chunk consume (packet B) split in lines on the rig:
+	 * preamble (entry 0xFFA08E -> before the row loop 0xFFA1FC), rows
+	 * (-> after the rows 0xFFA1FE), tail (-> 0xFFA086 after the return).
+	 * Tags 0-2 = means, 3 = the whole consume's mean, 4-6 = maxima,
+	 * 7 = the whole consume's max; lines, cap 63, per 64 vints. */
+	{
+		static uint8_t cc_vc, cc_val[8], cc_max[4];
+		static uint16_t cc_sum[4];
+#define CCV(a) ((uint8_t)(*(volatile uint16_t*)(a) >> 8))
+		uint8_t v0 = CCV(0xFFA08E), v1 = CCV(0xFFA1FC), v2 = CCV(0xFFA1FE), v3 = CCV(0xFFA086);
+		/* the NTSC V counter runs ..E9 EA E5 E6.. at the vblank start (lines
+		 * E5-EA occur twice), so a stage that straddles the jump reads six
+		 * lines short and a stage inside the repeat can read negative:
+		 * a small negative delta is the jump, add six (LOOP29 262a) */
+#define CCD(b_, a_) ((uint8_t)((int8_t)((b_) - (a_)) < 0 && (int8_t)((b_) - (a_)) >= -6 ? (uint8_t)((b_) - (a_) + 6) : (uint8_t)((b_) - (a_))))
+		uint8_t d[4] = { CCD(v1, v0), CCD(v2, v1), CCD(v3, v2), CCD(v3, v0) };
+#undef CCD
+#undef CCV
+		if (*(volatile uint8_t*)0xFFA1F7) {          /* the chunk path ran this vint */
+			for (int k = 0; k < 4; k++) { cc_sum[k] += d[k]; if (d[k] > cc_max[k]) cc_max[k] = d[k]; }
+			*(volatile uint8_t*)0xFFA1F7 = 0;
+		}
+		if (++cc_vc >= 64) {
+			for (int k = 0; k < 4; k++) {
+				unsigned m = cc_sum[k] >> 6; cc_val[k] = (uint8_t)(m > 63 ? 63 : m);
+				cc_val[4 + k] = (uint8_t)(cc_max[k] > 63 ? 63 : cc_max[k]);
+				cc_sum[k] = 0; cc_max[k] = 0;
+			}
+			cc_vc = 0;
+		}
+		{
+			uint8_t tag = (uint8_t)((cc_vc >> 3) & 7);
+			*(volatile uint16_t*)0xFFA18A = (uint16_t)(0xF000 | ((uint16_t)tag << 6) | cc_val[tag]);
+		}
 	}
 #endif
 #ifdef BOOT_MOTION
@@ -2394,6 +4693,9 @@ void shim_vblank(void) {
 	// so the span includes the window ack-wait — the part that scales with
 	// SH-2 speed (the MAME vs ares divergence the post-window probe missed).
 	uint8_t v_entry = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+#ifdef TAIL_CENSUS
+	*(volatile uint16_t*)0xFFA1F2 = (uint16_t)((uint16_t)v_entry << 8);   /* NOTES 49: V at IRQ4 entry */
+#endif
 
 	// ITER5: the DREQ push only fires on vints whose window was ACCEPTED
 	// (posted + acked) — those are the vints the master re-armed the DMA
@@ -2499,7 +4801,11 @@ void shim_vblank(void) {
 	}
 #endif
 
-	// RENDER WINDOW. SH-2 framebuffer writes are blocked while RV=1 (they
+	// RENDER WINDOW. [RV=1: SUPERSEDED — this whole window is dormant under
+	// R60 (window_ok stays 0) and its premise is gone besides: RV stays 0
+	// forever, so FB writes are never blocked and the game fetches through
+	// the banked 0x900000 window, not an identity map.]
+	// SH-2 framebuffer writes are blocked while RV=1 (they
 	// work only at RV=0), but the game needs RV=1 to fetch its ROM code.
 	// This handler runs from WORK RAM, so the 68K needs no ROM here — drop
 	// RV to 0, tell the SH-2 to draw the whole frame, wait for its ack, then
@@ -2538,6 +4844,33 @@ void shim_vblank(void) {
 		 * raise+post — the post lands ~14 lines after vblank, inside
 		 * the ISR's widened 1100-tick window. */
 		uint8_t r60_go = 0;
+#ifdef NO_GAMEHIGH
+		/* NO 68K GAME, SO NO RACE TO GATE AGAINST.
+		 *
+		 * Every condition below exists to keep the announce away from the 68K
+		 * GAME's framebuffer writes: the entry window is "the vint arrived when we
+		 * expected", `*mars_comm0` is "the master still has a window open", and the
+		 * fmgate_spans scan is "the game is mid-span". Under NO_GAMEHIGH there is no
+		 * game -- the SH-2 port is the producer and it runs on the master itself --
+		 * so all three are asking about a participant that does not exist, and the
+		 * first of them was declining every vint.
+		 *
+		 * MEASURED 2026-10-03: in a port-alone build the 68K announced 4 times in
+		 * 400 frames against the line's 726, so the master never opened a window;
+		 * 32X CRAM was entirely ZERO (the line: 442/512 bytes) and the framebuffer
+		 * held 968 non-zero bytes against 105,998. The red border the build painted
+		 * was this gate's own BOOT_GATECHK diagnostic saying "entry V outside the
+		 * gate" -- it had been reporting the cause the whole time.
+		 *
+		 * The master-open check is KEPT: that one is about the master, which does
+		 * still exist. */
+		if (*mars_comm0) {
+			fmgate_defer++;
+		} else {
+			r60_go = 1;
+		}
+		if (0)
+#endif
 		if (v_entry < 0xDF || v_entry > 0xE8) {
 			(*(volatile uint16_t*)0xFFB0FC)++;       /* entry reject */
 		} else if (*mars_comm0) {
@@ -2682,7 +5015,7 @@ void shim_vblank(void) {
 		 * last frame's coherent list - stale beats torn. */
 		if (!(*(volatile uint16_t*)0xA15100 & 0x8000)) {
 			const uint16_t *sp2 = (const uint16_t*)0xFF7000;
-			volatile uint16_t *dp = (volatile uint16_t*)0x85E000;
+			volatile uint16_t *dp = (volatile uint16_t*)0x857000;
 			for (uint16_t i = 0; i < 64; i++) {
 				uint16_t r2 = sp2[2];
 				dp[0] = sp2[0]; dp[1] = sp2[1];
@@ -2698,6 +5031,22 @@ void shim_vblank(void) {
 #ifdef MD_BG
 		/* phase stamps: beam line at each boundary (last-value
 		 * telemetry, 0xFFA080..88) — the post-delay budget autopsy */
+#if defined(R60) && defined(NT_WRAP) && defined(PAL_FIRST)
+        if (r60_palette_pending) {
+            uint16_t pv = (uint16_t)(*(volatile uint16_t*)0xC00008 >> 8);
+            if (pv >= 0xE0u && pv < 0xF8u) {
+                uint32_t src = ((uint32_t)r60_palette_hold) >> 1;
+                *(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
+                *(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;
+                *(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
+                *(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | (src & 0xFF));
+                *(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((src >> 8) & 0xFF));
+                *(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
+                *vdp_ctrl_wide = ((uint32_t)0xC000u << 16) | 0x80u;
+                r60_palette_pending = 0u;
+            }
+        }
+#endif
 		/* deferred palette block (see md_consume): first thing at vint
 		 * top, from the WRAM hold, before any name-table work */
 		if (*(volatile uint16_t*)0xFFA160) {
@@ -2710,8 +5059,13 @@ void shim_vblank(void) {
 			*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((src >> 16) & 0x7F));
 			*vdp_ctrl_wide = ((uint32_t)(0xC000u | 32u) << 16) | 0x80u;
 		}
+#if defined(TWO_POST) && !defined(TP_CONSUME_FIRST)
+		if (!r60_go)                         /* posting first: the consumes
+		                                      * run after the flip echo */
+#endif
+		{
 		*(volatile uint16_t*)0xFFA080 = *(volatile uint16_t*)0xC00008;
-		md_consume(0x851A00uL);
+		md_consume(0x857000uL);
 		*(volatile uint16_t*)0xFFA082 = *(volatile uint16_t*)0xC00008;
 		/* (md_stage_play retired here: R60 consumes are direct-DMA;
 		 * 0xFFA400 now holds the rowscroll prev-ship copy) */
@@ -2722,6 +5076,10 @@ void shim_vblank(void) {
 		mdspr_consume();                     /* P3: SAT + sprite pal */
 		mdspr_upload_pump();                 /* per-scene art chunks */
 #endif
+#ifdef TAIL_CENSUS
+		*(volatile uint16_t*)0xFFA1F8 = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pump */
+#endif
+		}
 #endif
 #ifdef POST_LATE
 		/* POST LATE (2026-09-06, the 60Hz fix): the post/push move to
@@ -2731,6 +5089,22 @@ void shim_vblank(void) {
 		 * body's deferred flip (one frame of constant latency). */
 		if (r60_go) { r60_late = 1; r60_late_v = v_entry; }
 #else
+#ifdef GATE_FREE
+		/* LOOP29 181. GAMEGATE's release lives INSIDE `if (r60_go)`, the
+		 * window path, so it can only fire on a window vint -- which is
+		 * why GAMEGATEWAIT=1 still measured the game at 50% of vints
+		 * (entry 180 claimed it decoupled them; it did not). Release on
+		 * a vint with NO window too, and the game's logic and input run
+		 * on vblank as the arcade's do, at 60 Hz, whatever rate the
+		 * display manages underneath. Mike, 2026-09-11: "we get our
+		 * player missing frames, but we dont slow down gameplay to catch
+		 * up. so this is the right progression." */
+		if (!r60_go) {
+			*(volatile uint8_t*)0xFFA0F5 = 1;
+			(*(volatile uint16_t*)0xFFA0F6)++;
+			(*(volatile uint8_t*)0xFFA0F4)++;    /* counted as a fallback */
+		}
+#endif
 		if (r60_go) {
 			{
 #ifdef BOOT_FBX_A
@@ -2758,19 +5132,91 @@ void shim_vblank(void) {
 					PSTAMP(0xFFA184);
 				}
 #endif
-#ifdef FB_XPORT
+#if defined(FBX_STAGE) && defined(FBX_BOTH)
+				/* THE OTHER BANK (LOOP28 91). FM is still down here —
+				 * it goes up on the next line — so the framebuffer is
+				 * ours, and a flip may have swapped banks since the
+				 * tail write. Same packet, same sequence. */
+				r60_blast(0);
+#endif
+#if defined(FBX_STAGE) && defined(FBX_PEND)
+				/* FBXPEND: the tail found FM up and left the packet
+				 * staged; FM is 0 here (the consumes above needed it),
+				 * so this is the one blast that packet gets. */
+				if (fbx_pend) { fbx_pend = 0; r60_blast(1); }
+#endif
+
+#ifdef TAIL_CENSUS
+				*(volatile uint16_t*)0xFFA1FA = *(volatile uint16_t*)0xC00008;   /* NOTES 49: after the pending blast */
+#endif
+#if defined(FB_XPORT) && !defined(FBX_TAIL) && !defined(FBX_STAGE)
 				/* THE PUSH MOVES AHEAD OF THE POST (LOOP27 67). It has
 				 * to: the 68K cannot reach the framebuffer at FM=1.
 				 * Push-before-post was tried and reverted in August
 				 * because the push was ~90 lines of FIFO writes and the
 				 * flip then never made vblank — through the FB it is
-				 * ~2, so the objection is gone with the FIFO. */
+				 * ~2, so the objection is gone with the FIFO.
+				 *
+				 * It is NOT ~2 lines: the ~56-line BUILD is in here too,
+				 * and that is what drives V-at-post to 43 and the flip
+				 * to 0.3 Hz. FBX_STAGE takes the build out of this
+				 * window entirely (LOOP28 89) and adds nothing ahead of
+				 * the post. */
 				r60_push();
 #endif
+#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
+				/* NOTES 63 / LOOP29 270: the mask rides its OWN word in
+				 * the FB packet half, not COMM2's shared high byte. One
+				 * writer, tagged and sequenced, and COMM2 goes back to
+				 * carrying nothing but the bank.
+				 * IT MUST BE WRITTEN BEFORE THE FM RAISE BELOW. The 68K
+				 * cannot reach the framebuffer at FM=1 at all -- the
+				 * write is silently DROPPED, the master then reads an
+				 * untagged word and takes the safe path (full capture)
+				 * forever. Measured with it on the wrong side of the
+				 * raise: 1-3 presented frames per 64 vints against the
+				 * line's 18 (LOOP29 270). One word is ~0.05 lines.
+				 * Every 8th vint forces the mask full, so an ungated
+				 * writer is stale for at most 8 vints -- card L's
+				 * backstop, kept. */
+				{
+					static uint8_t txm_seq;
+					txm_seq = (uint8_t)((txm_seq + 1) & 0x0F);
+					*(volatile uint16_t*)FBX_TXM_MD = (uint16_t)(FBX_TXM_TAG
+					              | ((uint16_t)txm_seq << 8)
+					              | txt_mask
+					              | (((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)));
+				}
+#endif
 				*(volatile uint16_t*)0xA15100 |= 0x8000;
+				#if defined(TXT_MASK) && defined(TXT_MASK_PKT)
 				*mars_comm2 = BANK_SHADOW;
+#elif defined(TXT_MASK)
+				/* mask in the high byte; every 8th vint force it full */
+				*mars_comm2 = (uint16_t)(BANK_SHADOW
+				              | ((uint16_t)(txt_mask | ((*(volatile uint16_t*)0xFFB0F0 & 7) ? 0 : 0xFF)) << 8));
+#else
+				*mars_comm2 = BANK_SHADOW;
+#endif
 				*mars_comm12 = (uint16_t)(0xD000 | v_entry);
-				*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+				#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #ifdef ARM_GATE
 				/* COMM4 was cleared at the announce, so a 0xA001 here is
 				 * THIS vint's arm (the ISR usually arms during our
@@ -2786,6 +5232,9 @@ void shim_vblank(void) {
 				 * flip NEVER made vblank: 8 flips in 1602 vints. The
 				 * push must overlap the flip span; the real fix is a
 				 * smaller packet.) */
+#ifdef ECHO_CENSUS
+				*mars_comm4 = 0xF000;                /* NOTES 45: "posted, no echo yet" */
+#endif
 				*mars_comm0 = 0x2020;                /* post: ISR flips */
 				*(volatile uint16_t*)0xFFA0A0 =
 					*(volatile uint16_t*)0xC00008;   /* V at post */
@@ -2829,6 +5278,22 @@ void shim_vblank(void) {
 #else
 				(void)0;                 /* FB route: shipped at FM=0 */
 #endif
+#ifdef FBX_STAGE
+				/* THE BUILD, OFF THE FM=0 WINDOW (LOOP28 89). Every
+				 * word goes to WRAM, so FM=1 does not apply and this
+				 * overlaps the master's blit, which we wait out below
+				 * either way. r60_blast() moves it to the framebuffer
+				 * at the tail.
+				 *
+				 * OUTSIDE the arm gate on purpose: arming is a DREQ
+				 * concern and the FB route has no DMA to arm. The
+				 * FBXPORT line builds unconditionally today and this
+				 * must not quietly start dropping packets on a vint
+				 * the ISR was slow to echo. */
+#ifndef TWO_POST
+				r60_push();                      /* TWO_POST: after post B */
+#endif
+#endif
 				/* (FM_LATE arm: selection overlaps the ISR span; the
 				 * F103 wait + FM drop sit before its ship) */
 				*(volatile uint16_t*)0xFFA0AC =
@@ -2863,11 +5328,26 @@ void shim_vblank(void) {
 #else
 				(void)0;                 /* FB route: shipped at FM=0 */
 #endif
+#ifdef FBX_STAGE
+				/* THE BUILD, OFF THE FM=0 WINDOW (LOOP28 89). Every
+				 * word goes to WRAM, so FM=1 does not apply and this
+				 * overlaps the master's blit, which we wait out below
+				 * either way. r60_blast() moves it to the framebuffer
+				 * at the tail.
+				 *
+				 * OUTSIDE the arm gate on purpose: arming is a DREQ
+				 * concern and the FB route has no DMA to arm. The
+				 * FBXPORT line builds unconditionally today and this
+				 * must not quietly start dropping packets on a vint
+				 * the ISR was slow to echo. */
+#ifndef TWO_POST
+				r60_push();                      /* TWO_POST: after post B */
+#endif
+#endif
 				*(volatile uint16_t*)0xFFA0AC =
 					*(volatile uint16_t*)0xC00008;   /* V post-push */
 #endif
-				while (*mars_comm4 != 0xF102
-				       && *mars_comm4 != 0xF1FF) {   /* flip-hold tail */
+				while (!ECHO_SEEN(*mars_comm4)) {   /* flip-hold tail */
 					uint8_t vv = (uint8_t)
 						(*(volatile uint16_t*)0xC00008 >> 8);
 					if (vv > 0xF8 || vv < 0xDF)
@@ -2876,6 +5356,175 @@ void shim_vblank(void) {
 				*(volatile uint16_t*)0xFFA09E =
 					*(volatile uint16_t*)0xC00008;   /* V at hold exit */
 				*(volatile uint16_t*)0xFFA0A2 = *mars_comm4;
+#ifdef TXT_MASK
+				{	/* the master captured with this post's mask: start afresh.
+					 * No echo (bailed vint) = keep accumulating. */
+					uint16_t c4m = *mars_comm4;
+					/* Any echo that proves flip_span RAN is a consume:
+					 * the capture sits above the guard, so a declining
+					 * vint captured too. Under ECHOCENSUS the decline
+					 * echo is tagged F1F1/F1F2/F1F3 instead of the plain
+					 * F1FF (NOTES 45), and without these three the census
+					 * build alone kept re-marking rows it had already
+					 * captured -- a slower rom than the ship measuring
+					 * the ship's guard. */
+					if (c4m == 0xF102 || c4m == 0xF103 || c4m == 0xF1FF
+					    || c4m == 0xF104 || c4m == 0xF1FE
+					    || c4m == 0xF1F1 || c4m == 0xF1F2
+					    || c4m == 0xF1F3) txt_mask = 0;
+				}
+#endif
+#ifdef GAME_GATE
+				/* THE GO TOKEN (LOOP29 141): one game frame per presented
+				 * frame. F102 = the ISR flipped this vint. The fallback
+				 * keeps loads, blanks and a stalled compose from freezing
+				 * the game. 0xFFA0F6 counts releases, 0xFFA0F4 fallbacks. */
+				{
+					static uint8_t gg_wait;
+					uint16_t c4 = *mars_comm4;   /* F102 = flipped; F103 = flipped
+					                              * and restored (the ISR writes both) */
+					uint8_t flipped = (c4 == 0xF102 || c4 == 0xF103 || c4 == 0xF104);
+					if (flipped || ++gg_wait >= GAMEGATE_MAXWAIT) {
+#ifdef OBJ_LOG
+						/* NOTES 72 / LOOP29 280: object 0's position,
+						 * ONE ENTRY PER GAME FRAME, so the index is the
+						 * game's own frame number and lines up with a
+						 * MAME log of the arcade frame-for-frame (modulo
+						 * a constant boot offset). Logged at the RELEASE,
+						 * which is by definition once per game frame --
+						 * a vint the game does not get is a frame it does
+						 * not run, and it must not consume an index.
+						 * 0xFFC00C = x, 0xFFC010 = y (identified by
+						 * diffing object 0 across the demo, not assumed).
+						 * Ring at 0xFF4000, 2048 entries of 4 bytes, in
+						 * the gap LOOP28 84 audited as never written
+						 * after boot (__bss_end <= 0xFF2200, PAL_SHADOW
+						 * at 0xFF6000). Stops at the end; no wrap, so a
+						 * short run reads clean. */
+						{
+							/* NOTES 73: index on the GAME'S OWN demo frame
+							 * counter (0xFFF02A, zeroed at game start and
+							 * the very word the tape reads), not on a
+							 * count of releases. A release without a game
+							 * frame -- or two for one -- drifted the old
+							 * index and showed as a one-frame stall, which
+							 * is exactly the shape the divergence took.
+							 * Writing log[ctr] makes a repeat overwrite
+							 * itself instead of consuming a slot. */
+							/* NOTES 74: 0xFFF02A has TWO JOBS -- a
+							 * countdown timer on the card steps and the
+							 * demo frame counter inside a demo step, and
+							 * it is re-zeroed at every game start. So
+							 * scope it: only demo steps (0xFFF031 in
+							 * {0x04, 0x0C, 0x14}), and only AFTER the
+							 * reset inside one, logging until the step
+							 * changes. That captures exactly one demo
+							 * instance with an index that is strictly
+							 * +1 per game frame, which is what both
+							 * earlier attempts lacked. */
+							static uint16_t ol_prev;
+							static uint8_t ol_state;   /* 0 wait, 1 log, 2 done */
+							uint8_t ol_st = *(volatile uint8_t*)0xFFF031;
+							uint8_t ol_demo = (ol_st == 0x04 || ol_st == 0x0C
+							                   || ol_st == 0x14);
+							uint16_t ol_c = *(volatile uint16_t*)0xFFF02A;
+							if (ol_state == 0) {
+								if (ol_demo && ol_c < ol_prev) {
+									ol_state = 1;         /* the reset inside a demo */
+									*(volatile uint16_t*)0xFF3FFC = ol_st;
+								}
+							} else if (ol_state == 1 && !ol_demo) {
+								ol_state = 2;             /* the step ended */
+							}
+							ol_prev = ol_c;
+							if (ol_state == 1 && ol_c < 2048) {
+								volatile uint16_t *lg =
+									(volatile uint16_t*)(0xFF4000u + ol_c * 4u);
+								lg[0] = *(volatile uint16_t*)0xFFC00C;
+								lg[1] = *(volatile uint16_t*)0xFFC010;
+								if (ol_c > *(volatile uint16_t*)0xFF3FFE)
+									*(volatile uint16_t*)0xFF3FFE = ol_c;
+							}
+						}
+#endif
+						if (!flipped) (*(volatile uint8_t*)0xFFA0F4)++;
+						*(volatile uint8_t*)0xFFA0F5 = 1;
+						(*(volatile uint16_t*)0xFFA0F6)++;
+						gg_wait = 0;
+					}
+				}
+#endif
+#ifdef TWO_POST
+				/* TWO-POST (LOOP29 149): the master flipped on post A and
+				 * dropped FM. Consumes and the packet blast here, at FM=0;
+				 * then raise again and post B for the window. If the body
+				 * flipped instead and FM is still up, md_consume skips
+				 * itself and the blast goes pending (late blast / next
+				 * pre-post), exactly the FBXPEND paths. */
+#ifndef TP_CONSUME_FIRST
+				*(volatile uint16_t*)0xFFA080 = *(volatile uint16_t*)0xC00008;
+				md_consume(0x857000uL);
+				md_consume(0x85E800uL);
+#ifdef MDSPR
+				mdspr_consume();
+				mdspr_upload_pump();
+#endif
+				*(volatile uint16_t*)0xFFA086 = *(volatile uint16_t*)0xC00008;
+#endif
+#ifdef FBX_STAGE
+				fbx_pend = 1;                        /* blast in game context
+				                                      * (the gate spin), not here:
+				                                      * post B must not wait ~12
+				                                      * lines of FB writes */
+#endif
+				*(volatile uint16_t*)0xA15100 |= 0x8000;
+#ifdef RIG_WIN3
+				*(volatile uint16_t*)0xFFA0EE = *(volatile uint16_t*)0xC00008;   /* RIGWIN3: V at post B (the live window post on the line) */
+#endif
+				*mars_comm0 = 0x2020;                /* post B: the window */
+				r60_push();                          /* the build, after post B (WRAM
+				                                      * only; the window runs under
+				                                      * it). Blasted next vint in the
+				                                      * consume window, or late. */
+#endif
+#if defined(FBX_STAGE) && !defined(TWO_POST)
+				/* THE BLAST, AT THE TAIL (LOOP28 89). Same window
+				 * FBX_TAIL uses and for the same reason — the master
+				 * dropped FM at its ack, so the 68K can reach the
+				 * framebuffer here, and it costs the post nothing
+				 * because the post already happened.
+				 *
+				 * What is different from FBX_TAIL is what runs here.
+				 * FBX_TAIL put the whole ~56-line build in this window
+				 * and the game's IRQ4 waited for all of it: 49.1%
+				 * against 60.7 without. Only the copy is here now. */
+#ifdef FBX_PEND
+				/* FBXPEND: a 68K FB write at FM=1 is DROPPED (ares
+				 * bus-external.cpp:45, FPGA IF.sv:946), and FM can only
+				 * RISE from this CPU, so a blast that starts at FM=0
+				 * completes at FM=0. Blast now if we can; otherwise hold
+				 * the staged packet for the pre-post slot next vint. */
+				if (*(volatile uint16_t*)0xA15100 & 0x8000)
+					fbx_pend = 1;
+				else
+					r60_blast(1);
+#else
+				r60_blast(1);
+#endif
+#endif
+#ifdef FBX_TAIL
+				/* PUSH AT THE TAIL, NOT BEFORE THE POST (LOOP27 75).
+				 * Measured: pushing before the post moves V-at-post from
+				 * 240 (inside vblank, where the ISR can still flip) to 34
+				 * (line 34 of active display), and the flip rate falls
+				 * 27.3 Hz -> 1.2. The push has to be at FM=0, but this
+				 * is FM=0 too — the master dropped it at its ack — and
+				 * it costs the post nothing. The packet then waits in the
+				 * framebuffer for the next window, one vint of latency,
+				 * which the harvest already tolerates (a stale publish
+				 * yields landed = 0 and last frame's records stand). */
+				r60_push();
+#endif
 			}
 		}
 #endif
@@ -2944,7 +5593,7 @@ void shim_vblank(void) {
 			 * Arming needs no post; the ISR consumes the announce
 			 * (clears COMM6) and echoes 0xA001 for the push gate. */
 			*mars_comm6 = 0xB101;
-			md_consume(0x851A00uL);
+			md_consume(0x857000uL);
 			md_stage_play();
 			{
 				/* the V-budget was protecting the ISR's arm timing —
@@ -3133,7 +5782,24 @@ void shim_vblank(void) {
 			*mars_comm12 = (uint16_t)(0xD000
 				| (*(volatile uint16_t*)0xC00008 >> 8));
 #endif
-			*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+			#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
+		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #ifdef K2_FREE
 			if ((wcmd & 0x00F0) == 0x0020)
 				*mars_comm4 = 0;     /* k2 ONLY: a stale 0xF102 from
@@ -3144,6 +5810,9 @@ void shim_vblank(void) {
 				                      * gate aborted every k1 push —
 				                      * 1718 aborts, sprites frozen,
 				                      * caught by the B0E0 counter. */
+#endif
+#ifdef RIG_WIN3
+			*(volatile uint16_t*)0xFFA0EE = *(volatile uint16_t*)0xC00008;   /* RIGWIN3: V at the post */
 #endif
 			*mars_comm0 = wcmd;
 #ifdef MD_BG
@@ -3163,8 +5832,7 @@ void shim_vblank(void) {
 				 * 68.2 it replaces. V-bounded: past 0xF8 (or wrapped
 				 * out of vblank entirely) the ISR declined this vint's
 				 * flip — release and let the body fallback decide. */
-				while (*mars_comm4 != 0xF102
-				       && *mars_comm4 != 0xF1FF) {
+				while (!ECHO_SEEN(*mars_comm4)) {
 					/* 0xF1FF = the ISR DECLINED the flip (edge
 					 * guard: too late in vblank — drop, not tear);
 					 * release the game immediately either way */
@@ -3192,7 +5860,15 @@ void shim_vblank(void) {
 		*mars_comm12 = (uint16_t)(0xD000
 			| (*(volatile uint16_t*)0xC00008 >> 8));
 #endif
+#ifdef NO_GAMEHIGH
+		/* BOUNDED under NO_GAMEHIGH. With the SH-2 port as producer the master's
+		 * window can legitimately run long (a scene transition is one game frame
+		 * of clears and tilemap fills), and an unbounded spin here took the 68K
+		 * out for good at frame 1050 on 2026-10-04. ~4 frames, then carry on. */
+		{ uint32_t dr = 400000UL; while (*mars_comm0 && --dr) ; }
+#else
 		while (*mars_comm0) ;                    // drain any pending stream batch
+#endif
 		// (unpair model: RV is 0 permanently — no toggle here)
 		// FM=1: hand the VDP (FB/CRAM) to the SH-2 for the window; FM
 		// stays 0 outside so the GAME's staged writes land.
@@ -3221,7 +5897,24 @@ void shim_vblank(void) {
 		// master reads a value complete through this vint (the game is
 		// stalled until the ack). NOT cleared here — the DREQ push
 		// below still owns harvest-and-clear.
+		#ifdef MD_ROUND
+		/* LOOP29 193: carry the GAME'S ROUND in COMM10 bits 13-15. The
+		 * low 13 are the tile-dirty mask and the SH-2 masks with 0x1FFF
+		 * (187), so the top three are free -- three bits for five
+		 * rounds. 0xFFF142 is the game's own scene variable
+		 * (LOOP-DECOMPILE 66: `move.b $FFF142,d0 ; the scene index`).
+		 * The SH-2 cannot read 68K wram, so this is the only way it can
+		 * know which round's palette table to install. */
+		/* LOOP29 222: MASK the dirty word. It is 16 regions wide and
+		 * regions 13-15 (the actor lines) are dirty whenever a sprite
+		 * palette moves, so the round in bits 13-15 read as round|dirt
+		 * on the SH-2 -- a wrong table installed on the same-round
+		 * return (vi66b: black rectangles in level 1's tree row). */
+		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
+			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+#else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
+#endif
 #if defined(CMD_PROBE) || defined(CMD_INT)
 		// LOOP 11 — assert CMD INT to the primary SH-2 (d32xr src-md/
 		// crt0.s:3143, `move.w #0x0001,0xA15102`). Purely additive: the
@@ -3234,6 +5927,9 @@ void shim_vblank(void) {
 		// sample came out ~one frame (262 lines). Raise FIRST so the
 		// timestamp precedes the signal it is timing.
 		*(volatile uint16_t*)0xA15102 = 0x0001;
+#endif
+#ifdef RIG_WIN3
+		*(volatile uint16_t*)0xFFA0EE = *(volatile uint16_t*)0xC00008;   /* RIGWIN3: V at the post */
 #endif
 		*mars_comm0 = wcmd;
 #ifdef MD_BG
@@ -3272,14 +5968,14 @@ fmg_raised: ;
 		 * clears — so the stagings don't collide; V here is still
 		 * vblank. On k1 vints FM=1 and both calls no-op. */
 #ifndef K2_FREE
-		md_consume(0x851A00uL);
+		md_consume(0x857000uL);
 		md_stage_play();
 		md_consume(0x85E800uL);
 #endif  /* K2FREE: consumes moved to k1 ENTRY (pre-raise, FM=0 there;
          * consume is STAGED so it needs no vblank) — here FM is still
          * 1 (the SH-2 owns its fall) and both calls would no-op. */
 #else
-		md_consume(0x851A00uL);
+		md_consume(0x857000uL);
 #endif
 #endif
 		// PRESENTATION 2.0: the FS-home wait is RETIRED, not rewritten.
@@ -3387,7 +6083,7 @@ window_done: ;
 	// below — a region must only be cleared when it has actually gone.)
 
 	// SPRITE LIST over DREQ FIFO: the game's own vint upload writes
-	// sprite RAM through the FB window (remap 0x85E000) exactly while
+	// sprite RAM through the FB window (remap 0x857000) exactly while
 	// the SH-2 blit owns the FB — ares/hardware DISCARD those writes
 	// (savestate-proven 40/64 torn records: the "utterly broken"
 	// sprites). The one reliable bulk channel is the DREQ FIFO. Walk
@@ -4190,6 +6886,9 @@ window_done: ;
 		if (md_hold_seen) md_hold = (uint8_t)(md_hold_seen == 2);
 		md_hold_seen = 0;
 		uint8_t disp = (uint8_t)((IO_MISC & 0x20) && !md_hold);
+#ifdef VID_FORCE
+		disp = 1;                            /* VIDFORCE probe: the MD display stays on without the game's enable */
+#endif
 #ifdef BOOT_FBXFER
 		/* THE PROBE MUST NOT BE READ THROUGH THE DISPLAY GATE. A blanked
 		 * MD plane is black, and so is a flooded d=0 — the first three
@@ -4199,7 +6898,18 @@ window_done: ;
 		disp = 1;
 #endif
 		if (disp != disp_last) {
+#ifdef NO_GAMEHIGH
+			/* KEEP IE0 SET. Both constants have bit 5 -- the VDP's vblank
+			 * interrupt enable -- CLEAR, because the GAME owns IRQ4 and turns it
+			 * on itself. With the port as producer there is no game to turn it
+			 * back on, so the first time this fired it switched the vblank
+			 * interrupt off and the 68K stopped being interrupted: 63 vints in
+			 * 1450 frames against the line's 1427, and the master's compose never
+			 * ran a single cycle. 0x74/0x34 = the same bits plus IE0. */
+			*(volatile uint16_t*)VDP_CTRL_PORT = disp ? 0x8174 : 0x8134;
+#else
 			*(volatile uint16_t*)VDP_CTRL_PORT = disp ? 0x8154 : 0x8114;
+#endif
 			disp_last = disp;
 		}
 	}
@@ -4437,17 +7147,263 @@ window_done: ;
 #endif
 }
 
+#ifdef RIG_SPAN
+/* RIGSPAN (2026-09-24): the game's own frame, measured at its idle loop. The
+ * patcher's 0x3982 thunk calls this through the 0xFFA0E8 vector on EVERY
+ * arrival at the idle loop (every spin iteration). A pass is ARMED when the
+ * arrival finds the frame flag set (the pass starts now); the next arrival
+ * with the pass armed is the pass's end: stamp V and the vints elapsed. */
+static uint8_t span_armed; static uint16_t span_start; volatile uint16_t span_v; volatile uint8_t span_len;
+#if RIG_SPAN == 2
+volatile uint16_t span_relmax;
+void span_fold(void)   /* called from shim_vblank every vint and at the pass end */
+{
+	uint16_t r = *(volatile uint16_t*)0xFFA0EC;
+	if (r > span_relmax) span_relmax = r;
+	*(volatile uint16_t*)0xFFA0EC = 0;
+}
+#endif
+#if RIG_SPAN == 18
+#ifndef PC_SAMP
+#error RIGSPAN=18 needs the PC sampler (PCSAMP=1 PCSAMPN=15)
+#endif
+/* RIGSPAN=18 (2026-09-24 22:45): classify the PC sampler's ring (md_start.s PC_SAMP, 64 x u32 at
+ * 0xFFA200, running index at 0xFFA3FE) once a vint into four counters, reset at every attract
+ * step / round change like modes 3-16. Readout at the barcode. */
+volatile uint16_t span_cls[4], span_cls_tot;
+static uint16_t span_cls_last; static uint8_t span_cls_key = 0xFF;
+void span_class(void)
+{
+	uint8_t key = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7) | (*(volatile uint8_t*)0xFFF031 & 0x1C) << 1);
+	if (key != span_cls_key) { span_cls_key = key; span_cls[0] = span_cls[1] = span_cls[2] = span_cls[3] = 0; span_cls_tot = 0; }
+	uint16_t idx = *(volatile uint16_t*)0xFFA3FE;
+	uint16_t n = (uint16_t)(idx - span_cls_last);
+	if (n > 64u) n = 64u;
+	span_cls_last = idx;
+	const volatile uint32_t *ring = (const volatile uint32_t*)0xFFA200;
+	for (uint16_t i = 0; i < n; i++) {
+		uint32_t pc = ring[(uint16_t)(idx - n + i) & 63u] & 0xFFFFFFu;   /* abs.w jumps sign-extend the PC register */
+		uint8_t c;
+		/* on a RIGSPAN rom the game's idle loop is the patcher's thunk (0xFFBFxx, jsr'd from
+		 * 0x903982) calling span_hook (ROM 0x8C0BA4-0x8C0BEA): all of that is IDLE time.
+		 * Ours = the shim's ROM text (0x8C0410-0x8C2286) and every WRAM address outside
+		 * the relocated game code (.data/.ramtext at 0xFF0100+, the gate/tile thunks at
+		 * 0xFFB3xx-0xFFBFxx). Measured on ares 2026-09-24 23:00: the first cut put the
+		 * thunk in "ours" and read 56-81% shim on the title. */
+		if (pc >= 0xFF5000u && pc < 0xFF5E00u) c = 2;
+		else if ((pc >= 0x903980u && pc <= 0x903990u) || (pc >= 0xFFBF80u && pc < 0xFFBFF0u) || (pc >= 0x8C0BA4u && pc < 0x8C0BEAu)) c = 0;
+		else if (pc >= 0xFF0000u || (pc >= 0x880000u && pc < 0x900000u)) c = 1;
+		else c = 3;
+		if (span_cls[c] < 65535u) span_cls[c]++;
+		if (span_cls_tot < 65535u) span_cls_tot++;
+	}
+}
+#endif
+#if RIG_SPAN == 16
+/* RIGSPAN=16 (2026-09-25 08:10): the dual-chain counter. At every IRQ4 chain entry the
+ * game's frame flag 0xFFF01C tells whether the game is mid-pass (set: the pass that
+ * started at an earlier vint has not reached its wait -- the game's own overrun; our
+ * shim still posts, pushes and blits a window for it) or waiting (clear: a fresh frame).
+ * byte 5 = chains entered mid-pass / 2, byte 6 = chains entered with a fresh frame / 2,
+ * per attract step. Counted in shim_vblank before the game's IRQ4 runs. */
+volatile uint16_t span_c_mid, span_c_fresh;
+void span_vint16(void) { if (*(volatile uint8_t*)0xFFF01C) { if (span_c_mid < 511) span_c_mid++; } else { if (span_c_fresh < 511) span_c_fresh++; } }
+#endif
+#if RIG_SPAN == 15 || RIG_SPAN == 17
+/* RIGSPAN=15 (2026-09-25 05:40, with CARTBENCH=1): instruction-fetch gauge. Every 64th
+ * vint, past the V jump: run the 16-byte loop planted at 0x93FFE0 FROM THE CART (byte 5,
+ * quarter-lines), then copy it to WRAM 0xFFA1F0 and run it from there (byte 6). */
+volatile uint16_t span_t15c, span_t15w;
+static uint16_t span_ql15(uint16_t a, uint16_t b) { uint16_t dv = (uint16_t)(((b >> 8) - (a >> 8)) & 0xFF); int dh = (int)(b & 0xFF) - (int)(a & 0xFF); return (uint16_t)(dv * 4 + dh / 64); }
+void span_bench15(void)
+{
+	if (*(volatile uint16_t*)0xFFB0F0 & 63) return;
+#if RIG_SPAN == 17
+	/* RIGSPAN=17 (2026-09-24 20:00): mode 15's fetch gauge run INSIDE the window, behind
+	 * mode 14's wait, at raw V = RIG_SPAN_V (RIGSPANV in the Makefile; 0x40 = +102 lines,
+	 * 0x10 = +54, 0x80 = +166). Tests the decompile's burst-tenure mechanism (IF.sv
+	 * RS_SH_CONT + CACHE.sv 16-byte line fills) on instruction fetch, which mode 14 only
+	 * tested on data reads. Costs that vint ~110+ lines of 68K; never a ship. */
+	{ uint16_t g = 0; while (++g && (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8) != (uint8_t)RIG_SPAN_V) {} }
+#else
+	{ uint16_t g = 0; while (++g && (((*(volatile uint16_t*)0xC00008) >> 8) - 0xE0u) < 0x10u) {} }
+#endif
+	void (*cart)(void) = (void (*)(void))0x93FFE0uL;
+	volatile uint16_t *w = (volatile uint16_t*)0xFFA1F0;
+	const volatile uint16_t *c = (const volatile uint16_t*)0x93FFE0uL;
+	for (int i = 0; i < 8; i++) w[i] = c[i];
+	void (*wram)(void) = (void (*)(void))0xFFA1F0uL;
+	uint16_t t0 = *(volatile uint16_t*)0xC00008;
+	cart();
+	uint16_t t1 = *(volatile uint16_t*)0xC00008;
+	wram();
+	uint16_t t2 = *(volatile uint16_t*)0xC00008;
+	span_t15c = span_ql15(t0, t1); span_t15w = span_ql15(t1, t2);
+}
+#endif
+#if RIG_SPAN == 14
+/* RIGSPAN=14 (2026-09-25 04:30): the cart-read + WRAM gauge of mode 9, but run INSIDE the
+ * window: every 64th vint the shim waits at the top of its vblank until raw V reaches 0x40
+ * (+102 lines, the master's blit in flight on both machines), then times 256 cart-window
+ * reads (byte 5) and a 256-iteration WRAM loop (byte 6) in quarter-lines. Costs that vint
+ * ~110 lines of 68K; a pricing probe, never a ship. */
+volatile uint16_t span_t14c, span_t14w, span_sink14;
+static uint16_t span_ql14(uint16_t a, uint16_t b) { uint16_t dv = (uint16_t)(((b >> 8) - (a >> 8)) & 0xFF); int dh = (int)(b & 0xFF) - (int)(a & 0xFF); return (uint16_t)(dv * 4 + dh / 64); }
+void span_bench14(void)
+{
+	if (*(volatile uint16_t*)0xFFB0F0 & 63) return;
+	{ uint16_t g = 0; while (++g && (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8) != 0x40u) {} }
+	uint16_t t0 = *(volatile uint16_t*)0xC00008;
+	{ const volatile uint16_t *p = (const volatile uint16_t*)0x900000uL; uint16_t acc = 0; for (uint16_t i = 0; i < 256; i++) acc += p[i]; span_sink14 = acc; }
+	uint16_t t1 = *(volatile uint16_t*)0xC00008;
+	{ volatile uint16_t w = 0; for (uint16_t i = 0; i < 256; i++) w += i; }
+	uint16_t t2 = *(volatile uint16_t*)0xC00008;
+	span_t14c = span_ql14(t0, t1); span_t14w = span_ql14(t1, t2);
+}
+#endif
+#if RIG_SPAN == 13
+/* RIGSPAN=13 (2026-09-25): the missing gauge -- 68K access to the 32X framebuffer.
+ * Every 64th vint at the top of shim_vblank (FM=0 there): 256 word writes to a
+ * dead FB area then 256 word reads back, each timed in quarter-lines. */
+volatile uint16_t span_t_fbw, span_t_fbr, span_sink13;
+static uint16_t span_ql13(uint16_t a, uint16_t b) { uint16_t dv = (uint16_t)(((b >> 8) - (a >> 8)) & 0xFF); int dh = (int)(b & 0xFF) - (int)(a & 0xFF); return (uint16_t)(dv * 4 + dh / 64); }
+void span_bench13(void)
+{
+	if (*(volatile uint16_t*)0xFFB0F0 & 63) return;
+	{ uint16_t g = 0; while (++g && (((*(volatile uint16_t*)0xC00008) >> 8) - 0xE0u) < 0x10u) {} }
+	volatile uint16_t *fb = (volatile uint16_t*)0x85EC00uL;   /* the packet hole's tail, dead space */
+	uint16_t t0 = *(volatile uint16_t*)0xC00008;
+	for (uint16_t i = 0; i < 256; i++) fb[i] = i;
+	uint16_t t1 = *(volatile uint16_t*)0xC00008;
+	{ uint16_t acc = 0; for (uint16_t i = 0; i < 256; i++) acc += fb[i]; span_sink13 = acc; }
+	uint16_t t2 = *(volatile uint16_t*)0xC00008;
+	span_t_fbw = span_ql13(t0, t1); span_t_fbr = span_ql13(t1, t2);
+}
+#endif
+#if RIG_SPAN == 9
+/* RIGSPAN=9 (2026-09-24 20:20): a 68K speed gauge. Every 64th vint, at the top
+ * of shim_vblank: 256 word reads from the cart window (0x900000, where the
+ * game's code lives) and a 256-iteration WRAM loop, each timed on the V/H
+ * counter in quarter-lines. byte 5 = cart, byte 6 = WRAM. Ares vs FPGA. */
+volatile uint16_t span_t_cart, span_t_wram, span_sink;
+static uint16_t span_ql(uint16_t a, uint16_t b) { uint16_t dv = (uint16_t)(((b >> 8) - (a >> 8)) & 0xFF); int dh = (int)(b & 0xFF) - (int)(a & 0xFF); return (uint16_t)(dv * 4 + dh / 64); }
+void span_bench(void)
+{
+	if (*(volatile uint16_t*)0xFFB0F0 & 63) return;
+	/* the raw V counter jumps 0xEA -> 0xE5 inside vblank; wait until it is past
+	 * 0xF0 so the two deltas are linear (wrap 0xFF -> 0x00 is handled by & 0xFF) */
+	{ uint16_t g = 0; while (++g && (((*(volatile uint16_t*)0xC00008) >> 8) - 0xE0u) < 0x10u) {} }
+	uint16_t t0 = *(volatile uint16_t*)0xC00008;
+	{ const volatile uint16_t *p = (const volatile uint16_t*)0x900000uL; uint16_t acc = 0; for (uint16_t i = 0; i < 256; i++) acc += p[i]; span_sink = acc; }
+	uint16_t t1 = *(volatile uint16_t*)0xC00008;
+	{ volatile uint16_t w = 0; for (uint16_t i = 0; i < 256; i++) w += i; }
+	uint16_t t2 = *(volatile uint16_t*)0xC00008;
+	span_t_cart = span_ql(t0, t1); span_t_wram = span_ql(t1, t2);
+}
+#endif
+#if RIG_SPAN == 8
+volatile uint16_t span_spin, span_spin_full; static uint8_t span_seen;   /* RIGSPAN=8: wait-loop arrivals per fully idle vint = a 68K speed gauge */
+void span_vint8(void) { if (!span_seen && !span_armed) span_spin_full = span_spin; span_spin = 0; span_seen = span_armed; }
+#endif
+#if RIG_SPAN == 10 || RIG_SPAN == 11
+/* RIGSPAN=10: span-1 passes by where they END in their second vint: byte 5 = ending in
+ * lines 0-130 / 2, byte 6 = ending in lines 131-261 / 2.  RIGSPAN=11: byte 5 = mean pass
+ * length in lines / 2 (span*262 + end line - start line), byte 6 = passes / 4. Per step. */
+static uint8_t span_v0; volatile uint16_t span_hA, span_hB; static uint32_t span_lsum; static uint16_t span_lcnt; volatile uint16_t span_mean;
+static uint16_t span_line(uint8_t v) { return (uint16_t)(v >= 0xE0u ? (uint8_t)(v - 0xE0u) : v + 38u); }
+#endif
+#if RIG_SPAN == 3 || RIG_SPAN == 4 || RIG_SPAN == 5 || RIG_SPAN == 8 || RIG_SPAN == 10 || RIG_SPAN == 11 || RIG_SPAN == 16
+static uint8_t span_key; volatile uint16_t span_h2; volatile uint16_t span_h1; volatile uint16_t span_h0;   /* per-step histogram: span >= 2, span 1, span 0 */
+volatile uint16_t span_vp, span_vw;   /* RIGSPAN=5: vints with a pass armed / with the game waiting (shim_vblank) */
+void span_vint(void) { if (span_armed) { if (span_vp < 1023) span_vp++; } else { if (span_vw < 1023) span_vw++; } }
+#endif
+void span_hook(void)
+{
+	uint16_t vc = *(volatile uint16_t*)0xFFB0F0;
+	if (span_armed) {
+		uint8_t len = (uint8_t)(vc - span_start);
+		span_armed = 0;
+#if RIG_SPAN == 2
+		/* the patcher's gate stamp (RIGWINMAX = RIGWIN's: V at a release the
+		 * game waited for, one per vint at most): span_fold() in shim_vblank
+		 * takes each vint's into the pass's max; the last vint's is still
+		 * in the stamp here */
+		span_fold();
+		span_v = span_relmax;
+		span_len = len;
+#elif RIG_SPAN == 10 || RIG_SPAN == 11
+		if (len >= 2) { if (span_h2 < 511) span_h2++; } else if (len == 1) { if (span_h1 < 511) span_h1++; } else { if (span_h0 < 511) span_h0++; }
+		{
+			uint8_t ve = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+			uint16_t le = span_line(ve), ls = span_line(span_v0);
+#if RIG_SPAN == 10
+			if (len == 1) { if (le <= 130u) { if (span_hA < 511) span_hA++; } else { if (span_hB < 511) span_hB++; } }
+#else
+			span_lsum += (uint32_t)len * 262u + le - ls; span_lcnt++;
+			if (span_lcnt) span_mean = (uint16_t)(span_lsum / span_lcnt);
+#endif
+		}
+#elif RIG_SPAN == 3 || RIG_SPAN == 4 || RIG_SPAN == 5 || RIG_SPAN == 8
+		if (len >= 2) { if (span_h2 < 511) span_h2++; }
+		else if (len == 1) { if (span_h1 < 511) span_h1++; }
+		else { if (span_h0 < 511) span_h0++; }
+#else
+		span_v = *(volatile uint16_t*)0xC00008;
+		span_len = len;
+#endif
+	}
+#if RIG_SPAN == 8
+	if (!*(volatile uint8_t*)0xFFA0EE) span_spin++;
+#endif
+	if (*(volatile uint8_t*)0xFFA0EE) {   /* the thunk's one read of 0xFFF01C (patch_game.py RIGSPANHOOK) */
+		span_armed = 1; span_start = vc;
+#if RIG_SPAN == 10 || RIG_SPAN == 11
+		span_v0 = (uint8_t)(*(volatile uint16_t*)0xC00008 >> 8);
+#endif
+#if RIG_SPAN == 8
+		span_seen = 1;
+#endif
+#if RIG_SPAN == 2
+		*(volatile uint16_t*)0xFFA0EC = 0; span_relmax = 0;
+#endif
+	}
+#if RIG_SPAN == 3 || RIG_SPAN == 4 || RIG_SPAN == 5 || RIG_SPAN == 8 || RIG_SPAN == 10 || RIG_SPAN == 11 || RIG_SPAN == 16
+	{ uint8_t k = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7) | (*(volatile uint8_t*)0xFFF031 & 0x1C) << 1);   /* round | attract step (the barcode's own fields) */
+	  if (k != span_key) { span_key = k; span_h2 = 0; span_h1 = 0; span_h0 = 0;
+#if RIG_SPAN == 10 || RIG_SPAN == 11
+	    span_hA = 0; span_hB = 0; span_lsum = 0; span_lcnt = 0; span_mean = 0;
+#endif
+#if RIG_SPAN == 16
+	    span_c_mid = 0; span_c_fresh = 0;
+#endif
+#if RIG_SPAN == 5
+	    span_vp = 0; span_vw = 0;
+#endif
+	  } }
+#endif
+}
+#endif
 __attribute__((section(".data")))
 void main(void) {
+#ifdef EARLY_REC
+	*(volatile uint32_t*)0xFFA0E8 = (uint32_t)earlyrec_push;   /* EARLYREC: the idle-loop thunk's vector */
+#endif
+#ifdef RIG_SPAN
+	*(volatile uint32_t*)0xFFA0E8 = (uint32_t)span_hook;         /* RIGSPAN: the same thunk, the span hook */
+#endif
+	*(volatile uint16_t*)0xFFA1D0 = 0;   /* the game-frame counter (shim_vblank); WRAM boots as 0xFFFF */
 	// BOOT-PHASE TRACER: Genesis backdrop colour is visible in ares no matter
 	// what the 32X side does (stage-A red flash proved it). BGR:
 	// RED=entered main; YELLOW=master SDRAM signal; CYAN=slave alive;
-	// GREEN=RV set + stash copied; game then owns the screen.
+	// GREEN=boot complete [RV=1: SUPERSEDED, nothing sets RV]; game owns the screen.
 	vdp_color(0, 0x00E);                // RED: main entered
 
-	// Wait for BOTH SH-2s to reach their SDRAM-resident code before setting
-	// RV=1 — with RV set the SH-2s must never touch cart ROM (hardware rule,
-	// enforced by ares; violating it kills their instruction fetch). The
+	// Wait for BOTH SH-2s to reach their SDRAM-resident code. [RV=1:
+	// SUPERSEDED — this wait was written to precede an RV=1 that v2 removed;
+	// it still earns its place, because the handshake it waits on is what
+	// proves both SH-2s are alive before the game takes the screen.] With RV
+	// set the SH-2s must never touch cart ROM (hardware rule, enforced by
+	// ares; violating it kills their instruction fetch). The
 	// master posts 0x600D on COMM14 from SDRAM; the slave's SDRAM loop
 	// increments COMM6.
 #ifdef BOOT_SHSTAGE
@@ -4491,6 +7447,9 @@ void main(void) {
 		while (*mars_comm6 == c6) ;
 	}
 #endif
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA600)++;
+#endif
 	vdp_color(0, 0xEE0);                // CYAN: slave alive too
 
 	// FM=0: 68K owns the FB window during gameplay so the game's remapped
@@ -4498,6 +7457,9 @@ void main(void) {
 	// VDP init (it posted 0x600D from SDRAM); from here it only touches
 	// FB/CRAM inside the render window, where the shim raises FM first.
 	*(volatile uint16_t*)0xA15100 &= 0x7FFF;
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA602)++;
+#endif
 	MDSTAGE(0x0200);                    /* DARK GREEN: heartbeat seen, FM down */
 
 	// UNPAIR MODEL (NOTES.md "REBASE DESIGN v2"): RV stays 0 FOREVER.
@@ -4545,15 +7507,15 @@ void main(void) {
 	 * VRAM 0, read VRAM back through the data port. WHITE = identical,
 	 * RED = not, then halt. */
 	{
-		volatile uint16_t *fb = (volatile uint16_t*)0x85E000;
+		volatile uint16_t *fb = (volatile uint16_t*)0x857000;
 		uint16_t i, bad = 0;
 		for (i = 0; i < 64; i++) fb[i] = (uint16_t)(0x1234 + i * 0x0101);
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x8F02;
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9340;             /* 64 words */
 		*(volatile uint16_t*)VDP_CTRL_PORT = 0x9400;
-		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | ((0x85E000ul >> 1) & 0xFF));
-		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((0x85E000ul >> 9) & 0xFF));
-		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((0x85E000ul >> 17) & 0x7F));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9500 | ((0x857000ul >> 1) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9600 | ((0x857000ul >> 9) & 0xFF));
+		*(volatile uint16_t*)VDP_CTRL_PORT = (uint16_t)(0x9700 | ((0x857000ul >> 17) & 0x7F));
 		*vdp_ctrl_wide = 0x40000080ul;                           /* VRAM 0, DMA */
 		*vdp_ctrl_wide = 0x00000000ul;                           /* VRAM 0 read */
 		for (i = 0; i < 64; i++)
@@ -4570,6 +7532,12 @@ void main(void) {
 	for (;;) ;
 #endif
 
+#ifdef TEST_CART
+	/* TEST CARTRIDGE (md_src/testcart.c): boot is complete here -- both SH-2s
+	 * up, RV set, the screen ours -- which is the same slot BOOT_BANK3HALT
+	 * uses. Never returns. */
+	{ extern void testcart_run(void); testcart_run(); }
+#endif
 	// Thunk for the one abs.w-encoded jump the rebase couldn't widen
 	// (US 0x1B5C6: jmp (47E).w -> jmp (FFFFB3F0).w): jmp 0x90047E.l.
 	// The target comes from the game table via game_irq.h (ABSW_JMP).
@@ -4603,6 +7571,20 @@ void main(void) {
 		d = (volatile uint16_t*)0xFFB3C0;
 		for (unsigned i = 0; i < sizeof t2 / 2; i++) d[i] = t2[i];
 	}
+#ifdef MD_HSCROLL_DIRECT
+	// MDHSCR (docs/log/LOOP-DECOMPILE.md 23-25): the game's two horizontal
+	// scroll stores now also write the MD hscroll table themselves. The
+	// thunk bodies are generated by patch_game.py, because only it knows
+	// what the text-RAM register remapped to under the active flag set.
+	// Purely additive: the original store still happens inside the thunk,
+	// so the SH-2 still sees the registers and sc[3]/sc[7] still work.
+	{
+		volatile unsigned short *d =
+			(volatile unsigned short*)HSCR_THUNK_BASE;
+		for (unsigned i = 0; i < HSCR_THUNK_WORDS; i++)
+			d[i] = hscr_thunks[i];
+	}
+#endif
 	// DATA-pointer normalization thunks: same trick for two STORED table
 	// pointers whose source values live below 0x28000 (excluded from the
 	// byte-harvest sweep — packed-art collisions). Caught by wpcatch.lua
@@ -4680,11 +7662,32 @@ void main(void) {
 			td[i] = tile_thunks[i];
 		*(volatile uint16_t*)0xFFB9FE = 0x1FFF;
 	}
+#ifdef WRAM_CODE
+	/* WRAM-RESIDENT GAME ROUTINES (2026-09-25, tools/wram_reloc.py, LESSONS
+	 * "the FPGA's cart-fetch penalty is the core's ROM path"): the hot
+	 * routines re-laid into 0xFF5000-0xFF5DFF (free: above the boot stack,
+	 * below the tile thunks); their ROM entries jump here. */
+	{
+		volatile uint16_t *wc = (volatile uint16_t*)WRAM_CODE_BASE;
+		for (uint16_t i = 0; i < WRAM_CODE_WORDS; i++)
+			wc[i] = wram_code[i];
+	}
+#if WRAM_CODE2_WORDS
+	{	/* region 2 (2026-09-24): 0xFF4600-0xFF4BFF, above .bss (md.ld fence) and
+		 * below the boot stack's keep -- the third block set */
+		volatile uint16_t *wc2 = (volatile uint16_t*)WRAM_CODE2_BASE;
+		for (uint16_t i = 0; i < WRAM_CODE2_WORDS; i++)
+			wc2[i] = wram_code2[i];
+	}
+#endif
+#endif
 	// Palette dirty-bit thunks (generated: pal_thunks.h) at 0xFFBA00, the
 	// same abs.w sign-extension rule as the tile thunks above. This block
-	// ends at 0xFFBD1A and the boot stack starts at 0xFFBFF0 — they share
-	// this page, but only during boot: the game runs on its own stack at
-	// 0xFFFFFF00, and our vint handler is entered in the game's context.
+	// ends at 0xFFBD1A. The boot stack USED to start at 0xFFBFF0 in this
+	// same page, 184 bytes above the FM-gate table's end, and the boot-time
+	// vint handler overwrote the table's tail whenever its frame grew by
+	// 32 bytes (2026-09-19, MAME watchpoint). It is at 0xFF3FF0 now
+	// (md_start.s); nothing else may be placed in this page's tail.
 	// The dirty word at 0xFFB9FC starts ALL-DIRTY so the whole palette
 	// ships once before the game's first upload.
 	{
@@ -4696,12 +7699,25 @@ void main(void) {
 #if FMGATE_ON
 	// LOOP 23 — FM entry-gate thunks, immediately after the pal thunks
 	// (FMGATE_THUNK_ADDR is generated from the pal area's actual end;
-	// the generator asserts it clears the boot stack at 0xFFBFF0).
+	// the generator asserts it stays under 0xBFF0, the page's end).
 	{
 		volatile uint16_t *ft =
 			(volatile uint16_t*)(0xFF0000uL | FMGATE_THUNK_ADDR);
 		for (uint16_t i = 0; i < FMGATE_THUNK_WORDS; i++)
 			ft[i] = fmgate_thunks[i];
+#ifdef TXT_MASK
+		txt_mask = 0xFF;                         /* first capture is full */
+#endif
+#ifdef GAME_GATE
+		*(volatile uint8_t*)0xFFA0F5 = 1;        /* first frame is free */
+		*(volatile uint8_t*)0xFFA0F4 = 0;
+		*(volatile uint16_t*)0xFFA0F6 = 0;
+#endif
+#ifdef FBX_PEND
+		*(volatile uint32_t*)0xFFA0F8 = (uint32_t)&fbx_late_blast;
+		fbx_pend = 0;
+		*(volatile uint16_t*)0xFFA0FC = 0;
+#endif
 	}
 #endif
 	*(volatile uint16_t*)0xFFB0F4 = 0;   // ITER5 tail-probe max span
@@ -4744,11 +7760,16 @@ void main(void) {
 	MCU_COINS = 0; MCU_SNDCMD = 0xFF; MCU_BUSY = 0;
 	// (MCU also sends sound cmd 0x40 at boot — no Z80 yet, noted)
 
+	// [RV=1: SUPERSEDED. The parenthetical below is from the old design and
+	// is now BACKWARDS: RV stays 0, so 0x0-0x3FF is the ADAPTER's space, not
+	// the cart image -- which is exactly why the H-int vector trick in the
+	// next paragraph works at all. That trick is the operative mechanism;
+	// believe it, not this line.]
 	// Vectors are served from the cart ROM table (RV=1 makes 0x0-0x3FF the
 	// cart image): exceptions -> 0xFFB408 rte stub, VBLANK -> _vblank. No
 	// runtime vector writes are possible (cart is read-only under RV=1).
 
-	// Interrupt delivery that works under RV=1: the adapter's H-int vector
+	// Interrupt delivery, and it needs RV=0: the adapter's H-int vector
 	// (0x70) is WRITABLE RAM (the security blob itself writes it). Point it
 	// straight at our RAM-resident handler — no adapter trampoline, no
 	// 0x880000-window fetch. H-int is 68K level 4 == the arcade's IRQ4.
@@ -4789,8 +7810,14 @@ void main(void) {
 		st[5] = 0xC057;
 	}
 #endif
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA604)++;
+#endif
 	vdp_color(0, 0x0E0);                // GREEN: handing to the rebased game
 
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA606)++;
+#endif
 	MDSTAGE(0x6318);                    /* GREY: uploads done, before B007 */
 	*mars_comm14 = 0xB007;              // beacon: shim init complete
 	// HOLD THE GAME until the master's V-ISR is armed (COMM14 = 0xB008,
@@ -4804,14 +7831,119 @@ void main(void) {
 	{
 		uint32_t hold = 6000000UL;
 		__asm__ __volatile__("move.w #0x2300,%%sr" ::: "memory");
+#ifdef MD_STATE
+		/* fold 4: the vint handler may already have taken COMM14 for
+		 * the state word (tag E) -- it only does so after seeing the
+		 * master's B1xx/B008, so E means armed too (vi87 cuts 1-2: this
+		 * loop spun on E for the whole run, screen black) */
+		while ((*mars_comm14 & 0xFE00) != 0xB000
+		       && (*mars_comm14 & 0xF000) != 0xE000 && --hold) ;
+#else
 		while ((*mars_comm14 & 0xFE00) != 0xB000 && --hold) ;   /* B008 or B1xx */
+#endif
 		__asm__ __volatile__("move.w #0x2700,%%sr" ::: "memory");
 	}
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA608)++;
+#endif
 	MDSTAGE(0x3000);                    /* DARK BLUE: hold over, entering the game */
+#ifndef NO_GAMEHIGH
+	/* LEAVE IT ZERO WHEN THERE IS NO GAME. md_start.s's vblank handler does
+	 * `jsr shim_vblank` and then `tst.w (game_running); beq.s 1f` -- non-zero means
+	 * chain to the GAME's own IRQ4 handler, which under NO_GAMEHIGH is an absent
+	 * vector. Setting it anyway took the 68K into garbage on the first vblank: all
+	 * COMM traffic stopped dead at frame 20. The hold loop's own comment upstream
+	 * already states the rule -- "_vblank returns before the game hook while
+	 * game_running == 0" -- which is exactly the behaviour a port-alone build
+	 * wants. */
 	game_running = 1;
+#endif
 
+#ifdef NO_GAMEHIGH
+	/* THERE IS NO GAME TO ENTER. The SH-2 port is the producer.
+	 *
+	 * .gamehigh is absent under NO_GAMEHIGH, so the jsr below went to an address
+	 * that holds nothing: the 68K left for garbage with SR = 0x2700, interrupts
+	 * masked, and never came back. shim_vblank is the vblank handler
+	 * (md_start.s:398) and it is what posts the master's per-frame announce, so
+	 * with no vints the announce never fired and the whole renderer stayed dark.
+	 *
+	 * MEASURED 2026-10-03: 4 announces in 400 frames against the line's 726; 32X
+	 * CRAM entirely zero against the line's 442/512 bytes. Every port-alone build
+	 * before this one was black for this reason and not for anything to do with the
+	 * port.
+	 *
+	 * So: unmask and idle. shim_vblank runs every vblank exactly as it does for the
+	 * game, the master gets its announce, and the port -- which lives on the SH-2
+	 * and needs nothing from the 68K -- drives the picture. The 68K's only remaining
+	 * job on this build is to be the thing the vblank interrupt happens to. */
+	/* AND ENABLE THE VBLANK INTERRUPT, which the GAME normally turns on.
+	 * The renderer's own write is `disp ? 0x8154 : 0x8114` (md_main.c) and 0x54
+	 * has bit 5 CLEAR -- that bit is IE0, the VDP's vblank interrupt enable, and
+	 * md_main has never set it because the game's boot does ("the game's boot
+	 * expects reset state and enables IRQ4 itself", the handoff comment above).
+	 * With no game it stayed off, so unmasking the 68K alone bought nothing: there
+	 * were no vblank interrupts to unmask. 0x74 = display on + IE0 + DMA. */
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA60A)++;
+#endif
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8174;
+	/* ONE VINT SOURCE, NOT TWO. The line's vint is the H-int at line 223 (reg 0
+	 * IE1, reg 10 = 0xDF; level 4) with the VDP vblank interrupt (reg 1 IE0, level
+	 * 6) OFF. The port build turned IE0 on (the display gate's 0x8114 stops the
+	 * H-int with the display) but left IE1 on, so every frame ran the handler
+	 * TWICE, the level-6 entry landing inside the level-4 one. MEASURED rd1
+	 * 2026-10-04: 0xFFB0F0 counted 840 vints in 548 frames; the 68K stack held an
+	 * exception frame SR=0x2404 PC=0xFF1C6E (the handler interrupted at IPL 4);
+	 * the handler stopped at frame 548, every VRAM tile slot read zero after it, and
+	 * slim_rec filled with garbage pairs from two consumes walking one packet.
+	 * IE1 off + IE0 on from here: the level-6 vint is the only entry. */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8004;     /* reg 0: IE1 OFF (H-int never fires) */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8174;     /* reg 1: display on, IE0 ON, DMA on */
+#ifdef R60_NEW
+	/* THE PLANE REGISTERS, WHICH NOTHING HAS EVER SET ON THIS BUILD. The GAME's boot
+	 * programs the VDP's layout registers, and under NO_GAMEHIGH there is no game: this
+	 * shim sets regs 0, 1, 11 and 15 and no others, so the plane bases and the plane
+	 * size have been whatever reset left them. Plane B's nametable base read 0 -- the
+	 * tile area -- which is why the MD layer showed nothing however correct the cells
+	 * and the art in VRAM were (measured: 6,640 non-zero bytes of tile data and 784
+	 * name-table entries at 0xE000, and a black layer).
+	 * The addresses are the ones md_consume already writes to (md_main.c:2342-2412). */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8230;     /* reg 2: plane A base 0xC000 */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8407;     /* reg 4: plane B base 0xE000 */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8578;     /* reg 5: sprite table 0xF000 */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8D3F;     /* reg 13: hscroll table 0xFC00 */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x8700;     /* reg 7: backdrop = colour 0 */
+	*(volatile uint16_t*)VDP_CTRL_PORT = 0x9001;     /* reg 16: plane 64 x 32 cells */
+#endif
+	__asm__ __volatile__("move.w #0x2000,%%sr" ::: "memory");   /* IPL 0: vints on */
+#ifdef R60_PKT_PROBE
+	(*(volatile uint16_t*)0xFFA174)++;      /* PROBE: reached the idle loop */
+	for (;;) (*(volatile uint16_t*)0xFFA176)++;   /* PROBE: idling */
+#endif
+#ifdef R60_IDLECONSUME
+	{ extern void r60_idle_consume(void);
+#ifdef R60_FRONTEND
+      extern void frontend_service(void);
+#endif
+      for (;;) {
+#ifdef R60_FRONTEND
+          frontend_service();
+#endif
+          r60_idle_consume();
+      } }   /* sw192: the span's packets taken as they land, under the hold */
+#endif
+	for (;;)
+		__asm__ __volatile__("nop");
+#else
 	// Enter the game's own boot IN PLACE in the rebased high copy
 	// (function-pointer call: GCC emits a real jsr; the game boot sets
 	// its own SP, discarding the pushed return).
 	((void (*)(void))0x00900400)();
+#endif
 }
+
+#ifdef R60_NEW
+#undef shim_vblank
+#include "r60_shim.h"
+#endif

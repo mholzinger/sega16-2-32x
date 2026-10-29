@@ -3150,3 +3150,511 @@ CAUTION carried forward: the rom Mike looked at ten minutes earlier
 every vint, fighting the game's own palette writes. Never hand him a
 `BOOT_VALUE` build as something to judge; those exist to be photographed
 by a script, not watched.
+
+---------------------------------------------------------------------
+
+## 71. THE INSTRUMENT WAS THE BUG: SH-2 COUNTERS ABOVE DIAG[63] ARE LOST
+
+2026-09-08, the flip census. Every SH-2-side number quoted in this
+session's second half came from writes that never landed.
+
+**Symptom.** Two counters incremented on the SAME STATEMENT read 808 and
+1. Adjacent lines disagreed by three orders of magnitude.
+
+**Calibration** at `m_main` entry, a site that must execute exactly once:
+
+    DIAG[62]   0x260280F8    1     write sticks
+    DIAG[64]   0x26028100    0     WRITE LOST
+    DIAG[84]   0x26028150    0     WRITE LOST
+    0x2602FF00               1     write sticks
+    0x26037000               1     write sticks
+    0x2603FF00              66     sticks, but the address is in use
+
+The usable DIAG block ends around slot 63. Slots past it silently
+discard writes and read back residue — plausible small numbers, which is
+what makes it dangerous. A zero-in-the-baseline scan does NOT prove a
+slot is free: a slot that discards writes reads zero too.
+
+**What this invalidated, and the correction:**
+
+  - **"FB transport delivery is 0.2%" — WRONG. It is 100%.** With a
+    calibrated census block: 819 publishes, 819 taken, 0 bad length, 0
+    stale. The alarm was a lost counter.
+  - `DIAG[56]` ("body-fallback flips") is a real counter — it is below
+    the cliff — and it was the only reason the contradiction showed up
+    at all.
+
+**Rule going forward:** every census build carries `CEN[10]`, incremented
+once at `m_main` entry. If it does not read exactly 1, no other slot in
+that run means anything. The census block is `CEN` at 0x2602FF00
+(m_main.c), not DIAG.
+
+## 72. THE FLIP IS NOT THE LIMITER (2026-09-08)
+
+With the census fixed, the measurement entry 9 called for, 900 frames,
+ares, same tree, one flag apart:
+
+    build          vints  ISR flips  body flips  declines  refresh
+    DREQ FIFO       875      357        338        668     79%  47.7 Hz
+    FB transport    881        7        814        825     93%  55.9 Hz
+
+The declines and the flips sum to more than the vint count because a
+vint DECLINES in the V-ISR (past the vblank edge) and then FLIPS in the
+body. The frame is not dropped; it is flipped late. Entry 9's "flips on
+17% of vints = ~10 Hz" does not reproduce.
+
+**So the framebuffer is refreshing at ~56 Hz and the observed ~9 fps is
+the GAME's frame advance, not the display's.** FLIPDEFER is not the next
+lever, and the plan built on entry 9 is withdrawn.
+
+The limiter is upstream and already named in docs/design/SILICON.md: the
+game enters and leaves its IRQ4 handler every vint (`fmgate_ret` reads
+64/64 on both transports) while its own frame advance inside that
+handler does not keep up. That is where the next measurement goes.
+
+Also settled, since the census could finally see it: the packet lift
+works at BOTH positions — before the flip and after it — at 100%
+delivery each (`FBXLATE=1` is the A/B). The flip does not move the
+packet out from under the reader, so the pre-flip move was unnecessary.
+It is kept because it is free and it removes the question.
+
+## 73. FBXPORT REGRESSES THE FLIP 27 Hz -> 1.2 Hz (2026-09-08)
+
+Entry 72's "93% refresh" was wrong. It counted code REACHING a flip
+site. The only thing that changes the displayed framebuffer is the FS
+write in flip_span(), and flip_span() declines internally — the same
+K2FREE edge guard, evaluated again — on almost every call.
+
+Counter at the FS write itself, corroborated by ares's own flip trace
+(`--trace-flip`, which logs FS write requests and actual bank changes):
+
+    build       vints  reached flip site  FS WRITES  emulator trace   refresh
+    baseline     497         392             222     228 wr / 226 fl  27.3 Hz
+    FBXPORT      502         472               6      12 wr /  10 fl   1.2 Hz
+
+**The FB transport made the display refresh 20x WORSE.** The mechanism
+is consistent with the change: the push moved AHEAD of the post (it has
+to — the 68K cannot reach the framebuffer at FM=1), so the post arrives
+~57 scanlines later, every flip attempt lands past the vblank edge, and
+both the ISR and the body fallback decline.
+
+So: entry 9 was right that the flip is the limiter, entry 72's
+withdrawal of that was wrong, and FLIPDEFER (entry 12) is exactly the
+lever — a late flip must commit at the next vblank instead of being
+dropped. The FPGA RTL does this in silicon (VDP.sv latches FS only when
+VBLK); ares latches immediately, which is why the guard exists at all.
+
+MEASUREMENT RULE from this entry: count the HARDWARE EFFECT, not the
+code path. "Reached the flip site" and "wrote FS" differ by 78x here.
+Where the emulator can log the effect itself (--trace-flip, --trace-dreq,
+--trace-comm), prefer that over any counter in our own source.
+
+## 74. THE CENSUS BLOCK NEEDED THE SAME CALIBRATION (2026-09-08)
+
+CEN[0] was verified to hold a write and the rest of the block assumed.
+CEN[12] then reported 470 hits inside a block compiled to `if (0)`.
+Calibrated properly — bump every slot once at m_main entry, a site that
+runs exactly once, and require each to read exactly 1:
+
+    usable   0 1 2 3 4 5 7 8 10 13 17 18 19 20 21 22 23
+    ALIASED  6 9 11 12 14 15 16      (read 76, 76, 150, 112, 35, 289, 150)
+
+Slots 9/11/12/14/15/16 were the entire flip census, so the flip numbers
+in entry 72 and the first version of 73 were garbage. `CENCAL=1` runs
+this calibration. **Calibrate every slot, not the block.**
+
+The `--trace-flip` figures were never affected — they come from the
+emulator, not from our memory — which is why they were the only numbers
+that stayed consistent all session.
+
+Second trap, same shape: `.build_flags` does not capture every flag
+(FLIP_EDGE_OFF and FBX_TAIL reach MDCCFLAGS/SHCCFLAGS and the compile
+line, but not the stamp). Objects depend on the stamp, so a flag build
+can silently reuse the previous build's objects — two roms differing by
+2 bytes of timestamp. `touch sh_src/m_main.c md_src/md_main.c` before
+every flag A/B until that is fixed.
+
+## 75. WHY FBXPORT KILLS THE FLIP: THE POST LEAVES VBLANK
+
+Trustworthy channel only (ares --trace-flip + 68K WRAM counters):
+
+    build                 vints  V at post  flips   refresh   delivery  tears
+    baseline (DREQ)        877      240      346    23.7 Hz     n/a       54
+    DREQ, no landing wait  871      n/a      440    30.3 Hz     n/a      208
+    FBXPORT (pre-post)     882       35       12     0.8 Hz   821/821      0
+    FBXPORT (tail push)    882       35       12     0.8 Hz   821/821      0
+
+**V at post is the mechanism.** The baseline posts at V=240, inside
+vblank, where the ISR can still flip. FBXPORT posts at V=35 — line 35 of
+active display — and every flip attempt then misses the window.
+
+Ruled out as the cause:
+  - the vblank edge guard (FLIPEDGEOFF=1 changes nothing under FBXPORT),
+  - FLIPDEFER (no effect under FBXPORT; on the DREQ build it drops the
+    game to 69 vints in 520 frames, reproducing entry 12),
+  - the landing wait (removing it on the DREQ build RAISES flips to
+    30.3 Hz, so it is not what delays a post),
+  - the push's position: moving it to the vint tail (FBXTAIL=1, after
+    the master's ack where FM is already down) left V at post at 35.
+
+So the post is late for a reason that is NOT the 68K's push placement,
+and that is the next thing to find. The FB transport itself is sound:
+100% delivery, zero tears, against the DREQ route's 54.
+
+NOLANDWAIT is a real but not free lever on the shipping line: +28%
+refresh (23.7 -> 30.3 Hz) for 4x the torn landings (54 -> 208) and lower
+tile throughput (355 -> 262). Not shippable as-is; worth revisiting if
+the tear feedback can absorb it.
+
+## 76. THE REAL GATE, AND THE TWO BOTTLENECKS ARE INDEPENDENT
+
+Mike, on a day of measurements that did not move: "we had a working
+model 4 days ago that was well over 30 frames per second, so you are
+measuring the wrong gates". Correct. Everything in entries 71-75 was
+measured on ATTRACT MODE with no input, and on the FLIP RATE. The
+project's speed gate is `tools/gameplay_speed.py`: game-frames per vint
+over the level-1 input script, 100% = 60 game-frames/s. It also already
+carried the counter entry 72 went looking for — WRAM 0xFFF144, vints in
+which the game's pass had not finished.
+
+    build                              speed    fps   frame-misses
+    ship line (today)                  48.7%     29     51.3%
+    opt1 flags on today's tree         60.7%     36     39.3%
+    opt1 rom as built 2026-09-07       64.9%     39     35.1%
+    FBXPORT alone                      50.3%     30     49.7%
+    **opt1 flags + FBXPORT             82.3%     49     17.7%**
+
+Confirmed: 86.9% on a different sample window (2000..3600), and a fresh
+build from clean objects reproduces byte-identically apart from the
+3-byte stamp.
+
+**THE TWO BOTTLENECKS ARE INDEPENDENT AND NEITHER SHOWS ALONE.** FBXPORT
+by itself buys 1.6 points, which is why entry 75 read it as a failure.
+The sprite-pair fix by itself buys 12. Together they buy 34. The DREQ
+push and the late-claim failures were each hiding the other: with the
+claim failing, the frame is spent on shadow-ramp draws no matter how
+fast the packet crosses; with the packet crossing slowly, fixing the
+claim leaves the 68K waiting anyway.
+
+Flags: TXTWRAM=1 LATESTEAL0=1 LATEKEEP=1 DRAWADOPT=1 FBXPORT=1.
+
+BUILD-SYSTEM HAZARD that cost several false results here: `.build_flags`
+does not capture every flag and objects depend on it, so a flag A/B can
+silently reuse the previous build's objects — three roms this session
+differed from their control by 2-4 bytes of timestamp. `rm -f sh_src/*.o
+md_src/*.o` before every A/B, and CHECK the roms differ before believing
+a comparison. Also: `make -n | grep "md_main.c"` matches the rule's echo
+line, not the compiler invocation; grep for `m68k-elf-gcc.*md_main\.c`.
+
+## 77. CLAIMNEW: THE LATE CLAIM WAS SCANNING THE SNAPSHOT
+
+Entry 6 left a residual of 114 shadow-ramp draws with a diagnosed cause:
+the compose reads records that arrived after the claim loop last looked.
+The fix it proposed was to claim from SPR_LAND before the copy into
+SPR_SNAP. The same effect, one line: **have the claim scan FB_SPR (the
+live list) instead of SPR_SNAP (the snapshot).**
+
+The two hold identical content whenever the snap refresh happened. They
+differ exactly when the snap LATCH SKIPPED a refresh — a compose chain
+mid-flight, which is the case entry 6 diagnosed — and there the claim
+was scanning last frame's records and never claiming a pair for a set
+that had just arrived. That set draws with base 15: the shadow ramp.
+
+    metric                    FBXPORT+opt1   +CLAIMNEW
+    shadow-ramp draws [3]         704            57
+    claim failures    [1]          28             0
+    nothing-stealable [0]          83             0
+    speed                        82.3%         82.0%
+
+12x fewer ramp draws, no claim failures at all, and no speed cost. Also
+below entry 6's best (114) on a build running 20 points faster, which
+means more sprite churn per second, not less.
+
+Flags: TXTWRAM LATESTEAL0 LATEKEEP DRAWADOPT FBXPORT CLAIMNEW.
+
+## 78. THE ARCADE 68K IS BUS-BOUND, NOT COMPUTE-BOUND (2026-09-08)
+
+Mike: "are reads and writes being posted by the CPU at the same rate on
+the genesis/32x as they are on the arcade?" and "do we have timings
+coded into the game, or is it gated on cycles alone?" Both answered from
+the binary and from MAME's own instruction trace — no sampling, no
+inference.
+
+**HOW THE GAME KEEPS TIME.** It is EVENT-gated, not cycle-gated:
+
+    2ac6:  addqb #1,0xfffff01c    ; IRQ4 (vblank) increments a flag
+    397e:  clrb  0xfffff01c       ; main code clears it
+    3982:  tstb  0xfffff01c       ; and spins
+    3986:  beqs  0x3982           ;   until vblank sets it
+    3988:  dbf   %d0,0x397e       ; repeated d0+1 times = wait N frames
+
+Delays are counted in VBLANK EVENTS. A scan of the whole program finds
+exactly ONE pure cycle-delay loop:
+
+    2d8a:  moveq #127,%d0
+    2d8c:  dbf %d0,0x2d8c         ; ~1280 cycles, no memory access
+
+128 us on the arcade, 167 us here — 30.4% longer, the clock ratio, and
+the only place in the program where that matters directly. The other 101
+short dbf loops are memory-move loops, sensitive to ACCESS RATE rather
+than to the clock.
+
+**WHAT THE TRACE SAYS** (gameplay, level-1 timeline, 7 frames):
+
+    instructions per frame   3681 3743 3665 3702 3667 3716 3664
+    mean                     3691
+    idle-loop instructions   54 of 29594 = 0.18%
+    CPU at every vblank      0x3986 — the wait loop, 8 of 8
+
+So the game DOES finish its frame and wait — but it executes only ~8
+idle instructions per frame (about four iterations, ~88 cycles). It
+finishes with essentially nothing to spare.
+
+**THE CONSEQUENCE, AND IT OVERTURNS THE CLOCK ARGUMENT.** 166,667
+cycles/frame over 3,691 instructions is **45.2 cycles per instruction**.
+No 68000 instruction mix averages 45 cycles. The arcade's CPU is
+spending most of its frame STALLED ON THE BUS — System 16B video RAM
+writes carry wait states — not computing.
+
+That means the 76.7% clock ratio is NOT the ceiling, because we do not
+pay the arcade's bus stalls: the game's video writes land in our own RAM
+and packet staging, not on an S16 video bus. Consistent with the
+measurement: the port runs at 82.0% of 60 fps, which is ABOVE the clock
+ratio and would be impossible if we executed the same instructions at
+the same per-instruction cost.
+
+Arithmetic for the ceiling: our budget is 127,841 cycles/frame, so the
+game's ~3,691 instructions fit inside one vint only if our average cost
+is at or below **34.6 cycles per instruction**. At 82.0% we are at about
+42, so ~7 cycles per instruction of headroom is what the remaining work
+has to find — and that is a bus/access-rate question, not a clock one.
+
+**UNVERIFIED, and it matters:** this assumes our port executes the same
+instruction COUNT per game frame as the arcade. The port patches the
+game's video accesses and gates some writers, so the count may differ.
+Measuring it needs a 68K instruction count on our side, which ares does
+not currently provide (its --profile is SH-2 only).
+
+Tools: tools/arcade_trace.lua (MAME instruction trace, gameplay-driven)
+and tools/arcade_trace.py (the analysis). PC sampling and memory taps
+were both tried and both failed — every MAME hook fires at a fixed phase
+where the game is always in its wait loop, and taps did not see work RAM
+in this driver. Do not re-try either.
+
+## 79. OUR SHIM COSTS AS MUCH 68K TIME AS THE GAME ITSELF
+
+Entry 78 left one term unpriced: our own instruction count per frame.
+MAME traces our rom's 68K exactly as it traced the arcade's, so it is
+measurable. Per vint, 7 vints of the level-1 timeline:
+
+    total 68K instructions      5335
+      the game's own code       2780   52.1%
+      our shim / RAMCODE        2882   47.9%
+
+    arcade, for comparison      3691   per frame, all of it game
+
+The shim is not overhead at the margin. It is roughly a second copy of
+the game's own workload, on a CPU with 77% of the arcade's clock.
+
+Not a spin artifact: the top ten shim PCs are 4.2% of shim instructions
+and the hottest is a compare loop, not a wait, so the count is not
+inflated by timing-dependent spinning in MAME.
+
+Where the shim's time goes, by 256-byte block, instructions per vint:
+
+    FF0A00   306   10.6%
+    FF0E00   264    9.2%
+    FF0700   258    9.0%
+    FF0D00   240    8.4%   4-byte compare loop = the PAL_DELTA pre-pass
+    FF0C00   183    6.4%
+    FF0100   182    6.3%
+    FF1200   175    6.1%
+    FF1500   118    4.1%
+
+No single hot spot: the cost is spread across the whole shim, so there
+is no one loop to delete. FF0D00 is the palette compare pre-pass, which
+r60_push's own comment measures at ~65 lines/vint and which the
+frame-threshold note had already predicted as the next lever —
+an independent measurement landing on the same place.
+
+METHOD CAVEAT: MAME's 32X models neither SH-2 timing nor the FB stall,
+so cycle costs from it mean nothing. Instruction counts are code-path
+facts and survive that; the spin check above is what makes them safe to
+use here.
+
+## 80. THE PIPELINE, SIZED: THE GAME WRITES 85 WORDS A FRAME
+
+Mike's architecture, in his words: "The game code only knows it's feeding
+data through a pipeline provided by the Sega 16 arcade architecture. All
+we should be doing is rebaking the bitmap data so that it's the
+compatible colour palette and having the dual SH-2 chips organize and
+feed the data to the 68K, wholesale."
+
+Sized with tools/write_census_ares.py on the 82% build, per frame over
+frames 1500-4100 of the level-1 timeline:
+
+    what the GAME writes            what OUR SHIM does
+      sprite RAM      47.6            adapter accesses   125.0
+      text RAM        21.8            shim instructions  2882 per vint
+      palette         14.8            hottest site       r60_ship_words
+      I/O + bank       5.6                               (389,804 accesses)
+      -----------------------
+      TOTAL          ~85 words
+
+**We move ~150 words a frame, and burn 2882 instructions deciding which
+ones, to convey ~85 words of actual change.** About 34 shim instructions
+per game write.
+
+The game's writes are ALREADY INTERCEPTED — the patcher rebases every
+one of them and the thunks mark dirty bits. So the pipeline does not
+need to discover anything: a write-through at the thunk, forwarding each
+write into the FB staging as it happens, is O(writes) and deletes the
+rotor, the compare, the shadow, the dirty bitmap, the selection and the
+packing. That is the architecture change, and 85 words/frame is why it
+is affordable.
+
+### 80a. NEGATIVE: PALNOCMP (ship raw instead of comparing)
+
+Reasoned from the FB transport's cheap words: a redundant 32-word block
+costs ~1.6 scanlines to ship and ~5 to prove redundant, so ship it.
+
+    baseline (compare)        82.0%
+    PALNOCMP (ship raw)       74.1%     REVERTED
+
+Wrong, and the measurement says why: the compare's fast pre-scan exits
+at the first difference, and an equal block then ships ZERO words. The
+raw path pays a 16-long shadow copy AND 32 shipped words. Discovery is
+cheaper than delivery here — the opposite of the DREQ case, because the
+unit of delivery is a whole block while the unit of discovery is one
+compare that usually stops early.
+
+The prize is in NOT VISITING, not in cheaper comparing:
+
+    PALROTOR_OFF (no visits, colours freeze)   86.1%    the ceiling
+    baseline                                   82.0%
+
+PAL_STREAK_N / PAL_BACKOFF_M are now build-tunable (PALSTREAK=,
+PALBACKOFF=) to chase that 4.1 points by visiting less often, but the
+real answer is write-through, which removes the visit entirely.
+
+## 81. NEGATIVE, TWICE: THE PALETTE COMPARE IS LOAD-BEARING
+
+The write-through idea says the 68K should not discover anything — ship
+raw, let the SH-2 sort it out. Tested twice on the palette path, both
+against the 82.0% baseline:
+
+    PALNOCMP v1  ship raw, keep the shadow copy      74.1%
+    PALNOCMP v2  ship raw, no shadow at all          57.9%
+    PALROTOR_OFF no visits at all (colours freeze)   86.1%   the ceiling
+
+v1 was a flawed test — it skipped the compare but still ran the 16-long
+shadow copy, which costs about what the compare cost. v2 removed the
+shadow and got WORSE, which settles it: the expensive term is not the
+68K's comparing, it is the PACKET VOLUME and what the SH-2 must then do
+with it. Eight raw blocks is 256 words a vint that the master has to
+apply to CRAM under PEN gating; the compare exists to stop that, and it
+pays for itself several times over.
+
+**So the palette compare is COMPRESSION, and compression is worth more
+than it costs even at 0.05 scanlines a word.** Write-through is the
+right instinct for a path whose writes are few and known at the writer;
+it is the wrong instinct for a path whose unit of delivery is a 32-word
+block and whose consumer pays per word.
+
+The 4.1 points in PALROTOR_OFF are therefore NOT recoverable by removing
+discovery. They are in NOT VISITING — scheduling, not arithmetic — which
+is what PAL_STREAK_N / PAL_BACKOFF_M tune.
+
+Both flags are kept, default off, so the next person does not re-run
+these two experiments.
+
+## 82. CLAIMNEW IS AN ARES-ONLY WIN — IT BREAKS ON SILICON
+
+Entry 77 measured CLAIMNEW as 12x fewer shadow-ramp draws (704 -> 57)
+with no speed cost, on ares. On the MiSTer, bisected one flag at a time:
+
+    A  FBXPORT                              86 colours   renders
+    B  + TXTWRAM LATESTEAL0 LATEKEEP DRAWADOPT
+                                            85 colours   renders
+    C  + CLAIMNEW                           43 colours   57% BLACK
+
+The change points the late claim at FB_SPR (the framebuffer sprite
+staging) instead of SPR_SNAP. An FB read at that point is evidently not
+valid on hardware — the same class as every other ares/silicon
+divergence in this log — and sets get drawn without pairs, which is
+black rather than the shadow ramp it was meant to fix.
+
+**Dropped.** The shipping combination is B: FBXPORT + the opt1 sprite
+flags, 82.3% on ares and rendering on hardware. CLAIMNEW stays in the
+tree, default off, with this entry attached.
+
+RULE THIS CONFIRMS AGAIN: a pixel/colour win measured only on ares is
+not a win. Every flag that changes WHERE the master reads from must be
+bisected on the MiSTer before it is believed.
+
+## 83. TWO BUILD BUGS THAT INVALIDATED HALF A DAY
+
+Both found 2026-09-08 while re-checking a result that would not reproduce.
+
+**1. THIS SHELL IS zsh, AND UNQUOTED $var DOES NOT WORD-SPLIT.** Every
+helper of the shape
+
+    build() { make ship-us $1 ...; }      # $1 = "A=1 B=1 C=1"
+    build "$FLAGS"
+
+hands make ONE malformed argument instead of three assignments. Builds
+where the flags were typed literally on the make line were correct;
+every helper-driven A/B in entries 73-82 must be re-run. Write the flags
+out, or use "$@" from a #!/bin/sh script (which does split).
+
+**2. `rm -f *.o` IS NOT `make clean`.** The baked assets (sprbake.bin,
+tiles.bin, sprites.bin, game_body.bin) are regenerated only when
+.build_flags changes, and .build_flags does not capture every flag, so a
+build can inherit the PREVIOUS flag set's asset bake. Two roms built
+from the same flag list differed by 1.3 MB — all of it the asset region,
+shifted — and each reproduced its own measurement.
+
+    same flags, back to back, make clean      1 byte differs (the stamp)
+    same flags, rm *.o only                   1,287,725 bytes differ
+
+**RULE: `make clean` before every measured build, and diff the roms
+before believing any A/B.** A pair that differs by 2-4 bytes is the same
+build; a pair that differs by ~1.3 MB has a stale bake in it.
+
+## 84. THE BIND, MEASURED PROPERLY
+
+Clean builds, flags typed literally, level-1 input script, ares:
+
+    build                       game speed   display    V at post
+    ship line (DREQ)              48.7%      21.5 Hz       -
+    opt1 (DREQ)                   60.7%      11.5 Hz      243
+    opt1 + FBXPORT                82.3%       0.3 Hz       43
+    opt1 + FBXPORT + FBXTAIL      49.1%      11.5 Hz      239
+
+The 82.3% is REAL — it survives a clean rebuild. So is its cost.
+
+**The mechanism is V at post.** The 68K cannot reach the framebuffer at
+FM=1, so the FB push must happen at FM=0, and the only FM=0 window
+before the post is ahead of it: the post then moves from V=243 (inside
+vblank, where the ISR can still flip) to V=43 (active display), and
+every flip misses. FBXTAIL moves the push to the vint tail, which
+restores V at post to 239 and the display to 11.5 Hz — but the tail runs
+before the game's IRQ4, so the game loses 33 points of speed.
+
+**THE ARCHITECTURAL BIND, stated exactly:**
+
+  - The DREQ FIFO needs no FM, and costs ~2.4 scanlines per word on
+    hardware.
+  - The framebuffer costs ~0.05 lines per word, and needs FM=0 — which
+    collides with the master's blit window.
+  - Every placement of the FB push either delays the post out of vblank
+    (killing the flip) or delays the game's IRQ4 (killing the speed).
+
+The packet is ~150 words to convey ~85 words of change (entry 80). At
+the FIFO's rate even 85 words is ~204 scanlines, so shrinking the packet
+does not escape the bind either.
+
+What does escape it: making the master's FM=1 window shorter and
+scheduled, so there is a real FM=0 window that is not in front of the
+post. That is item 3, "feed at the right frequency", and it is a
+scheduling change rather than a transport one.

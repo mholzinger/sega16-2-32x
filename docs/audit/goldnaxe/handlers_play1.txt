@@ -1,0 +1,20 @@
+s16b_handler_harvest goldnaxe frames 1-5400 play=1: 19 distinct handler values
+002490  hits      831  first f806
+0055fa  hits      406  first f380
+005658  hits      864  first f397
+0056d4  hits      144  first f493
+005728  hits      737  first f7
+005794  hits      239  first f7
+00580c  hits      239  first f7
+009c60  hits      175  first f1100
+009ca2  hits      263  first f1275
+009d3a  hits     3863  first f1538
+009e08  hits      145  first f1357
+009f1c  hits      163  first f1100
+009f54  hits       55  first f1263
+009fba  hits      119  first f1318
+00aee2  hits    19751  first f1100
+00d3fe  hits     4301  first f1100
+018c98  hits     7613  first f1514
+01c8be  hits     3774  first f1627
+01dc94  hits     3726  first f1675

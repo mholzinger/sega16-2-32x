@@ -485,6 +485,9 @@ Concretely:
 - The public branch is `public`. It is an orphan with a clean history;
   the working branches carry captures in their history and are not
   pushed.
+- `tools/public_refresh.sh` rebuilds it from HEAD and drops the tracked
+  Sega-derived paths it lists (`tests/demo-b/arcade/`, the arcade work-RAM
+  dumps the demo check diffs against).
 
 ---
 

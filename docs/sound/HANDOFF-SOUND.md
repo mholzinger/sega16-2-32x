@@ -1,5 +1,75 @@
 # HANDOFF — sndtest input bug, 2026-09-01 ~4am
 
+## REFERENCE: 32X Live Mixer Vol. 1 (Jenovi, 2026-10) vs the R60SOUND lane (2026-10-19)
+
+Source: `srcref/32X-Live-Mixer-Vol1/` (gitignored; sha256 a9dedc93...2943). Full address map
+with every register value in `srcref/32X-Live-Mixer-Vol1/MAP.md`. Static disassembly only;
+nothing below was run on ares or the rig. Facts derived, no code copied.
+
+What it is: a homebrew music cart. The 68K plays a YM2612 register stream; the SLAVE mixes
+24 sample voices into PWM; the master draws meters. It is the only reference we hold where
+one cart runs FM and a multi-voice SH-2 PWM mixer in lockstep for minutes.
+
+### How it is built
+
+- **PWM:** cycle 0x413 (~22.08 kHz), CTRL 0x0185, STEREO: DMA1 moves longwords to
+  0x20004034 so one transfer writes L and R (CHCR1 0x18E5). Boot ramps 2..516 through the
+  MONO reg, waiting on bit 15, so the first sample does not pop.
+- **One DMA buffer = one sequencer tick.** Length = samples per tick (16.16 accumulator,
+  default 368 = 60 Hz), written into TCR1 per buffer. Tempo 50-150% changes samples per
+  tick, never the sample rate, so pitch is untouched.
+- **Ring of 4 buffers, 3 mixed ahead** (~50 ms at 60 Hz ticks). The DMA-end ISR re-arms
+  the next ready buffer; if NONE is ready it plays a 64-entry buffer of the last sample
+  (DC hold, no click) and raises a LATE flag the master shows on screen.
+- **Mixer** (SDRAM, slave): 24 voices x 32 bytes; signed 8-bit samples, 16.16 step, no
+  interpolation, per-voice loop length. Per voice it divides once to get the run length,
+  so the inner loop has no end-of-sample test. Mono fast path unless some active voice
+  has volL != volR. Output `acc * level >> 16 + 0x205`, clamp [2, 0x408].
+- **FM is clocked by the PWM DMA.** The DMA-end ISR bumps a counter mirrored to COMM10;
+  the 68K FM driver (in work RAM) runs one FM tick per counter step until caught up, and
+  records its worst lag. FM follows the AUDIBLE clock, and tempo needs no 68K code.
+- **The 68K sends no notes.** The slave sequences the sample voices from the song itself.
+  COMM8 carries 13 transport commands `(cmd << 8) | arg`, executed on change, acked on
+  COMM14 as `0x8000 | seq`.
+- Load meter: FRT-timed permille per buffer, average on COMM12, peak on COMM4.
+
+### Against our lane (sh_src/r60/r60_speech.inc, md_src/md_sound.c)
+
+| | Live Mixer | ours (R60SPEECH/R60SFX, R60SOUND) |
+|---|---|---|
+| PWM | 22 kHz stereo, longword DMA to L/R | 16 kHz mono, word DMA to MONO (`r60_speech.inc:24`, CHCR1 0x14E5) |
+| Buffers | 4 x one tick (~17 ms), 3 ahead | 2 x 1024 (64 ms a side) (`:30`) |
+| Who mixes | slave, own loop | MASTER, once per vint (`speech_pump`, `:195`) |
+| Underrun | hold last sample + LATE flag | ISR re-arms the other side whether refilled or not (`amb_dma_handler`, `:97-106`): a late fill REPLAYS a stale 64 ms side |
+| Underrun counter | shown on screen | `speech_census[2]` is labelled "underruns" (`:46`) and has NO WRITER |
+| Voices | 24, 8-bit PCM | 4, IMA ADPCM 8 kHz |
+| DMAC IRQ priority | 15 | 4 (`:233`) |
+| Music clock | PWM DMA ticks drive FM | Z80 player on its own clock, 68K tops up its ring once a vint (`md_sound.c:137`) |
+
+### What applies, what does not
+
+1. **The dead underrun counter is a defect in our instrument.** Our lane cannot report a
+   stale-side replay today. Cheapest card: in `amb_dma_handler`, count when the side it
+   re-arms still has `sp_needv` set, and fill silence instead of replaying. One build, read
+   on ares with `speech_census`. Whether a replay ever happens is UNMEASURED; the master's
+   worst walk (2-2.7 frames, `hold-fill` notes) is under the 64 ms margin, but close.
+   **Prototyped and measured 2026-10-19, then REVERTED from the port branches 2026-10-20
+   (discovery only until the audio plan).** Code kept on branch `underrun-belt`: ec9164f3
+   (hold the last sample 64 samples, count in census[2]) + c9fd87c2 (R60UNDERPROBE=1 starves
+   speech_pump 8 vints in 256). ares, attract: 0 holds in 6000 frames, irqs 1529, fills 378;
+   the probe forced 266 holds by 6000 and speech recovered (plays 17, fills 375). Gates vs the
+   same build without it: soak 0.807/0.808, parity identical, artaudit 0/0. CAVEAT: that
+   worktree's sfx.bin was EMPTY, so these numbers are SPEECH ONLY, attract only, ares only.
+2. **Shorter, more numerous buffers would cut SFX latency** (ours can sit up to ~128 ms
+   behind the command; theirs ~50 ms). This only matters if the play pass hears effects as
+   late. Unproven; do not build without that complaint.
+3. **The FM-clocked-by-PWM pattern does NOT apply to the current music lane:** our music
+   is a Z80 stream with its own clock, and speech/SFX are one-shots that need no long-run
+   sync. It DOES apply if the software-YM2151-on-the-SH-2 card (section below) is ever
+   built. Then the PWM DMA tick should be the sequencer clock, exactly as here.
+4. Run-length precompute and the mono fast path are cheap wins for a mixer with many
+   voices. Ours has 4 and already special-cases one voice; not worth a card now.
+
 ## THE VGZ RIPS ARE DUCKED — restore levels from the gag capture (2026-09-02)
 
 The "uncanny valley / missing overarching theme" on the VGZ builds was
@@ -531,3 +601,24 @@ hex value is the ground truth this whole argument needs.**
   soundmap_build.py, z80_pack.py, mus_testgen.py.
 - Sweep/tap logs were scratchpad-transient; regenerate via the tools
   (~40 min for a full command sweep).
+
+## FROM THE DECOMPILE THREAD (2026-09-12): who posts what — `docs/audit/sound_posts.md`
+
+`tools/sound_posts.py` walks every call to the game's sound entry point
+0x3352 and names the command byte, the site, its function and your
+sweep class. LOOP-DECOMPILE 95 has the reading. The parts your sweep
+cannot see:
+
+  - level music is a byte table at rom 0x1858: rounds 0-4 post
+    0x94 0x95 0x96 0x94 0x95 (main loop 0x8C8-0x8DE, reset 0 first);
+    0x92 is the title/attract track (0xB96); 0x93 is the round-clear
+    jingle (0x1A474, not on round 4); 0x91 is posted at the cutscene's
+    exit (0x91CE), 0x90 by five object routines, 0x97 by 0x5D62.
+  - the between-round cutscene posts SPEECH per round: 0x46 0x56 0x54
+    0x55 0x46 (records at rom 0x99A2).
+  - the fade is the game's: the object at 0x16D7E posts master-volume
+    bytes (your fade law) as its countdown halves, 0x28 down to 0x24,
+    then 0x00, then 0x40 (full), then 0xC5. So a faithful port needs the
+    0x01-0x40 volume law live, not just at command start.
+  - 0xB6 (37 sites, animation/motion) and 0xB4 (12 sites, collision)
+    are the two commonest effects.

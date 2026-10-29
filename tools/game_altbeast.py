@@ -121,6 +121,34 @@ TABLES = {
         (0x30D0, [0x20,0x6D,0x00,0x02], 0xB360),  # movea.l (2,A5),A0 palette streamer
     ],
     # TAS latches -> shim thunks: (site, expected 4 bytes, thunk)
+    # WRAM-resident routines (2026-09-25, tools/wram_reloc.py): the level-1
+    # demo's hottest game code by instructions a frame (the arcade trace,
+    # tools/arcade_trace.lua at frames 1700/1900), ~82% of the pass's
+    # instructions in ~3 KB. Each block is a contiguous instruction range;
+    # its ROM entries become jmp (abs.w) to the WRAM copy at 0xFF5000.
+    'WRAM_BLOCKS': [(0xE052, 0xE1E8), (0x398E, 0x39C8), (0x3C84, 0x3F20), (0x3F24, 0x3F40),
+                    (0xD99C, 0xD9F6), (0xD8BA, 0xD8D6), (0x6654, 0x6794), (0x49BA, 0x4D12),
+                    (0xD47E, 0xD52C), (0x4D54, 0x4D9A), (0x1366, 0x144A),
+                    (0x3AAE, 0x3AFE),
+                    # second set (2026-09-24, OUR rom's 16-line PC-sampler profile on ares,
+                    # tools/../pcprof: the cart residue was 12% of samples; these three ranges
+                    # held 38% of it): 0x674E-0x6794 extends the 0x6654 block
+                    # (animation_frame_fetch, 60 samples); 0xD5A8-0xD776 = walk_player_slots
+                    # + its collision helpers 0xD608/0xD65C/0xD6D8/0xD73C (130) -- the block
+                    # starts at 0xD5A8 because 0xD5A4 branches to it (0xD5A6's moveq stays in
+                    # ROM and falls into the stub); 0x3F72-0x3FA4 = clamp_y (22; clamp_x's
+                    # 12 would overrun 0xFF5E00 by 2 bytes).
+                    (0xD5A8, 0xD776), (0x3F72, 0x3FA4)],
+    # region 2 (2026-09-24 night, 0xFF4600-0xFF4BFF): the cart residue's next ranges from
+    # the same profile, chosen after RIGSPAN=18 showed cart code costs 2x on the FPGA:
+    # the main loop 0x97C-0xB1E (74 samples; entered by short branches from 0x952-0x972
+    # above and 0xB6C-0xB7C below, all through the stub), 0x65AA-0x6654 (47, restore_
+    # position + animate_variant, ends at the 0x6654 block), 0xEE80-0xF00A (37, the big
+    # object handler's first routine), 0xF8C0-0xF90A (24), 0x144A-0x14D8 (19),
+    # 0xDABC-0xDB98 (24).
+    'WRAM_BLOCKS2': [(0x097C, 0x0B1E), (0x65AA, 0x6654), (0xEE80, 0xF00A), (0xF8C0, 0xF90A),
+                     (0x144A, 0x14D8), (0xDABC, 0xDB98)],
+    'WRAM_ENTRIES': [0x49BA],          # pointer-called handlers seen in the traces inside the blocks
     'TAS_SITES': [
         (0x2268,  bytes([0x4A, 0xF8, 0xC0, 0x20]), 0xB380),  # tas $c020.w
         (0xE098,  bytes([0x4A, 0xF8, 0xF1, 0x5A]), 0xB38A),  # tas $f15a.w
@@ -203,6 +231,13 @@ TABLES = {
     ],
     # colour-cycle engine (lea 0xFF9000,A1; write at +((D0&0x7F)<<4))
     'PAL_THUNK_A': 0x30C2,
+    # LOOP29 166: the cycler's dirty mark at PAL_THUNK_A fires at 0x30C2,
+    # BEFORE its four stores at 0x30F8-0x30FE. A consume landing between
+    # the two ships the OLD colours and clears the bit, so the mirror sits
+    # one rotation step behind for ever -- measured on sets 19/20/21
+    # (LOOP29 165). This is the mark-AFTER site: `lea 8(a5),a5` at 0x3100,
+    # four bytes, exactly a jsr abs.w, reached after every store path.
+    'PAL_THUNK_APOST': 0x3100,
     # queued-pointer palette writers (moveal (A2)+,A1 ; moveal (A2)+,A0)
     'PAL_THUNK_B': [0x2DC8, 0x3C5A],
     # FM gate entries: (site, displaced length, expected first word, note)
@@ -232,10 +267,42 @@ TABLES = {
         (0x3AAE, 6, 0x43F9, "lea text,%a1"),
         (0x4D88, 4, 0x2029, "movel 16(%a1),%d0"),
         (0x56E8, 4, 0x522E, "addqb frame ctr (follower rewrites CCR)"),
+        # LOOP29 225: the ROUND CLEAR typewriter. An object state machine
+        # types one glyph every 5 frames -- movew d1,(a1) at 0x6504 for
+        # "ROUND CLEAR BONUS " and 0x6560 for the points -- into the text
+        # area, once, never rewritten. Outside every span above because the
+        # attract never round-clears, so a glyph written while FM=1 was
+        # dropped for good: Mike's "RO D CL AR BONU". The displaced subq
+        # sets the CCR the bcs at +4 reads; the thunk runs it last.
+        # 228: gate the STORE, not the state routine. The state spans
+        # deferred 57 windows across the attract (vi72; vi70: 0) -- the
+        # glyph loop is reached there by a path the immediates do not show
+        # -- and every deferred window is a frame the SH-2 never gets:
+        # black tiles on the same-round return. A three-instruction span
+        # around each movew d1,(a1) is hit by a vint almost never.
+        (0x64FC, 4, 0x323C, "round clear text: movew #512,d1 before the glyph store"),
+        (0x6558, 4, 0x323C, "round clear points: movew #512,d1 before the glyph store"),
+        # 2026-09-21: THE ZEUS TYPEWRITER'S STORE ITSELF. The entry gate at
+        # 0x56E8 sits ~20 instructions before the store at 0x573E; one
+        # erase store per run still landed at FM=1 and left a single glyph
+        # (Mike, slim30). Gate the store (LOOP29 228), as the round-clear
+        # typewriter is gated: the displaced movew runs last in the thunk.
+        # 2026-09-20: THE HIGH-SCORE TABLE (attract). 0x4540 copies a
+        # palette, then writes text rows 7 and 9 and seven entry rows via
+        # the helpers 0x4612/0x4624/0x4664/0x466C/0x469C (called from
+        # nowhere else). Never gated, never marked: its stores were
+        # dropped at FM=1 and its rows captured only on the forced full
+        # mask. "Broken the entire time" (Mike). GATE THE STORES, not the
+        # routine (LOOP29 228): its delay helper 0x4664 sits in the game's
+        # own frame wait, so a span over the routine would defer every FM
+        # raise for the whole screen. Each store has a 4-byte instruction
+        # in front of it to displace; the dbf loops re-enter their gate.
+        # (high-score sites temporarily under HSGATE env, see below)
     ],
     'FMGATE_SPANS': [(0x153E, 0x155C), (0x16BE, 0x1772), (0x2550, 0x25AA),
                      (0x35CC, 0x3950), (0x3A9A, 0x3AFC), (0x4D80, 0x4D98),
-                     (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC)],
+                     (0x56E8, 0x5742), (0x1A52C, 0x1A59E), (0x1ACCA, 0x1ACEC),
+                     (0x64FC, 0x6506), (0x6558, 0x6562)],
     # LOOP 27 q4 TXTWRAM: text writers at the top of the game's pass, staged
     # in the WRAM text mirror and copied to FB staging by the shim.
     #  - credit line FUN_3aae: a1 = text + *(0xFFF024) (byte offset var),
@@ -262,3 +329,33 @@ TABLES = {
     'REBASE_EXCLUDE': [(0x6DC0, 0x6DCA), (0x1AD10, 0x1AD34), (0x7358, 0x73A0),
                        (0xEC32, 0xEC46), (0xECAC, 0xECB0)],
 }
+
+# 2026-09-20 bisect: the high-score gates join the tables only when HSGATE=1
+# (slim23 = the line without them lost the FPGA background; isolating).
+import os as _os
+# 2026-09-21: ON THE LINE (the score table fills on the rig, 7/7 launches
+# with the echo belt); HSNOGATE=1 turns them off again.
+if not _os.environ.get('HSNOGATE'):
+    TABLES['FMGATE_ENTRIES'] += [
+        (0x45EC, 4, 0x0600, "high-score: addib #-48,d0 before the rank store"),
+        (0x45FE, 4, 0x0601, "high-score: addib #-96,d1 before the name store"),
+        (0x4614, 4, 0x0601, "high-score: addib #-96,d1 before the string store (loop)"),
+        (0x4634, 4, 0x14FC, "high-score: moveb #0,(a2)+ leading-zero blank"),
+        (0x4648, 4, 0x0601, "high-score: addib #-48,d1 before the digit store"),
+        (0x4658, 4, 0x123C, "high-score: moveb #-48,d1 before the zero-digit store"),
+        (0x46A2, 4, 0x1081, "high-score: moveb d1,(a0); addql #2,a0 fill loop head"),
+    ]
+    if not _os.environ.get('HSNOSPAN'):
+        TABLES['FMGATE_SPANS'] += [(0x45EC, 0x45F2), (0x45FE, 0x4604), (0x4614, 0x461A),
+                                   (0x4634, 0x4638), (0x4648, 0x4650), (0x4658, 0x4660),
+                                   (0x46A2, 0x46AA)]
+
+# 2026-09-21 01:22: gating the Zeus typewriter's STORE (0x573E) for the one
+# leftover glyph. On the rig that build lost the level background, like every
+# other thunk-table growth tonight (LESSONS "follows BUILD LAYOUT"); the gate
+# is right by the round-clear precedent and waits under ZEUSSTORE=1.
+if _os.environ.get('ZEUSSTORE'):
+    TABLES['FMGATE_ENTRIES'] += [
+        (0x573E, 4, 0x3182, "zeus typewriter: movew d2,(a0,d0.l) the glyph/erase store"),
+    ]
+    TABLES['FMGATE_SPANS'] += [(0x573E, 0x5742)]

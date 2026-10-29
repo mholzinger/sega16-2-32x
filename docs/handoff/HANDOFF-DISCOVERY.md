@@ -22,7 +22,7 @@ name every timing gate in the program with a number next to it.
 
 ## Resources on disk (verified 2026-09-07)
 
-1. **Ghidra 11.2.1** — `/Users/mikeholzinger/src/kyocera-2235/ghidra_11.2.1_PUBLIC/`.
+1. **Ghidra 11.2.1** — `~/tools/ghidra/current/` (shared install, see `~/tools/ghidra/bin`).
    Headless works; language `68000:BE:32:default`; loader base 0x0
    (the arcade map). Driver: `tools/ghidra_run.sh` (import once, then
    `census` / `script NAME.py` against the project). The project lives

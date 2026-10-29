@@ -8,7 +8,7 @@ cross-referenced against the disassembly and reported for review.
 Output: md_src/game_body.bin (bytes 0x400-0x3FFFF, cart-ready) and
 tools/patch_report.txt.
 """
-import os, struct, re
+import os, struct, re, sys
 from pathlib import Path
 
 # LOOP 20: FBSPR=1 in the environment (plumbed from `make FBSPR=1`)
@@ -22,6 +22,7 @@ K2FREE = K2FREE or R60
 # granularity (64-bit bitmap as 8 BYTES at 0xFFBA00, code after) so the
 # shim can ship dirty 32-word BLOCKS instead of 256-word region pairs.
 PAL32 = bool(os.environ.get('PAL32'))
+PAL_APOST = bool(os.environ.get('PAL_APOST'))
 # LOOP 23: FMGATE=1 gates the game's MAIN-LOOP framebuffer writers on
 # FM at their subsystem entry points, so the 68K never spins for the
 # SH-2 window (the rte trampoline in md_start.s raises FM AFTER the
@@ -40,6 +41,11 @@ FMGATE = bool(os.environ.get('FMGATE'))
 # before the raise (md_main.c TXT_WRAM, table in fmgate_tab.h). Sega's
 # code untouched beyond the rebase; derivation in docs/log/LOOP27.md 4.
 TXTWRAM = bool(os.environ.get('TXTWRAM'))
+FBXPEND = bool(os.environ.get('FBXPEND'))   # LOOP29 137: gate spin blasts the pending packet
+GAMEGATE = bool(os.environ.get('GAMEGATE'))  # LOOP29 141: the game's frame release is ours
+TXTMASK = bool(os.environ.get('TXTMASK'))    # LOOP29 147: text writers mark their 4-row group
+BURSTGATE = bool(os.environ.get('BURSTGATE'))
+COUNTSITES = [int(x, 16) for x in os.environ.get('COUNTSITES', '').split(',') if x]   # pricing: gate sites to count (<= 8)  # 2026-09-25: 0x3A9A gated once per copy loop, not per byte
 TXTW_BASE = 0xFFB0C0       # 4 bytes per writer: [off word][dirty byte][pad]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,13 +61,48 @@ if not _gp.exists():
     raise SystemExit(f'patch_game: no tools/game_{GAME}.py — derive the tables first')
 _spec = _ilu.spec_from_file_location(f'game_{GAME}', _gp); _gm = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_gm)
 GT = getattr(_gm, 'TABLES', {})
+
+# The TABLES keys are the PATTERN CATALOGUE (kit/schema.py): each one names a
+# 68K idiom that recurs across titles, and this file is one title's
+# instantiation. Validate against it so that a key which drifted between
+# titles is caught here, at the lookup, instead of as a TypeError deep in a
+# pass. Errors are reported for EVERY key at once; a missing optional key is
+# not an error, and nothing here is fatal until a pass actually asks for it.
+try:
+    sys.path.insert(0, str(ROOT))
+    from kit import schema as _schema
+    _errs, _ = _schema.validate(GT, GAME)
+    for _e in _errs:
+        print(f'patch_game: SCHEMA {_e}', file=sys.stderr)
+except ImportError:                       # kit/ absent: fall back to the old behaviour
+    _schema = None
+
+
 def T(key):
     """Per-game table lookup: every program-specific offset comes from
-    tools/game_<GAME>.py; a missing key is a derivation gap, not a default."""
+    tools/game_<GAME>.py; a missing key is a derivation gap, not a default.
+
+    kit/schema.py says what the key means and whether None is legal for it,
+    so the two failures get different messages: a key this title never
+    derived, and an idiom this title genuinely does not have (which the
+    CALLER must guard, because substituting an empty value here would patch
+    nothing and say nothing)."""
+    spec = _schema.BY_NAME.get(key) if _schema else None
     if key not in GT:
+        what = f'\n  {spec.layer}/{key}: {spec.what}' if spec else ''
+        where = f'\n  evidence: {spec.evidence}' if spec else ''
         raise SystemExit(f'patch_game: tools/game_{GAME}.py lacks TABLES[{key!r}] '
-                         '— derive it (tools/game_derive.py) before building')
-    return GT[key]
+                         f'— derive it (tools/game_derive.py) before building{what}{where}')
+    v = GT[key]
+    if v is None:
+        if spec and spec.nullable:
+            raise SystemExit(
+                f'patch_game: {GAME} has no {key} idiom (TABLES[{key!r}] is None) '
+                f'but this pass asked for it — guard the caller, do not fill the key.'
+                f'\n  {spec.layer}/{key}: {spec.what}')
+        raise SystemExit(f'patch_game: TABLES[{key!r}] is None in {GAME}, and that '
+                         'key is not nullable — it is a derivation gap')
+    return v
 
 DATA_EXCLUDE = T('DATA_EXCLUDE')
 
@@ -721,6 +762,123 @@ for _o, _want, _thunk in T('DATA_PTR_NORM'):
     assert hrom[_o:_o+4] == bytes(_want), f"data-ptr site {_o:#x}: {hrom[_o:_o+4].hex()}"
     hrom[_o:_o+4] = struct.pack('>HH', 0x4EB8, _thunk)
 
+# MDHSCR (LOOP-DECOMPILE 23-25): the game's two HORIZONTAL scroll stores
+# write MD hscroll DIRECTLY, in addition to their original store.
+#
+# Why this is safe to do as a pure ADDITION: the shim/SH-2 still reads the
+# text-RAM copies to build sc[3]/sc[7], so nothing downstream changes. The
+# thunk writes the register too, one IRQ4 earlier than the packet would.
+#
+# The conversion is MD = S16 - 192, measured (LOOP-DECOMPILE 24): same
+# sign, constant offset, and 192 is the 24-column visible-window origin.
+# Row scroll is provably off — all four stores mask with #$1FF, which
+# clears the row/column-scroll enable in bit 15, and the scroll tables at
+# text 0xF00-0xFFF are never written (LOOP-DECOMPILE 23).
+#
+# d0 is dead at both sites: the next instruction reloads it from work RAM
+# (0x2AD8 and 0x2AF4), and no conditional branch reads the CCR in between.
+#
+# ALTBEAST ADDRESSES. When this graduates, move the site table into
+# tools/game_<GAME>.py like DISPATCHERS.
+if os.environ.get('MDHSCR') == '1':
+    if GAME not in ('altbeast', 'altbeastj'):
+        raise SystemExit('MDHSCR: site table is altbeast-only')
+    HSCR_BASE = 0xB300                   # two 32-byte thunks: A, then B
+    _hs_words = []
+    _hs_sites = [
+        # (rom offset, S16 register, VRAM hscroll entry, thunk addr)
+        (0x2AD2, 0x410E98, 0xFC00, HSCR_BASE),          # foreground -> plane A
+        (0x2AEE, 0x410E9A, 0xFC02, HSCR_BASE + 0x20),   # background -> plane B
+    ]
+    for _off, _reg, _vram, _thunk in _hs_sites:
+        _dst = remap(_reg)
+        assert isinstance(_dst, int), f'MDHSCR: {_reg:#x} did not remap'
+        _want = struct.pack('>HI', 0x33C0, _dst)         # move.w d0,<remapped>.l
+        assert hrom[_off:_off+6] == _want, (
+            f'MDHSCR site {_off:#x}: have {hrom[_off:_off+6].hex()}, '
+            f'want {_want.hex()} — the remap changed, re-derive')
+        _ctrl = ((0x4000 | (_vram & 0x3FFF)) << 16) | ((_vram >> 14) & 3)
+        _thunk_bytes = (
+            struct.pack('>HI', 0x33C0, _dst)             # move.w d0,<remapped>.l
+            + struct.pack('>HH', 0x0440, 192)            # sub.w  #192,d0
+            + struct.pack('>HH', 0x0240, 0x03FF)         # and.w  #$3FF,d0
+            + struct.pack('>HII', 0x23FC, _ctrl, 0xC00004)   # move.l #ctrl,$C00004
+            + struct.pack('>HI', 0x33C0, 0xC00000)       # move.w d0,$C00000
+            + struct.pack('>H', 0x4E75))                 # rts
+        assert len(_thunk_bytes) == 32, len(_thunk_bytes)
+        _hs_words += list(struct.unpack('>16H', _thunk_bytes))
+        hrom[_off:_off+6] = struct.pack('>HHH', 0x4EB8, _thunk, 0x4E71)
+    with open(ROOT / 'md_src' / 'hscr_thunks.h', 'w') as th:
+        th.write('/* generated by patch_game.py (MDHSCR) — direct MD hscroll\n'
+                 ' * from the game\'s own scroll stores. Two 32-byte 68000\n'
+                 f' * thunks installed at 0xFF{HSCR_BASE:04X} and '
+                 f'0xFF{HSCR_BASE + 0x20:04X} by md_main.c.\n'
+                 ' * See docs/log/LOOP-DECOMPILE.md 23-25. */\n')
+        th.write(f'#define HSCR_THUNK_BASE 0x{0xFF0000 | HSCR_BASE:06X}\n')
+        th.write(f'#define HSCR_THUNK_WORDS {len(_hs_words)}\n')
+        th.write('static const unsigned short hscr_thunks[] = {\n')
+        for i in range(0, len(_hs_words), 8):
+            th.write('    ' + ', '.join(f'0x{w:04X}' for w in _hs_words[i:i+8]) + ',\n')
+        th.write('};\n')
+    print(f'MDHSCR: 2 sites rewritten, thunks at 0xFF{HSCR_BASE:04X}/'
+          f'0xFF{HSCR_BASE + 0x20:04X}')
+
+# MDSPRPROBE (LOOP-DECOMPILE 27) — COST PROBE, RENDERS WRONG BY DESIGN.
+# The sprite upload at 0x2B16 copies 12 of each 16-byte record from the
+# pool at 0xFFF800 into the hardware mirror, for every live entry in the
+# 256-byte order list (entry 13). This blanks the COPY while keeping the
+# list geometry identical — the destination still advances 16 bytes per
+# live entry, so the same number of slots is produced and the end markers
+# still land in the same place. The mirror therefore goes stale and the
+# picture is wrong; the only thing this build measures is how much 68000
+# time the copy itself costs, read off the game's own missed-frame
+# counter at 0xFFF144 (entry 22).
+#
+#   2b30  lsl.w #4,d0          ]
+#   2b32  lea (a1,d0.w),a3     ] 14 bytes replaced by
+#   2b36  move.l (a3)+,(a2)+   ]   lea 16(a2),a2
+#   2b38  move.l (a3)+,(a2)+   ]   + 5 nops
+#   2b3a  move.l (a3)+,(a2)+   ]
+#   2b3c  addq.w #4,a2         ]
+if os.environ.get('MDSPRPROBE') == '1':
+    if GAME not in ('altbeast', 'altbeastj'):
+        raise SystemExit('MDSPRPROBE: site is altbeast-only')
+    _o = 0x2B30
+    _want = bytes([0xE9, 0x48, 0x47, 0xF1, 0x00, 0x00,
+                   0x24, 0xDB, 0x24, 0xDB, 0x24, 0xDB, 0x58, 0x4A])
+    assert hrom[_o:_o+14] == _want, f'MDSPRPROBE: {hrom[_o:_o+14].hex()}'
+    hrom[_o:_o+14] = bytes([0x45, 0xEA, 0x00, 0x10]) + b'\x4E\x71' * 5
+    print('MDSPRPROBE: sprite record copy blanked at 0x2B30 (renders wrong)')
+
+# SCENESEL (LOOP-DECOMPILE 66) — PROBE. Forces every round to load one
+# scene, so the later scenes can be reached without playing to them. No
+# input script in discover/inputs reaches past scene 0, even at 6000
+# frames, which made the per-scene palette analysis the tile plan needs
+# unreachable.
+#
+# 0x662 does `lea $1CDA(pc),a0` then `move.b (a0,d0.w),$FFF142` at 0x670,
+# where d0 is the round at 0xFFF14E masked to 7. The table is eight bytes:
+#   round  0 1 2 3 4 5 6 7
+#   scene  0 1 2 3 4 0 0 0
+# Writing N to all eight makes every round load scene N. One byte per
+# entry, in place.
+#
+# NOT A GAMEPLAY BUILD. The tilemap and palettes are the target scene's;
+# the ACTORS are whatever the round would have spawned, so this is valid
+# for tile and palette measurement and NOT for a sprite census.
+_scene = os.environ.get('SCENESEL')
+if _scene:
+    if GAME not in ('altbeast', 'altbeastj'):
+        raise SystemExit('SCENESEL: table address is altbeast-only')
+    _n = int(_scene)
+    if not 0 <= _n <= 4:
+        raise SystemExit('SCENESEL must be 0-4 (five scenes, entry 10)')
+    _t = 0x1CDA
+    assert list(hrom[_t:_t+8]) == [0, 1, 2, 3, 4, 0, 0, 0], \
+        f'SCENESEL: round table is {list(hrom[_t:_t+8])}, not the expected map'
+    hrom[_t:_t+8] = bytes([_n] * 8)
+    print(f'SCENESEL: every round now loads scene {_n}')
+
 # TAS REPLACEMENT: the MD bus arbiter drops the write phase of the
 # 68K's locked read-modify-write cycle, so TAS never sets its latch
 # on 32X (works on System 16B). Every tas/bne latch in the game
@@ -833,10 +991,46 @@ PAL_DIRTY = 0xB9FC                   # dirty word, abs.w (>=0x8000: 68K
 PAL_THUNK_BASE = 0xBA00              # 0xFFBA00: free (tile thunks end at
                                      # 0xFFB9E8, bitmap 0xFFB9FE, game RAM
                                      # starts 0xFFC000). The boot stack top
-                                     # is 0xFFBFF0 and the game runs on its
-                                     # OWN stack (0xFFFFFF00), so only boot
+                                     # WAS 0xFFBFF0 in this page; it is
+                                     # 0xFF3FF0 since 2026-09-19 (the boot
+                                     # vint overwrote the thunk tail). The
+                                     # game runs on its OWN stack
+                                     # (0xFFFFFF00), so only boot
                                      # shares this page — and only its top.
 # (site, displaced length, region mask, note)
+# LOOP29 182 — MISSKEEP. The game CLEARS its own missed-frame counter at
+# 0x930, on the main loop's countdown-expiry arm (LOOP-DECOMPILE 67), so
+# every 0.0% this port has ever read off 0xFFF144 was consistent with
+# misses being counted and wiped. NOP the clear and the count is
+# cumulative and honest. MEASUREMENT ONLY -- the game reads that counter
+# in test mode, so a never-cleared value is a lie to the game.
+# Asserts the exact bytes first, the rule that has kept every rebasing
+# patch in this file correct.
+if os.environ.get('MISSKEEP'):
+    want_clr = struct.pack('>HH', 0x4278, 0xF144)     # clr.w $FFF144
+    assert hrom[0x930:0x934] == want_clr, hrom[0x930:0x934].hex()
+    struct.pack_into('>HH', hrom, 0x930, 0x4E71, 0x4E71)
+    print('MISSKEEP: 0x00930 clr.w $FFF144 -> nop nop (counter is now cumulative)')
+
+# LOOP29 185 — PASSCOUNT. A correct game-frame counter, because none of
+# the three this repo has used is trustworthy across builds: the scene
+# timer at 0xFFF02A is per-scene and scene-dependent in rate AND
+# direction (183), the miss counter is cleared by the game itself (182),
+# and a counter inside the shared wait at 0x397E counts attract's 120-
+# and 240-frame delays as frames (184).
+# 0x922 is the GAMEPLAY loop's own `jsr 0x397E` (LOOP-DECOMPILE 67's
+# listing: 91A dispatcher, 920 moveq #0, 922 wait, 928 bra). Counting
+# there counts one tick per gameplay frame and nothing else.
+# Word at 0xFFA0EC. Bytes asserted before the rewrite.
+if os.environ.get('PASSCOUNT'):
+    # the target is ALREADY REBASED by the passes above (0x0090397E, not
+    # 0x0000397E) -- read it rather than assume it, and assert only the
+    # opcode and the low word, which rebasing does not touch.
+    pc_op, pc_hi, pc_lo = struct.unpack_from('>HHH', hrom, 0x922)
+    assert pc_op == 0x4EB9 and pc_lo == 0x397E, \
+        hrom[0x922:0x928].hex()
+    PASS_WAIT = (pc_hi << 16) | pc_lo
+
 PAL_DIRTY_SITES = T('PAL_DIRTY_SITES')
 pal_words = []
 pal_report = []
@@ -990,9 +1184,113 @@ if PAL32:
                   0x201F,                   # move.l (SP)+,D0
                   0x4E75]                   # rts
     pal_report.append(f"P {PA:06X}: 32-block from D0 -> thunk {pal_a:04X}")
+    # THUNK A-POST (LOOP29 166). Thunk A marks the block BEFORE the
+    # cycler's stores run, so a consume in that gap ships the old colours
+    # and clears the bit: the mirror holds the PREVIOUS rotation step,
+    # permanently, on every set the cycler drives. Measured stale at
+    # sets 19/20/21 in every sampled frame (LOOP29 165).
+    # Mark again AFTER the stores. D0 no longer holds the set index by
+    # then (0x30F2 reloads it), so recover the block from A1, which has
+    # been advanced past the 16 bytes written: block =
+    # ((A1-1) >> 6) & 0x3F, the same arithmetic thunk B uses.
+    if PAL_APOST:
+        apost = PAL_THUNK_BASE + len(pal_words) * 2
+        AP = T('PAL_THUNK_APOST')
+        want_ap = struct.pack('>HH', 0x4BED, 0x0008)   # lea 8(a5),a5
+        assert hrom[AP:AP+4] == want_ap, hrom[AP:AP+4].hex()
+        struct.pack_into('>HH', hrom, AP, 0x4EB8, apost)
+        pal_words += [0x2F00,                 # move.l D0,-(SP)
+                      0x2009,                 # move.l A1,D0
+                      0x5380,                 # subq.l #1,D0
+                      0xEC88,                 # lsr.l #6,D0
+                      0x0240, 0x003F,         # andi.w #0x3F,D0
+                      0x4EB8, pmark,          # jsr (pmark).w
+                      0x201F,                 # move.l (SP)+,D0
+                      0x4BED, 0x0008,         # displaced lea 8(a5),a5
+                      0x4E75]                 # rts
+        pal_report.append(f"P {AP:06X}: 32-block from A1 AFTER the stores"
+                          f" -> thunk {apost:04X}")
     pal_report.append("P " + "/".join(f"{o:06X}" for o in T('PAL_THUNK_B')) + f": 32-block from A1 -> {pal_b:04X}")
     assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, \
         f"pal thunks overrun boot stack: end {PAL_THUNK_BASE + len(pal_words)*2:#x}"
+
+# LOOP29 183 — RELBANK. The game's frame wait is four instructions
+# (LOOP-DECOMPILE 67):
+#     397E  clr.b  $FFF01C     <- DISCARDS any pending release
+#     3982  tst.b  $FFF01C        spin while zero
+#     3986  beq.s  0x3982
+#     3988  dbf    d0,0x397E
+# IRQ4 increments 0xFFF01C once per vint. The game finishes a pass,
+# CLEARS the byte -- throwing away the release that arrived while it was
+# working -- and waits for a fresh one. So a pass that takes slightly
+# MORE than one vint costs exactly TWO, which is the 50.2% this port has
+# measured on every build, with the game's own overrun counter honestly
+# at zero (LOOP29 182, with its clear NOPed).
+# Replace the clear with a CONSUME: decrement if non-zero, so a release
+# banked during a long pass is honoured and the game runs at its own rate
+# instead of quantising to the vint. Capped so it can never bank enough
+# to run away.
+if os.environ.get('CARTBENCH'):
+    # CARTBENCH (2026-09-25 05:40, RIGSPAN=15): a 16-byte loop planted in the
+    # game image's 0xFF padding at 0x3FFE0 (68K 0x93FFE0) so the shim can time
+    # the SAME loop fetched from the cart and from WRAM: 512 x (tst.w WRAM ;
+    # nop ; dbra). Pricing probe, never a ship.
+    assert all(b == 0xFF for b in hrom[0x3FFE0:0x3FFF0]), hrom[0x3FFE0:0x3FFF0].hex()
+    struct.pack_into('>8H', hrom, 0x3FFE0, 0x303C, 0x01FF,   # move.w #511,d0
+                     0x4A78, 0xB000,                          # loop: tst.w (0xFFB000).w
+                     0x4E71,                                  # nop
+                     0x51C8, 0xFFF8,                          # dbra d0,loop
+                     0x4E75)                                  # rts
+    print("CARTBENCH: 16-byte fetch gauge at 0x3FFE0 (68K 0x93FFE0)")
+
+if os.environ.get('RELBANK'):
+    rb = PAL_THUNK_BASE + len(pal_words) * 2
+    want_clr = struct.pack('>HH', 0x4238, 0xF01C)      # clr.b $FFF01C
+    assert hrom[0x397E:0x3982] == want_clr, hrom[0x397E:0x3982].hex()
+    struct.pack_into('>HH', hrom, 0x397E, 0x4EB8, rb)  # jsr (rb).w
+    cap = int(os.environ.get('RELBANK', '1') or 1)
+    if cap < 1:
+        cap = 1
+    # COUNT THE PASSES (LOOP29 184). This thunk runs once per completed
+    # game pass, which is the only build-independent way to measure the
+    # game's rate: the scene timer is per-scene and scene-dependent, so
+    # comparing it across builds compares different scenes (183).
+    # 0xFFA0EE, a word, read straight out of the wram dump.
+    pal_words += [
+        0x5278, 0xA0EE,                 # addq.w #1,$FFA0EE   passes
+        0x0C38, 0x0000 | cap, 0xF01C,   # cmpi.b #cap,$FFF01C
+        0x6306,                         # bls.s  .consume   (<= cap)
+        0x11FC, 0x0000 | cap, 0xF01C,   # move.b #cap,$FFF01C  (clamp)
+        0x4E75,                         # rts
+        0x4A38, 0xF01C,                 # .consume: tst.b $FFF01C
+        0x6704,                         # beq.s .done
+        0x5338, 0xF01C,                 # subq.b #1,$FFF01C
+        0x4E75,                         # .done: rts
+    ]
+    pal_report.append(f"P 00397E: clr.b -> CONSUME thunk {rb:04X} (cap {cap})")
+    assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, 'RELBANK overruns'
+    print(f"RELBANK: 0x0397E clr.b $FFF01C -> jsr {rb:#06x} "
+          f"(decrement, cap {cap})")
+
+# (LOOP29 186: I wrote a SECOND FRAMEDONE here that patched the same
+# site as the probe at line ~845 and asserted on its own predecessor's
+# bytes. Removed. The decompile thread's version measures first, on
+# purpose, and its note "no COMM register was free (all eight are in
+# use)" is the thing to check before wiring any channel -- COMM10's low
+# 13 bits are the dirty-page mask and bits 13-15 look spare, which is
+# free BITS rather than a free register. Price it, then wire it.)
+
+if os.environ.get('PASSCOUNT'):
+    pc = PAL_THUNK_BASE + len(pal_words) * 2
+    struct.pack_into('>HHH', hrom, 0x922, 0x4EB8, pc, 0x4E71)
+    pal_words += [
+        0x5278, 0xA0EC,                 # addq.w #1,$FFA0EC
+        0x4EB9, PASS_WAIT >> 16, PASS_WAIT & 0xFFFF,   # jsr the real wait
+        0x4E75,                         # rts
+    ]
+    pal_report.append(f"P 000922: gameplay wait -> pass counter {pc:04X}")
+    assert PAL_THUNK_BASE + len(pal_words) * 2 <= 0xBFF0, 'PASSCOUNT overruns'
+    print(f"PASSCOUNT: 0x00922 -> jsr {pc:#06x}, count at 0xFFA0EC")
 
 # ---------------------------------------------------------------------------
 # LOOP 23 — FMGATE: gate thunks at the MAIN-loop FB subsystems' entry
@@ -1030,6 +1328,8 @@ if TXTWRAM:
     FMGATE_SPANS = [sp for sp in FMGATE_SPANS
                     if tuple(sp) not in {tuple(x) for w in TXTW for x in w.get('drop_spans', [])}]
 fmgate_words = []
+spin_fixups = []
+burst_mark_addr = 0
 fmgate_base = PAL_THUNK_BASE + len(pal_words) * 2
 if FMGATE:
     for off, dlen, w0, note in FMGATE_ENTRIES:
@@ -1047,6 +1347,11 @@ if FMGATE:
             disp = [0x41F9, 0x0090, tgt & 0xFFFF]
             assert 0 <= tgt < 0x40000
         taddr = fmgate_base + len(fmgate_words) * 2
+        if COUNTSITES and off in COUNTSITES:
+            # PRICING PROBE (2026-09-25): count this gate's calls in a WRAM word
+            # (0xFFA1F0 + 2i, the TAIL_CENSUS stamps' block, free on the line);
+            # ~10 cycles a call, dump-read on ares. Never a ship.
+            fmgate_words += [0x5278, (0xA1F0 + 2 * COUNTSITES.index(off)) & 0xFFFF]   # addq.w #1,(abs.w)
         struct.pack_into('>HH', hrom, off, 0x4EB8, taddr)
         for k in range(4, dlen, 2):
             struct.pack_into('>H', hrom, off + k, 0x4E71)
@@ -1054,6 +1359,62 @@ if FMGATE:
             # the writer stores into WRAM now: no gate (its mark thunk is
             # installed below); undo the jsr just planted
             struct.pack_into(f'>{dlen // 2}H', hrom, off, *disp)
+            continue
+        if BURSTGATE and off == 0x3A9A and TXTMASK and not TXTWRAM:
+            # BURST GATE (2026-09-25, LESSONS "the 68K-line ranking" item 4):
+            # 0x3A9A is the game's text-copy loop  move.b (a0)+,(a1)+ /
+            # addq.l #1,a1 / dbra d0  (D0+1 glyph bytes). The standard entry
+            # gate ran the spin + the 4-row-group mark + the displaced pair
+            # PER BYTE, ~230 cycles against 12: ~10 68K lines a pass in the
+            # level-1 demo, 21-26 calls a frame (the arcade trace). This
+            # thunk does the whole loop once: spin until FM=0, save
+            # d0/a0/a1, mark the start group, copy, mark the end group
+            # (a burst may straddle a 512-byte group), then re-read FM --
+            # if the master raised it during the copy those bytes were
+            # dropped, so restore the saved registers and redo the burst
+            # from the spin. Leaves D0.w = 0 so the site's own dbra falls
+            # through exactly as the original loop left it (D0.w = -1).
+            _txt = remap(0x410000)
+            assert isinstance(_txt, int) and (_txt & 0xFFF) == 0, _txt
+            mark = [0x2F00, 0x2009, 0x0280, 0x00FF, 0xF000,
+                    0x0C80, (_txt >> 16) & 0xFFFF, _txt & 0xFFFF, 0x660E,
+                    0x2009, 0x0240, 0x0FFF, 0xE048, 0xE248, 0x01F8, 0xA1A6,
+                    0x201F, 0x4E75]                                   # ... ; rts
+            if os.environ.get('COUNTBURST'):
+                fmgate_words += [0x5278, 0xA3C4]   # addq.w #1,(0xFFA3C4).w  calls (pricing probe)
+                taddr_count = taddr; taddr = fmgate_base + len(fmgate_words) * 2
+                struct.pack_into('>HH', hrom, off, 0x4EB8, taddr_count)   # the site enters at the counter
+            body = [0x4EB8, 0x0000,          # T+0  burst: jsr (spin).w   [fixup]
+                    0x48E7, 0x80C0,          # T+4  movem.l d0/a0/a1,-(sp)
+                    0x6124,                  # T+8  bsr.s mark  (T+10 -> T+46)
+                    0x12D8,                  # T+10 loop: move.b (a0)+,(a1)+
+                    0x5289,                  # T+12 addq.l #1,a1
+                    0x51C8, 0xFFFA,          # T+14 dbra d0,loop
+                    0x5589,                  # T+18 subq.l #2,a1  (last byte written)
+                    0x6118,                  # T+20 bsr.s mark  (T+22 -> T+46)
+                    0x5489,                  # T+22 addq.l #2,a1
+                    0x4A79, 0x00A1, 0x5100,  # T+24 tst.w (0xA15100).l   FM rose mid-burst?
+                    0x6A06,                  # T+30 bpl.s done (T+38)
+                    0x4CDF, 0x0301,          # T+32 movem.l (sp)+,d0/a0/a1
+                    0x60DA,                  # T+36 bra.s burst (T+38 -> T+0)
+                    0x4FEF, 0x000C,          # T+38 done: lea 12(sp),sp
+                    0x4240,                  # T+42 clr.w d0
+                    0x4E75]                  # T+44 rts
+            assert len(body) == 23 and len(mark) == 18
+            spin_fixups.append(len(fmgate_words) + 1)
+            burst_mark_addr = taddr + 46     # the twin loop 0x3AA4 shares it (below)
+            fmgate_words += body + mark      # mark at T+46
+            pal_report.append(f"G {off:06X}: BURST gate (whole copy loop) -> {taddr:04X}  {note}")
+            continue
+        if BURSTGATE and off == 0x3AA4 and TXTMASK and not TXTWRAM and burst_mark_addr:
+            # the twin glyph loop keeps its per-byte gate but calls the burst
+            # thunk's mark subroutine instead of carrying its own 17 words
+            # (region space: the two together are then 4 bytes over the old pair)
+            fmgate_words += [0x4EB8, 0x0000, 0x4E71, 0x4E71]     # jsr (spin).w ; nop ; nop
+            spin_fixups.append(len(fmgate_words) - 3)
+            fmgate_words += [0x4EB8, burst_mark_addr & 0xFFFF]   # jsr (mark).w
+            fmgate_words += disp + [0x4E75]
+            pal_report.append(f"G {off:06X}: gate + shared burst mark -> {taddr:04X}  {note}")
             continue
         if TXTWRAM and off in GT.get('TXT_WRAM_CLEAR_SITES', []):
             # a scene-level text fill invalidates every pending footprint:
@@ -1065,8 +1426,75 @@ if FMGATE:
             #   cmpa.l #0x00FF0000,%a1 ; bhs.s <past the spin>
             # (CCR is rewritten by the displaced moveb/clrb anyway)
             fmgate_words += [0xB3FC, 0x00FF, 0x0000, 0x6408]
-        fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
-                         0x6BF8]                      # bmi.s back to tst
+        if FBXPEND and not (os.environ.get('HSPLAINSPIN') and off in (0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2)):
+            # jsr (spin).w ; nop ; nop  -- same 8 bytes as the inline spin,
+            # so the TXTWRAM bhs.s +8 above still lands past it. The spin
+            # routine is appended after the table; its address is patched in
+            # below once the table is complete.
+            fmgate_words += [0x4EB8, 0x0000, 0x4E71, 0x4E71]
+            spin_fixups.append(len(fmgate_words) - 3)
+        else:
+            fmgate_words += [0x4A79, 0x00A1, 0x5100,     # tst.w (0xA15100).l
+                             0x6BF8]                      # bmi.s back to tst
+        if TXTMASK:
+            # TEXT ROW MASK (LOOP29 147). Every text write reaches the FB
+            # through one of these gates; each marks the 4-row group it is
+            # about to write in WRAM byte 0xFFA1A6 (bit = rows 4g..4g+3),
+            # so the master captures only those rows before the flip
+            # instead of all 928 longs. The two shared loop heads derive
+            # the row from a1 at every iteration (and only for the text
+            # page, 0x85Fxxx); the credit writer from its offset variable;
+            # the health bar and the 0x153E writer are fixed rows; the two
+            # clear-alls mark everything.
+            _txt = remap(0x410000)
+            assert isinstance(_txt, int) and (_txt & 0xFFF) == 0, _txt
+            if TXTWRAM:
+                raise SystemExit('TXTMASK: not with TXTWRAM (its writers bypass the FB)')
+            if off in (0x3A9A, 0x3AA4):
+                fmgate_words += [0x2F00,                          # move.l d0,-(sp)
+                                 0x2009,                          # move.l a1,d0
+                                 0x0280, 0x00FF, 0xF000,          # andi.l #0xFFF000,d0
+                                 0x0C80, (_txt >> 16) & 0xFFFF, _txt & 0xFFFF,   # cmpi.l #text,d0
+                                 0x660E,                          # bne.s  skip (+14)
+                                 0x2009,                          # move.l a1,d0
+                                 0x0240, 0x0FFF,                  # andi.w #0xFFF,d0   byte offset in page
+                                 0xE048,                          # lsr.w  #8,d0
+                                 0xE248,                          # lsr.w  #1,d0       /512 = 4-row group
+                                 0x01F8, 0xA1A6,                  # bset   d0,(0xFFA1A6).w
+                                 0x201F]                          # skip: move.l (sp)+,d0
+            elif off == 0x3AAE:
+                fmgate_words += [0x2F00,                          # move.l d0,-(sp)
+                                 0x3038, 0xF024,                  # move.w (0xFFF024).w,d0  credit offset
+                                 0x0240, 0x0FFF, 0xE048, 0xE248,  # -> group
+                                 0x01F8, 0xA1A6,                  # bset   d0,(0xFFA1A6).w
+                                 0x201F]                          # move.l (sp)+,d0
+            elif off in (0x153E, 0x4D88):
+                fmgate_words += [0x08F8, 0x0006, 0xA1A6]          # bset #6,(0xFFA1A6).w  rows 24-27
+            elif off == 0x56E8:
+                # THE ZEUS MESSAGE TYPEWRITER (2026-09-20). One glyph every
+                # two frames at 0x4104B8 + 2*i, bit 6 of i folding to +256
+                # (rows 9 and 11), 64 glyphs, then 64 ZERO stores over the
+                # same cells (the erase). The site was gated but never
+                # MARKED, so the master captured its rows only on the
+                # forced full mask every 8th vint: a few letters landed,
+                # most did not, and the erase stores were lost the same
+                # way -- "R M U" burned in until the transform's clear-all.
+                # 2026-09-20 evening, rig: with `bset #2` (rows 8-11) the
+                # level background was black on the FPGA; with `st.b` (all
+                # rows) or three NOPs it was present -- and then a FIVE-nop
+                # pad lost it again while one and three nops kept it,
+                # deterministically on relaunch. The FPGA outcome follows
+                # BUILD LAYOUT, not this mark (LESSONS). st.b is the
+                # default because that layout passes today; ZEUSPAD=N /
+                # ZEUSBSET=1 reproduce the experiment.
+                if os.environ.get('ZEUSPAD'):
+                    fmgate_words += [0x4E71] * int(os.environ['ZEUSPAD'])   # PROBE: N-word shift, no mark
+                elif os.environ.get('ZEUSBSET'):
+                    fmgate_words += [0x08F8, 0x0002, 0xA1A6]      # bset #2,(0xFFA1A6).w  rows 8-11 (slim23/25)
+                else:
+                    fmgate_words += [0x50F8, 0xA1A6, 0x4E71]      # st.b (0xFFA1A6).w  all rows
+            elif off in (0x369C, 0x1ACCA, 0x573E) or (off in (0x45EC, 0x45FE, 0x4614, 0x4634, 0x4648, 0x4658, 0x46A2) and not os.environ.get('HSNOMARK')):
+                fmgate_words += [0x50F8, 0xA1A6]                  # st.b  (0xFFA1A6).w    all rows (0x45EC..0x46A2: the high-score table paints a screen)
         fmgate_words += disp + [0x4E75]
         pal_report.append(f"G {off:06X}: gate -> {taddr:04X}  {note}")
     for wi, w in enumerate(TXTW):
@@ -1092,6 +1520,155 @@ if FMGATE:
             assert g2 == lea_op and o2 >> 12 in (0x410, 0x85F), f"txtwram alt {alt:#x}: {g2:04X} {o2:#x}"
             struct.pack_into('>I', hrom, alt + 2, 0x00FF8000 | (o2 & 0xFFF))
         pal_report.append(f"G {site:06X}: TXTWRAM mark -> {taddr:04X}  {w.get('note', '')}")
+    if GAMEGATE:
+        # THE FRAME GATE (LOOP29 141, from LOOP-DECOMPILE 22). IRQ4 at
+        # 0x2AB8 tests the loop's frame flag: clear = the loop is waiting,
+        # release it (0x2AC6 addq.b #1,$FFF01C); set = the loop overran,
+        # count it (0x2ABE) and take the short path (0x2C06). We own the
+        # decision now: the thunk returns Z=1 (release) only when the shim's
+        # go token (0xFFA0F5) is set AND the loop is waiting, consuming the
+        # token; otherwise Z=0 and IRQ4 takes its own short path. The
+        # overrun count becomes nops so 0xFFF144 stays a pure overrun
+        # counter on the arcade and never counts our pacing.
+        _o = 0x2AB8
+        _want = bytes.fromhex('4a38f01c' '6708' '5278f144' '60000142')
+        assert hrom[_o:_o+14] == _want, f'GAMEGATE site: {hrom[_o:_o+14].hex()}'
+        gg_addr = fmgate_base + len(fmgate_words) * 2
+        if os.environ.get('TAILCENSUS'):
+            # NOTES 49 / LOOP29 260: stamp V on the thunk's first visit after
+            # a release (the game reached its frame-wait loop = FRAMEDONE);
+            # the shim's IRQ4 clears the flag after reading the stamp.
+            fmgate_words += [0x4A38, 0xA1F6,              # tst.b  (0xFFA1F6).w   stamped since the last release?
+                             0x660C,                      # bne.s  +12
+                             0x31F9, 0x00C0, 0x0008, 0xA1F4,   # move.w (0xC00008).l,(0xFFA1F4).w  (the pass ARRIVED here)
+                             0x50F8, 0xA1F6]              # st.b   (0xFFA1F6).w
+            # the flag clears when the token is consumed (below), so the
+            # next stamp is the arrival after the NEXT pass, not the spin
+            fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
+                             0x6710,              # beq.s  nogo (+16)
+                             0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?
+                             0x660A,              # bne.s  nogo (+10)
+                             0x4238, 0xA0F5,      # clr.b  (0xFFA0F5).w   consume, Z=1
+                             0x4238, 0xA1F6,      # clr.b  (0xFFA1F6).w   arm the next arrival stamp
+                             0x4E75,              # rts
+                             0x7001,              # nogo: moveq #1,d0
+                             0x4E75]              # rts
+        else:
+            fmgate_words += [0x4A38, 0xA0F5,      # tst.b  (0xFFA0F5).w   go token?
+                         0x670C,              # beq.s  nogo
+                         0x4A38, 0xF01C,      # tst.b  (0xFFF01C).w   loop waiting?
+                         0x6606,              # bne.s  nogo           (still mid-frame: hold)
+                         0x4238, 0xA0F5,      # clr.b  (0xFFA0F5).w   consume, Z=1
+                         0x4E75,              # rts
+                         0x7001,              # nogo: moveq #1,d0     Z=0 (d0 is reloaded at 0x2ACA)
+                         0x4E75]              # rts
+        struct.pack_into('>HH', hrom, _o, 0x4EB8, gg_addr)          # jsr (thunk).w
+        struct.pack_into('>HH', hrom, _o + 6, 0x4E71, 0x4E71)       # overrun count -> nops
+        pal_report.append(f"G {_o:06X}: GAMEGATE frame release -> {gg_addr:04X}")
+    if FBXPEND:
+        # THE SHARED GATE SPIN (LOOP29 137). Every gate thunk jsr's here
+        # instead of spinning inline. Spin on FM as before; when FM reads 0
+        # and the shim has a packet pending (WRAM word 0xFFA0FE, set by the
+        # tail when it found FM up), call the shim's late blast through the
+        # vector at 0xFFA0F8 with every register saved. The game was going
+        # to wait for FM anyway; the blast rides the tail of that wait, so
+        # the packet never has to take the pre-post slot and the post keeps
+        # its early line.
+        spin_addr = fmgate_base + len(fmgate_words) * 2
+        for i in spin_fixups:
+            fmgate_words[i] = spin_addr & 0xFFFF
+        if os.environ.get('RIGWIN') or os.environ.get('RIGWINMAX'):   # RIGWINMAX (RIGSPAN=2): the same stamp; the shim folds it into a per-pass max (a 40-byte compare form overran the thunk region)
+            # RIGWIN (2026-09-24): stamp the V counter the first time a gate
+            # actually waited (FM was 1) -- the window end as the 68K sees it
+            # -- into WRAM 0xFFA0EC for the barcode's byte 6. Gates that find
+            # FM=0 take the bpl and leave the stamp alone.
+            fmgate_words += [0x4A79, 0x00A1, 0x5100,      # spin: tst.w (0xA15100).l
+                             0x6A12,                      #       bpl.s nospin (+18)
+                             0x4A79, 0x00A1, 0x5100,      # loop: tst.w (0xA15100).l
+                             0x6BF8,                      #       bmi.s loop
+                             0x33F9, 0x00C0, 0x0008,      #       move.w (0xC00008).l,
+                             0x00FF, 0xA0EC]              #              (0xFFA0EC).l
+        elif os.environ.get('GATESLOW'):
+            # GATESLOW (2026-09-24): the tight FM poll (~4 us a read) hammers the
+            # adapter bus while the master blits; on the FPGA the window body
+            # grew when it overlapped this spin. 24 nops between polls (~13 us).
+            fmgate_words += [0x4A79, 0x00A1, 0x5100,      # spin: tst.w (0xA15100).l
+                             0x6A32,                      #       bpl.s done (+50: 24 nops + bra.s)
+                            ] + [0x4E71] * 24 + [         #       nop x24
+                             0x60C6]                      #       bra.s spin (-58)
+        else:
+            fmgate_words += [0x4A79, 0x00A1, 0x5100,      # spin: tst.w (0xA15100).l
+                             0x6BF8]                      #       bmi.s spin
+        fmgate_words += [0x4A79, 0x00FF, 0xA0FE,      #       tst.w (0xFFA0FE).l   pending?
+                         0x6710,                      #       beq.s done
+                         0x48E7, 0xFFFE,              #       movem.l d0-d7/a0-a6,-(sp)
+                         0x2079, 0x00FF, 0xA0F8,      #       movea.l (0xFFA0F8).l,a0
+                         0x4E90,                      #       jsr (a0)
+                         0x4CDF, 0x7FFF,              #       movem.l (sp)+,d0-d7/a0-a6
+                         0x4E75]                      # done: rts
+    if os.environ.get('EARLYREC') or os.environ.get('RIGSPANHOOK'):   # RIGSPANHOOK: the same idle-loop thunk, vector 0xFFA0E8 -> span_hook
+        # EARLYREC (2026-09-23): the game's frame wait (LOOP-DECOMPILE 67)
+        #     3982  tst.b  $FFF01C   spin while zero
+        #     3986  beq.s  0x3982
+        # is the 68K's idle time. Replace the tst.b with a jsr to a thunk
+        # that calls the shim's earlyrec_push through the vector at
+        # 0xFFA0E8 (set by md_main at init; skipped while zero), then does
+        # the tst.b so the caller's beq sees the flag. The push itself runs
+        # once per vint and masks interrupts only for its own duration.
+        er_addr = fmgate_base + len(fmgate_words) * 2
+        want_tst = struct.pack('>HH', 0x4A38, 0xF01C)
+        assert hrom[0x3982:0x3986] == want_tst, hrom[0x3982:0x3986].hex()
+        struct.pack_into('>HH', hrom, 0x3982, 0x4EB8, er_addr)      # jsr (thunk).w
+        # ONE READ OF THE FLAG (2026-09-24 15:20): the hook and the game's
+        # beq must judge the SAME read, or a release landing between the
+        # hook's read and a second tst.b starts a pass the hook never armed
+        # (RIGSPAN lost ~40% of ares' passes that way). The flag is read
+        # once, its truth saved in 0xFFA0EE (RIGWIN3/RELBANK's word; those
+        # knobs exclude RIGSPAN), and the caller's CCR rebuilt from it.
+        fmgate_words += [0x4A38, 0xF01C,              # tst.b  (0xFFF01C).w   THE read
+                         0x56F8, 0xA0EE,              # sne.b  (0xFFA0EE).w   0xFF if set
+                         0x4AB9, 0x00FF, 0xA0E8,      # tst.l  (0xFFA0E8).l   vector set?
+                         0x6712,                      # beq.s  done (+18)
+                         0x48E7, 0xFFFE,              # movem.l d0-d7/a0-a6,-(sp)
+                         0x2079, 0x00FF, 0xA0E8,      # movea.l (0xFFA0E8).l,a0
+                         0x4E90,                      # jsr (a0)
+                         0x4CDF, 0x7FFF,              # movem.l (sp)+,d0-d7/a0-a6
+                         0x4A38, 0xA0EE,              # done: tst.b (0xFFA0EE).w  the same read, for the beq
+                         0x4E75]                      # rts
+        pal_report.append(f"E {0x3982:06X}: EARLYREC idle-loop push -> {er_addr:04X}")
+    if os.environ.get('UPLOADSKIP'):
+        # UPLOADSKIP (2026-09-24 A/B): on odd vints the game's IRQ4 skips its
+        # uploads (scroll regs 0x2AD2/0x2AEE, the sprite RAM copy 0x2B16-46,
+        # the palette drain 0x2B4C) by jumping to the handler's common tail
+        # at 0x2C06 -- the same target the flag-still-set branch takes. The
+        # frame flag is still incremented, so the game's logic runs as on
+        # the line; only the 68K's upload traffic is absent every other vint.
+        us_addr = fmgate_base + len(fmgate_words) * 2
+        assert hrom[0x2AC6:0x2ACA] == struct.pack('>HH', 0x5238, 0xF01C), hrom[0x2AC6:0x2ACA].hex()
+        struct.pack_into('>HH', hrom, 0x2AC6, 0x4EB8, us_addr)      # jsr (thunk).w (4 bytes, exact fit)
+        fmgate_words += [0x5238, 0xF01C,              # addq.b #1,(0xFFF01C).w   the displaced frame flag
+                         0x0839, 0x0000, 0x00FF, 0xB0F1,   # btst #0,(0xFFB0F1).l  shim vint counter, low byte
+                         0x6708,                      # beq.s  cont (+8): even vint, upload as usual
+                         0x588F,                      # addq.l #4,sp   drop the return into the handler
+                         0x4EF9, 0x0090, 0x2C06,      # jmp 0x902C06   the handler's common tail
+                         0x4E75]                      # cont: rts
+        pal_report.append(f"U {0x2AC6:06X}: UPLOADSKIP odd-vint IRQ4 upload skip -> {us_addr:04X}")
+    if os.environ.get('SPRSKIP'):
+        # SPRSKIP (2026-09-24 A/B): on odd vints the game's IRQ4 skips ONLY the
+        # sprite RAM copy (0x2B16-0x2B4A, 256 entries x 3 longs into the FB) by
+        # jumping to the palette drain call at 0x2B4C; scroll, palette and the
+        # frame flag proceed as on the line. The sprite RAM keeps the previous
+        # frame's records on odd vints.
+        ss_addr = fmgate_base + len(fmgate_words) * 2
+        assert hrom[0x2B16:0x2B1A] == struct.pack('>HH', 0x307C, 0xEC80), hrom[0x2B16:0x2B1A].hex()
+        struct.pack_into('>HH', hrom, 0x2B16, 0x4EB8, ss_addr)      # jsr (thunk).w (4 bytes, exact fit)
+        fmgate_words += [0x0839, 0x0000, 0x00FF, 0xB0F1,   # btst #0,(0xFFB0F1).l  shim vint counter, low byte
+                         0x6606,                      # bne.s skip (+6): odd vint (movea.w 4 + rts 2)
+                         0x307C, 0xEC80,              # movea.w #$EC80,a0   the displaced instruction
+                         0x4E75,                      # rts: even vint, copy as usual
+                         0x588F,                      # skip: addq.l #4,sp
+                         0x4EF9, 0x0090, 0x2B4C]      #       jmp 0x902B4C   past the copy
+        pal_report.append(f"S {0x2B16:06X}: SPRSKIP odd-vint sprite RAM copy skip -> {ss_addr:04X}")
     fmgate_end = fmgate_base + len(fmgate_words) * 2
     assert fmgate_end <= 0xBFF0, \
         f"fmgate thunks overrun boot stack: end {fmgate_end:#x}"
@@ -1104,6 +1681,8 @@ with open(ROOT / 'md_src' / 'fmgate_tab.h', 'w') as fh:
     fh.write(f"#define FMGATE_ON {1 if FMGATE else 0}\n")
     fh.write(f"#define FMGATE_THUNK_ADDR 0x{fmgate_base:04X}\n")
     fh.write(f"#define FMGATE_THUNK_WORDS {len(fmgate_words)}\n")
+    fh.write(f"#define FMGATE_SPIN_ADDR 0x{(spin_addr if (FMGATE and FBXPEND) else 0):04X}\n")
+    fh.write(f"#define GAMEGATE_ON {1 if (FMGATE and GAMEGATE) else 0}\n")
     fh.write(f"#define TXT_WRAM_ON {1 if TXTWRAM else 0}\n")
     fh.write(f"#define TXTW_N {len(TXTW) if TXTWRAM else 0}\n")
     fh.write("/* per writer: WRAM slot (word = live text byte offset, byte +2 = dirty),\n"
@@ -1197,6 +1776,31 @@ for lo, hi_ in REBASE_EXCLUDE:
         hrom[lo:hi_] = orig_rom[lo:hi_]
         reb_report.append(f"REVERT {lo:06X}-{hi_:06X}: excluded region restored")
 
+# ==== WRAM-RESIDENT ROUTINES (2026-09-25, tools/wram_reloc.py) ====
+# The MiSTer core holds the 68K's DTACK for a full SDRAM access on every
+# MD ROM read (LESSONS, RIGSPAN=15: +18% fixed); hot game routines are
+# re-laid into WRAM at 0xFF5000 and their ROM entries become jumps. Runs
+# LAST so every other patch is already in the image it relocates.
+_wh = ROOT / 'md_src' / 'wram_code.h'
+if os.environ.get('WRAMCODE'):
+    import sys; sys.path.insert(0, str(ROOT / "tools"))
+    import wram_reloc
+    _od = os.path.join(os.environ.get('MARSDEV', os.path.expanduser('~/src/marsdev/mars')), 'm68k-elf', 'bin', 'm68k-elf-objdump')
+    # region 1: 0xFF5000-0xFF5DFF (the tile thunks start at 0xFF5E00); region 2 (2026-09-24):
+    # 0xFF4600-0xFF4BFF, the gap above .bss (md.ld asserts __bss_end <= 0xFF4600) and below
+    # the boot stack's 1 KB keep (top 0xFF4FF0, depth measured 202 bytes).
+    _regions = [(0xFF5000, GT['WRAM_BLOCKS'], 0xFF5E00)]
+    # region 2 is a KNOB (WRAMCODE2=1): measured 2026-09-24 23:50 as 0 conversions on the rig
+    # (LESSONS "the third block set converts nothing"); the line candidate wc2 is region 1 alone.
+    if GT.get('WRAM_BLOCKS2') and os.environ.get('WRAMCODE2'):
+        _regions.append((0xFF4600, GT['WRAM_BLOCKS2'], 0xFF4C00))
+    _res = wram_reloc.relocate_regions(hrom, _od, _regions, entries=GT.get('WRAM_ENTRIES'))
+    _base, _words, _table = _res[0]
+    wram_reloc.write_header(_wh, _base, _words, _table, region2=(_res[1] if len(_res) > 1 else None))
+    for _b, _w, _t in _res:
+        print(f"WRAMCODE: {len(_w)*2} bytes at 0x{_b:06X}, {len(_t)} entries")
+else:
+    _wh.write_text('/* generated by patch_game.py: WRAMCODE off */\n#define WRAM_CODE_WORDS 0\n#define WRAM_CODE_BASE 0xFF5000\nstatic const unsigned short wram_code[1] = {0};\n')
 (ROOT / 'md_src' / 'game_high.bin').write_bytes(hrom[:0x40000])
 (ROOT / 'tools' / 'rebase_report.txt').write_text(
     f"{reb} refs rebased (+{REBASE:#x})\n\n"

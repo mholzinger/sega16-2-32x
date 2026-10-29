@@ -1,0 +1,127 @@
+MOVEP — 2 sites
+  the game assumes: peripheral byte-lane access on a 68000 8-bit port
+  on 32X:           no such peripheral in the 32X map
+    0x0047A
+    0x1ED14
+
+STOP — 12 sites
+  the game assumes: halts until an interrupt the arcade guarantees
+  on 32X:           resumes only if the 32X-side interrupt actually arrives; a masked or re-vectored source hangs the 68000
+    0x1A9E6
+    0x1B0CA
+    0x1B178
+    0x1B1D2
+    0x1B35A
+    0x1B4AC
+    0x1B4B0
+    0x1B50C
+    0x1B5B2
+    0x1B5D0
+    0x1B93A
+    0x1B9E6
+
+TAS — 4 sites
+  the game assumes: a locked read-modify-write sets the latch
+  on 32X:           the MD bus arbiter DROPS the write phase, so the latch never sets — patch_game rewrites every site
+    0x02268
+    0x0E098
+    0x0EAC0
+    0x12E84
+  CANDIDATES the reference does not call code — VERIFY BY HAND.
+  Unreached real code looks exactly like this: 0x150B6 is a
+  live TAS that patch_game had to find by hand (entry 37).
+    0x03646 ?
+    0x150B6 ?
+
+====================================================================
+ARCADE HARDWARE SURFACE — 29 addresses accessed directly, 73 more only as a base
+Every one needs somewhere to land in the 32X map.
+====================================================================
+
+--- tile bank latch (tbank_cs)
+    reached once, by the MOVEP at 0x0047A
+
+--- tilemap VRAM, 32 kB — scr1 and scr2
+    jts16b_main.v:354 (A16=0). The port stages it in work RAM and ships it over the FB packet; nothing addresses it absolutely, which is why the interception is at the RLE loop heads and not at an address.
+
+--- TEXT layer, 4 kB — char_cs
+    jts16b_main.v:329 (A16=1). Same chip select as the tilemap, not a mirror of it.
+    0x410002  Wb            2 sites  first 0x1B77A
+    0x410E80  Ww            2 sites  first 0x1B0D6
+    0x410E82  Ww            2 sites  first 0x1B0DE
+    0x410E90  Ww            1 site   first 0x02AE0
+    0x410E92  Ww            1 site   first 0x02AFC
+    0x410E98  Ww            1 site   first 0x02AD2
+    0x410E9A  Ww            1 site   first 0x02AEE
+
+--- sprite RAM, 2 kB
+    one writer, the IRQ4 loop at 0x2B16 (LOOP-DECOMPILE 13)
+    0x440004  Ww            2 sites  first 0x1A92C
+
+--- palette RAM, 4 kB
+    the live palette the port reads from work RAM 0xFF9000 instead
+    0x840000  Ww            7 sites  first 0x01EF2
+    0x840002  Ww            2 sites  first 0x1A93C
+    0x840004  Ww            2 sites  first 0x1A944
+    0x840006  Ww            2 sites  first 0x1A94C
+    0x840010  Ww            4 sites  first 0x04544
+    0x840012  Ww            2 sites  first 0x1A95C
+    0x840014  Ww            2 sites  first 0x1A964
+    0x840016  Ww            2 sites  first 0x1A96C
+    0x840020  Ww            2 sites  first 0x1A974
+    0x840022  Ww            2 sites  first 0x1A97C
+    0x840024  Ww            2 sites  first 0x1A984
+    0x840026  Ww            2 sites  first 0x1A98C
+
+--- I/O: coin, DIPs, controls, display gate
+    byte-wide and ODD addresses only — jts16b_main.v:489 returns {8'hff, cab_dout}, so the board wires the low byte and the high byte reads as 0xFF
+    0xC40001  Wb RMWb       6 sites  first 0x00464
+    0xC41001  Rb            7 sites  first 0x00F94
+    0xC41003  Rb            5 sites  first 0x00954
+    0xC41005  Rb            2 sites  first 0x013BA
+    0xC41007  Rb            6 sites  first 0x0095A
+    0xC42001  Rb            2 sites  first 0x004E6
+    0xC42003  Rb            2 sites  first 0x004C4
+    0xC43001  Wb            1 site   first 0x02B58
+    0xC43007  Wb            1 site   first 0x0045C
+
+--- INTERRUPT MASK — 14 writes to the SR
+    the game assumes: the arcade's interrupt levels
+    on 32X:           the IRQ sources differ, so a mask written here can hide
+                      an interrupt the port needs, or admit one the game has
+                      no handler for. #0x2700 masks everything, #0x2300
+                      admits levels 4 and up -- the vblank the port drives.
+    #8960,%sr              8 sites
+    #9984,%sr              6 sites
+    0x00412  movew #9984,%sr
+    0x004A4  movew #9984,%sr
+    0x00552  movew #8960,%sr
+    0x005C2  movew #8960,%sr
+    0x0062E  movew #8960,%sr
+    0x01E5E  movew #8960,%sr
+    0x02E08  movew #9984,%sr
+    0x02E14  movew #8960,%sr
+    0x03372  movew #9984,%sr
+    0x0337E  movew #8960,%sr
+    0x03BEE  movew #9984,%sr
+    0x03BFA  movew #8960,%sr
+    0x1AFE4  movew #8960,%sr
+    0x1B834  movew #9984,%sr
+
+--- READ-MODIFY-WRITE ON A WRITE-ONLY I/O LATCH — 1 site
+    the game assumes: a read of 0xC40001 returns 0xFF.
+                      jts16b_cabinet.v:199-202 — for A[13:12]==0 the case
+                      arm only LATCHES flip and video_en from cpu_dout and
+                      never assigns cab_dout, so the read takes the 8'hff
+                      default at :189. The bclr therefore writes 0xBF:
+                      flip off, video ON. It only looks harmless.
+    on 32X:           the substitute MUST return 0xFF for this read. Anything
+                      else and the write half puts an arbitrary byte in the
+                      video latch. Every other site writes the shadow at
+                      0xFFF018 instead; these bypass it.
+    0xC40001  0x1AFF2
+
+--- STORES INTO ROM SPACE — 0 sites
+    NONE. The program never writes below 0x40000, so the +0x900000
+    rebase cannot be undone at runtime and no code is self-modifying.
+    A clean class is still a kit rule: check it per title, it is cheap.

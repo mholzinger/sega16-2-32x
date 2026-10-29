@@ -1,0 +1,1184 @@
+{
+"FFFFC001": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFC004": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFC00C": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFC010": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC014": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 3,
+"4": 1
+}
+},
+"FFFFC01A": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC020": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFC038": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC040": {
+"dominant": 2,
+"uses": 2,
+"widths": {
+"2": 2
+}
+},
+"FFFFC044": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC04A": {
+"dominant": 1,
+"uses": 6,
+"widths": {
+"1": 6
+}
+},
+"FFFFC06A": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFC06B": {
+"dominant": 1,
+"uses": 5,
+"widths": {
+"1": 5
+}
+},
+"FFFFC08C": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC090": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC0A0": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFC0A1": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFC0A2": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC401": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFC414": {
+"dominant": 4,
+"uses": 1,
+"widths": {
+"4": 1
+}
+},
+"FFFFC41A": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC438": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC440": {
+"dominant": 2,
+"uses": 2,
+"widths": {
+"2": 2
+}
+},
+"FFFFC444": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFC44A": {
+"dominant": 1,
+"uses": 6,
+"widths": {
+"1": 6
+}
+},
+"FFFFC46A": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFC46B": {
+"dominant": 1,
+"uses": 5,
+"widths": {
+"1": 5
+}
+},
+"FFFFD400": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFD40A": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFD420": {
+"dominant": 1,
+"uses": 17,
+"widths": {
+"1": 17
+}
+},
+"FFFFD422": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFD43E": {
+"dominant": 2,
+"uses": 2,
+"widths": {
+"2": 2
+}
+},
+"FFFFD43F": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFD440": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFD444": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFD46A": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"1": 1,
+"2": 3
+}
+},
+"FFFFD46E": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFD4F0": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFD522": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFD5A1": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFD5A2": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFD621": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFD622": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFD80C": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFD88C": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFE008": {
+"dominant": 4,
+"uses": 5,
+"widths": {
+"4": 5
+}
+},
+"FFFFE00C": {
+"dominant": 4,
+"uses": 2,
+"widths": {
+"4": 2
+}
+},
+"FFFFE010": {
+"dominant": 4,
+"uses": 3,
+"widths": {
+"2": 1,
+"4": 2
+}
+},
+"FFFFE014": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFE018": {
+"dominant": 1,
+"uses": 6,
+"widths": {
+"1": 6
+}
+},
+"FFFFE01A": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE01C": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFE01E": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFE01F": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE020": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE021": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFE022": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE023": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE028": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE029": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFE088": {
+"dominant": 4,
+"uses": 5,
+"widths": {
+"4": 5
+}
+},
+"FFFFE08C": {
+"dominant": 4,
+"uses": 2,
+"widths": {
+"4": 2
+}
+},
+"FFFFE090": {
+"dominant": 4,
+"uses": 3,
+"widths": {
+"2": 1,
+"4": 2
+}
+},
+"FFFFE094": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFE098": {
+"dominant": 1,
+"uses": 7,
+"widths": {
+"1": 7
+}
+},
+"FFFFE09A": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFE09C": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFE09E": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFE09F": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE0A0": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE0A1": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFE0A2": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE0A3": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE0A8": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFE0A9": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFE800": {
+"dominant": 1,
+"uses": 7,
+"widths": {
+"1": 6,
+"2": 1
+}
+},
+"FFFFE801": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF000": {
+"dominant": 1,
+"uses": 39,
+"widths": {
+"1": 39
+}
+},
+"FFFFF002": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF003": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF008": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFF009": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF00A": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF00C": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF00D": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF00E": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF010": {
+"dominant": 4,
+"uses": 1,
+"widths": {
+"4": 1
+}
+},
+"FFFFF014": {
+"dominant": 4,
+"uses": 2,
+"widths": {
+"4": 2
+}
+},
+"FFFFF018": {
+"dominant": 1,
+"uses": 21,
+"widths": {
+"1": 21
+}
+},
+"FFFFF019": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF01A": {
+"dominant": 1,
+"uses": 8,
+"widths": {
+"1": 8
+}
+},
+"FFFFF01B": {
+"dominant": 1,
+"uses": 14,
+"widths": {
+"1": 14
+}
+},
+"FFFFF01C": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF01E": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF020": {
+"dominant": 1,
+"uses": 6,
+"widths": {
+"1": 6
+}
+},
+"FFFFF021": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF022": {
+"dominant": 2,
+"uses": 5,
+"widths": {
+"2": 5
+}
+},
+"FFFFF024": {
+"dominant": 2,
+"uses": 6,
+"widths": {
+"2": 6
+}
+},
+"FFFFF026": {
+"dominant": 1,
+"uses": 47,
+"widths": {
+"1": 47
+}
+},
+"FFFFF028": {
+"dominant": 1,
+"uses": 42,
+"widths": {
+"1": 41,
+"2": 1
+}
+},
+"FFFFF029": {
+"dominant": 1,
+"uses": 43,
+"widths": {
+"1": 43
+}
+},
+"FFFFF02A": {
+"dominant": 2,
+"uses": 21,
+"widths": {
+"2": 21
+}
+},
+"FFFFF02B": {
+"dominant": 1,
+"uses": 11,
+"widths": {
+"1": 11
+}
+},
+"FFFFF02C": {
+"dominant": 1,
+"uses": 15,
+"widths": {
+"1": 13,
+"2": 2
+}
+},
+"FFFFF02D": {
+"dominant": 1,
+"uses": 19,
+"widths": {
+"1": 19
+}
+},
+"FFFFF030": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF031": {
+"dominant": 1,
+"uses": 12,
+"widths": {
+"1": 12
+}
+},
+"FFFFF032": {
+"dominant": 4,
+"uses": 18,
+"widths": {
+"4": 18
+}
+},
+"FFFFF03C": {
+"dominant": 1,
+"uses": 11,
+"widths": {
+"1": 11
+}
+},
+"FFFFF03E": {
+"dominant": 2,
+"uses": 7,
+"widths": {
+"2": 7
+}
+},
+"FFFFF094": {
+"dominant": 1,
+"uses": 14,
+"widths": {
+"1": 14
+}
+},
+"FFFFF095": {
+"dominant": 1,
+"uses": 8,
+"widths": {
+"1": 8
+}
+},
+"FFFFF0C2": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF0C4": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF0E0": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0E2": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0E4": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0E6": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0E8": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0EA": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0EC": {
+"dominant": 4,
+"uses": 2,
+"widths": {
+"4": 2
+}
+},
+"FFFFF0F0": {
+"dominant": 4,
+"uses": 2,
+"widths": {
+"4": 2
+}
+},
+"FFFFF0F4": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0F6": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF0F8": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFF0FA": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF109": {
+"dominant": 1,
+"uses": 18,
+"widths": {
+"1": 18
+}
+},
+"FFFFF120": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF124": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFF128": {
+"dominant": 2,
+"uses": 6,
+"widths": {
+"2": 6
+}
+},
+"FFFFF12C": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF130": {
+"dominant": 2,
+"uses": 8,
+"widths": {
+"2": 8
+}
+},
+"FFFFF132": {
+"dominant": 2,
+"uses": 49,
+"widths": {
+"2": 47,
+"4": 2
+}
+},
+"FFFFF136": {
+"dominant": 2,
+"uses": 6,
+"widths": {
+"2": 6
+}
+},
+"FFFFF138": {
+"dominant": 2,
+"uses": 7,
+"widths": {
+"2": 7
+}
+},
+"FFFFF13A": {
+"dominant": 2,
+"uses": 6,
+"widths": {
+"2": 6
+}
+},
+"FFFFF13C": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFF140": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFF142": {
+"dominant": 1,
+"uses": 54,
+"widths": {
+"1": 52,
+"2": 2
+}
+},
+"FFFFF143": {
+"dominant": 1,
+"uses": 5,
+"widths": {
+"1": 5
+}
+},
+"FFFFF144": {
+"dominant": 2,
+"uses": 2,
+"widths": {
+"2": 2
+}
+},
+"FFFFF146": {
+"dominant": 2,
+"uses": 3,
+"widths": {
+"2": 3
+}
+},
+"FFFFF148": {
+"dominant": 1,
+"uses": 13,
+"widths": {
+"1": 8,
+"2": 5
+}
+},
+"FFFFF149": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF14A": {
+"dominant": 1,
+"uses": 10,
+"widths": {
+"1": 9,
+"2": 1
+}
+},
+"FFFFF14B": {
+"dominant": 1,
+"uses": 7,
+"widths": {
+"1": 7
+}
+},
+"FFFFF14C": {
+"dominant": 2,
+"uses": 15,
+"widths": {
+"2": 15
+}
+},
+"FFFFF14E": {
+"dominant": 1,
+"uses": 8,
+"widths": {
+"1": 6,
+"2": 2
+}
+},
+"FFFFF150": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF151": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF152": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF154": {
+"dominant": 1,
+"uses": 9,
+"widths": {
+"1": 8,
+"2": 1
+}
+},
+"FFFFF156": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+},
+"FFFFF158": {
+"dominant": 2,
+"uses": 6,
+"widths": {
+"2": 6
+}
+},
+"FFFFF15A": {
+"dominant": 1,
+"uses": 4,
+"widths": {
+"1": 4
+}
+},
+"FFFFF15B": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF15C": {
+"dominant": 1,
+"uses": 3,
+"widths": {
+"1": 3
+}
+},
+"FFFFF15D": {
+"dominant": 1,
+"uses": 54,
+"widths": {
+"1": 54
+}
+},
+"FFFFF15E": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF400": {
+"dominant": 1,
+"uses": 2,
+"widths": {
+"1": 2
+}
+},
+"FFFFF401": {
+"dominant": 1,
+"uses": 5,
+"widths": {
+"1": 5
+}
+},
+"FFFFF402": {
+"dominant": 4,
+"uses": 3,
+"widths": {
+"4": 3
+}
+},
+"FFFFF406": {
+"dominant": 1,
+"uses": 1,
+"widths": {
+"1": 1
+}
+},
+"FFFFF808": {
+"dominant": 2,
+"uses": 4,
+"widths": {
+"2": 4
+}
+},
+"FFFFFC00": {
+"dominant": 4,
+"uses": 1,
+"widths": {
+"4": 1
+}
+},
+"FFFFFF80": {
+"dominant": 4,
+"uses": 4,
+"widths": {
+"4": 4
+}
+},
+"FFFFFF82": {
+"dominant": 2,
+"uses": 1,
+"widths": {
+"2": 1
+}
+}
+}

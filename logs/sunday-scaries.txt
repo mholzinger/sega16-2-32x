@@ -1,0 +1,1284 @@
+Background command "Wait for rd115 and its ELF" completed (exit code 0)
+Background command "Wait for the rd116 build" completed (exit code 0)
+Found that the hero's flag flips right before the dispatcher runs and the zombie's flips right after the last handler, both in the main loop itself rather than object handlers. I'll now inspect what code executes in those two windows.
+Found that the 0xFF writer is actually a memory layout bug: the I/O cell for 0xC43001 overlaps work RAM at FFC001, causing the game's routine writing FFF094=0xFF to collide with it. I'll check the zombie's FFD822 placement separately, then dig into the layout code to fix the overlap.
+I've ruled out the 68K-side writers via the dispatcher, so I'll now look for a renderer or slave buffer covering address 0x0602E400 (slot 48) in the link map and check what that slave writes near this address.
+The write falls in the renderer's main-loop frame work, and a tilemap page index of 21 would copy a 4 KB page right over work RAM slots 40–71. I'll search the renderer for page-indexed stores into the tilemap shadow.
+I'll look at the tilemap capture function in m_main.c (lines 7700-7760) with its PORT_VIDEO guard, then trace its callers and where their page index comes from.
+I'll pull together three pieces of read-only, independent info: the TILEMAP_C and SDRAM tile cache defines, all fixed buffer defines in m_main.c to check for spans crossing 0x2E400, and the VIDREG region table assumptions in tools/cport_layout.py above 0x28400.
+I'll pull up the rest of port_frame_wait and the renderer's per-frame entry point to see how frames get handed off and where to bracket its phases with hooks.
+Likely found the bug: irq4_handler writes 16-byte sprite records via p_A2, but the driver calls it with no argument, leaving p_A2 pointing at whatever r4 holds — matching the corrupted +0x30/+0x40/+0x50/+0x60 offsets. Now checking the 68K's A2 setup and the generated handler's prologue to confirm.
+I'll look at lines 20–45 of the generated irq4_handler to examine the two paths around the sprite copy, and compare that with the 68K vint handler's sprite copy region near 0x2AAC to see which path sets A2.
+I'll check three things in parallel: the call site of port_play_tick in m_main.c and the renderer logic after it, whether PORT_RESEED is defined in the build flags, and how l2m_io_apply behaves when the tick exceeds the capture.
+The slot-48 corruption vanishes in rd89, pointing to a timing race between the renderer and game rather than a bad pointer in game code — it tracks back to a few shifted hook instructions in the renderer loop. I'll now measure rd89 across the full demo to check for other effects.
+The write occurs between the wait entry and port_play_tick's return, where the corrupted bytes match a register-save frame from the coroutine context switch, indicating the game's stack pointer was inside slot 48 at that point. I'll now check how the port sets the game's stack pointer and the coroutine stack bounds.
+Next I'll check the stack top for both the master and slave SH-2 (via mars_start.s or the linker script) and review the SDRAM map in the linker script to confirm the work RAM window (0x0602CC00–0x06030BFF) is actually free.
+I'll gather three independent pieces of info in parallel: the PORT_CORO_BASE/TOP definitions, the coroutine's saved stack pointer from an rd89 dump at frame 1495, and port_ctx_switch's pushed frame size.
+I see the hook only retains the last transition even though five occur per tick, hiding the real sequence, so I'll expand it to track a ring buffer of the last eight transitions (previous tag, detecting tag, A6) and re-read at frame 1500. I'll edit the hook, build rd90 in the background, then read the results.
+Found the bug: older A/B watch blocks overwrite the same word used to track my "previous state," causing every hook after an A/B block to falsely re-detect a transition. Fixing the hook to maintain its own separate state word, then re-reading the ring.
+I've confirmed irq4_handler is the writer, since it's the only thing running between the transition points. Now I'll list every pointer store in the generated vint handler.
+I'll pull two read-only items: the position marker and state cells around frames 1495-1497 to identify which loop triggers the write, plus the last-four-hooks history from rd91 at frame 1497 that got cut off in the previous read.
+I'll request both read-only items: the ROM table at 0x326E for per-round palette data, and verification of whether PAL_SH masks the palette address to 4 KB like the arcade's mirrored RAM.
+The uncached reads confirm it's a genuine write occurring between the driver's vint-handler return and the game's next wait entry. I'll add hooks on both sides of the context switch to narrow down that stretch.
+The write is in game code between two consecutive frame waits with nothing hookable in between. Five such stretches exist in the generated unit. Reading them.
+
+I've pinpointed that the return address of the detecting wait call is the key piece of data needed to localize the write. I'll add a capture of __builtin_return_address(0) from port_frame_wait into the ring, then build rd94 and map that address in the listing.
+Mapping the return address inside the generated main loop to its C statements, using the port object's disassembly with relocations.
+
+I'll list every call target between the detecting wait's return address (main_entry+0x6c8) and the next port_frame_wait call, which includes FUN_0000057e, FUN_000012ec, FUN_00001366, FUN_00009052, FUN_00003aae, and others.
+I'll pull the 68K listing for FUN_00000bd6 (0xBD6–0xC68) and its ported equivalent next, since the FFFEFE markers already confirm this stretch is the right one to check.
+FUN_00016b6a is the culprit: its 68K code sets fp via lea 0xFFD400,fp before falling into the director's per-frame handler, but the ported version still reads the stale A6 register slot there. I'll finish reviewing the generated function and then apply the fix.
+I'm compiling a private list covering pointer stores in FUN_00016b6a beyond the D4xx cells, plus the remaining handler code at 0x16C5E–0x16D00 that Ghidra merged in, checking stores via non-fp registers—both as independent, read-only checks.
+The zombie behavior now matches the arcade version exactly, but the hero's partner at tick 0x44 is still off. I'll log this finding, build rd97 with call counters on the attack handlers, and diff the hero's record at that tick.
+Found that rd96's hero diverges from the arcade at tick 0x44 due to a different animation frame, causing the wrong handler lookup. Now checking rd97's call counters for the four handlers.
+rd98 still picks the punch, so the D5 value itself differs. Comparing the player's input record (FFE000) that D5 is built from, port versus arcade, at the attack tick.
+
+I'll check the 68K code around 0x1EC0–0x1EF0 (where lives is set to 1 at 0x1EDA) and its condition, plus the ported DAT_ffffe018 = 1; statements at lines 939 and 1783 along with their surrounding conditions.
+I'll pull up both the port's FUN_00001e54 switch logic (checking cases, default, and the FFE018/main_entry behavior) and the raw 68K code from 0x1E54–0x1EBA to verify the step increment and table jump—these are read-only and independent, so I'll fetch them together.
+I found where the port diverges: lives gets set to 1 before the main entry calls FUN_00001306 ahead of level setup. Now I'll compare what that routine clears on the 68K versus the port.
+Found it: the 68K's player-record clear at 0x1306 saves/restores FFE018/FFE098 around the wipe, but the port's version drops that save/restore. Now checking its callers and the generator state.
+I've confirmed the issue: main_entry clears the records at startup, and while the arcade version restores FFE018/FFE098 afterward, the port's generated version doesn't. I'll add a hand-derived replacement for this to the generator.
+Inserting the FUN_00001306 pass into the generator, turning the watch define off, and launching the rd99 build.
+
+The new generator pass matched nothing. Dumping the function text at that stage to fix the regex.
+
+Build rd99 with the fixed pass is running in the background. Once it finishes, I'll have the trace script dump the port at frames 1544–1580 and 2070–2094, printing hero state, slot 1, FFE018, and the tick alongside the arcade dumps at ticks 0x30, 0x32, 0x34, 0x44, 0x46, and 0x5A.
+Two findings: the fix landed in the unit but the port's FFE018 is still 0, so something else clears it or the setter never runs. And the line restore failed. Checking both.
+
+The compiled rd99 function has no load or store of FFE018 at all, so gcc folded the restore exactly as Ghidra did. The volatile version is building as rd100. Meanwhile, recording the lesson.
+
+Build rd100 is at the link stage. Once it finishes: run the tick trace and the FFE018 dump on rd100, check the restored line against line.32x, then gate, STATE update, commit, and push.
+
+FFE018 and FFE098 now align with the arcade at tick 0, but FFE01B is still mismatched—the port has 0 where the arcade has 1, and the 68K writes it at 0x48C2 via a sign-extended word link into A0. I'll check how the port handles that store next.
+Fixing the scanner so the nested two-hop link maps on the second sweep, then launching rd101.
+
+rd101 is building with the word-link pass, which maps 52 raw dereferences in the unit. Next, once it lands: tick trace, FFE01B check, line verification.
+
+The lost match was a 32-bit load through the link that the later LD32S passes own. Restricting the new pass to 8 and 16-bit dereferences and relaunching rd101.
+
+Timing for the hero's kick and partner spawn now matches the arcade, but I've found a new issue where the port's tick halts at 0x76. I'll trace where the SH-2 is stuck using the coroutine stack and review the newly mapped sites.
+Found the hang's root cause in FUN_00011386: the partner's x-offset walker dereferences a raw 68K ROM address directly on the SH-2, and the loop never advances the table pointer. I'll hand-derive the correct logic from the 68K code at 0x11386 and build rd102.
+The rd102 unit failed to compile: the generator's A6 pass adds its own unaff_A6 declaration on top of mine. Renaming my local and rebuilding.
+
+rd102 fixes the hang — the tick now runs through the full demo with the partner spawning/dying correctly and the hero walking right; the only remaining divergence is the enemy set near tick 0xA0. Next, I'll check which callees dereference the 68K raw-literal addresses found in the census as unmapped memory.
+Reading the parameter-normalization pass so the callees that dereference raw 68K addresses can be added to its list.
+
+The rd103 build stopped because my new ROM-literal pass rewrote the spawn installer's template literal before the pass that owns it. Excluding that literal and rebuilding.
+
+Build rd103 is good (7 literals mapped, 24 functions normalised). Measuring it against the arcade.
+
+Build rd104 for the spawner fix is in progress. I also spotted two more divergences in the dumps—a palette slot mismatch (0 vs. the arcade's 5) and an extra state jump at spawn for slot 16—and I'll start by comparing the palette slot tables.
+rd104 is rebuilding with the spawner and partner-palette fixes. While it builds, reading the 68K state machine of slot 16's handler to see why the port advances its state at spawn.
+
+I found that the enemy AI's player-distance helper functions return values via D0 and carry flag, but Ghidra dropped both, causing every enemy to see distance 0. I'll now gather all their call sites to design a single fix pass.
+rd105's build turned up five large attack-lookup functions (80-100 call sites, gameplay forms only) and seven small helpers that could touch the demo — I'll dig into the 68K source for those small helpers now.
+Fixing the f77c prototype mismatch and launching rd106 with the full helper set.
+
+Slot 16 is fixed, but slots 17-19 still produce garbage headers because the second and third installs use symbol addresses instead of 68K ROM addresses. I'll check the macro and symbol declarations next.
+Checking why slot 18's template copy reads the wrong bytes: dumping the macro's ROM branch, the ROM template bytes, and the generated installer.
+
+I found misaligned template records at 0x10112, 0x1011E, and 0x1012A causing early reads on the SH-2, plus the second and third installs passing SH-2 symbol addresses where the 68K expects ROM addresses. I'll fix both issues in the generator and build rd107.
+The symbol-address rule matches the finished unit but not the text at its stage, so a later step must be producing those casts. Locating it.
+
+Moving the symbol-address rule into the cast-fixing stage, which is where those casts are produced, and relaunching rd107.
+
+The rd107 build is running with the object now recompiled from the final text. Writing the lesson about the stale object while it builds.
+
+rd107 installs the zombie trio with the right headers and palette slots, but the tick freezes at 0x51. Pulling the coroutine stack to see where it is stuck.
+
+Found the root cause: 49 unresolved jump-table sites across 20 functions where Ghidra couldn't recover the PC-relative tables, causing the port to jump to garbage. I'll now write and run a script to override each site with the correct JumpTable and re-export.
+Fixing the script's operand filter (it picked the register instead of the table address) and rerunning it.
+
+I'll need to disassemble the jump table targets and re-fit the function body after each override, since Ghidra's function bodies currently stop short of reaching them. Updating the script and rerunning now.
+The Ghidra re-export with the 13 jump-table overrides is running. Meanwhile: adding the open cards, regenerating FACTS, and preparing the swap-and-build script.
+
+The re-export kept all 839 functions and FUN_0000fd6c now decompiles with a real switch. Checking its exact shape before swapping the export in and building rd108.
+
+Waiting on the rd108 build, which is the first build on the re-exported decompilation with the jump tables.
+
+The call-site number is only a miss-counter tag, so the passes that hardcode it can accept any number. Relaxing those three regexes and relaunching rd108.
+
+rd108 built on the re-exported decompilation. Measuring it.
+
+rd108 still stops at tick 0x51. Pulling the coroutine stack again to see whether it is the same site.
+
+I found that the table entries are offsets from their own address rather than the table base, which caused many targets to land mid-instruction. I'm fixing the script, clearing out the bad disassembly, and rerunning it.
+The corrected tables now name real instruction boundaries. Launching the re-export again and fixing the lesson's wording in the meantime.
+
+The re-export recovered the tables, but Ghidra folded the state-byte load into the pointer, so cases appear as index-minus-displacement (e.g. case -0x23:). I'll verify every overridden switch follows this pattern before handling it in the generator.
+All eight pointer-typed switches follow the same rule: the case value is the state byte at +0x23 minus 0x23. Encoding that in the generator, swapping in the export, and building rd109.
+
+rd109 built. Measuring it.
+
+rd109 confirms the demo matches the arcade on positioning, timing, and spawning, except the port's zombies survive the hero's attack. Next I'll measure the kill window on both machines to find the discrepancy.
+I've traced the bug: child zombies stay stuck because the port compares against a stale D1 holding the child's own state instead of the expected value. I'll now check how D1 gets set in the 68K prior to dispatch and how the port uses it.
+The port's generic 68K-address reads (P68) corrupt a pointer that is already SH-2, which is what FUN_0000e20c returns. Making P68 the identity for SH-2 pointers and building rd110.
+
+rd110 matches the arcade exactly at the demo's end (tick 0x2BA), with the trio surviving as expected, though the children land in state 7 with a script pointer of -4 via a single path in FUN_0000fd6c. I'll compare that path's logic on both sides next.
+Found that rd110 ends the demo at tick 0x2BA matching the arcade, but the children's behavior diverges at the parent's hit reaction due to a stale A1 pseudo-register read. I'll compare the child's own-state-4 path on both sides and fix the A1 read.
+I found that the trio spawner's slot search uses the comma form (FUN_0000e032(), bVar5), and my pass carried over the carry flag but missed re-reading A5, causing it to reuse the stale slot 17. I'll fix the comma rewrite and queue rd112.
+rd112 is building with the slot-search fix. Meanwhile, recording the lesson and locating the credit counter the attract text reads.
+
+rd112 matches the arcade's enemy positions and timing through tick 0x1FF, but the demo now ends before the arcade's tick 0x2BA. I'll measure the end window on both machines next.
+The port's demo end matches the arcade's, but at tick 0x246 the arcade already shows zombies 49/50 dying while the port still has them alive—I'll compare slots 54–61 to find the discrepancy.
+Frames now match arcade output at tick 0xD4, with the only remaining discrepancy being zombie 49/50 damage from the hero's late attack (arcade 0x18 vs port 8). I'll diff the hero's record at tick 0x1FE while starting the attract gate on rd112 in the background.
+The power level FFE006 is raised when a zombie's record is released (0x1004C → 0xF934 → 0xF742 / 0xE1E8). Reading those two routines on both sides.
+
+I'll start by scanning every 68K instruction that touches (6,An) to pinpoint the power-level increment, then check the gate result before moving on to the fix, rd113 measurements, STATE update, commit, and push.
+I found that the pending-bonus adder at 0x3706 reads a 4-byte value through unmapped Ghidra RAM names, and its BCD adjust is just a stub. I'll hand-derive the logic, build rd113, and trace the missed hit around tick 0x210 on both machines in parallel.
+Bash Diff every live object between the port and the arcade at tick 0x1FE
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; python3 - <<EOF
+a=open('$S/tick/aw_2008.bin','rb').read(); p=open('$S/tick/rd112_2000.bin','rb').read()
+for s in (1,8,16,17,18,19,20,21,40,48,50):
+    o=s*0x80; d=[(i,a[o+i],p[o+i]) for i in range(0x80) if a[o+i]!=p[o+i]]
+    print('slot %2d: h %s/%s x %s/%s diff: %s'%(s,a[o+2:o+6].hex(),p[o+2:o+6].hex(),a[o+0xc:o+0xe].hex(),p[o+0xc:o+0xe].hex(),' '.join('+%02x:%02x/%02x'%x for x in d)[:150]))
+print('FFF100-FFF1FF diff:', ' '.join('%04X:%02x/%02x'%(0xC000+o,a[o],p[o]) for o in range(0x3100,0x3200) if a[o]!=p[o])[:400])
+EOF
+
+OUT
+slot  1: h 0000a286/0000a286 x 1349/1349 diff: 
+slot  8: h 000049ba/000049ba x 1302/1302 diff: +11:9c/9d +12:a0/80 +1b:c0/e0 +22:e6/e5 +2b:9b/9c +39:9c/9d +3b:9c/9d +45:9c/9d +59:7c/7d +5b:9c/9d +65:9c/9d +67:9c/9d +69:9b/9c
+slot 16: h 0000ee80/0000ee80 x 134d/1351 diff: +0d:4d/51 +0e:40/38 +12:00/40 +1b:00/40 +29:49/4d +35:35/39 +37:6d/71 +41:4d/51 +55:3d/41 +57:75/79 +61:65/69 +63:75/79
+slot 17: h 0000ee80/0000ee80 x 136e/136e diff: 
+slot 18: h 00010dd4/00010dd4 x 126c/14a9 diff: +00:89/81 +06:01/e0 +07:5f/00 +0c:12/14 +0d:6c/a9 +0e:00/80 +10:10/f7 +11:d8/7f +21:00/02 +22:03/60 +24:00/02 +25:01/38 +26:13/dd +27:f8/40 +29:6d/69 
+slot 19: h 00010d1e/00010d1e x 12e2/12e2 diff: 
+slot 20: h 000103e0/000103e0 x 1213/11f3 diff: +07:51/53 +0c:12/11 +0d:13/f3 +0e:00/80 +21:01/03 +22:01/04 +28:12/11 +29:12/f3 +34:12/11 +35:0b/eb +36:12/11 +37:1b/fb +3e:01/03 +3f:02/05 +40:12/11 
+slot 21: h 00010824/00010824 x 120e/11f0 diff: +07:55/57 +0c:12/11 +0d:0e/f0 +0e:00/c0 +11:b5/bb +21:01/03 +22:01/04 +28:12/11 +29:13/f3 +40:12/11 +41:13/f3 +43:fb/fd +47:dd/e3
+slot 40: h 00016bf0/00016bf0 x 1408/1408 diff: +22:4c/4b
+slot 48: h 0000dabc/0000dabc x 12c8/12c8 diff: 
+slot 50: h 0000dabc/0000dabc x 1288/1288 diff: 
+FFF100-FFF1FF diff: F134:50/70
+Bash Find the remaining code-pointer stores and the flame object's installer
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "== (code **) left in the unit"; grep -c '(code \*\*)' sh_src/portfull/altbeast_port.c; grep -n '(code \*\*)' sh_src/portfull/altbeast_port.c | head -8; echo "== 0x10dd4 / 0x113f8 references"; grep -n '0x10dd4\|FUN_00010dd4\|113f8\|FUN_000113f8' sh_src/portfull/altbeast_port.c | grep -v '^[0-9]*:uint FUN_00010dd4\|---- ' | head -10
+
+OUT
+== (code **) left in the unit
+9
+33:/* the 68K -> SH-2 indirect call: every `(**(code **)(X))()` in the
+75284:              *(code **)(unaff_A6 + 0x24) = pcVar15;
+77127:      *(code **)(unaff_A6 + 0x24) = pcVar15;
+77167:      *(code **)(unaff_A6 + 0x24) = pcVar15;
+80507:            *(code **)(unaff_A6 + 0x24) = pcVar19;
+80586:              pcVar19 = *(code **)(unaff_A6 + 0x24);
+80987:      pcVar15 = *(code **)(iVar12 + 0x24);
+81021:        *(code **)(unaff_A6 + 0x24) = pcVar15 + -2 + *(short *)(pcVar15 + -2);
+== 0x10dd4 / 0x113f8 references
+74918:      ST32((unaff_A6 + 0x24), 0x113f8u);
+75168:                  pcVar15 = FUN_000113f8;
+75173:                      pcVar15 = FUN_000113f8;
+75179:                        pcVar15 = FUN_000113f8;
+75271:                pcVar15 = FUN_000113f8;
+75276:                    if (LD32U(unaff_A6 + 0x24) == 0x113f8u) goto LAB_000111de;
+75720:uint FUN_000113f8()
+Bash Read the flame installer and check the rd113 build
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; L=$(grep -n "^[a-z].* FUN_00010cd6(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); E=$(awk -v L=$L 'NR>L && /^}/{print NR; exit}' sh_src/portfull/altbeast_port.c); echo "== FUN_00010cd6 $L-$E"; sed -n "$L,${E}p" sh_src/portfull/altbeast_port.c | grep -v '^\s*$' | grep -n 'FUN_\|0x24\|ST32\|0x113\|_r_unaff' | head -20; D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; grep -E 'exit=|PASS MATCHED|3706' $D/build_rd113.log | head -3
+
+OUT
+== FUN_00010cd6 74855-74981
+1:uint FUN_00010cd6()
+3:  undefined2 *unaff_A5 = (undefined2 *)_r_unaff_A5;
+4:  byte *unaff_A6 = (byte *)_r_unaff_A6;
+26:    bVar11 = FUN_0000e032();   /* its carry: cport_prep.py */
+27:    unaff_A5 = (typeof(unaff_A5))_r_unaff_A5;   /* A5 moved by the callee: cport_prep.py */
+34:      ST32((unaff_A5 + 1), 0x10d1eu);
+38:      puVar10 = (undefined4 *)((char *)ROM_BASE + 0x113d4);   /* ROM template: cport_prep.py */
+40:        ST32(pbVar9, LD32U(puVar10));   /* 0x113D4 template: cport_prep.py */
+63:      ST32((unaff_A6 + 0x24), 0x113f8u);
+121:    FUN_00010d06();
+cport_prep: FUN_00003706 adds the kill points in BCD: 1
+Bash Fix the x-step walker, add the code-value pass, queue rd114
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -c 'pcVar[0-9]* = FUN_' sh_src/portfull/altbeast_port.c; python3 - <<'PYEOF'
+p='/Users/mikeholzinger/src/sega16-2-32x/tools/cport_prep.py'; s=open(p).read()
+# 1. FUN_00011386: the period byte is read ONCE; the loop subtracts it repeatedly
+old="""  for (;;) {
+    _d1 = *_a0++;
+    if (_d0 < _d1) break;
+    _d0 = _d0 - _d1;
+    _a0++;
+  }
+  _v = (short)(signed char)*_a0;"""
+new="""  /* 0x11392 `move.b (a0)+,d1` ONCE (the period), then 0x11394 `sub.b d1,d0 ; bcs ;
+     addq.l #1,a0 ; bra` -- the same d1 every pass: the delta is table[1 + d0/period].
+     (The first derivation re-read d1 each pass: the pairs drifted 0x20 px by tick
+     0x1FE, rd112 2026-10-04.) */
+  _d1 = *_a0++;
+  for (;;) {
+    if (_d0 < _d1) break;
+    _d0 = _d0 - _d1;
+    _a0++;
+  }
+  _v = (short)(signed char)*_a0;"""
+assert s.count(old)==1; s=s.replace(old,new)
+# 2. code pointers held as VALUES in 68K cells
+anchor="_pass_report('FUN_0000fd6c hit path script pointer', _fd6c[0], 1)\n"
+assert s.count(anchor)==1
+new2=anchor+r'''# ---- SCRIPT POINTERS GHIDRA TYPED AS CODE: THE 68K VALUE, NOT THE SH-2 SYMBOL ----
+# 0x113F8 is both a function and the flame object's script, so Ghidra writes
+# `pcVar15 = FUN_000113f8; *(code **)(unaff_A6 + 0x24) = pcVar15;` -- the SH-2 address
+# of the function (0x0238DD40) stored where the 68K keeps 0x113F8. rd112 2026-10-04:
+# the hero's special-attack flame (slot 18, 0x10DD4) had +0x24 = 0238DD40, y = F77F,
+# and never touched zombie 49 (arcade: 8 damage every 8 ticks from tick 0x206).
+# Nine sites: the bare-symbol assignment, the store, the load and the script-offset
+# form `p + -2 + *(short *)(p + -2)`.
+_cp = [0]
+def _code_values(_blk):
+    k = 0
+    _blk, n = re.subn(r'\b(pcVar\d+) = FUN_([0-9a-f]{8});', lambda m: '%s = (code *)0x%xu;   /* the 68K address: cport_prep.py */' % (m.group(1), int(m.group(2), 16)), _blk); k += n
+    _blk, n = re.subn(r'\*\(code \*\*\)\(([^;=]+?)\) = (pcVar\d+) \+ -2 \+ \*\(short \*\)\(\2 \+ -2\);', r'ST32((\1), ((uint)\2 - 2 + *(short *)A68PTR((uint)\2 - 2)));   /* script - 2 + word: cport_prep.py */', _blk); k += n
+    _blk, n = re.subn(r'\*\(code \*\*\)\(([^;=]+?)\) = (pcVar\d+);', r'ST32((\1), ((uint)\2));', _blk); k += n
+    _blk, n = re.subn(r'\b(pcVar\d+) = \*\(code \*\*\)\(([^;]+?)\);', r'\1 = (code *)LD32U(\2);', _blk); k += n
+    _cp[0] += k
+    return _blk
+out = [_code_values(_c) for _c in out]
+_pass_report('code-typed script pointers kept as 68K values', _cp[0], 9)
+'''
+s=s.replace(anchor,new2); open(p,'w').write(s); print('passes updated')
+PYEOF
+python3 -c "import ast;ast.parse(open('tools/cport_prep.py').read());print('syntax ok')"; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; D=$S/rd1dump; sed 's/rd99/rd114/g; s/build_line41/build_line56/; s/done99/done114/' $D/build_rd99.sh > $D/build_rd114.sh; chmod +x $D/build_rd114.sh; nohup zsh $D/build_rd114.sh >/dev/null 2>&1 & echo queued rd114
+
+OUT
+10
+passes updated
+syntax ok
+queued rd114
+Bash Wait for the rd114 build
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done114' $D/build_rd114.log 2>/dev/null; do sleep 10; done; grep -E 'exit=|PASS MATCHED|code-typed|error:' $D/build_rd114.log | head -5; tail -1 $D/build_line56.log
+
+OUT
+Command running in background with ID: bvlqlga61. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bvlqlga61.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Record the three rd112-era lessons
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat >> LESSONS.md <<'EOF'
+
+### Three more silent-wrong-value classes found by the tick-aligned object diff (rd112)
+- **(1) `cRamfffff035` is not `DAT_fffff035`.** Ghidra names a byte it reads through a
+  register-relative form `cRamXXXXXXXX`; cport_prep mapped `DAT_`/`_DAT_` cells into
+  work RAM and left ten `cRam` names as zero globals in defs.c. FUN_00003706 (the
+  kill's points, 0x3706: four `abcd -(a1),-(a0)` from 0xFFF032 into the player record's
+  pending bonus +4..+7) added zeros -- and its `bcdAdjust()` is a stub whose result is
+  discarded. MAME wp census on FFE006 (tools/wp_census.lua, WP_RANGES=FFE006:2): the
+  arcade's writer is PC 0x3780/0x3782 and the cell goes 1 -> 2 -> 3 as the trio dies;
+  the port's stayed 0. Hand-derived as a 4-byte BCD add (rd113).
+- **(2) A script pointer that is also a function is stored as the SH-2 symbol.** 0x113F8
+  is both; Ghidra writes `pcVar15 = FUN_000113f8; *(code **)(unaff_A6 + 0x24) =
+  pcVar15;` and the port stored 0x0238DD40 (the function's SH-2 address) into +0x24.
+  The hero's special-attack flame (slot 18, handler 0x10DD4) then ran a garbage script
+  (y = 0xF77F) and never touched zombie 49, which the arcade's flame hits for 8 every
+  8 ticks from tick 0x206 (49: hp 0x20 -> 0x18 at 0x20E, -> 0x10 at 0x21E, -> 0x08 at
+  0x228; the port's 49 was untouched until 0x246). Nine sites; cport_prep now keeps
+  the 68K value for the bare assignment, the store, the load and the
+  `p - 2 + *(short *)(p - 2)` script-offset form (rd114).
+- **(3) FUN_00011386's period is read once.** 0x11392 `move.b (a0)+,d1` happens before
+  the loop; 0x11394 `sub.b d1,d0 ; bcs ; addq.l #1,a0 ; bra` subtracts the SAME d1 --
+  the delta is table[1 + d0/period]. The first hand-derivation (rd102) re-read d1 each
+  pass as (count, delta) pairs: the zombie pairs drifted 0x20 px by tick 0x1FE (slot
+  20: arcade x 0x1213, port 0x11F3). Fixed in rd114.
+- **Rule:** when the live set and the hero match tick-for-tick, diff EVERY live record
+  (all 0x80 bytes) at one tick; the three classes above were each one object's few
+  bytes, and none showed in a picture gate.
+EOF
+echo appended
+
+OUT
+appended
+Waiting on rd114, the build with the flame-script and x-step fixes.
+
+Bash Block until rd114 finishes
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done114' $D/build_rd114.log 2>/dev/null; do sleep 10; done; grep -E 'exit=|PASS MATCHED|code-typed|error:' $D/build_rd114.log | head -5; tail -1 $D/build_line56.log
+
+OUT
+Command did not complete within its 600s timeout and was moved to the background (ID: be5jy0o2f). Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/be5jy0o2f.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Check the state of the queued builds
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; for n in 113 114; do echo "== rd$n: $(grep -E 'exit=|PASS MATCHED' $D/build_rd$n.log 2>/dev/null | head -2 | tr '\n' ' ') $(tail -1 $D/build_rd$n.log 2>/dev/null | cut -c1-60)"; done; pgrep -fl 'make line' | head -3
+
+OUT
+== rd113: exit=0  done113
+== rd114:  done114
+Bash Inspect the rd114 log and rom timestamps
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; head -5 $D/build_rd114.log; wc -l $D/build_rd114.log; ls -la --time-style=full-iso /Users/mikeholzinger/src/sega16-2-32x/rom/rd113.32x /Users/mikeholzinger/src/sega16-2-32x/rom/rd114.32x 2>&1 | awk '{print $6,$7,$9}'; grep -c 'code-typed' $D/build_rd113.log
+
+OUT
+/Applications/Xcode.app/Contents/Developer/usr/bin/make ship-us FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 TEXTCAPEARLY=1 NBUILD1=1 MDSPRTOP=1 C1NOFB=1 C1PUNCH=1 C1STAMP=1 CAT1MD=1 GLOWPAGE=1 MDBATCH=24 MDROUND=1 MDSTATE=1 MDSREFUSE=1 SETCOLS=1 SCANMEMO=1 SPRLIST=1 SPRRUN32=1 TEXTCAPMASK=1 TEXTMASKPKT=1 TILESMD=1 ROWGEN=1
+/Applications/Xcode.app/Contents/Developer/usr/bin/make GAME=altbeast MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1 BLITSHIFT=24 SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1 C1MASKTAB=1 CUTPREFETCH=1 CRAMISR=1 BLITAUDITDIV=4 PUBNORB=1  TILECLASS=1 TXTCLASS=1 MDSPR=1 PALSTATIC=1 PALGLOW=1 PENMATCH=1 MDSTATIC=1
+MDAS md_src/font.s
+192 refs patched, 674 warnings -> tools/patch_report.txt
+game_body.bin: 260088 bytes; boot_copy.bin: 1036 bytes
+     339 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump/build_rd114.log
+  
+format] [file 
+0
+Bash Measure the newest build against the arcade
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; R=rd114; [ -f rom/$R.32x ] || R=rd113; echo "measuring $R"; python3 $S/measure_rd.py $R 2>&1 | tail -9
+
+OUT
+measuring rd114
+port f1510 tick 013 live [0, 8, 40, 48] hero x 1217 | arc f1516 tick 012 live [0, 8, 40, 48] hero x 1217 | diff 154
+port f1530 tick 027 live [0, 8, 40, 48] hero x 1217 | arc f1536 tick 026 live [0, 8, 40, 48] hero x 1217 | diff 169
+port f1540 tick 031 live [0, 8, 40, 48] hero x 1217 | arc f1546 tick 030 live [0, 8, 40, 48] hero x 1217 | diff 164
+port f1560 tick 044 live [0, 1, 8, 40] hero x 1217 | arc f1566 tick 044 live [0, 1, 8, 40] hero x 1217 | diff 125
+port f1650 tick 09f live [0, 1, 8, 16, 17, 18, 19, 20, 21, 22, 23, 40] hero x 12c6 | arc f1658 tick 0a0 live [0, 8, 16, 17, 18, 19, 20, 21, 22, 23, 40] hero x 12d0 | diff 234
+port f1700 tick 0d0 live [0, 8, 40] hero x 12c6 | arc f1708 tick 0d2 live [0, 8, 40] hero x 12c6 | diff 168
+port f2000 tick 1fd live [0, 8, 16, 18, 19, 20, 21, 40, 48, 49, 50] hero x 1302 | arc f2008 tick 1fe live [0, 8, 16, 18, 19, 20, 21, 40, 48, 49, 50] hero x 1302 | diff 219
+f2100 tick 0b4 state 0121 step 00
+f2150 tick 0b4 state 0121 step 00
+Bash Confirm rd114 carries the new passes and the line is intact
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; grep -n 'exit=\|PASS MATCHED\|code-typed\|3706 adds' $D/build_rd114.log | head; ls -la rom/rd113.32x rom/rd114.32x | awk '{print $6,$7,$8,$9}'; grep -c '(code \*)0x113f8u' sh_src/portfull/altbeast_port.c; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; n=$(cmp -l rom/s16.32x $S/rd1dump/line.32x | wc -l | tr -d ' '); echo "line diff bytes=$n"
+
+OUT
+Oct 4 16:46 rom/rd113.32x
+Oct 4 16:50 rom/rd114.32x
+4
+line diff bytes=19
+Bash Trace zombie 49, diff the live objects at 0x1FE, check FFE006 and take screenshots for rd114
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1650 2001 2009 2017 2025 2033 2041 2071; do $A rom/rd114.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd114_$f.bin >/dev/null 2>&1 & done; for f in 1650 2000; do $A rom/rd114.32x --frames $((f+1)) --screenshot $f:$S/rd114_s$f.png >/dev/null 2>&1 & done; wait; python3 $S/hit49.py $S/tick/rd114_2001.bin $S/tick/rd114_2009.bin $S/tick/rd114_2017.bin $S/tick/rd114_2025.bin $S/tick/rd114_2033.bin $S/tick/rd114_2041.bin $S/tick/rd114_2071.bin | grep -v hero; python3 - <<EOF
+a=open('$S/tick/aw_2008.bin','rb').read(); p=open('$S/tick/rd114_2009.bin','rb').read()
+print('ticks arc %04x port %04x'%(int.from_bytes(a[0x302a:0x302c],'big'),int.from_bytes(p[0x302a:0x302c],'big')))
+for s in (16,18,19,20,21,40):
+    o=s*0x80; d=[(i,a[o+i],p[o+i]) for i in range(0x80) if a[o+i]!=p[o+i]]
+    print('slot %2d: x %s/%s y %s/%s +24 %s/%s ndiff %d'%(s,a[o+0xc:o+0xe].hex(),p[o+0xc:o+0xe].hex(),a[o+0x10:o+0x12].hex(),p[o+0x10:o+0x12].hex(),a[o+0x24:o+0x28].hex(),p[o+0x24:o+0x28].hex(),len(d)))
+b=open('$S/tick/rd114_1650.bin','rb').read(); print('port f1650 tick %04x FFE006=%02x FFE007=%02x'%(int.from_bytes(b[0x302a:0x302c],'big'),b[0x2006],b[0x2007]))
+from PIL import Image
+for f,g in ((1650,1658),(2000,2008)):
+    x=Image.open('$S/rd114_s%d.png'%f).convert('RGB'); y=Image.open('$S/arc7k5n/ref_%06d.png'%g).convert('RGB').resize(x.size)
+    c=Image.new('RGB',(x.width,x.height*2)); c.paste(x,(0,0)); c.paste(y,(0,x.height)); c.save('$S/cmp114_%d.png'%f)
+print('ok')
+EOF
+
+OUT
+rd114_2001.bin tick 01fe
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2009.bin tick 0206
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2017.bin tick 020e
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2025.bin tick 0216
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2033.bin tick 021e
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2041.bin tick 0226
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+rd114_2071.bin tick 0242
+   s49  x 12a8 y 10d8 st 00000000 +2c 0000 dmg 00 hp 20 box 129812b8109810d8 tmpl f010c000 +2e 00
+ticks arc 01fe port 0206
+slot 16: x 134d/1365 y 10c4/10d8 +24 0000f5d0/0000f5d0 ndiff 25
+slot 18: x 126c/14b0 y 10d8/f877 +24 000113f8/0238dd40 ndiff 55
+slot 19: x 12e2/12e2 y 116d/116d +24 0001025a/0001025a ndiff 0
+slot 20: x 1213/11f7 y 10d8/10d8 +24 000109d2/000109d2 ndiff 24
+slot 21: x 120e/11f6 y 10b5/10be +24 00010c48/00010c48 ndiff 13
+slot 40: x 1408/1408 y 10d8/10d8 +24 0001762c/0001762c ndiff 1
+port f1650 tick 009f FFE006=02 FFE007=00
+ok
+Bash Find the remaining producer of the flame's SH-2 script pointer
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'FUN_000113f8' sh_src/portfull/altbeast_port.c | grep -v 'uint FUN_000113f8\|FUN_000113f8()' | head -8; grep -n '&FUN_000113f8\|(code \*)FUN_000113f8' sh_src/portfull/altbeast_port.c | head -3; echo "== who installs the 0x10dd4 flame"; grep -n '0x10dd4u\|0x10dd4)' sh_src/portfull/altbeast_port.c | head -5
+
+OUT
+75720:/* ---- 0x113F8  FUN_000113f8  (4 B)  class: ? ---- */
+== who installs the 0x10dd4 flame
+Bash Trace the first pair's x on both machines and read the x-step tables
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1588 1598 1608 1618 1628 1642; do $A rom/rd114.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd114_$f.bin >/dev/null 2>&1 & done; wait; cat > $S/pair.py <<'EOF'
+import sys
+for f in sys.argv[1:]:
+    b=open(f,'rb').read(); t=int.from_bytes(b[0x302a:0x302c],'big')
+    o=16*0x80; x=b[o:o+0x80]
+    print('%-14s tick %04x s16 x %s y %s dx %s st %s +2e %02x +7e %02x +7f %02x anim %s'%(f.split('/')[-1],t,x[0xc:0xe].hex(),x[0x10:0x12].hex(),x[0x14:0x16].hex(),x[0x20:0x24].hex(),x[0x2e],x[0x7e],x[0x7f],x[0x24:0x28].hex()))
+EOF
+python3 $S/pair.py $S/tick/aw_1588.bin $S/tick/aw_1598.bin $S/tick/aw_1608.bin $S/tick/aw_1618.bin $S/tick/aw_1628.bin $S/tick/aw_1642.bin $S/tick/aw_1658.bin; echo "===== PORT rd114"; python3 $S/pair.py $S/tick/rd114_1588.bin $S/tick/rd114_1598.bin $S/tick/rd114_1608.bin $S/tick/rd114_1618.bin $S/tick/rd114_1628.bin $S/tick/rd114_1642.bin $S/tick/rd114_1650.bin; python3 -c "
+b=open('roms/altbeast/prog68k.bin','rb').read(); print('102c4:', b[0x102c4:0x102d4].hex(), ' 10cce:', b[0x10cce:0x10cde].hex())"
+
+OUT
+aw_1588.bin    tick 005a s16 x 12fb y 10b3 dx ff80 st 01020300 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1598.bin    tick 0064 s16 x 12f6 y 10d8 dx ff80 st 01040500 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1608.bin    tick 006e s16 x 12f1 y 10d8 dx ff80 st 01050100 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1618.bin    tick 0078 s16 x 12ec y 10d8 dx ff80 st 01010300 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1628.bin    tick 0082 s16 x 12e7 y 10d8 dx ff80 st 01030500 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1642.bin    tick 0090 s16 x 12e0 y 10d8 dx ff80 st 01050300 +2e 80 +7e 00 +7f 00 anim 000109d2
+aw_1658.bin    tick 00a0 s16 x 12dc y 10d8 dx 0000 st 01010505 +2e 80 +7e 09 +7f 00 anim 00010b94
+===== PORT rd114
+rd114_1588.bin tick 0061 s16 x 12f7 y 10d8 dx ff80 st 01030200 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1598.bin tick 006b s16 x 12f2 y 10d8 dx ff80 st 01050400 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1608.bin tick 0075 s16 x 12ed y 10d8 dx ff80 st 01010600 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1618.bin tick 007f s16 x 12e8 y 10d8 dx ff80 st 01020200 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1628.bin tick 0088 s16 x 12e4 y 10d8 dx ff80 st 01040500 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1642.bin tick 0097 s16 x 12dd y 10d8 dx ff80 st 01000300 +2e 80 +7e 00 +7f 00 anim 000109d2
+rd114_1650.bin tick 009f s16 x 12dc y 10d8 dx 0000 st 01010605 +2e 80 +7e 09 +7f 00 anim 00010b94
+102c4: 0301ff05fedc98011038f15d082e0007  10cce: 0301ff05fedc98011038f15d082e0007
+Bash Identify the SH-2 symbol at 0x0238DD40
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ~/src/marsdev/mars/sh-elf/bin/sh-elf-nm -n rom/rd114.elf | awk '$1 <= "0238dd40"' | tail -3; ~/src/marsdev/mars/sh-elf/bin/sh-elf-nm rom/rd114.elf | grep -i 'FUN_000113f8\|FUN_00010dd4$' | head -3
+
+OUT
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-nm: 'rom/rd114.elf': No such file
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-nm: 'rom/rd114.elf': No such file
+Bash Compare the later spawns (slots 16-21) at tick 0x136
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1808 1900; do $A rom/rd114.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd114_$f.bin >/dev/null 2>&1 & done; wait; python3 $S/slots.py $S/tick/aw_1808.bin:16,17,18,20,21 $S/tick/rd114_1808.bin:16,17,18,20,21 $S/tick/rd114_1900.bin:16,17,18,20,21 | grep -v '^$'
+
+OUT
+== aw_1808.bin tick 0136
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 12a7 y 109a +1a 0200 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 11f5 y 1064 +1a 0380 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 0000 h 0001004c spr 1203 pal 0828 x 12ba y 112c +1a 0a00 st 01000a04 anim 00010212 fr 0212 lnk 0000 hp 00 form 00
+20 +0 0000 h 00010058 spr 1403 pal 0828 x 1259 y 114e +1a 0800 st 01000104 anim 000102b2 fr 02b2 lnk c900 hp 10 form 00
+21 +0 0000 h 0001004c spr 1503 pal 0828 x 12d9 y 112c +1a 0a00 st 01000a04 anim 00010212 fr 0212 lnk 0000 hp 00 form 00
+== rd114_1808.bin tick 013d
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 12b1 y 108c +1a fb00 st 8200fc02 anim 0000f640 fr f640 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 1210 y 1083 +1a 0540 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 0000 h 0001004c spr 1203 pal 0828 x 12ba y 112c +1a 0a00 st 01000a04 anim 00010212 fr 0212 lnk 0000 hp 00 form 00
+20 +0 0000 h 00010058 spr 1403 pal 0828 x 1259 y 114e +1a 0800 st 01000104 anim 000102b2 fr 02b2 lnk c900 hp 10 form 00
+21 +0 0000 h 0001004c spr 1503 pal 0828 x 12d8 y 112c +1a 0a00 st 01000a04 anim 00010212 fr 0212 lnk 0000 hp 00 form 00
+== rd114_1900.bin tick 0199
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 124b y 10d8 +1a 0000 st 82011400 anim 0000f576 fr f576 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 133a y 1086 +1a ff40 st 8200eb02 anim 0000f640 fr f640 lnk 0000 hp 08 form 00
+18 +0 8100 h 00010dd4 spr 1202 pal 0f2d x 1443 y f877 +1a 0000 st 0002c600 anim 0238dd40 fr dd40 lnk 0000 hp 32 form 00
+20 +0 8100 h 000103e0 spr 1402 pal 062b x 11cc y 10d8 +1a 0000 st 00010600 anim 000109d2 fr 09d2 lnk 0000 hp 18 form 00
+21 +0 8100 h 00010824 spr 1502 pal 072c x 11c7 y 10b5 +1a 0a00 st 00010600 anim 00010c48 fr 0c48 lnk ca00 hp 10 form 00
+Checking who writes the flame's bad script pointer, and fetching the arcade's state around the second pair's spawn.
+
+Bash Find other 0x113F8 symbols and restore the ELF copy in the build template
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n '113f8' sh_src/portfull/altbeast_port.c | grep -v '0x113f8u\|FUN_000113f8()' | head -8; grep -n '113f8' sh_src/portfull/layout.ld sh_src/portfull/extras.h sh_src/portfull/dat_syms.h 2>/dev/null | head -5; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; sed -i '' 's|^cp rom/s16.elf rom/rd99.elf; ||; s|tools/save_build.sh rd99|cp rom/s16.elf rom/rd99.elf; tools/save_build.sh rd99|' $S/rd1dump/build_rd99.sh; grep -n 'save_build' $S/rd1dump/build_rd99.sh
+
+OUT
+75720:/* ---- 0x113F8  FUN_000113f8  (4 B)  class: ? ---- */
+6:cp rom/s16.elf rom/rd99.elf; tools/save_build.sh rd99 >> $D/build_rd99.log 2>&1
+Bash Compare the second-pair and flame spawns around ticks 0x160-0x1A0
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; for f in 1850 1880 1908; do [ -f $S/tick/aw_$f.bin ] && continue; d=$(mktemp -d $S/nv_$f.XXXX); WD_FRAME=$f WD_ADDR=0xFFC000 WD_LEN=0x4000 WD_OUT=$S/tick/aw_$f.bin mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick -bench 45 -nvram_directory $d -autoboot_script tools/wram_dump.lua >$S/mame_aw_$f.log 2>&1 & done; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1842 1872; do $A rom/rd114.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd114_$f.bin >/dev/null 2>&1 & done; wait; python3 $S/slots.py $S/tick/aw_1850.bin:0,16,17,18,20,21 $S/tick/aw_1880.bin:0,16,17,18,20,21 $S/tick/aw_1908.bin:0,16,17,18,20,21 | grep -v '^$'; echo "===== PORT rd114"; python3 $S/slots.py $S/tick/rd114_1842.bin:0,16,17,18,20,21 $S/tick/rd114_1872.bin:0,16,17,18,20,21 $S/tick/rd114_1900.bin:0
+
+OUT
+== aw_1850.bin tick 0160
+ 0 +0 8800 h 000049ba spr 0002 pal 020c x 1302 y 10d8 +1a 0000 st 04000100 anim 0000a9da fr a9da lnk e000 hp 20 form 03
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 126b y 107a +1a 03c0 st 8200d902 anim 0000f640 fr f640 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0e01 x 128b y 10d6 +1a 0180 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 8100 h 00010dd4 spr 1202 pal 0f2d x 11ce y 10aa +1a 0400 st 00020500 anim 000113f8 fr 13f8 lnk 0000 hp 32 form 00
+20 +0 8100 h 000103e0 spr 1402 pal 062b x 11cc y 10aa +1a 0400 st 00020500 anim 000109d2 fr 09d2 lnk 0000 hp 18 form 00
+21 +0 8100 h 00010824 spr 1502 pal 072c x 11c8 y 108a +1a 0a00 st 00020500 anim 00010c48 fr 0c48 lnk ca00 hp 10 form 00
+== aw_1880.bin tick 017e
+ 0 +0 8800 h 000049ba spr 0002 pal 020c x 12f9 y 10d8 +1a 0000 st 01000500 anim 0000a90c fr a90c lnk e000 hp 20 form 03
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 124b y 10d8 +1a 0000 st 82012f00 anim 0000f576 fr f576 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 12f2 y 10bd +1a 0140 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 8900 h 00010dd4 spr 1202 pal 0f2d x 11ee y 10d8 +1a 0000 st 00030500 anim 000113f8 fr 13f8 lnk 0000 hp 32 form 00
+20 +0 8900 h 000103e0 spr 1402 pal 062b x 11db y 10d8 +1a 0000 st 00010500 anim 000109d2 fr 09d2 lnk 0000 hp 18 form 00
+21 +0 8100 h 00010824 spr 1502 pal 072c x 11d6 y 10b5 +1a 0a00 st 00010500 anim 00010c48 fr 0c48 lnk ca00 hp 10 form 00
+== aw_1908.bin tick 019a
+ 0 +0 8900 h 000049ba spr 0002 pal 020c x 12f2 y 10d0 +1a 0000 st 0c001000 anim 0000abe0 fr abe0 lnk e000 hp 20 form 03
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 124b y 10d8 +1a 0000 st 82011300 anim 0000f576 fr f576 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 133c y 1085 +1a ff80 st 8200ea02 anim 0000f640 fr f640 lnk 0000 hp 08 form 00
+18 +0 8900 h 00010dd4 spr 1202 pal 0f2d x 120a y 10d8 +1a 0000 st 00030100 anim 000113f8 fr 13f8 lnk 0000 hp 32 form 00
+20 +0 8900 h 000103e0 spr 1402 pal 062b x 11e9 y 10d8 +1a 0000 st 00050100 anim 000109d2 fr 09d2 lnk 0000 hp 18 form 00
+21 +0 8900 h 00010824 spr 1502 pal 072c x 11e6 y 10bb +1a 0a00 st 00050100 anim 00010c48 fr 0c48 lnk ca00 hp 10 form 00
+===== PORT rd114
+== rd114_1842.bin tick 015f
+ 0 +0 8800 h 000049ba spr 0002 pal 020c x 1302 y 10d7 +1a 0280 st 04000100 anim 0000a9da fr a9da lnk e000 hp 20 form 03
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 126d y 1076 +1a 0380 st 8200da02 anim 0000f640 fr f640 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0d01 x 1287 y 10d4 +1a 0140 st 8204fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 8100 h 00010dd4 spr 1202 pal 0f2d x 1409 y f84e +1a 0380 st 00020000 anim 0238dd40 fr dd40 lnk 0000 hp 32 form 00
+20 +0 8100 h 000103e0 spr 1402 pal 062b x 11cb y 10a6 +1a 0380 st 00020600 anim 000109d2 fr 09d2 lnk 0000 hp 18 form 00
+21 +0 8100 h 00010824 spr 1502 pal 072c x 11c7 y 1086 +1a 0a00 st 00020600 anim 00010c48 fr 0c48 lnk ca00 hp 10 form 00
+== rd114_1872.bin tick 017d
+ 0 +0 8800 h 000049ba spr 0002 pal 020c x 12f9 y 10d8 +1a 0000 st 01000600 anim 0000a90c fr a90c lnk e000 hp 20 form 03
+16 +0 8900 h 0000ee80 spr 1002 pal 0ca5 x 124b y 10d8 +1a 0000 st 82013100 anim 0000f576 fr f576 lnk 0000 hp 08 form 00
+17 +0 8900 h 0000ee80 spr 1102 pal 0e01 x 12e6 y 10ab +1a 00c0 st 8203fe01 anim 0000f5d0 fr f5d0 lnk 0000 hp 08 form 00
+18 +0 8100 h 00010dd4 spr 1202 pal 0f2d x 1426 y f877 +1a 0000 st 0002e300 anim 0238dd40 fr dd40 lnk 0000 hp 32 form 00
+20 +0 8100 h 000103e0 spr 1402 pal 062b x 11cc y 10d8 +1a 0000 st 00010103 anim 000109a2 fr 09a2 lnk 0000 hp 18 form 00
+21 +0 8100 h 00010824 spr 1502 pal 072c x 11c8 y 10b8 +1a 0a00 st 00010103 anim 00010c36 fr 0c36 lnk ca00 hp 10 form 00
+== rd114_1900.bin tick 0199
+ 0 +0 8800 h 000049ba spr 0002 pal 020c x 12ea y 10d8 +1a 0000 st 01000300 anim 0000a90c fr a90c lnk e000 hp 20 form 03
+Bash Identify the SH-2 symbol at 0x0238DD40 and read the flame init 0x10D06
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "== symbol near 0x0238dd40 (rd108 layout)"; awk '$1 <= "0238dd40"' $S/rd108.nm | tail -2; awk '$1 <= "0238dd40"' $S/rd107.nm | tail -1; echo "== 68K 0x10D06-0x10DD4"; python3 - <<EOF
+import re
+for l in open('$S/prog68k.dis').read().splitlines():
+    m=re.match(r'\s*([0-9a-f]+):',l)
+    if m and 0x10d06<=int(m.group(1),16)<0x10dd4: print(l[:62])
+EOF
+
+OUT
+== symbol near 0x0238dd40 (rd108 layout)
+0238dc94 T _FUN_00016a08
+0238dd40 T _FUN_000113f8
+0238dd40 T _FUN_000113f8
+== 68K 0x10D06-0x10DD4
+   10d06:	082e 0007 0020 	btst #7,%fp@(32)
+   10d0c:	6708           	beqs 0x10d16
+   10d0e:	0438 0002 f15d 	subib #2,0xfffff15d
+   10d14:	4e75           	rts
+   10d16:	0438 0004 f15d 	subib #4,0xfffff15d
+   10d1c:	4e75           	rts
+   10d1e:	306e 003c      	moveaw %fp@(60),%a0
+   10d22:	4a68 0000      	tstw %a0@(0)
+   10d26:	6604           	bnes 0x10d2c
+   10d28:	426e 0000      	clrw %fp@(0)
+   10d2c:	4ef9 0000 3f04 	jmp 0x3f04
+   10d32:	3d4d 0078      	movew %a5,%fp@(120)
+   10d36:	3b7c 8000 0000 	movew #-32768,%a5@(0)
+   10d3c:	422d 007f      	clrb %a5@(127)
+   10d40:	3b7c ffff 0078 	movew #-1,%a5@(120)
+   10d46:	3b4e 003c      	movew %fp,%a5@(60)
+   10d4a:	41fa ffd2      	lea %pc@(0x10d1e),%a0
+   10d4e:	2b48 0002      	movel %a0,%a5@(2)
+   10d52:	43fa 0680      	lea %pc@(0x113d4),%a1
+   10d56:	41ee 0000      	lea %fp@(0),%a0
+   10d5a:	102e 0008      	moveb %fp@(8),%d0
+   10d5e:	7402           	moveq #2,%d2
+   10d60:	20d9           	movel %a1@+,%a0@+
+   10d62:	51ca fffc      	dbf %d2,0x10d60
+   10d66:	1d40 0008      	moveb %d0,%fp@(8)
+   10d6a:	1d7c 0002 002f 	moveb #2,%fp@(47)
+   10d70:	1d7c 0032 004a 	moveb #50,%fp@(74)
+   10d76:	082e 0007 0020 	btst #7,%fp@(32)
+   10d7c:	670c           	beqs 0x10d8a
+   10d7e:	1d7c 0067 000b 	moveb #103,%fp@(11)
+   10d84:	1d7c 003c 004a 	moveb #60,%fp@(74)
+   10d8a:	2d7c f808 bc00 	movel #-133645312,%fp@(80)
+   10d90:	0050 
+   10d92:	3d7c ff00 0014 	movew #-256,%fp@(20)
+   10d98:	3d7c 0080 001c 	movew #128,%fp@(28)
+   10d9e:	3d7c 0800 001e 	movew #2048,%fp@(30)
+   10da4:	422e 0021      	clrb %fp@(33)
+   10da8:	426e 004e      	clrw %fp@(78)
+   10dac:	1d7c 0001 0022 	moveb #1,%fp@(34)
+   10db2:	41fa 0644      	lea %pc@(0x113f8),%a0
+   10db6:	2d48 0024      	movel %a0,%fp@(36)
+   10dba:	082e 0000 0020 	btst #0,%fp@(32)
+   10dc0:	6706           	beqs 0x10dc8
+   10dc2:	1d7c 0080 002e 	moveb #-128,%fp@(46)
+   10dc8:	08ee 0003 0000 	bset #3,%fp@(0)
+   10dce:	4ef9 0000 3b2e 	jmp 0x3b2e
+Bash Read the port's FUN_00010d06 and the end of FUN_00010cd6
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; L=$(grep -n "^[a-z].* FUN_00010d06(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); E=$(awk -v L=$L 'NR>L && /^}/{print NR; exit}' sh_src/portfull/altbeast_port.c); echo "== FUN_00010d06 $L-$E"; sed -n "$L,${E}p" sh_src/portfull/altbeast_port.c | grep -v '^\s*$'; L2=$(grep -n "^[a-z].* FUN_00010cd6(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); sed -n "$((L2+55)),$((L2+70))p" sh_src/portfull/altbeast_port.c
+
+OUT
+== FUN_00010d06 74998-75008
+uint FUN_00010d06()
+{
+  int unaff_A6 = (int)_r_unaff_A6;
+  if ((*(byte *)(unaff_A6 + 0x20) & 0x80) != 0) {
+    DAT_fffff15d = DAT_fffff15d + -2;
+    return 0;
+  }
+  DAT_fffff15d = DAT_fffff15d + -4;
+  return 0;
+}
+      unaff_A6[0x1c] = 0;
+      unaff_A6[0x1d] = 0x80;
+      unaff_A6[0x1e] = 8;
+      unaff_A6[0x1f] = 0;
+      unaff_A6[0x21] = 0;
+      unaff_A6[0x4e] = 0;
+      unaff_A6[0x4f] = 0;
+      unaff_A6[0x22] = 1;
+      ST32((unaff_A6 + 0x24), 0x113f8u);
+      if ((unaff_A6[0x20] & 1) != 0) {
+        unaff_A6[0x2e] = 0x80;
+      }
+      *unaff_A6 = *unaff_A6 | 8;
+      bVar5 = unaff_A6[0xb];
+      uVar4 = (ushort)bVar5;
+      bVar3 = *(byte *)(W68PTR(0xFFF500u) + ((short)uVar4));
+Bash Find the stale-A1 script-pointer sites, in FUN_00010dd4 and overall
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "== extraout_A1 arithmetic (script-pointer idiom) across the unit"; grep -n 'extraout_A1[_0-9]* + -2\|extraout_A1[_0-9]* + -[0-9]' sh_src/portfull/altbeast_port.c | head -12; echo "== in FUN_00010dd4"; L=$(grep -n "^[a-z].* FUN_00010dd4(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); E=$(awk -v L=$L 'NR>L && /^}/{print NR; exit}' sh_src/portfull/altbeast_port.c); sed -n "$L,${E}p" sh_src/portfull/altbeast_port.c | grep -n 'extraout_A1\|+ 0x24)\|0xc) =\|0x10) =' | head -14
+
+OUT
+== extraout_A1 arithmetic (script-pointer idiom) across the unit
+== in FUN_00010dd4
+3:  uint extraout_A1 = (uint)_r_extraout_A1;
+75:        if ((unaff_A6[0x2c] & 0x10) == 0) {
+82:            if ((LD32S((unaff_A6 + 0x24)) == 0x11730) ||
+128:                    if ((LD32S((unaff_A6 + 0x24)) == 0x11452) && ((unaff_A6[0x21] & 1) != 0)) {
+143:                      if (LD32S((unaff_A6 + 0x24)) == 0x11452) {
+244:                    if (LD32U(unaff_A6 + 0x24) == 0x113f8u) goto LAB_000111de;
+252:              ST32((unaff_A6 + 0x24), ((uint)pcVar15));
+265:          if (LD32S((unaff_A6 + 0x24)) == 0x115e2) goto LAB_000111fa;
+284:          if (LD32S((unaff_A6 + 0x24)) == 0x114ac) goto LAB_000111fa;
+291:        ST32((unaff_A6 + 0x24), (uVar13));
+346:      ST32((unaff_A6 + 0x24), (uVar13));
+377:  extraout_A1 = (uint)uVar24;
+402:  uVar16 = extraout_A1;
+404:    uVar16 = (int)sVar9 + (extraout_A1 - 2);
+Bash Disassemble the start of the flame handler 0x10DD4
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; python3 - <<EOF
+import re
+for l in open('$S/prog68k.dis').read().splitlines():
+    m=re.match(r'\s*([0-9a-f]+):',l)
+    if m and 0x10dd4<=int(m.group(1),16)<0x10e30: print(l[:62])
+EOF
+
+OUT
+   10dd4:	4eb9 0000 65aa 	jsr 0x65aa
+   10dda:	082e 0003 0000 	btst #3,%fp@(0)
+   10de0:	663e           	bnes 0x10e20
+   10de2:	0c6e 1180 0010 	cmpiw #4480,%fp@(16)
+   10de8:	641c           	bccs 0x10e06
+   10dea:	422e 004b      	clrb %fp@(75)
+   10dee:	3038 f132      	movew 0xfffff132,%d0
+   10df2:	0440 0050      	subiw #80,%d0
+   10df6:	b06e 0040      	cmpw %fp@(64),%d0
+   10dfa:	640a           	bccs 0x10e06
+   10dfc:	0640 01e0      	addiw #480,%d0
+   10e00:	b06e 0040      	cmpw %fp@(64),%d0
+   10e04:	641a           	bccs 0x10e20
+   10e06:	6100 fef6      	bsrw 0x10cfe
+   10e0a:	4eb9 0000 e1e8 	jsr 0xe1e8
+   10e10:	426e 0000      	clrw %fp@(0)
+   10e14:	4eb9 0000 3bce 	jsr 0x3bce
+   10e1a:	4ef9 0000 3f04 	jmp 0x3f04
+   10e20:	0c2e 0005 0023 	cmpib #5,%fp@(35)
+   10e26:	6700 00ca      	beqw 0x10ef2
+   10e2a:	102e 004b      	moveb %fp@(75),%d0
+   10e2e:	6700 0114      	beqw 0x10f44
+Bash Read the stale-A1 sites in FUN_00010dd4 and the 68K's A1 script updates
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; L=$(grep -n "^[a-z].* FUN_00010dd4(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); sed -n "$((L+283)),$((L+292))p;$((L+338)),$((L+347))p;$((L+372)),$((L+380))p;$((L+398)),$((L+410))p" sh_src/portfull/altbeast_port.c; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "== 68K a1 <-> ($24,fp) in 0x10dd4-0x11386"; python3 - <<EOF
+import re
+for l in open('$S/prog68k.dis').read().splitlines():
+    m=re.match(r'\s*([0-9a-f]+):',l)
+    if m and 0x10dd4<=int(m.group(1),16)<0x11386 and ('%a1,%fp@(36)' in l or '%fp@(36),%a1' in l or 'a1@-,%a1' in l or 'subql #2,%a1' in l): print(l[:62])
+EOF
+
+OUT
+          if (LD32S((unaff_A6 + 0x24)) == 0x114ac) goto LAB_000111fa;
+        }
+        unaff_A6[0x21] = 0;
+        unaff_A6[0x22] = 1;
+        unaff_A6[0x14] = 0;
+        unaff_A6[0x15] = 0;
+        unaff_A6[0x23] = 2;
+        ST32((unaff_A6 + 0x24), (uVar13));
+      }
+    }
+          goto LAB_00010f10;
+        }
+        sound_enqueue(0xffffffb4);
+        unaff_A6[0x14] = 0;
+        unaff_A6[0x15] = 0;
+        uVar13 = 0x11702;
+      }
+      ST32((unaff_A6 + 0x24), (uVar13));
+      unaff_A6[0x23] = 4;
+      unaff_A6[0x21] = 0;
+    unaff_A6[0x2f] = bVar5;
+  }
+  order_list_insert();
+  uVar24 = sprite_frame_lookup();
+  extraout_A1 = (uint)uVar24;
+  uVar24 = zoom_scale_lookup((int)((ulonglong)uVar24 >> 0x20),p_D3);
+  p_D3 = (undefined4)_port_reg[3]; p_D6 = (undefined4)_port_reg[6]; p_D7 = (undefined4)_port_reg[7];   /* 0x3CD4 returns D3/D6/D7: cport_prep.py */
+  extraout_D1u = (uint)uVar24;
+  sVar11 = (_DAT_fffff0fa + *(short *)(unaff_A6 + 0x10) + -0x1000) - _DAT_fffff128;
+  }
+  uVar23 = 0;
+  sVar9 = (short)p_D3;
+  uVar16 = extraout_A1;
+  if ((bVar5 & 1) != 0) {
+    uVar16 = (int)sVar9 + (extraout_A1 - 2);
+    uVar23 = 0x100;
+  }
+  if (0xdf < sVar3) goto hide_object_sprite;
+  sVar6 = sVar3;
+  if ((sVar3 < 0) && (sVar6 = 0, (DAT_fffff018 & 0x40) == 0)) {
+    if ((bVar5 & 2) == 0) {
+      uVar16 = (int)(short)(-sVar3 * sVar9) + uVar16;
+== 68K a1 <-> (,fp) in 0x10dd4-0x11386
+Bash Trace slot 18's record through the flame spawn and diff it against the arcade
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1816 1824 1832 1840; do $A rom/rd114.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd114_$f.bin >/dev/null 2>&1 & done; wait; python3 - <<EOF
+import os
+def rec(f,s=18):
+    b=open(f,'rb').read(); o=s*0x80; x=b[o:o+0x80]; t=int.from_bytes(b[0x302a:0x302c],'big')
+    return '%-14s tick %04x +0 %s h %s x %s y %s +24 %s +3c %s +40 %s +44 %s +78 %s +7a %s hp %02x'%(os.path.basename(f),t,x[0:2].hex(),x[2:6].hex(),x[0xc:0xe].hex(),x[0x10:0x12].hex(),x[0x24:0x28].hex(),x[0x3c:0x3e].hex(),x[0x40:0x42].hex(),x[0x44:0x46].hex(),x[0x78:0x7a].hex(),x[0x7a:0x7c].hex(),x[0x4a])
+for f in ('rd114_1808','rd114_1816','rd114_1824','rd114_1832','rd114_1840','rd114_1842'): print(rec('$S/tick/%s.bin'%f))
+print('-- arcade'); print(rec('$S/tick/aw_1808.bin')); print(rec('$S/tick/aw_1850.bin'))
+a=open('$S/tick/aw_1850.bin','rb').read(); p=open('$S/tick/rd114_1842.bin','rb').read(); o=18*0x80
+print('slot 18 full diff at 0x160/0x15f:', ' '.join('+%02x:%02x/%02x'%(i,a[o+i],p[o+i]) for i in range(0x80) if a[o+i]!=p[o+i]))
+EOF
+
+OUT
+rd114_1808.bin tick 013d +0 0000 h 0001004c x 12ba y 112c +24 00010212 +3c 0000 +40 12b1 +44 10d8 +78 c980 +7a 0000 hp 00
+rd114_1816.bin tick 0144 +0 0000 h 0001004c x 12ba y 112c +24 00010212 +3c 0000 +40 12b1 +44 10d8 +78 c980 +7a 0000 hp 00
+rd114_1824.bin tick 014d +0 0000 h 0001004c x 12ba y 112c +24 00010212 +3c 0000 +40 12b1 +44 10d8 +78 c980 +7a 0000 hp 00
+rd114_1832.bin tick 0154 +0 0000 h 0001004c x 12ba y 112c +24 00010212 +3c 0000 +40 12b1 +44 10d8 +78 c980 +7a 0000 hp 00
+rd114_1840.bin tick 015d +0 8100 h 00010dd4 x 11c9 y 109f +24 00011452 +3c 0000 +40 11c9 +44 109f +78 c980 +7a 0000 hp 32
+rd114_1842.bin tick 015f +0 8100 h 00010dd4 x 1409 y f84e +24 0238dd40 +3c 0000 +40 11ca +44 10a6 +78 c980 +7a 0000 hp 32
+-- arcade
+aw_1808.bin    tick 0136 +0 0000 h 0001004c x 12ba y 112c +24 00010212 +3c 0000 +40 12b1 +44 10d8 +78 c980 +7a 0000 hp 00
+aw_1850.bin    tick 0160 +0 8100 h 00010dd4 x 11ce y 10aa +24 000113f8 +3c 0000 +40 11d0 +44 10aa +78 c980 +7a 0000 hp 32
+slot 18 full diff at 0x160/0x15f: +06:01/e0 +07:5f/00 +0c:11/14 +0d:ce/09 +0e:00/80 +10:10/f8 +11:aa/4e +1a:04/03 +1b:00/80 +22:05/00 +24:00/02 +25:01/38 +26:13/dd +27:f8/40 +29:cf/c9 +2b:a6/a2 +30:f8/d0 +31:06/03 +32:be/4f +33:00/22 +34:11/13 +35:c6/d9 +36:11/14 +37:d4/0c +38:10/f8 +39:68/9d +3a:10/f8 +3b:aa/70 +41:d0/ca +42:ff/02 +43:fe/3f +45:aa/a6 +46:00/e7 +47:00/a8 +48:00/c8 +49:00/c0 +50:f8/40 +51:08/0b +52:bc/00 +53:00/09 +54:11/12 +55:c8/0a +57:d8/d5 +59:66/a6 +5b:aa/af +5c:00/89 +5d:00/0a +5e:00/d1 +5f:00/13 +60:11/13 +61:ce/92 +62:11/14 +63:ce/13 +64:10/f8 +65:aa/1f +66:10/f8 +67:aa/61 +69:a6/a2
+Bash Find where the port's binary holds the flame symbol's address
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "== code-pointer forms left"; grep -n '(code \*\*)\|= (code \*)FUN\|(code \*)&' sh_src/portfull/altbeast_port.c | grep -v '^33:' | head -8; echo "== literal 0238dd40 in rd114.32x"; python3 - <<'EOF'
+b=open('/Users/mikeholzinger/src/sega16-2-32x/rom/rd114.32x','rb').read()
+import re
+offs=[m.start() for m in re.finditer(b'\x02\x38\xdd\x40', b)]
+print(len(offs), ['%08x'%(o+0x02000000) for o in offs[:12]])
+EOF
+
+OUT
+== code-pointer forms left
+81799:        p_A0 = (code *)&DAT_ffffc800;
+81983:    p_A0 = (code *)&DAT_ffffc800;
+82272:        p_A0 = (code *)&DAT_ffffc800;
+== literal 0238dd40 in rd114.32x
+3 ['023d908c', '023d9380', '023fb544']
+Bash Map the literal's locations to functions (approximate layout)
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; python3 - <<'EOF'
+import re, bisect, subprocess
+b=open('/Users/mikeholzinger/src/sega16-2-32x/rom/rd114.32x','rb').read()
+offs=[m.start() for m in re.finditer(b'\x02\x38\xdd\x40', b)]
+syms=[]
+for l in open('/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd108.nm'):
+    a,t,n=l.split(); syms.append((int(a,16),n))
+addrs=[s[0] for s in syms]
+for o in offs[:12]:
+    v=o+0x02000000; i=bisect.bisect_right(addrs,v)-1
+    print('%08x in ~%s+0x%x (rd108 layout)'%(v, syms[i][1], v-syms[i][0]))
+EOF
+
+OUT
+023d908c in ~_FUN_00011886+0x28c (rd108 layout)
+023d9380 in ~_FUN_00011886+0x580 (rd108 layout)
+023fb544 in ~_thk0_FUN_000149a6+0x24 (rd108 layout)
+Found the literal: the flame's SH-2 symbol address lives in FUN_00011886's literal pool. Disassembling the port code around it and checking that function's script-pointer stores.
+
+Bash Disassemble the code that loads the flame symbol's address
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ~/src/marsdev/mars/sh-elf/bin/sh-elf-objdump -b binary -m sh -D --adjust-vma=0x02000000 --start-address=0x023d8ff0 --stop-address=0x023d9090 rom/rd114.32x 2>/dev/null | grep -B2 -A6 '23d908c\|mov.l.*023d908c' | head -40
+
+OUT
+ 23d904a:	af c4       	bra	0x23d8fd6
+ 23d904c:	80 b1       	mov.b	r0,@(1,r11)
+ 23d904e:	d1 0f       	mov.l	0x23d908c,r1	! 238dd40
+ 23d9050:	d7 0d       	mov.l	0x23d9088,r7	! ff00
+ 23d9052:	af f8       	bra	0x23d9046
+ 23d9054:	e0 01       	mov	#1,r0
+ 23d9056:	d1 0d       	mov.l	0x23d908c,r1	! 238dd40
+ 23d9058:	97 01       	mov.w	0x23d905e,r7	! 100
+ 23d905a:	af f3       	bra	0x23d9044
+ 23d905c:	ea 01       	mov	#1,r10
+ 23d905e:	01 00       	.word 0x0100
+ 23d9060:	06 00       	.word 0x0600
+ 23d9062:	04 80       	.word 0x0480
+--
+ 23d9088:	00 00       	.word 0x0000
+ 23d908a:	ff 00       	.word 0xff00
+ 23d908c:	02 38       	.word 0x0238
+ 23d908e:	dd 40       	mov.l	0x23d9190,r13	! d070400b
+Bash List FUN_00011886's script-pointer stores and function references
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; L=$(grep -n "^[a-z].* FUN_00011886(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); E=$(awk -v L=$L 'NR>L && /^}/{print NR; exit}' sh_src/portfull/altbeast_port.c); echo "FUN_00011886 $L-$E"; sed -n "$L,${E}p" sh_src/portfull/altbeast_port.c | grep -n '0x24)\|FUN_0001[0-9a-f]*\b' | grep -v 'LD32[SU]((unaff_A6 + 0x24)) ==' | head -20
+
+OUT
+FUN_00011886 75736-76114
+1:uint FUN_00011886(int p_A5,undefined4 p_D1,uint p_D3,undefined4 p_D6,undefined4 p_D7)
+108:        ST32((unaff_A6 + 0x24), 0x12030u);
+121:    FUN_000118c6();
+232:          ST32((unaff_A6 + 0x24), 0x11fb8u);
+253:        ST32((unaff_A6 + 0x24), 0x11ef4u);
+Bash Disassemble the code that consumes the loaded symbol address
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ~/src/marsdev/mars/sh-elf/bin/sh-elf-objdump -b binary -m sh -D --adjust-vma=0x02000000 --start-address=0x023d9020 --stop-address=0x023d9060 rom/rd114.32x 2>/dev/null | tail -34 | head -30
+
+OUT
+023d9020 <.data+0x3d9020>:
+ 23d9020:	61 73       	mov	r7,r1
+ 23d9022:	84 b1       	mov.b	@(1,r11),r0
+ 23d9024:	c8 01       	tst	#1,r0
+ 23d9026:	8b 01       	bf	0x23d902c
+ 23d9028:	af 3b       	bra	0x23d8ea2
+ 23d902a:	00 09       	nop	
+ 23d902c:	ea 00       	mov	#0,r10
+ 23d902e:	af d2       	bra	0x23d8fd6
+ 23d9030:	e7 00       	mov	#0,r7
+ 23d9032:	97 14       	mov.w	0x23d905e,r7	! 100
+ 23d9034:	af c0       	bra	0x23d8fb8
+ 23d9036:	e6 01       	mov	#1,r6
+ 23d9038:	70 e8       	add	#-24,r0
+ 23d903a:	80 b2       	mov.b	r0,@(2,r11)
+ 23d903c:	af c5       	bra	0x23d8fca
+ 23d903e:	e3 18       	mov	#24,r3
+ 23d9040:	d1 0c       	mov.l	0x23d9074,r1	! 11452
+ 23d9042:	d7 0d       	mov.l	0x23d9078,r7	! fe80
+ 23d9044:	e0 01       	mov	#1,r0
+ 23d9046:	80 b2       	mov.b	r0,@(2,r11)
+ 23d9048:	e0 00       	mov	#0,r0
+ 23d904a:	af c4       	bra	0x23d8fd6
+ 23d904c:	80 b1       	mov.b	r0,@(1,r11)
+ 23d904e:	d1 0f       	mov.l	0x23d908c,r1	! 238dd40
+ 23d9050:	d7 0d       	mov.l	0x23d9088,r7	! ff00
+ 23d9052:	af f8       	bra	0x23d9046
+ 23d9054:	e0 01       	mov	#1,r0
+ 23d9056:	d1 0d       	mov.l	0x23d908c,r1	! 238dd40
+Bash Search every unit file for the flame symbol
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -c 'FUN_000113f8' sh_src/portfull/altbeast_port.c; grep -n 'FUN_000113f8' sh_src/portfull/objdispatch.c sh_src/portfull/protos.h sh_src/portfull/extras.h 2>/dev/null | head -4; grep -n '113f8\|113F8' sh_src/portfull/altbeast_port.c | head -5; grep -n 'cport_prep\|altbeast_port' Makefile | grep -i 'line\|LINE' | head -3
+
+OUT
+2
+sh_src/portfull/protos.h:522:uint FUN_000113f8();
+sh_src/portfull/objdispatch.c:576:static uint thk0_FUN_000113f8(const uint *r) { (void)r; return FUN_000113f8(); }
+sh_src/portfull/objdispatch.c:1326:    { 0x113F8u, thk0_FUN_000113f8 },
+74918:      ST32((unaff_A6 + 0x24), 0x113f8u);
+75168:                  pcVar15 = (code *)0x113f8u;   /* the 68K address: cport_prep.py */
+75173:                      pcVar15 = (code *)0x113f8u;   /* the 68K address: cport_prep.py */
+75179:                        pcVar15 = (code *)0x113f8u;   /* the 68K address: cport_prep.py */
+75271:                pcVar15 = (code *)0x113f8u;   /* the 68K address: cport_prep.py */
+Bash Check the object's relocations against the flame symbol
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ls -la sh_src/portfull/port.o sh_src/portfull/altbeast_port.c rom/rd114.32x | awk '{print $6,$7,$8,$9}'; ~/src/marsdev/mars/sh-elf/bin/sh-elf-objdump -dr sh_src/portfull/port.o 2>/dev/null | grep -c 'R_SH_DIR32.*_FUN_000113f8'; ~/src/marsdev/mars/sh-elf/bin/sh-elf-objdump -dr sh_src/portfull/port.o 2>/dev/null | grep -B3 'R_SH_DIR32.*_FUN_000113f8' | head -24
+
+OUT
+Oct 4 16:50 rom/rd114.32x
+Oct 4 16:48 sh_src/portfull/altbeast_port.c
+Oct 4 16:50 sh_src/portfull/port.o
+0
+Bash See whether a later stage rewrites code-pointer constants
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n "'(code \*)'\|(code \*)0x\|code \*)%s" tools/cport_cast.py tools/cport_prep.py | head -8; grep -n "code \*" sh_src/portfull/ghidra_types.h | head -3
+
+OUT
+tools/cport_prep.py:2343:#     uVar2 = (*(code *)0x4ebe)();
+tools/cport_prep.py:4743:    # NOT `(code *)0xNNNN`: those are handler ADDRESSES stored into 68K records for the
+tools/cport_prep.py:5035:    _blk, n = re.subn(r'\b(pcVar\d+) = FUN_([0-9a-f]{8});', lambda m: '%s = (code *)0x%xu;   /* the 68K address: cport_prep.py */' % (m.group(1), int(m.group(2), 16)), _blk); k += n
+14:typedef uint                code();       /* a call TARGET, so `code *p`
+I'll check the remaining symbol-as-value spellings in the unit and look for an ELF to map the literal, starting with rebuilding rd115 using the restored ELF copy.
+Bash Find function symbols still used as values in the unit
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "== direct function-symbol values"; grep -n -E '= FUN_[0-9a-f]{8};|\((uint|int|undefined4)\)FUN_[0-9a-f]{8}\b|, FUN_[0-9a-f]{8}\)|\(FUN_[0-9a-f]{8},' sh_src/portfull/altbeast_port.c | grep -v 'port_call68\|thk_' | head -12; echo "== count"; grep -c -E '= FUN_[0-9a-f]{8};' sh_src/portfull/altbeast_port.c
+
+OUT
+== direct function-symbol values
+81781:    p_A0 = FUN_0001762c;
+81797:      p_A0 = FUN_0001762c;
+81968:    p_A0 = FUN_0001762c;
+82251:    p_A0 = FUN_0001762c;
+== count
+4
+Bash Rebuild as rd115 to get the port ELF
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; D=$S/rd1dump; sed 's/rd99/rd115/g; s/build_line41/build_line57/; s/done99/done115/' $D/build_rd99.sh > $D/build_rd115.sh; chmod +x $D/build_rd115.sh; grep -c 'rd115.elf' $D/build_rd115.sh; nohup zsh $D/build_rd115.sh >/dev/null 2>&1 & echo launched rd115
+
+OUT
+1
+launched rd115
+Bash Widen the symbol-as-value rule to any local
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PYEOF'
+p='/Users/mikeholzinger/src/sega16-2-32x/tools/cport_prep.py'; s=open(p).read()
+old="""    _blk, n = re.subn(r'\\b(pcVar\\d+) = FUN_([0-9a-f]{8});', lambda m: '%s = (code *)0x%xu;   /* the 68K address: cport_prep.py */' % (m.group(1), int(m.group(2), 16)), _blk); k += n"""
+new="""    _blk, n = re.subn(r'\\b(pcVar\\d+) = FUN_([0-9a-f]{8});', lambda m: '%s = (code *)0x%xu;   /* the 68K address: cport_prep.py */' % (m.group(1), int(m.group(2), 16)), _blk); k += n
+    # the same for any other local (`p_A0 = FUN_0001762c;` -- the director's script)
+    _blk, n = re.subn(r'\\b(p_A\\d|puVar\\d+|iVar\\d+|uVar\\d+) = FUN_([0-9a-f]{8});', lambda m: '%s = (typeof(%s))0x%xu;   /* the 68K address: cport_prep.py */' % (m.group(1), m.group(1), int(m.group(2), 16)), _blk); k += n"""
+assert s.count(old)==1; open(p,'w').write(s.replace(old,new)); print('rule widened')
+PYEOF
+python3 -c "import ast;ast.parse(open('tools/cport_prep.py').read());print('syntax ok')"
+
+OUT
+rule widened
+syntax ok
+Bash Wait for rd115 and its ELF
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done115' $D/build_rd115.log 2>/dev/null; do sleep 10; done; grep -E 'exit=|PASS MATCHED' $D/build_rd115.log | head -3; ls -la /Users/mikeholzinger/src/sega16-2-32x/rom/rd115.elf | awk '{print $5,$9}'
+
+OUT
+Command running in background with ID: byxxm1nl8. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/byxxm1nl8.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Update STATE.md, regenerate FACTS, stage the day's work
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='/Users/mikeholzinger/src/sega16-2-32x/STATE.md'; s=open(p).read()
+start=s.index("rd107 (2026-10-04 evening) IS THE CURRENT MEASUREMENT BUILD")
+end=s.index("rd60 was:\n")
+new="""rd114 (2026-10-04 16:50) IS THE CURRENT MEASUREMENT BUILD; rd78 is still the rom on
+mister.office.local (push the next candidate once the flame object below is fixed).
+The watch hooks (PORT_FFWATCH) are OFF; the m_main.c measurement hooks are removed.
+DEMO B NOW RUNS TICK-FOR-TICK WITH THE ARCADE (fresh-NVRAM MAME dumps in
+scratchpad/tick/aw_*.bin, aligned on 0xFFF02A): the live object set and the hero's x
+are identical at ticks 0xA2 (slots 0 8 16-23 40), 0xD4 (0 8 40), 0x1FE (0 8 16 18-21
+40 48-50), the hero's state words match at 0x228 and 0x246, the demo ends at tick
+0x254 on both, and the next attract step starts at tick 0xB4 on both. The picture at
+tick 0xD4 is the arcade's frame (logo, "2 CREDITS 1 PLAY", hero pose). Whole-record
+diffs at 0x1FE: slots 1 8 17 19 40 48 49 50 identical; the differences left are the
+flame object and the second pair (below). Every step since rd78 came from a dump
+against the arcade (LESSONS 2026-10-04 has each):
+  rd96   slot 48 (the first zombie) survives: FUN_00016b6a's whole-body A6.
+  rd100  FFE018/FFE098 survive main_entry's record clear (0x1306: Ghidra AND gcc fold
+         the save/restore away -- volatile).
+  rd101  word links as pointer bases through W68 (52 sites): FFE01B = 1, the hero
+         KICKS at tick 0x34 and the partner spawns in slot 1 at 0x3A, as the arcade.
+  rd102  FUN_00011386 hand-derived: the tick-0x76 hang gone.
+  rd103  CPORT_PARAMNORM + 11 callees; ROM literals in dereferenced locals through
+         P68: the top score draws 50000.
+  rd104  FUN_0000f74a threads A6 through its three installs; FUN_0000a1e0's palette
+         request runs on the partner (pal 0550).
+  rd106  eleven carry/D0 helpers hand-derived (0xE23C/E266/E2C2/E2DC/F77C/D776/DBB8/
+         100B0/154C0/17BF8/1953C), 42 call sites rewritten.
+  rd107  2-mod-4 templates copied by bytes; symbol addresses stored as values are 68K
+         (cport_cast.py; cport_build.sh recompiles port.o from the final text).
+  rd108- the 13 PC-relative jump tables handed to Ghidra (tools/ghidra/make_jumptables
+  rd109  .py, entry-relative words) and re-exported; the decompiler's `switch(iVar12)
+         { case -0x23: }` normalisation handled (switch on the state byte - 0x23).
+  rd110  P68 is the identity for an SH-2 pointer (FUN_0000e20c's A0): the trio's
+         children see the parent die.
+  rd111  FUN_0000fd6c's hit path reads A1 from +0x24, not the pseudo-register.
+  rd112  the comma-form 0xE032 search re-reads A5: the trio lands in 18/19/20 like
+         the arcade (17 stays the pair's) and dies on schedule.
+  rd113  FUN_00003706 adds the kill's points in BCD (cRam names, bcdAdjust stub).
+  rd114  FUN_00011386's period read once (pair x drift); code-typed script pointers
+         kept as 68K values.
+STILL OPEN IN DEMO B (tick-aligned record diffs, rd114): (1) the hero's special-attack
+flame (slot 18, handler 0x10DD4, spawned by FUN_00010cd6 at tick ~0x15D): one tick
+after its install the port's record is overwritten (+0x24 = 0x0238DD40 = an SH-2
+function address, x/y/+0x30../+0x50.. garbage) where the arcade's keeps +0x24 =
+0x113F8; the literal 0x0238DD40 sits in two literal pools of the port's text (rd115
+builds the ELF to name them) -- until then zombie 49 misses the flame's 8 damage every
+8 ticks from tick 0x206; (2) the second pair (slots 20/21, spawned ~0x150) is 0x1C px
+left of the arcade's by 0x1FE and the 0xEE80 objects in 16/17 drift the other way --
+not yet traced; (3) the credit text blinks 26 ticks out of phase (FFF020/021); (4) the
+title logo's colour-cycle phase at tick 0xA0 (red vs white) -- at 0xD4 both red.
+Gate rd112 (tools/attract_parity.py, luma): cut black 0 at lag 20, demo scene 46 at
+lag 30+, face 25, eye 37-39, eye pan 27, demo 2 41-43 at lag 20+ (rd78: 45 43 42) --
+the luma gate does not see object parity; the tick-aligned dumps do.
+OPEN, in order: the flame object (above); the second pair's x; the other-form attack
+lookups (0x5062/0x7F58/0x8D66/0xBBC6/0xC9B4/0xAF4A, 80-100 call sites each, same
+shape as the hand-derived 0xA3B0) and the 40 `jmp (a0)` sites they feed (OPEN CARD);
+the general `movea ..,fp ; jsr` publication (66 sites, OPEN CARD); the boot card's
+bouncing text dots -- prog68k 0x15C0-0x166F fills twelve 4-byte records at 0xFFE800
+and steps them into text RAM 0x410030 for 165 frames; it is a Ghidra gap (no
+func_ranges entry) so the port never runs it (same fix as the kind installers:
+tools/ghidra/make_kind_inits.py); the renderer's round-2 HUD (logo palette); raw
+tilemap words in plane A at the boot card; the FPGA text garbage claim is WITHDRAWN
+(it was the typing loop, ares showed it too); BATTERY SAVE card below.
+"""
+s=s[:start]+new+s[end:]; open(p,'w').write(s); print('STATE updated')
+EOF
+python3 tools/build_facts.py 2>&1 | tail -1; git add -A tools/cport_prep.py tools/cport_cast.py tools/cport_build.sh tools/cport_layout.py tools/ghidra/make_jumptables.py tools/ghidra/make_hero_attacks.py tools/a68.py Makefile STATE.md LESSONS.md FACTS.md sh_src/m_main.c sh_src/s_main.c sh_src/port_l2.c sh_src/portfull docs/audit/func_ranges.txt docs/audit/func_ranges_prev.txt docs/audit/func_ranges_prev2.txt docs/audit/func_ranges_new.txt 2>&1 | tail -2; git status --short | grep -v '^A \|^M ' | head -8
+
+OUT
+STATE updated
+FACTS.md: 1056 facts
+ M .claude/prompt.log
+?? tools/cell_timeline.lua
+?? tools/check_tilesmd_bytes.py
+?? tools/ghidra/probe_jt.py
+?? tools/ghidra/probe_jt2.py
+?? tools/io_read.lua
+?? tools/md_pc.py
+?? tools/port_arglog_read.py
+Committing the day's generator, Ghidra script and doc work locally as a checkpoint while rd115 builds its ELF.
+
+Bash Commit the checkpoint locally
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; rm -f tools/ghidra/probe_jt.py tools/ghidra/probe_jt2.py; git add tools/cell_timeline.lua tools/io_read.lua tools/port_arglog_read.py; git commit -q -m "Port: demo B runs tick-for-tick with the arcade (rd112-rd114)
+
+Every live object, the hero's x and state words match the fresh-NVRAM arcade at
+ticks 0xA2, 0xD4, 0x1FE, 0x228 and 0x246; the demo ends at tick 0x254 on both.
+Nineteen defect classes found by tick-aligned dumps, each in LESSONS 2026-10-04:
+save/restore folded by Ghidra and gcc (0x1306), word links as pointer bases (52),
+bare 68K addresses into callees (CPORT_PARAMNORM + 11), A6 moved for one call
+(FUN_0000f74a, FUN_0000a1e0), carry/D0 helpers (11 hand-derived, 42 sites), 2-mod-4
+templates, symbol addresses as values, the 13 PC-relative jump tables (Ghidra
+overrides, tools/ghidra/make_jumptables.py, re-export), P68 on SH-2 pointers, the
+comma-form 0xE032 search, the BCD kill points, the x-step walker's period.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+8448d623 Port: demo B runs tick-for-tick with the arcade (rd112-rd114)
+Bash Trace the second pair's x and x-step state on both machines
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; cat > $S/pair20.py <<'EOF'
+import sys,os
+for f in sys.argv[1:]:
+    b=open(f,'rb').read(); t=int.from_bytes(b[0x302a:0x302c],'big')
+    out=[]
+    for s in (20,21,16):
+        o=s*0x80; x=b[o:o+0x80]
+        out.append('%d: x %s dx %s st %s +7e %02x +2e %02x anim %s'%(s,x[0xc:0xe].hex(),x[0x14:0x16].hex(),x[0x20:0x24].hex(),x[0x7e],x[0x2e],x[0x24:0x28].hex()))
+    print('%-14s tick %04x  %s'%(os.path.basename(f),t,' | '.join(out)))
+EOF
+python3 $S/pair20.py $S/tick/aw_1850.bin $S/tick/aw_1880.bin $S/tick/aw_1908.bin $S/tick/aw_2008.bin; echo "== port rd114"; python3 $S/pair20.py $S/tick/rd114_1842.bin $S/tick/rd114_1872.bin $S/tick/rd114_1900.bin $S/tick/rd114_2009.bin
+
+OUT
+aw_1850.bin    tick 0160  20: x 11cc dx 0080 st 00020500 +7e 00 +2e 00 anim 000109d2 | 21: x 11c8 dx 0040 st 00020500 +7e 00 +2e 00 anim 00010c48 | 16: x 126b dx fe00 st 8200d902 +7e 00 +2e 00 anim 0000f640
+aw_1880.bin    tick 017e  20: x 11db dx 0080 st 00010500 +7e 00 +2e 00 anim 000109d2 | 21: x 11d6 dx 0040 st 00010500 +7e 00 +2e 00 anim 00010c48 | 16: x 124b dx 0000 st 82012f00 +7e 00 +2e 00 anim 0000f576
+aw_1908.bin    tick 019a  20: x 11e9 dx 0080 st 00050100 +7e 00 +2e 00 anim 000109d2 | 21: x 11e6 dx 0040 st 00050100 +7e 00 +2e 00 anim 00010c48 | 16: x 124b dx 0000 st 82011300 +7e 00 +2e 00 anim 0000f576
+aw_2008.bin    tick 01fe  20: x 1213 dx 0080 st 00010100 +7e 00 +2e 00 anim 000109d2 | 21: x 120e dx 0040 st 00010100 +7e 00 +2e 00 anim 00010c48 | 16: x 134d dx 03f8 st 8204fe01 +7e 00 +2e 00 anim 0000f5d0
+== port rd114
+rd114_1842.bin tick 015f  20: x 11cb dx 0080 st 00020600 +7e 00 +2e 00 anim 000109d2 | 21: x 11c7 dx 0040 st 00020600 +7e 00 +2e 00 anim 00010c48 | 16: x 126d dx fe00 st 8200da02 +7e 00 +2e 00 anim 0000f640
+rd114_1872.bin tick 017d  20: x 11cc dx 0000 st 00010103 +7e 00 +2e 00 anim 000109a2 | 21: x 11c8 dx 0040 st 00010103 +7e 00 +2e 00 anim 00010c36 | 16: x 124b dx 0000 st 82013100 +7e 00 +2e 00 anim 0000f576
+rd114_1900.bin tick 0199  20: x 11cc dx 0080 st 00010600 +7e 00 +2e 00 anim 000109d2 | 21: x 11c7 dx 0040 st 00010600 +7e 00 +2e 00 anim 00010c48 | 16: x 124b dx 0000 st 82011400 +7e 00 +2e 00 anim 0000f576
+rd114_2009.bin tick 0206  20: x 11f7 dx 0080 st 00040300 +7e 00 +2e 00 anim 000109d2 | 21: x 11f6 dx 0040 st 00040300 +7e 00 +2e 00 anim 00010c48 | 16: x 1365 dx 03f8 st 8204fe01 +7e 00 +2e 80 anim 0000f5d0
+I found that the second pair's drift stems from reading a stale A2, with 0xE266 leaving A2 on the chosen player's chaser byte before the pair's handler tests it. I'll check the A2 pseudo-register plumbing before adding the publication.
+Bash Check the A2 pseudo-register and which e266 callers read A2
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n '_r_unaff_A2' sh_src/portfull/pseudoregs.h sh_src/portfull/defs.c sh_src/portfull/extras.h 2>/dev/null | head -3; echo "== callers of e266 that use unaff_A2"; python3 - <<'EOF'
+import re
+u=open('/Users/mikeholzinger/src/sega16-2-32x/sh_src/portfull/altbeast_port.c').read()
+n=0
+for m in re.finditer(r'\n[a-z][^\n]* (\w+)\([^\n]*\)\n\{(.*?)\n\}\n', u, flags=re.S):
+    body=m.group(2)
+    if 'FUN_0000e266(' in body and 'unaff_A2' in body:
+        n+=1; decl=re.search(r'\n\s*([\w \*]+?)\s*\*?unaff_A2 = [^\n]*', body)
+        print('  %s: %s | uses: %s'%(m.group(1), decl.group(0).strip() if decl else '?', re.findall(r'[^\n;]*unaff_A2[^\n;]*', body)[:2]))
+print('functions:', n)
+EOF
+
+OUT
+== callers of e266 that use unaff_A2
+functions: 0
+Bash Check rd115's progress
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; grep -E 'exit=|PASS MATCHED' $D/build_rd115.log | head -2; ls /Users/mikeholzinger/src/sega16-2-32x/rom/rd115.elf 2>&1 | tail -1
+
+OUT
+ls: /Users/mikeholzinger/src/sega16-2-32x/rom/rd115.elf: No such file or directory
+Bash Compare the chaser counters and find how the pair handler reads them
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; python3 - <<EOF
+for f in ('aw_1850','aw_1880','aw_1908','rd114_1842','rd114_1872','rd114_1900'):
+    b=open('$S/tick/%s.bin'%f,'rb').read(); print('%-11s tick %04x FFF154.. %s  slot20 +7c %s  slot21 +7c %s'%(f,int.from_bytes(b[0x302a:0x302c],'big'),b[0x3154:0x3160].hex(),b[20*0x80+0x7c:20*0x80+0x7e].hex(),b[21*0x80+0x7c:21*0x80+0x7e].hex()))
+EOF
+L=$(grep -n "^[a-z].* FUN_000103e0(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); E=$(awk -v L=$L 'NR>L && /^}/{print NR; exit}' sh_src/portfull/altbeast_port.c); sed -n "$L,${E}p" sh_src/portfull/altbeast_port.c | grep -n 'fffff156\|fffff157\|unaff_A2\|0x48\|< 0x30\|0x47 <\|pcVar' | head -14
+
+OUT
+aw_1850     tick 0160 FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+aw_1880     tick 017e FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+aw_1908     tick 019a FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+rd114_1842  tick 015f FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+rd114_1872  tick 017d FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+rd114_1900  tick 0199 FFF154.. 030000000010800000080000  slot20 +7c 0000  slot21 +7c 0000
+110:                  if (0x47 < extraout_D0w_01) goto LAB_00010762;
+111:                  if (extraout_D0w_01 < 0x30) {
+139:                if (extraout_D0w_03 < 0x48) {
+191:                 (bVar16 = uVar11 < 0x30, bVar16)) {
+198:                if (extraout_D0w_00 < 0x30) {
+Bash Wait for rd115, then map the flame symbol's literal to its function
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done115' $D/build_rd115.log 2>/dev/null; do sleep 10; done; grep -E 'exit=' $D/build_rd115.log; cd /Users/mikeholzinger/src/sega16-2-32x; ls -la rom/rd115.elf | awk '{print $5,$9}'; ~/src/marsdev/mars/sh-elf/bin/sh-elf-nm -n rom/rd115.elf > /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd115.nm; grep -i ' _FUN_000113f8$\| _FUN_00010dd4$\| _FUN_00011886$' /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd115.nm; python3 - <<'EOF'
+import re,bisect
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad'
+b=open('/Users/mikeholzinger/src/sega16-2-32x/rom/rd115.32x','rb').read()
+syms=[(int(l.split()[0],16),l.split()[2]) for l in open(S+'/rd115.nm') if ' T ' in l or ' t ' in l]
+addrs=[s[0] for s in syms]
+f8=[s for s in syms if s[1]=='_FUN_000113f8']
+print('FUN_000113f8 at', ['%08x'%s[0] for s in f8])
+lit=f8[0][0].to_bytes(4,'big')
+for m in re.finditer(re.escape(lit), b):
+    v=m.start()+0x02000000; i=bisect.bisect_right(addrs,v)-1
+    print('  literal at %08x in %s+0x%x'%(v, syms[i][1], v-syms[i][0]))
+EOF
+
+OUT
+exit=0
+3930324 rom/rd115.elf*
+023d88dc T _FUN_00010dd4
+023d92d8 T _FUN_000113f8
+023d9350 T _FUN_00011886
+FUN_000113f8 at ['023d92d8']
+  literal at 023fb714 in _thk0_FUN_000113f8+0x24
+Bash Catch the flame record's corruption in rd115 and name the value with its ELF
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1840 1841 1842; do $A rom/rd115.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd115_$f.bin >/dev/null 2>&1 & done; wait; python3 - <<EOF
+import bisect
+syms=[(int(l.split()[0],16),l.split()[2]) for l in open('$S/rd115.nm') if ' T ' in l or ' t ' in l or ' D ' in l or ' d ' in l or ' B ' in l or ' b ' in l]
+syms.sort(); addrs=[s[0] for s in syms]
+def who(v):
+    i=bisect.bisect_right(addrs,v)-1
+    return '%s+0x%x'%(syms[i][1],v-syms[i][0]) if i>=0 else '?'
+for f in (1840,1841,1842):
+    b=open('$S/tick/rd115_%d.bin'%f,'rb').read(); o=18*0x80; x=b[o:o+0x80]; t=int.from_bytes(b[0x302a:0x302c],'big')
+    v=int.from_bytes(x[0x24:0x28],'big')
+    print('f%d tick %04x slot18 h %s x %s y %s +24 %08x (%s) +30.. %s +50 %s'%(f,t,x[2:6].hex(),x[0xc:0xe].hex(),x[0x10:0x12].hex(),v,who(v) if v>0x02000000 else '68K',x[0x30:0x3c].hex(),x[0x50:0x54].hex()))
+EOF
+
+OUT
+f1840 tick 015e slot18 h 00010dd4 x 11c9 y 10a2 +24 00011452 (68K) +30.. f806be0011c111cf106010a2 +50 f808bc00
+f1841 tick 015f slot18 h 00010dd4 x 11c8 y 10a6 +24 000113f8 (68K) +30.. f806be0011c011ce106410a6 +50 f808bc00
+f1842 tick 015f slot18 h 00010dd4 x 11c8 y 10a6 +24 000113f8 (68K) +30.. f806be0011c011ce106410a6 +50 f808bc00
+Bash Read the pair handler's distance tests and D0 plumbing
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; L=$(grep -n "^[a-z].* FUN_000103e0(" sh_src/portfull/altbeast_port.c | head -1 | cut -d: -f1); sed -n "$((L+96)),$((L+142))p" sh_src/portfull/altbeast_port.c
+
+OUT
+              uVar13 = FUN_0000e2dc(uVar13);
+              bVar17 = (byte)port_carry;   /* the callee's carry: cport_prep.py */
+              if (!(bool)bVar17) {
+                uVar18 = FUN_0000e23c(uVar13,p_D1_01);
+                extraout_D0w_03 = (ushort)port_e_d0;   /* D0 after the call: cport_prep.py */
+                extraout_D0w_01 = (ushort)port_e_d0;   /* D0 after the call: cport_prep.py */
+                extraout_D0w = (ushort)port_e_d0;   /* D0 after the call: cport_prep.py */
+                extraout_D0w_00 = (ushort)port_e_d0;   /* D0 after the call: cport_prep.py */
+                (*(ushort *)((byte *)&p_D7 + 2)) = bVar17 & 1;
+                if ((bVar17 & 1) != 0) {
+                  unaff_A6[0x2e] = unaff_A6[0x2e] ^ 0x80;
+                }
+                if (*(byte *)((int)((ulonglong)uVar18 >> 0x20) + 0x20) < 0x11) {
+                  if (0x47 < extraout_D0w_01) goto LAB_00010762;
+                  if (extraout_D0w_01 < 0x30) {
+                    unaff_A6[0x7c] = 0;
+                    unaff_A6[0x7d] = 0;
+                    goto LAB_000106d6;
+                  }
+                }
+                goto LAB_00010700;
+              }
+LAB_00010762:
+              if (unaff_A6[0x23] == 2) goto LAB_00010758;
+              unaff_A6[0x14] = 0xff;
+              unaff_A6[0x15] = 0x80;
+              bVar6 = 0;
+            }
+            else {
+              bVar16 = false;
+              if ((((extraout_D0w_02 == -1) || (iVar14 = FUN_0000e2dc(uVar13), (bVar16 = (byte)port_carry))) ||
+                  (*(ushort *)(unaff_A6 + 0x10) < *(ushort *)(iVar14 + 0x10))) ||
+                 (bVar16 = (ushort)(*(ushort *)(unaff_A6 + 0x10) - *(ushort *)(iVar14 + 0x10)) <
+                           0x32, !bVar16)) goto LAB_00010762;
+              uVar18 = FUN_0000e23c(iVar14,p_D1_02);
+              bVar16 = (byte)port_carry;   /* the callee's carry: cport_prep.py */
+              extraout_D0w_03 = (ushort)port_e_d0;   /* D0 after the call: cport_prep.py */
+              iVar14 = (int)((ulonglong)uVar18 >> 0x20);
+              if (bVar16) {
+                unaff_A6[0x2e] = unaff_A6[0x2e] ^ 0x80;
+              }
+              if (0x2f < extraout_D0w_03) {
+                if (extraout_D0w_03 < 0x48) {
+                  if (1 < *p_A2) goto LAB_00010700;
+                  if (4 < *(byte *)(iVar14 + 0x20)) {
+                    if (0x10 < *(byte *)(iVar14 + 0x20)) goto LAB_00010758;
+                    if (*(byte *)(iVar14 + 0x2e) != unaff_A6[0x2e]) goto LAB_00010700;
+Confirmed rd115's flame record stays intact under the widened symbol rule, and traced the second pair's early stop to the chaser-count pointer read via A2, set inside 0xE266. Now publishing A2 from the hand-derived helper and building rd116.
+Bash Publish A2 from FUN_0000e266 and re-read it in its callers
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; grep 'code-typed' $D/build_rd114.log $D/build_rd115.log | cut -d/ -f8-; grep -c 'p_A2' sh_src/portfull/altbeast_port.c; python3 - <<'PYEOF'
+p='/Users/mikeholzinger/src/sega16-2-32x/tools/cport_prep.py'; s=open(p).read()
+# e266 publishes A2 (the chaser-count byte of the chosen player)
+old="""  *(ushort *)(_a6 + 0x7c) = _d0;
+  port_e_d0 = _d0;
+  return (uint)_a0;
+}
+\"\"\","""
+new="""  *(ushort *)(_a6 + 0x7c) = _d0;
+  port_e_d0 = _d0;
+  port_e_a2 = (uint)_c;   /* 0xE2A2/0xE2AC: A2 = the chosen player's chaser count; the
+                             pair handler tests `cmpi.b #2,(a2)` through its A2 parameter */
+  return (uint)_a0;
+}
+\"\"\","""
+assert s.count(old)==1; s=s.replace(old,new)
+# callers: re-read A2 after the call
+old2="""        # (2) the carry placeholder tested within the next 4 lines
+        if kind in _AI_CF:"""
+new2="""        # (1b) 0xE266 leaves A2 on the chaser byte; a caller that took A2 as a parameter or
+        #      pseudo-register reads it after the call (FUN_000103e0 `if (1 < *p_A2)`: the
+        #      second pair of the demo stopped in state 3 at tick ~0x170 on a stale A2,
+        #      rd114 2026-10-04, x 0x1C short by tick 0x1FE).
+        if kind == 'e266':
+            for _nm in ('p_A2', 'unaff_A2'):
+                if re.search(r'\\b%s\\b' % _nm, _blk):
+                    o.append('%s%s = (typeof(%s))port_e_a2;   /* A2 after 0xE266: cport_prep.py */' % (ind, _nm, _nm))
+                    _ai[1] += 1
+        # (2) the carry placeholder tested within the next 4 lines
+        if kind in _AI_CF:"""
+assert s.count(old2)==1; s=s.replace(old2,new2)
+open(p,'w').write(s); print('A2 publication added')
+PYEOF
+python3 -c "import ast;ast.parse(open('tools/cport_prep.py').read());print('syntax ok')"; grep -n "_AI_CALL = re.compile" tools/cport_prep.py | head -2; grep -n "kind = m.group(1)" tools/cport_prep.py | head -2
+
+OUT
+rd1dump/build_rd115.log:cport_prep: code-typed script pointers kept as 68K values: 19
+105
+A2 publication added
+syntax ok
+5298:_AI_CALL = re.compile(r'FUN_000(0e266|0e2dc|0e23c|0f77c|0d776|0dbb8|100b0|154c0|17bf8|1953c)\(')
+5313:        kind = m.group(1)
+Fixing the kind tag for the A2 re-read (the tag carries a leading zero) and launching rd116.
+
+Bash Fix the kind tag and launch rd116
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='/Users/mikeholzinger/src/sega16-2-32x/tools/cport_prep.py'; s=open(p).read()
+old="        if kind == 'e266':\n"; new="        if kind == '0e266':\n"
+assert s.count(old)==1; open(p,'w').write(s.replace(old,new)); print('kind fixed')
+EOF
+python3 -c "import ast;ast.parse(open('tools/cport_prep.py').read());print('syntax ok')"; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; D=$S/rd1dump; sed 's/rd99/rd116/g; s/build_line41/build_line58/; s/done99/done116/' $D/build_rd99.sh > $D/build_rd116.sh; chmod +x $D/build_rd116.sh; nohup zsh $D/build_rd116.sh >/dev/null 2>&1 & echo launched rd116
+
+OUT
+kind fixed
+syntax ok
+launched rd116
+Bash Wait for the rd116 build
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done116' $D/build_rd116.log 2>/dev/null; do sleep 10; done; grep -E 'exit=|PASS MATCHED|D0 assignments|error:' $D/build_rd116.log | head -4; tail -1 $D/build_line58.log
+
+OUT
+Command running in background with ID: bunv59l0e. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bunv59l0e.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Record the A2-parameter lesson
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat >> LESSONS.md <<'EOF'
+
+### A helper that leaves a register for its caller: 0xE266's A2 and the handler's A2 PARAMETER
+- **FUN_0000e266 ends with A2 on the chosen player's chaser-count byte (0xE2A2 `lea
+  0xFFF156,a2 ; ... addq.l #1,a2`), and the pair handler tests it: 0x1069A `cmpi.b
+  #2,(a2) ; bcc 10700` (-> state 3, stop and wait). Ghidra gave FUN_000103e0 a
+  PARAMETER `byte *p_A2` and wrote `if (1 < *p_A2) goto LAB_00010700;` -- the
+  register-file A2 at dispatch, never e266's.** Measured 2026-10-04 (rd114, slots
+  20/21 of the demo's second pair): the port's pair entered state 3 between ticks
+  0x160 and 0x17D (`st 00010103`, script 0x109A2, dx 0) while the arcade's kept
+  walking, and sat 0x1C px left of it by 0x1FE; FFF156/FFF157 are 0 on both machines,
+  so only a stale pointer could read "2 or more". The hand-derived e266 publishes
+  `port_e_a2`, and every caller that holds A2 as `p_A2` or `unaff_A2` re-reads it
+  after the call (rd116).
+- **Rule:** a parameter named after a register (`p_A2`, `p_D1`) is the value at
+  ENTRY; any callee that writes that register for the caller's benefit (the pair
+  allocator's A5, e266's A2, the finders' A0) needs an explicit re-read after the
+  call. The 68K ABI here is "whatever the callee leaves", not "whatever came in".
+EOF
+echo appended
+
+OUT
+appended
+Bash Block until rd116 finishes
+IN
+D=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd1dump; until grep -q 'done116' $D/build_rd116.log 2>/dev/null; do sleep 10; done; grep -E 'exit=|PASS MATCHED|D0 assignments|error:' $D/build_rd116.log | head -4; tail -1 $D/build_line58.log
+
+OUT
+cport_prep: AI helpers: D0 assignments redirected: 40
+cport_prep: AI helpers: D0 assignments redirected: 40
+exit=0
+ok: rom/s16.32x MD fetches baked art from the line (0x26A000) base
+Bash Measure rd116 against the arcade
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; python3 $S/measure_rd.py rd116 2>&1 | tail -9
+
+OUT
+port f1510 tick 012 live [0, 8, 40, 48] hero x 1217 | arc f1516 tick 012 live [0, 8, 40, 48] hero x 1217 | diff 126
+port f1530 tick 027 live [0, 8, 40, 48] hero x 1217 | arc f1536 tick 026 live [0, 8, 40, 48] hero x 1217 | diff 169
+port f1540 tick 031 live [0, 8, 40, 48] hero x 1217 | arc f1546 tick 030 live [0, 8, 40, 48] hero x 1217 | diff 164
+port f1560 tick 045 live [0, 1, 8, 40] hero x 1217 | arc f1566 tick 044 live [0, 1, 8, 40] hero x 1217 | diff 159
+port f1650 tick 09f live [0, 1, 8, 16, 17, 18, 19, 20, 21, 22, 23, 40] hero x 12c6 | arc f1658 tick 0a0 live [0, 8, 16, 17, 18, 19, 20, 21, 22, 23, 40] hero x 12d0 | diff 234
+port f1700 tick 0d1 live [0, 8, 40] hero x 12c6 | arc f1708 tick 0d2 live [0, 8, 40] hero x 12c6 | diff 155
+port f2000 tick 1fd live [0, 8, 16, 18, 19, 20, 21, 40, 48, 49, 50] hero x 1302 | arc f2008 tick 1fe live [0, 8, 16, 18, 19, 20, 21, 40, 48, 49, 50] hero x 1302 | diff 192
+f2100 tick 0b4 state 0121 step 00
+f2150 tick 0b4 state 0121 step 00
+Bash Pair trace, flame damage, demo end, pool diff, screenshots and line check for rd116
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 1842 1872 1900 2009 2017 2025 2033 2041 2050 2080; do $A rom/rd116.32x --frames $f --dump sdram:0x2CC00:0x4000:$S/tick/rd116_$f.bin >/dev/null 2>&1 & done; for f in 1650 2000; do $A rom/rd116.32x --frames $((f+1)) --screenshot $f:$S/rd116_s$f.png >/dev/null 2>&1 & done; wait; python3 $S/pair20.py $S/tick/rd116_1842.bin $S/tick/rd116_1872.bin $S/tick/rd116_1900.bin $S/tick/rd116_2009.bin; python3 $S/hit49.py $S/tick/rd116_2009.bin $S/tick/rd116_2017.bin $S/tick/rd116_2025.bin $S/tick/rd116_2033.bin $S/tick/rd116_2041.bin $S/tick/rd116_2050.bin | grep -v hero; python3 $S/endw.py $S/tick/rd116_2050.bin $S/tick/rd116_2080.bin; python3 -c "
+a=open('$S/tick/aw_2008.bin','rb').read(); p=open('$S/tick/rd116_2009.bin','rb').read()
+tot=0

@@ -1,0 +1,1449 @@
+artifact-design skill
+Rig45 closing out; the ares flag series is still running.
+
+Rig45 done (on rg1); rig46 (idle-off) starts. Waiting on the ares series.
+
+Waiting.
+
+The unmodified ROM shows no overruns during the demo, unlike the hook ROM's 2-vint passes. I'll run the same test on the hook ROM to check if the instrumentation itself is affecting the game's timing.
+Waiting on the hook-rom series (12 ares runs) and rig46.
+
+Idle-off on the FPGA: 3-vint share 35-63% (control 73-86%), passes 38-43%. A partial term, like the shim DMAs. The ares anomaly comes first: waiting on the hook-rom series.
+
+Waiting.
+
+Monitor event: "build50 (rigidle = IDLEOFF+NOMAPS + span histogram) and rig46 (2 launches after rig45, ends on rg1)"
+Monitor event: "build50 (rigidle = IDLEOFF+NOMAPS + span histogram) and rig46 (2 launches after rig45, ends on rg1)"
+Monitor "build50 (rigidle = IDLEOFF+NOMAPS + span histogram) and rig46 (2 launches after rig45, ends on rg1)" stream ended
+Monitor event: "build51 (rigpc = interrupted-PC sample) ares series and rig47 (2 launches after rig46, ends on rg1)"
+Monitor "build51 (rigpc = interrupted-PC sample) ares series and rig47 (2 launches after rig46, ends on rg1)" stream ended
+Background command "Build a barcode-only rom and sample flag/PC/ring on ares over 6 frames" failed with exit code 2
+Monitor event: "build48 (relaunched): race-free span hook, modes 5/3/4 ares series"
+Monitor event: "build42 (rigspk/rigsph/rigtask3 + ares checks) and rig42 (2+2+3 launches, ends on rg1)"
+Monitor event: "build43 (rigspk/rigsph + ares checks) and rig43 (2+3 launches after rig42, ends on rg1)"
+Monitor event: "build52 (throttled barcode: rigbc8 ring, rigsp3c/4c ares) and rig48 (rigsp3c x2, rigsp4c x2, ends on rg1)"
+Monitor event: "build52 (throttled barcode: rigbc8 ring, rigsp3c/4c ares) and rig48 (rigsp3c x2, rigsp4c x2, ends on rg1)"
+I found that the hook and instrument ROMs desync from the line ROM's per-frame wait pattern, likely due to the barcode's per-vint 384-word VRAM DMA halting the 68K for ~50 lines. I'll test a barcode-only ROM on ares and check the emit path to throttle it.
+Rig chain complete (rig on rg1). Waiting on the barcode-only ares test.
+
+Checking the barcode-only ares result, then building the throttled-barcode roms.
+
+The barcode alone causes the shift—ares' demo passes straddle only half the vints while the line rom idles at all 64, showing the instrument itself was the perturbation. Now building throttled-barcode roms to record this finding.
+Throttled roms built. Waiting on the ares ring check (rigbc8) and the histogram series.
+
+The light barcode restores the line's behaviour on ares: idle at all 64 vints. Waiting on the histogram series and the rig.
+
+Confirmed across six frames. Waiting on the light-barcode histogram (ares) and rig48.
+
+Waiting.
+
+Waiting on the histogram rows.
+
+Waiting.
+
+Waiting for the f3100/f3500 rows to read the deltas.
+
+Waiting for f3500 and the mode-4 rows.
+
+The light-barcode rom reaches the title by f3500 where the heavy ones were still mid-demo: the attract itself runs faster. Waiting on the mode-4 rows for the one-vint count.
+
+Ares with the light barcode, demo: 242 one-vint, 150 two-vint, 8 three-vint passes, about 71%, matching the game's own scene timer on the line (70%). The FPGA read with the same rom is next (rig48).
+
+Waiting on the rig.
+
+Title step on ares: 468 one-vint passes in 400 vints of step 0 (60 Hz there). Rig48 running.
+
+FPGA with the light barcode, demo: per 440 vints about 42 one-vint, 166 two-vint, 22 three-vint passes (52%). Ares: 188 / 117 / 6 (71%). The instrument cost ~15-20 points on both; the FPGA deficit is real. Waiting for the mode-4 rig rows for the exact one-vint count.
+
+Second launch replicates (2872 to 3312: 16 three-vint, 176 two-vint per 440). Waiting on the mode-4 rows.
+
+Rig48 is on its last launch (rigsp4c L2), then pushes rg1. Waiting for that to report.
+
+Monitor event: "build52 (throttled barcode: rigbc8 ring, rigsp3c/4c ares) and rig48 (rigsp3c x2, rigsp4c x2, ends on rg1)"
+Monitor "build52 (throttled barcode: rigbc8 ring, rigsp3c/4c ares) and rig48 (rigsp3c x2, rigsp4c x2, ends on rg1)" stream ended
+Rig is on rg1 (18:15 UTC-4 push confirmed). Tree committed through 0d5c03f0.
+
+Result: the tail was never in the window. Two instrument faults hid a 68K-time story.
+
+The span hook read the flag twice. A release landing between the reads started passes the hook never saw (~40% of them on ares). Fixed: one read, shared with the game's branch.
+The rig barcode cost the 68K ~48 lines a vint. Its 384-word VRAM DMA runs in active display with the 68K halted. On ares the line's demo passes finish inside their vint (the 68K idles at every vint, miss counter 0); the barcode alone makes half of them straddle. Every rate number read through the barcode since 2026-09-21 was handicapped, on both machines. RIGBCEVERY=8 (barcode every 8th vint) no longer perturbs ares.
+Nothing waits on the FM window. Max release V per pass reads 0 on ares and in 22 of 24 FPGA samples, the shim never spins at vint entry, and the IRQ4 chain lands in the same band on both. The ack/pickup model is dead as a rate lever. STATE and memory say so.
+Span distribution, level-1 demo, light barcode, race-free hook:
+
+one-vint	two-vint	three-vint	rate
+ares (566 vints)	242	150	8	71%
+FPGA (440 vints, 2 launches)	34	~170	16 / 22	50%
+The FPGA's deficit is one-vint passes turning two-vint. The three-vint column is small on both, so "span-2 to zero" was a target set on handicapped data. The scene timer is a pass counter after all (70% on the line).
+
+Lever: 68K lines per pass. Under the heavy barcode, shim DMAs off (MDQUIET=2) and master idle work off (IDLEOFF) each moved the FPGA distribution; both need a light-barcode re-read with the one-vint column.
+
+Next: re-run MDQUIET=2 and IDLEOFF with RIGBCEVERY=8 on the rig (2 launches each, ~50 min) to price the two 68K terms. Say the word and I chain it.
+
+do it
+Chained: 4 builds, then 6 rig launches (MDQUIET=2 ×3, IDLEOFF ×3, light barcode, modes 4 and 3), ending on rg1. About 70 minutes.
+
+Note for the rig: the IDLEOFF launches (the last three) show a frozen or empty picture. That is the probe (the master builds no packets), not a crash. The chain returns the rig to rg1 at the end.
+
+Next: I report the two distributions when rig49 finishes.
+
+Building.
+
+Two of four built.
+
+Three of four.
+
+All four built. Ares checks, then the rig.
+
+Ares MDQUIET=2 with the light barcode: 346 one-vint passes, 4 three-vint by f2700 (shim DMAs off raises ares' demo above 71%). Waiting on the rig.
+
+Waiting.
+
+Ares IDLEOFF likewise (370 one-vint, 6 three-vint). Rig launches next.
+
+Rig49 starting.
+
+MDQUIET=2 on the FPGA with the light barcode: one-vint 24, three-vint 22 per 432 vints, versus the control's 34 / 16. The shim's DMAs are not the FPGA term. IDLEOFF next.
+
+MDQUIET=2 L2 replicates (2888 to 3328: one-vint +28, three-vint +18). Waiting on IDLEOFF.
+
+MDQUIET=2 mode 3: two-vint +184 per 432 vints (control ~170). Full accounting: 24 + 184×2 + 22×3 ≈ 458 ≈ 432. Shim DMAs off changes nothing on the FPGA. IDLEOFF launches next (frozen picture on the rig, by design).
+
+Monitor event: "build54 (rigspin = 68K spin gauge) ares series and rig50 (2 launches after rig49, ends on rg1)"
+IDLEOFF on the FPGA: one-vint 10, three-vint 2 per 440, passes still ~50%. Neither the shim's DMAs nor the master's idle work moves the FPGA's pass rate; ares runs the same rom at 71%. That points at raw 68K speed on the FPGA. Adding a mode that counts the game's wait-loop iterations per idle vint as a 68K speed gauge, to run on both machines.
+
+Recorded. The spin-gauge rom built; its ares series runs now, then the rig after rig49's last IDLEOFF launch.
+
+Monitor event: "build54 (rigspin = 68K spin gauge) ares series and rig50 (2 launches after rig49, ends on rg1)"
+Monitor event: "build54 (rigspin = 68K spin gauge) ares series and rig50 (2 launches after rig49, ends on rg1)"
+Monitor event: "build53 (light-barcode MDQUIET=2 / IDLEOFF, modes 4+3) and rig49 (6 launches, ends on rg1)"
+The spin gauge as designed never triggers (there is no vint without a release while the game waits). Replacing it with a direct 68K benchmark in the shim every 64th vint: time 1024 cart-window reads and a 1024-iteration WRAM loop in scanlines.
+
+IDLEOFF L2 replicates. Rig49 has one launch left, then rig51 runs the 68K gauge (2 launches) and returns to rg1. Waiting.
+
+Those are rig49's earlier rows replayed by the new monitor. Waiting on the gauge.
+
+Waiting on rigbench (build55) and the rig.
+
+Gauge rom built; ares reads next.
+
+Monitor event: "build55 (rigbench = 68K cart/WRAM gauge) ares series, rig49 tail, rig51 (2 launches, ends on rg1)"
+Monitor event: "build56 (rigbench 256-iteration gauge) ares series and rig52 (2 launches after rig49, ends on rg1)"
+Monitor event: "build56 (rigbench 256-iteration gauge) ares series and rig52 (2 launches after rig49, ends on rg1)"
+Both bytes saturate (over 64 lines each). Scaling the loops down to 256 iterations and rebuilding before the rig reaches it.
+
+The saturation is the raw V counter's jump inside vblank, not the loop length. Aligning the benchmark past the jump (spin until V reaches 0xF0) so the delta is linear.
+
+Ares gauge (first read): 256 cart reads = 57 quarter-lines, 256 WRAM iterations = 104. Waiting for the rest and the FPGA's numbers.
+
+Rebuilt with the alignment; ares reads next.
+
+Aligned ares read: cart 74, WRAM 108 quarter-lines. Waiting on the other frames and the FPGA.
+
+Ares is stable at 74 / 108. Waiting on the rig.
+
+IDLEOFF mode 3 confirms: 398 two-vint passes in 880 vints. Rig49 finishes, then the gauge runs.
+
+Duplicate from the older monitor. Waiting on rig52.
+
+Rig49 done (rig on rg1 briefly); rig52 launches the gauge now.
+
+Waiting.
+
+Waiting on the gauge's rig rows.
+
+Ares: 74 / 108 at all three frames. Rig next.
+
+Recorded. Rig52's second launch runs, then the rig returns to rg1; I report after that.
+
+Monitor event: "build56 (rigbench 256-iteration gauge) ares series and rig52 (2 launches after rig49, ends on rg1)"
+Monitor "build56 (rigbench 256-iteration gauge) ares series and rig52 (2 launches after rig49, ends on rg1)" stream ended
+Done. Rig is on rg1 (pushed 19:20 UTC-4). Tree committed through 101c1067. The untracked logs/builder-thursday.txt is not mine.
+
+Result: the FPGA term is the 68K itself, about 5% slower than ares. Neither of the two A/Bs moves the FPGA.
+
+Light barcode, race-free hook, level-1 demo, passes per ~440 vints on the FPGA:
+
+rom	one-vint	two-vint	three-vint	passes
+control	34	~170	16	~220 (50%)
+MDQUIET=2 (shim DMAs off)	24-28	184	18-22	~230
+IDLEOFF+NOMAPS (no packets)	10	~212	2	~224
+On ares the same roms go the other way: control 71%, MDQUIET=2 and IDLEOFF both push toward 60 Hz (346 and 370 one-vint passes by f2700).
+
+The gauge. Every 64th vint the shim times 256 cart-window reads and a 256-iteration WRAM loop in quarter-lines:
+
+cart	WRAM
+ares	74	108
+FPGA (22 samples)	77-80	112-115
+About 5% slower on both, a platform constant. On a ~250-line pass that is ~12 lines, and ares' demo passes sit within that of the vint (188 one-vint : 150 two-vint), so the FPGA loses the marginal ones (34 : ~170).
+
+What that means for the axis. The window, the shim's DMAs, and the master's cart work are all cleared as the FPGA term. The lever we own is 68K lines per pass: the IRQ4 chain (shim vblank + game IRQ4 + partb) and the per-write gate/tile thunks. Each line saved converts the passes that end within it of the vint. The barcode's own 48 lines were the first such cost; it is now every 8th vint.
+
+Written: LESSONS (five entries today), STATE speed axis, memory.
+
+Next: price the IRQ4 chain and the per-write thunk overhead in 68K lines on ares (dump-based, no rig), so the first cut is the biggest one.
+
+Background command "Trace 8 frames of the arcade's attract at frame 3000 with MAME (headless, windowed thumbnail, bench backstop)" completed (exit code 0)
+Guidance line for the builder
+Price the IRQ4 chain and the per-write thunks in 68K lines on ares, dump-based, and rank by lines × executions — not by site count. Cut nothing until the ranking exists.
+
+Three things that should shape it:
+
+1. Your own instrument is the first hazard. You found the barcode costing 48 lines — four times the entire 12-line deficit you're hunting. At this gradient every probe must have its own cost priced before its result is read. A pricing probe that costs 20 lines will mis-rank everything it measures.
+
+2. Rank dynamically, not statically. patch_report.txt says 192 hardware refs patched. That's sites, not executions. A thunk on a site that runs once a frame is free; one on a site inside the sprite loop is the whole budget. The ranking you want is lines-per-execution × executions-per-frame, and the second factor is the one nobody has. (That's what my trace is for — it should tell you whether the cost is concentrated in a few hot sites or smeared across all 192.)
+
+3. The gradient is steep here, which is new. ares 188 one-vint : FPGA 34 — 154 passes flip on ~12 lines. Unlike every card this month, partial wins are wins: 6 lines should convert roughly half of them. So report conversions, not percentages — "N passes moved from two-vint to one-vint" is the number, and it should move smoothly rather than in a step.
+
+What not to do: don't take a scheduling or gating card yet. Mike raised fixed-phase acking and it's sound reasoning, but the straddle is a symptom of the 12-line overrun, not a separate term. Fix the overrun and it resolves itself. Hold that idea in reserve for if the 68K-line hunt stalls.
+I'm pulling the thunked-site list from the patch report, building a per-PC execution histogram from the arcade trace, and adding two zero-cost chain stamps (after the shim and after part B) for the ares split.
+Pricing continues: locating the patched 68K program image so I can identify every thunked site from the binary (a jsr at a hot PC) and join it with the arcade trace's execution counts.
+
+I still need the ongoing chain split/consume series, the hot thunked sites identified from trace disassembly (fm-gate at 0x3A9A and TAS at 0x39A8), and confirmation on whether arcade frame 3000 is the level-1 demo. I'll request the latter two now.
+All three pricing runs are in flight (chain split, consume stamps, the four arcade traces). Nothing further to request until they land.
+
+Background command "Dump the line's existing shim stamps over 12 consecutive ares frames to price the consumes inside the IRQ4 chain" completed (exit code 0)
+Background command "Add the chain stamps, build the pricing rom, dump the chain split over 12 ares frames" completed (exit code 0)
+Background command "Dump the shim's live stage stamps on the pricing rom and convert to lines after the vint" completed (exit code 0)
+Background command "Build the tail-census pricing rom and dump its stamps over 4 ares frames" completed (exit code 0)
+Current ranking: IRQ4 chain leads at ~81 lines/frame, thunks contribute ~10-12 (mostly from the 0x3A9A text copy loop), with smaller costs from TAS (~2) and a gate at 0x4D88 (~1.5). I'll now check the two hot thunk bodies while the ares series finishes.
+I've profiled the IRQ4 handling costs (game handler ~1220 instructions/64 lines, shim ~17 lines, thunks ~12-14 lines/pass with 10 at one text-copy site). I'm still waiting on the chain-split dumps to finalize the shim/game/part B numbers.
+Found that on ares the shim's vblank finishes around +66 to +88 lines after the vint (roughly three quarters of the full chain at +104), with its consumes wrapping up by +13—leaving about 65 lines unaccounted for after that. Now locating that gap using the existing tail-census stamps.
+Mapping the shim's vblank: it holds more stamps on the line (consume end, post, pre/post push, hold exit). Dumping those on the pricing rom, and reading the packet blast's size.
+
+I've mapped out the shim's timeline on ares, noting a gap of 60-70 lines between the post and hold exit stages. Now I'll dig into that code path.
+I'm nearly done ranking—r60_push (the palette push) costs +18 to +85 on ares each vint across ~65 lines split between its compare loop and tail. I'll read the two remaining unlabeled stretches, then write up the final ranking.
+Fixing a duplicated line from the last STATE edit, then reporting the ranking.
+
+Ranking done, nothing cut. Tree committed through 1a48eefc; rig on rg1.
+
+Instrument costs priced first. The line's own V stamps and the arcade trace add zero to our 68K. The two chain stamps and the tail census add ~0.3 line total. The barcode (48 lines) stayed out.
+
+The IRQ4 chain on ares, level-1 demo, lines after the vint (16 consecutive frames, steady state):
+
+stage	ends at	lines
+shim entry, consumes A/B, sprite pal, pump	+17	15
+post	+18	1
+r60_push: palette rotor + compares	+59	41
+r60_push: rowscroll + selection	+67	8
+r60_push: stage ship (regs, rowscroll+pal, records)	+85	18
+shim end	+86	1
+game IRQ4 + part B	+112	25 (the game's own ~20)
+About 85 of the chain's ~110 lines a vint are ours. A two-vint pass pays the chain twice.
+
+Per-write thunks, dynamic (jsr sites in the patched image × executions from the arcade trace, demo frames 1500 and 3000):
+
+site	what	exec/frame	lines/frame
+0x3A9A	FM gate + TXTWRAM mark on a 16-byte text copy loop, gated per byte (~230 cycles a call vs 12)	21-26	~10
+0x39A8	object-dispatcher normalisation thunk	15-19	~2
+0x4D88	FM gate	4-5	~1.5
+8 others	mixed	~8	~2
+109 jsr-to-thunk sites exist; 10 execute in the demo. Three quarters of the thunk cost is one site.
+
+Ranking by lines × executions per pass (chain items ×1-2 vints):
+
+r60_push palette rotor + compares: 41-82
+r60_push stage ship: 18-36
+consumes + sprite pal + pump: 15-30
+0x3A9A text-copy gate: 10
+r60_push rowscroll/selection: 8-16
+part B: ~5-10
+other thunks: ~5
+The deficit is ~12 lines. Item 1 alone is 3 to 7 times it; item 4 alone covers it, at one site, with no palette semantics involved.
+
+Written: LESSONS (the ranking, with the instrument prices), STATE.
+
+Next, on your word: cut item 4 first (gate the 16-byte copy once per burst, not per byte), measured as passes converted two-vint to one-vint per ~440 demo vints on the FPGA with the light barcode, against 34 today.
+
+Go on item 4. Right item, right reason: one site, no palette semantics, 10 lines against a 12-line deficit, and 20 on a two-vint pass since the chain is paid twice.
+
+O-12 is answered by your own ranking — closing it YES. The +C/+E drop sits inside stage ship (item 2, 18-36 lines). It's the no-semantics portion of that item. Take it when you open item 2, not before, and not as a separate card.
+
+Your instrument-cost discipline is what made this ranking trustworthy — pricing the stamps at ~0.3 lines and keeping the 48-line barcode out, before reading any result. At this gradient that's the difference between a ranking and a fiction.
+
+One number to report: passes converted two-vint → one-vint per ~440 demo vints, against 34 today. Not a percentage. If item 4 is worth 10-20 lines at 154-passes-per-12-lines density, the expected move is large and visible — and if it isn't, that discrepancy is itself the next finding.
+I still need four things: whether the 0xFFA1A6 text-group mark is consumed on the line, the full patcher's FMGATE_ENTRIES loop to insert a burst variant, the thunk region's current end for slack, and the shape of the 0x3AA4 twin loop. I'll pull these independently.
+I've finalized the burst thunk design for 0x3A9A (41 words within the 52-byte slack), and now I'm reading the mark emission code to hook it in.
+Implementing the burst gate now: patcher variant, Makefile knob, builds (line variant for a pixel check, two histogram roms), ares checks, and the rig chain.
+
+Waiting on build57 (pixel check of the burst rom against the light-barcode line at six frames, then the ares histograms) and rig53.
+
+Found two issues: the histogram ROMs overran the thunk region by 20 bytes due to the idle-loop hook, and my "0 burst" check wrongly counted an unwritten report section. I'll fix this by sharing the burst's mark subroutine with the twin loop at 0x3AA4 to save 30 bytes, then verify the burst bytes directly in the built image and rebuild.
+Burst confirmed in the first rom (signature present). Rebuilding with the shared mark; waiting on the pixel check, the ares histograms, and the rig.
+
+Building the histogram variants next.
+
+The region fits now. One more build, then the ares checks.
+
+All three built. Pixel check running.
+
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+The same-frame pixel diff is not a same-state diff: the burst rom runs the game faster, so frame 800 is a different game moment. Looking at both screenshots directly.
+
+Both screenshots show the same title screen at different animation phases, so I'll align them using the game's scene timer and compare the text page bytes at the same moment for an exact check.
+Text pages match at the same game moment except 2 bytes in one bank (the other bank identical). Checking which bytes those are.
+
+Confirmed: the two bytes represent one glyph pair mid-update, with the older value in one line bank and the newer in the other, while the burst ROM holds the newer value in both. I'm logging this check while the ares histograms and rig53 continue running.
+Waiting on the last pixel frames, the ares histograms, and rig53.
+
+Same-frame diffs, expected. Waiting.
+
+Histograms next.
+
+Ares mode 3 at f2700: 164 two-vint, 8 three-vint (line: 150 / 4 at a slightly different step phase). The one-vint count comes with mode 4.
+
+Waiting on the mode-4 ares rows and the rig.
+
+Ares one-vint share is unchanged by the burst (62% vs 61% of passes); its two-vint passes sit further past the line. The FPGA read is what counts; rig53 starts now.
+
+Waiting on the rig.
+
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Zero conversions: on the FPGA the burst rom reads one-vint +34, three-vint +16 per 440 demo vints, identical to the control, and ares' share is unchanged too. That is the discrepancy to chase, and the likely cause is scene: the arcade frames I traced (1500, 3000) may be the title, where the 16-byte text copy blinks, not the level-1 demo. Mapping the arcade's attract steps.
+
+I've clarified the frame ranges: the demo (step 5) covers frames 1500-2100, while my earlier traces ("attract3000" and "att1500") were different scenes. Now tracing frames 1700 and 1900 in the demo's middle and re-ranking the thunks there.
+Confirmed the ~9-line cut moved zero passes on both machines, and pass-end samples show the work is bimodal rather than borderline. I'm now building two instruments—mean pass length (control vs burst) and where 2-vint passes end—to nail this down.
+The mode edit did not apply (anchor changed after adding mode 8), and build58 launched on the unedited code. Killing it, fixing, relaunching.
+
+Code applied and committed; build58 relaunched (four roms, ares reads at two demo frames). Rig53's mode-3 launches are still running. Waiting.
+
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Relaunched. Waiting on build58 (mean pass length and end-half, control vs burst, ares) and rig53's last launches.
+
+Building.
+
+Two of four.
+
+Three of four.
+
+All four built; ares reads next.
+
+Control, ares demo: mean pass 246 lines over 236 passes. Burst rom next.
+
+FPGA burst mode 3: two-vint +174, three-vint +18 per 432 vints, the control's numbers. Waiting on the burst rom's mean pass length on ares.
+
+Control at f2700: mean 232 lines over 432 passes. Burst rom next.
+
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build58: RIGSPAN=10/11 control vs burst on ares"
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+Monitor event: "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)"
+Monitor "build57 (burst gate roms: pixel check vs the light-barcode line, ares histograms) and rig53 (rigbg4 x2, rigbg3 x2, ends on rg1)" stream ended
+Monitor event: "build54 (rigspin = 68K spin gauge) ares series and rig50 (2 launches after rig49, ends on rg1)"
+Monitor event: "build55 (rigbench = 68K cart/WRAM gauge) ares series, rig49 tail, rig51 (2 launches, ends on rg1)"
+The burst rom's mean pass length on ares is identical to the control (246 lines, 236 passes): the cut saved nothing measurable, so the site must run far less than the arcade trace says in our demo. Counting its calls directly in our rom.
+
+The copy loop runs 33,761 times at the title but zero times during our level-1 demo, meaning the arcade trace's counts don't apply here — item 4's estimate came from the wrong machine state. I'll recount the gate sites directly on our own ROM instead.
+Found my mistake: COUNTBURST was inside the entry ring and getting clobbered every 64 vints, but COUNTSITES confirms 0x3A9A runs ~7.7 times per pass (not 22/frame), so the burst saves ~3 lines, not 10—and pass-end timing shows a small cut wouldn't help since 2-vint passes end spread across the second vint rather than clustered. Now checking the FPGA's mean pass length against ares' 232-246 reference.
+Recorded. Rig54 (mean pass length and pass-end halves on the FPGA) is running; that number decides the next cut.
+
+Monitor event: "build59 (chain split + FB gauge roms, ares) and rig55 (rigc13 x1, rigc12 x2 after rig54, ends on rg1)"
+Monitor event: "build59 (chain split + FB gauge roms, ares) and rig55 (rigc13 x1, rigc12 x2 after rig54, ends on rg1)"
+The direct read: the FPGA's mean demo pass is 362-400 lines against ares' 232-246, about 130-150 lines longer, not 12. The 5% gauge covered cart reads and WRAM loops only; what it did not cover is 68K access to the 32X framebuffer, which the chain and the pass are full of. Two more gauges: the chain split through the barcode, and an FB read/write timing on the rig.
+
+Both gauge roms built; ares reads next, then rig55 after rig54. Waiting.
+
+Ares chain split on the barcode: entry to shim end 68 lines, to part B end 89. The FPGA's version of those two numbers is the comparison.
+
+Ares f2700: 62 / 69. Waiting on the FB gauge and the rig.
+
+Ares FB gauge: 256 FB word writes 64 quarter-lines, 256 reads 77 (cart reads were 74, WRAM loop 108). Now the FPGA's.
+
+Waiting on rig54's remaining launches, then rig55.
+
+Mean pass length replicates on the FPGA (418 then 358 lines in the demo). Waiting on the pass-end halves and then rig55.
+
+FPGA pass-end halves: 2-vint passes end in the second half of their second vint 140 times against 30 in the first half (ares: even). The FPGA adds a large near-fixed term per pass, not a percentage. Rig55 (chain split, FB access gauge) reads it next.
+
+Replicated. Rig55 next.
+
+Rig54 done; rig55 launches the FB gauge, then the chain split.
+
+Waiting on rig55.
+
+FPGA framebuffer access: writes 65-68, reads 80 quarter-lines against ares' 61-64 / 77, the same ~5%. Single 68K accesses are not the term. The chain split on the FPGA is next (rigc12, two launches).
+
+Monitor event: "build60 (in-window cart/WRAM gauge, ares) and rig56 (one launch after rig55, ends on rg1)"
+FPGA chain split: entry to shim end 63-65 lines, to part B end 69-72, the same as ares (62-68 / 69-89). The chain is not longer on the FPGA. So the extra ~130 lines sit in the game's own pass, while cart, WRAM and FB accesses all gauge +5% at vblank start. The one thing never removed in any A/B is the SH-2 window blit running alongside the pass. Gauging cart reads inside the window instead of at vblank.
+
+Recorded. The in-window gauge rom is built; ares reads next, then the rig after rig55's second chain-split launch.
+
+Ares inside the window: cart 74, WRAM 108, identical to its vblank numbers (ares charges no contention). The FPGA's in-window read is the one that matters.
+
+Waiting on rig55's last launch, then rig56.
+
+Chain split L2: 70-72 / 95-96 in the demo, still ares-like. Rig56 (in-window gauge) next.
+
+Rig56 launching.
+
+Waiting on rig56.
+
+Monitor event: "build60 (in-window cart/WRAM gauge, ares) and rig56 (one launch after rig55, ends on rg1)"
+Monitor "build60 (in-window cart/WRAM gauge, ares) and rig56 (one launch after rig55, ends on rg1)" stream ended
+Monitor event: "build61 (interrupted-PC roms, ares) and rig57 (rigpc6 x1, rigpc7 x2 after rig56, ends on rg1)"
+Monitor event: "build61 (interrupted-PC roms, ares) and rig57 (rigpc6 x1, rigpc7 x2 after rig56, ends on rg1)"
+FPGA inside the window: cart 78-80, WRAM 112-115, the same +5% as at vblank. The blit does not slow the 68K either. The chain, single accesses, and the window are all cleared; the extra 130 lines are inside the game's own pass. Sampling where the 68K actually is at the vint on the FPGA (interrupted PC, raw) to find it.
+
+Both PC roms built; ares check then the rig (3 launches, ends on rg1). Waiting.
+
+Waiting for the other ares frames (one no-barcode read is a sprite crossing the band; the rig takes 20 samples each).
+
+The title with sprites across the band, hence no decode at those frames; the rig's 20 samples per launch will cover it. Waiting on rig57.
+
+Ares sample: PC 0xBFD0, the idle-loop hook thunk (waiting). The FPGA samples decide.
+
+Waiting on the rig.
+
+Ares split at the vint (64 vints): 44 in our thunks (the wait hook), 2 in the idle loop proper, 18 in game code. Waiting on the FPGA's.
+
+Rig57 starts now.
+
+FPGA at the vint (demo): game code 40-44 of 64, our wait hook 18-24. Ares: game 18, hook 44. The raw PC samples come next.
+
+FPGA samples in the demo land in game code at 0xD5D8, 0xD5F8, 0xD8C8: the 0xD8C6-0xD8D0 stretch was the arcade trace's hottest loop (80 iterations a frame). Reading that code.
+
+Checking whether the game image's trailing bytes are free padding for a cart-resident routine, while also inspecting the two hot sites in the ROM for any thunk code.
+Instruction-fetch gauge queued (build62 then rig58 after rig57). Nothing else to request until they land.
+
+Built; ares reads next.
+
+Ares: the loop from the cart 115 quarter-lines, from WRAM 112 (ares charges no fetch penalty). The FPGA's pair is the number.
+
+Waiting on rig57 to finish, then rig58.
+
+The FPGA's samples scatter across game code (object loop at 0x39BA, 0x0B54, 0xD5xx-0xD8xx): no single spin site. A uniformly slower pass that the tight gauges miss points at instruction fetch itself; rig58 reads that next.
+
+Waiting on rig57's finish and rig58.
+
+Rig58 launching the fetch gauge.
+
+Waiting on rig58.
+
+Monitor event: "build62 (instruction-fetch gauge, ares) and rig58 (one launch after rig57, ends on rg1)"
+Monitor "build62 (instruction-fetch gauge, ares) and rig58 (one launch after rig57, ends on rg1)" stream ended
+FPGA: the same loop fetched from the cart takes 132-148 quarter-lines against 112 from WRAM (ares: 115 / 112). Instruction fetch from the cart is 18-32% slower on the FPGA core and varies, while data reads and WRAM code are +5%. The game runs entirely from the cart. That is the term. Writing it up.
+
+Item 4 done, and it converted nothing. The discrepancy led somewhere real. Rig on rg1, tree committed through f4e616a7.
+
+Item 4 (BURSTGATE): 0 passes converted. FPGA per 440 demo vints: one-vint 34 before, 34 after; two-vint ~170 both; three-vint 16 both. Exact on ares (text page identical at the same scene-timer value). Kept as a knob, off the line.
+
+Why it could not convert, in order of discovery:
+
+The site runs ~7.7 times a pass in our demo, not the arcade's 22 a frame. Per-site call counters on our own rom (COUNTSITES) gave the real numbers; the arcade trace's text traffic does not transfer. The cut was ~3 lines, not 10.
+Two-vint passes do not pile up at the line. On ares they end spread evenly across their second vint (30 : 34 per 296 vints); on the FPGA 30 : 140, ending late. The "154 passes per 12 lines" density was a fiction.
+The direct read: the FPGA's mean demo pass is 358-418 lines against ares' 232-246. About 130-150 lines longer, not 12.
+Then I gauged everything the 130 lines could be, on both machines:
+
+gauge	ares	FPGA
+IRQ4 chain, entry to shim end / part B end	62-68 / 69-89	63-72 / 69-96
+256 FB word writes / reads (quarter-lines)	61-64 / 77	65-68 / 80
+cart data reads / WRAM loop, at vblank	74 / 108	77-80 / 112-115
+same, inside the master's blit	74 / 108	78-80 / 112-115
+the same loop fetched from the cart / from WRAM	115 / 112	132-148 / 112
+Chain equal, single accesses +5%, the blit alongside irrelevant. Instruction fetch from the cart is 18-32% slower on the FPGA core and varies. The game runs entirely from the cart, its code is branchy with cart-resident tables, and the measured pass is +55-65%. The interrupted-PC samples put the FPGA's 68K in game code at 40-44 of 64 vints (ares 18), scattered over the object loop and the scans, no spin site.
+
+What this closes: the window, the shim's DMAs, the master's idle work, the chain, the blit, single-access speed, and the text-copy gate.
+
+What it opens, for your call:
+
+hot game routines resident in WRAM (the dispatcher and the scans the samples hit), which needs WRAM we mostly spend on the shim;
+fewer cart instructions per pass, which is the game's own code;
+the core's ROM path in srcref/S32X_MiSTer, where the +18-32% lives (a real cartridge is zero-wait mask ROM).
+Written: LESSONS (six entries tonight, each with its instrument priced), STATE, memory.
+
+Monitor event: "build63 (fetch gauge + IDLEOFF) and rig59 (one launch, frozen picture by design, ends on rg1)"
+hold the palette card, take option 3 first because it's free and it decides whether the last week measured hardware or an emulator
+Taking option 3: reading the S32X_MiSTer core's 68K-to-ROM path to see where the +18-32% instruction-fetch penalty comes from and whether a real cartridge would have it.
+
+Found that the cart ROM shares a single SDRAM controller with the 32X's own SDRAM as separate channels, unlike real hardware's two distinct chips. Next I'll dig into four independent areas: the SH-2 SDRAM's actual memory type on this build, how the cart stretches the 68K's DTACK, the 32X interface's ROM wait states, and the controller's channel priority.
+I'll pull up the 32X interface's ROM wait-state state machine and the fetch gauge with SH-2 cart traffic removed (IDLEOFF) to isolate fixed latency from arbitration—noting the SH-2 SDRAM runs on DDR3 here (use_sdr unset), so it doesn't contend with the ROM's SDRAM channel.
+RTL facts in hand: the core clocks the system at 53.69 MHz (7 per 68K clock) and the SDRAM at 107.4 MHz; an MD ROM read waits for a full SDRAM access plus two clock-domain syncs before DTACK, about one 68K clock per access, which alone predicts +20-25% on fetch-bound code. A mask-ROM cartridge answers inside the 68K's own cycle. Waiting on the IDLEOFF gauge to separate that fixed latency from SH-2 arbitration.
+
+Ares with IDLEOFF: 114 / 112, unchanged. The FPGA's IDLEOFF gauge is the split.
+
+Monitor event: "build63 (fetch gauge + IDLEOFF) and rig59 (one launch, frozen picture by design, ends on rg1)"
+Monitor "build63 (fetch gauge + IDLEOFF) and rig59 (one launch, frozen picture by design, ends on rg1)" stream ended
+A mask-ROM cartridge answers inside the 68K's own cycle. The core cannot.
+
+And they caught something I missed: use_sdr is unset, so the SH-2's SDRAM runs on DDR3 — it doesn't share the cart's SDRAM channel. That weakens the arbitration half of my read considerably. The SH_ROM_WAIT-first priority in IF.sv:822 still applies to SH-2 cart reads, which is what the IDLEOFF gauge is splitting now.
+
+What it means if the gauge confirms it
+The FPGA is not hardware truth for fetch-bound 68K code. The game's pass measures 358-418 lines there and 232-246 on ares — and the RTL says most of that gap is the core's DTACK path, not the 68K.
+
+On a real cartridge the pass would land near the ares figure. Which would mean the 50% ceiling we've spent a week against is substantially a MiSTer artefact.
+
+The decision that's yours, and it's a direction call
+Which machine is the deliverable for?
+
+
+real 32X + cartridge    the FPGA number is pessimistic, ares is
+                        closer to truth on this axis, and the speed
+                        story is better than it looks
+MiSTer                  the +20-25% is real for your users and has
+                        to be engineered around
+both                    ship for hardware, accept MiSTer runs slower,
+                        and say so
+STATE.md has MiSTer as the truth tier and your acceptance gate. If it's also the deployment target, the artefact isn't an artefact — it's the product. That's not something I should decide.
+
+The one thing that's safe either way
+Their option 1 — hot game routines resident in WRAM — works regardless of the answer. WRAM fetch measured 112 on both machines, identical. So moving the dispatcher and the scans out of cart removes the penalty by construction on MiSTer and is neutral on real hardware.
+
+That makes it the right next card whichever way the direction call goes — and the only cost is WRAM, which the shim mostly owns.
+
+I'd wait for the IDLEOFF split before deciding anything. If it comes back showing arbitration is a large share, SH-2 cart traffic becomes a lever too. If it's all fixed latency, the artefact case is clean and the question above is the whole question.
+The IDLEOFF split landed, so the direction question is now fully posed. Rig on rg1; tree committed through 3c187de4.
+
+The split. With the master's art fetches off, the loop from the cart reads 130-133 quarter-lines (one 141) against 112 from WRAM; with them on, 132-148. So the penalty is +18% fixed and 0-15% arbitration on top. Ares reads 114-115 / 112 either way.
+
+The fixed part is the core's. In rtl/32X/IF.sv an MD ROM read with USE_ROM_WAIT set goes idle, wait for the SDRAM channel to go busy, wait for it to finish, then DTACK: a 107 MHz SDRAM access plus two clock-domain syncs at 53.69 MHz, about one 68K clock on every cart read. S32X.sv sets USE_ROM_WAIT(1). A mask-ROM cartridge answers inside the 68K's own cycle. The arbitration part (SH-2 ROM request granted first at IF.sv:822) is real-hardware behaviour and is small for us.
+
+So the week's gap was mostly the emulator. The FPGA's demo pass of 358-418 lines against ares' 232-246 is largely this DTACH path on fetch-bound code; on a cartridge the pass lands near the ares figure, and the 50% ceiling is substantially a MiSTer artefact. Ares is closer to hardware truth on this axis, optimistic only by the small arbitration share.
+
+Your direction call, stated as the other thread put it: real cartridge, MiSTer, or both. STATE has MiSTer as the truth tier and the acceptance gate; if it is also the deployment target the artefact is the product. I have not changed the tiering; LESSONS, STATE and memory record the finding and hold the palette card.
+
+What is safe either way: hot game routines resident in WRAM. WRAM fetch is 112 on both machines, so moving the dispatcher and the scans the PC samples hit out of the cart removes the penalty by construction on MiSTer and is neutral on hardware. Cost is WRAM the shim mostly owns. That is the next card whichever way you decide, and a core rebuild with USE_ROM_WAIT(0) is the other option if MiSTer is the target.
+
+Next on your word: either the WRAM-resident-routines card, or the core rebuild.
+
+Monitor event: "build65 (WRAMCODE roms, ares exactness vs the line, histograms) and rig61 (wram4 x2, wram11 x2, wram3 x1, ends on rg1)"
+WRAM-resident routines. Not the core rebuild — it fragments distribution, can't be verified safe, and wouldn't survive a core update.
+
+Two things to carry with it:
+
+Update the tiering in STATE.md yourself, explicitly. The finding is that ares is closer to hardware truth for fetch-bound 68K code, optimistic only by the small arbitration share, while MiSTer remains truth for everything else and stays the acceptance gate. That's a real change to how numbers get read and it belongs in the file, not just in LESSONS.
+
+And take the dual-chain counter while you're in the 68K: on a two-vint pass the chain runs twice — how many pushes does the master actually harvest per presented frame? If it's one and we send two, that's ~33 lines a vint on the lever that survived.
+Three items: the STATE tiering, the dual-chain counter, then the WRAM-resident card. Starting with the tiering and the counter build together.
+
+I need the STATE tiering text, the free-WRAM map from md.ld and the shim's region comments, and disassembly of the hot routines with their PC-relative references — requesting all three while the dual-chain counter continues building in the background.
+Since the routines rely on PC-relative table loads and cross-routine branches, a direct copy won't work — I'll need to re-layout the code, converting PC-relative operands to absolute and re-encoding branches, plus turn the ROM entry into a jump so pointer-called handlers stay untouched. First, I'll build out the analysis: full disassembly, exact routine boundaries, fixup counts, and available WRAM budget.
+Fixing the ranking script's crash (empty mnemonic, and 'btst' matched as a branch) and, in parallel, writing the relocation tool since its shape does not depend on the final block list.
+
+I've sized the block at ~3.3 KB, covering about 82% of the pass's instructions, which fits within the 3.5 KB free at 0xFF5000. Now running the relocation tool standalone on the current image to check for rejects and growth before integrating it into the patcher.
+The dry run succeeds: 3054 bytes at 0xFF5000 across 13 of 14 blocks, all verified by re-disassembly. I'll fix the entries logic to only include addresses reachable from outside the block, then wire everything into the patcher, shim init copy, and Makefile.
+I'm wiring the relocation into the build (patcher hook, block table, shim init copy, Makefile knob), then validating it against the light-barcode line and rig histograms, while reading the dual-chain counter results in parallel.
+Counted chains entering mid-pass: 212/440 on FPGA (48%) and 98/304 on ares (32%), all pushing through to compose a static-frame window. Logging this and setting up the monitor for the WRAM ROMs next.
+Missing import sys in the patcher hook. Fixing and relaunching the build chain.
+
+Rebuild running; the exactness gate (full 16 KB game WRAM plus both text pages at the same scene-timer value against the light-barcode line) runs right after it, then the rig. Nothing to request until those land.
+
+That was the old monitor seeing the first rig61 run's exit. The relaunched chain is what counts; waiting on it.
+
+Waiting on the rebuilt chain.
+
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+The 68K side grew by 3 KB and pushed the SH-2 image's RAM-code copy into the fixed tile blob address. The linker's own hint names the fix (make tilesmd-addr); checking what it does.
+
+Moving the tile blob up by 8 KB in both files that carry its address (the check script enforces they agree), then relaunching.
+
+Chain relaunched. Nothing else to request until the build and exactness results land.
+
+Waiting.
+
+First WRAMCODE rom links. Three more, then the exactness gate.
+
+Two built.
+
+Three.
+
+Duplicate from the older monitor. Waiting on the exactness gate.
+
+Waiting.
+
+All four built. Boot check and the exactness gate next.
+
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 (WRAMCODE roms, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), third launch"
+Monitor event: "build65 (WRAMCODE roms, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), third launch"
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), third launch"
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 relaunched (WRAMCODE roms, exactness, histograms) and rig61 (5 launches, ends on rg1)"
+Monitor event: "build65 (WRAMCODE roms, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), third launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Read wramc8_800.png
+Boot is failing — the shim reaches main but never picks up the master's SDRAM signal, likely due to either the tile-blob move or the WRAM copy. I'll test the fresh build with the blob moved (no WRAMCODE) and grep for any hard-coded blob address on the SH-2 side.
+Bash Check whether the moved blob breaks the plain line build, and grep for hard-coded blob addresses
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; pkill -f build65.sh; pkill -f rig61.sh; grep -rn '2268000\|0x2268\|268000\|26A000' sh_src/*.c sh_src/*.h sh_src/*.s Makefile tools/*.py 2>/dev/null | grep -v 'mars.ld' | head; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; $A --frames 400 --screenshot 399:$S/line65_400.png rom/s16.32x >/dev/null 2>&1; python3 -c "
+from PIL import Image; im=Image.open('$S/line65_400.png').convert('RGB'); px=im.getdata(); from collections import Counter; c=Counter(px); print('line65 f400 top colours', c.most_common(3))"
+
+OUT
+tools/game_altbeast.py:135:        (0x2268,  bytes([0x4A, 0xF8, 0xC0, 0x20]), 0xB380),  # tas $c020.w
+tools/patch_game.py:850:# re-fires its one-shot forever. Proven live at 0x2268 (attract eye
+<string>:2: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.
+  from PIL import Image; im=Image.open('/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/line65_400.png').convert('RGB'); px=im.getdata(); from collections import Counter; c=Counter(px); print('line65 f400 top colours', c.most_common(3))
+line65 f400 top colours [((0, 0, 0), 199709), ((255, 0, 0), 73604), ((0, 0, 87), 38076)]
+Need to know if frame 400 is simply before the boot completes: comparing the known-good rom at the same frame, plus the master's boot signal register.
+
+Bash Compare the known-good rom and the new line at frame 400, and the new line at 800 and 1200, with the vint counter
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for r in rigbc8 s16; do f=400; p=rom/night/$r.32x; [ $r = s16 ] && p=rom/s16.32x; $A --frames $f --screenshot $((f-1)):$S/cmp_${r}_$f.png --dump wram:0xFFB0F0:2:$S/cmpvc_$r.bin $p >/dev/null 2>&1; python3 -c "
+from PIL import Image; import struct; from collections import Counter
+im=Image.open('$S/cmp_${r}_$f.png').convert('RGB'); c=Counter(im.getdata()); vc=struct.unpack('>H',open('$S/cmpvc_$r.bin','rb').read())[0]
+print('$r f$f vc', vc, 'top colours', c.most_common(3))" 2>/dev/null; done; for f in 800 1200; do $A --frames $f --screenshot $((f-1)):$S/cmp_s16_$f.png --dump wram:0xFFB0F0:2:$S/cmpvc_s16_$f.bin rom/s16.32x >/dev/null 2>&1; python3 -c "
+from PIL import Image; import struct; from collections import Counter
+im=Image.open('$S/cmp_s16_$f.png').convert('RGB'); c=Counter(im.getdata()); vc=struct.unpack('>H',open('$S/cmpvc_s16_$f.bin','rb').read())[0]
+print('line65 f$f vc', vc, 'top colours', c.most_common(2))" 2>/dev/null; done
+
+OUT
+rigbc8 f400 vc 380 top colours [((0, 0, 0), 112765), ((255, 0, 0), 76432), ((0, 116, 172), 49360)]
+s16 f400 vc 382 top colours [((0, 0, 0), 199709), ((255, 0, 0), 73604), ((0, 0, 87), 38076)]
+line65 f800 vc 778 top colours [((0, 0, 0), 58765), ((144, 172, 172), 31884)]
+line65 f1200 vc 1178 top colours [((0, 0, 0), 58641), ((144, 172, 172), 35396)]
+Found the bug: relocation mishandles instructions like btst/bset #n and movem that have an extension word before the PC-relative displacement, and the verify step was using my own target calculation instead of objdump's. Fixing this while also dumping the broken ROM's state to check progress.
+Bash Dump the broken rom's vint counter, interrupted PC, and PC ring at frame 800
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; $A --frames 800 --dump wram:0xFFB0F0:2:$S/bad_vc.bin --dump wram:0xFFB0F8:4:$S/bad_pc.bin --dump wram:0xFFA200:256:$S/bad_ring.bin --dump wram:0xFFF01C:1:$S/bad_fl.bin rom/night/wramc8.32x >/dev/null 2>&1; python3 -c "
+import struct,collections; S='$S/'
+vc=struct.unpack('>H',open(S+'bad_vc.bin','rb').read())[0]; pc=struct.unpack('>I',open(S+'bad_pc.bin','rb').read())[0]; fl=open(S+'bad_fl.bin','rb').read()[0]
+ring=struct.unpack('>64I',open(S+'bad_ring.bin','rb').read())
+print(f'wramc8 f800: vc {vc} last PC {pc:06X} flag {fl}'); print('ring top:', collections.Counter(f'{p:06X}' for p in ring).most_common(6))"
+
+OUT
+wramc8 f800: vc 3 last PC 900556 flag 1
+ring top: [('000000', 61), ('FF2A30', 2), ('900556', 1)]
+Bash Fix the leading-extension-word case and make verify use objdump's resolved targets; rerun the dry run
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PY'
+p='tools/wram_reloc.py'; s=open(p).read()
+old="""            if (op & 0x3F) != 0x3A:
+                raise Reject(f'{a:#x}: PC-relative operand not in the source ea field ({mn} {ops})')
+            disp = words[1] if words[1] < 0x8000 else words[1] - 0x10000
+            t = a + 2 + disp
+            it['target'] = t
+            it['kind'] = 'pcrel'"""
+new="""            if (op & 0x3F) != 0x3A:
+                raise Reject(f'{a:#x}: PC-relative operand not in the source ea field ({mn} {ops})')
+            # extension words that precede the ea displacement: the bit number
+            # of btst/bchg/bclr/bset #n, the register mask of movem
+            lead = 1 if ((op & 0xFFC0) in (0x0800, 0x0840, 0x0880, 0x08C0) or (op & 0xFB80) == 0x4880) else 0
+            dw = words[1 + lead]
+            disp = dw if dw < 0x8000 else dw - 0x10000
+            t = a + 2 + lead * 2 + disp          # the PC is the address of the displacement word
+            told = target_of(ops.split('%pc@', 1)[1])
+            assert told == t, f'{a:#x}: PC-relative target {t:#x} != objdump {told:#x} ({mn} {ops})'
+            it['target'] = t
+            it['lead'] = lead
+            it['kind'] = 'pcrel'"""
+assert s.count(old)==1; s=s.replace(old,new)
+old2="""        elif k == 'pcrel':
+            t = ROM_HIGH + it['target']
+            out += [(w[0] & ~0x3F) | 0x39, t >> 16, t & 0xFFFF] + w[2:]"""
+new2="""        elif k == 'pcrel':
+            t = ROM_HIGH + it['target']
+            ld = it['lead']
+            out += [(w[0] & ~0x3F) | 0x39] + w[1:1 + ld] + [t >> 16, t & 0xFFFF] + w[2 + ld:]"""
+assert s.count(old2)==1; s=s.replace(old2,new2)
+old3="""        elif k == 'pcrel':
+            assert mn == it['mn'] and '%pc@' not in ops and target_of(ops) == ROM_HIGH + it['target'], \\
+                (hex(it['old']), it['mn'], mn, ops)
+            gi += 1"""
+new3="""        elif k == 'pcrel':
+            # the re-disassembled operand must name the same absolute target
+            # objdump resolved for the ORIGINAL PC-relative operand
+            want = ROM_HIGH + target_of(it['ops'].split('%pc@', 1)[1])
+            assert mn == it['mn'] and '%pc@' not in ops and (ROM_HIGH + target_of(ops) if target_of(ops) < ROM_HIGH else target_of(ops)) == want, \\
+                (hex(it['old']), it['mn'], it['ops'], mn, ops)
+            gi += 1"""
+assert s.count(old3)==1; s=s.replace(old3,new3)
+open(p,'w').write(s); print('tool fixed')
+PY
+OD=$HOME/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump; python3 tools/wram_reloc.py md_src/game_high.bin $OD FF5000 E052-E1E8,398E-39C8,3C84-3F20,3F24-3F40,D99C-D9F6,D8BA-D8D6,6654-674E,49BA-4D12,D47E-D52C,4D54-4D9A,30B2-3108,1366-144A,3AAE-3AFE /tmp/arc/wram_code.h 2>&1 | tail -5
+
+OUT
+tool fixed
+WRAMCODE: 04D54-04D9A   70B -> FF5A08 (  72B) entries 04D54
+WRAMCODE: 030B2-03108   86B -> FF5A50 (  86B) entries 030B2
+WRAMCODE: 01366-0144A  228B -> FF5AA6 ( 230B) entries 01366
+WRAMCODE: 03AAE-03AFE   80B -> FF5B8C (  98B) entries 03AAE
+3054 bytes of WRAM code, 25 entries
+Found it: the entry uses jmp (abs.w), which mishandles addresses like 0xFF5000 by truncating them into low ROM, whereas the tile thunks avoid this by living at 0xFFB820. I'll switch the entry to a 6-byte jmp (abs.l) and update the overwrite check to match.
+Bash Plant 6-byte absolute-long entry jumps and rerun the dry run
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PY'
+p='tools/wram_reloc.py'; s=open(p).read()
+old="""            # the 4-byte jmp overwrites [e, e+4): nothing may branch into e+2.
+            # An unplantable entry keeps its ROM code (correct, just not
+            # accelerated) -- unless it is the block's own start.
+            if (e + 2) in targets or e + 4 > end:"""
+new="""            # the 6-byte jmp (abs.l) overwrites [e, e+6): nothing may branch
+            # into e+2 or e+4. (abs.w would sign-extend only from 0x8000 up;
+            # 0xFF5000 as .w is low ROM -- the tile thunks sit at 0xFFB820 for
+            # that reason.) An unplantable entry keeps its ROM code (correct,
+            # just not accelerated) -- unless it is the block's own start.
+            if (e + 2) in targets or (e + 4) in targets or e + 6 > end:"""
+assert s.count(old)==1; s=s.replace(old,new)
+old2="""            struct.pack_into('>HH', image, e, 0x4EF8, wa & 0xFFFF)     # jmp (abs.w): sign-extends to 0xFFxxxx"""
+new2="""            struct.pack_into('>HHH', image, e, 0x4EF9, wa >> 16, wa & 0xFFFF)   # jmp (abs.l)"""
+assert s.count(old2)==1; s=s.replace(old2,new2)
+s=s.replace("`jmp (abs.w)` to the copy, so pointer-called handlers need no call-site", "`jmp (abs.l)` to the copy, so pointer-called handlers need no call-site")
+open(p,'w').write(s); print('ok')
+PY
+OD=$HOME/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump; python3 tools/wram_reloc.py md_src/game_high.bin $OD FF5000 E052-E1E8,398E-39C8,3C84-3F20,3F24-3F40,D99C-D9F6,D8BA-D8D6,6654-674E,49BA-4D12,D47E-D52C,4D54-4D9A,30B2-3108,1366-144A,3AAE-3AFE /tmp/arc/wram_code.h 2>&1 | tail -15
+
+OUT
+ok
+WRAMCODE: 0E052-0E1E8  406B -> FF5000 ( 406B) entries 0E052
+WRAMCODE: 0398E-039C8   58B -> FF5196 (  58B) entries 0398E
+WRAMCODE: 03C84-03F20  668B -> FF51D0 ( 656B) entries 03C84 03D14 03D36 03D8A 03DD8 03F04
+WRAMCODE: 03F24-03F40   28B -> FF5460 (  28B) entries 03F24 03F32
+WRAMCODE: 0D99C-0D9F6   90B -> FF547C (  94B) entries 0D99C
+WRAMCODE: 0D8BA-0D8D6   28B -> FF54DA (  32B) entries 0D8BA  (ROM-only entries 0D8D4)
+WRAMCODE: 06654-0674E  250B -> FF54FA ( 250B) entries 06654 0669C 06742
+WRAMCODE: 049BA-04D12  856B -> FF55F4 ( 870B) entries 049BA 049C6 049F6
+WRAMCODE: 0D47E-0D52C  174B -> FF595A ( 174B) entries 0D47E 0D4B8 0D4F2
+WRAMCODE: 04D54-04D9A   70B -> FF5A08 (  72B) entries 04D54
+WRAMCODE: block 030B2-03108 rejected: its entry cannot take a jump
+WRAMCODE: 01366-0144A  228B -> FF5A50 ( 230B) entries 01366
+WRAMCODE: 03AAE-03AFE   80B -> FF5B36 (  98B) entries 03AAE
+2968 bytes of WRAM code, 24 entries
+Bash Commit the tool fixes and relaunch the build, exactness check, and rig chain
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sed -i '' 's/(0xD47E, 0xD52C), (0x4D54, 0x4D9A), (0x30B2, 0x3108), (0x1366, 0x144A),/(0xD47E, 0xD52C), (0x4D54, 0x4D9A), (0x1366, 0x144A),/' tools/game_altbeast.py; git commit -qam "wram_reloc: jmp (abs.l) entries (abs.w does not sign-extend below 0x8000), leading extension words, verify against objdump's targets
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; (sh $S/build65.sh > $S/build65.log 2>&1 &); (sh $S/rig61.sh > $S/rig61.log 2>&1 &); echo relaunched 65/61
+
+OUT
+0c25cca6 wram_reloc: jmp (abs.l) entries (abs.w does not sign-extend below 0x8000), leading extension words, verify against objdump's targets
+relaunched 65/61
+Monitor
+IN
+{
+  "command": "S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sleep 8; tail -n +1 -F $S/build65.log $S/rig61.log 2>/dev/null | grep -E --line-buffered 'built|BUILD FAIL|wramc8 f|timer|att f|DONE|skipped|L[0-9]:' | while IFS= read -r l; do echo \"$l\"; case \"$l\" in *\"RIG61 DONE\"*) exit 0;; esac; done",
+  "description": "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch",
+  "timeout_ms": 3600000,
+  "persistent": false
+}
+OUT
+Monitor started (task blbslgd9b, timeout 3600000ms). You will be notified on each event. Keep working — do not poll or sleep. Events may arrive while you are waiting for the user — an event is not their reply.
+Bash Record the abs.w lesson
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat >> LESSONS.md <<'EOF'
+
+### WRAMCODE, first cut: the entry jump must be abs.l (2026-09-25 10:40 ET)
+
+tools/wram_reloc.py re-lays 12 blocks (2968 bytes, 24 entries) of the
+demo's hottest game code into WRAM 0xFF5000 and turns each ROM entry
+into a jump. The first build hung at boot after 3 vints with the 68K
+at 0x556: the entry was `jmp (abs.w)`, and abs.w sign-extends only
+from 0x8000 up -- 0xFF5000 as .w is 0x005000, low ROM. (The tile
+thunks sit at 0xFFB820 for exactly this reason; the comment was there.)
+The entry is now `jmp (abs.l)`, six bytes, with the overwrite check
+widened to e+2 and e+4; one block (0x30B2) lost its entry to that
+check and is dropped. Two more tool faults fixed on the way: btst/bset
+#n and movem carry an extension word BEFORE the PC-relative
+displacement, and the re-disassembly check must compare against
+objdump's resolved target, not the tool's own arithmetic. The 68K side
+grew 3 KB, which pushed the SH-2 RAM-code image into the tile blob;
+the blob moved 0x268000 -> 0x26A000 (mars.ld + md_main.c, the check
+script agrees).
+
+**Rule:** an abs.w operand reaches 0xFF8000-0xFFFFFF only; anything
+lower in WRAM needs abs.l, and a boot hang after a handful of vints
+with the PC in early game code is the first thing to suspect.
+EOF
+git commit -qam "LESSONS: WRAMCODE's abs.w entry-jump lesson and the tool fixes
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+79d2c4d5 LESSONS: WRAMCODE's abs.w entry-jump lesson and the tool fixes
+TaskStop
+IN
+{
+  "task_id": "bw3a3l1pz"
+}
+OUT
+{"message":"Successfully stopped task: bw3a3l1pz (S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sleep 8; tail -n +1 -F $S/build65.log $S/rig61.log 2>/dev/null | grep -E --line-buffered 'built|BUILD FAIL|WRAMCODE|wramc8 f|timer|att f|DONE|skipped|L[0-9]:' | while IFS= read -r l; do echo \"$l\"; case \"$l\" in *\"RIG61 DONE\"*) exit 0;; esac; done)","task_id":"bw3a3l1pz","task_type":"local_bash","command":"S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sleep 8; tail -n +1 -F $S/build65.log $S/rig61.log 2>/dev/null | grep -E --line-buffered 'built|BUILD FAIL|WRAMCODE|wramc8 f|timer|att f|DONE|skipped|L[0-9]:' | while IFS= read -r l; do echo \"$l\"; case \"$l\" in *\"RIG61 DONE\"*) exit 0;; esac; done"}
+TaskStop
+IN
+{
+  "task_id": "bqx3uscpk"
+}
+OUT
+{"message":"Successfully stopped task: bqx3uscpk (S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sleep 8; tail -n +1 -F $S/build65.log $S/rig61.log 2>/dev/null | grep -E --line-buffered 'built|BUILD FAIL|bytes at|wramc8 f|timer|att f|DONE|skipped|L[0-9]:' | while IFS= read -r l; do echo \"$l\"; case \"$l\" in *\"RIG61 DONE\"*) exit 0;; esac; done)","task_id":"bqx3uscpk","task_type":"local_bash","command":"S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; sleep 8; tail -n +1 -F $S/build65.log $S/rig61.log 2>/dev/null | grep -E --line-buffered 'built|BUILD FAIL|bytes at|wramc8 f|timer|att f|DONE|skipped|L[0-9]:' | while IFS= read -r l; do echo \"$l\"; case \"$l\" in *\"RIG61 DONE\"*) exit 0;; esac; done"}
+All four roms built with the corrected entries (2968 bytes, 24 entries). The boot check and the exactness gate run next; waiting on them.
+
+Bash Diagnose the second WRAMCODE boot: counters, PC ring, WRAM contents, and the planted entries
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; $A --frames 800 --dump wram:0xFFB0F0:2:$S/bad2_vc.bin --dump wram:0xFFB0F8:4:$S/bad2_pc.bin --dump wram:0xFFA200:256:$S/bad2_ring.bin --dump wram:0xFFF01C:1:$S/bad2_fl.bin --dump wram:0xFF5000:16:$S/bad2_wc.bin rom/night/wramc8.32x >/dev/null 2>&1; python3 -c "
+import struct,collections; S='$S/'
+vc=struct.unpack('>H',open(S+'bad2_vc.bin','rb').read())[0]; pc=struct.unpack('>I',open(S+'bad2_pc.bin','rb').read())[0]; fl=open(S+'bad2_fl.bin','rb').read()[0]
+ring=struct.unpack('>64I',open(S+'bad2_ring.bin','rb').read()); wc=open(S+'bad2_wc.bin','rb').read().hex()
+print(f'wramc8 f800: vc {vc} last PC {pc:06X} flag {fl} wram@FF5000 {wc}'); print('ring top:', collections.Counter(f'{p:06X}' for p in ring).most_common(6))"; python3 -c "
+from PIL import Image; from collections import Counter; im=Image.open('$S/wramc8_800.png').convert('RGB'); print(Counter(im.getdata()).most_common(3))" 2>/dev/null; python3 -c "
+img=open('md_src/game_high.bin','rb').read(); print('ROM entry at E052:', img[0xE052:0xE058].hex(), ' 398E:', img[0x398E:0x3994].hex())"; head -c 300 md_src/wram_code.h | tail -c 200
+
+OUT
+wramc8 f800: vc 773 last PC FF59F8 flag 1 wram@FF5000 41f90091d33e90401038f142d000d0c0
+ring top: [('903986', 18), ('903982', 14), ('90E22E', 2), ('FF52DE', 1), ('FF59F8', 1), ('90D70E', 1)]
+[((0, 0, 0), 71753), ((144, 172, 255), 26808), ((116, 144, 206), 21224)]
+ROM entry at E052: 41f90091d33e  398E: 3c7cc0004238
+/* generated by patch_game.py: WRAMCODE off */
+#define WRAM_CODE_WORDS 0
+#define WRAM_CODE_BASE 0xFF5000
+static const unsigned short wram_code[1] = {0};
+The second cut runs: 773 vints at frame 800, the game in its idle loop and inside the WRAM copies (PCs at 0xFF52DE, 0xFF59F8), picture present. The exactness dumps against the line are next in the same script; nothing to request until they print.
+
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Monitor event: "build65 (WRAMCODE roms, boot, exactness vs the line, histograms) and rig61 (5 launches, ends on rg1), fourth launch"
+Timers did not align (138-143 vs the line's 147 at its frame 800); the WRAM rom reaches 147 around frame 813. Comparing at the matching timer.
+
+Bash Compare the game's 16 KB WRAM and text pages at the same scene-timer value as the line
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 811 812 813 814 815; do $A --frames $f --dump wram:0xFFF02A:2:$S/wt_$f.bin --dump wram:0xFFC000:0x4000:$S/wg_$f.bin --dump "32X DRAM:0x1F000:0x1000:$S/wtp0_$f.bin" --dump "32X DRAM:0x3F000:0x1000:$S/wtp1_$f.bin" rom/night/wramc8.32x >/dev/null 2>&1; done; python3 - <<'PY'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+ref=open(S+'rg_800.bin','rb').read(); r0=open(S+'tp0_rigbc8_800.bin','rb').read(); r1=open(S+'tp1_rigbc8_800.bin','rb').read()
+for f in (811,812,813,814,815):
+    t=struct.unpack('>H',open(S+f'wt_{f}.bin','rb').read())[0]
+    g=open(S+f'wg_{f}.bin','rb').read(); d=[i for i in range(len(g)) if g[i]!=ref[i]]
+    a=open(S+f'wtp0_{f}.bin','rb').read(); b=open(S+f'wtp1_{f}.bin','rb').read()
+    ta=min(sum(1 for x,y in zip(a,r0) if x!=y)+sum(1 for x,y in zip(b,r1) if x!=y), sum(1 for x,y in zip(a,r1) if x!=y)+sum(1 for x,y in zip(b,r0) if x!=y))
+    print(f'wramc8 f{f} timer {t}: game WRAM bytes differing from the line@147: {len(d)} {[hex(0xFFC000+i) for i in d[:8]]}  text pages {ta}')
+PY
+
+OUT
+wramc8 f811 timer 146: game WRAM bytes differing from the line@147: 232 ['0xffc022', '0xffc180', '0xffc1a0', '0xffc200', '0xffc220', '0xffc24e', '0xffc280', '0xffc2a0']  text pages 2
+wramc8 f812 timer 147: game WRAM bytes differing from the line@147: 293 ['0xffc40d', '0xffc412', '0xffc41b', '0xffc422', '0xffc42c', '0xffc680', '0xffc6a0', '0xffc6ce']  text pages 2
+wramc8 f813 timer 147: game WRAM bytes differing from the line@147: 96 ['0xfff307', '0xfff30f', '0xfff317', '0xfffda5', '0xfffda7', '0xfffda9', '0xfffdaa', '0xfffdab']  text pages 0
+wramc8 f814 timer 148: game WRAM bytes differing from the line@147: 288 ['0xffc022', '0xffc200', '0xffc220', '0xffc24e', '0xffc280', '0xffc2a0', '0xffc2ce', '0xffc422']  text pages 0
+wramc8 f815 timer 148: game WRAM bytes differing from the line@147: 199 ['0xffc022', '0xffc200', '0xffc220', '0xffc24e', '0xffc280', '0xffc2a0', '0xffc2ce', '0xffc422']  text pages 2
+At the same game moment (timer 147, frame 813): text pages identical, game WRAM differs in 96 of 16,384 bytes, all in two spots. Checking what those bytes are before calling it exact.
+
+Bash Show the differing WRAM bytes as runs with both roms' values
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PY'
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+ref=open(S+'rg_800.bin','rb').read(); g=open(S+'wg_813.bin','rb').read()
+d=[i for i in range(len(g)) if g[i]!=ref[i]]
+import itertools
+# group into runs
+runs=[]; 
+for i in d:
+    if runs and i<=runs[-1][1]+2: runs[-1][1]=i
+    else: runs.append([i,i])
+for a,b in runs:
+    print(f'0xFFC000+{a:04X}..{b:04X} ({b-a+1}B): line {ref[a:b+1][:24].hex()}  wram {g[a:b+1][:24].hex()}')
+PY
+
+OUT
+0xFFC000+3307..3307 (1B): line 05  wram 06
+0xFFC000+330F..330F (1B): line 04  wram 00
+0xFFC000+3317..3317 (1B): line 04  wram 00
+0xFFC000+3DA5..3DAE (10B): line 92003800ff188200ff70  wram 00000000000000000000
+0xFFC000+3DB1..3DB5 (5B): line 38009200e2  wram 0000000000
+0xFFC000+3DB9..3DB9 (1B): line 0d  wram 00
+0xFFC000+3DBD..3DBD (1B): line 0f  wram 00
+0xFFC000+3DC1..3DC1 (1B): line 01  wram 00
+0xFFC000+3DC9..3DDF (23B): line 0400c0000800ff0a2effffdf00ffffe080ffffc4001882  wram 0000000000000000000000000000000000000000000000
+0xFFC000+3DE7..3DE7 (1B): line 88  wram a0
+0xFFC000+3DF7..3DF7 (1B): line 00  wram 92
+0xFFC000+3E04..3E04 (1B): line 00  wram ff
+0xFFC000+3E0D..3E0D (1B): line 21  wram d8
+0xFFC000+3E20..3E21 (2B): line ca80  wram c400
+0xFFC000+3E24..3E27 (4B): line e080ffff  wram 00000000
+0xFFC000+3E2A..3E2B (2B): line e810  wram 0040
+0xFFC000+3E31..3E33 (3B): line 000040  wram 0300fd
+0xFFC000+3E36..3E36 (1B): line 00  wram 01
+0xFFC000+3E3A..3E3B (2B): line 00fd  wram e800
+0xFFC000+3E3E..3E3E (1B): line 01  wram 00
+0xFFC000+3E41..3E42 (2B): line 85e8  wram c000
+0xFFC000+3E45..3E45 (1B): line c0  wram ff
+0xFFC000+3E49..3E4F (7B): line c0000000ff0000  wram 40e81000000092
+0xFFC000+3E57..3E5D (7B): line 9200e200000001  wram 00000f009200e2
+0xFFC000+3E61..3E61 (1B): line 0f  wram 01
+0xFFC000+3E65..3E65 (1B): line 01  wram 0f
+0xFFC000+3E69..3E69 (1B): line 00  wram 01
+0xFFC000+3E6D..3E79 (13B): line 0c00c0000800ff0a2effffc480  wram 000000000c00c0000800ff0a2e
+0xFFC000+3E7C..3E8D (18B): line e080000100010085e80000ff1d380085e800  wram c480ffffe0800001000100851a0000ff1d20
+0xFFC000+3EB2..3EB5 (4B): line 1b62ffff  wram 00000000
+0xFFC000+3EFB..3EFB (1B): line 86  wram 82
+0xFFC000+3F83..3F83 (1B): line 05  wram 0e
+The stack area explains most of the diff, but five stray bytes might reflect the game being mid-pass at one snapshot. I'll check the frame flag at both points and add a second alignment point.
+Bash Compare game WRAM below the stack at equal timer and step, with the frame flag shown
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 800 1500; do $A --frames $f --dump wram:0xFFF01C:1:$S/xf_l_$f.bin --dump wram:0xFFF02A:2:$S/xt_l_$f.bin --dump wram:0xFFF031:1:$S/xs_l_$f.bin --dump wram:0xFFC000:0x3D00:$S/xg_l_$f.bin rom/night/rigbc8.32x >/dev/null 2>&1; done; for f in 812 813 1505 1510 1515 1520 1525 1530; do $A --frames $f --dump wram:0xFFF01C:1:$S/xf_w_$f.bin --dump wram:0xFFF02A:2:$S/xt_w_$f.bin --dump wram:0xFFF031:1:$S/xs_w_$f.bin --dump wram:0xFFC000:0x3D00:$S/xg_w_$f.bin rom/night/wramc8.32x >/dev/null 2>&1; done; python3 - <<'PY'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+def rd(k,f): return (open(S+f'xf_{k}_{f}.bin','rb').read()[0], struct.unpack('>H',open(S+f'xt_{k}_{f}.bin','rb').read())[0], (open(S+f'xs_{k}_{f}.bin','rb').read()[0]>>2)&7, open(S+f'xg_{k}_{f}.bin','rb').read())
+for lf in (800,1500):
+    fl,t,st,g=rd('l',lf); print(f'line f{lf}: flag {fl} timer {t} step {st}')
+for wf in (812,813,1505,1510,1515,1520,1525,1530):
+    fl,t,st,g=rd('w',wf); ref=None
+    for lf in (800,1500):
+        lfl,lt,lst,lg=rd('l',lf)
+        if lt==t and lst==st:
+            d=[i for i in range(len(g)) if g[i]!=lg[i]]
+            print(f'wram f{wf}: flag {fl} timer {t} step {st}  == line f{lf} (flag {lfl}): WRAM below the stack differs in {len(d)} bytes {[hex(0xFFC000+i) for i in d[:6]]}')
+            break
+    else: print(f'wram f{wf}: flag {fl} timer {t} step {st}')
+PY
+
+OUT
+line f800: flag 0 timer 147 step 3
+line f1500: flag 0 timer 596 step 3
+wram f812: flag 1 timer 147 step 3  == line f800 (flag 0): WRAM below the stack differs in 97 bytes ['0xffc40d', '0xffc412', '0xffc41b', '0xffc422', '0xffc42c', '0xffc680']
+wram f813: flag 0 timer 147 step 3  == line f800 (flag 0): WRAM below the stack differs in 3 bytes ['0xfff307', '0xfff30f', '0xfff317']
+wram f1505: flag 0 timer 577 step 3
+wram f1510: flag 0 timer 581 step 3
+wram f1515: flag 0 timer 586 step 3
+wram f1520: flag 0 timer 589 step 3
+wram f1525: flag 1 timer 592 step 3
+wram f1530: flag 0 timer 595 step 3
+Found that with both idle at the same timer/step, WRAM below the stack differs in exactly 3 bytes, all within one 8-byte-stride table at 0xFFF300. Now checking whether that table belongs to the shim's mailbox or actual game state, and adding two more alignment points including the demo.
+Bash Identify the 0xFFF300 table
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n '0xFFF30[0-9A-F]\|FFF30' md_src/md_main.c md_src/md_start.s tools/patch_game.py tools/game_altbeast.py | head -8; grep -n -i 'f300\|f307\|fff30' docs/log/LOOP-DECOMPILE.md | head -5
+
+OUT
+1715:    30b2:  lea     $FFF300,a5      ; a table of cycling slots
+1723:So slots at 0xFFF300 are 8 bytes each: active/line byte, timer byte, a
+4389:load.** 0x1A6BA clears 16 slots (32 longs) at 0xFFF300 and loads the
+4399:references to 0xFFF300-0xFFF33F (0x30B2 and 0x1A6BA), so **palettes 20
+9893:stale: f300 reads 1212/6767 scroll 00C0, f700-1400 steps 0192 -> 0189 ->
+Bash Second and third alignment points (title f1500, demo f2700) for the WRAM compare
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 2700; do $A --frames $f --dump wram:0xFFF01C:1:$S/xf_l_$f.bin --dump wram:0xFFF02A:2:$S/xt_l_$f.bin --dump wram:0xFFF031:1:$S/xs_l_$f.bin --dump wram:0xFFC000:0x3D00:$S/xg_l_$f.bin rom/night/rigbc8.32x >/dev/null 2>&1; done; for f in 1531 1532 1533 2560 2580 2600 2620 2640 2660; do $A --frames $f --dump wram:0xFFF01C:1:$S/xf_w_$f.bin --dump wram:0xFFF02A:2:$S/xt_w_$f.bin --dump wram:0xFFF031:1:$S/xs_w_$f.bin --dump wram:0xFFC000:0x3D00:$S/xg_w_$f.bin rom/night/wramc8.32x >/dev/null 2>&1; done; python3 - <<'PY'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+def rd(k,f): return (open(S+f'xf_{k}_{f}.bin','rb').read()[0], struct.unpack('>H',open(S+f'xt_{k}_{f}.bin','rb').read())[0], (open(S+f'xs_{k}_{f}.bin','rb').read()[0]>>2)&7, open(S+f'xg_{k}_{f}.bin','rb').read())
+L={lf:rd('l',lf) for lf in (1500,2700)}
+for lf,(fl,t,st,g) in L.items(): print(f'line f{lf}: flag {fl} timer {t} step {st}')
+for wf in (1531,1532,1533,2560,2580,2600,2620,2640,2660):
+    fl,t,st,g=rd('w',wf); hit=''
+    for lf,(lfl,lt,lst,lg) in L.items():
+        if lt==t and lst==st:
+            d=[i for i in range(len(g)) if g[i]!=lg[i]]; hit=f' == line f{lf} (flag {lfl}): differs in {len(d)} bytes {[hex(0xFFC000+i) for i in d[:6]]}'
+    print(f'wram f{wf}: flag {fl} timer {t} step {st}{hit}')
+PY
+
+OUT
+line f1500: flag 0 timer 596 step 3
+line f2700: flag 0 timer 477 step 5
+wram f1531: flag 0 timer 596 step 3 == line f1500 (flag 0): differs in 5 bytes ['0xfff307', '0xfff309', '0xfff30f', '0xfff311', '0xfff317']
+wram f1532: flag 1 timer 597 step 3
+wram f1533: flag 0 timer 597 step 3
+wram f2560: flag 1 timer 360 step 5
+wram f2580: flag 0 timer 373 step 5
+wram f2600: flag 1 timer 388 step 5
+wram f2620: flag 0 timer 401 step 5
+wram f2640: flag 0 timer 415 step 5
+wram f2660: flag 0 timer 428 step 5
+The palette-cycling timers at 0xFFF300 differ because they advance per vint rather than per pass, but game-logic state is otherwise byte-identical at aligned points. I'll check one more alignment in the demo while the rig's first WRAM rows arrive.
+Bash Align inside the demo (line f2700, timer 477) and compare
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 2728 2730 2732 2734 2736 2738; do $A --frames $f --dump wram:0xFFF01C:1:$S/xf_w_$f.bin --dump wram:0xFFF02A:2:$S/xt_w_$f.bin --dump wram:0xFFF031:1:$S/xs_w_$f.bin --dump wram:0xFFC000:0x3D00:$S/xg_w_$f.bin rom/night/wramc8.32x >/dev/null 2>&1; done; python3 - <<'PY'
+import struct
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+def rd(k,f): return (open(S+f'xf_{k}_{f}.bin','rb').read()[0], struct.unpack('>H',open(S+f'xt_{k}_{f}.bin','rb').read())[0], (open(S+f'xs_{k}_{f}.bin','rb').read()[0]>>2)&7, open(S+f'xg_{k}_{f}.bin','rb').read())
+lfl,lt,lst,lg=rd('l',2700)
+for wf in (2728,2730,2732,2734,2736,2738):
+    fl,t,st,g=rd('w',wf); hit=''
+    if lt==t and lst==st:
+        d=[i for i in range(len(g)) if g[i]!=lg[i]]; hit=f' == line f2700 (flag {lfl}): differs in {len(d)} bytes {[hex(0xFFC000+i) for i in d[:8]]}'
+    print(f'wram f{wf}: flag {fl} timer {t} step {st}{hit}')
+PY
+
+OUT
+wram f2728: flag 1 timer 477 step 5 == line f2700 (flag 0): differs in 16 bytes ['0xffd891', '0xffd8a0', '0xffd8d9', '0xffd8db', '0xffd911', '0xffd920', '0xffd959', '0xffd95b']
+wram f2730: flag 1 timer 478 step 5
+wram f2732: flag 1 timer 479 step 5
+wram f2734: flag 1 timer 480 step 5
+wram f2736: flag 1 timer 481 step 5
+wram f2738: flag 1 timer 482 step 5
+Demo-phase alignment is not available at frame edges (the WRAM rom is mid-pass at every sampled edge there; the 16 differing bytes are object slots mid-update). Two phase-aligned points and the text pages are byte-identical apart from the per-vint palette-cycle timers. Waiting on the rig's mean-pass-length rows.
+
+WRAM rom on the FPGA (first launch): mean demo pass 356 then 332 lines against the control's 400-418 and 358-362, about 30-45 lines shorter; one-vint passes 42 versus 34 per 440 vints, three-vint 12 versus 16. A real move, about a quarter to a third of the FPGA's excess. Waiting on the second launch and the mode-3 rows before writing it up.
+
+Second launch replicates (mean 328 lines at 452 passes). One mode-3 launch left, then the rig returns to rg1; writing the entry meanwhile.
+
+Bash Record the WRAMCODE result
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat >> LESSONS.md <<'EOF'
+
+### WRAMCODE on the FPGA: the demo pass shortens by 30-45 lines, 8 passes per 440 vints convert; exact by the game's own clock (2026-09-25 11:45 ET)
+
+wramc8 = light barcode + WRAMCODE (2968 bytes, 12 blocks, 24 entries).
+Exactness on ares, aligned by the scene timer 0xFFF02A with the frame
+flag clear on both (the game idle at the snapshot): the 16 KB of game
+WRAM below the stack differs from the light-barcode line by 3 bytes at
+timer 147 (title) and 5 at timer 596, all inside the palette-cycling
+slot table at 0xFFF300 (LOOP-DECOMPILE: 8-byte slots, a timer byte
+each) -- those timers advance per VINT, and a rom that reaches the
+same pass count in fewer vints must read differently there (it is the
+arcade-faithful direction). Both 4 KB text pages identical. Inside the
+demo no frame edge finds both roms idle (the WRAM rom is mid-pass at
+every sampled edge); at timer 477 the 16 differing bytes are object
+slots mid-update, the phase, not the code. The stack area itself
+differs (stale frames hold our return addresses) and is excluded.
+FPGA, level-1 demo, two launches each, per ~440 vints:
+    mean pass (RIGSPAN=11)  control 400/418 -> 358/362 lines as the
+                            step ages; WRAM 356 -> 332/328
+    one-vint / two-vint / three-vint (RIGSPAN=4)
+                            control 34 / ~170 / 16;  WRAM 42 / ~170 / 12
+    passes                  ~220 -> ~224 (50% -> 52%)
+So 30-45 lines a pass came off, 8 passes per 440 vints converted
+two-vint -> one-vint, 4 three-vint -> two-vint: a quarter to a third of
+the FPGA's ~130-line excess. The block list was chosen from the ARCADE
+demo's instruction profile (~82% of its pass), which the text-copy
+lesson already showed mis-weights OUR demo; the remaining cart-fetch
+time is in routines that profile did not rank. Next: an execution
+profile of our own rom (per-entry counters, or the interrupted-PC ring
+on the WRAM rom) to choose the second block set; 616 bytes of the
+0xFF5000 region remain, and 0xFF3C30-0xFF3EFF is a further ~700.
+EOF
+git commit -qam "LESSONS: WRAMCODE on the FPGA -- 30-45 lines a pass off, 8 conversions per 440 vints, exact by the scene timer
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+
+OUT
+bfae1cec LESSONS: WRAMCODE on the FPGA -- 30-45 lines a pass off, 8 conversions per 440 vints, exact by the scene timer
+Bash Update STATE and memory with the WRAMCODE measurement
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PY'
+import re
+p='STATE.md'; s=open(p).read()
+m=re.search(r"WRAMCODE=1 \(hot routines in WRAM, tools/wram_reloc\.py\) is built\s*\nand on ares/rig\.", s)
+assert m
+new="""WRAMCODE=1 (hot routines in WRAM, tools/wram_reloc.py) MEASURED
+(11:45 ET): exact by the scene timer on ares; on the FPGA the demo pass
+shortens 30-45 lines (400/418 -> 356, 358/362 -> 332/328), 8 passes per
+440 vints convert two-vint -> one-vint (34 -> 42), 4 three-vint -> two.
+A quarter to a third of the FPGA's excess; the block list came from the
+arcade's profile, the next set needs our own rom's (per-entry counters
+or the interrupted-PC ring on the WRAM rom). Not on the line yet: Mike's
+play pass + 3 rig launches of a line candidate first."""
+s=s[:m.start()]+new+s[m.end():]; open(p,'w').write(s); print('ok')
+PY
+git commit -qam "STATE: WRAMCODE measured on the FPGA
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1
+M=/Users/mikeholzinger/.claude/projects/-Users-mikeholzinger-src-sega16-2-32x/memory; cat >> $M/vi70-accepted-base.md <<'EOF'
+
+2026-09-25 11:45 ET: WRAMCODE=1 (tools/wram_reloc.py: 12 hot game blocks, 2968 B, re-laid into WRAM 0xFF5000, ROM entries = jmp abs.l; abs.w does NOT sign-extend below 0x8000 -- a boot hang lesson) is exact on ares (game WRAM identical at equal scene timer except the per-vint palette-cycle slots at 0xFFF300) and on the FPGA shortens the demo pass 30-45 lines, converts 8 passes/440 vints (34 -> 42 one-vint). Tiering in STATE: ares closer to hardware for fetch-bound 68K code; MiSTer truth for the rest + the gate. Dual-chain count: 48% FPGA / 32% ares chains are mid-pass and still push a full window (~33 lines/vint lever, palette-timing trade). Blob moved to 0x26A000. Rig on rg1; WRAMCODE not on the line until Mike's pass.
+EOF
+sed -i '' 's|count executions on OUR rom (COUNTSITES), never from the arcade trace|count executions on OUR rom (COUNTSITES), never from the arcade trace; WRAMCODE=1 (hot routines in WRAM, exact, -30..45 lines/pass on the FPGA, +8 one-vint passes/440) built, awaiting Mike; dual-chain: 48% FPGA chains mid-pass (~33 lines/vint lever)|' $M/MEMORY.md; grep -c WRAMCODE $M/MEMORY.md
+
+OUT
+ok
+e801036f STATE: WRAMCODE measured on the FPGA
+1
+Bash Profile where our WRAM rom's 68K still sits in cart code at demo vints on ares (12 ring dumps, 768 samples)
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen; A=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in 2560 2620 2680 2740 2800 2860 2920 2980 3040 3100 3160 3220; do $A --frames $f --dump wram:0xFFA200:256:$S/wprof_$f.bin rom/night/wramc8.32x >/dev/null 2>&1; done; python3 - <<'PY'
+import struct,collections,bisect,re
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/scratchpad/rowgen/'
+pcs=[]
+for f in range(2560,3221,60):
+    try: pcs+=list(struct.unpack('>64I',open(S+f'wprof_{f}.bin','rb').read()))
+    except: pass
+cart=[p&0x3FFFF for p in pcs if 0x900000<=p<0x940000]; wram=[p for p in pcs if 0xFF5000<=p<0xFF6000]; idle=[p for p in pcs if 0x903980<=p<=0x903990 or 0xFFB000<=p<0xFFC000]
+print(f'samples {len(pcs)}: cart code {len(cart)} (incl idle-loop {sum(1 for p in cart if 0x3980<=p<=0x3990)}), WRAM code {len(wram)}, our thunks/shim {len(idle)-sum(1 for p in cart if 0x3980<=p<=0x3990)}, other {len(pcs)-len(cart)-len(wram)-len([p for p in idle if p>=0xFF0000])}')
+# routine starts: jsr/bsr/jmp targets + pointer entries from the arcade traces (reuse), fallback bucket by 0x40
+starts=set()
+pc_re=re.compile(r'^([0-9A-F]{6}): (\S+)\s*(.*)$')
+for name in ('demo1700','demo1900','att1500','play3000','attract3000'):
+    prev=None
+    for l in open(f'/tmp/arc/{name}.log'):
+        m=pc_re.match(l)
+        if not m: continue
+        pc=int(m.group(1),16); mn=m.group(2); ops=m.group(3)
+        if mn in ('jsr','bsr','jmp'):
+            t=re.search(r'\$([0-9a-fA-F]+)',ops)
+            if t: starts.add(int(t.group(1),16))
+        if prev and prev[1] in ('jsr','jmp') and '(A' in prev[2]: starts.add(pc)
+        prev=(pc,mn,ops)
+starts=sorted(s for s in starts if s<0x40000)
+c=collections.Counter()
+for p in cart:
+    if 0x3980<=p<=0x3990: continue
+    i=bisect.bisect_right(starts,p)-1; c[starts[i] if i>=0 else 0]+=1
+tot=sum(c.values()); print(f'cart mid-pass samples {tot}; top routines:')
+acc=0
+for r,n in c.most_common(20): acc+=n; print(f'  {r:05X} {n:4d} {100*n/tot:5.1f}% cum {100*acc/tot:5.1f}%')
+PY
+
+OUT
+Command running in background with ID: bwdy14s55. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/tasks/bwdy14s55.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Session cwd remains /Users/mikeholzinger/src/sega16-2-32x; directory changes made by the backgrounded command do not apply to subsequent commands.
+Both remaining items are in flight (the rig's last launch and the our-rom cart-code profile). Nothing else to request.
+
+Mode 3 consistent (two-vint +182, three-vint +14 per 432). Rig returning to rg1; profile still running.
+
+Rig on rg1. Waiting on the profile to finish, then the report.
+
+Waiting on the profile.
+
+Bash Read the our-rom cart-code profile
+IN
+cat /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/11e5cece-41a3-4ece-8bba-61312ee23804/tasks/bwdy14s55.output | grep -v '^$'
+
+OUT
+samples 768: cart code 638 (incl idle-loop 572), WRAM code 93, our thunks/shim 0, other 37
+cart mid-pass samples 66; top routines:
+  03352    9  13.6% cum  13.6%
+  0EE80    8  12.1% cum  25.8%
+  0D6D8    7  10.6% cum  36.4%
+  0D608    6   9.1% cum  45.5%
+  0DABC    6   9.1% cum  54.5%
+  0674E    4   6.1% cum  60.6%
+  0D65C    3   4.5% cum  65.2%
+  0E2C2    3   4.5% cum  69.7%
+  012EC    3   4.5% cum  74.2%
+  103E0    2   3.0% cum  77.3%
+  00000    2   3.0% cum  80.3%
+  0D5A6    2   3.0% cum  83.3%
+  03F72    2   3.0% cum  86.4%
+  0EFD2    1   1.5% cum  87.9%
+  16BF0    1   1.5% cum  89.4%
+  0D47E    1   1.5% cum  90.9%
+  065AA    1   1.5% cum  92.4%
+  0D99C    1   1.5% cum  93.9%
+  03BCE    1   1.5% cum  95.5%
+  0E266    1   1.5% cum  97.0%
+[exited with code 0]
+Bash Record the residual profile and confirm the tree is clean
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; cat >> LESSONS.md <<'EOF'
+
+Addendum (our-rom profile, 12:10 ET): the interrupted-PC ring on the
+WRAM rom on ares, 12 demo dumps = 768 vints: 572 idle, 93 in WRAM
+code, 66 mid-pass in cart code. Those 66 (a thin sample) sit in
+0x3352, 0xEE80, 0xD6D8, 0xD608, 0xDABC, 0x674E, 0xD65C, 0xE2C2,
+0x12EC, 0x103E0, 0xD5A6 -- mostly pointer-called object handlers the
+arcade-derived list did not rank or the tool rejected (0xD5A6's entry
+takes a branch at +2). ~1.3 KB of WRAM remains (616 B at 0xFF5BA0,
+~700 B at 0xFF3C30) for a second block set once the profile has a
+few thousand samples; a longer ring dump series on the FPGA rom
+(mid-pass 65% of vints there) is the cheaper source.
+EOF
+git commit -qam "LESSONS: the WRAM rom's residual cart-code profile
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; git status --short | grep -v '^??' | head -3
+
+OUT
+ff54025f LESSONS: the WRAM rom's residual cart-code profile
+All three items delivered. Rig on rg1; tree committed through ff54025f.
+
+1. Tiering, in STATE.md. New section "THE TIERS": MiSTer stays truth for everything except fetch-bound 68K code and stays the acceptance gate; ares is closer to hardware truth for fetch-bound 68K code, optimistic only by the SH-2 ROM-arbitration share (0-15% of cart cycles, small for us); how to read each machine's numbers; the core is not to be rebuilt.
+
+2. Dual-chain counter. At chain entry the frame flag says whether the game is mid-pass:
+
+mid-pass chains	fresh-frame chains
+ares, per 304 demo vints	98 (32%)	208
+FPGA, per 440 demo vints	212 (48%)	228
+The master harvests one new frame per pass; we push one per vint. Every mid-pass chain runs the full 68-line push and posts a window the master composes for unchanged sprites and scroll. Skipping it is worth ~33 lines a vint on the FPGA, ~22 on ares, and survives the tiering. One fidelity note before cutting: the arcade's palette RAM is written directly, so an overrun vint on the arcade shows the previous sprites with any palette writes made so far. Skipping the mid-pass push delays those writes by one vint on overrun vints only. Your call whether that is acceptable, or the push becomes palette-only on mid-pass chains.
+
+3. WRAM-resident routines (WRAMCODE=1). tools/wram_reloc.py re-lays 12 hot blocks (2968 bytes, 24 entries) into WRAM 0xFF5000; PC-relative operands go absolute, branches re-encode, each ROM entry becomes jmp (abs.l), and every block is re-disassembled and checked against objdump before it ships. Two lessons on the way, recorded: abs.w does not sign-extend below 0x8000 (the first build hung at boot), and btst/movem carry an extension word before the displacement.
+
+Exactness on ares, aligned by the scene timer with the game idle on both: the 16 KB of game WRAM below the stack is identical except the palette-cycle slot timers at 0xFFF300, which advance per vint and must differ for a rom that needs fewer vints per pass. Text pages identical.
+
+FPGA, level-1 demo, two launches each, per ~440 vints:
+
+control	WRAMCODE
+mean pass, early / late in the step	400-418 / 358-362	356 / 328-332
+one-vint / two-vint / three-vint	34 / ~170 / 16	42 / ~170 / 12
+8 passes converted two-vint to one-vint per 440 vints, 4 three-vint to two, 30-45 lines a pass off. A quarter to a third of the FPGA's excess. The block list came from the arcade's profile, which the text-copy lesson showed mis-weights our demo; a ring profile of our own rom names the residue (pointer-called handlers at 0x3352, 0xEE80, 0xD6D8, 0xD608, 0xDABC, 0x674E and the rejected 0xD5A6), with ~1.3 KB of WRAM left for a second set.
+
+Not on the line: WRAMCODE waits for your play pass and three rig launches of a line candidate.
+
+Next on your word: the second block set from our own profile, or the mid-pass push skip once you've ruled on the palette timing.
+
+write a handoff please!
+Bash Check the handoff naming and format convention
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; ls -t docs/handoff | head -5; head -20 "docs/handoff/$(ls -t docs/handoff | head -1)"
+
+OUT
+LOOP-BLASTEM-EVENING.md
+HANDOFF-BLASTEM.md
+HANDOFF-SLIM-PIPELINE.md
+START-HERE.md
+NOTES-FROM-DECOMPILE.md
+# LOOP BRIEF — O-8 BlastEm evening queue (2026-09-23, unattended)
+
+**STATUS, loop ended 2026-09-23 evening: all three items done.** Item 3
+(BLASTEM.md 10): the RTL count reaches ~190 clk/group vs the rig's 336;
+the FB store path is ~80 of it, so the 1.6x is a blit-rate figure whose
+remainder is bracketed (instruction-fetch misses on a 5.4x oversubscribed
+cache, DDR3 latency, the shared ddram channel) with a rig probe recipe.
+Item 1 (BLASTEM.md 11, fork fa7550d): cart-ROM arbiter from IF.sv behind
+BLASTEM_BUS_ARB; < 0.5% of either CPU's frame on the line rom; the
+FIFO-era poll figure is SH-2-internal CPU/DMAC sharing, not the adapter.
+Item 2 (BLASTEM.md 12, fork pushed): --trace-comm/flip/dreq with ares's
+columns, checked on bprof3 for 120 frames. sega16 commits are local only.
+The two mislabelled fork commits were rewritten afterwards on Mike's call (now 2febe53 fix / cd3a5f7 knob / 9f980a6 diagnostics; tree verified identical; force-pushed).
+
+Mike is away for the evening. This loop works the three open O-8 items in
+order, one at a time, and writes results into the record as it goes.
+Re-read this file at every wake. `docs/design/BLASTEM.md` sections 7-9
+hold the state of the instrument; STATE.md's INSTRUMENT STATUS block
+names it.
+Write HANDOFF-68K-FETCH.md
+211 lines
+# HANDOFF — the 68K-time axis: instruments, the core's ROM wait, WRAMCODE (2026-09-24/25)
+
+**STATUS at 12:20 ET 2026-09-25.** The line is rg1 (`make line`), on the
+rig, 3/3. Nothing built this session is on the line. Tree committed
+locally through ff54025f (native1, ~150 commits ahead of origin; not
+pushed, per the standing rule). The rig holds rg1.
+
+Read STATE.md first (THE TIERS, THE AXIS — SPEED, the 60 Hz card), then
+LESSONS.md entries dated 2026-09-24 and 2026-09-25 (nine of them). This
+file is the map of what those entries add up to, what is built, what is
+measured, what waits on Mike, and how to run every instrument.
+
+## 1. What is TRUE now (each with the instrument that established it)
+
+1. **The game's pass never waits on the FM window** on either machine.
+   RIGSPAN=2 (max release V of the shared gate per pass) reads 0 on ares
+   at four frames and on the FPGA in 22 of 24 samples. The shim does not
+   wait at vint entry (fmgate_belt constant). The whole ack/pickup/
+   window-end model of 2026-09-23/24 is dead as a frame-rate lever.
+
+2. **The rig barcode was an instrument that cost 48 68K lines a vint**
+   (its 384-word VRAM DMA in active display) and turned the line's demo
+   from one-vint passes into two-vint ones on ares. Every barcode-era
+   FPGA rate number before 17:40 ET 2026-09-24 is handicapped.
+   RIGBCEVERY=8 (barcode built and DMA'd every 8th vint) no longer
+   perturbs (ares PC ring idle 64/64 again). Use it on every rate rom.
+
+3. **The span hook read the frame flag twice** and lost ~40% of passes
+   (a release between the two reads started an unarmed pass). Fixed:
+   one read, shared with the game's branch (patch_game.py RIGSPANHOOK,
+   the byte at 0xFFA0EE). Every RIGSPAN number before 15:50 ET
+   2026-09-24 carried the race.
+
+4. **Light barcode, race-free hook, level-1 demo (step 5):**
+   ares 71% (one-vint 242 / two-vint 150 / three-vint 8 per 566 vints);
+   FPGA 50% (34 / ~170 / 16 per 440). The FPGA turns one-vint passes
+   into two-vint; three-vint is small on both. Title: one-vint on both.
+   The scene timer 0xFFF02A IS a pass counter (70% on the line).
+
+5. **Mean pass length (RIGSPAN=11):** ares 232-246 lines; FPGA 358-418.
+   The FPGA's demo pass is ~130-150 lines longer. The IRQ4 chain is the
+   same length on both (RIGSPAN=12: entry -> shim end 62-72, -> part B
+   end 69-96). Single 68K accesses are +5% on the FPGA (RIGSPAN=9 cart
+   data reads + WRAM loop, =13 FB writes/reads, =14 the same inside the
+   master's blit). MDQUIET=2 (shim DMAs off) and IDLEOFF (no packet
+   building) leave the FPGA at ~50% while ares gains from either.
+
+6. **The FPGA term is instruction fetch from the cart, and it is the
+   MiSTer core's** (RIGSPAN=15 + CARTBENCH: the same 512-iteration loop
+   from the cart 132-148 quarter-lines vs 112 from WRAM; ares 115/112;
+   with the SH-2s' art fetches off 130-133). rtl/32X/IF.sv with
+   USE_ROM_WAIT=1 (S32X.sv) holds the 68K's DTACK for a full SDRAM
+   access (~7 cycles at 107.39 MHz plus two syncs at 53.69 MHz, about
+   one 68K clock) on every MD ROM read; the cart ROM is SDRAM channel 1
+   of rtl/sdram.sv; the 32X SDRAM is in DDR3 (use_sdr never set). An
+   SH-2 ROM request pending at RS_IDLE is granted first (IF.sv:822) —
+   that part is real hardware, 0-15% for us. A mask-ROM cartridge adds
+   no wait. +18% fixed, up to +32% with arbitration, on fetch-bound
+   code; the game runs entirely from the cart.
+
+7. **Tiering (STATE.md THE TIERS, Mike's call):** MiSTer is truth for
+   everything except fetch-bound 68K code and stays the acceptance
+   gate; ares is closer to hardware truth for fetch-bound 68K code,
+   optimistic only by the arbitration share. The core is NOT to be
+   rebuilt (fragments distribution, unverifiable, dies with the next
+   core update). The port engineers around it.
+
+8. **The 68K-line ranking of the pass on ares** (dump-based, instrument
+   cost ~0.3 line): r60_push palette rotor + compares 41 lines a vint,
+   its stage ship 18, consumes + sprite pal + pump 15, rowscroll/
+   selection 8, part B ~5; the game's own IRQ4 ~20; gate thunks ~7 a
+   pass (from OUR rom's counters, COUNTSITES). The chain runs once per
+   vint a pass spans. Execution counts must come from OUR rom: the
+   arcade trace's text traffic differs (coin state), and 0x3A9A ran 22
+   a frame there vs ~7.7 a pass here.
+
+9. **BURSTGATE** (the 0x3A9A text-copy gate once per burst, exact on
+   ares by the scene timer): 0 conversions on the FPGA. 2-vint passes
+   end spread across their second vint, not piled at the line
+   (RIGSPAN=10), so a 3-line cut converts ~2 per 300 vints. Knob, off
+   the line.
+
+10. **WRAMCODE=1** (tools/wram_reloc.py: 12 hot blocks, 2968 B, into
+    WRAM 0xFF5000, ROM entries `jmp (abs.l)`): exact on ares by the
+    scene timer (game WRAM identical below the stack except the
+    per-vint palette-cycle slot timers at 0xFFF300; text pages
+    identical); FPGA demo mean pass 400/418 -> 356, 358/362 -> 328/332;
+    one-vint 34 -> 42, three-vint 16 -> 12 per 440 vints. A quarter to
+    a third of the FPGA's excess. Not on the line: awaits Mike's play
+    pass and three rig launches of a line candidate.
+
+11. **Dual-chain count (RIGSPAN=16):** 48% of the FPGA's demo chains
+    (32% of ares') enter with the game mid-pass; each still runs the
+    full push and posts a window the master composes for unchanged
+    sprites/scroll. ~33 lines a vint on the FPGA if skipped, ~22 on
+    ares. Fidelity trade to rule on: the arcade shows mid-pass palette
+    writes during overrun vints; a skipped push delays them one vint
+    on those vints only. Alternative that stays exact: palette-only
+    push on mid-pass chains.
+
+## 2. What waits on Mike
+
+- **WRAMCODE line candidate:** `make line WRAMCODE=1` (no barcode), his
+  play pass, 3 rig launches, then LINE_FLAGS += WRAMCODE=1 and the line
+  is named. The tile blob moved 0x268000 -> 0x26A000 for it (mars.ld +
+  md_main.c; `make tilesmd-addr` agrees) — that move is already in
+  every build, including the current line's rebuild; rg1.32x on the
+  rig predates it and is unaffected.
+- **The mid-pass push:** rule on the palette-timing trade (item 11).
+- **The palette card** (item 1 of the ranking, 41+18 lines a vint) is
+  held on his word; O-12's +C/+E drop belongs inside its stage-ship
+  part, not as a separate card.
+- **Direction call** (real cartridge / MiSTer / both) — asked, not yet
+  answered; the tiering above stands either way.
+
+## 3. Next cards, in order
+
+1. Second WRAMCODE block set from OUR rom's profile. The residue on
+   ares (LESSONS addendum 12:10 ET): pointer-called handlers 0x3352,
+   0xEE80, 0xD6D8, 0xD608, 0xDABC, 0x674E, 0xD65C, 0xE2C2, 0x12EC,
+   0x103E0, and 0xD5A6 (rejected: its entry takes a branch at +2 —
+   start the block at its first safe instruction instead). ~1.3 KB of
+   WRAM remains: 616 B at 0xFF5BA0-0xFF5DFF and ~700 B at 0xFF3C30-
+   0xFF3EFF (above .bss, below the boot stack at 0xFF4000-0xFF4FF0).
+   Profile first: the interrupted-PC ring (0xFFA200, 64 vints) dumped
+   on the FPGA rom is the cheaper source (mid-pass 65% of vints there);
+   on ares only ~9% of ring samples are mid-pass cart code.
+2. Mid-pass push skip or palette-only push (after the ruling).
+3. The palette rotor (after Mike's word).
+
+## 4. Instruments (all under RIGBARCODE=1 RIGBCEVERY=8 unless said)
+
+    RIGSPAN=1   byte 5 = raw V at the pass end, byte 6 = vints spanned
+    RIGSPAN=2   byte 5 = max release V of the shared gate in the pass
+                (needs the RIGWINMAX patcher stamp, auto), byte 6 = span
+    RIGSPAN=3   per attract step: span>=2 count/2, span-1 count/2
+    RIGSPAN=4   span>=2 count/2, span-0 count/2
+    RIGSPAN=5   vints inside passes/4, vints waiting/4 (shim_vblank)
+    RIGSPAN=6   interrupted-PC ring classified: ours / idle (rest = game)
+    RIGSPAN=7   raw interrupted PC, low 16 bits
+    RIGSPAN=8   (dead: no vint without a release while waiting)
+    RIGSPAN=9   256 cart reads / 256 WRAM iterations, quarter-lines,
+                every 64th vint, past the V jump (waits for V >= 0xF0)
+    RIGSPAN=10  span-1 passes ending in lines 0-130 / 131-261 of their
+                second vint, /2 each
+    RIGSPAN=11  mean pass length in lines /2, passes /4
+    RIGSPAN=12  (+CHAINPRICE=1) chain entry -> shim end, -> part B end
+    RIGSPAN=13  256 FB word writes / reads, quarter-lines
+    RIGSPAN=14  mode 9 run inside the window (waits for raw V 0x40)
+    RIGSPAN=15  (+CARTBENCH=1) the same loop from the cart / from WRAM
+    RIGSPAN=16  chains entered mid-pass /2, with a fresh frame /2
+    COUNTSITES=3A9A,4D88,...   per-gate-site call counters at 0xFFA1F0
+    CHAINPRICE=1  V stamps after the shim's vblank (0xFFA3C0) and after
+                part B (0xFFA3C2) -- NOTE both sit inside the entry ring
+                0xFFA380-0xFFA3FF (slots 32/33); consistent in practice,
+                move before reuse. 0xFFA3C4 (an old COUNTBURST word) was
+                garbage for that reason.
+    Knobs off the line: BURSTGATE, WRAMCODE, IDLEOFF, MDQUIET, POSTPOLL
+                (v3: the maps drain yields to a post), TEXTRESTMASK, ...
+
+Raw V to lines after the vint: (V - 0xE0) & 0xFF for V >= 0xE0, else
+V + 38; the raw counter jumps 0xEA -> 0xE5 inside vblank (a 5-line
+ambiguity for values 0xE5-0xEA).
+
+Every RIGSPAN rom needs the patcher's idle-loop thunk (RIGSPANHOOK,
+automatic with RIGSPAN); the thunk region ends at 0xBFF0 and is within
+~14 bytes of full with RIGSPAN + BURSTGATE together.
+
+## 5. How things are run
+
+- Ares checks: `ares-headless --frames N --screenshot (N-1):x.png` +
+  `python3 tools/rig_barcode.py x.png`; `--dump wram:ADDR:LEN:file`,
+  `--dump "32X DRAM:0x1F000:0x1000:file"` (text page, bank 0; 0x3F000
+  bank 1). Ares runs are deterministic per rom.
+- Same-game-time comparison of two roms of different speed: align on
+  the scene timer 0xFFF02A AND the attract step ((0xFFF031>>2)&7) AND
+  the frame flag 0xFFF01C == 0 on both, then compare 0xFFC000-0xFFFCFF
+  (below the stack) and the two text pages. Never compare at the same
+  emulator frame (LESSONS, the BURSTGATE exactness entry).
+- Rig: scratchpad rigcap2.sh <rom> 14 36 2 (14 screenshots) then
+  `tools/rig_barcode.py --rom <name>`; the rig's screenshot dir keeps
+  older files of the same rom name -- dedupe by vint (scratchpad
+  spans.py). Every chain ends with `tools/mister_push.sh rom/night/rg1.32x`.
+  IDLEOFF roms show a frozen picture on the rig by design; say so.
+- Arcade profile: `tools/arcade_trace.lua` (AT_START/AT_LEN), the
+  arcade's attract steps by frame: step 5 (level-1 demo) = f1500-2100,
+  step 0 = 2200-2700, step 1 (round 1) = 2700-3400, step 3 (title) =
+  3900-4500. Use it for routine EXTENTS and structure, never for
+  execution counts on our rom.
+- WRAMCODE tool: `tools/wram_reloc.py <image> <objdump> FF5000 a-b,c-d
+  out.h` (dry run), blocks in tools/game_altbeast.py TABLES
+  ['WRAM_BLOCKS'], entries known to be pointer-called in
+  ['WRAM_ENTRIES']. Rules and rejects are in the file's docstring; the
+  re-disassembly check compares every instruction with objdump's
+  resolved target. Region: 0xFF5000-0xFF5DFF (3.5 KB, tile thunks at
+  0xFF5E00).
+
+## 6. Rules added this session (LESSONS has each with its measurement)
+
+- Price an instrument on the CPU it measures before reading its result.
+- An instrument reading a shared flag reads it ONCE and shares that read.
+- Measure the frame, not the window; report the whole span distribution
+  with the one-vint column; conversions, not percentages.
+- Execution counts come from OUR rom (COUNTSITES), never the arcade trace.
+- Gauge instruction fetch separately from data access.
+- When a rig disagrees with an emulator by a constant, read the rig's
+  RTL for that path; the FPGA is an emulator too.
+- abs.w reaches 0xFF8000-0xFFFFFF only; lower WRAM needs abs.l.
+- Compare builds of different speed at the same GAME time.
+- A predicted saving is not a saving: measure the pass before and after.
+Bash Find where STATE points at handoffs so the new one gets a pointer
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'HANDOFF-SLIM-PIPELINE\|docs/handoff' STATE.md | head -3; grep -n 'START-HERE' CLAUDE.md | head -2
+
+OUT
+110:answer sat in `START-HERE.md` unread.
+118:`docs/handoff/START-HERE.md` is superseded by `STATE.md`. It is kept for
+Bash Point STATE at the handoff and commit
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'PY'
+p='STATE.md'; s=open(p).read()
+a="## THE TIERS — what each machine is truth for (Mike's call, 2026-09-25 08:00 ET)\n"
+i=s.index(a)
+s=s[:i]+"(The 2026-09-24/25 68K-time work -- instruments, the core's ROM wait,\nWRAMCODE, the dual-chain count -- is mapped in docs/handoff/HANDOFF-68K-FETCH.md.)\n\n"+s[i:]
+open(p,'w').write(s); print('ok')
+PY
+git add docs/handoff/HANDOFF-68K-FETCH.md STATE.md; git commit -qm "HANDOFF-68K-FETCH.md: the 68K-time axis -- instruments, the core's ROM wait, WRAMCODE, the dual-chain count; STATE points at it
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>" && git log --oneline -1; wc -l docs/handoff/HANDOFF-68K-FETCH.md
+
+OUT
+ok
+4f8ea103 HANDOFF-68K-FETCH.md: the 68K-time axis -- instruments, the core's ROM wait, WRAMCODE, the dual-chain count; STATE points at it
+     210 docs/handoff/HANDOFF-68K-FETCH.md
+Handoff written: HANDOFF-68K-FETCH.md, 210 lines, committed as 4f8ea103 with a pointer from STATE.md. Rig on rg1, tree clean.
+
+What it holds, in six parts:
+
+What is true now, eleven items, each with the instrument that established it: no pass waits on the FM window; the barcode's 48-line cost; the two-read race; the light-barcode distributions (ares 71%, FPGA 50%); mean pass lengths and the chain split; the core's DTACK wait on MD ROM reads (+18% fixed, +0-15% arbitration) and where it lives in IF.sv and sdram.sv; the tiering; the 68K-line ranking; BURSTGATE's zero; WRAMCODE's measured result; the dual-chain count.
+What waits on you: the WRAMCODE line candidate (play pass plus three launches, then LINE_FLAGS), the mid-pass push ruling, the palette card, the direction call.
+Next cards in order: the second WRAMCODE block set from our own rom's profile (the residue routines named, the WRAM left listed, the FPGA ring dump as the cheaper profile source), then the mid-pass push, then the palette rotor.
+Every RIGSPAN mode 1 through 16 with its two bytes, plus COUNTSITES, CHAINPRICE and the ring-collision caveat, the raw-V-to-lines rule, and the thunk region's remaining room.
+How things are run: ares dumps and screenshots, the same-game-time comparison recipe (scene timer, step, flag clear, below the stack), the rig capture chain and its dedupe, the arcade attract step map, and the relocation tool's usage and region.
+The rules added this session, nine of them, each backed by a LESSONS entry.
+Next: nothing running; the rig holds the line. On your word: the second block set, or the mid-pass push once you've ruled on the palette timing.

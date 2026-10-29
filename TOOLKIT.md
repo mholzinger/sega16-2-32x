@@ -227,6 +227,141 @@ time than the bounded latency saves (docs/log/LOOP.md iteration 7f, reverted).
   thunk: `tst.b` (TAS's exact N/Z, clears V/C) + `st` (no CC) + `rts`.
   See patch_game.py TAS_SITES + md_main.c TAS thunks.
 
+- **Run the census, do not eyeball it.** `tools/code_stream.py` builds the
+  program's instruction stream from the reference disassembly's own
+  address list (no Ghidra, no listing), and
+  `tools/hazard_census.py --stream` reports every dependency class over
+  it, plus a raw-opcode sweep for the classes whose opcode is distinctive
+  enough to survive one — TAS, STOP, RESET, TRAPV. The loose ones (CHK,
+  MOVEP) are deliberately NOT swept: MOVEP's pattern matches the `0000
+  xxxx` longword every rom pointer table is made of, and a list nobody
+  reads is worse than no list. Altered Beast output is
+  `docs/audit/hazard_census.txt` (LOOP-DECOMPILE 76).
+
+- **STOP is the same shape as TAS and nobody has hit it yet.** 12 sites in
+  Altered Beast, all inside the service/test region. The 68000 halts until
+  an interrupt the arcade guarantees; on 32X it resumes only if that
+  interrupt actually arrives. KIT RULE: census it, and if the port can
+  reach test mode at all, patch every site.
+
+- **A read-modify-write on a write-only latch is a hidden hardware
+  contract.** Altered Beast has one: `bclr #6,0xC40001`. On the board the
+  read returns 0xFF, because jts16b_cabinet.v's A[13:12]==0 arm only
+  latches flip and video_en from cpu_dout and never assigns cab_dout
+  (:199-202, default at :189). So the instruction writes 0xBF — flip off,
+  video ON — and looks harmless. **Any substitute for that address must
+  return 0xFF on read**, or the write half puts an arbitrary byte in the
+  video latch. KIT RULE: for every hardware address the census marks RMW,
+  derive what the board returns on READ before choosing the substitute.
+
+- **A 4-byte scan over 2-byte fields INVENTS pointers.** Chasing "who
+  points at this data block" is the method that cracks most rom regions,
+  and scanning the rom for longwords in range is how you do it — but a
+  window over a record of words reads two unrelated fields as one address.
+  On Altered Beast that produced 62 fictional pointers into one 7840-byte
+  block (LOOP-DECOMPILE 83). KIT RULE: count the DISTINCT HIGH WORDS of a
+  block's candidate pointers. A straddle can only ever produce one,
+  because that word is a different field holding the same small value.
+  Print the count, mark one-high-word blocks suspect, drop nothing.
+
+- **Census the TIMING classes too; the opcode scan cannot see them.**
+  `tools/timing_hazards.py` asks three questions separately because they
+  fail differently: a `dbf` branching to ITSELF is a pure cycle delay and
+  breaks on a different clock; a counted loop around `stop` measures
+  interrupts and breaks only if the interrupt never arrives; a
+  test-and-branch-back busy-waits on a byte and hangs if nothing writes it.
+  Altered Beast has one, one and three, and every one of them is in the
+  service or test path — so the game paces itself on its frame interrupt
+  and nothing else, and a slower unstalled 68000 cannot desynchronise it.
+  TWO TRAPS IN THE DETECTOR: a self-branching `dbf` has target == address,
+  so `target < address` drops exactly the shape you are hunting; and a
+  conditional branch backwards to an `rts` is a shared exit with the same
+  shape as a spin.
+
+- **Check that the program never writes rom space, and record that you
+  checked.** A rebasing port is only safe if nothing stores below the rom
+  ceiling. Altered Beast: zero sites. The check is one pass over the
+  stream and a clean result is still a kit rule.
+
+## Reading a NEW title's program rom, with no Ghidra — KIT-CORE
+
+Everything below runs from the rom and a binutils `objdump`. It was built
+while finishing Altered Beast (LOOP-DECOMPILE 73-84) after the analysed
+Ghidra project turned out to be the one artefact you must open least: its
+own rebuild rule is import once, seed once, never re-analyse, because
+re-running analysis over seeded code destroyed 84 functions the one time
+it happened.
+
+**Step 1 — get the instruction addresses, and know which set you have.**
+There are two, they answer different questions, and using the wrong one
+is the mistake that costs a session.
+
+    tools/code_walk.py           recursive descent from the vector table,
+                                 to a fixpoint: each pass harvests the
+                                 object routine pointers and rte dispatch
+                                 targets out of the code it just decoded
+                                 and seeds them
+    tools/code_walk.py --linear  a plain linear sweep to the code ceiling
+
+Measured on Altered Beast against a reference disassembly's own 19137
+addresses:
+
+    descent   5601 addresses    29.3% recall    0 wrong
+    linear   34748 addresses    99.8% recall    15641 wrong
+
+and the descent set is a strict SUBSET of the linear one — on 5601
+addresses they never disagree. **Take the linear superset for a hazard
+census**, where missing a TAS is the failure and a false positive costs
+one hand check. **Take the verified set for a rom map**, where a false
+instruction inflates code coverage and hides data underneath it.
+
+Descent stops at 29% for a reason worth knowing rather than working
+around: System 16 dispatches through `jmp (a0)`, and the per-scene tables
+have no entry reachable any other way, so there is nothing to validate
+them against. A table whose every target is only reachable through the
+table cannot be bootstrapped. Seed those by hand once you find them.
+
+**Step 2 — decode the stream.** `tools/code_stream.py` turns an address
+list into `addr, length, mnemonic, operands`. ONE TRAP, and it produced
+eight false findings before it was found: objdump WRAPS an instruction
+longer than six bytes onto a second line carrying an address and bytes but
+no mnemonic. Drop those lines and every long instruction measures short —
+including `move.l #next,$02(a6)`, which is the object state machine's exit
+idiom and the last instruction of many routines.
+
+**Step 3 — the dependency census.** `tools/hazard_census.py --stream`
+reports TAS, STOP, MOVEP and friends, plus the arcade hardware surface:
+every board address the program touches, with direction and width, because
+each one needs somewhere to land in the new machine's map. Its raw-opcode
+sweep covers only TAS/STOP/RESET/TRAPV — exact words or a tight range —
+because MOVEP's pattern matches the `0000 xxxx` longword every pointer
+table is made of, and a list nobody reads is worse than no list.
+
+**Step 4 — the timing census.** `tools/timing_hazards.py`, three separate
+questions: a `dbf` branching to ITSELF is a pure cycle delay; a counted
+loop around `stop` measures interrupts; a short test-and-branch-back is a
+busy-wait. See the landmines section above for the two detector traps.
+
+**Step 5 — bounds and profile.** `tools/bound_ref.py` audits function
+bounding against the stream; `tools/func_profile_ref.py` rebuilds the
+per-function profile with the arcade surface kept SEPARATE from work RAM.
+Conflating them is how 117 functions came to be labelled `hardware` when
+45 touched the board.
+
+**Step 6 — the rom map.** `tools/rom_map.py` marks code, marks the regions
+you have established, and for every remaining run prints who points into
+it. Chasing those pointers is what cracks data regions. Two rules keep it
+honest: a 4-byte scan over 2-byte fields INVENTS pointers, so count the
+distinct high words (see the landmines section); and prefer a bound that
+comes from the ADDRESSING over one that comes from the eye — the zoom
+table's index is read as a byte and shifted left five, so the table is
+exactly 256 rows and nothing about that is a guess.
+
+**What none of it replaces.** Every claim still has to name the
+instruction that consumes the value. The tools narrow where to look; they
+do not establish anything on their own, and one of them invented 62
+pointers into a block that has none.
+
 ## Hardware truth from jtcores (srcref/jtcores, GPL — derive, never copy)
 
 S16B shares jts16_prio.v/jts16_colmix.v with S16A (jts16_video.v's
@@ -677,6 +812,45 @@ with objective pass/fail (per-round parity sweeps against the oracle,
 soak tests, bisects). Ares play-testing remains the outer acceptance
 gate for everything.
 
+## The pattern library — `kit/` (2026-10-04)
+
+`tools/game_<name>.py` TABLES keys ARE the pattern catalogue: each key names
+a 68K idiom that recurs across titles, and the game file is one title's
+instantiation. That was never declared, so it drifted the moment a second
+title was derived:
+
+    altbeast 38 keys   goldnaxe 61   shared 35   goldnaxe-only 26   None in goldnaxe 16
+
+`kit/schema.py` declares all 64 with layer, shape, whether None is legal,
+what the value means, and the log entry that established it.
+
+    python3 -m kit.schema          # the catalogue, by layer
+    python3 -m kit.schema check    # audit every tools/game_*.py
+    python3 -m kit.schema index    # regenerate kit/INDEX.md (never hand-edit)
+
+Five layers, by how general each pattern is — this is the axis that decides
+what a second title inherits for free:
+
+    cpu68k    4   any 68000 program, any board, any vendor
+    decomp   11   any 68K program read through a disassembler or decompiler
+    s16b     11   the System 16B board
+    segaprog 21   Sega's 68K arcade program lineage
+    port32x  17   exists only because the 32X port needs it
+
+`patch_game.py` validates against the schema at import and reports EVERY
+problem at once; `T(key)` then gives a missing key and a genuinely-absent
+idiom different messages, because substituting an empty value for the second
+would patch nothing and say nothing. First run found a real gap:
+`game_altbeastj.py` carries `PAL_THUNK_A` but not `PAL_THUNK_APOST`, which
+`patch_game.py:1163` reads under `PAL_APOST`.
+
+THE RULE FOR GROWING IT. A pattern's write-up and the detector that finds it
+in a new ROM belong in the same file, so they cannot drift — the model is
+`tools/cport_cast.py`, `cport_widths.py`, `cport_names.py`, whose docstrings
+are better pattern write-ups than any prose here and stay true because the
+tool beside them is what runs. `kit/INDEX.md` is generated from the
+declarations; do not hand-maintain a second copy.
+
 ## Roadmap to "kit" status
 
 Reuse audit, 2026-08-17 (LOC counted, hardcode density measured):
@@ -687,7 +861,7 @@ scene anchors. Everything else is BOARD-level or 32X-level.
 
 | Component | LOC | Reuse | Per-title residue |
 |---|---|---|---|
-| `sh_src/` renderer (`m_main.c`, `mars_start.s`, `s_main.c`) | 6055 | ~95% | 3 extern symbol names; sprite bank mask `&7` (`m_main.c:1563`, assumes 1MB sprite ROM); `MD_TILE_MAX`; 16384-tile assumption |
+| `sh_src/` renderer (`m_main.c`, `mars_start.s`, `s_main.c`) | 6055 | ~95% | 3 extern symbol names; sprite bank mask `&7` (`m_main.c:1757`, assumes 1MB sprite ROM); `MD_TILE_MAX`; 16384-tile assumption |
 | `md_src/` shim | 1821 | ~80% | MCU personality (~60 lines), input map, DIP defaults, sound mailbox |
 | `tools/patch_game.py` | 981 | ~60% | 117 lines of hex tables + 22 hand `bfix` sites + the `remap()` address map |
 | `bake_sprites.py` + `sprite_discover.*` | ~950 | ~100% | none |
@@ -820,16 +994,48 @@ Find the title's discriminator scene at rung 3, not later — see
 "Geometry-convention rule".
 
 **Encryption gates the title choice** (surveyed 2026-08-17, `-listxml`
-grep for `317-*.key`). FD1094 decrypts opcodes as a function of CPU
-STATE, so those sets can never yield one flat patchable binary — they
-are out of scope for a static patcher, permanently.
-  - Clean (no key ROM): `shinobi5` (S16B, and NO MCU — cheapest
-    possible second title, skips the whole MCU bucket), `goldnaxe`
-    (i8751, same shape as AB), `tturf`, `wb3`, `aliensyn`.
-  - Blocked: `goldnaxe3`, `shinobi2`, `eswat`, `passsht` (FD1094);
-    `dunkshot` (FD1089); `altbeast2` (317-0066 key).
-  - Only `altbeast.zip` is in `./mame`; title #2 needs the dump on
-    disk before any of stage 3 can start.
+grep for `317-*.key`; RE-CHECKED 2026-09-12 against MAME 0.288). FD1094
+decrypts opcodes as a function of CPU STATE, so a static patcher cannot
+decrypt those sets itself — but it does not have to: MAME carries a flat
+pre-decrypted clone for most of them, suffixed `d` ("bootleg of FD1094
+317-xxxx set"). The `d` set's program ROMs (`bootleg_epr-*`) are the
+decrypted image, the CPU is a plain MC68000, art/sound ROMs are the
+originals, driver status good. Feed the `d` program to `patch_game.py`.
+Verified: `eswatd`, `cottond`, `dduxd`, `fpointd`, `bayrouted`,
+`goldnaxe1d`. (The 2026-08-17 "permanently out of scope" reading was
+wrong for these; it cost nothing but it kept half the S16B list off
+the table.)
+  - Clean (plain 68000 set): `goldnaxe` (set 6 US, i8751 317-0123A,
+    same shape as AB), `aliensyn` (no MCU), `fantzn2x` (S16C, no MCU),
+    `ddux1` (i8751), `bayroute1` (US, unprotected), `afightere`,
+    `shinobi5`, `tturf`, `wb3`.
+  - Reachable via a `d` set: `eswat`, `cotton`, `ddux`, `bayroute`,
+    `fpoint`.
+  - Still blocked: `aceattac`, `bullet`, `exctleag` (FD1094, no `d`
+    set — needs a state-tracked decrypt, unproven here); `dunkshot`
+    (FD1089, a STATIC cipher with no CPU-state term, so derivable, but
+    nobody has); `altbeast2` (317-0066 key).
+  - S16A titles (`fantzone`, `alexkidd`, `mjleague`, `bodyslam`,
+    `afightera`) are clean but need the S16A variant of the kit: no
+    315-5195 mapper, different sound wiring, jtcores `s16` core.
+  - Only `altbeast.zip`/`altbeastj.zip` are in `./mame` and
+    `roms/`; title #3 needs the dump on disk before stage 3 can start.
+
+**Stage 3 title: GOLDEN AXE (`goldnaxe`, set 6 US) — Mike's call,
+2026-09-12.** Chosen over Alien Storm because it exercises the kit as
+built and nothing else: same board, same 315-5195 mapper, same i8751
+conductor shape (317-0123A, 4 KB, dumped), same YM2151 + uPD7759 sound
+board, 2.54 MB flat (no SSF2), jtcores `s16b` is the spec. Alien Storm
+would have added four unbuilt subsystems before a frame composed:
+FD1094 (no `d` set for `astorm`), System 18's third plane on the MD VDP
+(which ARCHITECTURE.md already fills with both S16 planes), 2x YM3438 +
+RF5C68 sound, and the SSF2 mapper (SILICON.md 4e, derived, never run).
+Stage 0 (AB at 60) keeps priority; Golden Axe starts when its set is in
+`roms/goldnaxe` + `mame/goldnaxe.zip`. First rung: `make
+GAME=goldnaxe SPRLINE=1` + `tools/sprline_probe.lua` (hybrid vs
+framebuffer sprites), then the write-tap census (step a below). One
+known difference to diff first: its Z80 program is `epr-12390`, not
+AB's `epr-11671`, so `docs/sound/SOUND_DRIVER.md` needs a re-check.
 
 Per-title work the write-observer pattern implies (do it in this
 order, it is the cheapest path):

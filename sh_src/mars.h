@@ -51,6 +51,8 @@ typedef volatile signed long int vint32;
 #define MARS_SYS_COMM0      (*(volatile uint16_t *)0x20004020) /* Primary SH2 communication */
 #define MARS_SYS_COMM2      (*(volatile uint16_t *)0x20004022)
 #define MARS_SYS_COMM4      (*(volatile uint16_t *)0x20004024) /* Secondary SH2 communication */
+#define MARS_SYS_COMM5 (*(volatile uint16_t *)0x20004026) /* Secondary SH2 communication */
+#define MARS_SYS_COMM7 (*(volatile uint16_t *)0x2000402A) /* Secondary SH2 communication */
 #define MARS_SYS_COMM6      (*(volatile uint16_t *)0x20004026)
 #define MARS_SYS_COMM8      (*(volatile uint16_t *)0x20004028) /* controller 1 current value */
 #define MARS_SYS_COMM10     (*(volatile uint16_t *)0x2000402A) /* controller 2 current value */
@@ -98,9 +100,44 @@ typedef volatile signed long int vint32;
 #define SECONDARY_STATUS_OK 2
 #define SECONDARY_LOCK 8
 
+/* THE REGISTER ITSELF, which had no C accessor until 2026-09-27 -- every
+ * CCR touch in this tree was in mars_start.s (:465, :596, :1193). It lives in
+ * the I/O area (A31-A29 = 111), which the manual's table 8.2 marks "Cache is
+ * not used", so a plain volatile byte access is correct and needs no
+ * cache-through alias. */
+#define SH2_CCTL            (*(volatile uint8_t *)0xFFFFFE92)
+/* CONFIRMED BY THE OFFICIAL SPEC 2026-09-27: ~/src/32XDK/docs/
+ * sh7604-hardware-manual.md section 8.2 gives CCR at H'FFFFFE92 as
+ * W1 W0 - CP TW OD ID CE, matching every definition below. These were
+ * derived from the MiSTer RTL; they are now documented, not inferred. */
 #define SH2_CCTL_CP         0x10
 #define SH2_CCTL_TW         0x08
+/* NOTES 89: the two REPLACEMENT-DISABLE bits, absent here until
+ * 2026-09-14 and the reason the fetch term looked untestable. Derived
+ * from srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101, whose
+ * packed CCR_t is MSB-first: W[1:0], UNUSED, CP, TW, OD, ID, CE.
+ * CACHE.sv:499 is the whole mechanism --
+ *     CACHE_UPDATE <= CBUS_ID ? ~CCR.ID : ~CCR.OD;
+ * a FILL happens on the instruction bus only while ID is clear and on
+ * the data bus only while OD is clear. CE is untouched either way, so
+ * LOOKUPS still work and the other stream still caches normally. That
+ * is the "comparable work" condition CACHEOFF violated: half the cache
+ * survives in each build and the machine stays alive. */
+#define SH2_CCTL_OD         0x04    /* data replacement disable */
+#define SH2_CCTL_ID         0x02    /* instruction replacement disable */
 #define SH2_CCTL_CE         0x01
+/* CCR[7:6] selects which way the ADDRESS array read/write touches.
+ * Packed struct, MSB first: W[7:6], unused[5], CP[4], TW[3], OD[2],
+ * ID[1], CE[0] -- srcref/S32X_MiSTer/rtl/SH/SH7604/SH7604_pkg.sv:92-101. */
+#define SH2_CCTL_W_SHIFT    6
+#define SH2_CCTL_W_MASK     0xC0
+/* The two cache arrays are directly addressable (CACHE.sv:53-54).
+ * ADDRESS array: way from CCR.W, and the set, tag and valid bit come
+ * from the ADDRESS WRITTEN -- set A[9:4], tag A[28:10], valid A[2]
+ * (CACHE.sv:291-294). DATA array: way A[11:10], longword A[9:2]
+ * (CACHE.sv:255-287,318-319). */
+#define SH2_CACHE_ADDR_ARRAY 0x60000000u
+#define SH2_CACHE_DATA_ARRAY 0xC0000000u
 
 #define SH2_FRT_TIER        (*(volatile uint8_t *)0xFFFFFE10)
 #define SH2_FRT_FTCSR       (*(volatile uint8_t *)0xFFFFFE11)

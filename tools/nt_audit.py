@@ -31,6 +31,9 @@ class Regs:
         self.rs    = [be16(b, o+26+2*i) for i in range(28)]
         self.any_special = b[o+82]
 
+DISTINCT = {}
+
+
 def main(d):
     snap  = open(f'{d}/snap.bin','rb').read()
     ntmir = open(f'{d}/ntmir.bin','rb').read()
@@ -47,6 +50,7 @@ def main(d):
               f'vx0={wl.vx0&0x3FF} vy0={wl.vy0&0x1FF} xs_raw={wl.xs_raw:04x} '
               f'any_special={wl.any_special} pq={wl.pq} pq_a={wl.pq_a}')
         tot = {'ok':0,'blank':0,'stale':0,'freeslot':0}
+        want_keys, got_keys = set(), set()   # distinct on-screen tiles, this plane
         for row in range(28):
             pqb, vxr, vyr = wl.pq, wl.vx0, wl.vy0
             used_alt = 0
@@ -77,6 +81,9 @@ def main(d):
                     continue
                 code = w & 0x1FFF
                 cset = (w >> 6) & 0x7F
+                want_keys.add((code, cset))
+                if slot != BLANK and tag[slot] != 0xFFFFFFFF:
+                    got_keys.add((tag[slot] & 0xFFFF, (tag[slot] >> 16) & 0x7F))
                 if slot == BLANK:
                     rowstat['blank'] += 1
                     continue
@@ -103,6 +110,18 @@ def main(d):
                       f'blank={rowstat["blank"]:2d} stale={rowstat["stale"]:2d} '
                       f'free={rowstat["freeslot"]:2d}{flag} {samples}')
         print(f'  TOTAL {tot}')
+        # DISTINCT ON-SCREEN TILES: want = the keys this plane's cells name in the
+        # dumped tilemap (the arcade's demand), got = the keys actually in the slots
+        # the mirror ships. Counted inside the one walk above, never a second one.
+        print(f'  DISTINCT plane {name}: want {len(want_keys)}  shipped {len(got_keys)}')
+        DISTINCT[name] = (want_keys, got_keys)
+
+def report_distinct():
+    w = set().union(*[v[0] for v in DISTINCT.values()])
+    g = set().union(*[v[1] for v in DISTINCT.values()])
+    print(f'DISTINCT BOTH PLANES: want {len(w)}  shipped {len(g)}')
+
 
 if __name__ == '__main__':
     main(sys.argv[1] if len(sys.argv) > 1 else '/tmp/nt_dump')
+    report_distinct()

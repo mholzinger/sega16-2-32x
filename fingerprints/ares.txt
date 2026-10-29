@@ -1,0 +1,29 @@
+machine: ares (headless fork), Mega 32X NTSC-U
+date:    2026-09-27
+build:   make line TESTCART=1
+readout: on-screen table, plus wram 0xFFE100 and a savestate
+
+header: 09 OF 09 PASS  (T10 is report-only, see below)
+
+TEST                  VALUE   RESULT
+T00 WRAM WORD          0000   PASS
+T01 WRAM LONG          0000   PASS
+T02 CART BANK LONG     0000   PASS
+T03 CART BANK WORD     0000   PASS
+T04 MD VRAM            0000   PASS
+T05 MD CRAM            0000   PASS
+T06 DMA WRAM-VRAM      0000   PASS
+T07 SH-2 ALIVE         0000   PASS
+T08 T-1K WRAM READ     005A   MEAS    90 lines
+T09 T-1K CART READ     005A   MEAS    90 lines
+T0A T-1K VRAM WRITE    0071   MEAS   113 lines
+T0B T-1K FB WRITE      0040   MEAS    64 lines
+T0C T-1K FB READ       005A   MEAS    90 lines
+T0D T-DMA256 ACTIVE    001C   MEAS    28 lines
+T0E T-DMA256 VBLANK    0002   MEAS     2 lines
+T0F FMDL ASSEMBLE      0037   MEAS    55 lines
+T10 FMDL BLAST         005C   MEAS    92 lines
+T11 FMDL LIFT          0044   MEAS    68 lines
+T12 FMDL PCT OF FRAME  0038   MEAS    56 %  <- the transport's share
+T13 32X CRAM VBLANK    1234   PASS   the write lands
+T14 32X CRAM ACTIVE    5678   MEAS   the write ALSO lands

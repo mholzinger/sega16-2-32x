@@ -11,6 +11,103 @@ wrong. Hardware claims cite `srcref/jtcores` Verilog by file and line.
 
 ---
 
+## THE LINE'S TILE PIPELINE IS THE SLIM ROUTE (2026-09-21, Mike: "THIS is the new line")
+
+The frame described below the scope section was drawn, until 2026-09-20,
+with the SH-2 converting every tile at run time and packing it into the
+framebuffer packet for the 68K to DMA into VRAM: cart -> SH-2 -> FB ->
+VRAM, three payload copies, 17 words per tile, ~40 tiles per packet.
+
+The line now draws it the other way (`make line`, rom/night/slim31.32x):
+
+    bake     every (round, set) the level pages use is pre-converted to MD
+             4bpp in a cart blob at 0x268000 (TILESMD, tools/bake_tiles_md.py)
+    record   the SH-2 emits 2 words per baked tile: slot|fg<<15, blk*64+code
+    fetch    the 68K, after the game's IRQ4 and before the FM raise
+             (partb_hook), reads the 16 art words from cart through the
+             0x900000 bank window into WRAM
+    land     68K->VDP DMA from WRAM to VRAM, first thing in the same hook
+    inline   a set the bake does not cover still ships its pixels as a
+             17-word record flagged by bit 14; the 68K DMAs it from the FB
+
+cart -> 68K -> VRAM, two copies, and the SH-2 never touches the bytes of
+92% of gameplay tiles (BAKECENSUS). The VDP cannot DMA from cart
+(measured, LESSONS), so two is the floor. docs/design/SLIM-PIPELINE.md
+is the design and its measurements; docs/design/LINE-DELTA-bldS-slim31.md
+is the validation against the previous line; docs/design/HOTPATH.md is
+what has worked on hardware and how it was verified.
+
+Two hardware facts shaped where the steps sit, both from the rig, both
+invisible in ares: the 68K's cart reads and the WRAM->VRAM DMA are
+accepted at the start of the after-IRQ4 hook and rejected at the top of
+the consume, after the fetch, and after the FM raise (2026-09-20, four
+placements); and the FB persists across a warm relaunch, so the first
+BG palette publishes are forced. One thing is NOT yet understood and is
+the open card: the level-start background is a per-launch race on the
+FPGA whose odds a build's layout shifts (LESSONS 2026-09-20/21).
+
+---
+
+## THE SCOPE OF THIS PROJECT (2026-09-08, Mike — read this first)
+
+**The 68000 is not the problem, and the clock is not a loss.** Measured,
+not assumed (LOOP27 78-79):
+
+    the game needs             2780 instructions per vint
+    our budget                 127,841 cycles per vint at 7.670 MHz
+    so it fits at any cost <=  46 cycles per instruction
+    the ARCADE itself runs at  45.2 cycles per instruction
+
+The arcade's 10 MHz 68000 spends its frame STALLED ON ITS VIDEO BUS, not
+computing — 45 cycles per instruction is a bus-bound machine. We do not
+pay those stalls, because the game's video writes land in our RAM and
+packet staging instead of on an S16 video bus. The slower clock is
+therefore offset by cheaper access, and the game's own code fits.
+
+**CORRECTED 2026-09-12 (LOOP-DECOMPILE 88). The figures below are LOW BY
+2.5x AND THE CONCLUSION DOES NOT SURVIVE THEM.** `tools/arcade_trace.py`
+counted the lines MAME lists, and MAME COLLAPSES a tight loop into one
+`(loops for N instructions)` line, so every loop was counted once.
+Re-measured with the loops expanded, same rig, level 1:
+
+    arcade, executed           14,209 instructions per vint
+      of which the frame wait   6,025
+      of which WORK             8,184
+    arcade cycles/instruction    11.7   a normal 68000 mix, NOT bus-bound
+    our budget                 127,841 cycles per vint at 7.670 MHz
+    so our allowance is          13.3 cycles per instruction
+
+**So the arcade is not stalled at 45 cycles per instruction; that number
+was the artefact.** It runs at 11.7, and our 13.3 is a 14% margin over the
+game's own mix, not a fourfold one.
+
+Measured on our side the same way, `rom/night/vi39.32x`, level 1:
+
+    executed                   12,418 per vint
+      the frame wait            2,781
+      WORK                      9,637   game 4,904 + shim 4,733
+
+LOOP27 79's RATIO survives exactly — the shim is 49% of the 68K work, as
+it said. Its absolutes, and everything derived from them, do not.
+
+**What this does NOT establish:** that the 68000 is the binding
+constraint. Our rom still spends 2,781 instructions a vint in the frame
+wait, and that wait is the game blocked on the port's frame flag, not
+proof of spare CPU. The honest statement is that the clock has a 14%
+margin rather than a comfortable one, so shim instructions now cost
+something they were assumed not to.
+
+
+
+**The only thing between this port and parity is the pipeline** — the
+shim that feeds frames and sprites into the 32X at the right frequency
+and in the shape that architecture wants. Measured, it costs 2882
+instructions per vint, about as much as the game itself, and every one
+of those instructions is ours to spend or save.
+
+That is the scope. Work that reduces or reshapes the pipeline is on it.
+Work premised on the 68000 being too slow is not.
+
 ## RUNNING ON REAL SILICON — see docs/design/SILICON.md
 
 2026-09-08: the port boots and runs on a real 32X FPGA core. Two

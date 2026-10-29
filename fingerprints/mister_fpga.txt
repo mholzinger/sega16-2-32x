@@ -1,0 +1,65 @@
+MiSTer FPGA, S32X core (mister.tv.local), 2026-09-27
+TESTCART 63 tests -- 31 graded, 29 PASS, 2 FAIL. PLATFORM FPGA OR HW.
+Eight TCPAGE builds, one screenshot each; the launch API takes no pad input.
+
+RESOLVED THE SAME EVENING -- the cause was the missing 68S-off FIFO pointer
+reset (md_main.c:3855). Variant B adds it and the transport is exact; variant
+C shows a dummy word arrives normally, so nothing is being eaten. The FPGA now
+reads 30-30 PASS. Kept below as the capture.
+
+THE ONE REAL FAILURE, AND IT REPRODUCES
+  T36 DREQ SH2 SUM     F7E0  against 07E0 -- short by exactly 0x1000
+  T37 DREQ FIRST WORD  0000  against 1000
+  The 68K pushed all 64 words (T35 PASS). The SH-2's DMAC received 63 of them
+  IN THEIR CORRECT SLOTS and slot 0 was never written -- it still holds the
+  zero the receiver put there. Not a shift: a shift would leave 0x1001 in slot
+  0 and the same short sum. THE FIRST WORD OF THE TRANSFER IS LOST.
+  Twice, on two launches. ares, BlastEm and Genesis Plus GX all pass.
+
+  This is the first deterministic capture of what the record calls "partial
+  DREQ landings" and "the lost-push belt" -- previously inferred from pixels
+  and packet censuses. Two numbers, reproducible, on the transport every
+  frame of the shipping game goes through.
+
+WHERE THE FPGA CONFIRMS A DERIVATION
+  T0A VRAM WRITE   0071   the 18-slot count from GEN/vdp.sv predicts 113.78
+  T16 VRAM READ    0072   114 -- closer to 113.78 than ares' 113
+  T0D DMA256 ACT   001C   predicts 28.44
+  T18 DMA FILL     000E   predicts 14.22
+  T19 DMA COPY     001C   predicts 28.44
+  All five RTL-derived rows land on the machine that runs that RTL.
+
+  T2E 32X BMMR     80C3   EXACTLY the core's own BMMR_MASK. BlastEm agrees;
+                          ares says B3FF and Genesis Plus GX says 80FF, so
+                          two of three emulators have this register wrong.
+  T37 LINES/FRAME  0106   262. Same as all three emulators.
+  T25 4096 NOPS    0023   35, so a NOP is 4 cycles here too.
+  T2B MD CRAM MASK 0EEE   nine-bit CRAM, matching ares and BlastEm.
+  T31 VSRAM WIDTH  07FF   eleven-bit, matching ares and BlastEm.
+  Z80 page         all    including T39 Z80 EXECUTES = 005A.
+  MD VDP page      all    VSRAM, DMA fill and copy verified, status vs VCNT.
+
+WHERE IT DIFFERS, AND THESE ARE THE KNOWN PENALTIES
+  T24 57344 CYC    0079   121 lines, so 473.9 68K cycles a line against the
+                          emulators' 477.9. The frame is still 262 lines, so
+                          the FPGA simply gives the 68K ~0.8% less than the
+                          emulators do and ~3.0% less than the nominal clock.
+  T08 WRAM READ    +03    work RAM, no cart, no VDP
+  T09 CART READ    +05    the core's ROM DTACK wait (IF.sv USE_ROM_WAIT)
+  T0B/T0C/T1A FB   +04/+06/+03   the framebuffer stall ares does not model
+  T0F-T12 FMDL     +01..+03
+  T27 ADAPTER CTRL 0003   against 0083 everywhere else: REN reads CLEAR here.
+
+ONE ROW THAT NEEDS RE-READING, NOT A DIVERGENCE
+  T0E DMA256 VBLANK  0103  259 lines against 2. That is about a whole frame,
+  so the measurement almost certainly straddled one rather than timing a
+  vblank DMA. Re-aim the test before quoting the number.
+
+AND ONE CLAIM OF MINE IT REFUTES
+  T1D 32X CRAM ACTIVE  5678, the same as all three emulators. I had read
+  GEN/32X VDP.sv:402-406 and :170 as implementing the manual's PEN refusal
+  and predicted 0000 here. The machine that RUNS that RTL lands the write, so
+  my reading was wrong about which path the gate covers -- the 68K's route to
+  0xA15200 is evidently not the one PEN guards. Four machines now land it
+  against a manual that says it must be refused. Real Sega silicon is still
+  the only authority left, but the weight has moved a long way.

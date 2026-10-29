@@ -1,0 +1,27 @@
+[
+{
+"call": 13614,
+"caller": "FUN_000034fe",
+"regs": {
+"0": 128
+},
+"table": null
+},
+{
+"call": 13670,
+"caller": "FUN_000034fe",
+"regs": {
+"0": 128
+},
+"table": null
+},
+{
+"call": 18870,
+"caller": "FUN_00004870",
+"regs": {
+"6": 0,
+"7": 0
+},
+"table": "0x06D70"
+}
+]

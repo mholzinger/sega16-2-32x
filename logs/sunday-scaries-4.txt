@@ -1,0 +1,1195 @@
+rd107 installs the zombie trio with the right headers and palette slots, but the tick freezes at 0x51. Pulling the coroutine stack to see where it is stuck.
+
+Found the root cause: 49 unresolved jump-table sites across 20 functions where Ghidra couldn't recover the PC-relative tables, causing the port to jump to garbage. I'll now write and run a script to override each site with the correct JumpTable and re-export.
+Fixing the script's operand filter (it picked the register instead of the table address) and rerunning it.
+
+I'll need to disassemble the jump table targets and re-fit the function body after each override, since Ghidra's function bodies currently stop short of reaching them. Updating the script and rerunning now.
+The Ghidra re-export with the 13 jump-table overrides is running. Meanwhile: adding the open cards, regenerating FACTS, and preparing the swap-and-build script.
+
+The re-export kept all 839 functions and FUN_0000fd6c now decompiles with a real switch. Checking its exact shape before swapping the export in and building rd108.
+
+Waiting on the rd108 build, which is the first build on the re-exported decompilation with the jump tables.
+
+The call-site number is only a miss-counter tag, so the passes that hardcode it can accept any number. Relaxing those three regexes and relaunching rd108.
+
+rd108 built on the re-exported decompilation. Measuring it.
+
+rd108 still stops at tick 0x51. Pulling the coroutine stack again to see whether it is the same site.
+
+I found that the table entries are offsets from their own address rather than the table base, which caused many targets to land mid-instruction. I'm fixing the script, clearing out the bad disassembly, and rerunning it.
+The corrected tables now name real instruction boundaries. Launching the re-export again and fixing the lesson's wording in the meantime.
+
+The re-export recovered the tables, but Ghidra folded the state-byte load into the pointer, so cases appear as index-minus-displacement (e.g. case -0x23:). I'll verify every overridden switch follows this pattern before handling it in the generator.
+All eight pointer-typed switches follow the same rule: the case value is the state byte at +0x23 minus 0x23. Encoding that in the generator, swapping in the export, and building rd109.
+
+rd109 built. Measuring it.
+
+rd109 confirms the demo matches the arcade on positioning, timing, and spawning, except the port's zombies survive the hero's attack. Next I'll measure the kill window on both machines to find the discrepancy.
+I've traced the bug: child zombies stay stuck because the port compares against a stale D1 holding the child's own state instead of the expected value. I'll now check how D1 gets set in the 68K prior to dispatch and how the port uses it.
+The port's generic 68K-address reads (P68) corrupt a pointer that is already SH-2, which is what FUN_0000e20c returns. Making P68 the identity for SH-2 pointers and building rd110.
+
+rd110 matches the arcade exactly at the demo's end (tick 0x2BA), with the trio surviving as expected, though the children land in state 7 with a script pointer of -4 via a single path in FUN_0000fd6c. I'll compare that path's logic on both sides next.
+Found that rd110 ends the demo at tick 0x2BA matching the arcade, but the children's behavior diverges at the parent's hit reaction due to a stale A1 pseudo-register read. I'll compare the child's own-state-4 path on both sides and fix the A1 read.
+I found that the trio spawner's slot search uses the comma form (FUN_0000e032(), bVar5), and my pass carried over the carry flag but missed re-reading A5, causing it to reuse the stale slot 17. I'll fix the comma rewrite and queue rd112.
+rd112 is building with the slot-search fix. Meanwhile, recording the lesson and locating the credit counter the attract text reads.
+
+rd112 matches the arcade's enemy positions and timing through tick 0x1FF, but the demo now ends before the arcade's tick 0x2BA. I'll measure the end window on both machines next.
+The port's demo end matches the arcade's, but at tick 0x246 the arcade already shows zombies 49/50 dying while the port still has them alive—I'll compare slots 54–61 to find the discrepancy.
+Frames now match arcade output at tick 0xD4, with the only remaining discrepancy being zombie 49/50 damage from the hero's late attack (arcade 0x18 vs port 8). I'll diff the hero's record at tick 0x1FE while starting the attract gate on rd112 in the background.
+The power level FFE006 is raised when a zombie's record is released (0x1004C → 0xF934 → 0xF742 / 0xE1E8). Reading those two routines on both sides.
+
+I'll start by scanning every 68K instruction that touches (6,An) to pinpoint the power-level increment, then check the gate result before moving on to the fix, rd113 measurements, STATE update, commit, and push.
+I found that the pending-bonus adder at 0x3706 reads a 4-byte value through unmapped Ghidra RAM names, and its BCD adjust is just a stub. I'll hand-derive the logic, build rd113, and trace the missed hit around tick 0x210 on both machines in parallel.
+Waiting on rd114, the build with the flame-script and x-step fixes.
+
+Checking who writes the flame's bad script pointer, and fetching the arcade's state around the second pair's spawn.
+
+Found the literal: the flame's SH-2 symbol address lives in FUN_00011886's literal pool. Disassembling the port code around it and checking that function's script-pointer stores.
+
+I'll check the remaining symbol-as-value spellings in the unit and look for an ELF to map the literal, starting with rebuilding rd115 using the restored ELF copy.
+Committing the day's generator, Ghidra script and doc work locally as a checkpoint while rd115 builds its ELF.
+
+I found that the second pair's drift stems from reading a stale A2, with 0xE266 leaving A2 on the chosen player's chaser byte before the pair's handler tests it. I'll check the A2 pseudo-register plumbing before adding the publication.
+Confirmed rd115's flame record stays intact under the widened symbol rule, and traced the second pair's early stop to the chaser-count pointer read via A2, set inside 0xE266. Now publishing A2 from the hand-derived helper and building rd116.
+Fixing the kind tag for the A2 re-read (the tag carries a leading zero) and launching rd116.
+
+Zombie 49 now correctly takes flame damage and spawns death parts, but the second pair still gets stuck in state 3, meaning the A2 re-read isn't reaching the handler. I'll check the generated text and redo the pool diff at the matching tick.
+I found that the second pair stops because its animation counter cycles 0/1 instead of advancing frames, triggering the "paused after three cycles" rule within six ticks. I'll check the animation stepper (0x65CA) on both sides along with the script bytes it processes.
+Contact flags and distance check out, so the state-3 entry must come from a path not visible via reading the code. I'll instrument the handler with a generator pass (rd117) that logs the tick into probe globals every time the state-3 label is entered.
+Found that the probe pass failed due to a function name formatting slip; fixing it and relaunching rd117, while also checking the hero's dispatch register publication to explain why it reacts differently from the arcade at tick 0x16B.
+The hero's state now matches the arcade tick-for-tick, but it still triggers the "within reach" branch at tick 0x161. I'll extend the probe to capture the distance and target seen at that point, then rebuild.
+I've confirmed that at tick 0x161, the pair's nearest player (player 2, slot 8) has state 0x14, triggering the "target state ≥ 0x11 → wait" rule. Now I'll compare player 2's state across both machines at that tick.
+Found the root cause: a Ghidra flag placeholder issue where the 68K code checks the Z flag from 0xE266's D0, but the C translation reuses an unrelated bool—this happens at six sites, plus a bogus extraout_D0w == -1 check that can never be true for a ushort. I'll add rules for both issues and rebuild rd118.
+The second pair now matches the arcade's schedule timing closely. I'm noting this finding while rd119, the widened rule candidate for the rig, finishes building.
+At tick 0xD5 the hero's state, position, frame, partner spawn, and input byte all match between arcade and port, so rd119 checks out. I'll update STATE, commit, push rd119 to the rig, and check the gate.
+rd119 is running on the rig. I found the attract credit-text blink is 26 ticks off, so I'm now sweeping the port's attract-step boundaries by frame against the arcade's while the luma gate finishes in the background.
+Paste this into that thread as the next message:
+
+
+Before any more port fixes, change how you work. Do these in order and stop after step 2 to show me the make target output.
+
+1. Promote your harness into the repo. Copy measure_rd.py, pair20.py, the tick/ arcade dumps (aw_*.bin) and the build_rdNN.sh chain out of the scratchpad into tests/demo-b/. Add a Makefile target `check-demo` that builds the port rom, runs ares-headless for the demo, diffs every live object record against the arcade dumps at ticks 0xA2, 0xD4, 0x1FE, 0x228, 0x246, prints the tick table, and exits 1 on any record mismatch. Commit it. Nothing in your loop may depend on the scratchpad after this.
+
+2. Give the port build its own output directory. `make port` writes objects and the rom under build/port/ and never touches rom/s16.32x or the line's objects. No touch of source files to force rebuilds, no second `make line` to restore. Prove it: build the port, then `make line` must be a no-op.
+
+3. From now on a hand-derived function is a C file, not a regex pass. Put it in sh_src/portfull/hand/FUN_<addr>.c and have cport_prep skip that address. Only mechanical rewrites stay as passes. Do not add new regex passes for single functions.
+
+4. Batch independent fixes. If two fixes touch different objects, put both in one build and let check-demo tell them apart. Target one build per three fixes, not one per fix.
+
+5. Stop writing lessons for things the code already encodes. If a fix is an override file or a pass, the commit message carries the finding in two lines. LESSONS.md gets a line only for a hardware or decompiler fact that no code captures, with the file:line that proves it.
+
+Report each step as: what changed, the command I run to verify it, the result.
+Next: after it shows the make check-demo output, reply "continue" and it proceeds to steps 3 to 5 on its own.
+I'll update the Makefile's object layout and add a check-demo target, then pull the two arcade dumps needed at ticks 0xA2 and 0xD4 into a separate port build directory.
+The shadow build reached the rom link and failed only on an untracked tool the Makefile calls. Tracking that tool, letting the shadow also link untracked tools, and resuming the build.
+
+The out-of-tree build still leaks because tools write through the shadow's symlinks. I'll switch sh_src, md_src, and tools to real copies refreshed via rsync on each run, then re-verify both properties.
+The port build no longer touches the real tree, and the dry run revealed the check's search misses ticks skipped within a frame, taking 34 minutes serially. I'm rewriting it to run targets in parallel, tolerate skipped ticks, and use arcade dumps at neighboring ticks, which I'm capturing now.
+The arcade neighbour captures and make check-demo are running in the background. Waiting for the check's table.
+
+Steps 1 and 2 are done and committed (9197ef44). Stopping here as instructed.
+
+Step 1: harness in the repo.
+Changed: tests/demo-b/check_demo.py (the check), tests/demo-b/arcade/aw_*.bin (97 arcade work-RAM dumps from MAME with a fresh NVRAM directory, including the three ticks around each target), measure_rd.py, pair.py, records.py, the old build-chain script, a .gitignore exception for the dumps, and a check-demo target in the Makefile. Nothing in the loop reads the scratchpad any more.
+Verify: make check-demo
+Result (about 8 minutes, the five ticks run in parallel):
+
+
+target  at tick  port frame arcade dump  hero x arc/port  live  bytes  live records differing (slot:bytes)
+00a2    00a2     1649       aw_1660.bin  12d0/12d0        same  16     21:10 22:3 23:3
+00d4    00d4     1699       aw_1710.bin  12c6/12c6        same  0      -
+01fe    01fd     1997       aw_2007.bin  1302/1302        same  39     16:22 18:10 21:7  (port skipped 01fe inside a frame; compared at 01fd)
+0228    0228     2039       aw_2050.bin  12fc/12fc        same  27     18:12 21:7 49:4 50:4
+0246    0245     2069       aw_2079.bin  130a/130a        DIFF  52     18:14 21:7 52:5 54:3 55:4 56:3 57:6 59:3 60:4 61:3  (port skipped 0246 inside a frame; compared at 0245)
+        live arcade [0, 8, 18, 19, 20, 21, 40, 48, 54, 56, 59, 61]
+        live port   [0, 8, 18, 19, 20, 21, 40, 48, 52, 54, 55, 56, 57, 59, 60, 61]
+check-demo: 4 of 5 ticks differ
+make: *** [check-demo] Error 1
+It exits 1 today. The residuals it names are real: a few bytes in the parts objects at 0xA2, the 0xEE80 pair and the flame at 0x1FD and 0x228, and at 0x245 the port spawns eight death parts where the arcade spawns four. Those are port fixes for after step 5. Two properties of the check worth knowing: the port sometimes runs two game ticks in one frame, so a target tick can be invisible at a frame boundary and the check then compares at the neighbouring tick and says so; and the arcade dumps are Sega-derived, so the public-branch refresh must exclude tests/demo-b/arcade/.
+
+Step 2: the port builds out of tree.
+Changed: make port runs this same Makefile inside build/port/, a shadow tree made by tools/shadow_tree.sh. sh_src, md_src and tools are real copies refreshed by rsync (newer wins) because the build regenerates tracked files there and several tools write beside their own path; the first symlinked version wrote sh_src/portfull/*, md_src/game_irq.h and sh_src/tiles.bin into the real tree, which is why they are copies now. Everything else is a per-file symlink. port and check-demo joined INFO_GOALS so they never restamp the real tree's .build_flags. The rom is build/port/rom/s16.32x. No touch, no restoring make line.
+Verify:
+
+
+touch /tmp/marker; make port
+find . -path ./build -prune -o -path ./.git -prune -o -type f -newer /tmp/marker -print
+make line
+Result: the find prints nothing (the real tree is untouched). make line afterwards does exactly what make line after make line does: it regenerates buildstamp.h, recompiles m_main.c and relinks, because the line has always relinked for its build stamp. Its rom differs from the kept line only in the 17 stamp bytes. If you want the line to be a literal zero-command no-op, that is a separate change to the stamp rule.
+
+Reply "continue" for steps 3 to 5.
+
+Background command "Wait for the check on the hand-file build" completed (exit code 0)
+Background command "Wait for the flame-fix check" completed (exit code 0)
+Background command "Wait for the flame-fix check" completed (exit code 0)
+Background command "Wait for both dense sweeps and summarise every remaining difference" completed (exit code 0)
+Background command "Wait for the dense sweeps to finish" completed (exit code 0)
+continue with steps 3 to 5. Two additions first:
+
+a. Add tests/demo-b/arcade/ to the public-branch exclusion list in the refresh script now, and commit that with a one-line note in the public repo policy doc. Do not leave it as something to remember.
+
+b. Open a card, do not build it: "generated files write under build/, not into sh_src/ or md_src/". The shadow tree stays until that card lands. Note the three files it was added for.
+
+Then steps 3 to 5 as written. When they are done, the four residuals check-demo printed are the work list, in this order: the eight-versus-four death parts at 0x245, the flame at 0x1FD and 0x228, the 0xEE80 pair, the parts bytes at 0xA2. Batch them two or three per build. check-demo is the only gate. Report each build as the tick table only, plus the commit hash.
+Starting with the two additions, then step 3.
+
+Migrating the hand-derived functions to C files: two of them relied on locals a pass used to supply, fixing those, then rebuilding and running the check to prove nothing moved.
+
+The flame object's spawn position is the lead: capturing the arcade at the three ticks around its birth to compare with the port's, while the migrated-generator check runs.
+
+Three measurements in parallel while the flame probe builds: the second zombie pair's half-pixel at its birth, and the 0xEE80 objects' divergence after tick 0x136.
+
+The remaining one-tick skews between objects are likely just dumps captured mid-tick, since the port's tick isn't synced to the frame when the SH-2 slows down. I'll check how the frame loop drives the coroutine to see if a measurement build can force frames to only end after a full tick completes.
+I'll check where in the master's frame loop the tick kicks off, since it can start late relative to vblank where the ares dump lands—I want to see if a measurement build can trigger it right after vblank instead.
+Flame-fix check rebuilding in the background. Meanwhile, tracing the eight-versus-four death parts (work-list item 1).
+
+The flame record has been frozen since initialization—the dx sign never flips and the animation never steps. I'll check the hand file's script-install block to find what writes the damage byte for slots 49/50.
+Flame root cause narrowed: the port's slot-18 record never changes after its spawn, so the flame handler is not being dispatched. Checking whether the dispatch table knows the hand-file function.
+
+Flame probe build is running. Meanwhile, reading the port's hand-written player-hit walk, the 0xDABC handler's 68K call chain, and the player-active bytes in both dumps.
+
+Investigating why the probe build lost the flame spawn entirely (slot 18 became an orphaned record). Checking how the seed handler's address is written in the generated text.
+
+Found the root cause: the table generator only scans altbeast_port.c for definitions, so a hand-filed function got dropped, leaving the flame handler and flame seed undispatched. I'll fix the table generator next.
+Flame, trio and death parts are fixed in this build (0x228 and 0x246 now differ only in one stale-byte slot). Next: committing, then the parts spawn (two ticks late in the port) and the pair.
+
+Found that Demo B's leftover artifacts all trace back to a scroll fraction inherited from the prior scene, where demo A's port ended with scroll speed 0x40 instead of 0x80. Now sweeping demo A on both machines to pinpoint where the divergence occurs.
+Demo A diverges early—by tick 0x5c its enemy count and speed index already differ from the arcade version, and its hero takes damage the arcade never does. I'll sweep ticks 0x28 to 0x60 of demo A record-by-record to pinpoint the first differing slot.
+Found the demo-A divergence: the original spawner advances A6 by 0x80 per call, but the port never moves A6, causing five trail objects to overwrite one record. I'll review the caller loop and port callee to document this in the hand file.
+Trail objects now exist on both machines; the remaining per-object bytes (+07, +4e, flag bit 3) look like the trail handler's first run. Reading that handler and tracing slots 62/63 from their birth.
+
+Writing the script-pointer mapping pass (the eight short-indexed sites are all address uses), then building the batch of three fixes.
+
+The trail objects' draw entry points aren't recognized as Ghidra functions, so their sprites never get built, and the port's vblank counter runs one tick ahead of the arcade's from demo A's start. I'll check the gap-handler precedent, the counter's readers, and when the extra vblank appears.
+Trail objects now match the arcade at both gate ticks. Committing, then tracing slot 63's birth (its palette slot and first-tick state differ) and the palette allocator state before it.
+
+Found the bug: uRamffffdfa1 is mistyped as a 32-bit int despite move.b #2,0x21(a5) only writing a byte, causing slot 63's bad state. I'll now verify the true width of every similar uRam work-RAM accessor in the disassembly before adding overrides.
+Deriving the true access width of each Ghidra-named work-RAM cell from the instructions, then I'll add them as width overrides in one build.
+
+I've located the divergence: at tick 0xED the arcade hero attacks (enqueuing sound 0xB6) while the port's hero doesn't. Now I'll trace what drives the hero's inputs during the demo and investigate address 0xFFE086.
+Hero records are identical at 0xEC and only one non-pointer global differs before 0xED: byte 0xFFE086 (0x10 in the arcade, 0 in the port). Finding what writes and reads it.
+
+Narrowed: 0xFFE084 is player 2's pending score delta (the arcade holds 0x1000 there from tick 0xC1 on; in demo mode the score tick never consumes it). The port never adds it. Finding the award site.
+
+Two threads now: fixing the player-2 ball-award path (unmapped HUD link, broken BCD) and finding what the hero's demo AI reads at tick 0xED. Reading the 68K for both.
+
+Player 2's award now matches correctly, but the hero still diverges at 0xED despite work RAM being identical at 0xEC, pointing to dispatch-time register leftovers or an I/O read as the cause. I'll check the hero's demo-AI decision code next.
+I found that the hero's state functions read input bits from D5/D6 and branch through jump tables Ghidra couldn't recover (0x8B24, 0x8EDE). Now I'll check how the port dispatches those branches and whether its unknown-handler counters trigger around tick 0xED.
+I've confirmed the arcade hero's dash state (0xED) relies on input bits absent in the port, sourced in demo mode from the HUD struct's +0x1E/+0x1F cells. Now I'm tracking down the demo-script reader that writes those values.
+Hero is form 2, state 6; its state handler is 0x8D3E/0x8D44 and the arcade's "restart walk + trail + sound 0xB6" transition lives around 0x8296. Reading those in the 68K and the port.
+
+Found the bug: state 6 calls 0x8D66 for a transition target via jmp (a0), but Ghidra misread this as a value-only function, so the port loses input-driven transitions during walking. I'll check how widespread this pattern is and how the generator handles it.
+Three more deciders account for 240 structured call sites and 20 plain ones, and none of the 18 jump targets land on a function entry. I'll extend the a3b0 approach by hand-coding these deciders, running a call-site pass, and building hand functions for the 18 targets, starting by gathering those target blocks and remaining call-site shapes.
+Putting together a single batch fix: hand files for the five remaining deciders, a generalized call-site pass, and functions for the eighteen jump targets, plus the four form-1 blocks, their fall-through entries, and the second call-site shape.
+The structured-shape regex had the assignment and whitespace captures in the wrong order (175 of 240 sites). Fixing the regex and relaunching.
+
+Bash Read the linker errors
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; grep -E 'undefined reference|ld:|error' $S/check_demo15.log | sort | uniq -c | sort -rn | head -20; grep -B2 'collect2' $S/check_demo15.log | head -8
+
+OUT
+   3 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/../lib/gcc/sh-elf/15.2.0/../../../../sh-elf/bin/ld: warning: dot moved backwards before `.bss'
+   2 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/../lib/gcc/sh-elf/15.2.0/../../../../sh-elf/bin/ld: address 0x240403c of rom/s16.elf section `.portcode' is not within region `rom'
+   1 pass 2: 5 errors, 138 warnings
+   1 pass 1: 67 errors, 138 warnings
+   1 pass 1: 0 errors
+   1 pass 0: 285 errors, 138 warnings
+   1 layout.ld: wram 414 syms (68K 0xFFC000-0xFFFF82 = 16259 B), rom 438, mmio 43
+   1 layout.ld: video on the renderer shadows -- tile 0x400000->0x06019000 53248B, text 0x410000->0x06026000 4096B, palette 0x840000->0x06027000 4096B, sprite 0x440000->0x06028400 1024B; I/O 0x500 B at 0x0602C700 (5 page(s))
+   1 layout.ld: 46 ROM-resident tables from the listing + 249 decompiler spellings placed instead of fabricated
+   1 final: 5 errors, 138 warnings
+   1 collect2: error: ld returned 1 exit status
+   1 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/objdispatch.c -o sh_src/portfull/objdispatch.o
+   1 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/l2seed.c -o sh_src/portfull/l2seed.o
+   1 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/dispregs.c -o sh_src/portfull/dispregs.o
+   1 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/defs.c -o sh_src/portfull/defs.o
+   1 /Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/../lib/gcc/sh-elf/15.2.0/../../../../sh-elf/bin/ld: .portcode overflows the 4 MB cart
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/../lib/gcc/sh-elf/15.2.0/../../../../sh-elf/bin/ld: warning: dot moved backwards before `.bss'
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/../lib/gcc/sh-elf/15.2.0/../../../../sh-elf/bin/ld: .portcode overflows the 4 MB cart
+collect2: error: ld returned 1 exit status
+Bash Measure the port code section against the cart region in the last good build
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; SZ=~/src/marsdev/mars/sh-elf/bin/sh-elf-size; $SZ -A $S/rd13.elf | grep -E 'portcode|\.text|\.rodata|romimg|Total' ; grep -n 'portcode' sh_src/*.ld sh_src/portfull/layout.ld 2>/dev/null | head -5; grep -n 'rom *(\|rom :\|ORIGIN = 0x02' sh_src/*.ld | head -5; NM=~/src/marsdev/mars/sh-elf/bin/sh-elf-nm; $NM --size-sort -S $S/rd13.elf | tail -5
+
+OUT
+.text             2500484    33554432
+.portcode          466900    37277696
+Total             3980785
+sh_src/mars.ld:40:		 * straight into .tilesmd at 0x26A000. It belongs in .portcode. */
+sh_src/mars.ld:219:	 *   .portcode  the port itself. */
+sh_src/mars.ld:225:		 * address 0). Naming the object is how .portcode already does it. */
+sh_src/mars.ld:237:	 * OTHER input and took the seed + deltas + I/O past 48 KB. .portcode has ~72 KB
+sh_src/mars.ld:240:	       ".portdata (L2 seed + delta blob + I/O capture) grew into .portcode at 0x238D000")
+30:	rom (rx) : ORIGIN = 0x02000000, LENGTH = 0x00400000
+02250314 00002325 t _setcol_ent3
+0225ceb6 00002800 t _mdr_s_map
+02255d24 00003864 t _setcol_ent0
+06033914 00003cd4 T _m_main
+06003d94 00013080 b _sbuf
+Bash Locate the indirect-call helpers to add a compact decider-jump helper beside them
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'port_call68_at\b' sh_src/port_l2.c | head -3; grep -n '^uint port_call68_at\|^PORTCODE uint port_call68_at' sh_src/port_l2.c; grep -n 'void port_set_reg' sh_src/port_l2.c | head -2
+
+OUT
+56:/* the live register file, filled by the dispatcher and shared with port_call68_at
+82: * Why not copy `_port_reg` wholesale in port_call68_at: that would also overwrite
+638:    uint port_call68_at(unsigned int site, unsigned int a68);   /* defined below */
+1053:PORTCODE uint port_call68_at(unsigned int site, unsigned int a68)
+59:void port_set_reg(unsigned int ix, unsigned int v);
+87:void port_set_reg(unsigned int ix, unsigned int v)
+Bash Count the register write-back counter sites and read the indirect-call helper to add a compact jump helper
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; echo "_port_reg_n++ sites: $(grep -c '_port_reg_n++' build/port/sh_src/portfull/altbeast_port.c)"; grep -n '_port_reg_n' sh_src/port_l2.c sh_src/m_main.c tools/*.py 2>/dev/null | grep -v 'altbeast_port' | head -8; sed -n 1053,1075p sh_src/port_l2.c | grep -v '^\s*\*\|^\s*/\*'
+
+OUT
+_port_reg_n++ sites: 7029
+sh_src/port_l2.c:91:unsigned int _port_reg_n;   /* how many write-backs actually ran */
+sh_src/port_l2.c:918:    _port_reg_n++;
+sh_src/port_l2.c:2346:        port_l2m_out[182] = _port_reg_n;
+tools/cport_prep.py:2352:            wb = ''.join('\n  _port_reg[%d] = (uint)p_%s; _port_reg_n++;' % (ix, r)
+tools/cport_prep.py:3324:       'extern unsigned int _port_reg_n;   /* write-backs EXECUTED */',
+PORTCODE uint port_call68_at(unsigned int site, unsigned int a68)
+{
+    unsigned int lo = 0, hi = port_handlers_n;
+    while (lo < hi) {
+        unsigned int mid = (lo + hi) >> 1;
+        if (port_handlers[mid].a68 < a68) lo = mid + 1; else hi = mid;
+    }
+    if (lo < port_handlers_n && port_handlers[lo].a68 == a68)
+        return port_handlers[lo].fn(port_cur_regs);
+    port_l2_out[13]++;                       /* indirect calls MISSED */
+    {   /* misses per SITE, in slots 56..63. NOT 16..23: [21] is the tick count,
+        static uint per_site[8];
+        if (site < 8) { per_site[site]++; port_l2_out[56 + site] = per_site[site]; }
+    }
+    if (port_l2_out[14] == 0)
+        port_l2_out[14] = a68;               /* the first one, for triage */
+    {   /* the first 8 DISTINCT missed targets: one repeated miss and eight
+Bash Drop the per-site write-back counter, add a compact jump helper and route the pass through it
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/cport_prep.py'; s=open(p).read()
+old="            wb = ''.join('\\n  _port_reg[%d] = (uint)p_%s; _port_reg_n++;' % (ix, r)"
+assert s.count(old)==1, s.count(old)
+s=s.replace(old,"            wb = ''.join('\\n  _port_reg[%d] = (uint)p_%s;' % (ix, r)   # no _port_reg_n++: 7029 sites cost ~40 KB of .portcode (2026-10-04)")
+old2="       'extern unsigned int _port_reg_n;   /* write-backs EXECUTED */',"
+assert s.count(old2)==1
+s=s.replace(old2, old2+"\n       'uint port_dec_jump(unsigned int h, unsigned int d5, unsigned int d6, unsigned int d7);   /* the forms\\' attack lookups: D5-D7 then the handler at h (port_l2.c) */',")
+old3="""def _dec_regs(args):
+    _a = [x.strip() for x in args.split(',')]
+    return 'port_set_reg(5, (uint)p_D5); port_set_reg(6, (uint)%s); port_set_reg(7, (uint)%s); ' % (_a[1], _a[2])"""
+assert s.count(old3)==1
+s=s.replace(old3,"""def _dec_regs(args):
+    _a = [x.strip() for x in args.split(',')]
+    return 'port_dec_jump(_dec_h, (uint)p_D5, (uint)%s, (uint)%s); ' % (_a[1], _a[2])""")
+# the three rewriters append "port_call68_at(9, _dec_h);" after _dec_regs: drop that now that the helper calls it
+s=s.replace("""    return ('if ((!%s) && ((%s(_dec_h = %s(%s))), _dec_h != 0)) {\\n%s%s%s%sport_call68_at(9, _dec_h);'
+            % (m.group(1), _x, m.group(3), m.group(4), m.group(5), m.group(6), _dec_regs(m.group(4)), _y))""",
+"""    return ('if ((!%s) && ((%s(_dec_h = %s(%s))), _dec_h != 0)) {\\n%s%s%s%s'
+            % (m.group(1), _x, m.group(3), m.group(4), m.group(5), m.group(6), _y, _dec_regs(m.group(4))))""")
+s=s.replace("""    return ('%s(_dec_h = %s(%s));\\n%sif (_dec_h != 0) {\\n%s%s%s%sport_call68_at(9, _dec_h);'
+            % (_x, m.group(2), m.group(3), m.group(4), m.group(6), m.group(7), _dec_regs(m.group(3)), _y))""",
+"""    return ('%s(_dec_h = %s(%s));\\n%sif (_dec_h != 0) {\\n%s%s%s%s'
+            % (_x, m.group(2), m.group(3), m.group(4), m.group(6), m.group(7), _y, _dec_regs(m.group(3))))""")
+s=s.replace("""    return ('_dec_h = FUN_0000af4a(%s);\\n%sif (_dec_h == 0) {\\n%s%s}\\n%s%s%sport_call68_at(9, _dec_h);'
+            % (m.group(1), m.group(2), m.group(4), m.group(2), m.group(5), m.group(6), _dec_regs(m.group(1))))""",
+"""    return ('_dec_h = FUN_0000af4a(%s);\\n%sif (_dec_h == 0) {\\n%s%s}\\n%s%s%s'
+            % (m.group(1), m.group(2), m.group(4), m.group(2), m.group(5), m.group(6), _dec_regs(m.group(1))))""")
+assert s.count('port_dec_jump(_dec_h')==1 and s.count("'port_call68_at(9, _dec_h)")==0
+open(p,'w').write(s); print('cport_prep updated')
+p='sh_src/port_l2.c'; s=open(p).read()
+anchor='PORTCODE uint port_call68_at(unsigned int site, unsigned int a68)\n{'
+assert s.count(anchor)==1
+s=s.replace(anchor,'''/* THE FORMS' ATTACK LOOKUPS (0x5062, 0x7F58, 0x8D66, 0xA3B0, 0xAF4A, 0xBBC6, 0xC9B4) leave a
+ * transition handler in A0 and the caller jumps through it with D5-D7 live (the input
+ * bits). cport_prep rewrites every `bsr ; bcc ; jmp (a0)` site to this: one call instead
+ * of four, because .portcode sits 4 KB under the cart's end. */
+PORTCODE uint port_dec_jump(unsigned int h, unsigned int d5, unsigned int d6, unsigned int d7)
+{
+    port_cur_regs[5] = d5; port_cur_regs[6] = d6; port_cur_regs[7] = d7;
+    return port_call68_at(9, h);
+}
+'''+anchor)
+open(p,'w').write(s); print('port_l2.c: port_dec_jump')
+EOF
+grep -n 'port_cur_regs\[' sh_src/port_l2.c | head -3; grep -n '^void port_set_reg' -A4 sh_src/port_l2.c | head -8
+
+OUT
+cport_prep updated
+port_l2.c: port_dec_jump
+58:static uint port_cur_regs[15];
+89:    if (ix < 15u) port_cur_regs[ix] = v;
+998:                        if (q != 3u && q != 6u) port_cur_regs[q] = 0;
+59:void port_set_reg(unsigned int ix, unsigned int v);
+60-
+61-/* THE REGISTER FILE the ported code writes back into. A function whose body assigns
+62- * a register PARAMETER stores it here before returning (tools/cport_prep.py), which
+63- * is how a modification survives the return -- the 68000 threaded these between
+--
+87:void port_set_reg(unsigned int ix, unsigned int v)
+88-{
+Bash Launch the gate with the compact helper
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; sleep 5; grep -n 'port_cur_regs' sh_src/port_l2.c | head -4; (date > $S/check_demo16.log; make check-demo >> $S/check_demo16.log 2>&1; echo "check-demo exit=$?" >> $S/check_demo16.log; date >> $S/check_demo16.log) & echo launched
+
+OUT
+58:static uint port_cur_regs[15];
+69: * TWO ARRAYS, and confusing them cost a round of measurement. `port_cur_regs` is
+89:    if (ix < 15u) port_cur_regs[ix] = v;
+998:                        if (q != 3u && q != 6u) port_cur_regs[q] = 0;
+launched
+Bash Wait for the attack-lookup build's tick table
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; sleep 150; until grep -q 'check-demo exit=' $S/check_demo16.log 2>/dev/null; do sleep 15; done; grep -E 'error|PASS MATCHED|Traceback|attack lookup|overflows' $S/check_demo16.log | grep -v 'pass [0-9]:' | head -10; grep -A16 '^target' $S/check_demo16.log; tail -1 $S/check_demo16.log
+
+OUT
+sh_src/port_l2.c:1060:12: error: implicit declaration of function ‘port_call68_at’ [-Wimplicit-function-declaration]
+sh_src/port_l2.c:1060:12: error: incompatible implicit declaration of function ‘port_call68_at’
+Sun Oct  4 22:19:59 EDT 2026
+Fixing a missing prototype for the helper and relaunching the build.
+
+Bash Relaunch the gate and wait for its tick table
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='sh_src/port_l2.c'; s=open(p).read()
+old="PORTCODE uint port_dec_jump(unsigned int h, unsigned int d5, unsigned int d6, unsigned int d7)\n{"
+assert s.count(old)==1
+s=s.replace(old,"PORTCODE uint port_call68_at(unsigned int site, unsigned int a68);   /* defined just below */\n"+old)
+open(p,'w').write(s); print('prototype added')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; (date > $S/check_demo17.log; make check-demo >> $S/check_demo17.log 2>&1; echo "check-demo exit=$?" >> $S/check_demo17.log; date >> $S/check_demo17.log) & sleep 240; until grep -q 'check-demo exit=' $S/check_demo17.log 2>/dev/null; do sleep 15; done; grep -E 'error|PASS MATCHED|Traceback|overflows' $S/check_demo17.log | grep -v 'pass [0-9]:' | head -8; grep -A16 '^target' $S/check_demo17.log; tail -1 $S/check_demo17.log
+
+OUT
+prototype added
+final: 5 errors, 138 warnings
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/objdispatch.c -o sh_src/portfull/objdispatch.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/defs.c -o sh_src/portfull/defs.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/l2seed.c -o sh_src/portfull/l2seed.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/dispregs.c -o sh_src/portfull/dispregs.o
+target  at tick  port frame arcade dump  hero x arc/port  live  bytes  live records differing (slot:bytes)
+A 0074  0074     578        aw_580.bin   11c1/11c1        same  0      -
+A 007c  007c     586        aw_588.bin   11ad/11ad        same  0      -
+A 00c4  00c4     657        aw_660.bin   11b8/11b8        same  0      -
+A 0140  0140     782        aw_784.bin   11a6/11a6        same  0      -
+A 01c0  01c0     909        aw_912.bin   11cb/11cb        same  0      -
+A 0240  0240     1037       aw_1040.bin  11f8/11f8        same  0      -
+B 00a2  00a2     1655       aw_1660.bin  12d0/12d0        same  0      -
+B 00d4  00d4     1705       aw_1710.bin  12c6/12c6        same  0      -
+B 01fe  01fe     2003       aw_2008.bin  1302/1302        same  0      -
+B 0228  -        -          -            -                -     -      NOT REACHED: no port frame at this tick or its neighbours
+B 0246  0246     2075       aw_2080.bin  130a/130a        same  0      -
+check-demo: 1 of 11 ticks differ
+make: *** [check-demo] Error 1
+check-demo exit=2
+Sun Oct  4 22:24:19 EDT 2026
+Sun Oct  4 22:24:19 EDT 2026
+All ten reachable gate ticks now match the arcade byte-for-byte in both demos — the only unmatched line is the harness failing to locate a complete tick 0x228 on the new ROM. I'll commit this batch and dig into that search issue next.
+Bash Commit the attack-lookup batch
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git add tools/cport_prep.py sh_src/port_l2.c sh_src/portfull/hand/FUN_00005062.c sh_src/portfull/hand/FUN_00007f58.c sh_src/portfull/hand/FUN_00008d66.c sh_src/portfull/hand/FUN_0000bbc6.c sh_src/portfull/hand/FUN_0000c9b4.c sh_src/portfull/hand/FUN_0000af4a.c sh_src/portfull/hand/AT_FUN_*.c && git commit -q -F - <<'EOF'
+Both demos tick-exact at every reachable gate tick: the player forms' attack lookups jump
+
+Six attack lookups (0x5062, 0x7F58, 0x8D66, 0xBBC6, 0xC9B4, 0xAF4A) leave a transition handler
+in A0 with carry set and 448 call sites do `bsr ; bcc ; jmp (a0)`; Ghidra rendered the carry
+as a stale bVarN and the jump as a call through an uninitialised pointer, so no input-driven
+transition ever ran while a player walked (demo A tick 0xED: the dash, sound 0xB6, the trail).
+Hand deciders return the 68K target (as hand/FUN_0000a3b0.c did); the 22 targets are hand
+functions at entries Ghidra never made (hand/AT_FUN_*.c, written from the 68K blocks); the
+call sites go through port_dec_jump (D5-D7 then port_call68_at). _port_reg_n++ is no longer
+emitted at the 7029 write-back sites: ~40 KB of .portcode, which sat 4 KB under the cart end.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log -1 --format='%h %s'
+
+OUT
+5c704e5f Both demos tick-exact at every reachable gate tick: the player forms' attack lookups jump
+Bash Dump the port's frames around demo-B tick 0x228 with the complete-tick marker
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; cp build/port/rom/s16.32x $S/rd17.32x; cp build/port/rom/s16.elf $S/rd17.elf; NM=~/src/marsdev/mars/sh-elf/bin/sh-elf-nm; MK=$(printf '0x%x' $((0x$($NM $S/rd17.elf | grep ' _port_tick_done$' | cut -d' ' -f1) - 0x06000000))); ARES=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless; for f in $(seq 2038 2054); do $ARES $S/rd17.32x --frames $f --dump sdram:0x2cc00:0x4000:$S/pd_rd17_$f.bin --dump sdram:$MK:4:$S/pd_rd17_$f.bin.mk >/dev/null 2>&1 & done; wait; python3 - <<'EOF'
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad'
+for f in range(2038,2055):
+    b=open('%s/pd_rd17_%d.bin'%(S,f),'rb').read(); mk=int.from_bytes(open('%s/pd_rd17_%d.bin.mk'%(S,f),'rb').read()[:4],'big')
+    print('f%d tick %04x done %04x %s'%(f,int.from_bytes(b[0x302a:0x302c],'big'),mk,'' if mk==int.from_bytes(b[0x302a:0x302c],'big') else 'MID-TICK'))
+EOF
+
+OUT
+f2038 tick 0221 done 0221 
+f2039 tick 0222 done 0222 
+f2040 tick 0223 done 0223 
+f2041 tick 0224 done 0223 MID-TICK
+f2042 tick 0225 done 0224 MID-TICK
+f2043 tick 0226 done 0226 
+f2044 tick 0227 done 0227 
+f2045 tick 0228 done 0227 MID-TICK
+f2046 tick 0229 done 0228 MID-TICK
+f2047 tick 022a done 022a 
+f2048 tick 022b done 022b 
+f2049 tick 022c done 022c 
+f2050 tick 022d done 022c MID-TICK
+f2051 tick 022e done 022d MID-TICK
+f2052 tick 022f done 022f 
+f2053 tick 0230 done 0230 
+f2054 tick 0231 done 0230 MID-TICK
+Bash Make the gate's frame search skip mid-tick dumps by scanning a window, and rerun the check
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tests/demo-b/check_demo.py'; s=open(p).read()
+old=s[s.index('def find_port_frame('):s.index('def check_one(')]
+new='''def find_port_frame(rom, scene, target, arcade, workdir, start_guess):
+    """The port frame whose dump holds the target tick COMPLETE (port_tick_done equals the
+    tick counter); failing that, the complete dump nearest the target among the ticks the
+    arcade set also holds. The port runs two game ticks in one frame when it is behind, so
+    a frame's dump can land mid-tick (counter = N, slots half-dispatched): those are
+    skipped, and the frames on either side are tried instead."""
+    frame = start_guess
+    seen = {}
+    for _ in range(12):                            # walk to the target's neighbourhood
+        b = dump_port(rom, frame, workdir)
+        t = tick_of(b)
+        seen[frame] = (t, b)
+        if abs(t - target) <= 2:
+            break
+        if t == 0 and len(seen) > 1:
+            break                                  # the demo is over / not started
+        step = (target - t) if abs(target - t) < 64 else (8 if t < target else -8)
+        if frame + step in seen:
+            break
+        frame += step
+    for f in range(frame - 3, frame + 4):          # the window around it
+        if f not in seen:
+            b = dump_port(rom, f, workdir)
+            seen[f] = (tick_of(b), b)
+    best = None
+    for f in sorted(seen):
+        t, b = seen[f]
+        if (scene, t) in arcade and tick_complete(workdir, f, b) and (best is None or abs(t - target) < abs(best[1] - target)):
+            best = (f, t, b)
+    return best if best else (None, None, None)
+
+
+'''
+s=s.replace(old,new); open(p,'w').write(s)
+import ast; ast.parse(s); print('check_demo: window search')
+EOF
+python3 tests/demo-b/check_demo.py build/port/rom/s16.32x 2>&1 | tail -14
+
+OUT
+check_demo: window search
+target  at tick  port frame arcade dump  hero x arc/port  live  bytes  live records differing (slot:bytes)
+A 0074  0074     578        aw_580.bin   11c1/11c1        same  0      -
+A 007c  007c     586        aw_588.bin   11ad/11ad        same  0      -
+A 00c4  00c4     657        aw_660.bin   11b8/11b8        same  0      -
+A 0140  0140     782        aw_784.bin   11a6/11a6        same  0      -
+A 01c0  01c0     909        aw_912.bin   11cb/11cb        same  0      -
+A 0240  0240     1037       aw_1040.bin  11f8/11f8        same  0      -
+B 00a2  00a2     1655       aw_1660.bin  12d0/12d0        same  0      -
+B 00d4  00d4     1705       aw_1710.bin  12c6/12c6        same  0      -
+B 01fe  01fe     2003       aw_2008.bin  1302/1302        same  0      -
+B 0228  0227     2044       aw_2049.bin  12fc/12fc        same  0      -  (port skipped 0228 inside a frame; compared at 0227)
+B 0246  0246     2075       aw_2080.bin  130a/130a        same  0      -
+check-demo: every live record matches the arcade at all 11 ticks
+Bash Dense sweep of both demos on the new rom for any remaining record or global divergence
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; (FULL=1 OFF=460 ARCRANGE=400:1300 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0x8,0x2b8,8)))") > $S/sweepA.log 2>&1; echo done >> $S/sweepA.log) & (FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0x8,0x250,8)))") > $S/sweepB.log 2>&1; echo done >> $S/sweepB.log) & wait; echo '== demo A (differing ticks only)'; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepA.log | grep -v 'port frame None' | cut -c1-200 | head -30; echo '== demo B'; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB.log | grep -v 'port frame None' | cut -c1-200 | head -30
+
+OUT
+Exit code 143
+Command timed out after 10m 0s
+Bash Commit the gate's window search
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git add tests/demo-b/check_demo.py && git commit -q -m "check_demo: scan a frame window and skip mid-tick dumps (the port runs two ticks in one frame when behind)
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log -1 --format='%h %s'
+
+OUT
+27490549 check_demo: scan a frame window and skip mid-tick dumps (the port runs two ticks in one frame when behind)
+Bash Read what the dense sweeps completed before the timeout
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "== demo A: $(grep -c . $S/sweepA.log) lines"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepA.log | grep -v 'port frame None' | cut -c1-220 | head -20; echo "   same-ticks: $(grep -c 'ALL SAME | dead \[\]' $S/sweepA.log)  globals-only lines: $(grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepA.log | wc -l)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepA.log | sed 's/.*globals //' | cut -c1-120 | sort | uniq -c | sort -rn | head -5; echo "== demo B: $(grep -c . $S/sweepB.log) lines"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB.log | grep -v 'port frame None' | cut -c1-220 | head -20; echo "   same-ticks: $(grep -c 'ALL SAME | dead \[\]' $S/sweepB.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepB.log | sed 's/.*globals //' | cut -c1-120 | sort | uniq -c | sort -rn | head -5
+
+OUT
+== demo A: 0 lines
+   same-ticks: 0  globals-only lines:        0
+== demo B: 0 lines
+   same-ticks: 0
+Bash Launch the dense sweeps of both demos sequentially in the background
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; nohup sh -c "FULL=1 OFF=460 ARCRANGE=400:1300 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0x10,0x2b8,0x10)))") > $S/sweepA.log 2>&1; echo done >> $S/sweepA.log; FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0x10,0x250,0x10)))") > $S/sweepB.log 2>&1; echo done >> $S/sweepB.log" > /dev/null 2>&1 & echo "sweeps launched"
+
+OUT
+sweeps launched
+Bash Find the decompile-lane paragraph and the open cards in STATE.md
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'rd119\|tick-for-tick\|check-demo\|BUILD DIR OUTPUTS' STATE.md | head -12
+
+OUT
+76:rd119 (2026-10-04 18:40) IS THE CURRENT PORT BUILD, pushed to mister.office.local
+113:  rd119  the same for the nested-paren forms (FUN_00014bb8/15434/1650a).
+1800:    BUILD DIR OUTPUTS     Mike, 2026-10-04: "generated files write under build/, not
+Bash Check the memory index for an existing port-status note
+IN
+cat /Users/mikeholzinger/.claude/projects/-Users-mikeholzinger-src-sega16-2-32x/memory/MEMORY.md | tail -5; ls /Users/mikeholzinger/.claude/projects/-Users-mikeholzinger-src-sega16-2-32x/memory/ | grep -i 'port\|gate\|demo' 
+
+OUT
+- [Office rigs intermittent](office-rigs-intermittent.md) — from 2026-10-02 Mike is at a new office; rigs often unreachable, verify on ares and hand over the push command
+- [68K objdump in the tree](m68k-objdump-in-tree.md) — ~/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump reads prog68k.bin directly; disassemble from a real boundary (func_ranges.txt), never a linear sweep
+- [Port width census](port-width-census.md) — the port's silent-wrong-value class is declared-type vs real 68K access width; tools/cport_widths.py ranks every suspect; aligned(1) on a scalar is IGNORED by gcc
+- [Read the curve shape](read-the-curve-shape.md) — a saturating plateau is a fixed set of wrong cells, not drift; print the curve before summarising it
+- [Port register-file gap](port-register-file-gap.md) — the dispatcher establishes A6 only; A-registers computed into locals never reach _port_reg, so indirect thunks pass stale values; PORTSEED=108 is the one-frame reproducer
+demo-speed-68k-bound.md
+display-gate.md
+fbxport-froze-the-picture.md
+gamegate-pivot.md
+port-arch-plan.md
+port-frame-rotation.md
+port-register-file-gap.md
+port-width-census.md
+speed-gate-resolution-floor.md
+Bash Read the decompile-lane current-state paragraph
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; sed -n 68,100p STATE.md
+
+OUT
+pointers (CPORT_PARAMNORM, from a MAME watchpoint census: tools/video_writers.lua);
+the tilemap unpacker chain lost A1 between its two halves; the palette queue derefs
+were raw and misaligned; clear_tileram's 64 KB walk crossed into the palette/text/
+sprite shadows; the master landed the MD's empty palette pushes over PAL_SH; the
+order-list insert stored a pointer's low byte as a slot index; the sprite
+terminator's second word went through P68. A 10th -- 0xFFF400 forced to 4 bytes so
+the sprite-palette allocator never ran -- is in build.
+
+rd119 (2026-10-04 18:40) IS THE CURRENT PORT BUILD, pushed to mister.office.local
+(rd78 before it). The watch hooks (PORT_FFWATCH) are OFF; the m_main.c measurement
+hooks are removed; CPORT_PROBE is a measurement knob (Makefile) and is off.
+DEMO B RUNS TICK-FOR-TICK WITH THE ARCADE (fresh-NVRAM MAME dumps in
+scratchpad/tick/aw_*.bin, aligned on 0xFFF02A): the live object set and the hero's
+x/state are identical at ticks 0xA2 (0 8 16-23 40), 0xD2-0xD5 (0 8 40, then the
+special kick 0x0C with the partner at 0xD5), 0x1FE (0 8 16 18-21 40 48-50), 0x228 and
+0x246; the second pair walks on the arcade's schedule (x 0x11DB/0x11E9/0x1214 at
+0x17F/0x19B/0x200 vs 0x11DB/0x11E9/0x1213); the flame hits zombie 49 for 8 every 8
+ticks from 0x206 on both; the demo ends at tick 0x254 and the next step starts at
+0xB4 on both. Whole-pool diff at tick 0x1FE: 90 bytes over 64 records, all 1-2 tick
+drift (the port's tick at a given FRAME varies 1-4 ticks between builds -- the
+SH-2 frame loop runs the game slightly off 60 Hz; compare by tick, never by frame).
+Every step since rd78 came from a dump against the arcade (LESSONS 2026-10-04):
+  rd96   slot 48 survives: FUN_00016b6a's whole-body A6.
+  rd100  FFE018/FFE098 survive main_entry's record clear (Ghidra AND gcc fold the
+         save/restore -- volatile).
+  rd101  word links as pointer bases through W68 (52 sites): the hero KICKS at 0x34
+         and the partner spawns at 0x3A.
+  rd102  FUN_00011386 hand-derived: the tick-0x76 hang gone.
+  rd103  CPORT_PARAMNORM + 11 callees; ROM literals through P68: top score 50000.
+  rd104  FUN_0000f74a threads A6 through its installs; FUN_0000a1e0's palette
+         request on the partner.
+  rd106  eleven carry/D0 helpers hand-derived, 42 call sites rewritten.
+  rd107  2-mod-4 templates copied by bytes; symbol addresses stored as values are
+Write port-gate-passes-both-demos.md
+27 lines
+---
+name: port-gate-passes-both-demos
+description: 2026-10-04 evening the SH-2 port's check-demo gate passes every live record at all 11 ticks of demo A and demo B; what was wrong and what is still open
+metadata:
+  type: project
+---
+
+As of commit 27490549 (2026-10-04 ~22:30) `make check-demo` passes: every live object
+record equals the arcade's at demo A ticks 0x74/0x7C/0xC4/0x140/0x1C0/0x240 and demo B
+0xA2/0xD4/0x1FE/0x228/0x246. The evening's root causes, each now a hand file or a pass
+(the commit messages carry them): hand-file functions had dropped out of the dispatch
+table; the trail spawner moves A6 per call; two sprite-draw entries Ghidra never made
+functions of (hand/AT_FUN_*.c mechanism); 32 register-reached cells declared at their
+instruction width (CPORT_WIDTH); the ball-award BCD chain; and the big one, six attack
+lookups that return a handler in A0 + carry with 448 `bsr; bcc; jmp (a0)` sites Ghidra
+rendered as calls through an uninitialised pointer (port_dec_jump + 22 AT_ targets).
+
+**Why:** demo B's residuals all traced back into demo A (the scroll fraction inherited
+across the scene boundary), so the gate now covers both demos.
+
+**How to apply:** the next port work is a denser sweep (scratchpad pdiff.py style,
+FULL=1 compares dead records and globals too) and the one known cosmetic residual: the
+title blink timer 0xFFF020/21 runs a few vblanks ahead in the port (extra irq4 per tick
+early in boot), not root-caused. `.portcode` sits a few KB under the 4 MB cart end; the
+`_port_reg_n++` write-back counter is no longer emitted (40 KB). Related:
+[[port-width-census]], [[port-register-file-gap]].
+Bash Index the new memory and extend the width-census note
+IN
+cd /Users/mikeholzinger/.claude/projects/-Users-mikeholzinger-src-sega16-2-32x/memory; python3 - <<'EOF'
+p='MEMORY.md'; s=open(p).read()
+line='- [Port gate passes both demos](port-gate-passes-both-demos.md) — 2026-10-04: check-demo exact at all 11 ticks of demo A+B (commit 27490549); open = blink timer 0xFFF020/21 phase, denser sweep; .portcode near the cart end\n'
+if 'port-gate-passes-both-demos' not in s: s=s.rstrip('\n')+'\n'+line
+p2='port-width-census.md'; w=open(p2).read()
+if 'register-reached' not in w:
+    w=w.rstrip('\n')+'\n\nAddendum 2026-10-04: Ghidra\'s `uRam`/`cRam` names are accesses it resolved through a register base, invisible to the absolute-operand census, and dat_syms.h defaulted them to `uint`; the width is the instruction\'s (`move.b #2,0x21(a5)` wrote four bytes). The Makefile\'s CPORT_WIDTH list carries each such cell with its instruction. See [[port-gate-passes-both-demos]].\n'
+    open(p2,'w').write(w)
+open(p,'w').write(s); print('memory updated')
+EOF
+
+OUT
+memory updated
+Updating STATE.md's port paragraph to the new status, polling the dense sweeps, and trying the rig push.
+
+Bash Rewrite the port's current-state paragraph in STATE.md
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='STATE.md'; s=open(p).read()
+a=s.index('rd119 (2026-10-04 18:40) IS THE CURRENT PORT BUILD')
+b=s.index('Every step since rd78 came from a dump against the arcade')
+new='''COMMIT 27490549 (2026-10-04 22:30) IS THE CURRENT PORT BUILD (`make check-demo`,
+build/port/rom/s16.32x; rd119 is the last one pushed to mister.office.local). THE
+GATE PASSES: every live object record equals the arcade's at demo A ticks 0x74 0x7C
+0xC4 0x140 0x1C0 0x240 and demo B 0xA2 0xD4 0x1FE 0x228 0x246 (tests/demo-b/
+check_demo.py, arcade dumps tests/demo-b/arcade/, 395 ticks). The gate grew to demo A
+because demo B's residuals (the parts two ticks late, the 0xEE80 pair, slot 21) all
+came from the scroll fraction (0xFFF132 low word) the port inherits across the scene
+boundary, and demo A diverged at tick 0x74. The evening's fixes, in commit order
+(each commit message carries the finding): hand-file functions had dropped out of the
+dispatch table (2416f340); the five-record trail spawner moves A6 per call
+(715c3552); indexed +0x24 script pointers through P68, the 0xF352 spawner's A6
+switch, the enemy collision loop counter (41339dc3); two sprite-draw entries Ghidra
+never made functions of, hand/AT_FUN_*.c (17da52b0); 32 register-reached cells at
+their instruction width, CPORT_WIDTH (ce55900f); the ball-award BCD chain and raw
+16-bit links (5c704e5f's predecessor); six attack lookups returning a handler in A0
+with carry, 448 `bsr ; bcc ; jmp (a0)` sites, 22 hand targets, port_dec_jump
+(5c704e5f). OPEN: the title blink timer 0xFFF020/21 runs a few vblanks ahead of
+the arcade from boot (extra irq4 per tick early on) -- cosmetic, not root-caused;
+.portcode sits a few KB under the 4 MB cart end (the 7029 `_port_reg_n++` sites are
+no longer emitted, 40 KB); a denser sweep of both demos (dead records and globals
+too) is the next instrument. The port's tick at a given FRAME varies between builds
+and it runs two ticks in one frame when behind: compare by tick, never by frame, and
+only on dumps whose port_tick_done marker equals the counter.
+'''
+s=s[:a]+new+s[b:]
+open(p,'w').write(s); print('STATE.md updated')
+EOF
+git -C /Users/mikeholzinger/src/sega16-2-32x diff --stat STATE.md | tail -1
+
+OUT
+STATE.md updated
+ 1 file changed, 23 insertions(+), 13 deletions(-)
+Bash Poll the dense sweep progress
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "A: $(grep -c . $S/sweepA.log 2>/dev/null) lines, done? $(grep -c '^done' $S/sweepA.log 2>/dev/null)"; echo "B: $(grep -c . $S/sweepB.log 2>/dev/null) lines"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepA.log 2>/dev/null | grep -v 'port frame None' | cut -c1-200 | head -20
+
+OUT
+A: 0 lines, done? 0
+B: 0 lines
+Bash Try to deploy the passing port build to the office rig
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; timeout 90 tools/mister_push.sh --name mister.office.local build/port/rom/s16.32x 2>&1 | tail -4; echo "push exit=$?"
+
+OUT
+deploy  build/port/rom/s16.32x -> root@mister.office.local:/media/fat/games/S32X/s16.32x  (4194304 bytes)
+rig     mister.office.local
+launch  http://mister.office.local:8182/api/games/launch
+ok      2026/10/04 22:43:05 INFO game started: Sega32X/s16.32x (0s)
+push exit=0
+Bash Record the deploy in STATE.md and commit it
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='STATE.md'; s=open(p).read()
+old='build/port/rom/s16.32x; rd119 is the last one pushed to mister.office.local). THE'
+assert s.count(old)==1
+s=s.replace(old,'build/port/rom/s16.32x, pushed to mister.office.local 22:43). THE')
+open(p,'w').write(s)
+EOF
+git add STATE.md && git commit -q -m "STATE: the port gate passes both demos at commit 27490549; what was fixed tonight and what is open
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log -1 --format='%h %s'
+
+OUT
+1ff35997 STATE: the port gate passes both demos at commit 27490549; what was fixed tonight and what is open
+Bash Wait for both dense sweeps and summarise every remaining difference
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; for i in $(seq 1 100); do if grep -q '^done' $S/sweepB.log 2>/dev/null; then break; fi; sleep 12; done; echo "== demo A"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepA.log | grep -v 'port frame None' | cut -c1-230 | head -24; echo "   ticks compared: $(grep -c '^0' $S/sweepA.log)  all-same: $(grep -c 'ALL SAME | dead \[\]' $S/sweepA.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepA.log | sed 's/.*globals [0-9]*: //' | tr ' ' '\n' | cut -d: -f1 | sort | uniq -c | sort -rn | head -12; echo "== demo B"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB.log | grep -v 'port frame None' | cut -c1-230 | head -24; echo "   ticks compared: $(grep -c '^0' $S/sweepB.log)  all-same: $(grep -c 'ALL SAME | dead \[\]' $S/sweepB.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepB.log | sed 's/.*globals [0-9]*: //' | tr ' ' '\n' | cut -d: -f1 | sort | uniq -c | sort -rn | head -12
+
+OUT
+Command did not complete within its 600s timeout and was moved to the background (ID: bn0gd4jko). Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bn0gd4jko.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Wait for the dense sweeps to finish
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; for i in $(seq 1 110); do if grep -q '^done' $S/sweepB.log 2>/dev/null; then break; fi; sleep 10; done; grep -c '^done' $S/sweepA.log $S/sweepB.log
+
+OUT
+Command did not complete within its 600s timeout and was moved to the background (ID: bqm1wbowj). Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bqm1wbowj.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Read the dense sweep summary
+IN
+cat /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bn0gd4jko.output | cut -c1-230
+
+OUT
+== demo A
+0010: port frame 477 arcade no
+0020: port frame 493 arcade no
+0120 f749 live same 21:2 22:2 | dead [] | globals 60: ffe006:01/00 fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+0130 f765 live same 21:5 22:2 | dead [] | globals 61: ffe006:01/00 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36
+0140 f782 live same ALL SAME | dead [21, 22] | globals 59: ffe006:01/00 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36
+0150: port frame 797 arcade no
+0160: port frame 813 arcade no
+0170: port frame 829 arcade no
+01a0: port frame 877 arcade no
+01b0: port frame 893 arcade no
+01c0 f909 live same ALL SAME | dead [21, 22] | globals 58: ffe006:01/00 ffe086:12/10 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+01d0: port frame 925 arcade no
+01e0: port frame 942 arcade no
+01f0: port frame 957 arcade no
+0210: port frame 989 arcade no
+0220: port frame 1006 arcade no
+0230: port frame 1021 arcade no
+0240 f1037 live same ALL SAME | dead [21, 22] | globals 58: ffe006:01/00 ffe086:12/10 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+0250: port frame 1054 arcade no
+0270: port frame 1086 arcade no
+0280: port frame 1102 arcade no
+0290: port frame 1118 arcade no
+02a0: port frame 1134 arcade no
+02b0: port frame 1150 arcade no
+   ticks compared: 43  all-same: 11
+  11 fff615
+  11 fff614
+  11 fff612
+  11 fff611
+  11 fff610
+  11 fff60d
+  11 fff60c
+  11 fff60a
+  11 fff609
+  11 fff608
+  11 fff402
+   8 fff618
+== demo B
+   ticks compared: 0  all-same: 0
+
+[exited with code 0]
+Bash Read the demo-B dense sweep
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "B lines: $(grep -c . $S/sweepB.log)"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB.log | grep -v 'port frame None' | cut -c1-230 | head -20; echo "   ticks compared: $(grep -c '^0' $S/sweepB.log)  all-same: $(grep -c 'ALL SAME | dead \[\]' $S/sweepB.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepB.log | sed 's/.*globals [0-9]*: //' | tr ' ' '\n' | cut -d: -f1 | sort | uniq -c | sort -rn | head -8
+
+OUT
+B lines: 0
+   ticks compared: 0  all-same: 0
+Bash Find the first demo-A divergence after tick 0xC4 on the new rom
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; FULL=1 OFF=460 ARCRANGE=400:1300 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0xc6,0x121,2)))") 2>&1 | grep -v 'ALL SAME | dead \[\] | globals' | grep -v 'port frame None' | cut -c1-260 | head -30
+
+OUT
+0118 f741 live same 21:2 22:2 | dead [] | globals 61: ffe006:01/00 fff020:10/11 fff0c4:ff/b4 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78
+011a f743 live same 21:2 22:2 | dead [] | globals 60: ffe006:01/00 fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+011c f745 live same 21:2 22:2 | dead [] | globals 60: ffe006:01/00 fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+0120 f749 live same 21:2 22:2 | dead [] | globals 60: ffe006:01/00 fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02
+Bash Find the 100- and 200-point award sites and how they reach the HUD delta
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n '_DAT_fffff032 = 0x100;\|_DAT_fffff032 = 0x200;\|_DAT_fffff032 = 0x1000;\|_DAT_fffff032 = 0x3000;' docs/proof/altbeast.c | head; for n in $(grep -n '_DAT_fffff032 = 0x100;\|_DAT_fffff032 = 0x200;' docs/proof/altbeast.c | cut -d: -f1); do awk -v L=$n 'NR<L && /^\/\* ---- 0x/ {h=$0} END{print L": "h}' docs/proof/altbeast.c; sed -n "$((n-1)),$((n+2))p" docs/proof/altbeast.c; done
+
+OUT
+69846:    _DAT_fffff032 = 0x1000;
+70023:      _DAT_fffff032 = 0x3000;
+70068:      _DAT_fffff032 = 0x3000;
+70112:      _DAT_fffff032 = 0x3000;
+70552:      _DAT_fffff032 = 0x100;
+71868:          _DAT_fffff032 = 0x100;
+74053:        _DAT_fffff032 = 0x100;
+77210:          _DAT_fffff032 = 0x100;
+80246:          _DAT_fffff032 = 0x200;
+70552: /* ---- 0x0F90A  FUN_0000f90a  (904 B)  class: ? ---- */
+LAB_0000f9b8:
+      _DAT_fffff032 = 0x100;
+      FUN_00003706((int)*(short *)(*(short *)(unaff_A6 + 0x4c) + 0x3c));
+      unaff_A6[0x4a] = 0;
+71868: /* ---- 0x103E0  FUN_000103e0  (1092 B)  class: collision + animation + claim/lock + draws + despawns + motion + palette + sound ---- */
+          unaff_A6[0x4a] = 0;
+          _DAT_fffff032 = 0x100;
+          FUN_00003706((int)*(short *)(sVar10 + 0x3c));
+          *(code **)(unaff_A6 + 0x24) = FUN_00010b94;
+74053: /* ---- 0x1211A  FUN_0001211a  (508 B)  class: collision + animation + claim/lock + draws + despawns + motion + palette + sound ---- */
+        sound_enqueue(0xffffffbb);
+        _DAT_fffff032 = 0x100;
+        FUN_00003706((int)*(short *)(sVar9 + 0x3c));
+        *(code **)(unaff_A6 + 0x24) = FUN_000123fa;
+77210: /* ---- 0x143DC  FUN_000143dc  (752 B)  class: ? ---- */
+          p_A5 = (undefined2 *)(int)*(short *)(*(short *)(unaff_A6 + 0x4c) + 0x3c);
+          _DAT_fffff032 = 0x100;
+          uVar4 = FUN_00003706(p_A5);
+          if ((unaff_A6[8] & 1) != 0) goto LAB_00014528;
+80246: /* ---- 0x1650A  FUN_0001650a  (972 B)  class: collision + animation + claim/lock + draws + despawns + motion + palette + sound ---- */
+          unaff_A6[0x23] = 8;
+          _DAT_fffff032 = 0x200;
+          FUN_00003706((int)*(short *)(sVar1 + 0x3c));
+          unaff_A6[0x4a] = 0;
+Bash List every score-award call and how its HUD link argument is formed in the port
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'FUN_00003706(' build/port/sh_src/portfull/altbeast_port.c | grep -v '^.*void FUN_00003706\|hand/' | cut -c1-200
+
+OUT
+21798:    FUN_00003706(0xffffe000);
+21802:    FUN_00003706((int)(&DAT_ffffe080));
+21858:    FUN_00003706(0xffffe000);
+21862:    FUN_00003706((int)(&DAT_ffffe080));
+21897:    FUN_00003706(0xffffe000);
+21901:    FUN_00003706((int)(&DAT_ffffe080));
+70866:          FUN_00003706((int)W68(*(short *)(sVar13 + 0x3c)));
+72209:      FUN_00003706((int)*(short *)((char *)W68(*(short *)(unaff_A6 + 0x4c)) + 0x3c));
+73552:          FUN_00003706((int)W68(*(short *)(sVar10 + 0x3c)));
+74253:      FUN_00003706(p_A5);
+74897:        FUN_00003706((int)W68(*(short *)(sVar9 + 0x3c)));
+75250:          FUN_00003706((int)*(short *)((char *)W68(*(short *)(unaff_A6 + 0x4c)) + 0x3c));
+75564:    FUN_00003706((int)*(short *)((char *)W68(*(short *)(unaff_A6 + 0x4c)) + 0x3c));
+76900:          FUN_00003706((int)W68(*(short *)(sVar14 + 0x3c)));
+77379:          uVar4 = FUN_00003706((int)(p_A5));
+78265:          FUN_00003706((int)W68(*(short *)(sVar12 + 0x3c)));
+79054:          FUN_00003706((int)*(short *)((char *)W68(*(short *)(unaff_A6 + 0x4c)) + 0x3c));
+79951:          FUN_00003706((int)W68(*(short *)(sVar1 + 0x3c)));
+Bash Show the first differing bytes of the demo-A pair at tick 0x118
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+S='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad'
+A='/Users/mikeholzinger/src/sega16-2-32x/tests/demo-b/arcade/'
+a=open(A+'aw_744.bin','rb').read(); p=open(S+'/pd_rd17_741.bin','rb').read()
+print('ticks %04x/%04x'%(int.from_bytes(a[0x302a:0x302c],'big'),int.from_bytes(p[0x302a:0x302c],'big')))
+for s in (21,22):
+    o=s*0x80; d=[(i,a[o+i],p[o+i]) for i in range(0x80) if a[o+i]!=p[o+i]]
+    print('slot %d h %s st %s/%s +4a %02x/%02x +4c %s/%s |'%(s,a[o+2:o+6].hex(),a[o+0x20:o+0x24].hex(),p[o+0x20:o+0x24].hex(),a[o+0x4a],p[o+0x4a],a[o+0x4c:o+0x4e].hex(),p[o+0x4c:o+0x4e].hex()),' '.join('+%02x:%02x/%02x'%t for t in d))
+EOF
+
+OUT
+ticks 0118/0118
+slot 21 h 000103e0 st 00010a05/00010a05 +4a 00/00 +4c c000/c000 | +00:89/88 +2e:00/80
+slot 22 h 00010824 st 00010306/00010306 +4a 10/10 +4c 0000/0000 | +00:89/88 +2e:00/80
+Bash Relaunch the demo-B dense sweep if it is not running
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; if pgrep -f 'pdiff.py' >/dev/null; then echo "sweep still running"; else nohup sh -c "FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 $S/pdiff.py $S/rd17.32x $(python3 -c "print(','.join('%x'%t for t in range(0x10,0x250,0x10)))") > $S/sweepB.log 2>&1; echo done >> $S/sweepB.log" >/dev/null 2>&1 & echo "sweep B relaunched"; fi
+
+OUT
+sweep still running
+The remaining 100/200-point awards use the same raw 16-bit link read (six sites, one mechanical form). Adding that pass, rebuilding, and checking the award helper's pointer handling.
+
+Bash Add the killer-link mapping pass and launch the gate
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'define A68ANY\|define A68IS\|define A68VIDA' sh_src/portfull/w68.h | head -4; python3 - <<'EOF'
+p='tools/cport_prep.py'; s=open(p).read()
+anchor="_pass_report('FUN_00009270: script pointer cast to short* through P68', _sp2[1], 1)\n"
+assert s.count(anchor)==1
+new=anchor+r'''
+# THE KILLER'S HUD LINK IS READ THROUGH THE KILLER'S 16-BIT LINK. `movea.w ($4c,a6),a0 ;
+# movea.w ($3c,a0),a5 ; jsr 0x3706` awards points to the record that last hit this one:
+# +0x4c is a 16-bit record address, +0x3c of THAT record the HUD struct. Ghidra wrote
+# `W68(*(short *)(sVarN + 0x3c))` -- the outer link mapped, the inner one dereferenced
+# as an SH-2 address 0x0000Cxxx -- so the award went into W68(garbage)+4 (measured
+# 2026-10-04, demo A tick 0x118: 0xFFE006 = 1 on the arcade, 0 on the port, slot 21's
+# facing byte flipped). Six sites, one form.
+_kl = re.subn(r'W68\(\*\(short \*\)\((sVar\d+) \+ 0x3c\)\)',
+              r'W68(*(short *)((char *)W68(\1) + 0x3c))', src)
+src = _kl[0]
+_pass_report("the killer's HUD link read through the mapped killer link", _kl[1], 6)
+'''
+s=s.replace(anchor,new); open(p,'w').write(s); print('pass added')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; (date > $S/check_demo18.log; make check-demo >> $S/check_demo18.log 2>&1; echo "check-demo exit=$?" >> $S/check_demo18.log; date >> $S/check_demo18.log) & echo launched
+
+OUT
+49:#define A68IS(v)     ((((((unsigned)(v)) >> 24) == 0xFFu)                         || ((((unsigned)(v)) >> 24) == 0x00u))                        && ((((unsigned)(v)) & 0xFFFFFFu) >= WRAM_68K_ORIGIN))
+101:#define A68ANY(v)    (A68SH(v) ? (unsigned)(v)                       : A68IS(v)                         ? (unsigned)((char *)WRAM_BASE                                      + ((((unsigned)(v)) & 0xFFFFFFu) - WRAM_68K_ORIGIN))                       : ((((unsigned)(v)) & 0xFFFFFFu) < 0x40000u                          && (((unsigned)(v)) >> 24) == 0u)                         ? (unsigned)((char *)ROM_BASE + (((unsigned)(v)) & 0x3FFFFu))                         : (unsigned)(v))
+142:#define A68VIDA(v)   ((((unsigned)(v)) >= 0x400000u && ((unsigned)(v)) < 0x40D000u)                         ? 0x06019000u + (((unsigned)(v)) - 0x400000u)                       : (((unsigned)(v)) >= 0x410000u && ((unsigned)(v)) < 0x411000u)                         ? 0x06026000u + (((unsigned)(v)) - 0x410000u)                       : (((unsigned)(v)) >= 0x840000u && ((unsigned)(v)) < 0x850000u)                         ? 0x06027000u + ((((unsigned)(v)) - 0x840000u) & 0xFFFu)                       : (((unsigned)(v)) >= 0x440000u && ((unsigned)(v)) < 0x440400u)                         ? 0x06028400u + (((unsigned)(v)) - 0x440000u)                       : (unsigned)(v))
+pass added
+launched
+Bash Wait for the gate and poll the demo-B sweep
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; sleep 240; until grep -q 'check-demo exit=' $S/check_demo18.log 2>/dev/null; do sleep 15; done; grep -E 'error|PASS MATCHED|Traceback|killer' $S/check_demo18.log | grep -v 'pass [0-9]:' | head -6; grep -A14 '^target' $S/check_demo18.log | cut -c1-150; tail -1 $S/check_demo18.log; echo "sweepB: $(grep -c . $S/sweepB.log) lines"
+
+OUT
+cport_prep: the killer's HUD link read through the mapped killer link: 8
+final: 5 errors, 138 warnings
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/objdispatch.c -o sh_src/portfull/objdispatch.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/defs.c -o sh_src/portfull/defs.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/l2seed.c -o sh_src/portfull/l2seed.o
+/Users/mikeholzinger/src/marsdev/mars/sh-elf/bin/sh-elf-gcc -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_ALTBEAST -DMD_BG -DMD_BG_FG0 -DPG_STICKY -DCUT_BLANK -DNT_WRAP -DEDGE42 -DR60 -DK2_FREE -DVISR_FLIP -DSNAP_ONE -DWIN_TWO -DCUT_30 -DPAL_DELTA -DVISR_FLIP -DTILE_SLIM -DSLIM_CAP=80    -DMD_BATCH_BLANK=80 -DTEXTCAP_EARLY -DTEXTCAP_MASK -DTEXTCAP_MASK -DTXT_MASK_PKT -DTEXTCAP_FULL -DFB_XPORT -DMD_STATE -DSET_COLS -DC1_PUNCH -DC1_MASKTAB -DC1_STAMP -DSET_COLS_MEMO -DSPR_RUN32 -DSPR_LIST -DPORT_FULL -DSPR_TRUNC -DBLIT_SKIP -DBAND_SHIFT=36 -DBAND_SHIFT_RG2=40 -DBLIT_SHIFT=24 -DSPR_LATE -DPR_HOLD_TICKS=6 -DFB_TEXT_READ -DPAL32 -DFM_GATE -DDIRTY_ROW -DMDSPR_TOP -DTILES_MD -DNBUILD1 -DC1_NOFB -DMDS_REFUSE -DMD_ROUND -DLAUNCH_EARLY -DBLIT_CHASE -DPEN_MATCH -DCAT1_MD -DART_TAIL -DHS_SHIP -DTILE_CLASS -DSHAD_CAP=255 -DROW_GEN -DPG_SKIP_PKT -DFBX_ISRLIFT -DFBX_ECHO -DBG_BOTTOM_HOLES -DMDS_REMARK -DMD_SCENES -DHOLD_FROM_BLANK -DCUT_PREFETCH -DCRAM_ISR -DBLIT_AUDIT_DIV=4 -DPUB_NORB -DMD_SCENE_CUT -DSLIM_WORDCAP -DTEXT_CLASS -DMD_SPR -DNO_SELF_CHAIN -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER -DPAL_STATIC -DGLOW_PAGE -DGLOW_ANIM -DMD_BATCH_N=24 -DMD_STATIC -DPORT_MAINLOOP -DPORT_VIDEO -DPORT_PLAY=1 -DPORT_BOOT -DPORT_CORO -DNO_GAMEHIGH -DPORT_OS -w -I sh_src/portfull -c sh_src/portfull/dispregs.c -o sh_src/portfull/dispregs.o
+target  at tick  port frame arcade dump  hero x arc/port  live  bytes  live records differing (slot:bytes)
+A 0074  0073     575        aw_579.bin   11c4/11c4        same  0      -  (port skipped 0074 inside a frame; compared at 0073)
+A 007c  007c     583        aw_588.bin   11ad/11ad        same  0      -
+A 00c4  00c4     655        aw_660.bin   11b8/11b8        same  0      -
+A 0140  0140     779        aw_784.bin   11a6/11a6        same  0      -
+A 01c0  01c0     908        aw_912.bin   11cb/11cb        same  0      -
+A 0240  0240     1035       aw_1040.bin  11f8/11f8        same  0      -
+B 00a2  00a2     1651       aw_1660.bin  12d0/12d0        same  0      -
+B 00d4  00d4     1701       aw_1710.bin  12c6/12c6        same  0      -
+B 01fe  01fe     1999       aw_2008.bin  1302/1302        same  0      -
+B 0228  0228     2042       aw_2050.bin  12fc/12fc        same  0      -
+B 0246  0246     2071       aw_2080.bin  130a/130a        same  0      -
+check-demo: every live record matches the arcade at all 11 ticks
+check-demo exit=0
+Sun Oct  4 23:10:33 EDT 2026
+Sun Oct  4 23:10:33 EDT 2026
+sweepB: 0 lines
+Bash Commit the killer-link pass
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git add tools/cport_prep.py && git commit -q -m "The killer's HUD link is read through the mapped killer link (8 award sites): 100/200-point awards land
+
+\`movea.w (\$4c,a6),a0 ; movea.w (\$3c,a0),a5 ; jsr 0x3706\`: Ghidra mapped the outer link and
+dereferenced the inner 16-bit one as an SH-2 address, so the award went to W68(garbage)+4
+(demo A tick 0x118: 0xFFE006 = 1 on the arcade, 0 on the port; slot 21's facing flipped).
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log -1 --format='%h %s'
+
+OUT
+65783858 The killer's HUD link is read through the mapped killer link (8 award sites): 100/200-point awards land
+Bash Verify the award fix on the new rom at the ticks that showed the HUD delta and the pair's facing
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; cp build/port/rom/s16.32x $S/rd18.32x; cp build/port/rom/s16.elf $S/rd18.elf; FULL=1 OFF=460 ARCRANGE=400:1300 python3 $S/pdiff.py $S/rd18.32x 118,11c,120,130,140,1c0,240 2>&1 | cut -c1-250
+
+OUT
+0118 f739 live same 21:2 22:2 | dead [] | globals 59: fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36
+011c f743 live same 21:2 22:2 | dead [] | globals 59: fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36
+0120 f747 live same 21:2 22:2 | dead [] | globals 59: fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36
+0130 f763 live same 21:5 22:2 | dead [] | globals 60: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff618:00/06
+0140 f779 live same ALL SAME | dead [21, 22] | globals 58: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff618:00/06
+01c0 f908 live same ALL SAME | dead [21, 22] | globals 56: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff618:00/06
+0240 f1035 live same ALL SAME | dead [21, 22] | globals 56: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff618:00/06
+Bash Check whether the demo-B sweep is still running
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; pgrep -fl 'pdiff.py' | head -3; echo "sweepB lines: $(grep -c . $S/sweepB.log)"; ls -la $S/sweepB.log; ls $S/pd_rd17_*.bin 2>/dev/null | wc -l
+
+OUT
+44482 sh -c FULL=1 OFF=460 ARCRANGE=400:1300 python3 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/pdiff.py /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd17.32x 10,20,30,40,50,60,70,80,90,a0,b0,c0,d0,e0,f0,100,110,120,130,140,150,160,170,180,190,1a0,1b0,1c0,1d0,1e0,1f0,200,210,220,230,240,250,260,270,280,290,2a0,2b0 > /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/sweepA.log 2>&1; echo done >> /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/sweepA.log; FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/pdiff.py /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd17.32x 10,20,30,40,50,60,70,80,90,a0,b0,c0,d0,e0,f0,100,110,120,130,140,150,160,170,180,190,1a0,1b0,1c0,1d0,1e0,1f0,200,210,220,230,240 > /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/sweepB.log 2>&1; echo done >> /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/sweepB.log
+62094 python3 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/pdiff.py /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/rd17.32x 10,20,30,40,50,60,70,80,90,a0,b0,c0,d0,e0,f0,100,110,120,130,140,150,160,170,180,190,1a0,1b0,1c0,1d0,1e0,1f0,200,210,220,230,240
+sweepB lines: 0
+-rw-r--r--@ 1 mikeholzinger  wheel  0 Oct  4 22:48 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad/sweepB.log
+     659
+Bash Trace the demo-A pair tick by tick across its facing divergence
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; tests/demo-b/arcade_dump.sh 741 743 2>&1 | tail -1; OFF=460 ARCRANGE=400:1300 python3 $S/pt.py $S/rd18.32x 21,22 112,114,115,116,117,118 2>&1 | cut -c1-330
+
+OUT
+2
+0112: port frame None arcade yes
+0114 f736 slot 21 live 1/1 h 000103e0 x 1186/1186 y 10d8/10d8 dx 0000/0000 st 03/03 +24 000109a2/000109a2 | SAME
+0114 f736 slot 22 live 1/1 h 00010824 x 1182/1182 y 10b6/10b6 dx 0000/0000 st 03/03 +24 00010c36/00010c36 | SAME
+0115: port frame None arcade yes
+0116 f738 slot 21 live 1/1 h 000103e0 x 1186/1186 y 10d8/10d8 dx 0000/0000 st 03/03 +24 000109a2/000109a2 | SAME
+0116 f738 slot 22 live 1/1 h 00010824 x 1182/1182 y 10b8/10b8 dx 0000/0000 st 03/03 +24 00010c36/00010c36 | SAME
+0117: port frame None arcade yes
+0118 f739 slot 21 live 1/1 h 000103e0 x 1186/1186 y 10d8/10d8 dx 0000/0000 st 05/05 +24 00010b94/00010b94 | +00:89/88 +2e:00/80
+0118 f739 slot 22 live 1/1 h 00010824 x 1186/1186 y 10bf/10bf dx 0000/0000 st 06/06 +24 00010cb4/00010cb4 | +00:89/88 +2e:00/80
+The pair's death transition at tick 0x117 sets its facing from the killer's record, read through the same raw 16-bit link. Checking that site for other raw dereferences.
+
+Bash Find every remaining raw dereference through a short record link near the award sites
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; grep -n 'sVar10 + 0x\|sVar9 + 0x\|sVar13 + 0x\|sVar14 + 0x\|sVar12 + 0x\|sVar1 + 0x' build/port/sh_src/portfull/altbeast_port.c | grep -v 'W68(sVar' | awk -F: '$1>70000 && $1<80500' | cut -c1-170 | head -20
+
+OUT
+70855:        if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar13 + 0x40)) {
+73533:      if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar10 + 0x40)) {
+74913:      if (*(ushort *)(unaff_A6 + 0xc) <= *(ushort *)(sVar9 + 0x40)) {
+75473:        if (uVar10 < (ushort)(sVar12 + 0xeU)) {
+75484:          if ((ushort)(sVar12 + 0x23U) <= uVar10) goto LAB_00012ebe;
+75920:    if (*(char *)(sVar10 + 0x2e) == '\0') {
+75927:      *(undefined *)(sVar10 + 0x2e) = DAT_fffff109;
+76018:      pbVar17 = (byte *)(int)W68(*(short *)(sVar10 + 0x78));
+76878:      if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar14 + 0x40)) {
+78239:      if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar12 + 0x40)) {
+79934:      if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar1 + 0x40)) {
+Bash Census the raw short-link dereference form across the whole port
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+import re
+q=open('build/port/sh_src/portfull/altbeast_port.c').read().split('\n')
+hdr=None; out=[]
+for i,l in enumerate(q,1):
+    if l.startswith('/* ---- 0x'): hdr=l[8:22]
+    for m in re.finditer(r'\*\((?:byte|char|short|ushort|undefined|undefined2|int|uint) \*\)\((sVar\d+) \+ 0x[0-9a-f]+\)', l):
+        out.append((i,hdr,l.strip()[:140]))
+print(len(out))
+from collections import Counter
+print(Counter(h for _,h,_ in out).most_common(12))
+for o in out[:14]: print(o)
+EOF
+
+OUT
+19
+[('0x13374  FUN_0', 3), ('0x04870  FUN_0', 2), ('0x049BA  FUN_0', 2), ('0x059D2  FUN_0', 2), ('0x059FA  FUN_0', 2), ('0x0F74A  FUN_0', 2), ('0x0E474  FUN_0', 1), ('0x103E0  FUN_0', 1), ('0x1211A  FUN_0', 1), ('0x13B2C  FUN_0', 1), ('0x14BB8  FUN_0', 1), ('0x1650A  FUN_0', 1)]
+(7788, '0x04870  FUN_0', '*(undefined *)(sVar10 + 0x18) = 1;')
+(7789, '0x04870  FUN_0', 'pbVar15 = (byte *)(int)W68(*(short *)(sVar10 + 0x1c));')
+(8155, '0x049BA  FUN_0', '*(undefined *)(sVar7 + 0x18) = 1;')
+(8156, '0x049BA  FUN_0', 'pbVar11 = (byte *)(int)W68(*(short *)(sVar7 + 0x1c));')
+(18673, '0x059D2  FUN_0', '*(undefined *)(sVar7 + 0x18) = 1;')
+(18674, '0x059D2  FUN_0', 'pbVar10 = (byte *)(int)W68(*(short *)(sVar7 + 0x1c));')
+(18844, '0x059FA  FUN_0', '*(undefined *)(sVar1 + 0x18) = 1;')
+(18845, '0x059FA  FUN_0', 'pbVar2 = (byte *)(int)W68(*(short *)(sVar1 + 0x1c));')
+(70855, '0x0E474  FUN_0', 'if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar13 + 0x40)) {')
+(71938, '0x0F74A  FUN_0', '*(undefined *)(iVar3 + 0x2e) = *(undefined *)(sVar4 + 0x2e);')
+(71949, '0x0F74A  FUN_0', '*(undefined *)(iVar3 + 0x2e) = *(undefined *)(sVar4 + 0x2e);')
+(73533, '0x103E0  FUN_0', 'if (*(ushort *)(unaff_A6 + 0x40) <= *(ushort *)(sVar10 + 0x40)) {')
+(74913, '0x1211A  FUN_0', 'if (*(ushort *)(unaff_A6 + 0xc) <= *(ushort *)(sVar9 + 0x40)) {')
+(75920, '0x13374  FUN_0', "if (*(char *)(sVar10 + 0x2e) == '\\0') {")
+I've identified the raw dereference issue as a 19-site mechanical pattern (killer x compares, HUD-struct flags, facing copies). I'm adding that fix pass and rebuilding, while also checking the completed demo-B sweep results.
+Bash Add the record-link dereference pass and launch the gate
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='tools/cport_prep.py'; s=open(p).read()
+anchor='_pass_report("the killer\'s HUD link read through the mapped killer link", _kl[1], 6)\n'
+assert s.count(anchor)==1
+new=anchor+r'''
+# ... AND EVERY OTHER DEREFERENCE THROUGH A 16-BIT RECORD LINK. A `short` local holding
+# `*(short *)(A6 + 0x3c)` or `+ 0x4c` (the HUD struct, the killer) is a 68K address; the
+# decompiled text reads and writes through it as if it were a pointer: `*(ushort *)(sVar10
+# + 0x40)` (the killer's x: which way the dying pair is knocked -- demo A tick 0x117, the
+# port's pair faced the other way), `*(undefined *)(sVar7 + 0x18) = 1` (a HUD flag, written
+# into SH-2 0xE018), `*(sVar4 + 0x2e)` (a facing copy). W68 maps either domain.
+_rl = re.subn(r'\*\(((?:byte|char|short|ushort|undefined|undefined2|int|uint)) \*\)\((sVar\d+) \+ (0x[0-9a-f]+)\)',
+              r'*(\1 *)((char *)W68(\2) + \3)', src)
+src = _rl[0]
+_pass_report('dereferences through a 16-bit record link mapped with W68', _rl[1], 19)
+'''
+s=s.replace(anchor,new); open(p,'w').write(s); print('pass added')
+EOF
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; (date > $S/check_demo19.log; make check-demo >> $S/check_demo19.log 2>&1; echo "check-demo exit=$?" >> $S/check_demo19.log; date >> $S/check_demo19.log) & echo launched
+
+OUT
+pass added
+launched
+Bash Read the demo-B dense sweep
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "B lines: $(grep -c . $S/sweepB.log)"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB.log | grep -v 'port frame None' | cut -c1-230 | head -20; echo "   ticks compared: $(grep -c '^0' $S/sweepB.log)  all-same: $(grep -c 'ALL SAME | dead \[\]' $S/sweepB.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepB.log | sed 's/.*globals [0-9]*: //' | tr ' ' '\n' | cut -d: -f1 | sort | uniq -c | sort -rn | head -8
+
+OUT
+B lines: 0
+   ticks compared: 0  all-same: 0
+Bash Check for stuck emulator processes from the demo-B sweep
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; echo "ares procs: $(pgrep -c ares-headless)"; pgrep -fl 'pdiff.py' | cut -c1-80; ps -o pid,etime,command -p $(pgrep ares-headless | head -3 | tr '\n' ',' | sed 's/,$//') 2>/dev/null | cut -c1-120
+
+OUT
+usage: pgrep [-Lfilnoqvx] [-d delim] [-F pidfile] [-G gid]
+             [-P ppid] [-U uid] [-g pgrp] [-t tty] [-u euid]
+             pattern ...
+ares procs: 
+44482 sh -c FULL=1 OFF=460 ARCRANGE=400:1300 python3 /private/tmp/claude-501/-Us
+62094 python3 /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f8
+  PID ELAPSED COMMAND
+35379   00:04 /Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless /private/tmp/claude-501/
+Bash Wait for the gate on the record-link build
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; sleep 200; until grep -q 'check-demo exit=' $S/check_demo19.log 2>/dev/null; do sleep 15; done; grep -E 'error|PASS MATCHED|Traceback|record link' $S/check_demo19.log | grep -v 'pass [0-9]:\|sh-elf-gcc' | head -6; grep -A14 '^target' $S/check_demo19.log | cut -c1-150; tail -1 $S/check_demo19.log
+
+OUT
+cport_prep: dereferences through a 16-bit record link mapped with W68: 20
+final: 5 errors, 138 warnings
+target  at tick  port frame arcade dump  hero x arc/port  live  bytes  live records differing (slot:bytes)
+A 0074  0074     576        aw_580.bin   11c1/11c1        same  0      -
+A 007c  007b     584        aw_587.bin   11ad/11ad        same  0      -  (port skipped 007c inside a frame; compared at 007b)
+A 00c4  00c4     656        aw_660.bin   11b8/11b8        same  0      -
+A 0140  0140     780        aw_784.bin   11a6/11a6        same  0      -
+A 01c0  01c0     908        aw_912.bin   11cb/11cb        same  0      -
+A 0240  0240     1036       aw_1040.bin  11f8/11f8        same  0      -
+B 00a2  00a3     1653       aw_1661.bin  12d0/12d0        same  0      -  (port skipped 00a2 inside a frame; compared at 00a3)
+B 00d4  00d4     1702       aw_1710.bin  12c6/12c6        same  0      -
+B 01fe  01fe     2000       aw_2008.bin  1302/1302        same  0      -
+B 0228  0227     2042       aw_2049.bin  12fc/12fc        same  0      -  (port skipped 0228 inside a frame; compared at 0227)
+B 0246  0246     2072       aw_2080.bin  130a/130a        same  0      -
+check-demo: every live record matches the arcade at all 11 ticks
+check-demo exit=0
+Sun Oct  4 23:17:47 EDT 2026
+Sun Oct  4 23:17:47 EDT 2026
+Bash Commit the record-link pass
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; git add tools/cport_prep.py && git commit -q -m "Every dereference through a 16-bit record link goes through W68 (20 sites)
+
+A short local holding +0x3c (the HUD struct) or +0x4c (the killer) is a 68K address; the text
+read the killer's x, wrote HUD flags and copied facings through it as an SH-2 pointer.
+Demo A tick 0x117: the dying pair was knocked the other way (facing from the killer's x).
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log -1 --format='%h %s'
+
+OUT
+f3bec7ae Every dereference through a 16-bit record link goes through W68 (20 sites)
+Bash Verify the pair's facing and the later dead-record residue on the new rom
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; cp build/port/rom/s16.32x $S/rd19.32x; cp build/port/rom/s16.elf $S/rd19.elf; FULL=1 OFF=460 ARCRANGE=400:1300 python3 $S/pdiff.py $S/rd19.32x 118,120,130,140,1c0,240 2>&1 | cut -c1-200
+
+OUT
+0118 f741 live same ALL SAME | dead [] | globals 55: fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff6
+0120 f748 live same ALL SAME | dead [] | globals 55: fff020:10/11 fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff6
+0130 f764 live same ALL SAME | dead [] | globals 54: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff6
+0140 f780 live same ALL SAME | dead [] | globals 53: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff6
+01c0 f908 live same ALL SAME | dead [] | globals 51: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff6
+0240 f1036 live same ALL SAME | dead [] | globals 51: fff402:ff/00 fff608:00/06 fff609:84/02 fff60a:08/78 fff60c:00/02 fff60d:02/36 fff610:00/06 fff611:84/02 fff612:08/78 fff614:00/02 fff615:02/36 fff
+Demo A now matches exactly at every dumped tick aside from pointer values and blink phase. Next I'll run a full demo-B sweep on the new rom, deploy it, and capture the resulting state.
+Bash Sweep every demo-B tick that has an arcade dump on the new rom, in the background
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; pkill -f 'pdiff.py' 2>/dev/null; sleep 1; cd /Users/mikeholzinger/src/sega16-2-32x; TICKS=$(python3 - <<'EOF'
+import os
+A='tests/demo-b/arcade/'; t=set()
+for n in os.listdir(A):
+    f=int(n[3:-4])
+    if f>=1460:
+        b=open(A+n,'rb').read(); t.add(int.from_bytes(b[0x302a:0x302c],'big'))
+t.discard(0); print(','.join('%x'%x for x in sorted(t)))
+EOF
+); echo "demo-B ticks with arcade dumps: $(echo $TICKS | tr ',' '\n' | wc -l)"; nohup sh -c "FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 $S/pdiff.py $S/rd19.32x $TICKS > $S/sweepB19.log 2>&1; echo done >> $S/sweepB19.log" >/dev/null 2>&1 & echo "sweep B launched on rd19"
+
+OUT
+claude-sonnet-5[1m] is temporarily unavailable (timed out), so auto mode cannot determine the safety of Bash right now. Wait a moment and then try this action again. If it keeps failing, continue with other tasks that don't require this action and come back to it later. Note: reading files, searching code, and other read-only operations do not require the classifier and can still be used.
+Bash Deploy the record-link build to the office rig
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; timeout 90 tools/mister_push.sh --name mister.office.local build/port/rom/s16.32x 2>&1 | tail -2
+
+OUT
+launch  http://mister.office.local:8182/api/games/launch
+ok      2026/10/04 23:21:01 INFO game started: Sega32X/s16.32x (2276s)
+Bash Record the latest build and the demo-A result in STATE.md
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 - <<'EOF'
+p='STATE.md'; s=open(p).read()
+old='COMMIT 27490549 (2026-10-04 22:30) IS THE CURRENT PORT BUILD (`make check-demo`,\nbuild/port/rom/s16.32x, pushed to mister.office.local 22:43). THE'
+assert s.count(old)==1
+s=s.replace(old,'COMMIT f3bec7ae (2026-10-04 23:18) IS THE CURRENT PORT BUILD (`make check-demo`,\nbuild/port/rom/s16.32x, pushed to mister.office.local 23:20). THE')
+old2='(5c704e5f). OPEN: the title blink timer'
+assert s.count(old2)==1
+s=s.replace(old2,'''(5c704e5f); the 100/200-point awards and every other dereference through a 16-bit
+record link mapped with W68 (65783858, f3bec7ae: the dying pair's knockback facing).
+DEMO A IS IDENTICAL AT EVERY DUMPED TICK, dead records and globals included (0x08..0x240,
+scratchpad pdiff.py FULL=1); the only cells that differ are the ones holding SH-2
+pointers (0xFFF402, 0xFFF600.., 0xFFE008/88, 0xFFF0EC..) and the blink timer below.
+OPEN: the title blink timer''')
+open(p,'w').write(s); print('STATE updated')
+EOF
+git add STATE.md && git commit -q -m "STATE: port build f3bec7ae; demo A identical at every dumped tick
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" && git log -1 --format='%h %s'
+
+OUT
+STATE updated
+2ffb5884 STATE: port build f3bec7ae; demo A identical at every dumped tick
+Bash Sweep every demo-B tick that has an arcade dump on the new rom, in the background
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; pkill -f 'pdiff.py' 2>/dev/null; sleep 1; cd /Users/mikeholzinger/src/sega16-2-32x; TICKS=$(python3 -c "
+import os
+A='tests/demo-b/arcade/'; t=set()
+for n in os.listdir(A):
+    f=int(n[3:-4])
+    if f>=1460:
+        b=open(A+n,'rb').read(); t.add(int.from_bytes(b[0x302a:0x302c],'big'))
+t.discard(0); print(','.join('%x'%x for x in sorted(t)))"); echo "demo-B ticks with arcade dumps: $(echo $TICKS | tr ',' '\n' | wc -l)"; nohup sh -c "FULL=1 OFF=1487 ARCRANGE=1460:99999 python3 $S/pdiff.py $S/rd19.32x $TICKS > $S/sweepB19.log 2>&1; echo done >> $S/sweepB19.log" >/dev/null 2>&1 & echo "sweep B launched on rd19"
+
+OUT
+demo-B ticks with arcade dumps:      144
+sweep B launched on rd19
+Waiting for the full demo-B sweep (144 ticks) to finish on the new rom.
+
+Bash Wait for the demo-B sweep and summarise every remaining difference
+IN
+S=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/scratchpad; until grep -q '^done' $S/sweepB19.log 2>/dev/null; do sleep 20; done; echo "lines: $(grep -c . $S/sweepB19.log)"; grep -v 'ALL SAME | dead \[\] | globals' $S/sweepB19.log | grep -v 'port frame None' | cut -c1-230 | head -40; echo "   ticks compared: $(grep -c '^0' $S/sweepB19.log)  all-same: $(grep -c 'ALL SAME | dead \[\]' $S/sweepB19.log)  skipped(no port frame): $(grep -c 'port frame None' $S/sweepB19.log)"; grep 'ALL SAME | dead \[\] | globals [1-9]' $S/sweepB19.log | sed 's/.*globals [0-9]*: //' | tr ' ' '\n' | cut -d: -f1 | sort | uniq -c | sort -rn | head -14
+
+OUT
+Command running in background with ID: bjx3a153n. Output is being written to: /private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bjx3a153n.output. You will be notified when it completes. To check interim output, use Read on that file path.
+Bash Regenerate the facts index after the STATE edit and commit it
+IN
+cd /Users/mikeholzinger/src/sega16-2-32x; python3 tools/build_facts.py 2>&1 | tail -2; git add FACTS.md 2>/dev/null; git diff --cached --stat | tail -1; git commit -q -m "FACTS: regenerated after the STATE update
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" 2>/dev/null && git log -1 --format='%h %s' || echo "nothing to commit"
+
+OUT
+FACTS.md: 1059 facts
+ 1 file changed, 111 insertions(+), 110 deletions(-)
+30d1c1ec FACTS: regenerated after the STATE update
+Bash Wait for the demo-B sweep summary
+IN
+F=/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/c5f81f8e-7de6-48d9-b1fa-a2f1a0e38c12/tasks/bjx3a153n.output; until grep -q 'ticks compared' $F 2>/dev/null; do sleep 20; done; cat $F | cut -c1-230
+
+Demo A is now in scope, so add its ticks to check-demo as targets (the first divergence you find, plus the scene end) and commit the new arcade dumps with it. The gate must cover what you are fixing.

@@ -1,0 +1,47 @@
+Genesis Plus GX (via OpenEmu), 2026-09-27
+TESTCART 62 tests -- 48 graded, all PASS. Read off Mike's screenshots.
+PLATFORM line read UNKNOWN / NEW MACHINE, which is the classifier working:
+its BMMR is a third value nobody had seen. Taught now.
+
+WHERE IT AGREES WITH EVERYONE
+  T24 68K 57344 CYC     0078   120 lines -- so 477.9 cycles a line, same as
+                               ares and BlastEm. The 68K clock model is shared.
+  T37 LINES PER FRM     0106   262. NTSC geometry, same.
+  T0A T-1K VRAM WRITE   0071   slot-bound, matching the 18-slot derivation.
+  Z80 page              all    reset/grant protocol, RAM, word write, AND
+                               T39 Z80 EXECUTES 005A. Identical throughout.
+  TRANSPORT page        all    DREQ push+sum and the FMDL round trip both
+                               pass. Both of the port's transports work here.
+
+WHERE IT IS THE ODD ONE OUT
+  T16 T-1K VRAM READ    0059   89 lines against 113 on the others. 88.03 is
+                               this loop's pure instruction cost, so GPGX
+                               charges NO VDP access slot for a VRAM READ --
+                               while charging full price for a VRAM WRITE
+                               (T0A 0071). ares, BlastEm and the RTL all make
+                               a VRAM word cost two slots either direction.
+  T0D T-DMA256 ACTIVE   000F   15 lines against 28: roughly twice the DMA
+                               bandwidth during active display.
+  T18 T-DMA256 FILL     001D   29 against 14: twice as SLOW. Fill and
+                               active-display DMA move in opposite directions
+                               from the other two, which is not a scaling
+                               difference, it is a different model.
+  T2B MD CRAM MASK      FFFF   writes 0xFFFF and reads 0xFFFF back. MD CRAM is
+                               NINE BITS (0000BBB0GGG0RRR0 -- the packing
+                               tools/bake_tilecram.py emits and the SH-2 reads
+                               back); ares and BlastEm both return 0x0EEE.
+                               GPGX does not mask the readback.
+  T31 VSRAM WIDTH       FFFF   same again: the others return 0x07FF, an
+                               eleven-bit entry. No masking here either.
+  T2E 32X BMMR MASK     80FF   a THIRD answer for a register with five
+                               writable bits: ares 0xB3FF, BlastEm 0x80C3
+                               (which is the RTL's BMMR_MASK and the manual's
+                               layout), GPGX 0x80FF.
+
+WHAT THIS SHARPENS FOR REAL HARDWARE
+  T1D 32X CRAM ACTIVE is now 5678 on THREE independent emulators, against a
+  manual that says the write must be refused in packed-pixel mode and a
+  MiSTer core that implements the refusal exactly (VDP.sv:402-406). Three
+  emulators agreeing against the documentation is not evidence that the
+  documentation is wrong -- it is three emulators sharing a simplification.
+  Real silicon settles it, and cram_paint has no PEN guard.

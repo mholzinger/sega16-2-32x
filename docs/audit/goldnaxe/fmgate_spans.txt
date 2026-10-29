@@ -1,0 +1,54 @@
+84 MAIN-context writer sites (44 static, 40 executed in the census), 6 VINT-context census writers: 2fa0 2fae 2fbc 2fca 2fda 2fe4
+26 spans:
+  span  0 001402..0019ca ( 1482 B)  writers 19c2
+           entries 1402 146e 16ac 1806 19ac
+  span  1 001a08..001a8c (  134 B)  writers 1a26 1a32 1a42 1a4e
+           entries 1a08 1a20 1a36
+  span  2 001fce..002072 (  166 B)  writers 1fe2 1fea 1ff2 1ffa 2010 2024 ...
+           entries 1fce
+  span  3 002166..00218c (   40 B)  writers 2166 217c
+           entries 2166
+  span  4 00383a..003974 (  316 B)  writers 3970
+           entries 38d8 3962
+  span  5 00399e..0039b0 (   20 B)  writers 399e 39ac
+           entries 399e
+  span  6 003eb0..003ec2 (   20 B)  writers 3eb0 3eb2 3eba 3ebc
+           entries 3eb0 3eba
+  span  7 003ee2..003efc (   28 B)  writers 3ee2 3ef4
+           entries 3ee2
+  span  8 003f16..003f3c (   40 B)  writers 3f3c
+           entries 3f16
+  span  9 00484a..004a78 (  560 B)  writers 48e2
+           entries 484a 4a78
+  span 10 004c62..004c90 (   48 B)  writers 4c62
+           entries 4c62 4c6c
+  span 11 0050b4..0050da (   40 B)  writers 50b4
+           entries 50b4 50ce
+  span 12 00580c..00588e (  132 B)  writers 5836 5852 586a 587e
+           entries 586a
+  span 13 005f46..006190 (  588 B)  writers 60f6
+           entries 
+  span 14 00633c..006382 (   72 B)  writers 6356 635e 6366 636e
+           entries 
+  span 15 006390..0063c4 (   54 B)  writers 63ac
+           entries 6390
+  span 16 006ec8..0073f6 ( 1328 B)  writers 6ed6 71f2 7390 73a6 73b6 73c4
+           entries 6ec8 6ed6 710a
+  span 17 007ac0..007b18 (   90 B)  writers 7ae8
+           entries 7ac0 7ad2 7ade 7ae8 7b02 7b0e 7b16
+  span 18 009e24..009e40 (   30 B)  writers 9e34
+           entries 9e24
+  span 19 009e78..009eb4 (   62 B)  writers 9e9a
+           entries 9e78
+  span 20 00a67c..00a6aa (   48 B)  writers a6a6
+           entries a67c a69e a6aa
+  span 21 00c3a4..00c4fa (  344 B)  writers c4b2
+           entries c3a4 c3ce c42c c4b2 c4c4
+  span 22 00c59a..00c628 (  144 B)  writers c59a c5a0 c5e2
+           entries 
+  span 23 00c750..00c922 (  468 B)  writers c764 c76a c776 c790 c796 c7a2 ...
+           entries c750 c7be c7ce
+  span 24 035ac0..0364d2 ( 2580 B)  writers 36404 36484 364ae
+           entries 35af4 36306 36314 36322 36330
+  span 25 036ad8..0370b6 ( 1504 B)  writers 36ad8 37092 370a6
+           entries 36ad8 37022

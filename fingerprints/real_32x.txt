@@ -1,0 +1,7 @@
+machine: real Sega 32X hardware
+status:  NOT YET RUN -- unit in transit as of 2026-09-27
+
+THE REFERENCE. When it runs, this file is the one the other two are diffed
+against. Readout is the screen: green and holding = 8/8. If it walks colours,
+count them -- blue separator, then one per test in order, white pass / red
+fail.

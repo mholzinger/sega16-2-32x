@@ -69,8 +69,21 @@ def main():
     shots = [int(x) for x in args.shots.split(",") if x]
     ta, da, ma = run(args.rom, args.a, out, "a", inp=args.input, extra=args.extra)
     tb, db, mb = run(args.rom, args.b, out, "b", shots=shots, inp=args.input, extra=args.extra)
-    dt = (tb - ta) & 0xFFFF
     vints = args.b - args.a
+    # SCENE-RESET GUARD (LOOP28 87).  0xFFF02A is a PER-SCENE counter: it
+    # restarts when the scene does (level end, death, attract rollover).
+    # The old `(tb - ta) & 0xFFFF` turned every reset into a huge positive
+    # and printed it as a speed — [3000,5500] on the shipping rom read
+    # 2546.7%.  A window that crosses a reset measures nothing; say so
+    # instead of reporting a number.
+    if tb < ta:
+        print(f"rom {args.rom}")
+        print(f"scene timer f{args.a}={ta} f{args.b}={tb}  "
+              f"WENT BACKWARDS: the scene reset inside this window.")
+        print("NO SPEED NUMBER. Pick a window inside one scene "
+              "(the level-1 script holds one from ~f1200 to ~f4500).")
+        raise SystemExit(2)
+    dt = tb - ta
     pct = 100.0 * dt / vints
     print(f"rom {args.rom}")
     print(f"scene timer f{args.a}={ta} f{args.b}={tb}  "

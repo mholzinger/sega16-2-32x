@@ -1,0 +1,1 @@
+c32c2f04cc14fc20e053a6f09bd002a970de39c0d33ddd69c7982eeb3cefea6a  docs/proof/altbeast.c

@@ -1,0 +1,14 @@
+00374A  movea.l    (0x8,A6),A2
+00374E  lea        (0x4,A6),A0
+003752  bsr.b      0x00003774
+003754  move.l     (A0),D3
+003756  bsr.w      0x000037d0
+00375A  lea        (-0xff0).w,A1
+00375E  cmpm.l     (A0)+,(A1)+
+003760  bhi.b      0x00003770
+003762  move.l     -(A0),-(A1)
+003764  movea.l    A1,A0
+003766  lea        (0x4100d2).l,A2
+00376C  bsr.w      0x000037d0
+003770  lea        (0x10,A6),A0
+003774  lea        (0x8,A6),A1

@@ -1,0 +1,12 @@
+# port_guard: accepted, pre-existing violations.
+# Each needs a Ghidra declaration change. SHRINK this file.
+A6+0x36 accessed as int (4B) at 5 site(s); the arcade only ever accesses it 2B
+A6+0x34 accessed as undefined4 (4B) at 5 site(s); the arcade only ever accesses it 2B
+A6+0x38 accessed as undefined4 (4B) at 5 site(s); the arcade only ever accesses it 2B
+A6+0x6C accessed as undefined4 (4B) at 4 site(s); the arcade only ever accesses it 1B/2B
+A6+0x2C accessed as undefined2 (2B) at 4 site(s); the arcade only ever accesses it 1B
+A6+0x12 accessed as int (4B) at 3 site(s); the arcade only ever accesses it 2B
+A6+0x0C accessed as int (4B) at 1 site(s); the arcade only ever accesses it 1B/2B
+A6+0x10 accessed as int (4B) at 1 site(s); the arcade only ever accesses it 2B
+0x13232 FUN_00013232: 1 pointer(s) re-expanded from a 16-bit integer ((T *)(int)x) with no W68 translation
+0x16F06 FUN_00016f06: ASSIGNS register0x0000003c (the 68K SP) 1 time(s) -- Ghidra models -(SP) with no matching pop, so a value spilled across a call is read back from the wrong cell

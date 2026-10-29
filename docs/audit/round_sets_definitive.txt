@@ -1,0 +1,12 @@
+# DEFINITIVE colour-set list per round, from the arcade (LOOP-DECOMPILE 125).
+# Every cell of every tilemap page walked AFTER the round has loaded (f700),
+# not the visible window and not sampled during the load. Supersedes
+# docs/audit/mdpen_scene_sets.txt, which sampled from f450 and captured the
+# PREVIOUS scene's tile RAM (that is where 'sets 22-36' came from).
+# Sets 19, 20, 21 are the CYCLER/chevron plane and appear in every round.
+
+round 0  31 sets: 19,20,21,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101
+round 1  13 sets: 19,20,21,64,65,66,67,68,69,70,71,72,73
+round 2  15 sets: 19,20,21,102,103,104,105,106,107,108,109,110,111,112,113
+round 3  12 sets: 19,20,21,64,65,66,67,68,69,70,71,72
+round 4  19 sets: 19,20,21,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111

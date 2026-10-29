@@ -34,7 +34,17 @@ SRC = ROOT / 'discover' / 'palscenes'
 sys.path.insert(0, str(ROOT / 'tools'))
 import palscene_bake as psb                      # anchors, TOL, REGION, load()
 
-NLINES, NPENS = 3, 15
+# LOOP29 132: the line count is the question, not a constant. Three MD
+# CRAM lines hold the background today and sprites get ONE (shared with
+# the text ramp). If the background partitions into TWO, the third line
+# goes to sprites and the MDSPR claim rate moves a great deal -- the
+# decompile thread measured the top 3 palettes covering 65-75% of live
+# sprite records. This bake does an EXHAUSTIVE partition search and fails
+# loudly when none exists, so it answers the question without rendering
+# anything.  --lines N to ask.
+import os as _os
+NLINES = int(_os.environ.get("MDPEN_LINES", "3"))
+NPENS = 15
 SD = 0x23B
 MD_TAG, MDP_S_USED = 0x3B400, 0x3E380
 
@@ -128,12 +138,56 @@ def partition(colsets):
     return go(0, [frozenset()] * NLINES, {})
 
 
+ALSO = []          # --also: sets the harvest CANNOT see (see bake_scene)
+CYC = {}           # --ring: {slot: {'ring','steps','cls','c0'}} from the game's
+                   # colour-cycler script (tools/ring_script.py demand()).
+                   # docs/design/RING-BAKE.md. A cycled set's colours CHANGE, so
+                   # its pens must be private and one-per-pixel-SEQUENCE; the
+                   # single anchor frame this file otherwise bakes from catches
+                   # whichever ring step was live at capture (altbeast's
+                   # transformation cut was anchored before the cycler's first
+                   # write, so set 19's eight pixels deduped onto ONE pen and the
+                   # field rendered flat).
+
+
 def bake_scene(name, anchor, masks):
     colsets = {}
     for s, mu in sorted(masks.items()):
+        if s in CYC:
+            continue                     # cycled: demand comes from the ring
         cs = frozenset(quant(anchor[s * 8 + p]) for p in range(8) if mu & (1 << p))
         if cs:
             colsets[s] = cs
+    # CYCLED SETS (docs/design/RING-BAKE.md). One pen per distinct per-pixel
+    # colour SEQUENCE -- NOT per distinct colour. Two pixels may share a pen
+    # only if they agree at EVERY ring step, and under a rotation every pixel
+    # visits the same colours in a different phase (slot 19: union 4 MD
+    # colours, demand 8 pens). An opaque token per class carries that through
+    # partition() unchanged, and keeps a cycled pen from merging with a static
+    # set's pen that happens to match at step 0. The token is keyed on the RING
+    # POINTER, not the slot, so slots driven by one ring (altbeast 20/21) share
+    # one allocation: keying per slot would cost 8+7+7=22 and overflow the line.
+    masks = dict(masks)
+    for s, v in CYC.items():
+        colsets[s] = frozenset(('cyc', v['ring'], k) for k in set(v['cls']))
+        masks[s] = 0xFF                  # every pen group live; s_used reads this
+    # --also (2026-09-16, CARD MDCHEV): sets the harvest is STRUCTURALLY
+    # blind to. Demand is built from cells in the rom's packed tilemaps,
+    # which cover pages 0-9 only; the cycler sets 19/20/21 live on pages
+    # 10 and 11 (docs/audit/chevplane_cells.txt, tools/chevcells.lua), so
+    # they have zero cells, never become candidates, and are REFUSED an
+    # MD line in every round -- which is why the attract face and eye
+    # screens, both of which are pure tiles (arcade sprite records = 0 at
+    # frames 1060/1100/1180), lose their art. Force them in with every
+    # pen group live, and let partition() fail loudly if they do not fit.
+    for s in ALSO:
+        if s in CYC:
+            continue                     # the ring already forced it in
+        cs = frozenset(quant(anchor[s * 8 + p]) for p in range(8))
+        if cs:
+            colsets[s] = cs
+            masks = dict(masks)
+            masks[s] = 0xFF          # every pen group live; s_used reads this
     allc = set().union(*colsets.values()) if colsets else set()
     assign = partition(colsets)
     if assign is None:
@@ -144,9 +198,27 @@ def bake_scene(name, anchor, masks):
     s_line = [0] * 128
     s_map = [[0] * 8 for _ in range(128)]
     s_used = [0] * 128
+    pen_ring = [[0] * 16 for _ in range(NLINES)]
     for s, li in assign.items():
         s_line[s] = li + 1
         s_used[s] = masks[s]
+        if s in CYC:
+            v = CYC[s]
+            row = line_c[li]
+            for p in range(8):
+                tok = ('cyc', v['ring'], v['cls'][p])
+                if tok in row[1:]:
+                    pen = row.index(tok)
+                else:
+                    if 0xFFFF not in row[1:]:
+                        sys.exit(f'BAKE FAIL: scene {name}: cycled set {s} ran '
+                                 f'line {li} out of pens -- partition() sized it '
+                                 f'wrong, do not ship a degraded table')
+                    pen = row.index(0xFFFF, 1)
+                    row[pen] = tok
+                s_map[s][p] = pen
+                pen_ring[li][pen] = 1
+            continue
         for p in range(8):
             if not masks[s] & (1 << p):
                 continue
@@ -158,10 +230,29 @@ def bake_scene(name, anchor, masks):
                 pen = row.index(0xFFFF, 1)
                 row[pen] = q
             s_map[s][p] = pen
+    # line_c must hold real 9-bit colours: each class token becomes its
+    # ring's STEP 0 colour. The runtime repaints these pens as the ring
+    # advances, so step 0 only has to be right for the first frame.
+    tokc = {}
+    for s, v in CYC.items():
+        for k, c in enumerate(v['c0']):
+            tokc[('cyc', v['ring'], k)] = c
+    for l in range(NLINES):
+        for i in range(16):
+            if isinstance(line_c[l][i], tuple):
+                line_c[l][i] = tokc[line_c[l][i]]
     loads = [sum(1 for v in line_c[l][1:] if v != 0xFFFF) for l in range(NLINES)]
     print(f'  {name}: {len(colsets)} sets, {len(allc)} colours -> lines {loads} '
           f'({NLINES * NPENS - sum(loads)} pens spare)')
-    return line_c, s_line, s_map, s_used
+    if CYC:
+        for s in sorted(CYC):
+            v = CYC[s]
+            if not s_line[s]:
+                sys.exit(f'BAKE FAIL: scene {name}: cycled set {s} got no line')
+            print(f'    cycled set {s}: ring 0x{v["ring"]:06X} {v["steps"]} steps '
+                  f'-> {len(set(v["cls"]))} pens on line {s_line[s]}, '
+                  f'map {s_map[s]}')
+    return line_c, s_line, s_map, s_used, pen_ring
 
 
 def main():
@@ -169,8 +260,36 @@ def main():
     ap.add_argument('--harvest', action='append', default=[])
     ap.add_argument('--state', action='append', default=[])
     ap.add_argument('--stats', action='store_true')
+    ap.add_argument('--also', default='',
+                    help='comma-separated colour sets to force in (they have '
+                         'no cells in the harvested tilemaps). CARD MDCHEV: '
+                         '19,20,21 -- the cycler plane on pages 10/11.')
+    ap.add_argument('--ring', default='',
+                    help='game program image (.zip of the MAME set, or a flat '
+                         'binary) holding the colour-cycler script. Cycled sets '
+                         'are baked from the RING, not from the anchor frame '
+                         '(docs/design/RING-BAKE.md).')
+    ap.add_argument('--ring-script', type=lambda x: int(x, 0), default=0x1A70C,
+                    help='address of the cycler script COUNT word (altbeast '
+                         '0x1A70C; the only title-specific input)')
     ap.add_argument('--out', default=str(ROOT / 'sh_src' / 'pal_scenes_md.h'))
     a = ap.parse_args()
+    ALSO[:] = [int(x) for x in a.also.split(',') if x.strip()]
+    if a.ring:
+        import ring_script
+        img = (ring_script.program_from_zip(a.ring) if a.ring.endswith('.zip')
+               else open(a.ring, 'rb').read())
+        CYC.update(ring_script.demand(img, a.ring_script))
+        print(f'  ring 0x{a.ring_script:06X}: cycled sets '
+              f'{sorted(CYC)} -> pens '
+              f'{ {s: len(set(v["cls"])) for s, v in sorted(CYC.items())} }')
+        # the cycled slots and --also are two independent derivations of the
+        # same list (the cycler plane has no cells in the packed tilemaps, so
+        # the harvest is blind to exactly these sets). Disagreement means one
+        # of them is stale.
+        if ALSO and sorted(ALSO) != sorted(CYC):
+            print(f'  WARNING: --also {sorted(ALSO)} != cycled sets '
+                  f'{sorted(CYC)} -- one of the two is stale')
     if not a.harvest and not a.state:
         sys.exit('need --harvest and/or --state inputs')
     scenes = {s: psb.load(SRC / f'{s}.palsh') for s in psb.ANCHORS}
@@ -204,7 +323,12 @@ def main():
         # scene change such as normal -> boss_smoke
         owner = [psb.LOADABLE.index('normal') if not masks[n] else i for i, n in enumerate(psb.LOADABLE)]
         f.write('static const uint8_t mds_table_of[MDSTATIC_N] = { ' + ', '.join(str(o) for o in owner) + ' };\n')
-        f.write('static const uint16_t mds_line_c[MDSTATIC_N][48] = {\n')
+        # LOOP29 176: the 48 was hardcoded for three lines. MDPEN_LINES=4
+        # emitted a 4-line table into a 3-line declaration, so the fourth
+        # line was silently truncated -- exactly the kind of quiet wrong
+        # table this file's own comments warn about.
+        f.write('static const uint16_t mds_line_c[MDSTATIC_N][%d] = {\n'
+                % (NLINES * 16))
         for name in psb.LOADABLE:
             lc = tables[name][0]
             f.write('    { ' + ', '.join(f'0x{v:04X}' for row in lc for v in row) + ' },   /* ' + name + ' */\n')
@@ -217,6 +341,18 @@ def main():
         f.write('};\nstatic const uint8_t mds_s_used[MDSTATIC_N][128] = {\n')
         for name in psb.LOADABLE:
             f.write('    { ' + ', '.join(f'0x{v:02X}' for v in tables[name][3]) + ' },\n')
+        # RING PENS (docs/design/RING-BAKE.md). 1 = this pen carries a
+        # colour-cycled class. Slots driven by one ring SHARE these pens, so
+        # their refcount is >= 2 and the runtime's sole-owner in-place
+        # recolour (m_main.c "SOLE-OWNER DRIFT") would refuse to track them --
+        # the pen would hold its install-time colour forever, which is the
+        # CHEVPEN freeze. The bake guarantees every co-owner of a ring pen
+        # carries the SAME colour at every step, so the owner may drive the
+        # recolour regardless of refcount; this table is that certificate.
+        f.write('};\nstatic const uint8_t mds_pen_ring[MDSTATIC_N][%d] = {\n'
+                % (NLINES * 16))
+        for name in psb.LOADABLE:
+            f.write('    { ' + ', '.join(str(v) for row in tables[name][4] for v in row) + ' },\n')
         f.write('};\n')
     print('wrote', a.out)
 

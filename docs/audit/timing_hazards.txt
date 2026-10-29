@@ -1,0 +1,10 @@
+CYCLE DELAY — a dbf branching to itself, empty body: 1
+  0x02D8C  count from 0x02D8A moveq #127,%d0
+
+INTERRUPT DELAY — a counted loop around stop: 1
+  0x1B5B2-0x1B5B6  stop #8960
+
+BUSY-WAIT — test and branch back, three instructions or fewer: 3
+  0x02D82-0x02D88  #2,0xfffff0c2
+  0x02DA8-0x02DAE  #7,0xfffff0c2
+  0x03982-0x03986  0xfffff01c

@@ -56,3 +56,33 @@ pcm_clean/
 sndtest/md/render_music.h
 sndtest/md/render_track.h
 docs/audit/timing_census.json
+docs/audit/palette_demand.json
+docs/audit/altbeast_seeds.json
+docs/audit/video_map.md
+docs/audit/video_map.json
+docs/audit/function_map.md
+
+# Golden Axe decompile thread (2026-09-12): census outputs derived from the ROM
+docs/audit/goldnaxe/*.json
+docs/audit/gcc_strict.log
+oracle/
+.port_flags
+
+# tests/demo-b/arcade: the arcade's work RAM at known frames (MAME, fresh NVRAM) -- the
+# oracle the demo check diffs against. Sega-derived: excluded from the public branch.
+!tests/demo-b/arcade/aw_*.bin
+
+# the demo gate's scratch dumps (tests/demo-b/check_demo.py, DEMO_WORK)
+tests/demo-b/work/
+
+# tests/demo-b/picbase: the PICTURE baselines the gate compares the composed screen band
+# against -- the only check that sees what was DRAWN, as opposed to the records (work RAM)
+# and the FB staging (the tilemap). *.bin above excludes them by default, and a baseline
+# that is not committed is not a baseline.
+!tests/demo-b/picbase/pic_*.bin
+
+# per-tree, per-build undeclared-symbol harvest (tools/cport_build.sh)
+sh_src/portfull/cport_overrides.json
+tests/gameplay/arcade*/
+sh_src/tape_pad.h
+sh_src/tape_pad.id

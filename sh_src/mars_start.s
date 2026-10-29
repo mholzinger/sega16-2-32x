@@ -346,6 +346,32 @@ mcont:
 		dt      r4
 		bf      3b
 
+! PORTHOT2 (2026-10-24): the hot game code's further SDRAM regions (mars.ld .ramtext2,
+! .ramtext3), copied from the table __hotcopy_tab = {lma, vma, size} x 2. A size of 0 is
+! skipped. Same order as above: before M_OK, so the slave never runs them uncopied.
+		mov.l   _primary_hc_tab,r5
+		mov     #2,r6
+	6:
+		mov.l   @r5+,r2     /* ROM offset of the image */
+		mov.l   @r5+,r3     /* cached SDRAM address */
+		mov.l   @r5+,r4     /* bytes, a multiple of 4 */
+		tst     r4,r4
+		bt      8f
+		mov.l   _primary_hc_rom,r1
+		add     r1,r2       /* cart view 0x22000000 */
+		mov.l   _primary_hc_unc,r1
+		or      r1,r3       /* uncached SDRAM alias 0x26000000 */
+		shlr2   r4
+	7:
+		mov.l   @r2+,r0
+		mov.l   r0,@r3
+		add     #4,r3
+		dt      r4
+		bf      7b
+	8:
+		dt      r6
+		bf      6b
+
 .ifdef BOOT_BEACON
 		mov.l   _beacon_comm12,r1
 		mov     #3,r0
@@ -476,6 +502,12 @@ _primary_rt_vma:
 		.long   __ramtext_start + 0x20000000 /* uncached SDRAM alias */
 _primary_rt_size:
 		.long   __ramtext_size
+_primary_hc_tab:
+		.long   __hotcopy_tab
+_primary_hc_rom:
+		.long   0x22000000
+_primary_hc_unc:
+		.long   0x20000000
 _primary_do_init:
 		.long   __INIT_SECTION__
 _primary_do_fini:
@@ -1323,6 +1355,32 @@ main_reset:
 		dt      r4
 		bf      2b
 
+! PORTHOT2 (2026-10-24): the hot game code's further SDRAM regions (mars.ld .ramtext2,
+! .ramtext3), copied from the table __hotcopy_tab = {lma, vma, size} x 2. A size of 0 is
+! skipped. Same order as above: before M_OK, so the slave never runs them uncopied.
+		mov.l   hc_tab,r5
+		mov     #2,r6
+	6:
+		mov.l   @r5+,r2     /* ROM offset of the image */
+		mov.l   @r5+,r3     /* cached SDRAM address */
+		mov.l   @r5+,r4     /* bytes, a multiple of 4 */
+		tst     r4,r4
+		bt      8f
+		mov.l   rom_start,r1
+		add     r1,r2       /* cart view 0x22000000 */
+		mov.l   hc_unc,r1
+		or      r1,r3       /* uncached SDRAM alias 0x26000000 */
+		shlr2   r4
+	7:
+		mov.l   @r2+,r0
+		mov.l   r0,@r3
+		add     #4,r3
+		dt      r4
+		bf      7b
+	8:
+		dt      r6
+		bf      6b
+
 		mov.l   main_st,r0
 		mov.l   main_ok,r1
 		mov.l   r1,@r0      /* tell everyone reset complete */
@@ -1366,10 +1424,19 @@ ramtext_vma:
 		.long   __ramtext_start + 0x20000000   ! uncached alias, like sdram_start
 ramtext_size:
 		.long   __ramtext_size
+hc_tab:
+		.long   __hotcopy_tab
+hc_unc:
+		.long   0x20000000
 rom_start:
 		.long   0x22000000
 sdram_start:
 		.long   0x26000000
+! PORTHOT2: {ROM offset, cached SDRAM address, bytes} per hot region (mars.ld)
+		.global __hotcopy_tab
+__hotcopy_tab:
+		.long   __ramtext2_lma, __ramtext2_start, __ramtext2_size
+		.long   __ramtext3_lma, __ramtext3_start, __ramtext3_size
 
 slav_st:
 		.long   0x20004024
@@ -1377,6 +1444,114 @@ slav_ok:
 		.ascii  "S_OK"
 slav_go:
 		.long   sstart
+
+
+! ============================================================================
+! THE PORT'S COROUTINE SWITCH (docs/design/PORT-ARCH.md 1b)
+!
+! WHY IT EXISTS. The port extracts one arcade frame from a loop that never exits
+! by REDIRECTING wait_frame_flag (68K 0x397E) to port_frame_wait, which left
+! through __builtin_longjmp. A longjmp cannot RESUME: every frame re-entered the
+! game at its root and re-ran the prologue. For the seeded frame and the per-frame
+! curve that is harmless -- the prologue only writes work RAM and the seed
+! overwrites all 16 KB afterwards -- but FREE-RUN must carry state across the
+! frame boundary, and a re-run prologue erases it. So PORTMAIN REFUSED free-run
+! rather than report a per-frame curve under a free-run name. A playable build IS
+! a free-run, so this is the gate, and a real resume is what lifts it.
+!
+!     void port_ctx_switch(void **save_sp, void *load_sp);
+!
+! Saves the SH ABI's callee-saved set (r8-r14) and PR on the CURRENT stack, writes
+! the resulting SP through r4, adopts r5, and returns into whatever that stack's
+! saved PR names. Two stacks take turns; each `rts` lands in the other side's last
+! switch call. r0-r7, MACH/MACL and the T bit are caller-saved by the SH ABI and
+! are not live across a call boundary, which is the only place a switch happens.
+!
+! GBR is NOT saved: this build never changes it (grep: no ldc/stc GBR outside the
+! boot path), so saving it would be ceremony around a constant. SR likewise -- a
+! switch only ever happens with interrupts in whatever state the caller had, and
+! both sides are the same CPU at the same level.
+! ============================================================================
+! GATED, so the SHIPPING LINE does not carry it. 84 bytes of .text in every rom
+! would be a real cost at this project's resolution: 64 bytes of dead .data has
+! been measured moving the level-1 speed ladder 18 points (LESSONS, "speed gate
+! resolution floor"), so a build that silently grew would make every speed
+! comparison across this commit incomparable. --defsym PORT_CORO=1 comes from
+! PORTCORO=1 in the Makefile.
+		.ifdef  PORT_CORO
+		.align  2
+		.global _port_ctx_switch
+_port_ctx_switch:
+		sts.l   pr, @-r15
+		mov.l   r14, @-r15
+		mov.l   r13, @-r15
+		mov.l   r12, @-r15
+		mov.l   r11, @-r15
+		mov.l   r10, @-r15
+		mov.l   r9,  @-r15
+		mov.l   r8,  @-r15
+		mov.l   r15, @r4          ! our SP, for the other side to load
+		mov     r5,  r15          ! adopt theirs
+		mov.l   @r15+, r8
+		mov.l   @r15+, r9
+		mov.l   @r15+, r10
+		mov.l   @r15+, r11
+		mov.l   @r15+, r12
+		mov.l   @r15+, r13
+		mov.l   @r15+, r14
+		lds.l   @r15+, pr
+		rts
+		nop
+
+! void *port_ctx_make(void *stack_top, void (*entry)(void));
+!
+! Builds the frame port_ctx_switch will pop on the FIRST switch into a new
+! coroutine, and returns the SP to hand it. The frame is the same eight longs the
+! switch pushes, in the same order, with PR = entry: so the first `rts` on that
+! stack jumps straight to `entry` with a clean callee-saved set. r8-r14 are zeroed
+! rather than left as whatever the allocator found -- a coroutine that reads an
+! uninitialised callee-saved register would be a non-reproducible bug, and the
+! eight stores cost nothing once per launch.
+!
+! stack_top must be 4-aligned and is used EXCLUSIVE (nothing is written at or
+! above it), so the caller passes the end of its buffer.
+		.align  2
+		.global _port_ctx_make
+_port_ctx_make:
+		mov     r4, r0
+		add     #-32, r0          ! 8 longs: r8-r14 + pr
+		mov.l   r5, @(28, r0)     ! pr  <- entry
+		mov     #0, r1
+		mov.l   r1, @(0,  r0)     ! r8
+		mov.l   r1, @(4,  r0)     ! r9
+		mov.l   r1, @(8,  r0)     ! r10
+		mov.l   r1, @(12, r0)     ! r11
+		mov.l   r1, @(16, r0)     ! r12
+		mov.l   r1, @(20, r0)     ! r13
+		mov.l   r1, @(24, r0)     ! r14
+		rts
+		nop
+
+! void port_sp_reset_jump(void *fn, uint a, uint b, uint c, uint d, uint e, void *root);
+!
+! The 68K's `lea 0xffffff00,%sp` at the top of a routine reached by jmp (sh_src/
+! port_l2.c, "68K ENTRIES THAT RESET THE STACK"). Adopts `root` as the SP and jumps
+! to port_sp_root_run(fn, a, b, c, d, e) with r4-r7 untouched and d, e re-pushed as
+! its two stack arguments. jmp, not jsr: nothing returns here.
+		.align  2
+		.global _port_sp_reset_jump
+_port_sp_reset_jump:
+		mov.l   @r15, r1          ! d
+		mov.l   @(4, r15), r2     ! e
+		mov.l   @(8, r15), r3     ! root
+		mov     r3, r15           ! every frame above root is now dead
+		mov.l   r2, @-r15         ! e -> @(4, r15) on entry to the runner
+		mov.l   .Lsp_run, r0
+		jmp     @r0
+		mov.l   r1, @-r15         ! d -> @(0, r15)   (delay slot)
+		.align  2
+.Lsp_run:	.long   _port_sp_root_run
+		.endif  ! PORT_CORO
 
 
 		.global _start

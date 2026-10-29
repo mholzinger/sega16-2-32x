@@ -9,7 +9,10 @@ sh_src/sprites.bin (the interleaved sprite ROM), REUSING bake_sprites'
 decoder — the one that ships with a byte-identical replay gate — so the
 pixel walk here is the proven one, not a re-derivation.
 
-Emits, for the v1 class list (S16 colour sets 0x00, 0x10, 0x0B):
+Emits, for the colour sets listed in SCENES below -- READ THAT TABLE,
+not this line. (It said 0x00, 0x10, 0x0B for months while the code
+baked set 0x09 alone; that stale sentence is part of why nobody noticed
+75%% of live sprite records had no baked art -- LOOP29 119.)
   sh_src/md_sprart.bin   MD 4bpp tiles, per-key per-subsprite,
                          column-major within a subsprite (the VDP's
                          multi-tile order: tileNumber = tileX*htiles).
@@ -53,7 +56,12 @@ OUT_MD_H = ROOT / 'md_src' / 'md_sprart_info.h'
 # — the bots never reach the boss.
 SCENES = [
     # (name, csv, sets, min_count, anchor or None=dynamic)
-    ('normal', 'play.csv', (0x09,), 40, 0x09),
+    # LOOP29 119: the claim census measured 75.2% of live records rejected
+    # for NO BAKED KEY while the normal scene used 6944B of its 12288B VRAM
+    # window. Sets 0x0A and 0x0B are 67.6% of the missing art (689 records
+    # each per 600 vints -- an exactly-paired actor). Added here; the fitter
+    # drops by ascending count if VRAM runs out, so over-listing is safe.
+    ('normal', 'play.csv', (0x09, 0x0A, 0x0B), 40, 0x09),
     ('boss',   'boss.csv', None, 1, None),   # sets=None: set-agnostic (0xFF wildcard keys)
 ]
 VRAM_BASE = 0x8000

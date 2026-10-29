@@ -1,0 +1,25 @@
+003CD4  lea        (0x20000).l,A2
+003CDA  moveq      #0x0,D0
+003CDC  moveq      #0x0,D6
+003CDE  moveq      #0x0,D7
+003CE0  move.b     (A0)+,D0b
+003CE2  lsl.w      #0x5,D0w
+003CE4  adda.w     D0w,A2
+003CE6  move.b     (0x4e,A6),D0b
+003CEA  andi.w     #0x1f,D0w
+003CEE  move.b     (0x0,A2,D0w*0x1),D6b
+003CF2  move.b     (A0)+,D7b
+003CF4  move.w     D7w,D3w
+003CF6  add.w      D7w,D7w
+003CF8  subq.w     #0x1,D7w
+003CFA  moveq      #0x40,D1
+003CFC  sub.w      D0w,D1w
+003CFE  mulu.w     D1w,D7
+003D00  add.w      D0w,D0w
+003D02  add.w      D0w,D0w
+003D04  andi.w     #0x3f,D0w
+003D08  sub.w      D0w,D7w
+003D0A  addi.w     #0x3f,D7w
+003D0E  asr.w      #0x6,D7w
+003D10  addq.w     #0x1,D7w
+003D12  rts        

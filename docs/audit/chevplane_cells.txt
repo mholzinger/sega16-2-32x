@@ -1,0 +1,30 @@
+# THE CYCLER/CHEVRON PLANE IS ON PAGES 10 AND 11 (2026-09-14).
+# Live arcade tile RAM, tools/chevcells.lua. Sets 19/20/21 hold ZERO cells
+# on pages 0-9 -- in the rom's packed map AND in live tile RAM. They are on
+# pages 10/11, which every tool in this repo walks past: bake_tilecram.py,
+# bake_cat1hole.py and bake_cat1vis.py all take TILES_N = 20480 = TEN pages.
+#
+# Shape: a solid rectangle, rows 4-23 x cols 24-63 = 20 x 40 = 800 cells per
+# page, both pages = 1,600 cells. 40 cols is the full screen width.
+# Displayed FULL SCREEN: at frame 1100 the page selects read 0x740=AAAA and
+# 0x741=BBBB -- all four quadrants page 10 over page 11. Built at runtime
+# (0 cells at f1200, after teardown) and shown 218 frames in round 0 from
+# f1056 at attract step 0x0C, 426 frames in round 2 from f3181.
+#
+# So it is not a narrow strip: while it is up it IS the entire picture.
+# Note the pairing (10,11) is +1, not the +5 that locks pages 0-4 to 5-9.
+=== frame 700  pagesel 0x740=0101 0x741=5656
+page 10: 800 cells  rows 4-23  cols 24-63
+  per-row: 0,0,0,0,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,0,0,0,0,0,0,0,0
+page 11: 800 cells  rows 4-23  cols 24-63
+  per-row: 0,0,0,0,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,0,0,0,0,0,0,0,0
+=== frame 1100  pagesel 0x740=AAAA 0x741=BBBB
+page 10: 800 cells  rows 4-23  cols 24-63
+  per-row: 0,0,0,0,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,0,0,0,0,0,0,0,0
+page 11: 800 cells  rows 4-23  cols 24-63
+  per-row: 0,0,0,0,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,40,0,0,0,0,0,0,0,0
+=== frame 1200  pagesel 0x740=0101 0x741=5656
+page 10: 0 cells  rows 99--1  cols 99--1
+  per-row: 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+page 11: 0 cells  rows 99--1  cols 99--1
+  per-row: 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0

@@ -44,6 +44,117 @@ or a `docs/log/LOOP*.md` already records a hardware fact with a citation, use
 it. Going back to the binaries should be for questions the docs do not
 already answer.
 
+## Scope and legality (reviewed 2026-09-19)
+
+Reviewed against the tree on 2026-09-19: this is clean-room
+interoperability and preservation work on 40-year-old hardware. It is
+NOT security research, not protection circumvention, and not
+cyber-restricted work. The evidence, each point verifiable in the repo:
+
+1. **Address rebasing, not decryption.** `tools/patch_game.py` scans the
+   68K program for System 16B hardware addresses and rewrites them to
+   32X addresses. Altered Beast US is an unencrypted set with no FD1094
+   (`NOTES.md`, "Unencrypted").
+2. **No cipher code exists anywhere.** The only mentions of FD1094 /
+   FD1089 are prose in `TOOLKIT.md` ("Encryption gates the title
+   choice"), which states the static patcher cannot break them and
+   lists titles without a MAME-shipped flat `d` set as blocked. Any
+   `key` in the sound tools is a YM2151 key-on/off register write.
+3. **The Ghidra work is timing analysis of a program the owner holds.**
+   `tools/ghidra_run.sh` imports the 68K binary to census instruction
+   timing. The Ghidra project lives outside the repo and is never
+   committed. It is the same open reverse-engineering MAME and jtcores
+   perform.
+4. **The i8751 shim is emulation, not circumvention.** `md_src/md_main.c`
+   ("Stage B: replicate the i8751 MCU") reproduces the MCU's mailbox
+   behaviour (coins, sound command, bank request) so the game runs on
+   the 32X. The MCU ROM is a dumped part of the owned board; no check
+   is stubbed out or bypassed.
+5. **Nothing leaves the machine.** No socket, HTTP, or request code in
+   any tool. ROM-derived material, captures, and third-party dumps are
+   gitignored, and the public branch policy excludes Sega-derived files.
+
+Caveat kept for accuracy: the toolkit plans to port FD1094 titles by
+feeding MAME's pre-decrypted `d` clone sets to the patcher. That relies
+on decryption MAME already publishes; this repo does not implement, and
+cannot implement, the FD1094 or FD1089 ciphers.
+
+## BEFORE DERIVING ANYTHING: grep FACTS.md
+
+    grep -i <keyword> FACTS.md
+
+573 one-line facts, each with the `file:line` that carries its measurement,
+generated from `LESSONS.md`, `STATE.md`, the Makefile's flag comments and the
+per-game patcher tables by `tools/build_facts.py`. It is a LOOKUP, not a read
+— it exists because the record is 500,000 words and this file tells you not to
+read it, which removed the guard against re-deriving what is already known.
+
+Two rules it enforces, each from a measured failure:
+
+1. **For a question about a FEATURE, read the file that implements it first.**
+   2026-09-24: a 60-line analysis of the WRAMCODE block set was committed 22
+   minutes after the builder committed the block list itself, comment and all,
+   in `tools/game_altbeast.py`. Five re-derivations happened in one session;
+   four of the five are now one grep away.
+2. **Never assert a negative about the record — "never measured", "not
+   reported", "no instrument exists" — without the grep in the same turn.**
+   Each of those was wrong at least once and each cost a correction round-trip.
+
+Regenerate after editing LESSONS or STATE: `python3 tools/build_facts.py`
+(`--check` exits 1 when stale).
+
+## START HERE — read these four, in this order, and nothing else
+
+    docs/design/REBUILD.md
+                       THE PLAN OF RECORD. "the 60Hz arcade-perfect
+                       architecture", 2026-08-21: the target
+                       architecture, the phase sequence P1-P5, the
+                       risk register, and WHAT BURNS. Read §0-§6 (the
+                       first 204 lines); everything after that is the
+                       execution log. If a card is not moving a phase
+                       of this document forward, say so out loud
+                       before building it.
+    INTENT.md          what this project is for, and the bar. Stable.
+    STATE.md           what is TRUE RIGHT NOW: the line, the live axis,
+                       what is measured dead, what is already shipped,
+                       the open defects and cards. PRUNED, not appended.
+    LESSONS.md         findings that must never be re-derived, each with
+                       the measurement that established it and what it
+                       cost when it was violated.
+
+Then read `.build_flags` — but it is the stamp of the LAST BUILD, which
+is usually a probe, NOT the line. The line's flags are `LINE_FLAGS` in
+the Makefile; `make line` is the only thing that builds it. Then
+`LOOP-PROTOCOL.md` if you are relaying to the other thread.
+
+**Do NOT start by reading the logs.** `docs/log/*` (30 files) and
+`docs/handoff/*` (31 files) are HISTORY, not state. They are append-only,
+so the newest entry wins attention over the better-founded older one —
+that is how a month of work got aimed at the wrong axis while the right
+answer sat in `START-HERE.md` unread.
+
+**Run the PREMISE CHECK before proposing anything** (`LOOP-PROTOCOL.md`):
+what the record already says, what flags are on the line, which
+instrument, and whether it is already in MEASURED DEAD. Two cards in one
+week were killed by that check *after* a full costing exercise had begun.
+Both were free to kill at the top.
+
+`docs/handoff/START-HERE.md` is superseded by `STATE.md`. It is kept for
+its transport and rig detail; treat its rankings as history.
+
+## The scope (2026-09-08)
+
+The 68000 clock is NOT a loss. The game needs 2780 instructions/vint and
+our 7.670 MHz budget covers that at any cost up to 46 cycles per
+instruction; the arcade's own 10 MHz 68000 runs the same code at 45.2,
+because it is stalled on its video bus rather than computing. We do not
+pay those stalls.
+
+**The only thing holding up parity is the pipeline: feeding frames and
+sprites into the 32X at the right frequency, in the shape that
+architecture wants.** It costs 2882 instructions/vint today — as much as
+the game itself. See `ARCHITECTURE.md` (top) and LOOP27 78-79.
+
 ## Standing rules
 
 1. **Accuracy before speed.** The port must look and play exactly like
@@ -72,6 +183,12 @@ already answer.
   rom/s16.32x`. `PRESSURE` is a MAME-side proxy that widens the quiet
   zone; it is a handicap on ares and must never be handed over as an
   ares build.
+- **Quantiser agreement** — `make quantcheck` (`tools/quant_diff.py`): the
+  host baker that generates the MD pen tables against the SH-2 runtime that
+  consumes them, over all 65536 S16 colour words. Two implementations of one
+  function in two languages; when they drift the symptom is pink trees, not a
+  crash (LOOP29 196). Two seconds, no emulator, no rig. It also refuses to let
+  `PALQUANT=1` ship with `MDROUND=1`, which would re-arm that bug.
 - **Mike's ares play pass.**
 
 ## What MAME is for now (2026-08-17)
@@ -192,10 +309,38 @@ savestate contains SDRAM, and RAMCODE lives in SDRAM, so a state saved
 under one build carries that build's code into whatever rom you load it
 against.
 
+
+## The port's workflow (Mike, 2026-10-04)
+
+- **`make check-demo` is the only gate for the port.** It builds the port out of
+  tree (`make port` -> `build/port/rom/s16.32x`, never `rom/s16.32x`) and diffs every
+  live object record against the arcade's work RAM at ticks 0xA2 0xD4 0x1FE 0x228
+  0x246 (`tests/demo-b/`). Report a build as its tick table plus the commit hash.
+- **A hand-derived function is a C file, not a regex pass:**
+  `sh_src/portfull/hand/FUN_<addr>.c`; cport_prep swaps it in for the decompiled
+  body at the end of the pipeline and takes the signature from `protos.h`. Only
+  mechanical rewrites (a shape across many functions) stay as passes. No new regex
+  pass for a single function.
+- **Batch independent fixes:** two or three fixes per build when they touch
+  different objects; let check-demo tell them apart.
+- **LESSONS.md gets a line only for a hardware or decompiler fact no code captures**,
+  with the `file:line` that proves it. A fix that is a hand file or a pass carries its
+  finding in the commit message, two lines.
+- Nothing in the loop depends on the scratchpad.
+
 ## Where things are written down
 
+- `docs/design/REBUILD.md` — THE PLAN OF RECORD (§0-§6; the rest is
+  its execution log). The target architecture, phases P1-P5, and the
+  BURNS list. Was missing from this file until 2026-09-17, and a full
+  day was spent optimising machinery §5 says to delete.
+- `docs/design/SLIM-PIPELINE.md` — cart art to the VDP in the fewest
+  steps. What the hardware allows (VDP DMA from cart is BLOCKED; the
+  68K reaches cart only through the 0x900000 bank window), why
+  throughput is a CORRECTNESS metric and not a speed one, the 2-word
+  record design, and the proven 512-words/vint budget it must respect.
 - `ARCHITECTURE.md` — how the 32X library draws a frame, where this
-  port sits, and the pivot. Start here.
+  port sits, and the pivot.
 - `docs/design/SILICON.md` — what makes the port run on REAL 32X
   hardware: the slave SDRAM warm-up, the FM=1 framebuffer rule, the FB
   packet transport, the probe rig and its traps. Every claim carries the
@@ -203,6 +348,13 @@ against.
   path, the packet transport, or before writing any hardware probe.
 - `TOOLKIT.md` — the reusable kit inventory: what is game-agnostic and
   what is Altered-Beast-specific.
+- `kit/` — the pattern library. `kit/schema.py` declares every
+  `tools/game_<name>.py` TABLES key as a named 68K idiom with its layer
+  (cpu68k / decomp / s16b / segaprog / port32x), whether absence is
+  legal, and the log entry that proved it. `python3 -m kit.schema check`
+  audits every title. Add a key THERE first; a key not in the schema is
+  rejected, which is how a second title stops inventing private
+  vocabulary. `kit/INDEX.md` is generated.
 - `docs/log/LOOP.md`, `docs/log/LOOP6..11.md` — the working log, newest last. Each has a
   NEGATIVE RESULTS section. **Read them before re-trying an idea**;
   most of the obvious optimisations are already in there with the

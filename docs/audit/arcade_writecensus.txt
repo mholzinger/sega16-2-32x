@@ -1,0 +1,17 @@
+# 68K WRITES PER FRAME into the ranges patch_game.py rebases.
+# arcade (mame altbeast), frames 1201-3600 = 2400 sampled.
+# LOWER BOUND: MAME lua taps under-report on S16B (LESSONS).
+# 192 static sites are patched; these are EXECUTIONS per frame.
+
+range     mean/frame  max/frame
+tileRAM          0.0          0
+textRAM          0.0          0
+sprRAM           0.0          0
+palette          0.0          0
+tilebank         0.0          0
+io               0.0          0
+
+TOTAL            0.0
+
+# Context: the arcade executes 14,209 instructions a vint with
+# loops expanded, 8,184 of which are WORK (LOOP-DECOMPILE 88).

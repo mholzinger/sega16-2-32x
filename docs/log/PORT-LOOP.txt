@@ -1,0 +1,28 @@
+22:03:50  guard: CLEAN
+22:03:50    port_guard: clean -- 8 known violation(s) in the baseline, 0 new
+22:03:50  --- baseline (the current tree, 4-call body is already replaced) ---
+22:23:49  baseline: 97 wrong, control 52, net +45   FRAME BODY: 7 of 14 completed  HUNG 0x0E052
+22:23:49  --- PORTBODY=1 : frame body: first 1 of 14 calls ---
+22:27:17    46 wrong, control 52, net -6   FRAME BODY: 1 of 14 completed
+22:27:17    KEEP -- better than +45
+22:27:17  --- PORTBODY=2 : frame body: first 2 of 14 calls ---
+22:30:40    54 wrong, control 52, net +2   FRAME BODY: 2 of 14 completed
+22:30:40    REVERT -- not better than -6
+22:30:40  --- PORTBODY=3 : frame body: first 3 of 14 calls ---
+22:34:01    54 wrong, control 52, net +2   FRAME BODY: 3 of 14 completed
+22:34:01    REVERT -- not better than -6
+22:34:01  --- PORTBODY=4 : frame body: first 4 of 14 calls ---
+22:37:26    54 wrong, control 52, net +2   FRAME BODY: 4 of 14 completed
+22:37:26    REVERT -- not better than -6
+22:37:26  --- PORTBODY=5 : frame body: first 5 of 14 calls ---
+22:40:53    61 wrong, control 52, net +9   FRAME BODY: 5 of 14 completed
+22:40:53    REVERT -- not better than -6
+22:40:53  --- PORTBODY=6 : frame body: first 6 of 14 calls ---
+22:44:18    69 wrong, control 52, net +17   FRAME BODY: 6 of 14 completed
+22:44:18    REVERT -- not better than -6
+22:44:18  --- PORTBODY=7 : frame body: first 7 of 14 calls ---
+22:47:22    69 wrong, control 52, net +17   FRAME BODY: 7 of 14 completed
+22:47:22    REVERT -- not better than -6
+22:47:22  === BEST: PORTBODY=1  46 wrong, control 52, net -6 ===
+22:47:22  the tree is left at the LAST BUILD, not the best -- rebuild with the winning
+22:47:22  flag before trusting rom/s16.32x
