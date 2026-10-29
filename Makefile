@@ -492,6 +492,14 @@ MDASFLAGS  = -x assembler-with-cpp -Imd_src -m68000 -Wa,--register-prefix-option
 # 2026-10-03 across arcade frames 1460-1491, which spans the state 0x10 -> 0x14
 # transition at frame 1481 -- the one the cold-booted port never makes.
 L2DIR ?= docs/proof/l2m
+# RELEASE (2026-10-29): the captures are arcade work RAM, so they are never committed. The
+# shipping rom does not read them (no literal of _l2_before/_l2_frames/_l2_io in sw344's
+# code) and .portdata/.portcode sit at fixed addresses, so a tree without them links three
+# EMPTY blobs and every code byte is unchanged.
+ifeq ($(wildcard $(L2DIR)/seed.bin),)
+L2DIR := build/l2none
+L2NONE := build/l2none/seed.bin
+endif
 SHASFLAGS  = -Ish_src -I$(L2DIR) --small
 # NOTE: this is a plain `=` and it sits BELOW the flag blocks, so any
 # `SHASFLAGS +=` written up there is silently discarded. Assembler flags
@@ -4688,7 +4696,36 @@ PORT_DIR = build/port
 # is derived from PORT_EXTRA (PORTRIG=1 -> portrig), or set PORT_NAME to choose it.
 PORT_SLUG := $(if $(PORT_EXTRA),$(if $(PORT_NAME),$(PORT_NAME),$(shell printf '%s' '$(PORT_EXTRA)' | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9')),)
 
-port:
+# THE RELEASE INPUT (2026-10-29): roms/$(GAME) is unpacked from the user's own MAME zip
+# (mame/$(GAME).zip, or the parent's for a merged clone) by tools/romset.py, which also
+# interleaves prog68k.bin and checks its SHA-1. prog68k.asm is read by ten tools; it is
+# objdump at -m m68k:68000 -- plain -m m68k decodes FPU forms and gives a different file.
+# No prerequisite on purpose: an existing roms/ tree is never re-extracted.
+$(GAMEROMS)/prog68k.bin:
+	python3 tools/romset.py $(GAME)
+$(GAMEROMS)/prog68k.asm: $(GAMEROMS)/prog68k.bin
+	$(MDBIN)/m68k-elf-objdump -D -b binary -m m68k:68000 $< > $@
+romset: $(GAMEROMS)/prog68k.bin $(GAMEROMS)/prog68k.asm
+# THE COMMITTED DECOMPILE INPUTS (2026-10-29): docs/proof is the working decompile dir and
+# is untracked, so a release clone builds from these copies (tools/shadow_tree.sh links
+# them in when docs/proof is absent). `candidate` refuses when they drift from docs/proof,
+# so a release never builds from a different decompile than the one that was tested.
+RELEASE_INPUTS = altbeast.c datwidth.json datwidth_observed.json datwidth_observed_min.json \
+                 indirect_roots.txt object_handlers_union.txt
+release-sync:
+	@for f in $(RELEASE_INPUTS); do cp docs/proof/$$f docs/decomp/$$f; done; git status --short docs/decomp
+release-check:
+	@[ ! -d docs/proof ] || for f in $(RELEASE_INPUTS); do cmp -s docs/proof/$$f docs/decomp/$$f || \
+	  { echo "release-check: docs/decomp/$$f differs from docs/proof -- run make release-sync and commit"; exit 2; }; done
+.PHONY: release-sync release-check
+ifdef L2NONE
+sh_src/port_l2_data.o sh_src/port_l2_frames.o sh_src/port_l2_io.o: | $(L2NONE)
+$(L2NONE):
+	mkdir -p $(dir $@) && : > $(dir $@)seed.bin && : > $(dir $@)deltas.bin && : > $(dir $@)io.bin
+endif
+.PHONY: romset
+
+port: romset
 	tools/shadow_tree.sh $(PORT_DIR)
 	$(MAKE) -C $(PORT_DIR) line $(PORT_FLAGS) $(PORT_EXTRA)
 ifeq ($(PORT_SLUG),)
@@ -4716,7 +4753,17 @@ CANDIDATE_FLAGS = R60PLOT4=1 R60PLOT5=1 R60TXTFAST=1 R60ROWCLR=1 R60ROWFILL=1 R6
 	R60HOLDDIRECT=1 R60STAGEDIRECT=1 R60IDLECONSUME=1 R60LIVEPAD=1 R60FRONTEND=1 NOTILESMD=1 \
 	R60SPEECH=1 R60SFX=1 R60CUTPF=1 R60PALMAP=1 R60ZOOMFAST=1 R60PUNCH2=1 R60ROWFAST=1 R60CLREXT=1 R60CLRPRE=1 PORTSTARTCOIN=1 R60PKTODDHI=1 PORTNOPALPROBE=1 R60SPLITFAST=1 R60TXTPLANFAST=1 R60SPEECHSLAVE=1 R60TXTLUTPAL=1 R60TXTHEAL=1 R60TXTHEALLATE=1 R60PLANFAST=1 R60PLANNEW=1 PORTHOT2=1 CARTMB=4
 .PHONY: candidate
-candidate:
+# The sound lanes' inputs are recorded from the user's MAME set (tools/sound_inputs.sh skips
+# what is present), then baked by the sh_src/{speech,sfx}.bin rules below.
+sound-inputs:
+	tools/sound_inputs.sh
+.PHONY: sound-inputs
+# THE RELEASE ENTRY POINT: a fresh clone + mame/$(GAME).zip + mame on PATH -> one rom.
+release-rom:
+	$(MAKE) tables
+	$(MAKE) candidate NAME=$(GAME)
+.PHONY: release-rom
+candidate: release-check sound-inputs sh_src/speech.bin sh_src/sfx.bin
 	@test -n "$(NAME)" || { echo "make candidate NAME=<rom name>"; exit 2; }
 	@# THE SOUND BANKS ARE SEGA-DERIVED AND GITIGNORED: a tree without them links EMPTY
 	@# .sounddata/.sfxdata and the rom loops a sound re-init with no effects or speech
@@ -5064,7 +5111,7 @@ sh_src/%.o: sh_src/%.c
 # is ignored; a fresh clone regenerates it here. pal_scenes.h needs the
 # PAL_SH dumps under discover/palscenes/ (see README "Today").
 .PHONY: tables
-tables: sh_src/tiles.bin sh_src/sprites.bin sh_src/sprbake.bin \
+tables: romset sh_src/tiles.bin sh_src/sprites.bin sh_src/sprbake.bin \
         sh_src/md_sprart.bin
 	@if ls discover/palscenes/*.palsh >/dev/null 2>&1; then \
 	    python3 tools/palscene_bake.py; \
@@ -5917,7 +5964,9 @@ sh_src/portfull/defs.o: sh_src/portfull/port.o
 
 # the ARCADE's register file per slot, for the PORTREGS diagnostic
 sh_src/portfull/dispregs.o: sh_src/portfull/port.o
-	python3 tools/cport_dispregs.py sh_src/portfull
+	@# l1_vectors.jsonl is an arcade trace (never committed); without it the tracked
+	@# dispregs.c stands, which is what the generator wrote from it.
+	if [ -f docs/proof/l1_vectors.jsonl ]; then python3 tools/cport_dispregs.py sh_src/portfull; fi
 	$(SHCC) $(SHCCFLAGS) -w -I sh_src/portfull -c sh_src/portfull/dispregs.c -o $@
 
 sh_src/portfull/l2seed.o: sh_src/portfull/port.o

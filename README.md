@@ -10,9 +10,10 @@ semantics (ares) and is graded against the arcade in MAME. Sound is a
 separate test rom and is not yet in the shipping build. See
 [Status](#status) at the end for what works today.
 
-**This repository contains no Sega code, art, or sound.** The build
-takes your own MAME `altbeast` ROM set as input and produces the 32X
-rom locally. See [Legal shape](#legal-shape-of-the-build).
+**This repository contains no Sega art, sound or rom.** It does contain
+the decompiled game program. The build takes your own MAME `altbeast`
+ROM set and produces the 32X rom locally. See
+[Legal shape](#legal-shape-of-the-build).
 
 ---
 
@@ -342,42 +343,37 @@ with the number that ended them, so they are not retried.
   `MARSDEV`, default `~/src/marsdev/mars`. The current builds use GCC
   15.2.0 for both targets.
 - Python 3.
-- The MAME `altbeast` ROM set, which you supply. It is never committed
-  and the `roms/` directory is ignored.
-- MAME, for the parity gate. ares, for hardware-proxy testing.
+- Your own MAME `altbeast` ROM set as `mame/altbeast.zip`, merged or
+  non-merged. It is never committed; `mame/` and `roms/` are ignored.
+- MAME on `PATH`. The build records the sound effects and speech from
+  your set (0.288 reproduces the shipped banks byte for byte). ares,
+  for hardware-proxy testing.
 
-### Today
+### Building the rom
 
-    # 1. Place the ROM set. Extract altbeast.zip into roms/altbeast/
-    #    and interleave the program ROM:
-    #      epr-11907.a7 (even bytes) + epr-11906.a5 (odd bytes)
-    #      -> roms/altbeast/prog68k.bin (256 KB)
-    # 2. Regenerate the derived tables. They are built from your ROM
-    #    set and from ares captures, and are NOT committed:
-    make tables                 # tiles/sprites/sprbake/md_sprart/pal/glow
-    # 3. Build the shipping rom (the canonical flag line; zsh arrays):
-    CANON=(MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1
-           CUTBLANK=1 BANDSHIFT=36 RG2SHIFT=40 BLITSKIP=1 DIRTYROW=1
-           SPRBAKE=1 BLITSHIFT=24 SPRLATE=1 PRHOLD=6 TILECLASS=1
-           TXTCLASS=1 MDSPR=1 ROWDEFER=1 PALDELTA=1 NATIVE=1
-           PALSTATIC=1 PALGLOW=1 LAUNCHEARLY=1)
-    make "${CANON[@]}"          # shipping rom -> rom/s16.32x
-    make <FLAG>=1               # probe builds; see the Makefile header
-    make sndtest                # the sound test rom
+    make release-rom            # -> build/port/rom/altbeast.32x
 
-Objects depend on `.build_flags`, so switching flags forces a rebuild.
-Every `make` overwrites `rom/s16.32x`; copy a build you want to keep.
+That one target, from a fresh clone:
 
-`make tables` runs `tools/gen_tiles.py`, `gen_sprites.py`,
-`bake_sprites.py` and `bake_mdspr.py` against your ROM set. The
-palette-scene header `sh_src/pal_scenes.h` is the one input a fresh
-clone must harvest itself: `tools/palscene_bake.py` consumes
-`discover/palscenes/*.palsh`, raw 2048-word dumps of the SH-2 palette
-shadow (`PAL_SH`, SDRAM `0x27000`, 4 KB) taken from a headless-ares
-run or a savestate, with three files named `normal`, `boss_smoke` and
-`transform` as the scene anchors. The script's docstring has the
-format and the failure rules. The sound tables under `sndtest/` come
-from `tools/soundmap_build.py` and `tools/mus_testgen.py`.
+1. `tools/romset.py` unpacks your set into `roms/altbeast/`,
+   interleaves the 68K program into `prog68k.bin` and checks its SHA-1
+   (a different dump revision stops here). `prog68k.asm` is objdump at
+   `-m m68k:68000`.
+2. `make tables` bakes the tile, sprite and MD sprite art from the set.
+3. `tools/sound_inputs.sh` records whatever sound input is missing:
+   one MAME run per effect command (`tools/arcade_wav.lua`), and the
+   speech from an attract tap plus a full command sweep (about 40
+   minutes, once). Anything already present is left alone.
+4. `make candidate` builds the port out of tree in `build/port` from
+   the decompiled program and its committed inputs (`docs/decomp/`).
+
+A working tree with the untracked `docs/proof/` decompile directory
+builds from that instead; `make release-sync` copies its inputs into
+`docs/decomp/`, and `candidate` refuses when the two differ.
+
+Probe builds: `make candidate NAME=<name> EXTRA="<FLAG>=1 ..."`; the
+flags are documented in the Makefile header. Objects depend on
+`.build_flags`, so switching flags forces a rebuild.
 
 ### Gates on every build
 
@@ -466,28 +462,23 @@ The reproducible build treats generated files by where they come from.
 ## Legal shape of the build
 
 The shipping rom contains Sega's 68000 program, tile and sprite art,
-music sequence data, and speech samples. Those are Sega's copyright,
-and Altered Beast is still sold. This repository therefore distributes
-none of them. It distributes our renderer, shim, patcher, converters,
-and the scripts that build the rom from a ROM set you already have.
+music sequence data, and speech samples. Altered Beast is still sold.
+This repository distributes no rom, no ROM image, no art, no audio and
+no capture of the running game; you build the rom from a set you own.
 
-Concretely:
+What it does contain, by the author's decision:
 
-- `roms/`, `rom/*.32x`, `*.bin`, and `srcref/` are ignored and have
-  never been committed.
-- Everything generated FROM the ROMs or captured from the running game
-  is ignored too: the sound tables and speech PCM under `sndtest/`,
-  the baked sprite, tile, palette and glow headers, the palette-scene
-  dumps under `discover/`, screenshot corpora, parity captures, and
-  the patcher's reports. `make tables` rebuilds them locally.
-- No rom file, ROM image, capture, or audio is published. Users build
-  their own from a ROM set they own.
-- The public branch is `public`. It is an orphan with a clean history;
-  the working branches carry captures in their history and are not
-  pushed.
-- `tools/public_refresh.sh` rebuilds it from HEAD and drops the tracked
-  Sega-derived paths it lists (`tests/demo-b/arcade/`, the arcade work-RAM
-  dumps the demo check diffs against).
+- The decompiled 68000 program (`docs/decomp/altbeast.c`, the port in
+  `sh_src/portfull/`), produced with Ghidra from the program ROM and
+  hand-corrected.
+- `md_src/sega_blob.bin`, Sega's 32X "MARS Initial & Security
+  Program": the boot block the 32X requires in every cartridge.
+
+Never committed: `roms/`, `mame/`, built roms, the sound recordings and
+banks, the arcade work-RAM and palette captures, and anything under
+`docs/proof/`. `tools/public_refresh.sh` builds the published `main`
+from the working tree minus the tracked capture paths it lists, as a
+fast-forward of the published history.
 
 ---
 

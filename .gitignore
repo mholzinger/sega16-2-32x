@@ -1,5 +1,7 @@
 roms/
 *.bin
+# the 32X boot block every cart carries (Sega MARS security program); committed 2026-10-29
+!md_src/sega_blob.bin
 *.32x
 build/
 gfx-preview/

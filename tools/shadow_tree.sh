@@ -48,5 +48,10 @@ for d in roms mame docs/proof srcref; do
     [ -L "$OUT/$d" ] && continue
     rm -rf "$OUT/$d"; mkdir -p "$(dirname "$OUT/$d")"; ln -s "$ROOT/$d" "$OUT/$d"
 done
+# A RELEASE CLONE HAS NO docs/proof (the working decompile dir is untracked): the build
+# reads the committed copies of its inputs in docs/decomp instead (`make release-sync`).
+if [ ! -e "$ROOT/docs/proof" ] && [ ! -e "$OUT/docs/proof" ]; then
+    mkdir -p "$OUT/docs"; ln -s "$ROOT/docs/decomp" "$OUT/docs/proof"
+fi
 mkdir -p "$OUT/rom"
 echo "shadow: $OUT"
