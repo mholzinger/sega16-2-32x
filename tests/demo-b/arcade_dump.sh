@@ -9,8 +9,14 @@
 # whose frame falls outside the scene it is named for.
 # MAME altbeast with a FRESH NVRAM directory (the attract sequence depends on it), the
 # headless flags CLAUDE.md requires, tools/wram_dump.lua at 0xFFC000 x 0x4000.
+# DEMO_SET=altbeastj DEMO_TICKS=tests/demo-b/arcade_jp: the same dumps from another regional set
+# (altbeastj runs the US attract 603 frames later -- its boot warning -- measured frame by
+# frame 2026-10-30; check_demo.py takes that as DEMO_SHIFT).
 set -e
 cd "$(dirname "$0")/../.."
+SET="${DEMO_SET:-altbeast}"
+DEST="${DEMO_TICKS:-tests/demo-b/arcade}"
+mkdir -p "$DEST"
 SC="$1"; shift
 case "$SC" in
   [A-Z]) ;;
@@ -21,11 +27,11 @@ LAST=$(echo "$@" | tr ' ' '\n' | sort -n | tail -1)
 NV=$(mktemp -d)
 OUT=$(mktemp -d)
 WD_FRAMES="$FR" WD_ADDR=0xFFC000 WD_LEN=0x4000 WD_OUTDIR="$OUT" \
-mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle \
+mame "$SET" -rompath ./mame -skip_gameinfo -video none -sound none -nothrottle \
     -window -resolution 160x120 -keyboardprovider none -nomouse -nojoystick \
-    -bench $(( LAST / 60 + 5 )) -nvram_directory "$NV" -autoboot_script tools/wram_dump.lua \
+    -bench $(( LAST / 60 + 5 )) -nvram_directory "$NV" -cfg_directory "$NV" -autoboot_script tools/wram_dump.lua \
     2>&1 | grep -c 'WRAM-DUMP DONE' || true
 for f in "$@"; do
-    [ -f "$OUT/aw_$f.bin" ] && mv "$OUT/aw_$f.bin" "tests/demo-b/arcade/aw_${SC}_$f.bin"
+    [ -f "$OUT/aw_$f.bin" ] && mv "$OUT/aw_$f.bin" "$DEST/aw_${SC}_$f.bin"
 done
 rm -rf "$NV" "$OUT"

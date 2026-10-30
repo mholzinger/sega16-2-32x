@@ -369,18 +369,25 @@ KEYS = [
        'testcart.c:2354', nullable=True),
     _k('ROUNDS', 'port32x', 'int', 'how many rounds a starting-round option offers',
        'testcart.c:2374, port_l2.c port_frontend_settings', nullable=True),
-    _k('DSW2_DEFAULT', 'port32x', 'int', 'the arcade DIP switch bank 2 the port boots with',
-       'memory arcade-oracle-dips (66/54); port_l2.c port_frontend_settings', nullable=True),
-    _k('DSW2_OPTION_MASK', 'port32x', 'int', 'DSW2 bits the menu options replace',
-       'port_l2.c port_frontend_settings', nullable=True),
-    _k('MENU_DIFFICULTY', 'port32x', 'list[tuple]',
-       'difficulty choices, (label, DSW2 bits); index 0 is ARCADE (keep the DIP)',
-       'testcart.c:2343, port_l2.c port_frontend_settings', nullable=True),
-    _k('MENU_LIVES', 'port32x', 'list[tuple]', 'lives choices, (label, DSW2 bits)',
-       'testcart.c:2344, port_l2.c port_frontend_settings', nullable=True),
+    _k('DIPS', 'port32x', 'list[tuple]',
+       "the arcade DIP sheet the frontend menu edits, (name, bank 1|2, mask, [(label, value)])",
+       'mame -listxml; md_src/testcart.c frontend_menu_screen', nullable=True),
+    _k('WRAM_DSW2_LATCH', 'port32x', 'int', "the boot's copy of DIP bank 2, read by the game afterwards",
+       'FUN_0000040e `DAT_fffff01b = DAT_00c42001`; glue port_dips_latch', nullable=True),
+    _k('WRAM_LIVES_LATCH', 'port32x', 'int', 'starting lives, latched at boot from DIP bank 2',
+       'FUN_0000040e `DAT_fffff019 = ROM[0x1996 + ...]`; glue port_dips_latch', nullable=True),
     _k('WRAM_SPR_ORDER', 'port32x', 'int',
        'sprite draw-order lists, 256 bytes, 0xFF = empty', 'port_l2.c:2729',
        nullable=True),
+    _k('REGIONS', 'port32x', 'list[tuple]',
+       'regional sets one rom boots, (label, MAME set, DSW1, DSW2 as that board reads them); '
+       'the index is the region byte, 0 = the set the decompile was made from',
+       'MAME work RAM 0xFFF01A/1B at frame 1500: altbeast 66/54, altbeastj FF/FD (2026-10-30); '
+       'port_l2.c port_region', nullable=True),
+    _k('REGION_DATA', 'port32x', 'list[tuple]',
+       'program bytes a regional set has that the reference lacks, (region, lo, hi): '
+       'tools/region_data.py takes them from that set at build time as region<N>_<lo>',
+       'tools/region_diff.py; altbeastj logo blocks 0x26C20-0x270DC (2026-10-30)', nullable=True),
 ]
 
 BY_NAME = {k.name: k for k in KEYS}

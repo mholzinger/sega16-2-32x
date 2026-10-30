@@ -1662,7 +1662,7 @@ static void tc_hold(uint16_t units)
  */
 #ifdef R60_FRONTEND
 #include "frontend.h"
-#include "../sh_src/game_cfg.h"   /* GAME_TITLE, GAME_ROUNDS, GAME_MENU_* (games/<title>/game.py) */
+#include "../sh_src/game_cfg.h"   /* GAME_TITLE, GAME_ROUNDS, GAME_REGIONS_*, GAME_DIP_* (games/<title>/game.py) */
 /* The game uses C000-CFFF and E000-EFFF plane tables, art below C000,
  * sprite attributes at F000 and hscroll at FC00. These two gaps are UI-owned. */
 #define TC_NAMES 0xD000u
@@ -2338,12 +2338,61 @@ static void tc_padtest(uint16_t standalone)
 #endif
 
 #ifdef R60_FRONTEND
+/* THE OPTIONS SCREEN (hold B at power-on, or START+B on the title). Rows, top to bottom:
+ * VERSION (the region byte: games/<title>/game.py REGIONS), STARTING ROUND, the arcade DIP
+ * sheet (game.py DIPS), CONTROLLER TEST, RESTORE ARCADE DEFAULTS, RETURN TO ARCADE.
+ *
+ * WHAT TAKES EFFECT WHEN (2026-10-30, Mike: region at power-on only; the full sheet; a
+ * region change resets the switches to that board). The region and the coin switches (bank
+ * 1) are read once, by the game's boot, so they are offered only on the power-on menu and
+ * shown locked on the title's. Bank 2 is re-latched every frame, so it changes from both. */
+static const char *const fe_region_names[] = GAME_REGIONS_NAMES;
+static const uint8_t fe_region_dsw1[] = GAME_REGIONS_DSW1, fe_region_dsw2[] = GAME_REGIONS_DSW2;
+static const char *const fe_dip_names[] = GAME_DIP_NAMES;
+static const char *const fe_dip_labels[] = GAME_DIP_LABELS;
+static const uint8_t fe_dip_bank[] = GAME_DIP_BANK, fe_dip_mask[] = GAME_DIP_MASK;
+static const uint8_t fe_dip_first[] = GAME_DIP_FIRST, fe_dip_count[] = GAME_DIP_COUNT;
+static const uint8_t fe_dip_values[] = GAME_DIP_VALUES;
+#define FE_ROW_REGION 0u
+#define FE_ROW_ROUND  1u
+#define FE_ROW_DIP0   2u
+#define FE_ROW_PADS   (FE_ROW_DIP0 + GAME_DIPS_N)
+#define FE_ROW_RESET  (FE_ROW_PADS + 1u)
+#define FE_ROW_RETURN (FE_ROW_PADS + 2u)
+#define FE_ROWS       (FE_ROW_PADS + 3u)
+
+static uint16_t fe_screen_row(uint16_t r)
+{
+    if (r == FE_ROW_REGION) return 3u;
+    if (r == FE_ROW_ROUND) return 4u;
+    if (r < FE_ROW_PADS) return (uint16_t)(6u + (r - FE_ROW_DIP0));
+    return (uint16_t)(7u + GAME_DIPS_N + (r - FE_ROW_PADS));
+}
+
+static int fe_editable(uint16_t r, uint16_t at_boot)
+{
+    if (r == FE_ROW_REGION) return at_boot && GAME_REGIONS_N > 1u;
+    if (r >= FE_ROW_DIP0 && r < FE_ROW_PADS) return at_boot || fe_dip_bank[r - FE_ROW_DIP0] != 1u;
+    return 1;
+}
+
+/* the option index a switch currently holds, or 0xFF when the byte matches none of them */
+static uint16_t fe_dip_option(uint16_t d, const uint8_t *dsw)
+{
+    uint16_t k, v = dsw[fe_dip_bank[d] - 1u] & fe_dip_mask[d];
+    for (k = 0; k < fe_dip_count[d]; k++)
+        if (fe_dip_values[fe_dip_first[d] + k] == v) return k;
+    return 0xFFu;
+}
+
 void frontend_menu_screen(void)
 {
-    static uint16_t round, difficulty, lives;
-    static const char *const diff_names[] = GAME_MENU_DIFFICULTY_NAMES;
-    static const char *const life_names[] = GAME_MENU_LIVES_NAMES;
-    uint16_t palette[3], mode, n, selected = 0, prev = 0xFFFFu, dirty = 1;
+    static uint16_t round, region, set_up;
+    static uint8_t dsw[2];
+    uint16_t palette[3], mode, n, selected = FE_ROW_ROUND, prev = 0xFFFFu, dirty = 1;
+    uint16_t at_boot = frontend_at_boot;
+    if (!set_up) { dsw[0] = fe_region_dsw1[0]; dsw[1] = fe_region_dsw2[0]; set_up = 1; }
+    if (at_boot) selected = FE_ROW_REGION;
     tc_dma_wait();
     VWIDE = 0x00000020ul;                /* CRAM read, auto-increment 2 */
     for (n = 0; n < 3u; n++) palette[n] = VDATA;
@@ -2353,32 +2402,56 @@ void frontend_menu_screen(void)
         uint16_t pad, fresh;
         if (dirty) {
             tc_frame(GAME_TITLE " - OPTIONS");
-            tc_puts(3, 2, "STARTING ROUND"); tc_hex(3, 25, round + 1u, 1);
-            tc_puts(5, 2, "DIFFICULTY"); tc_puts(5, 25, diff_names[difficulty]);
-            tc_puts(7, 2, "LIVES"); tc_puts(7, 25, life_names[lives]);
-            tc_puts(9, 2, "CONTROLLER TEST");
-            tc_puts(11, 2, "RESTORE ARCADE DEFAULTS");
-            tc_puts(13, 2, "RETURN TO ARCADE");
-            tc_puts(3 + selected * 2u, 0, ">");
-            tc_puts(17, 2, "UP DOWN SELECT  LEFT RIGHT CHANGE");
-            tc_puts(19, 2, "A OR START CONFIRM  B RETURN");
-            tc_puts(22, 2, "ROUND APPLIES TO THE NEXT GAME");
-            tc_puts(24, 2, "ARCADE KEEPS THE ORIGINAL SETTINGS");
+            tc_puts(3, 2, "VERSION");
+            tc_puts(3, 21, fe_region_names[region]);
+            if (!at_boot) tc_puts(3, 25, "- POWER-ON ONLY");
+            tc_puts(4, 2, "STARTING ROUND"); tc_hex(4, 21, round + 1u, 1);
+            for (n = 0; n < GAME_DIPS_N; n++) {
+                uint16_t k = fe_dip_option(n, dsw);
+                tc_puts(6u + n, 2, fe_dip_names[n]);
+                tc_puts(6u + n, 21, k < fe_dip_count[n] ? fe_dip_labels[fe_dip_first[n] + k] : "?");
+            }
+            tc_puts(fe_screen_row(FE_ROW_PADS), 2, "CONTROLLER TEST");
+            tc_puts(fe_screen_row(FE_ROW_RESET), 2, "RESTORE ARCADE DEFAULTS");
+            tc_puts(fe_screen_row(FE_ROW_RETURN), 2, "RETURN TO ARCADE");
+            tc_puts(fe_screen_row(selected), 0, ">");
+            tc_puts(21, 2, "UP DOWN SELECT  LEFT RIGHT CHANGE");
+            tc_puts(22, 2, "A OR START CONFIRM  B RETURN");
+            tc_puts(24, 2, at_boot ? "VERSION AND COINS: POWER-ON MENU"
+                                   : "COINS LOCKED: HOLD B AT POWER-ON");
+            tc_puts(25, 2, "ROUND APPLIES TO THE NEXT GAME");
             dirty = 0;
         }
         tc_frame_wait(); pad = read_joypad(0); fresh = pad & ~prev; prev = pad;
         if (fresh & 0x10u) break;
-        if (fresh & 1u) { selected = selected ? selected - 1u : 5u; dirty = 1; }
-        if (fresh & 2u) { selected = (selected + 1u) % 6u; dirty = 1; }
+        if (fresh & (1u | 2u)) {          /* up / down, over the rows this menu may edit */
+            do selected = (fresh & 1u) ? (selected ? selected - 1u : FE_ROWS - 1u)
+                                       : (uint16_t)((selected + 1u) % FE_ROWS);
+            while (!fe_editable(selected, at_boot));
+            dirty = 1;
+        }
         if (fresh & (4u | 8u | 0x40u | 0x0880u)) {
             int direction = (fresh & 4u) ? -1 : 1;
-            if (selected == 0u) round = (round + GAME_ROUNDS + direction) % GAME_ROUNDS;
-            if (selected == 1u) difficulty = (difficulty + GAME_MENU_DIFFICULTY_N + direction) % GAME_MENU_DIFFICULTY_N;
-            if (selected == 2u) lives = (lives + GAME_MENU_LIVES_N + direction) % GAME_MENU_LIVES_N;
+            if (selected == FE_ROW_REGION) {
+                region = (uint16_t)((region + GAME_REGIONS_N + direction) % GAME_REGIONS_N);
+                dsw[0] = fe_region_dsw1[region];   /* that board's switches (Mike 2026-10-30) */
+                dsw[1] = fe_region_dsw2[region];
+            }
+            if (selected == FE_ROW_ROUND) round = (uint16_t)((round + GAME_ROUNDS + direction) % GAME_ROUNDS);
+            if (selected >= FE_ROW_DIP0 && selected < FE_ROW_PADS) {
+                uint16_t d = selected - FE_ROW_DIP0, k = fe_dip_option(d, dsw), c = fe_dip_count[d];
+                uint8_t *b = &dsw[fe_dip_bank[d] - 1u];
+                k = (k < c) ? (uint16_t)((k + c + direction) % c) : 0u;
+                *b = (uint8_t)((*b & ~fe_dip_mask[d]) | fe_dip_values[fe_dip_first[d] + k]);
+            }
             if (fresh & (0x40u | 0x0880u)) {
-                if (selected == 3u) { tc_padtest(0); prev = 0xFFFFu; }
-                if (selected == 4u) round = difficulty = lives = 0;
-                if (selected == 5u) break;
+                if (selected == FE_ROW_PADS) { tc_padtest(0); prev = 0xFFFFu; }
+                if (selected == FE_ROW_RESET) {
+                    round = 0;
+                    if (at_boot) dsw[0] = fe_region_dsw1[region];
+                    dsw[1] = fe_region_dsw2[region];
+                }
+                if (selected == FE_ROW_RETURN) break;
             }
             dirty = 1;
         }
@@ -2390,7 +2463,12 @@ void frontend_menu_screen(void)
     for (n = 0; n < 3u; n++) VDATA = palette[n];
     VCTRL = 0x832C; VCTRL = 0x9100; VCTRL = 0x9200; /* normal disabled window */
     *(volatile uint16_t*)0xA15180 = mode;
-    *(volatile uint16_t*)MARS_COMM12 = FE_RESULT | round | (difficulty << 3) | (lives << 6);
+    /* three words, each after the master asks for it (frontend.h) */
+    *(volatile uint16_t*)MARS_COMM12 = FE_RESULT | round | (region << 3);
+    while (*(volatile uint16_t*)MARS_COMM12 != FE_MORE1) __asm__ volatile ("nop");
+    *(volatile uint16_t*)MARS_COMM12 = FE_DSW1 | dsw[0];
+    while (*(volatile uint16_t*)MARS_COMM12 != FE_MORE2) __asm__ volatile ("nop");
+    *(volatile uint16_t*)MARS_COMM12 = FE_DSW2 | dsw[1];
 }
 #endif
 

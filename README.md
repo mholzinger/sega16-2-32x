@@ -345,6 +345,10 @@ with the number that ended them, so they are not retried.
 - Python 3.
 - Your own MAME `altbeast` ROM set as `mame/altbeast.zip`, merged or
   non-merged. It is never committed; `mame/` and `roms/` are ignored.
+  The rom also boots the Japanese set (Juuouki), so it needs `altbeastj`
+  too: inside a merged `altbeast.zip`, or as `mame/altbeastj.zip`. The
+  build takes the ~1.7 KB the Japanese title adds from it
+  (`tools/region_data.py`) and stops if it is missing.
 - MAME on `PATH`. The build records the sound effects and speech from
   your set (0.288 reproduces the shipped banks byte for byte). ares,
   for hardware-proxy testing.

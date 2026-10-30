@@ -3661,7 +3661,7 @@ TYPEDEFD = {'BADSPACEBASE', 'code', 'bool'}
 # DEFINES it, which collides with the driver's real definition at link time. Naming
 # them here is the fix; the link error is the good outcome, since a silently separate
 # copy would read zero forever.
-_DRIVER_OWNED = {'port_fn_count', 'port_fn_seq', 'port_set_reg'}
+_DRIVER_OWNED = {'port_fn_count', 'port_fn_seq', 'port_set_reg', 'port_region', 'port_region_boot'}
 _DECLARED = set(syms) | set(pseudo) | _DRIVER_OWNED
 for nm in sorted(set(_ov.get('undeclared', [])) - TYPEDEFD - _DECLARED):
     if re.match(r'^(s_|PTR_|DAT_|_DAT_|[a-z]{1,3}Ram)', nm):
@@ -3817,6 +3817,11 @@ dl += ['uint halt_baddata(){return 0;}', 'uint halt_unimplemented(){return 0;}',
 open(os.path.join(outdir, 'defs.c'), 'w').write('\n'.join(dl))
 
 out = ['#include "ghidra_types.h"', '#include "ghidra_rt.h"', '#include "w68.h"',
+       '/* THE REGION BYTE (sh_src/port_l2.c) and its CPORT_AFTER hook (games/<title>/glue.c): the',
+       ' * hand files of the sites a regional set changes switch on it. Declared here, not',
+       ' * harvested, or extras.h types it uint and defs.c defines a second copy. */',
+       'extern unsigned char port_region;',
+       'extern void port_region_boot(void);',
        '#ifdef PORT_TILEDIRTY',
        'extern volatile unsigned short port_tile_dirty;   /* sh_src/r60/r60_main.c */',
        '#endif',

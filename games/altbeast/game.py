@@ -20,6 +20,13 @@ _hh = _ROOT / 'tools' / 'harvested_handlers.txt'
 HARVESTED = [int(x, 16) for x in _hh.read_text().split() if x.strip()] \
     if _hh.exists() else []
 
+# MAME's coinage values for one coin slot (DSW1 low nibble; the high nibble is slot B).
+_COINS = [('1 COIN 1 CREDIT', 15), ('1 COIN 2 CREDITS', 14), ('1 COIN 3 CREDITS', 13),
+          ('1 COIN 4 CREDITS', 12), ('1 COIN 5 CREDITS', 11), ('1 COIN 6 CREDITS', 10),
+          ('2 COINS 1 CREDIT', 9), ('3 COINS 1 CREDIT', 8), ('4 COINS 1 CREDIT', 7),
+          ('2 COINS 3 CREDITS', 6), ('2C 1CR 5:3 6:4', 5), ('2C 1CR 4:3', 4), ('1C 1CR 5:6', 3),
+          ('1C 1CR 4:5', 2), ('1C 1CR 2:3', 1), ('FREE PLAY', 0)]
+
 TABLES = {
     # i8751 MCU <-> 68K mailboxes in work RAM: +0 screen-sync busy word,
     # +2 coin/service byte the MCU posts (high byte, inverted), +4 sound
@@ -42,13 +49,33 @@ TABLES = {
     'WRAM_FRAME_LATCH':  0xFFF01C,
     'WRAM_TILE_BANKREQ': 0xFFF095,
     'WRAM_SPR_ORDER':    0xFFEC80,
+    'WRAM_DSW2_LATCH':   0xFFF01B,
+    'WRAM_LIVES_LATCH':  0xFFF019,
     # THE SECRET MENU (hold B at boot): its title, round count and DIP-backed options.
     'TITLE':            'ALTERED BEAST',
     'ROUNDS':           5,
-    'DSW2_DEFAULT':     0x54,
-    'DSW2_OPTION_MASK': 0xCC,
-    'MENU_DIFFICULTY':  [('ARCADE', 0x40), ('EASY', 0x80), ('NORMAL', 0xC0), ('HARD', 0x40), ('HARDEST', 0x00)],
-    'MENU_LIVES':       [('ARCADE', 4), ('2', 8), ('3', 12), ('4', 4)],
+    # THE ARCADE DIP SHEET (2026-10-30): (name, bank, mask, [(label, value)]), bank 1 = DSW1 at
+    # 0xC42003 (latched to 0xFFF01A), 2 = DSW2 at 0xC42001 (0xFFF01B). Switches and values are
+    # MAME's (mame -listxml altbeast; identical for altbeastj); labels shortened to the menu font
+    # (A-Z 0-9 and : . - only, 18 columns). The menu edits the latched bytes, which the same
+    # code reads in both regions, so one sheet serves both.
+    'DIPS': [
+        ('COIN A', 1, 0x0F, _COINS),
+        ('COIN B', 1, 0xF0, [(l, v << 4) for l, v in _COINS]),
+        ('CREDITS TO START', 2, 0x01, [('1', 0x01), ('2', 0x00)]),
+        ('DEMO SOUNDS', 2, 0x02, [('ON', 0x00), ('OFF', 0x02)]),
+        ('LIVES', 2, 0x0C, [('2', 0x08), ('3', 0x0C), ('4', 0x04), ('FREE PLAY', 0x00)]),
+        ('PLAYER METER', 2, 0x30, [('2', 0x20), ('3', 0x30), ('4', 0x10), ('5', 0x00)]),
+        ('DIFFICULTY', 2, 0xC0, [('EASY', 0x80), ('NORMAL', 0xC0), ('HARD', 0x40), ('HARDEST', 0x00)]),
+    ],
+    # ONE ROM, TWO SETS (2026-10-30). The region byte picks the row; games/altbeast/glue.c and
+    # the hand files switch the five places altbeastj differs (tools/region_diff.py). The DIPs
+    # are what each board's 68K latches at 0xFFF01A/1B under MAME's defaults, measured.
+    'REGIONS':          [('US', 'altbeast', 0x66, 0x54), ('JP', 'altbeastj', 0xFF, 0xFD)],
+    # (region, lo, hi) in THAT set's program. The Juuouki logo: the first two blocks of the
+    # 0x26C20 title map list (20x15 each); its fade colours: the 0x2952 table (US 0x2934, 97
+    # bytes differ), 29 rows of 16 = the most FUN_00002636 reads at 7 colour sets.
+    'REGION_DATA':      [(1, 0x26C20, 0x270DC), (1, 0x2952, 0x2B22)],
     # regions the operand scan must not touch (raw data)
     'DATA_EXCLUDE': [
         (0x1986, 0x1998),   # boot mapper table (raw bytes, not code)

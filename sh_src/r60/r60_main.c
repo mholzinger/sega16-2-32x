@@ -5741,7 +5741,7 @@ __attribute__((noinline)) static int r60_frontend_service(void)
     volatile uint8_t *w = (volatile uint8_t*)0x2602CC00u;
     uint16_t command = MARS_SYS_COMM12;
     if (command == FE_REQUEST && MARS_SYS_COMM6 == FE_SLAVE_IDLE) {
-        extern void port_frontend_settings(unsigned);
+        extern void port_frontend_settings(unsigned, unsigned, unsigned);
         frontend_paused = 1;
         R60_FM_DOWN();
         MARS_SYS_COMM12 = FE_GRANTED;
@@ -5750,7 +5750,17 @@ __attribute__((noinline)) static int r60_frontend_service(void)
             for (delay = 0; delay < 256u; delay++) __asm__ volatile ("nop");
         }
         command = MARS_SYS_COMM12;
-        if ((command & 0xFF00u) == FE_RESULT) port_frontend_settings(command & 0xFFu);
+        if ((command & 0xFF00u) == FE_RESULT) {
+            /* THE REST OF THE RESULT, one word at a time (md_src/frontend.h) */
+            unsigned dsw1, dsw2;
+            MARS_SYS_COMM12 = FE_MORE1;
+            while ((MARS_SYS_COMM12 & 0xFF00u) != FE_DSW1) __asm__ volatile ("nop");
+            dsw1 = MARS_SYS_COMM12 & 0xFFu;
+            MARS_SYS_COMM12 = FE_MORE2;
+            while ((MARS_SYS_COMM12 & 0xFF00u) != FE_DSW2) __asm__ volatile ("nop");
+            dsw2 = MARS_SYS_COMM12 & 0xFFu;
+            port_frontend_settings(command & 0xFFu, dsw1, dsw2);
+        }
         pp_due = 0;
         R60_FM_UP();
 #ifdef R60_CRAMDELTA

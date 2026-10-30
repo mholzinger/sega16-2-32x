@@ -13,7 +13,7 @@
 #   rom/night/             built roms: the game's program and art
 set -e
 cd "$(dirname "$0")/.."
-EXCLUDE="tests/demo-b/arcade tests/gameplay/arcade tests/demo-b/picbase discover/cram/arcade rom/night"
+EXCLUDE="tests/demo-b/arcade tests/demo-b/arcade_jp tests/gameplay/arcade tests/demo-b/picbase discover/cram/arcade rom/night"
 export GIT_INDEX_FILE=$(mktemp)
 git read-tree HEAD
 for p in $EXCLUDE; do git rm -r -q --cached "$p" >/dev/null 2>&1 || true; done

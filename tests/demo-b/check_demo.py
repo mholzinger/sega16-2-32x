@@ -60,6 +60,75 @@ SCENES = {
 ANCHOR = {'H': 0x2384}
 
 
+# A REGIONAL SET'S ORACLE (2026-10-30). DEMO_REGION=altbeastj gates the one rom's JP mode
+# (`make candidate ... EXTRA=PORTREGION=1`) against MAME altbeastj dumps. Measured frame by
+# frame: altbeastj runs the US attract 603 frames later (its boot warning) with identical
+# ticks, and its records differ from the US arcade's only where (a) a field holds a 68K
+# PROGRAM address -- the JP code sits 22-42 bytes later -- and (b) sprite-list entry byte +8,
+# the bank, which the JP board doubles (prog 0x3EF6 `addb d1,d1`; its sprite chips are half
+# the size). The port runs the US program in both regions, so a port value matches when it
+# is equal OR maps forward to the arcade's (tools/region_diff.py --map). Translating the
+# arcade's value back instead is wrong: 0x00010000 is a velocity in slots 48-51 and also a
+# JP instruction address. With the US arcade standing in for the port, this leaves 35 of 489
+# dumps differing: the title object's +6/+0x4E (a real JP difference) and 4 boundary frames.
+REGION = os.environ.get('DEMO_REGION')
+REGION_SETS = {'altbeastj': {'shift': 603, 'ticks': 'arcade_jp', 'spr_bank_x2': True}}
+_RMAP_CODE, _RMAP_DATA = {}, []
+if REGION:
+    if REGION not in REGION_SETS:
+        raise SystemExit('check_demo: DEMO_REGION=%s is not one of %s' % (REGION, sorted(REGION_SETS)))
+    _R = REGION_SETS[REGION]
+    if 'DEMO_TICKS' not in os.environ:
+        ARC = os.path.join(HERE, _R['ticks'])
+    SCENES = {k: (f0 + _R['shift'], t0, d, (lo + _R['shift'], hi + _R['shift']))
+              for k, (f0, t0, d, (lo, hi)) in SCENES.items()}
+    _mp = os.path.join(ARC, 'us2jp.tsv')
+    if not os.path.exists(_mp):
+        raise SystemExit('check_demo: %s missing -- python3 tools/region_diff.py altbeast %s --map %s'
+                         % (_mp, REGION, _mp))
+    for _l in open(_mp):
+        _k, _a, _b = _l.split()
+        if _k == 'code':
+            _RMAP_CODE[int(_a, 16)] = int(_b, 16)
+        else:
+            _RMAP_DATA.append((int(_a, 16), int(_b)))
+    _RMAP_DATA.sort()
+_RMAP_KEYS = [a for a, _ in _RMAP_DATA]
+
+
+def region_addr(u):
+    """The regional set's address for a reference program address u (code exact, else the
+    local data shift); u itself with no region."""
+    if not REGION:
+        return u
+    if u in _RMAP_CODE:
+        return _RMAP_CODE[u]
+    import bisect
+    i = bisect.bisect_right(_RMAP_KEYS, u) - 1
+    return u + _RMAP_DATA[i][1] if i >= 0 else u
+
+
+def region_same(a, p, base, n):
+    """Indices in a[base:base+n] that differ from p once the region's rules are applied."""
+    bad = [i for i in range(n) if a[base + i] != p[base + i]]
+    if not REGION or not bad:
+        return bad
+    import bisect
+    ok = set()
+    for off in range(0, n - 3, 2):
+        o = base + off
+        pv = int.from_bytes(p[o:o + 4], 'big')
+        av = int.from_bytes(a[o:o + 4], 'big')
+        if pv != av and 0x100 <= pv < 0x40000:
+            if _RMAP_CODE.get(pv) == av:
+                ok.update(range(off, off + 4))
+            else:
+                i = bisect.bisect_right(_RMAP_KEYS, pv) - 1
+                if any(0 <= k < len(_RMAP_DATA) and pv + _RMAP_DATA[k][1] == av for k in (i, i + 1)):
+                    ok.update(range(off, off + 4))
+    return [i for i in bad if i not in ok]
+
+
 # PORT_STRETCH scales the whole port frame axis against the arcade's. The scene table is
 # the ARCADE's timeline, and a port whose game-frame rate differs from 60/sec walks away
 # from it linearly: PORTCLK1=1 drops every vint that lands while a frame is already owed
@@ -83,13 +152,14 @@ def calibrate(rom, workdir):
     # frame-1000 ratio read x1.065, the guess for demo B's last tick landed 50 frames past
     # the scene, and the walk settled on a tick from the NEXT attract pass. Demo A counts
     # its tick up, so two frames inside it give frames-per-tick directly.
-    t1 = tick_of(dump_port(rom, 700, workdir))
-    t2 = tick_of(dump_port(rom, 1100, workdir))
+    sh = REGION_SETS[REGION]['shift'] if REGION else 0
+    t1 = tick_of(dump_port(rom, 700 + sh, workdir))
+    t2 = tick_of(dump_port(rom, 1100 + sh, workdir))
     if 0x20 < t1 < 0x2b0 and 0x20 < t2 < 0x2b0 and t2 > t1:
         STRETCH = 400.0 / (t2 - t1)
     else:
-        t = tick_of(dump_port(rom, 1000, workdir))
-        STRETCH = (1000.0 / (SCENES['A'][0] + t)) if 0x20 < t < 0x2b0 else 1.0
+        t = tick_of(dump_port(rom, 1000 + sh, workdir))
+        STRETCH = ((1000.0 + sh) / (SCENES['A'][0] + t)) if 0x20 < t < 0x2b0 else 1.0
     return STRETCH
 
 
@@ -419,7 +489,7 @@ def scene_anchor(arc, scene, tick):
     h = ANCHOR.get(scene)
     if h is None:
         return None
-    want = h.to_bytes(4, 'big')
+    want = region_addr(h).to_bytes(4, 'big')
     for fr, _n, b in arc.get((scene, tick), []):
         if b[2:6] == want:
             return fr, want
@@ -487,6 +557,8 @@ def fb_screen(rom, frame, workdir):
 
 
 def pic_wanted(scene, target, nth):
+    if REGION:
+        return False    # tests/demo-b/picbase is the reference set's screen; a region's logo differs by design
     return PIC_ALL or PIC_ONE.get(scene) == (scene, target, nth)
 
 
@@ -631,7 +703,7 @@ def check_one(rom, scene, target, arcade, workdir, guess, nth=0, arcframes=None)
     if nth and arcframes:
         fs = arcframes.get((scene, t), [])
         an = scene_anchor(arcframes, scene, t)
-        pf = port_anchor(rom, scene, t, an[1], workdir, frame) if an else None
+        pf = port_anchor(rom, scene, t, ANCHOR[scene].to_bytes(4, 'big'), workdir, frame) if an else None
         if not (nth < len(fs) and an and pf is not None):
             return (scene, target, nth), None, None, None, None, None, None, None
         arcfr, name, a = fs[nth]
@@ -696,7 +768,7 @@ def check_one(rom, scene, target, arcade, workdir, guess, nth=0, arcframes=None)
     diffs = []
     for s in sorted(set(la) | set(lp)):
         o = s * 0x80
-        n = sum(1 for i in range(0x80) if a[o + i] != p[o + i])
+        n = len(region_same(a, p, o, 0x80))
         if n:
             diffs.append((s, n))
         # ... and the sprite-list entry that record owns. The record is what the game
@@ -706,7 +778,9 @@ def check_one(rom, scene, target, arcade, workdir, guess, nth=0, arcframes=None)
         # every record matched. The entry index is the record's own byte +8.
         eo = SPR + a[o + 8] * 0x10      # the entry index is the record's own byte +8; when
         m = sum(1 for i in range(0x10)   # the two sides disagree on it the record diff above
-                if a[eo + i] != p[eo + i])   # has already said so
+                if a[eo + i] != p[eo + i]    # has already said so
+                and not (i == 8 and REGION and REGION_SETS[REGION].get('spr_bank_x2')
+                         and a[eo + 8] == ((((p[eo + 8] & 0x0F) << 1) | 0xF0) & 0xFF)))
         if m:
             diffs.append(('e%d' % a[o + 8], m))
     pic = (pic_check(rom, scene, target, nth, frame, pic_t, game_frame(pic_p), latch_of(pic_p), workdir)

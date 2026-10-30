@@ -9,9 +9,16 @@ extern uint16_t read_joypad(uint8_t);
 #define FE_PHASE (*(volatile uint16_t*)MARS_COMM6)
 #define FE_RAM __attribute__((section(".data"), noinline))
 
+/* THE POWER-ON MENU DECIDES THE BOOT: the region and the coin switches take effect only
+ * before the game's first frame, so the menu offers them only when opened here. */
+/* Set before main runs, so it must not live in a .bss a later clear could wipe: a non-zero
+ * initialiser keeps it in .data (frontend_boot_check always overwrites it first). */
+volatile unsigned short frontend_at_boot = 0xFFFFu;
+
 FE_RAM void frontend_boot_check(void)
 {
-    FE_COMM = (read_joypad(0) & 0x10u) ? FE_REQUEST : 0;
+    frontend_at_boot = (read_joypad(0) & 0x10u) ? 1u : 0u;
+    FE_COMM = frontend_at_boot ? FE_REQUEST : 0;
 }
 
 FE_RAM int frontend_input(unsigned short pad)
@@ -20,8 +27,10 @@ FE_RAM int frontend_input(unsigned short pad)
     /* Keep the game's existing Start/Mode alias for cores that bind Start
      * as Mode. The controller page still lets Mode be inspected as a button. */
     uint16_t start = pad & 0x0880u;
-    if (start && !last_start && (pad & 0x10u) && FE_PHASE == FE_TITLE)
+    if (start && !last_start && (pad & 0x10u) && FE_PHASE == FE_TITLE) {
+        frontend_at_boot = 0;
         FE_COMM = FE_REQUEST;
+    }
     last_start = start;
     return FE_WAITING(FE_COMM);
 }

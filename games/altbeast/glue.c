@@ -618,3 +618,18 @@ PORTCODE void port_region_boot(void)
     DAT_fffff018 &= (byte)~0x20u;
     port_frame_wait_n(1u);
 }
+
+/* ---- THE DIP LATCHES, REFRESHED FROM THE OPTIONS SCREEN ---------------------------
+ *
+ * FUN_0000040E copies the switches into work RAM once, at boot: DSW1 to 0xFFF01A (with the
+ * coin tables 0xFFF008/0C), DSW2 to 0xFFF01B and the starting lives to 0xFFF019, looked up
+ * from the 4-byte table at 0x1996 by DSW2 bits 2-3. DSW2 is read from its latch afterwards
+ * (credits to start at 0x1462, the player meter, difficulty), so a title-menu change takes
+ * effect by rewriting the latch -- and the lives latch with it, before the next credited
+ * game. Called every frame while a menu result stands (sh_src/port_l2.c l2m_io_live). */
+PORTCODE void port_dips_latch(unsigned dsw2)
+{
+    ((volatile byte*)WRAM_BASE)[GAME_WRAM_DSW2_LATCH - SDRAM_WRAM_68K] = (byte)dsw2;
+    ((volatile byte*)WRAM_BASE)[GAME_WRAM_LIVES_LATCH - SDRAM_WRAM_68K] =
+        ((const byte*)ROM_BASE)[0x1996u + ((~dsw2 & 0xCu) >> 2)];
+}

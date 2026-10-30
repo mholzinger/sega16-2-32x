@@ -4,7 +4,7 @@
 # tools/public_refresh.sh made the commit. Install: cp tools/pre-push .git/hooks/pre-push
 # Checks EVERY object the push would send, not just the tip tree: a branch whose history ever
 # held a rom is refused even if its last commit deleted it.
-NEVER='\.(32x|bs1|wav|mov|mp4)$|^rom/night/|^tests/demo-b/arcade/|^tests/gameplay/arcade/|^tests/demo-b/picbase/|^discover/cram/arcade/|^megadriveref/|^docs/proof/|^roms/|^mame/'
+NEVER='\.(32x|bs1|wav|mov|mp4)$|^rom/night/|^tests/demo-b/arcade/|^tests/demo-b/arcade_jp/|^tests/gameplay/arcade/|^tests/demo-b/picbase/|^discover/cram/arcade/|^megadriveref/|^docs/proof/|^roms/|^mame/'
 remote="$1"
 z=0000000000000000000000000000000000000000
 while read lref lsha rref rsha; do

@@ -76,8 +76,6 @@ extern void port_irq_redirect(uint target);
 extern byte port_blank_on(byte v);
 extern void port_blank_work(void);
 extern byte port_blank_off(byte v, uint site);
-/* CPORT_AFTER hooks (tools/cport_prep.py): called right after a marked call site. */
-extern void port_region_boot(void);
 
 extern uint stack0x00000000;
 extern uint stack0xfffffffc;

@@ -1989,7 +1989,8 @@ endif
 ifdef PORTFULL
 SHCCFLAGS += -DPORT_FULL
 SHOBJS += sh_src/portfull/port.o sh_src/portfull/objdispatch.o \
-          sh_src/portfull/defs.o sh_src/portfull/l2seed.o sh_src/portfull/dispregs.o
+          sh_src/portfull/defs.o sh_src/portfull/l2seed.o sh_src/portfull/dispregs.o \
+          sh_src/region_data.o
 # the program image rides sh_src/port_rom_data.s (.incbin), NOT the objcopy-made
 # romimg.o -- that produced an EMPTY section, see the comment in that .s file
 SHLDFLAGS += -T sh_src/portfull/layout.ld
@@ -4223,6 +4224,11 @@ PORT_SLUG := $(if $(PORT_EXTRA),$(if $(PORT_NAME),$(PORT_NAME),$(shell printf '%
 # No prerequisite on purpose: an existing roms/ tree is never re-extracted.
 $(GAMEROMS)/prog68k.bin:
 	python3 tools/romset.py $(GAME)
+# THE ONE-ROM REGIONS' DATA (2026-10-30): the program bytes another regional set has and the
+# reference lacks (games/$(GAME)/game.py REGION_DATA), taken from that set's MAME zip at build
+# time. A missing set is an error, never an empty region.
+sh_src/region_data.s: games/$(GAME)/game.py tools/region_data.py
+	python3 tools/region_data.py $(GAME) sh_src
 $(GAMEROMS)/prog68k.asm: $(GAMEROMS)/prog68k.bin
 	$(MDBIN)/m68k-elf-objdump -D -b binary -m m68k:68000 $< > $@
 romset: $(GAMEROMS)/prog68k.bin $(GAMEROMS)/prog68k.asm

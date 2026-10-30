@@ -91,3 +91,5 @@ sh_src/tape_pad.id
 
 # generated per GAME by tools/emit_game_cfg.py (framework step 2)
 sh_src/game_cfg.h
+# arcade program bytes for the one-rom regions (tools/region_data.py); rom-derived, never committed
+sh_src/region_data.s

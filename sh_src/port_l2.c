@@ -1888,15 +1888,22 @@ static unsigned char port_snd_q[8]; static unsigned port_snd_w, port_snd_r;   /*
 volatile uint16_t port_live_p1;   /* probe: the raw P1 byte the 68K posted */
 volatile uint port_live_svc;    /* VOLATILE, non-static: LTO folded the static (builder trap 2026-10-17). bit 8 = live pads seen; low byte = service bits pressed (coin1 b0, start1 b4, start2 b5) */
 #ifdef R60_FRONTEND
-static unsigned frontend_round, frontend_dsw2 = GAME_DSW2_DEFAULT, frontend_configured;
-PORTCODE void port_frontend_settings(unsigned packed)
+/* THE OPTIONS SCREEN'S RESULT (md_src/testcart.c frontend_menu_screen, three words over
+ * COMM12). The region and DSW1 decide the game's boot -- port_region_boot and the DIP latch
+ * in FUN_0000040E -- so they are taken only before it has run (the power-on menu); DSW2 is
+ * re-latched every frame (port_dips_latch, the title's glue) and changes from either menu. */
+static unsigned frontend_round, frontend_dsw1, frontend_dsw2, frontend_configured, frontend_dsw1_set;
+static unsigned port_game_booted;   /* set after the first game frame: the boot has latched */
+PORTCODE void port_frontend_settings(unsigned packed, unsigned dsw1, unsigned dsw2)
 {
-    static const byte difficulties[GAME_MENU_DIFFICULTY_N] = GAME_MENU_DIFFICULTY_BITS;
-    static const byte lives[GAME_MENU_LIVES_N] = GAME_MENU_LIVES_BITS;
-    unsigned d = (packed >> 3) & 7u, l = (packed >> 6) & 3u;
+    unsigned region = (packed >> 3) & 3u;
     frontend_round = (packed & 7u) < GAME_ROUNDS ? (packed & 7u) : 0u;
-    if (d >= GAME_MENU_DIFFICULTY_N) d = 0;
-    frontend_dsw2 = (GAME_DSW2_DEFAULT & ~GAME_DSW2_OPTION_MASK) | difficulties[d] | lives[l];
+    if (!port_game_booted) {
+        if (region < GAME_REGIONS_N) port_region = (byte)region;
+        frontend_dsw1 = dsw1 & 0xFFu;
+        frontend_dsw1_set = 1;
+    }
+    frontend_dsw2 = dsw2 & 0xFFu;
     frontend_configured = 1;
 }
 #endif
@@ -1907,12 +1914,11 @@ PORTCODE static void l2m_io_live(void)
     uint c8 = MARS_SYS_COMM8;
 #ifdef R60_FRONTEND
     if (frontend_configured) {
+        extern void port_dips_latch(unsigned dsw2);   /* games/<title>/glue.c */
         DAT_00c42001 = (byte)frontend_dsw2;
-        ((volatile byte*)WRAM_BASE)[0x301B] = (byte)frontend_dsw2;
-        /* The arcade latches starting lives at boot. Title-menu changes must
-         * refresh that latch as well, before the next credited game starts. */
-        ((volatile byte*)WRAM_BASE)[0x3019] =
-            ((const byte*)ROM_BASE)[0x1996u + ((~frontend_dsw2 & 0xCu) >> 2)];
+        if (frontend_dsw1_set && !port_game_booted)
+            DAT_00c42003 = (byte)frontend_dsw1;   /* read once, by the boot */
+        port_dips_latch(frontend_dsw2);
     }
 #endif
     if ((c8 & 0xFF00u) != 0xA500u) return;
@@ -2191,9 +2197,14 @@ PORTCODE void port_play_tick(void)
          * the arcade's own I/O: 0xC42001 = 0x54 and 0xC42003 = 0x66, everything else
          * 0xFF. The port had 0xFF in both, so 0xFFF01A/1B read 0xFF where the arcade
          * holds 0x66/0x54 -- the port was booting a different machine. */
-        for (i = 0; i < 9u; i++)
-            *l2_io_cell[i] = (l2_io_a68[i] == 0xC42001u) ? 0x54u
-                           : (l2_io_a68[i] == 0xC42003u) ? 0x66u : 0xFFu;
+        /* PER REGION since 2026-10-30: altbeastj's 68K latches FF/FD under the same MAME
+         * defaults (games/<title>/game.py REGIONS), and its attract and lives follow them. */
+        {   static const byte dsw1[GAME_REGIONS_N] = GAME_REGIONS_DSW1;
+            static const byte dsw2[GAME_REGIONS_N] = GAME_REGIONS_DSW2;
+            for (i = 0; i < 9u; i++)
+                *l2_io_cell[i] = (l2_io_a68[i] == 0xC42001u) ? dsw2[port_region]
+                               : (l2_io_a68[i] == 0xC42003u) ? dsw1[port_region] : 0xFFu;
+        }
         port_play_dbg[0] = 0x424F4F54u;   /* 'BOOT' */
 #else
         /* COLD BOOT: no capture at all. The game clears its own work RAM, loads its
@@ -2239,6 +2250,9 @@ PORTCODE void port_play_tick(void)
 #endif
         uint t0 = FRT16();
         l2m_frame_body();
+#ifdef R60_FRONTEND
+        port_game_booted = 1u;        /* the first frame ran the boot: region and DSW1 are final */
+#endif
 #ifndef PORT_NOPALPROBE
         port_pal_probe(pp_k, 1u);     /* collapsed inside this frame */
 #endif
