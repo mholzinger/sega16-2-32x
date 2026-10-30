@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 NOTES = []      # scanner observations that are not derivation failures
 
 def load_tables(game):
-    gp = ROOT / 'tools' / f'game_{game}.py'
+    gp = ROOT / 'games' / game / 'game.py'
     spec = ilu.spec_from_file_location(f'game_{game}', gp)
     m = ilu.module_from_spec(spec); spec.loader.exec_module(m)
     return m.TABLES
@@ -421,7 +421,7 @@ def main():
             inner = ', '.join(fmt(x) for x in v)
             return ('(' + inner + (',' if len(v) == 1 else '') + ')') if isinstance(v, tuple) else '[' + inner + ']'
         raise TypeError(type(v))
-    lines = [f'"""{tgt_g}: patch tables DERIVED from tools/game_{ref_g}.py by',
+    lines = [f'"""{tgt_g}: patch tables DERIVED from games/{ref_g}/game.py by',
              'tools/game_derive.py (disassembly alignment + per-site byte checks).',
              'Regenerate with:  python3 tools/game_derive.py ' + ref_g + ' ' + tgt_g,
              'Hand corrections belong in this file AFTER the generated block, keyed',
@@ -441,11 +441,12 @@ def main():
         else:
             lines.append(f"    # {k!r}: NOT DERIVED — see report")
     lines.append('}')
-    (ROOT / 'tools' / f'game_{tgt_g}.py').write_text('\n'.join(lines) + '\n')
+    (ROOT / 'games' / tgt_g).mkdir(parents=True, exist_ok=True)
+    (ROOT / 'games' / tgt_g / 'game.py').write_text('\n'.join(lines) + '\n')
     report += ['NOTE ' + n for n in NOTES]
     print('\n'.join(report))
     missing = [k for k in R if k not in out]
-    print(f"\nwrote tools/game_{tgt_g}.py: {len(out)}/{len(R)} keys; missing: {missing}")
+    print(f"\nwrote games/{tgt_g}/game.py: {len(out)}/{len(R)} keys; missing: {missing}")
 
 if __name__ == '__main__':
     main()

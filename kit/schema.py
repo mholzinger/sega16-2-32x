@@ -2,7 +2,7 @@
 """THE TABLES SCHEMA — one declaration per recurring 68K idiom.
 
     python3 -m kit.schema                 # the catalogue, by layer
-    python3 -m kit.schema check           # audit every tools/game_*.py
+    python3 -m kit.schema check           # audit every games/*/game.py
     python3 -m kit.schema check goldnaxe  # audit one
     python3 -m kit.schema index           # regenerate kit/INDEX.md
 
@@ -78,7 +78,7 @@ class Key:
         if v is None:
             return None if self.nullable else 'None, but the key is not nullable'
         base = self.shape.split('[')[0]
-        want = {'int': int, 'tuple': tuple, 'list': list, 'dict': dict}[base]
+        want = {'int': int, 'tuple': tuple, 'list': list, 'dict': dict, 'str': str}[base]
         if base == 'int' and isinstance(v, bool):
             return 'bool where int expected'
         if not isinstance(v, want):
@@ -336,6 +336,51 @@ KEYS = [
        'second-stage work-RAM blocks', 'altbeast'),
     _k('WRAM_ENTRIES', 'port32x', 'list[int]',
        'entry points into the relocated work-RAM code', 'altbeast'),
+
+    # --- port32x: THE GAME'S OWN WORK-RAM CELLS the port reads (2026-10-29) --
+    # 68K addresses. tools/emit_game_cfg.py emits each as GAME_<KEY> in the generated
+    # sh_src/game_cfg.h, the one place the engine C learns where a title keeps them.
+    _k('WRAM_PALETTE', 'port32x', 'int',
+       "the game's live palette RAM mirror, 128 colour sets x 16 words",
+       'memory game-palette-is-wram (2026-09-02); md_main.c:2886', nullable=True),
+    _k('WRAM_ROUND', 'port32x', 'int', 'current round, 0-based (& 7)',
+       'md_main.c:4158; PORTROUND', nullable=True),
+    _k('WRAM_MODE', 'port32x', 'int',
+       'game mode flags: bit 0 = credit game vs attract (LESSONS.md:11360 reads set = '
+       'credit game; md_main.c:4153 reads clear = credited -- unresolved)',
+       'md_main.c:4159', nullable=True),
+    _k('WRAM_P1_STATE', 'port32x', 'int',
+       'player 1 state byte; (P1|P2) & 1 = a game or demo running', 'md_main.c:4156',
+       nullable=True),
+    _k('WRAM_P2_STATE', 'port32x', 'int', 'player 2 state byte', 'md_main.c:4156',
+       nullable=True),
+    _k('WRAM_CUTSCENE', 'port32x', 'int', 'non-zero while a cut scene plays',
+       'md_main.c:4157', nullable=True),
+    _k('WRAM_ATTRACT_STEP', 'port32x', 'int', 'attract-sequence step (>> 2 = picture)',
+       'md_main.c:4160, r60_planes.c:881', nullable=True),
+    _k('WRAM_FRAME_LATCH', 'port32x', 'int',
+       "the game's frame latch, clear while its frame body runs",
+       'md_main.c:4079; memory scene-timer-alignment', nullable=True),
+    _k('WRAM_TILE_BANKREQ', 'port32x', 'int',
+       'tile bank request byte the game writes for the MCU (bank in bits 0-2)',
+       'md_main.c:182, r60_tiles.h:10', nullable=True),
+    # --- port32x: THE SECRET MENU's per-title content (hold B at boot; testcart.c:2340) --
+    _k('TITLE', 'port32x', 'str', "the title's name on the port's own screens",
+       'testcart.c:2354', nullable=True),
+    _k('ROUNDS', 'port32x', 'int', 'how many rounds a starting-round option offers',
+       'testcart.c:2374, port_l2.c port_frontend_settings', nullable=True),
+    _k('DSW2_DEFAULT', 'port32x', 'int', 'the arcade DIP switch bank 2 the port boots with',
+       'memory arcade-oracle-dips (66/54); port_l2.c port_frontend_settings', nullable=True),
+    _k('DSW2_OPTION_MASK', 'port32x', 'int', 'DSW2 bits the menu options replace',
+       'port_l2.c port_frontend_settings', nullable=True),
+    _k('MENU_DIFFICULTY', 'port32x', 'list[tuple]',
+       'difficulty choices, (label, DSW2 bits); index 0 is ARCADE (keep the DIP)',
+       'testcart.c:2343, port_l2.c port_frontend_settings', nullable=True),
+    _k('MENU_LIVES', 'port32x', 'list[tuple]', 'lives choices, (label, DSW2 bits)',
+       'testcart.c:2344, port_l2.c port_frontend_settings', nullable=True),
+    _k('WRAM_SPR_ORDER', 'port32x', 'int',
+       'sprite draw-order lists, 256 bytes, 0xFF = empty', 'port_l2.c:2729',
+       nullable=True),
 ]
 
 BY_NAME = {k.name: k for k in KEYS}
@@ -348,8 +393,8 @@ assert len(BY_NAME) == len(KEYS), 'duplicate key name in KEYS'
 # validation
 # ---------------------------------------------------------------------------
 def load_game(game):
-    """Import tools/game_<game>.py and return its TABLES dict."""
-    p = ROOT / 'tools' / f'game_{game}.py'
+    """Import games/<game>/game.py and return its TABLES dict."""
+    p = ROOT / 'games' / game / 'game.py'
     if not p.exists():
         raise FileNotFoundError(p)
     spec = importlib.util.spec_from_file_location(f'game_{game}', p)
@@ -379,8 +424,7 @@ def validate(tables, game='?'):
 def check(games=None):
     """Audit every game file. Returns the number of errors."""
     if not games:
-        games = sorted(p.stem[5:] for p in (ROOT / 'tools').glob('game_*.py')
-                       if p.stem not in ('game_align', 'game_derive'))
+        games = sorted(p.parent.name for p in (ROOT / 'games').glob('*/game.py'))
     total = 0
     for g in games:
         try:

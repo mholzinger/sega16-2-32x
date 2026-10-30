@@ -7,7 +7,7 @@
 static inline unsigned r60_tile_bank1(void)
 {
 #ifdef PORT_FULL
-    return *(const volatile unsigned char *)0x2602FC95u & 7u; /* arcade FFF095 */
+    return *(const volatile unsigned char *)SDRAM_WRAM_AT(GAME_WRAM_TILE_BANKREQ) & 7u;
 #else
     return MARS_SYS_COMM2 & 7u;
 #endif

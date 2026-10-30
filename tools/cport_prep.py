@@ -275,19 +275,19 @@ typedef int                 bool;
 # 13-15, sprite records 64+) is left alone and reported, because moving it would
 # silently alias a different page.
 #
-# The shadow bases are parsed from sh_src/m_main.c, the same single source
-# cport_layout derives VIDREG from -- not copied, so the two cannot drift.
+# The shadow bases are parsed from sh_src/sdram_map.h, the same single source
+# cport_layout derives VIDREG from and the renderer compiles -- not copied, so none can drift.
 _mm = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        'sh_src', 'm_main.c')).read()
+                        'sh_src', 'sdram_map.h')).read()
 _shad = {}
-for _m in re.finditer(r'#define\s+(TILEMAP_U|TEXT_U|PAL_SH|DIAG|SPR_SNAP|SYNC)\s+'
-                      r'\(\(volatile\s+uint(?:16|32)_t\s*\*\)0x([0-9A-Fa-f]+)\)', _mm):
+for _m in re.finditer(r'#define\s+SDRAM_(TILEMAP_U|TEXT_U|PAL_SH|DIAG|SPR_SNAP|SYNC)\s+'
+                      r'0x([0-9A-Fa-f]{8})u?\b', _mm):
     _shad[_m.group(1)] = int(_m.group(2), 16) & 0x0FFFFFFF | 0x06000000
 _vmiss = [n for n in ('TILEMAP_U', 'TEXT_U', 'PAL_SH', 'DIAG', 'SPR_SNAP', 'SYNC')
           if n not in _shad]
 if _vmiss:
-    raise SystemExit('cport_prep: sh_src/m_main.c no longer defines %s -- the video '
-                     'literal map cannot be derived' % ', '.join(_vmiss))
+    raise SystemExit('cport_prep: sh_src/sdram_map.h no longer defines SDRAM_%s -- the video '
+                     'literal map cannot be derived' % ', SDRAM_'.join(_vmiss))
 _VIDMAP = tuple((_lo, _lo + (_shad[_nx] - _shad[_f]), _shad[_f], _nm) for _lo, _nm, _f, _nx in (
     (0x400000, 'tile',    'TILEMAP_U', 'TEXT_U'),
     (0x410000, 'text',    'TEXT_U',    'PAL_SH'),
@@ -3818,7 +3818,7 @@ open(os.path.join(outdir, 'defs.c'), 'w').write('\n'.join(dl))
 
 out = ['#include "ghidra_types.h"', '#include "ghidra_rt.h"', '#include "w68.h"',
        '#ifdef PORT_TILEDIRTY',
-       'extern volatile unsigned short port_tile_dirty;   /* sh_src/m_main.c */',
+       'extern volatile unsigned short port_tile_dirty;   /* sh_src/r60/r60_main.c */',
        '#endif',
        '#include "extras.h"',
        '/* The SH-2 needs 4-byte alignment for a 32-bit access; the 68000 needed',
@@ -6599,7 +6599,9 @@ _pass_report('0x34FE callers take vx from the published D0', _v34[0], 3)
 # #include (so no pass rewrites the hand code), and the signature line is taken from
 # protos.h so the hand file and the prototype cannot disagree. The hand code sees the
 # unit's own vocabulary (w68.h macros, the register file, port_e_d0/port_carry).
-_hand_dir = os.path.join(outdir, 'hand')
+# games/<title>/hand since framework 3c (2026-10-29); the unit still says #include "hand/X.c" and
+# tools/cport_build.sh puts the title directory on the include path.
+_hand_dir = os.environ.get('CPORT_HAND_DIR') or os.path.join(outdir, 'hand')
 # DISCOVERY WAS HEX-ONLY WHILE EVERY OTHER STEP MATCHES BY NAME. The swap below keys on
 # the function's name -- protos.h, the definition in the unit, the #include -- so a hand
 # file for a NAMED routine worked in every respect except being found: it was skipped in
@@ -6634,7 +6636,7 @@ for _fn in _hand:
                          'non-void (%s)\n  gcc 15 makes that an error -- write `return 0;` '
                          'in the hand file' % (_fn, _pm.group(1)))
     _text, k = re.subn(r'^[a-z][^\n]* \*?%s\([^)]*\)\s*\n\{.*?\n\}\n' % _fn,
-                       '#include "hand/%s.c"   /* hand-derived: sh_src/portfull/hand */\n' % _fn,
+                       '#include "hand/%s.c"   /* hand-derived: games/<title>/hand */\n' % _fn,
                        _text, count=1, flags=re.M | re.S)
     if k != 1:
         raise SystemExit('cport_prep: hand file %s.c has no definition to replace in the unit' % _fn)
@@ -6660,7 +6662,7 @@ if _at_protos:
         _pf.write('\n'.join(_at_protos) + '\n')
 print('cport_prep: hand functions at non-Ghidra entries (hand/AT_*.c): %d' % len(_at))
 out = [_text]
-print('cport_prep: hand-derived functions included from sh_src/portfull/hand: %d' % _hand_n)
+print('cport_prep: hand-derived functions included from %s: %d' % (_hand_dir, _hand_n))
 # ---- 68K SP-RESET ENTRIES ARE JUMPS, NOT CALLS (2026-10-24) ------------------------
 #
 # A 68K routine that opens with `lea 0xffffff00,%sp` discards every frame below it, and

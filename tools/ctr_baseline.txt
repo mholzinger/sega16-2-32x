@@ -1,11 +1,26 @@
-# Known counter findings, baselined 2026-09-17. A NEW one fails
+# 2026-10-29: first audit of the SHIPPING build (r60 blocks); every entry pre-existing -- triage card, not a pass.
+# Known counter findings, baselined 2026-10-29. A NEW one fails
 # `make lint`; these are pre-existing and tracked in the slot
-# registry at sh_src/m_main.c:72. Regenerate with --bless only
+# registry (tools/ctr_audit.py BLOCKS). Regenerate with --bless only
 # after FIXING something, never to silence a new finding.
-COLLISION DIAG[27]
-COLLISION DIAG[35]
-COLLISION DIAG[36]
-COLLISION DIAG[37]
-COLLISION DIAG[39]
-COLLISION DIAG[42]
-COLLISION DIAG[52]
+COLLISION R60_DIAG2[0]
+COLLISION R60_DIAG2[11]
+COLLISION R60_DIAG2[12]
+COLLISION R60_DIAG2[13]
+COLLISION R60_DIAG2[14]
+COLLISION R60_DIAG2[1]
+COLLISION R60_DIAG2[3]
+COLLISION R60_DIAG2[4]
+COLLISION R60_DIAG2[5]
+COLLISION R60_DIAG2[6]
+COLLISION R60_DIAG2[7]
+COLLISION R60_DIAG2[9]
+COLLISION R60_DIAG[10]
+COLLISION R60_DIAG[12]
+COLLISION R60_DIAG[13]
+COLLISION R60_DIAG[14]
+COLLISION R60_DIAG[15]
+COLLISION R60_DIAG[1]
+COLLISION R60_DIAG[7]
+COLLISION R60_DIAG[9]
+OVERLAP 3 more block pair(s) overlap on OBSERVED

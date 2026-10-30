@@ -30,6 +30,25 @@ TABLES = {
     'MCU_BUSY':  0xFFF0C0,   # screen-sync busy word (68K sets high byte)
     'MCU_COINS': 0xFFF0C2,   # coin/service byte the MCU posts (inverted)
     'MCU_SND':   0xFFF0C4,   # sound command byte (0xFF = idle)
+    # THE GAME'S WORK-RAM CELLS the port reads (kit/schema.py port32x; emitted into
+    # sh_src/game_cfg.h by tools/emit_game_cfg.py). 68K addresses, from the read sites cited there.
+    'WRAM_PALETTE':      0xFF9000,
+    'WRAM_ROUND':        0xFFF142,
+    'WRAM_MODE':         0xFFF026,
+    'WRAM_P1_STATE':     0xFFF028,
+    'WRAM_P2_STATE':     0xFFF029,
+    'WRAM_CUTSCENE':     0xFFF148,
+    'WRAM_ATTRACT_STEP': 0xFFF031,
+    'WRAM_FRAME_LATCH':  0xFFF01C,
+    'WRAM_TILE_BANKREQ': 0xFFF095,
+    'WRAM_SPR_ORDER':    0xFFEC80,
+    # THE SECRET MENU (hold B at boot): its title, round count and DIP-backed options.
+    'TITLE':            'ALTERED BEAST',
+    'ROUNDS':           5,
+    'DSW2_DEFAULT':     0x54,
+    'DSW2_OPTION_MASK': 0xCC,
+    'MENU_DIFFICULTY':  [('ARCADE', 0x40), ('EASY', 0x80), ('NORMAL', 0xC0), ('HARD', 0x40), ('HARDEST', 0x00)],
+    'MENU_LIVES':       [('ARCADE', 4), ('2', 8), ('3', 12), ('4', 4)],
     # regions the operand scan must not touch (raw data)
     'DATA_EXCLUDE': [
         (0x1986, 0x1998),   # boot mapper table (raw bytes, not code)

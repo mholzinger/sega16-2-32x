@@ -4,7 +4,7 @@
     python3 tools/bake_mdspr.py            # regenerate outputs
     python3 tools/bake_mdspr.py --stats    # print budget table only
 
-Consumes discover/play.csv + discover/attract.csv (the census keys) and
+Consumes games/$GAME/discover/play.csv + attract.csv (the census keys) and
 sh_src/sprites.bin (the interleaved sprite ROM), REUSING bake_sprites'
 decoder — the one that ships with a byte-identical replay gate — so the
 pixel walk here is the proven one, not a re-derivation.
@@ -33,6 +33,7 @@ build FAILS if the class list exceeds it.
 """
 import csv
 import struct
+import os
 import sys
 from pathlib import Path
 
@@ -75,9 +76,9 @@ def load_keys(name, sets, min_count):
     blob 12K -> 70K). Unknown records stay SH-2-composed."""
     keys = {}
     for name in (name,):
-        p = ROOT / 'discover' / name
-        if not p.exists():
-            continue
+        p = ROOT / 'games' / os.environ.get('GAME', 'altbeast') / 'discover' / name   # per title (2026-10-29)
+        if not p.exists():   # LOUD: skipping baked an empty art set for any other title (2026-10-29)
+            sys.exit('bake_mdspr: no %s -- run tools/sprite_discover.sh for this title' % p)
         for r in csv.DictReader(open(p)):
             if int(r['count']) < min_count:
                 continue

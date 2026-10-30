@@ -48,15 +48,6 @@ SHLIBS   = -L$(MARSDEV)/sh-elf/lib/gcc/sh-elf/$(SHCC_VER) -lgcc
 # the build now.
 MDCCFLAGS  = -m68000 -mshort -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_$(GAMEDEF)
 SHCCFLAGS  = -m2 -mb -Wall -Wextra -Werror=return-type -std=c99 -ffreestanding -DGAME_$(GAMEDEF)
-# `make PRESSURE=1` = ares-proxy budgets (cut quiet zone) for pre-handoff
-# validation; NEVER ship a PRESSURE build to ares/hardware.
-ifdef PRESSURE
-SHCCFLAGS += -DPRESSURE_TEST
-endif
-# `make SPROBE=1` = sprites-off cart-bus contention probe; never ship.
-ifdef SPROBE
-SHCCFLAGS += -DSPRITES_OFF_TEST
-endif
 # `make TAILPROBE=1` = MD tail-split + mean handler-span probes (LOOP 6).
 # NEVER SHIP: the probes add per-vint work to the overloaded tail and
 # shift V-gate outcomes (measured demo 52.1 -> 54.6, demo2 20.9 -> 23.4).
@@ -70,32 +61,12 @@ endif
 ifdef TAILBURN
 MDCCFLAGS += -DTAIL_BURN
 endif
-# `make WINSPLIT=1` = LOOP 9 diagnostic: split the master's slot-5
-# `blit_preempt` term into blit-only ([23]), post-blit waits ([24]) and
-# rows blitted ([25]). NEVER SHIP. Decoded by tools/win_probe.lua and by
-# the savestate readers in tools/wait_split.py.
-# `make ROWSTALE=1` = LOOP 9: how many master rows are byte-identical to
-# the same row one cycle ago ([32] identical / [33] checked). Decides
-# whether a dirty-row blit is worth building. NEVER SHIP — it hashes
-# every row on top of blitting it.
-ifdef ROWSTALE
-SHCCFLAGS += -DROWSTALE_PROBE
-endif
 # `make SPANPROBE=1` = LOOP 9: pickup-V histogram ([34..41]) + blit-span
 # histogram ([42..49]) + late restores split by pickup half ([50]/[51]).
 # The mean span already fits vblank; this asks what the TAIL looks like
 # and whether a late pickup is what makes it. NEVER SHIP.
 ifdef SPANPROBE
 SHCCFLAGS += -DSPAN_PROBE
-endif
-# `make BQCHUNK=1` = LOOP 13: bound the band queue's two long
-# single-shots (cache_fill adaptive drain, build_maps terminator) to
-# per-visit quanta — SPAN_PROBE v3 put 98.9% of missed pickups behind
-# them on ares. Falsifier: stage-6 misses collapse in span_hist.py
-# without stale-color regression (chunked maps drain 1/window under
-# load). Candidate for shipping if it holds; probe until then.
-ifdef BQCHUNK
-SHCCFLAGS += -DBQ_CHUNK
 endif
 # `make MDVERIFY=1` = LOOP 13 tick-row probe: the MD receiver reads
 # every tile-batch entry back through the data port and tallies
@@ -105,12 +76,6 @@ endif
 # NEVER SHIP.
 ifdef MDVERIFY
 MDCCFLAGS += -DMD_VERIFY
-endif
-# `make TILERATE=1` = LOOP 11: how often the game dirties a tilemap page
-# ([54] pages copied, [55] cycles with any dirt, [56] pages pending).
-# The MK2 pivot rests on this being rare. tools/tile_rate.py. NEVER SHIP.
-ifdef TILERATE
-SHCCFLAGS += -DTILE_RATE
 endif
 # `make IDLETOKEN=1` = LOOP 11 (a): Chaotix's idle-token + poll-and-skip
 # handshake instead of raise-FM-and-spin. Needs BOTH sides, so it also
@@ -177,57 +142,6 @@ ifdef MDBGALL
 SHCCFLAGS += -DMD_BG -DMD_BG_FG0 -DPG_STICKY
 MDCCFLAGS += -DMD_BG
 endif
-ifdef MDBGTEXT
-SHCCFLAGS += -DMD_BG_TEXT
-endif
-# `make CUTBLANK=1` = LOOP 14 item 2: at a scene-cut claim storm (one
-# nt chunk claiming >=80 slots arms a 12-chunk countdown), cells whose
-# slot's art has not shipped yet go out as the BLANK slot instead of
-# the stale art the slot still holds — the J-field of foreign art at
-# cuts becomes blank cells under the fade, filling in as uploads land
-# (heal <=1 rotation after each tile lands). Bandwidth-neutral by
-# design: the cut drain is at the transport floor (measured 2026-08-15,
-# tools/cut_profile.lua: 792 claims drained in 28 windows = 8 discovery
-# chunks + 20 batches; the 768-word packet is full at MD_BATCH=40+pal).
-# Counters at the 0x28FA0 scrap: [0] blanked cells, [1] cut arms.
-# Candidate for the MDBGALL bundle if Mike's pass likes it.
-ifdef CUTBLANK
-SHCCFLAGS += -DCUT_BLANK
-endif
-# `make PGROTOR=1` = LOOP 14 item 3 ROOT FIX candidate: background
-# tilemap-truth re-verify, 2 pages per k1 through the existing
-# cap_drain (budget 3->5). MEASURED (2026-08-15, tools/nt_dump.lua +
-# arc_dump.lua at the eyehold anchor): MDBGALL truth pages 0-4 hold
-# 6947 stale words vs the arcade (ranking-table cat-1 cells the game
-# cleared at the cut — the top/bottom trash bands and the stage-1 sky
-# garbage); the SHIPPING flavor at the same anchor is 0-word EXACT.
-# The MD_BG window work shifts capture timing so streamed staging
-# writes slip past pg_watch's one-quiet-capture drop and are never
-# re-marked. The rotor bounds any such miss to <=0.65s instead of
-# forever. Cost ~0.1-0.3ms per k1 (full-13 refresh was ~0.7ms).
-# DEAD ON ARES (Mike, 2026-08-16, frames 3239-42 + bs9): backgrounds
-# CYCLE between scenes' art — the rotor captures unmarked pages
-# outside the settled-mark discipline, so on ares timing it takes
-# mid-write staging states into truth continuously (exactly the
-# half-written-page hazard the k2 merge comment warns about; MAME's
-# capture timing happened to land post-write). NEVER SHIP. The root
-# fix is PGSTICKY below.
-ifdef PGROTOR
-SHCCFLAGS += -DPG_ROTOR
-endif
-# `make PGSTICKY=1` = LOOP 14 item 3 root fix, take 2: sticky watch.
-# The original miss: thunks mark at POINTER-LOAD; the budgeted drain
-# can capture the page before the stream's writes arrive, see no
-# change, and drop it — nothing ever re-marks (the eyehold 6947-word
-# staleness, MDBGALL-only because MD_BG work shifts drain timing into
-# that too-early window). Fix: every mark puts the page into pg_watch
-# (not just pg_pending), and watch drops only after 3 consecutive
-# quiet captures. All captures stay inside the settled-mark path —
-# no unmarked-page races (the PGROTOR disease), ~zero steady-state
-# cost, ~3 extra page captures per transition burst.
-ifdef PGSTICKY
-SHCCFLAGS += -DPG_STICKY
-endif
 # `make NTWRAP=1` = LOOP 15 wrap protocol, PHASE A (display math only,
 # bandwidth-neutral): cells land at wrapped 64x32 plane positions with
 # per-row placement headers; the MD switches to cell-strip hscroll
@@ -270,17 +184,6 @@ endif
 ifdef WIN2
 SHCCFLAGS += -DSNAP_ONE -DWIN_TWO
 MDCCFLAGS += -DSNAP_ONE -DWIN_TWO
-endif
-# `make SPRREUSE=1` = LOOP 16 motion-parity probe: per-cycle sprite
-# decode-job repeat rate + cost split at the k2 snapshot (the frame
-# cache's hit ceiling). Overlays ROWHASH 0x28D00. NEVER SHIP.
-ifdef SPRREUSE
-SHCCFLAGS += -DSPR_REUSE
-endif
-# MDPAYOFF=1 adds the transparent-area scan inside blit_half. It reads
-# every row a second time, so it inflates the blit -- diagnosis only.
-ifdef MDPAYOFF
-SHCCFLAGS += -DMD_PAYOFF
 endif
 ifdef CMDINT
 SHCCFLAGS += -DCMD_INT
@@ -393,17 +296,6 @@ SHCCFLAGS += -DPD_VFLOOR=$(PDFLOOR)
 endif
 endif
 endif
-# `make ... CRAMFLIP=1` = ARC B HALF 1: tile/sprite group REMAP
-# paints deferred to the flip (an ISR ring, <=32 entries, drained
-# right after the reveal — content and CRAM mapping switch together).
-# The blink strips were CRAM recolor flashes (cross-correlation:
-# zero displacement); census: ~15 remap paints/frame land mid-scan
-# of the displayed old generation without this. VALUE paints (fades)
-# stay live. Not PALDELTA-specific — the mid-scan remap predates the
-# diet; the diet's phase shift made it 5.7x more visible.
-ifdef CRAMFLIP
-SHCCFLAGS += -DCRAM_FLIP
-endif
 # `make ... PALSTORM=1` = LOOP 25: the palette-channel storm census —
 # per-k2-vint {backlog, newly-dirtied, shipped, storm vints, torn-CRAM
 # proxy, tile/sprite-half split} at 0xFFA060 (decoded by state_health
@@ -437,48 +329,11 @@ endif
 ifdef VISRFLIP
 SHCCFLAGS += -DVISR_FLIP
 endif
-# `make YIELDROWS=n` = chunk size for the yieldable strips. 12 = one
-# chunk = no yielding, which isolates the restructure's own cost from
-# the cost of chunking.
-ifdef YIELDROWS
-SHCCFLAGS += -DYIELD_ROWS=$(YIELDROWS)
-endif
-# (BLITDMA and BLITUNC retired in LOOP 9 with their answers. The DMAC
-# blit measured 1.77x SLOWER on ares and BLITUNC exists only to prove
-# MAME models no FB write cost — neither is a build anyone should be
-# able to ship by accident. docs/log/LOOP.md negatives 20 and 21.)
-# `make FMTEST=1` = LOOP 9: does an SH-2 write to the framebuffer land
-# while FM=0 (outside the window)? That assumption rules out BOTH the
-# shadow bank and composing straight into the FB, and was never tested.
-# Writes to dead FB space (0x11A00-0x12000), carries a positive control.
-# NEVER SHIP.
-ifdef FMTEST
-SHCCFLAGS += -DFM_TEST
-endif
-# `make WAITSPLIT=1` = LOOP 9: inside the pickup->restore span, split the
-# master's blit from its SYNC[2] wait on the slave, PER WINDOW. k=1 owns
-# 100% of the past-vblank restores and its excess over k=0/k=2 doubled
-# under load (3.6 -> 7.9 lines), which 4 extra rows cannot explain.
-# NEVER SHIP.
-ifdef WAITSPLIT
-SHCCFLAGS += -DWAIT_SPLIT_PROBE
-endif
-# `make PICKUPSRC=1` = LOOP 9: does the slave answer the preempt mailbox
-# from inside its concurrent compose (a DATA DEPENDENCY — it is composing
-# the very rows it is being asked to blit) or from the idle loop (a
-# polling delay)? The two want opposite fixes and 7f died on the wrong
-# one. NEVER SHIP.
-ifdef PICKUPSRC
-SHCCFLAGS += -DPICKUP_SRC_PROBE
-endif
 # (PIPE2 is now the DEFAULT — it won Mike's play pass and is folded in.
 # See slave_concurrent_k: compose a band two windows before shipping it.)
 # (BLITBAL retired in LOOP 9 — the even thirds LOST Mike's play pass on
 # the seams they cost. Retired rather than left here to mislead, the same
 # call BLITBURN got. docs/log/LOOP.md negative 23.)
-ifdef WINSPLIT
-SHCCFLAGS += -DWIN_SPLIT_PROBE
-endif
 # (SPINPROBE retired in LOOP 8 with the COMM stream it capped. It did its
 # job: N=0 moved the reject band 57.1 -> 39.4% on its own, which is what
 # identified the ack-spin as the elastic sink and set this whole arc off.)
@@ -545,10 +400,6 @@ SHCCFLAGS += -DBOOT_SHSTAGE
 MDCCFLAGS += -DBOOT_SHSTAGE
 SHASFLAGS += --defsym BOOT_SHSTAGE=1
 endif
-# `make ... BOOTSLVNOCACHE=1` = the slave jumps into SDRAM with its cache OFF (probe).
-ifdef BOOTSLVNOCACHE
-SHASFLAGS += --defsym BOOT_SLVNOCACHE=1
-endif
 # `make ... BOOTSHSTAGE=1 BOOTBANK3HALT=1` = 68K reads the game image via bank 3, white/red, halt.
 ifdef BOOTBANK3HALT
 MDCCFLAGS += -DBOOT_BANK3HALT
@@ -557,17 +408,9 @@ endif
 ifdef BOOTVPULSE
 MDCCFLAGS += -DBOOT_VPULSE
 endif
-# `make ... BOOTWSTAGE=1` = master paints 32X CRAM 0 at render-window stages (red/yellow/green/white).
-ifdef BOOTWSTAGE
-SHCCFLAGS += -DBOOT_WSTAGE
-endif
 # `make ... BOOTSHSTAGE=1 BOOTFBDMAHALT=1` = VDP DMA from the 32X framebuffer: white ok / red bad, halt.
 ifdef BOOTFBDMAHALT
 MDCCFLAGS += -DBOOT_FBDMAHALT
-endif
-# `make ... BOOTFBBAR=1` = master draws a magenta bar into FB rows 0-7 before every flip.
-ifdef BOOTFBBAR
-SHCCFLAGS += -DBOOT_FBBAR
 endif
 # `make ... BOOTVISRCHK=1` = after 120 game vints, white if the master's V-ISR ever ran, red if never; halt.
 ifdef BOOTVISRCHK
@@ -587,50 +430,6 @@ endif
 ifdef BOOTPKTCHK
 SHCCFLAGS += -DBOOT_PKTCHK
 MDCCFLAGS += -DBOOT_PKTCHK
-endif
-# `make ... BOOTFLIPTEST=1` = master: bar in bank A, flip, bar in bank B, flip, halt (display-path test).
-ifdef BOOTFLIPTEST
-SHCCFLAGS += -DBOOT_FLIPTEST
-endif
-# `make ... BOOTFRTCHK=1 BOOTPKTCHK=1` = the master's FRT ticks per vint, classified by the 68K at vint 120.
-ifdef BOOTFRTCHK
-SHCCFLAGS += -DBOOT_FRTCHK
-endif
-ifdef BOOTGATEOFF
-SHCCFLAGS += -DBOOT_GATEOFF
-endif
-# `make ... MISTERBOOT=1` = both MiSTer boot changes together: the slave
-# SDRAM warm-up stub in mars_start.s AND the slave cache off. SUPERSEDED —
-# the warm-up is now default (see below) and it is the only half that
-# does anything. MISTERCACHE=1 is the cache-off alone; it has never been
-# shown to help. The old note here said the default carries neither and
-# that neither fixed the hang; both statements were wrong, and six black
-# captures on 2026-09-08 were spent finding that out.
-# `make ... FLIPDEFER=1` = LOOP27 9, the 60Hz blocker: the K2FREE edge
-# guard DROPS any flip that misses the 38-line vblank, and at one
-# game-frame per vint it misses most of them (flips on ~17% of vints).
-# The FPGA RTL (srcref/S32X_MiSTer rtl/32X/VDP.sv) latches `FS <= FBCR.FS`
-# only when VBLK: real silicon DEFERS a late flip to the next vblank, it
-# does not tear. ares latches immediately mid-scan instead, so we do the
-# deferral in software — arm on the late arrival, commit at the top of
-# the next vblank. Counters: DIAG[6] arms, DIAG[5] commits.
-# `make ... BOOTABDRAW=1` = A/B WRITER PROBE (LOOP27 10b). Does the
-# MASTER's framebuffer write reach the display on the FPGA? The 68K's
-# does (s16_68kdraw), and every SH-2-driven frame is black. Master paints
-# MAGENTA at rows 8-15 as the last FB write of the window; the 68K paints
-# GREEN at rows 16-23 at vint top as the positive control, with the 32X
-# display forced on. Rows 8+ ON PURPOSE: rows 0-7 are off Mike's display,
-# which is what made the original BOOT_FBBAR reading worthless.
-# `make ... BOOTPALTEST=1` = CRAM residue test: hammer CRAM 1 yellow and
-# CRAM 2 red every window, direct stores bypassing cram_set/PALPEN. If
-# the screen changes colour our writes land; if it stays magenta/green
-# the picture is residue and nothing of ours reaches CRAM.
-ifdef BOOTPALTEST
-SHCCFLAGS += -DBOOT_PALTEST
-endif
-ifdef BOOTABDRAW
-SHCCFLAGS += -DBOOT_ABDRAW
-MDCCFLAGS += -DBOOT_ABDRAW
 endif
 # `make ... BOOTABREAD=1` = the follow-up to a NO-BAR abdraw result: the
 # master still paints its bar, and the 68K reads those FB bytes at FM=0
@@ -875,14 +674,6 @@ endif
 ifdef CARTREADDELAY
 MDCCFLAGS += -DCART_READ_DELAY=$(CARTREADDELAY)
 endif
-# rig bisect of the slim pipeline's steps (2026-09-20): drop step 3 (the
-# WRAM->VRAM DMA) or step 2 (the cart fetch) from a TILESLIM build.
-# `make line TILESLIM=1 SLIMVALUE=1` = flood MD CRAM with the slim counters (rig readout)
-# `make line TILESLIM=1 BAKECENSUS=1` = why tiles miss the bake; SDRAM 0x28F90
-# (SLIM-PIPELINE.md 1b). ares: --dump sdram:0x28F90:36:out.bin
-ifdef BAKECENSUS
-SHCCFLAGS += -DBAKE_CENSUS
-endif
 ifdef SLIMVALUE
 MDCCFLAGS += -DSLIM_VALUE
 endif
@@ -895,11 +686,6 @@ MDCCFLAGS += -DMDS_VALUE
 endif
 ifdef PALFIRST
 MDCCFLAGS += -DPAL_FIRST
-endif
-# `make line PALSTICKY=N` = keep the packet's palette flag raised for N
-# publishes after every change (race-card fix candidate, 2026-09-21)
-ifdef PALSTICKY
-SHCCFLAGS += -DPAL_STICKY=$(PALSTICKY)
 endif
 # `make line CRAMPROBE=1` = BG palette readback (CRAM vs shadow) with the picture kept
 ifdef CENSUS2
@@ -914,98 +700,6 @@ endif
 ifdef RIGBARCODE
 SHCCFLAGS += -DRIG_BARCODE
 MDCCFLAGS += -DRIG_BARCODE
-endif
-# RIGBLIT=1 (with RIGBARCODE=1 BODYPROF=1) = 2026-09-23: the barcode's byte 5
-# carries the master's last blit_half in lines (FRT ticks / 46) and byte 6
-# its groups stored / 8, instead of the publish census: the FPGA's own
-# framebuffer write rate, the number the 60 Hz floor turns on.
-ifdef RIGBLIT
-SHCCFLAGS += -DRIG_BLIT
-endif
-# RIGSLAVE=1 (with RIGBLIT): byte 6 = the slave's last blit_half in lines
-# (uncached scrap 0x38E10) instead of the master's groups/8. DEAD AS BUILT
-# (2026-09-24): reads 0 on the rig -- the slave never sets its FRT TCR
-# (s_main.c ~279), so its frt() does not tick at the master's rate. Use
-# RIGBODY's stage 3 (the master's wait for the slave half) instead.
-ifdef RIGSLAVE
-SHCCFLAGS += -DRIG_SLAVE
-endif
-# RIGBODY=1 (with RIGBLIT BODYPROF): byte 5 = the last window body in lines
-# (post pickup -> ack), byte 6 = the master's wait for the slave's half.
-ifdef RIGBODY
-SHCCFLAGS += -DRIG_BODY
-endif
-# RIGBODYA=n RIGBODYB=m (with RIGBODY): bytes 5/6 = stages n and m in lines
-# instead of total/stage 3. Stages: 0 launch, 1 master half, 2 slave pickup
-# wait, 3 slave half wait, 4 ph_ship+hs_promote, 5 apply_cram, 6 dreq_rearm,
-# 7 publish+P3 to the ack.
-# RIGPICK=1 (with RIGBLIT BODYPROF, not RIGBODY): byte 5 = the master's post
-# pickup line after its V-ISR, byte 6 = the post-ack walker slice (stage 8).
-# POSTPOLL=1 (2026-09-24): the master's idle chunk builders (tile batch, NT
-# rows) check COMM0 per tile / per row and stop when the 68K's post is
-# waiting; the rest ships next slice. Rig: the pickup lagged the post by
-# 15-70 lines because a slice ran 50-255 lines on the FPGA (RIGPICK).
-ifdef POSTPOLL
-SHCCFLAGS += -DPOST_POLL
-endif
-# ISRSPLIT=1 (2026-09-24): the V-ISR ends at the FS write; the latch wait, the
-# page restores and the publish copies run in the window body after the launch
-# (flip_finish), and blit_half waits on FLIP_PEND_U. Rig: the ISR held the
-# post pickup 28-48 lines per flip because the FPGA latches FS at vblank end.
-ifdef ISRSPLIT
-SHCCFLAGS += -DISR_SPLIT
-endif
-ifdef ISRSPLITPRE
-SHCCFLAGS += -DISR_SPLIT_PRE
-endif
-# TEXTRESTMASK=1 (2026-09-24): the post-flip text restore copies only the
-# 512 B groups the game wrote since the fresh bank last held them (+ the
-# register group), instead of the full 4 KB every flip.
-ifdef TEXTRESTMASK
-SHCCFLAGS += -DTEXT_REST_MASK
-endif
-ifdef RIGPICK
-SHCCFLAGS += -DRIG_PICK
-endif
-# RIGACK=1 (with RIGPICK): byte 5 = the window's ack line after the master's V-ISR, byte 6 = the pickup line.
-ifdef RIGACK
-SHCCFLAGS += -DRIG_ACK
-endif
-# RIGPICKBLIT=1 (with RIGPICK RIGBLIT): byte 5 = the pickup line, byte 6 = the master's blit_half lines (scatter: does a blit that starts inside the 68K's IRQ4 span run longer?).
-ifdef RIGPICKBLIT
-SHCCFLAGS += -DRIG_PICKBLIT
-endif
-# RIGTASK=1 (with RIGPICK): byte 6 = the id of the last idle task begun before
-# the pickup (1 long 2 LUT 3 maint 4 mcompose 5 maps 6 artdrain 7 strip 8 postack 9 tiles 10 NT).
-ifdef RIGTASK
-SHCCFLAGS += -DRIG_TASK
-endif
-# RIGISR=1 (with RIGPICK): byte 6 = the master's last V-ISR duration in lines.
-ifdef RIGISR
-SHCCFLAGS += -DRIG_ISR
-endif
-# RIGISR2=1 (with RIGPICK): byte 5 = the ISR's packet lift in lines, byte 6 = its CRAM paint.
-ifdef RIGISR2
-SHCCFLAGS += -DRIG_ISR2
-endif
-# RIGISR3=1 (with RIGPICK): byte 5 = the ISR's text capture in lines, byte 6 = text end -> the FS write.
-ifdef RIGISR3
-SHCCFLAGS += -DRIG_ISR3
-endif
-# RIGISR4=1 (with RIGPICK): byte 5 = the FS write -> the ISR's exit, byte 6 = the CRAM paint, lines.
-ifdef RIGISR4
-SHCCFLAGS += -DRIG_ISR4
-endif
-# RIGISR5=1 (with RIGPICK): byte 5 = restore_pages in lines, byte 6 = the packet copies -> ISR exit.
-ifdef RIGISR5
-SHCCFLAGS += -DRIG_ISR5
-endif
-# RIGVBSA=n RIGVBSB=m (with RIGPICK VBSPAN): bytes 5/6 = ISR spans between VB_SPAN marks n-1..n and m-1..m, lines.
-ifdef RIGVBSA
-SHCCFLAGS += -DRIG_VBS_A=$(RIGVBSA) -DRIG_VBS_B=$(RIGVBSB)
-endif
-ifdef RIGBODYA
-SHCCFLAGS += -DRIG_BODY_A=$(RIGBODYA) -DRIG_BODY_B=$(RIGBODYB)
 endif
 # bisect the barcode build's ingredients (it wins the level-start race on
 # every layout, 2026-09-21): BCNODMA=1 drops its 384-word DMA, BCDMAONLY=1
@@ -1085,21 +779,8 @@ ifdef SLIMCAP
 MDCCFLAGS += -DSLIM_CAP=$(SLIMCAP)
 SHCCFLAGS += -DSLIM_CAP=$(SLIMCAP)   # the emitter caps records per packet at the 68K's per-vint fetch
 endif
-# `make ... MDBATCHBLANK=N` = the batch used while the display is BLANKED
-# or off, which measurement shows is where EVERY large batch happens --
-# peak 40, 59 of 398 batches in the 33-64 bucket, histogram identical
-# across MDBATCH 24/48/320. MDBATCH governs only the non-blank path and
-# was never the cap. Defaults to 40, the historic literal.
-ifdef MDBATCHBLANK
-SHCCFLAGS += -DMD_BATCH_BLANK=$(MDBATCHBLANK)
-endif
 ifdef CARTDMAPROBE
 MDCCFLAGS += -DCART_DMA_PROBE
-endif
-# CARTDMANODMA=1: the same probe with the DMA REMOVED, to prove the
-# CPU write to the readout entry survives the frame at all.
-ifdef CARTDMANODMA
-MDCCFLAGS += -DCART_DMA_NODMA
 endif
 ifdef BOOTENTRYV
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_ENTRYV
@@ -1113,17 +794,8 @@ endif
 ifdef BOOTBURNR
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_BURN_R
 endif
-ifdef CLAIMNEW
-SHCCFLAGS += -DCLAIM_NEW
-endif
 ifdef FBXTAIL
 MDCCFLAGS += -DFBX_TAIL
-endif
-ifdef NOLANDWAIT
-SHCCFLAGS += -DNO_LAND_WAIT
-endif
-ifdef FLIPEDGEOFF
-SHCCFLAGS += -DFLIP_EDGE_OFF
 endif
 ifdef FLIPRATE
 SHCCFLAGS += -DFLIP_CENSUS -DFLIP_RATE_POST
@@ -1134,15 +806,6 @@ ifdef FLIPRATEMEAN
 SHCCFLAGS += -DFLIPRATE_MEANSUM=$(FLIPRATEMEAN)
 endif
 MDCCFLAGS += -DBOOT_VALUE -DBOOT_FBXFER
-endif
-# TEXTCAPEARLY=1 = LOOP29 145. With the slave text capture (TEXTCAPMASTER
-# OFF), the master posts the capture at its V-ISR ENTRY instead of after
-# the 68K's post; the slave waits for FM itself and copies while the
-# master waits for the post. Takes ~10 (ares) / ~20 (FPGA) lines of FB
-# reads off the pre-flip path so the FS write lands inside the guard on
-# silicon (143/144).
-ifdef TEXTCAPEARLY
-SHCCFLAGS += -DTEXTCAP_EARLY
 endif
 # TEXTCAPMASK=1 = LOOP29 147. The game's text writers mark the 4-row
 # group they write (patch_game.py TXTMASK, WRAM byte 0xFFA1A6); the shim
@@ -1182,70 +845,13 @@ endif
 ifdef TPCONSUMEFIRST
 MDCCFLAGS += -DTP_CONSUME_FIRST
 endif
-ifdef FBXLATE
-SHCCFLAGS += -DFBX_LATE
-endif
-# VBSPAN=1 = LOOP28 94. FRT stamps through flip_span's PRE-FLIP path into
-# CEN[24..28] with CEN[29] as the count, so the reader takes means. ~46
-# ticks is one scanline and the edge guard is 1650 (38 lines); the whole
-# path measured 4717 ticks (~103 lines) on the double-buffered line, which
-# was why almost every flip declined THERE. STRUCK 2026-10-12 for the line:
-# CEN[21] (past the edge) is 24 of 96 declines in demo A and CEN[23]
-# (nothing SHIPPED -- the compose did not finish a generation) is 72. The
-# edge is a minority reason; the compose not finishing is the majority.
-# Implies FLIPCENSUS.
-# PGFRESH=1 = LOOP28 95. restore_pages replays truth into the bank the
-# flip just handed us; measured 2.35 pages per flip of which only 0.10
-# came from cycle_dirt — the rest are pg_watch pages whose truth has not
-# changed since they were last written into that same bank. This skips
-# those. A page is fresh in a bank once restored into it and stops being
-# fresh in BOTH the moment cap_page sees its truth change. Needs BLITSKIP
-# (fb_draw_par is the bank label).
-# CSETCENSUS=1 = LOOP28 99. Distinct System 16 colour SETS drawn per vint
-# on the Mega Drive plane, into CEN[39] sum / [40] max / [41] samples.
-# The MD plane has 3 lines x 16 pens and an S16 background tile is 3bpp
-# (<=8 pens), so six sets fit without eviction. This says whether the
-# LRU in mdp_assign_set ever has anything to do. Implies FLIPCENSUS.
-# TEXTCAPFULL=1 = LOOP28 100. With TEXTCAPMASTER, capture text EVERY
-# frame instead of every other. The inline path's R60 halving is the
-# suspected cause of its wrong pixels; the slave path it replaces
-# captures every frame.
-# TEXTCAPDUAL=1 = LOOP28 101 diagnostic: inline capture PLUS the slave
-# post+join, so the barrier is kept and only the capture moves. Separates
-# "the join was a barrier" from "the capture is wrong". Saves nothing.
-# BGBLANK0=1 = LOOP28 104. Blank a CLEARED background cell (w == 0), not
-# just a cleared foreground one. The game zeroes the tilemap at a scene
-# change and the background kept drawing tile 0 of set 0, so the previous
-# scene survived under the new one — the missing title-screen eye.
-# NTPROBE=1 = LOOP28 106. Counts what the name-table pass sees: CEN[47]
-# background+foreground cells walked, CEN[48] of them BACKGROUND cells
-# whose tilemap word is zero, CEN[49] vints. Answers whether the walk
-# reaches the title screen's cleared cells at all.
-# DRAINCUT=N = LOOP28 107. Cap the truth drain INSIDE the flip path at N
-# pages instead of all 13, so the flip write can reach vblank. The rest
-# drains in the body. N=0 empties the flip path of it entirely.
-ifdef DRAINCUT
-SHCCFLAGS += -DDRAIN_CUT=$(DRAINCUT)
-endif
 ifdef NTPROBE
 SHCCFLAGS += -DNT_PROBE -DFLIP_CENSUS
 MDCCFLAGS += -DFLIP_CENSUS
 endif
-ifdef BGBLANK0
-SHCCFLAGS += -DBG_BLANK0
-endif
-ifdef TEXTCAPDUAL
-SHCCFLAGS += -DTEXTCAP_DUAL
-endif
-ifdef TEXTCAPFULL
-SHCCFLAGS += -DTEXTCAP_FULL
-endif
 ifdef CSETCENSUS
 SHCCFLAGS += -DCSET_CENSUS -DFLIP_CENSUS
 MDCCFLAGS += -DFLIP_CENSUS
-endif
-ifdef PGFRESH
-SHCCFLAGS += -DPG_FRESH
 endif
 ifdef VBSPAN
 SHCCFLAGS += -DVB_SPAN -DFLIP_CENSUS
@@ -1323,24 +929,6 @@ ifdef STAMP4CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP4_CENSUS
 endif
-# `make ... BOOTFLIPRATE=1 STAMP5CENSUS=1` = LOOP29 265: the master window's span (pickup->ack), its pickup offset and ack offset from the ISR entry (ticks>>10; a vint = 11.8), and vints per 64 whose window straddled an ISR entry.
-# `make ... CRAMFLUSHRAM=1` = Card K (NOTES 57, LOOP29 266): cram_flush_pen
-# gets RAMCODE + noinline (it inlines into flip_span, which lives in the CART
-# window) and its dead per-entry PEN register read is removed. CRAM contents
-# are unchanged by construction; the saving is fetch stalls and blocking reads
-# on the FPGA, which ares cannot price.
-ifdef CRAMFLUSHRAM
-SHCCFLAGS += -DCRAM_FLUSH_RAM
-endif
-# `make ... BOOTFLIPRATE=1 STAMP6CENSUS=1` = LOOP29 266: the flip path's four
-# FRT stamps -- flip_span entry (the post), before the TEXTCAP copy, after it,
-# at the guard. 128-tick steps; 1650 = 12.9.
-# `make ... TEXTCAPOFF=1` = LOOP29 266c ablation, NEVER A SHIP: the ISR's
-# 3,712-byte framebuffer text snapshot is skipped (text goes stale; only the
-# rig's presented rate means anything).
-ifdef TEXTCAPOFF
-SHCCFLAGS += -DTEXTCAP_OFF
-endif
 ifdef STAMP6CENSUS
 MDCCFLAGS += -DSTAMP_CENSUS
 SHCCFLAGS += -DSTAMP6_CENSUS
@@ -1371,26 +959,6 @@ ifdef MDSTATE
 SHCCFLAGS += -DMD_STATE
 MDCCFLAGS += -DMD_STATE
 endif
-# `make ... C1EVICT=1` = LOOP29 236 probe: under C1_NOFB let cat-1 tiles
-# evict hot ways instead of leaving the slot blank. Measured no picture
-# change on the rig (vi91) and suspected of costing windows (NOTES 30).
-ifdef C1EVICT
-SHCCFLAGS += -DC1_EVICT
-endif
-# `make ... SETCOLS=1` = PLAN-SINGLE-VINT fold 2 (LOOP29 242): the maps
-# scan from the baked per-column set extents (sh_src/setcols_md.h,
-# tools/bake_setcols.py, NOTES 21), one pass per plane instead of 2,464
-# cell reads, when the state word says the level's tilemap is on screen
-# (needs MDSTATE). SETCOLSCHECK=1 runs the live scan too and counts
-# disagreements in CEN[60] (presence) / CEN[61] (level), CEN[62] planes.
-# PHASECENSUS=1 now also splits the maps drain: CEN[56] scan ticks,
-# CEN[57] tail ticks, CEN[58] scan chunks, CEN[59] tails.
-ifdef SETCOLS
-SHCCFLAGS += -DSET_COLS
-endif
-ifdef SETCOLSCHECK
-SHCCFLAGS += -DSET_COLS_CHECK
-endif
 # `make ... C1PUNCH=1` = fold 1's hole punch (LOOP29 175/243): sprite
 # pixels of priority < 3 are not written into cells the FG holds as
 # cat-1 (a 40x28 mask from the master's name-table pass), so the MD's
@@ -1398,18 +966,6 @@ endif
 ifdef C1PUNCH
 SHCCFLAGS += -DC1_PUNCH
 SHOBJS += sh_src/cat1hole_data.o
-endif
-# `make ... C1PCELL=1` = Build C (LOOP29 246): the punch's 1:1 and zoomed
-# sprite paths fetch the hole class (and the art row) once per cell
-# crossed instead of per pixel. Needs C1PUNCH.
-ifdef C1PCELL
-SHCCFLAGS += -DC1_PCELL
-endif
-# LOOP29 247 ablations for the punch's price (never ship):
-#   C1NOPLOT=1  the slave draws every sprite unpunched (mask still written)
-#   C1NOMASK=1  the master writes no mask (the punched loops see class 0)
-ifdef C1NOPLOT
-SHCCFLAGS += -DC1_NOPLOT
 endif
 ifdef C1NOMASK
 SHCCFLAGS += -DC1_NOMASK
@@ -4472,6 +4028,20 @@ endif
 # be re-measured before it is believed.
 ARES ?= $(HOME)/src/ares-debug/build_macos/headless-ui/Release/ares-headless
 FLAGSTAMP := .build_flags
+# every tool a recipe runs sees the title (2026-10-29): a per-game input it cannot find is
+# an error, never a silent fall back to altbeast's
+export GAME
+# THE DECOMPILE HALF IS DERIVED FOR THESE TITLES ONLY (2026-10-29 smoke test). Its CPORT_*
+# tables (roots, stubs, clamps, widths, hot set), the audit tables in docs/audit/ and the
+# corpus are Altered Beast's. A port build for any other title stops HERE -- before this
+# guard, GAME=goldnaxe decompiled and shipped Altered Beast under another name. Add a title
+# once its tables exist (docs/design/FRAMEWORK.md, step 4).
+PORT_TITLES = altbeast
+ifdef PORTFULL
+ifeq ($(filter $(GAME),$(PORT_TITLES)),)
+$(error PORTFULL: no decompile tables for GAME=$(GAME) (have: $(PORT_TITLES)) -- derive its corpus docs/proof/$(GAME).c, CPORT_* tables and docs/audit tables first; see docs/design/FRAMEWORK.md)
+endif
+endif
 PORTSTAMP := .port_flags
 # INFORMATION-ONLY GOALS DO NOT RESTAMP. This $(shell) runs at PARSE time,
 # so `make lint` -- which only asks questions -- used to overwrite the
@@ -4548,10 +4118,10 @@ SHIPBLITSHIFT ?= 24
 SHIPBANDSHIFT ?= 36
 SHIPRG2SHIFT ?= 40
 SHIP_COMMON = MDBGALL=1 NTWRAP=1 SPRTRUNC=1 FBTEXT=1 PAL32=1 FMGATE=1 R60=1 \
-              CUTBLANK=1 BANDSHIFT=$(SHIPBANDSHIFT) RG2SHIFT=$(SHIPRG2SHIFT) BLITSKIP=1 DIRTYROW=1 \
+              BANDSHIFT=$(SHIPBANDSHIFT) RG2SHIFT=$(SHIPRG2SHIFT) BLITSKIP=1 DIRTYROW=1 \
               BLITSHIFT=$(SHIPBLITSHIFT) SPRLATE=1 PRHOLD=6 ROWDEFER=1 PALDELTA=1 NATIVE=1 \
               LAUNCHEARLY=1 BLITCHASE=1 EDGE42=1 HSSHIP=1 \
-              TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 MDBATCHBLANK=80 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
+              TILESLIM=1 SLIMCAP=80 SLIMWORDCAP=1 FBXECHO=1 BGBOTTOM=1 MDSREMARK=1 \
              MDSCENES=1 MDSCENECUT=1 HOLDFROMBLANK=1 ARTTAIL=1 C1MASKTAB=1 CUTPREFETCH=1 CRAMISR=1 BLITAUDITDIV=4 PUBNORB=1
 # TILESLIM=1 SLIMCAP=40 joined the line 2026-09-20 (rom/night/slim21.32x,
 # Mike: "background fixed, and frames feel consistent again"). The slim
@@ -4588,10 +4158,10 @@ ship:
 # nt1 -- Mike's play pass ("looks great no regressions"), rig 3/3, and TAGKEEP was
 # already falsified for its own purpose. WRAMCODE is still passed explicitly.
 LINE_FLAGS = FBXPORT=1 FBXSTAGE=1 FBXPEND=1 FBXISRLIFT=1 PGSKIPPKT=1 \
-             TEXTCAPMASTER=1 TEXTCAPFULL=1 GAMEGATE=1 GAMEGATEWAIT=1 \
-             TEXTCAPEARLY=1 NBUILD1=1 \
+             TEXTCAPMASTER=1 GAMEGATE=1 GAMEGATEWAIT=1 \
+             NBUILD1=1 \
              MDSPRTOP=1 C1NOFB=1 C1PUNCH=1 C1STAMP=1 CAT1MD=1 GLOWPAGE=1 \
-             MDBATCH=24 MDROUND=1 MDSTATE=1 MDSREFUSE=1 SETCOLS=1 \
+             MDBATCH=24 MDROUND=1 MDSTATE=1 MDSREFUSE=1 \
              SCANMEMO=1 SPRLIST=1 SPRRUN32=1 TEXTCAPMASK=1 TEXTMASKPKT=1 \
              TILESMD=1 ROWGEN=1
 # HOST-SIDE GATE, no emulator and no rig: does the SH-2's mdp_quant still agree
@@ -4608,61 +4178,6 @@ glyphcheck:
 .PHONY: quantcheck
 quantcheck:
 	python3 tools/quant_diff.py
-
-# THE PEN GRID, graded from pixels rather than from readback. Builds the cart
-# opened on page 6, runs it headless, and hands the frame to tools/tc_pattern.py
-# -- which checks cell flatness, that each coloured ramp reproduces the grey
-# ramp's eight levels on its own gun, and that those levels match the DAC ramp
-# m_main.c records. No rig.
-# THREE-WAY (well, two until the rig is reachable): run the cart on ares and on
-# the BlastEm fork and diff every value. Both accept the identical
-# `--dump wram:ADDR:LEN:FILE`, so one spec feeds both. BLASTEM NEEDS THE THREE
-# 32X BIOS ROMS IN ITS CWD (plain CWD-relative fopen, BLASTEM.md 37-45) --
-# without them the SH-2s never boot, and the symptom is "Unimplemented
-# instruction: 0, pc=0" with no dump file, which reads like a broken switch.
-BLASTEM ?= $(HOME)/src/blastem-0c61d0d95463/blastem
-BLDIR   ?= /tmp/bl-eval
-# THE SH-2 SIDE. Runs the hardware probe on both instruments and decomposes the
-# ticks into per-access cycles. Everything TESTCART knows from the 68K is
-# inferred; this is measured where the cache and the bus actually are.
-.PHONY: shprobe
-shprobe:
-	$(MAKE) line TESTCART=1
-	cp rom/s16.32x rom/night/tcshp.32x
-	mkdir -p $(BLDIR)
-	cd $(BLDIR) && unzip -o -q $(CURDIR)/mame/32x.zip -d . \
-	  && mv -f 32x_m_bios.bin 32X_M_BIOS.bin 2>/dev/null || true
-	cd $(BLDIR) && mv -f 32x_s_bios.bin 32X_S_BIOS.bin 2>/dev/null || true
-	cd $(BLDIR) && mv -f 32x_g_bios.bin 32X_G_BIOS.bin 2>/dev/null || true
-	cp rom/night/tcshp.32x $(BLDIR)/
-	$(ARES) rom/night/tcshp.32x --frames 1500 \
-	  --dump sdram:0x0603B000:0x40:/tmp/shp_ares.bin
-	cd $(BLDIR) && $(BLASTEM) -b 600 -m 32x \
-	  --dump sdram:0x0603B000:0x40:/tmp/shp_bl.bin tcshp.32x > /dev/null 2>&1
-	python3 tools/sh_probe_read.py ares=/tmp/shp_ares.bin blastem=/tmp/shp_bl.bin
-
-.PHONY: compare
-compare:
-	$(MAKE) line TESTCART=1
-	cp rom/s16.32x rom/night/tc3way.32x
-	mkdir -p $(BLDIR)
-	cd $(BLDIR) && unzip -o -q $(CURDIR)/mame/32x.zip -d . \
-	  && mv -f 32x_m_bios.bin 32X_M_BIOS.bin 2>/dev/null || true
-	cd $(BLDIR) && mv -f 32x_s_bios.bin 32X_S_BIOS.bin 2>/dev/null || true
-	cd $(BLDIR) && mv -f 32x_g_bios.bin 32X_G_BIOS.bin 2>/dev/null || true
-	cp rom/night/tc3way.32x $(BLDIR)/
-	$(ARES) rom/night/tc3way.32x --frames 1500 \
-	  --dump wram:0xFFF200:0x1D0:/tmp/tc_ares.bin
-	cd $(BLDIR) && $(BLASTEM) -b 600 -m 32x \
-	  --dump wram:0xFFF200:0x1D0:/tmp/tc_blastem.bin tc3way.32x > /tmp/tc_bl.log 2>&1
-	python3 tools/tc_compare.py ares=/tmp/tc_ares.bin blastem=/tmp/tc_blastem.bin
-
-.PHONY: pengrid
-pengrid:
-	$(MAKE) line TESTCART=1 TCPAGE=5
-	cp rom/s16.32x rom/night/tcgrid.32x
-	$(ARES) rom/night/tcgrid.32x --frames 1500 --screenshot 1450:/tmp/tcgrid.png
-	python3 tools/tc_pattern.py /tmp/tcgrid.png
 
 .PHONY: line
 line:
@@ -4710,14 +4225,22 @@ romset: $(GAMEROMS)/prog68k.bin $(GAMEROMS)/prog68k.asm
 # is untracked, so a release clone builds from these copies (tools/shadow_tree.sh links
 # them in when docs/proof is absent). `candidate` refuses when they drift from docs/proof,
 # so a release never builds from a different decompile than the one that was tested.
-RELEASE_INPUTS = altbeast.c datwidth.json datwidth_observed.json datwidth_observed_min.json \
+RELEASE_INPUTS = $(GAME).c datwidth.json datwidth_observed.json datwidth_observed_min.json \
                  indirect_roots.txt object_handlers_union.txt
 release-sync:
-	@for f in $(RELEASE_INPUTS); do cp docs/proof/$$f docs/decomp/$$f; done; git status --short docs/decomp
+	@for f in $(RELEASE_INPUTS); do cp docs/proof/$$f games/$(GAME)/decomp/$$f; done; git status --short games/$(GAME)/decomp
 release-check:
-	@[ ! -d docs/proof ] || for f in $(RELEASE_INPUTS); do cmp -s docs/proof/$$f docs/decomp/$$f || \
-	  { echo "release-check: docs/decomp/$$f differs from docs/proof -- run make release-sync and commit"; exit 2; }; done
+	@[ ! -d docs/proof ] || for f in $(RELEASE_INPUTS); do cmp -s docs/proof/$$f games/$(GAME)/decomp/$$f || \
+	  { echo "release-check: games/$(GAME)/decomp/$$f differs from docs/proof -- run make release-sync and commit"; exit 2; }; done
 .PHONY: release-sync release-check
+# THE PER-GAME C CONSTANTS (framework step 2, 2026-10-29): games/$(GAME)/game.py TABLES ->
+# sh_src/game_cfg.h (GAME_WRAM_*), generated, never committed. FLAGSTAMP carries GAME.
+sh_src/game_cfg.h: tools/emit_game_cfg.py games/$(GAME)/game.py kit/schema.py $(FLAGSTAMP)
+	python3 tools/emit_game_cfg.py $(GAME) > $@
+md_src/md_main.o md_src/testcart.o sh_src/port_l2.o sh_src/r60/r60_main.o sh_src/r60/r60_planes.o: sh_src/game_cfg.h
+# the title's runtime glue, #included into port_l2.c where it was cut out (framework 3e)
+sh_src/port_l2.o: games/$(GAME)/glue.c
+sh_src/port_l2.o: SHCCFLAGS += -Igames/$(GAME)
 ifdef L2NONE
 sh_src/port_l2_data.o sh_src/port_l2_frames.o sh_src/port_l2_io.o: | $(L2NONE)
 $(L2NONE):
@@ -4726,7 +4249,7 @@ endif
 .PHONY: romset
 
 port: romset
-	tools/shadow_tree.sh $(PORT_DIR)
+	GAME=$(GAME) tools/shadow_tree.sh $(PORT_DIR)
 	$(MAKE) -C $(PORT_DIR) line $(PORT_FLAGS) $(PORT_EXTRA)
 ifeq ($(PORT_SLUG),)
 	@ls -l $(PORT_DIR)/rom/s16.32x
@@ -4756,7 +4279,7 @@ CANDIDATE_FLAGS = R60PLOT4=1 R60PLOT5=1 R60TXTFAST=1 R60ROWCLR=1 R60ROWFILL=1 R6
 # The sound lanes' inputs are recorded from the user's MAME set (tools/sound_inputs.sh skips
 # what is present), then baked by the sh_src/{speech,sfx}.bin rules below.
 sound-inputs:
-	tools/sound_inputs.sh
+	GAME=$(GAME) tools/sound_inputs.sh
 .PHONY: sound-inputs
 # THE RELEASE ENTRY POINT: a fresh clone + mame/$(GAME).zip + mame on PATH -> one rom.
 release-rom:
@@ -4850,7 +4373,7 @@ check-demo: port
 	if [ "$(SWEEP)" = 1 ]; then python3 tests/demo-b/sweep_demo.py $(CHECK_DEMO_ROM); fi
 
 ship-us:
-	$(MAKE) GAME=altbeast $(SHIP_US)
+	$(MAKE) GAME=$(GAME) $(SHIP_US)   # was GAME=altbeast: a GAME=goldnaxe candidate built AB (2026-10-29)
 ship-jp:
 	$(MAKE) GAME=altbeastj $(SHIP_JP)
 
@@ -4912,7 +4435,6 @@ BUILD_HASH := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo 0)
 GITDIR := $(shell git rev-parse --git-dir 2>/dev/null || echo .git)
 sh_src/buildstamp.h: $(GITDIR)/HEAD $(wildcard $(GITDIR)/refs/heads/*)
 	@echo "#define BUILD_HASH32 0x$(BUILD_HASH)u" > $@
-sh_src/m_main.o: sh_src/buildstamp.h
 
 
 release: MDEXTRA = -O2 -fomit-frame-pointer -flto -fuse-linker-plugin
@@ -5028,7 +4550,7 @@ $(ROMDIR):
 
 # Patched arcade game body + boot RAM copy, .incbin'd by mars_start.s
 md_src/md_start.o: md_src/game_irq.h    # GAME_IRQ4 comes from the patcher
-md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h md_src/wram_code.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py tools/game_$(GAME).py $(FLAGSTAMP)
+md_src/game_body.bin md_src/boot_copy.bin md_src/game_high.bin md_src/pal_thunks.h md_src/fmgate_tab.h md_src/game_irq.h md_src/wram_code.h &: $(GAMEROMS)/prog68k.bin tools/patch_game.py games/$(GAME)/game.py $(FLAGSTAMP)
 	@GAME=$(GAME) MISSKEEP=$(MISSKEEP) SCENESEL=$(SCENESEL) MDHSCR=$(MDHSCR) MDSPRPROBE=$(MDSPRPROBE) FBSPR=$(FBSPR) FBTEXT=$(if $(FOLD5),,$(FBTEXT)) PAL32=$(PAL32) FMGATE=$(FMGATE) K2FREE=$(K2FREE) R60=$(R60) TXTWRAM=$(TXTWRAM) FBXPEND=$(FBXPEND) GAMEGATE=$(GAMEGATE) TXTMASK=$(TEXTCAPMASK)$(TEXTMASKPKT) PAL_APOST=$(PALAPOST) MISSKEEP=$(MISSKEEP) RELBANK=$(RELBANK) PASSCOUNT=$(PASSCOUNT) FRAMEDONE=$(FRAMEDONE) TAILCENSUS=$(TAILCENSUS) python3 tools/patch_game.py
 sh_src/game_body.bin: md_src/game_body.bin
 	@cp $< $@
@@ -5084,7 +4606,7 @@ sh_src/sprites_data.o: sh_src/sprites.bin
 # "overriding commands for target `&`" and the two rules fight. The .h
 # is a side effect of the .bin recipe, expressed the 3.81 way.)
 sh_src/sprbake.bin: tools/bake_sprites.py sh_src/sprites.bin \
-                $(wildcard discover/*.csv)
+                $(wildcard games/$(GAME)/discover/*.csv)
 	@python3 tools/bake_sprites.py
 sh_src/sprbake.h: sh_src/sprbake.bin
 	@:
@@ -5092,7 +4614,7 @@ sh_src/sprbake_data.o: sh_src/sprbake.bin
 
 # P3: MD sprite art blob + both indices regenerate from the census
 sh_src/md_sprart.bin sh_src/md_sprart.h md_src/md_sprart_info.h: \
-		tools/bake_mdspr.py discover/play.csv
+		tools/bake_mdspr.py games/$(GAME)/discover/play.csv
 	python3 tools/bake_mdspr.py
 sh_src/md_sprart_data.o: sh_src/md_sprart.bin
 
@@ -5222,9 +4744,13 @@ print-defs:
 	@echo "MD $(MDCCFLAGS)"
 	@echo "SH $(SHCCFLAGS)"
 shipus-defs:
-	@$(MAKE) --no-print-directory GAME=altbeast $(SHIP_US) print-defs
+	@$(MAKE) --no-print-directory GAME=$(GAME) $(SHIP_US) print-defs
 line-defs:
 	@$(MAKE) --no-print-directory $(LINE_FLAGS) shipus-defs
+# THE SHIPPING SET since the port (2026-10-29): `make candidate` = line + PORT_FLAGS +
+# CANDIDATE_FLAGS. line-defs alone is the September 68K-shim line, which nothing ships.
+candidate-defs:
+	@$(MAKE) --no-print-directory $(LINE_FLAGS) $(PORT_FLAGS) $(CANDIDATE_FLAGS) shipus-defs
 
 # `make lint` = the whole health gate. See tools/lint.sh.
 lint:
@@ -5836,7 +5362,7 @@ CPORT_WIDTH ?= 00840000=2,0000DD8A=2,0000DD8C=2,0000DCEE=2,0000DCF0=2,0000DD3C=2
 #   FUN_00014b5e (A1 = ROM object templates 0x10112/0x15164..), FUN_000180c2 (A5 = ROM
 #   0x186FA).
 CPORT_PARAMNORM ?= FUN_00002622,FUN_00003972,textram_stride_write,FUN_00001732,tilemap_unpack_hi,tilemap_unpack_lo,FUN_0000258a,FUN_00003aa4,FUN_0000f28a,FUN_0000135e,FUN_0000469c,FUN_00004612,FUN_00010394,FUN_00001192,switchD_00002ef0__caseD_f0,FUN_000037d0,FUN_00004276,FUN_00004330,FUN_00004196,FUN_000058e4,FUN_00005e04,FUN_0000f8c0,FUN_00014b5e,FUN_000180c2
-CPORT_ENV = CPORT_CLAMP=$(CPORT_CLAMP) \
+CPORT_ENV = CPORT_CORPUS=docs/proof/$(GAME).c CPORT_HAND_DIR=games/$(GAME)/hand CPORT_CLAMP=$(CPORT_CLAMP) \
 	    CPORT_STUBS='$(CPORT_STUB_WAIT),object_dispatcher->port_object_dispatch,zoom_scale_lookup->port_zoom_scale' \
 	    CPORT_HANDLERS=$(CPORT_ROOTFILE) \
 	    CPORT_OPT=$(CPORT_OPT_SET) \
@@ -5865,14 +5391,14 @@ CPORT_ENV = CPORT_CLAMP=$(CPORT_CLAMP) \
 # encodings, so it only changes when the ROM or Ghidra's function boundaries do -- and
 # it is a PREREQUISITE of the port unit, because a stale census would clamp to a width
 # the program no longer uses and say nothing about it.
-docs/audit/width_census.json: roms/altbeast/prog68k.bin docs/audit/func_ranges.txt tools/cport_widths.py
+docs/audit/width_census.json: $(GAMEROMS)/prog68k.bin docs/audit/func_ranges.txt tools/cport_widths.py
 	python3 tools/cport_widths.py --json $@
 
 # WHICH REGISTERS EACH 68K FUNCTION WRITES (2026-10-25): cport_prep's extraout feed reads
 # it to tell a register the producer passes through (fed from the value before the call)
 # from one it computes and C never returns (left to the attributed call). Same inputs and
 # the same standing as the width census above.
-docs/audit/regwrites.json: roms/altbeast/prog68k.bin docs/audit/func_ranges.txt tools/m68k_regwrites.py
+docs/audit/regwrites.json: $(GAMEROMS)/prog68k.bin docs/audit/func_ranges.txt tools/m68k_regwrites.py
 	python3 tools/m68k_regwrites.py --json $@
 
 # THE GENERATOR AND THE HAND FILES ARE INPUTS, 2026-10-11. They were not listed, so editing
@@ -5880,10 +5406,10 @@ docs/audit/regwrites.json: roms/altbeast/prog68k.bin docs/audit/func_ranges.txt 
 # something else in this list moved. That is how eleven hand-file signatures sat broken
 # against protos.h since d696b228 without a single build failing -- cport_prep checks them,
 # but only when it actually runs. Deleting build/port was the only way to find out.
-CPORT_HAND := $(wildcard sh_src/portfull/hand/*.c sh_src/portfull/hand/*.h)
-sh_src/portfull/port.o: $(CPORT_ROOTFILE) docs/proof/altbeast.c $(FLAGSTAMP) $(PORTSTAMP) docs/audit/width_census.json docs/audit/regwrites.json tools/cport_prep.py tools/cport_build.sh $(CPORT_HAND)
+CPORT_HAND := $(wildcard games/$(GAME)/hand/*.c games/$(GAME)/hand/*.h)
+sh_src/portfull/port.o: $(CPORT_ROOTFILE) docs/proof/$(GAME).c $(FLAGSTAMP) $(PORTSTAMP) docs/audit/width_census.json docs/audit/regwrites.json tools/cport_prep.py tools/cport_build.sh $(CPORT_HAND)
 	$(CPORT_ENV) CPORT_EXTRA_CFLAGS='$(PORT_TRACE_CF)' CPORT_DEFS='$(filter -D%,$(SHCCFLAGS))' tools/cport_build.sh sh_src/portfull
-	python3 tools/cport_layout.py sh_src/portfull --rom roms/altbeast/prog68k.bin \
+	python3 tools/cport_layout.py sh_src/portfull --rom $(GAMEROMS)/prog68k.bin \
 	  --wram-base 0x0602CC00 --mmio-base 0x06019000 --rom-base $(PORTROM_BASE) \
 	  --io-base 0x0602C700
 	$(CPORT_ENV) python3 tools/cport_dispatch.py sh_src/portfull

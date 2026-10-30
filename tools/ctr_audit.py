@@ -59,16 +59,17 @@ SHOW_OVERLAPS = False
 
 # name -> (file, slots or None, [accessor regexes capturing the index])
 # A counter block is audited only if it is listed here.
+# THE SHIPPING BUILD'S BLOCKS (2026-10-29: sh_src/m_main.c's DIAG/mdalloc/CEN/mds blocks
+# retired with that renderer). Slot counts are the distance to the next block in the
+# SDRAM map: R60_DIAG 0x26028E40 -> R60_DIAG2 0x26028E80 -> R60_MMASK 0x26028F00.
+R60_SH = ['sh_src/r60/r60_main.c', 'sh_src/r60/r60_planes.c']
 BLOCKS = {
-    'DIAG':        ('sh_src/m_main.c', 64,
-                    [r'\bDIAG\s*\[\s*(\d+)\s*\]', r'\bdiag_add\s*\(\s*(\d+)\s*,']),
-    'mdalloc_ctr': ('sh_src/m_main.c', 48,
-                    [r'\bmdalloc_ctr\s*\[\s*(\d+)\s*\]', r'\bMDA\s*\(\s*(\d+)\s*\)',
-                     r'\bMDA_ADD\s*\(\s*(\d+)\s*,']),
-    'mdalloc_id':  ('sh_src/m_main.c', 24, [r'\bmdalloc_id\s*\[\s*(\d+)\s*\]']),
-    'CEN':         ('sh_src/m_main.c', 64, [r'\bCEN\s*\[\s*(\d+)\s*\]']),
-    'mds_ctr':     ('sh_src/m_main.c', 6,  [r'\bmds_ctr\s*\[\s*(\d+)\s*\]']),
+    'R60_DIAG':  (R60_SH, 16, [r'\bR60_DIAG\s*\[\s*(\d+)\s*\]']),
+    'R60_DIAG2': (R60_SH, 32, [r'\bR60_DIAG2\s*\[\s*(\d+)\s*\]']),
 }
+# the files the fixed-block overlap check reads: everything the shipping build compiles
+SH_FILES = R60_SH + ['sh_src/port_l2.c', 'sh_src/port_selftest.c', 'sh_src/mars.c']
+MD_FILES = ['md_src/md_main.c']
 
 # An OWNING write accumulates: ++, +=, |=, ^=, or `= <something computed>`.
 # `DIAG[19] = 0;` in m_boot_init is an INITIALISER and owns nothing -- the
@@ -100,7 +101,7 @@ def defs_for_line():
     stamp = os.path.join(ROOT, '.build_flags')
     save = open(stamp, 'rb').read() if os.path.exists(stamp) else None
     try:
-        out = subprocess.run(['make', '--no-print-directory', 'line-defs'],
+        out = subprocess.run(['make', '--no-print-directory', 'candidate-defs'],
                              cwd=ROOT, capture_output=True, text=True).stdout
     finally:
         if save is not None:
@@ -124,10 +125,10 @@ def audit(sh_defs, md_defs, show=None):
         return cache[path]
 
     # ---- slot census -------------------------------------------------
-    for name, (path, slots, pats) in BLOCKS.items():
-        defs = md_defs if path.startswith('md_') else sh_defs
+    for name, (paths, slots, pats) in BLOCKS.items():
         writes, reads, inits = {}, {}, {}
-        for r in recs_for(path, defs):
+        for r in (r for path in paths
+                  for r in recs_for(path, md_defs if path.startswith('md_') else sh_defs)):
             s = r.text
             if s.lstrip().startswith(('*', '/*', '//')):
                 continue                       # registry comments are not sites
@@ -178,7 +179,7 @@ def audit(sh_defs, md_defs, show=None):
 
     # ---- fixed-block overlap ----------------------------------------
     blocks = []
-    for path, defs in (('sh_src/m_main.c', sh_defs), ('md_src/md_main.c', md_defs)):
+    for path, defs in [(f, sh_defs) for f in SH_FILES] + [(f, md_defs) for f in MD_FILES]:
         recs = recs_for(path, defs)
         idx_max = {}
         for r in recs:
@@ -226,7 +227,7 @@ def audit(sh_defs, md_defs, show=None):
         findings.append(('WARN', 'OVERLAP',
                          f'{n1} (0x{a1:07X}+{s1}B, {c1} '
                          f'{"declared" if d1 else "OBSERVED"}) overlaps '
-                         f'{n2} (0x{a2:07X}) — m_main.c:{l1} vs :{l2}'))
+                         f'{n2} (0x{a2:07X}) — line {l1} vs {l2}'))
     if unconfirmed and not SHOW_OVERLAPS:
         findings.append(('INFO', 'OVERLAP',
                          f'{unconfirmed} more block pair(s) overlap on OBSERVED '
@@ -284,7 +285,7 @@ def main():
         with open(BASELINE, 'w') as fh:
             fh.write('# Known counter findings, baselined %s. A NEW one fails\n'
                      '# `make lint`; these are pre-existing and tracked in the slot\n'
-                     '# registry at sh_src/m_main.c:72. Regenerate with --bless only\n'
+                     '# registry (tools/ctr_audit.py BLOCKS). Regenerate with --bless only\n'
                      '# after FIXING something, never to silence a new finding.\n'
                      % __import__('datetime').date.today())
             for sev, kind, msg in sorted(f):

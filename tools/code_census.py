@@ -6,6 +6,7 @@
     tools/code_census.py --hot           # per-vint reachable set only
     tools/code_census.py --dead          # code not in the shipping rom
     tools/code_census.py --guards        # which flags own the dead lines
+    tools/code_census.py --candidate ... # measure the SHIPPING build (make candidate)
 
 Four questions a pivoting codebase stops being able to answer by reading:
 
@@ -24,7 +25,9 @@ Four questions a pivoting codebase stops being able to answer by reading:
   DUP    blocks repeated verbatim after normalisation. Three copies of a
          span rule is three places to fix it and two places to forget.
 
-Everything is measured against THE LINE's -D set, so a 400-line function
+Everything is measured against THE LINE's -D set (or, with --candidate, the shipping
+port build's: `make candidate-defs` and the files it compiles, 2026-10-29 -- the line
+compiles sh_src/m_main.c, the candidate does not), so a 400-line function
 that is entirely probe code counts as the ~0 lines it compiles to.
 """
 import hashlib, os, re, subprocess, sys, collections
@@ -32,8 +35,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cguard import scan, parse_defs, eval_guard
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILES = [('sh_src/m_main.c', 'sh'), ('sh_src/s_main.c', 'sh'), ('sh_src/mars.c', 'sh'),
-         ('md_src/md_main.c', 'md')]
+# THE SHIPPING BUILD (make candidate, R60NEW): sh_src/r60 replaces m_main.c/s_main.c.
+# The generated port unit (sh_src/portfull/altbeast_port.c) is decompiler output and is
+# left out; its hand files are audited as code.
+CANDIDATE_FILES = [('sh_src/r60/r60_main.c', 'sh'), ('sh_src/r60/r60_planes.c', 'sh'),
+                   ('sh_src/port_l2.c', 'sh'), ('sh_src/port_selftest.c', 'sh'),
+                   ('sh_src/portfull/objdispatch.c', 'sh'), ('sh_src/mars.c', 'sh'),
+                   ('md_src/md_main.c', 'md'), ('md_src/testcart.c', 'md'),
+                   ('md_src/md_sound.c', 'md'), ('md_src/frontend.c', 'md')]
+DEFS_TARGET = 'candidate-defs'
+FILES = CANDIDATE_FILES   # the default since 2026-10-29; --candidate is kept as a no-op
 # Entry points that run once per vertical interrupt.
 VINT_ROOTS = {'shim_vblank', 'm_main', 'md_consume', 'r60_push', 's_main'}
 BRANCH = re.compile(r'\b(if|for|while|case|&&|\|\||\?)\b|\?')
@@ -46,7 +57,7 @@ def defs_for_line():
     stamp = os.path.join(ROOT, '.build_flags')
     save = open(stamp, 'rb').read() if os.path.exists(stamp) else None
     try:
-        out = subprocess.run(['make', '--no-print-directory', 'line-defs'],
+        out = subprocess.run(['make', '--no-print-directory', DEFS_TARGET],
                              cwd=ROOT, capture_output=True, text=True).stdout
     finally:
         if save is not None:
@@ -130,7 +141,12 @@ def dups(defs, win=8, minhits=2):
 
 
 def main():
+    global FILES, DEFS_TARGET
     a = sys.argv[1:]
+    if '--candidate' in a:
+        a.remove('--candidate')
+        FILES, DEFS_TARGET = CANDIDATE_FILES, 'candidate-defs'
+        print('census: the SHIPPING build (make candidate-defs), %d files' % len(FILES))
     only = a[0].lstrip('-') if a else None
     defs = defs_for_line()
     per_file, funcs, calls = collect(defs)

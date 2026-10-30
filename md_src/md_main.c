@@ -71,6 +71,7 @@ void span_fold(void);
 #endif
 #include "fmgate_tab.h"
 #include "game_irq.h"      /* generated: GAME_IRQ4, GAME_ABSW_JMP_TARGET, GAME_MCU_* */
+#include "../sh_src/game_cfg.h"   /* generated: GAME_WRAM_* (tools/emit_game_cfg.py) */
 #ifdef MDSPR
 #include "md_sprart_info.h"   /* generated: tools/bake_mdspr.py */
 #endif
@@ -179,7 +180,7 @@ extern uint16_t read_joypad(uint8_t player);
 // MCU mailboxes are per-game (game_irq.h: US 0xFFF0C0/C2/C4, JP
 // 0xFFF0D2/D0/D4 — the 68K program reads only its own MCU's addresses)
 #define MCU_COINS   (*(volatile uint8_t*)GAME_MCU_COINS)  // MCU posts inverted SERVICE
-#define MCU_BANKREQ (*(volatile uint8_t*)0xFFF095)  // game's tile bank request
+#define MCU_BANKREQ (*(volatile uint8_t*)GAME_WRAM_TILE_BANKREQ)  // game's tile bank request
 #define MCU_SNDCMD  (*(volatile uint8_t*)GAME_MCU_SND)    // sound mailbox (0xFF = idle)
 #define MCU_BUSY    (*(volatile uint8_t*)GAME_MCU_BUSY)   // screen-sync handshake
 #define TEXT_SYNC   (*(volatile uint8_t*)0xFF8002)  // text RAM shadow +2
@@ -1072,10 +1073,10 @@ static void bc_emit(void)
 			 * bit 7: the game's own video-enable (IO_MISC bit 5) */
 			(void)sh; (void)magic;
 			by[7] = (uint8_t)((n & 63) | ((md_hold ? 1u : 0u) << 6) | (((IO_MISC & 0x20) ? 1u : 0u) << 7));
-			by[8] = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7)
-			      | (*(volatile uint8_t*)0xFFF148 ? 8 : 0)
-			      | ((*(volatile uint8_t*)0xFFF031 >> 2) & 7) << 4
-			      | ((~*(volatile uint8_t*)0xFFF026 & 1) << 7));
+			by[8] = (uint8_t)((*(volatile uint8_t*)GAME_WRAM_ROUND & 7)
+			      | (*(volatile uint8_t*)GAME_WRAM_CUTSCENE ? 8 : 0)
+			      | ((*(volatile uint8_t*)GAME_WRAM_ATTRACT_STEP >> 2) & 7) << 4
+			      | ((~*(volatile uint8_t*)GAME_WRAM_MODE & 1) << 7));
 						#ifdef RIG_RATE
 						/* byte 5 = GAME frames per vint x 255 over the WHOLE RUN (255 = 60 Hz,
 						 * 128 = every other vint); byte 6 = vints elapsed / 256, so a reader can
@@ -2883,14 +2884,14 @@ static void r60_push(void) {
 			 * switched programs -> lift the mask THIS vint so the
 			 * foreign values ship; the SH-2 pauses on that landing
 			 * and re-grants only when the ambient cycle returns. */
-			uint16_t g1 = ((const uint16_t*)0xFF9000)[0x99];
-			uint16_t g2 = ((const uint16_t*)0xFF9000)[0xA1];
+			uint16_t g1 = ((const uint16_t*)GAME_WRAM_PALETTE)[0x99];
+			uint16_t g2 = ((const uint16_t*)GAME_WRAM_PALETTE)[0xA1];
 			/* 0xA6 = constant 0x100F in every scene/level census —
 			 * the transform flash is the only writer. Without it
 			 * the flash ran UNDER the mask (its ambient programs
 			 * keep the other sentinels in-set) and its 0xA6/0xAE
 			 * pulses were swallowed (Mike's flash artifacts). */
-			uint16_t g3 = ((const uint16_t*)0xFF9000)[0xA6];
+			uint16_t g3 = ((const uint16_t*)GAME_WRAM_PALETTE)[0xA6];
 #ifdef PAL_STAMP2
 			PSTAMP(0xFFA0C8);            /* sentinels read */
 #endif
@@ -2978,7 +2979,7 @@ static void r60_push(void) {
 #endif
 				ncmp++;
 				const uint32_t *mp4 = (const uint32_t*)
-					((const uint16_t*)0xFF9000 + ((uint16_t)r << 5));
+					((const uint16_t*)GAME_WRAM_PALETTE + ((uint16_t)r << 5));
 				uint32_t *sp4 = (uint32_t*)
 					((uint16_t*)PAL_SHADOW + ((uint16_t)r << 5));
 #ifdef PAL_NOCMP
@@ -3676,7 +3677,7 @@ static void r60_push(void) {
 			 * stable here — the game is suspended for the whole
 			 * handler. */
 			for (uint16_t j = 0; ok && j < K; j++) {
-				const uint16_t *p = (const uint16_t*)0xFF9000
+				const uint16_t *p = (const uint16_t*)GAME_WRAM_PALETTE
 					+ ((uint16_t)(ids[j] & 0x7F) << 5);
 				if (ids[j] & R60_PAL_RAW) {
 					if (r60_ship_words(p, 32)) ok = 0;
@@ -3696,7 +3697,7 @@ static void r60_push(void) {
 		PSTAMP(0xFFA0BA);                /* rowscroll+pal shipped */
 #else
 			for (uint16_t j = 0; ok && j < K; j++) {
-				const uint16_t *p = (const uint16_t*)0xFF9000
+				const uint16_t *p = (const uint16_t*)GAME_WRAM_PALETTE
 					+ ((uint16_t)ids[j] << 5);
 				for (uint16_t g = 0; ok && g < 8; g++) {
 					R60G();
@@ -4026,7 +4027,7 @@ void r60_late_post(void)
 		 * on the SH-2 -- a wrong table installed on the same-round
 		 * return (vi66b: black rectangles in level 1's tree row). */
 		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
-			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+			| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ROUND & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #endif
@@ -4076,7 +4077,7 @@ void shim_vblank(void) {
 	 * ares-headless --input-gameframe 0xFFA1D0 to replay an arcade-recorded
 	 * route (tools/inp_dump.lua keys the inputs the same way) at the same
 	 * game frames whatever our pass rate. ~12 cycles a vint. */
-	if (!*(volatile uint8_t*)0xFFF01C) (*(volatile uint16_t*)0xFFA1D0)++;
+	if (!*(volatile uint8_t*)GAME_WRAM_FRAME_LATCH) (*(volatile uint16_t*)0xFFA1D0)++;
 #if defined(RIG_BARCODE) && defined(NO_GAMEHIGH) && (defined(TILE_SLIM) || defined(CART_READ_AT))
 	/* THE BARCODE HAS TO BE EMITTED FROM HERE IN A PORT BUILD. bc_emit() is called from
 	 * partb_hook(), which is part of the GAME's own 68K IRQ4 chain -- and NO_GAMEHIGH means
@@ -4095,7 +4096,7 @@ void shim_vblank(void) {
 	 * launch reads the same number, and four launches give four numbers
 	 * instead of twenty-four samples of six accumulators. */
 	rr_vints++;
-	if (!*(volatile uint8_t*)0xFFF01C) rr_gframes++;
+	if (!*(volatile uint8_t*)GAME_WRAM_FRAME_LATCH) rr_gframes++;
 #endif
 #if defined(RIG_SPAN) && RIG_SPAN == 2
 	span_fold();
@@ -4153,11 +4154,11 @@ void shim_vblank(void) {
 			 * [3] credited = the game's attract bit CLEAR, [2:0] step */
 			st_seq = (uint8_t)((st_seq + 1) & 7);
 			*mars_comm14 = (uint16_t)(0xE000 | ((uint16_t)st_seq << 9)
-				| ((uint16_t)((*(volatile uint8_t*)0xFFF028 | *(volatile uint8_t*)0xFFF029) & 1) << 8)
-				| (*(volatile uint8_t*)0xFFF148 ? 0x80 : 0)
-				| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 4)
-				| ((uint16_t)(~*(volatile uint8_t*)0xFFF026 & 1) << 3)
-				| ((uint16_t)(*(volatile uint8_t*)0xFFF031 >> 2) & 7));
+				| ((uint16_t)((*(volatile uint8_t*)GAME_WRAM_P1_STATE | *(volatile uint8_t*)GAME_WRAM_P2_STATE) & 1) << 8)
+				| (*(volatile uint8_t*)GAME_WRAM_CUTSCENE ? 0x80 : 0)
+				| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ROUND & 7) << 4)
+				| ((uint16_t)(~*(volatile uint8_t*)GAME_WRAM_MODE & 1) << 3)
+				| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ATTRACT_STEP >> 2) & 7));
 		}
 	}
 #endif
@@ -5213,7 +5214,7 @@ void shim_vblank(void) {
 		 * on the SH-2 -- a wrong table installed on the same-round
 		 * return (vi66b: black rectangles in level 1's tree row). */
 		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
-			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+			| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ROUND & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #endif
@@ -5424,7 +5425,7 @@ void shim_vblank(void) {
 							 * earlier attempts lacked. */
 							static uint16_t ol_prev;
 							static uint8_t ol_state;   /* 0 wait, 1 log, 2 done */
-							uint8_t ol_st = *(volatile uint8_t*)0xFFF031;
+							uint8_t ol_st = *(volatile uint8_t*)GAME_WRAM_ATTRACT_STEP;
 							uint8_t ol_demo = (ol_st == 0x04 || ol_st == 0x0C
 							                   || ol_st == 0x14);
 							uint16_t ol_c = *(volatile uint16_t*)0xFFF02A;
@@ -5796,7 +5797,7 @@ void shim_vblank(void) {
 		 * on the SH-2 -- a wrong table installed on the same-round
 		 * return (vi66b: black rectangles in level 1's tree row). */
 		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
-			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+			| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ROUND & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #endif
@@ -5911,7 +5912,7 @@ void shim_vblank(void) {
 		 * on the SH-2 -- a wrong table installed on the same-round
 		 * return (vi66b: black rectangles in level 1's tree row). */
 		*mars_comm10 = (uint16_t)((*(volatile uint16_t*)0xFFB9FE & 0x1FFFu)
-			| ((uint16_t)(*(volatile uint8_t*)0xFFF142 & 7) << 13));
+			| ((uint16_t)(*(volatile uint8_t*)GAME_WRAM_ROUND & 7) << 13));
 #else
 		*mars_comm10 = *(volatile uint16_t*)0xFFB9FE;
 #endif
@@ -6558,7 +6559,7 @@ window_done: ;
 						FPUSH(pal_k > 3 ? pal_blk[3] : 0xFFFF);
 					}
 					for (uint16_t j = 0; ok && j < pal_k; j++) {
-						const uint16_t *p = (const uint16_t*)0xFF9000
+						const uint16_t *p = (const uint16_t*)GAME_WRAM_PALETTE
 							+ ((uint16_t)pal_blk[j] << 5);
 						for (uint16_t g = 0; g < 8; g++) {
 							while (*ctrl < 0 && --spin) ;
@@ -6571,7 +6572,7 @@ window_done: ;
 				}
 #else
 				if (pal_pr) {
-					const uint16_t *p = (const uint16_t*)0xFF9000
+					const uint16_t *p = (const uint16_t*)GAME_WRAM_PALETTE
 						+ ((pal_pr - 1) << 8);
 					for (uint16_t g = 0; g < 64; g++) {
 						while (*ctrl < 0 && --spin) ;
@@ -7174,7 +7175,7 @@ volatile uint16_t span_cls[4], span_cls_tot;
 static uint16_t span_cls_last; static uint8_t span_cls_key = 0xFF;
 void span_class(void)
 {
-	uint8_t key = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7) | (*(volatile uint8_t*)0xFFF031 & 0x1C) << 1);
+	uint8_t key = (uint8_t)((*(volatile uint8_t*)GAME_WRAM_ROUND & 7) | (*(volatile uint8_t*)GAME_WRAM_ATTRACT_STEP & 0x1C) << 1);
 	if (key != span_cls_key) { span_cls_key = key; span_cls[0] = span_cls[1] = span_cls[2] = span_cls[3] = 0; span_cls_tot = 0; }
 	uint16_t idx = *(volatile uint16_t*)0xFFA3FE;
 	uint16_t n = (uint16_t)(idx - span_cls_last);
@@ -7207,7 +7208,7 @@ void span_class(void)
  * byte 5 = chains entered mid-pass / 2, byte 6 = chains entered with a fresh frame / 2,
  * per attract step. Counted in shim_vblank before the game's IRQ4 runs. */
 volatile uint16_t span_c_mid, span_c_fresh;
-void span_vint16(void) { if (*(volatile uint8_t*)0xFFF01C) { if (span_c_mid < 511) span_c_mid++; } else { if (span_c_fresh < 511) span_c_fresh++; } }
+void span_vint16(void) { if (*(volatile uint8_t*)GAME_WRAM_FRAME_LATCH) { if (span_c_mid < 511) span_c_mid++; } else { if (span_c_fresh < 511) span_c_fresh++; } }
 #endif
 #if RIG_SPAN == 15 || RIG_SPAN == 17
 /* RIGSPAN=15 (2026-09-25 05:40, with CARTBENCH=1): instruction-fetch gauge. Every 64th
@@ -7368,7 +7369,7 @@ void span_hook(void)
 #endif
 	}
 #if RIG_SPAN == 3 || RIG_SPAN == 4 || RIG_SPAN == 5 || RIG_SPAN == 8 || RIG_SPAN == 10 || RIG_SPAN == 11 || RIG_SPAN == 16
-	{ uint8_t k = (uint8_t)((*(volatile uint8_t*)0xFFF142 & 7) | (*(volatile uint8_t*)0xFFF031 & 0x1C) << 1);   /* round | attract step (the barcode's own fields) */
+	{ uint8_t k = (uint8_t)((*(volatile uint8_t*)GAME_WRAM_ROUND & 7) | (*(volatile uint8_t*)GAME_WRAM_ATTRACT_STEP & 0x1C) << 1);   /* round | attract step (the barcode's own fields) */
 	  if (k != span_key) { span_key = k; span_h2 = 0; span_h1 = 0; span_h0 = 0;
 #if RIG_SPAN == 10 || RIG_SPAN == 11
 	    span_hA = 0; span_hB = 0; span_lsum = 0; span_lcnt = 0; span_mean = 0;
@@ -7643,7 +7644,7 @@ void main(void) {
 	// retired the 0xFFA000 sent-copy along with the diff scan that needed
 	// it, so this loop no longer runs over 8KB.
 	{
-		volatile uint32_t *pm = (volatile uint32_t*)0xFF9000;
+		volatile uint32_t *pm = (volatile uint32_t*)GAME_WRAM_PALETTE;
 		for (uint16_t i = 0; i < 1024; i++)
 			pm[i] = 0;
 		pm = (volatile uint32_t*)0xFF7000;    // sprite-list mirror

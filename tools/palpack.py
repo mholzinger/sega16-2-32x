@@ -28,7 +28,7 @@ INPUTS, both already produced by existing tooling:
     decoder bake_sprites.py uses -- so pen usage per set comes from the
     ROM, with no runtime probe.
 """
-import sys, csv, collections
+import os, sys, csv, collections
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -113,7 +113,7 @@ def pack(sets, used):
 def main():
     args = sys.argv[1:]
     harvest = args[0] if args else '/tmp/palharvest2.txt'
-    csvs = args[1:] or sorted(str(p) for p in Path('discover').glob('*.csv'))
+    csvs = args[1:] or sorted(str(p) for p in (Path('games') / os.environ.get('GAME', 'altbeast') / 'discover').glob('*.csv'))
     used, jobs = pen_usage(csvs)
     print(f"pen usage from {jobs} decode jobs in {len(csvs)} csv(s): "
           f"{len(used)} colour sets")

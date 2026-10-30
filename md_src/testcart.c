@@ -1662,6 +1662,7 @@ static void tc_hold(uint16_t units)
  */
 #ifdef R60_FRONTEND
 #include "frontend.h"
+#include "../sh_src/game_cfg.h"   /* GAME_TITLE, GAME_ROUNDS, GAME_MENU_* (games/<title>/game.py) */
 /* The game uses C000-CFFF and E000-EFFF plane tables, art below C000,
  * sprite attributes at F000 and hscroll at FC00. These two gaps are UI-owned. */
 #define TC_NAMES 0xD000u
@@ -2340,8 +2341,8 @@ static void tc_padtest(uint16_t standalone)
 void frontend_menu_screen(void)
 {
     static uint16_t round, difficulty, lives;
-    static const char *const diff_names[] = {"ARCADE", "EASY", "NORMAL", "HARD", "HARDEST"};
-    static const char *const life_names[] = {"ARCADE", "2", "3", "4"};
+    static const char *const diff_names[] = GAME_MENU_DIFFICULTY_NAMES;
+    static const char *const life_names[] = GAME_MENU_LIVES_NAMES;
     uint16_t palette[3], mode, n, selected = 0, prev = 0xFFFFu, dirty = 1;
     tc_dma_wait();
     VWIDE = 0x00000020ul;                /* CRAM read, auto-increment 2 */
@@ -2351,7 +2352,7 @@ void frontend_menu_screen(void)
     for (;;) {
         uint16_t pad, fresh;
         if (dirty) {
-            tc_frame("ALTERED BEAST - OPTIONS");
+            tc_frame(GAME_TITLE " - OPTIONS");
             tc_puts(3, 2, "STARTING ROUND"); tc_hex(3, 25, round + 1u, 1);
             tc_puts(5, 2, "DIFFICULTY"); tc_puts(5, 25, diff_names[difficulty]);
             tc_puts(7, 2, "LIVES"); tc_puts(7, 25, life_names[lives]);
@@ -2371,9 +2372,9 @@ void frontend_menu_screen(void)
         if (fresh & 2u) { selected = (selected + 1u) % 6u; dirty = 1; }
         if (fresh & (4u | 8u | 0x40u | 0x0880u)) {
             int direction = (fresh & 4u) ? -1 : 1;
-            if (selected == 0u) round = (round + 5u + direction) % 5u;
-            if (selected == 1u) difficulty = (difficulty + 5u + direction) % 5u;
-            if (selected == 2u) lives = (lives + 4u + direction) % 4u;
+            if (selected == 0u) round = (round + GAME_ROUNDS + direction) % GAME_ROUNDS;
+            if (selected == 1u) difficulty = (difficulty + GAME_MENU_DIFFICULTY_N + direction) % GAME_MENU_DIFFICULTY_N;
+            if (selected == 2u) lives = (lives + GAME_MENU_LIVES_N + direction) % GAME_MENU_LIVES_N;
             if (fresh & (0x40u | 0x0880u)) {
                 if (selected == 3u) { tc_padtest(0); prev = 0xFFFFu; }
                 if (selected == 4u) round = difficulty = lives = 0;

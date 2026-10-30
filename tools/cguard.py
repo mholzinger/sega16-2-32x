@@ -10,7 +10,7 @@ after two index collisions cost two debugging cycles each
 (LESSONS.md "Counter indices collide").
 
     from cguard import scan
-    for r in scan("sh_src/m_main.c", defines):
+    for r in scan("sh_src/r60/r60_main.c", defines):
         r.line, r.text, r.live, r.guards, r.func
 
 `live` means "this line compiles in the given -D set". `guards` is the

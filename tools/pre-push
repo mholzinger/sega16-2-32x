@@ -1,0 +1,24 @@
+#!/bin/sh
+# Refuse any push that would publish game content (2026-10-29). Installed as .git/hooks/pre-push,
+# which every worktree shares, so it guards whichever checkout and whichever copy of
+# tools/public_refresh.sh made the commit. Install: cp tools/pre-push .git/hooks/pre-push
+# Checks EVERY object the push would send, not just the tip tree: a branch whose history ever
+# held a rom is refused even if its last commit deleted it.
+NEVER='\.(32x|bs1|wav|mov|mp4)$|^rom/night/|^tests/demo-b/arcade/|^tests/gameplay/arcade/|^tests/demo-b/picbase/|^discover/cram/arcade/|^megadriveref/|^docs/proof/|^roms/|^mame/'
+remote="$1"
+z=0000000000000000000000000000000000000000
+while read lref lsha rref rsha; do
+    [ "$lsha" = "$z" ] && continue
+    if [ "$rsha" != "$z" ] && ! git merge-base --is-ancestor "$rsha" "$lsha" 2>/dev/null; then
+        echo "pre-push: $lref -> $rref is not a fast-forward of $remote; publish with tools/public_refresh.sh from a branch whose script parents the snapshot on origin/main" >&2
+        exit 1
+    fi
+    if [ "$rsha" = "$z" ]; then range="$lsha --not --remotes=$remote"; else range="$lsha --not $rsha"; fi
+    bad=$(git rev-list --objects $range | cut -d' ' -f2- | grep -E "$NEVER" | head -5)
+    if [ -n "$bad" ]; then
+        echo "pre-push: REFUSED -- $lref would publish game content to $remote:" >&2
+        echo "$bad" | sed 's/^/  /' >&2
+        exit 1
+    fi
+done
+exit 0

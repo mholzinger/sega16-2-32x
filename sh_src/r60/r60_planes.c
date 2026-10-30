@@ -15,6 +15,8 @@
  */
 #include <stdint.h>
 #include "mars.h"
+#include "sdram_map.h"
+#include "game_cfg.h"
 #include "r60_tiles.h"
 
 #define R60CODE __attribute__((section(".ramtext")))
@@ -151,8 +153,8 @@ R60PHWALKCODE static unsigned r60_stale_same(uint16_t cell, unsigned line, unsig
 #define MD_PIN(sl)     do { if (sl) md_pin[(sl)]++; } while (0)
 #endif
 
-#define TILEMAP_U      ((const volatile uint16_t *)0x26019000u)  /* 13 pages x 0x800 w */
-#define PAL_SH         ((const volatile uint16_t *)0x26027000u)
+#define TILEMAP_U      ((const volatile uint16_t *)SDRAM_TILEMAP_U)  /* 13 pages x 0x800 w */
+#define PAL_SH         ((const volatile uint16_t *)SDRAM_PAL_SH)
 #define R60_DIAG       ((volatile uint32_t *)0x26028E40u)
 #define R60_MDHOLD     (*(volatile uint16_t *)0x26028FE2u)   /* the display gate's hold for the MD (packet bit 13); the slave's word is 0x26028FE0 */
 #define R60_DIAG2      ((volatile uint32_t *)0x26028E80u)
@@ -660,7 +662,7 @@ R60ARTCODE static void r60_art(volatile uint16_t *w, unsigned slot)
 /* THE WALK, new. Plane B, the background: page 0 of the tilemap (the page selects never
  * change -- BG page 0, FG page 7), 64 columns by 32 rows of words, read as the arcade
  * means them: code and cset DO overlap in an S16B tile word and that is not a bug. */
-#define TEXT_U         ((const volatile uint16_t *)0x26026000u)  /* S16 text RAM, the port's copy */
+#define TEXT_U         ((const volatile uint16_t *)SDRAM_TEXT_U)  /* S16 text RAM, the port's copy */
 
 /* ONE PLANE'S SEVEN ROWS, FULL WIDTH. The S16 page is 64 cells wide and so is the MD name
  * table, and the game selects one page for all four quadrants (BG 0x0000, FG 0x7777), so
@@ -877,7 +879,7 @@ static void r60_pf_release(void)
 __attribute__((noinline)) static unsigned r60_pf_step(unsigned win, unsigned *art, unsigned n, unsigned cap)
 {
     extern unsigned char WRAM_BASE[];
-    unsigned step = ((const volatile uint8_t *)WRAM_BASE)[0x3031];   /* 68K 0xFFF031, the attract step */
+    unsigned step = ((const volatile uint8_t *)WRAM_BASE)[GAME_WRAM_ATTRACT_STEP - SDRAM_WRAM_68K];
     uint16_t fsel = TEXT_U[0x740u], bsel = TEXT_U[0x741u];
     unsigned r, which;
     static unsigned hold;

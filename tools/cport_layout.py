@@ -139,7 +139,7 @@ olo = min(ol) if ol else 0
 # each S16 video region at the address the renderer already reads and the port's
 # picture is the renderer's input with zero code and zero cost per frame.
 #
-# THE ADDRESSES AND THE SIZES ARE PARSED OUT OF sh_src/m_main.c, NEVER COPIED.  Each
+# THE ADDRESSES AND THE SIZES ARE PARSED OUT OF sh_src/sdram_map.h, NEVER COPIED.  Each
 # region's size is the distance to the NEXT define in that map, so a renderer-side
 # move of any one of them moves the port's layout with it.  A hand-copied constant
 # here would be a silent wrong answer the first time the SDRAM map is re-carved.
@@ -152,17 +152,17 @@ olo = min(ol) if ol else 0
 # (`0940 0940 0940 0941 0942 0943`) turned up inside the I/O PORTS page.  Internal
 # offsets are preserved exactly; only the sparse I/O ports are compacted.
 _MM = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   'sh_src', 'm_main.c')
+                   'sh_src', 'sdram_map.h')
 _rmap = {}
 for _l in open(_MM):
-    _m = re.match(r'#define\s+(TILEMAP_U|TEXT_U|PAL_SH|DIAG|SPR_SNAP|SYNC)\s'
+    _m = re.match(r'#define\s+SDRAM_(TILEMAP_U|TEXT_U|PAL_SH|DIAG|SPR_SNAP|SYNC)\s'
                   r'.*?0x([0-9A-Fa-f]{8})', _l)
     if _m and _m.group(1) not in _rmap:
         _rmap[_m.group(1)] = int(_m.group(2), 16) & 0x0FFFFFFF | 0x06000000
 _need = ('TILEMAP_U', 'TEXT_U', 'PAL_SH', 'DIAG', 'SPR_SNAP', 'SYNC')
 _miss = [n for n in _need if n not in _rmap]
 if _miss:
-    raise SystemExit('cport_layout: sh_src/m_main.c no longer defines %s -- the '
+    raise SystemExit('cport_layout: sh_src/sdram_map.h no longer defines SDRAM_%s -- the '
                      'renderer SDRAM map moved and the port layout cannot be '
                      'derived' % ', '.join(_miss))
 

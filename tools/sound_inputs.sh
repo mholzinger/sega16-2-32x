@@ -9,6 +9,9 @@
 #   sndtest/sh/speech_bank8.c   tools/speech_bake.py
 set -e
 cd "$(dirname "$0")/.."
+# THE EFFECT LIST, THE SPEECH ORDER AND THE MAME DRIVER BELOW ARE ALTERED BEAST'S. Another title
+# stops here rather than recording AB's sound into its rom (2026-10-29 smoke test).
+[ "${GAME:-altbeast}" = altbeast ] || { echo "sound_inputs: sound tables are derived for altbeast only, not GAME=$GAME -- derive its effect commands and speech order first"; exit 2; }
 command -v mame >/dev/null || { echo "sound_inputs: needs mame on PATH -- the effects and speech are recorded from the arcade"; exit 2; }
 [ -f mame/altbeast.zip ] || { echo "sound_inputs: needs mame/altbeast.zip"; exit 2; }
 # ONE LINE: it is pasted into xargs' `sh -c` below, where a newline ends the command and

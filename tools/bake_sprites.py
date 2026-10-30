@@ -355,16 +355,18 @@ def hash_key(addr, d2, bank, zoom, mask):
 
 def load_keys(paths):
     if not paths:
-        paths = [str(ROOT / 'discover')]
+        paths = [str(ROOT / 'games' / os.environ.get('GAME', 'altbeast') / 'discover')]   # per title (2026-10-29)
     files = []
     for p in paths:
+        if not os.path.exists(p):
+            sys.exit('bake_sprites: no %s -- run tools/sprite_discover.sh for this title' % p)
         if os.path.isdir(p):
             files += sorted(os.path.join(p, f) for f in os.listdir(p)
                             if f.endswith('.csv'))
         else:
             files.append(p)
     if not files:
-        sys.exit('no discovery CSVs found -- run tools/sprite_discover.sh')
+        sys.exit('no discovery CSVs in %s -- run tools/sprite_discover.sh for this title' % paths)
     out = {}
     for f in files:
         with open(f) as fh:

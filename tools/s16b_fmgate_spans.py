@@ -19,7 +19,7 @@ file — the builder decides which regions are FB-destined in the port.
 """
 import re, sys, bisect, importlib.util as ilu
 game = sys.argv[1]
-spec = ilu.spec_from_file_location('g', f'tools/game_{game}.py'); g = ilu.module_from_spec(spec); spec.loader.exec_module(g); T = g.TABLES
+spec = ilu.spec_from_file_location('g', f'games/{game}/game.py'); g = ilu.module_from_spec(spec); spec.loader.exec_module(g); T = g.TABLES
 lines = []
 for line in open(f'roms/{game}/prog68k.asm', errors='ignore'):
     m = re.match(r'\s*([0-9a-f]+):\t([0-9a-f ]+)\t(\S+)\s*(.*)$', line.rstrip())

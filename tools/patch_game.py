@@ -56,9 +56,9 @@ ROMS = ROOT / 'roms' / GAME
 # named TABLES); the US module is empty. The build fails loudly if a game
 # module is missing so an underived title never ships silently.
 import importlib.util as _ilu
-_gp = ROOT / 'tools' / f'game_{GAME}.py'
+_gp = ROOT / 'games' / GAME / 'game.py'
 if not _gp.exists():
-    raise SystemExit(f'patch_game: no tools/game_{GAME}.py — derive the tables first')
+    raise SystemExit(f'patch_game: no games/{GAME}/game.py — derive the tables first')
 _spec = _ilu.spec_from_file_location(f'game_{GAME}', _gp); _gm = _ilu.module_from_spec(_spec); _spec.loader.exec_module(_gm)
 GT = getattr(_gm, 'TABLES', {})
 
@@ -91,7 +91,7 @@ def T(key):
     if key not in GT:
         what = f'\n  {spec.layer}/{key}: {spec.what}' if spec else ''
         where = f'\n  evidence: {spec.evidence}' if spec else ''
-        raise SystemExit(f'patch_game: tools/game_{GAME}.py lacks TABLES[{key!r}] '
+        raise SystemExit(f'patch_game: games/{GAME}/game.py lacks TABLES[{key!r}] '
                          f'— derive it (tools/game_derive.py) before building{what}{where}')
     v = GT[key]
     if v is None:
@@ -1316,7 +1316,7 @@ FMGATE_ENTRIES = T('FMGATE_ENTRIES')
 FMGATE_SPANS = T('FMGATE_SPANS')
 TXTW = GT.get('TXT_WRAM_WRITERS') if TXTWRAM else []
 if TXTWRAM and not TXTW:
-    raise SystemExit(f'patch_game: TXTWRAM needs tools/game_{GAME}.py TABLES["TXT_WRAM_WRITERS"]')
+    raise SystemExit(f'patch_game: TXTWRAM needs games/{GAME}/game.py TABLES["TXT_WRAM_WRITERS"]')
 if TXTWRAM:
     assert FMGATE, "TXTWRAM builds on FMGATE (its marks live in the thunk block)"
     TXTW_SITES = {w['site'] for w in TXTW}

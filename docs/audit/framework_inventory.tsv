@@ -1,0 +1,636 @@
+# Framework inventory 2026-10-29 (tools/ask_api.sh, 7 batches, $6.01). Head+grep reads: verdicts are
+# INFERRED until a step checks them. Classes: ENGINE, ENGINE+TABLE, GAME-AB, DIAG, DEAD.
+batch	item	class	reason	ab_constants
+make	Makefile:16-20 ifeq GAME	ENGINE+TABLE	picks rom/s16 vs rom/s16_<GAME>; `GAME ?= altbeast` at :13	GAME default altbeast, rom/s16
+make	Makefile:55-66 TAILPROBE,TAILBURN	DIAG	per-vint probes, "NEVER SHIP" :52	
+make	Makefile:68-70 SPANPROBE	DEAD	-DSPAN_PROBE :69 has no #ifdef reader in md_src, sh_src, sh_src/r60	
+make	Makefile:77-79 MDVERIFY	DIAG	MD_VERIFY verifier read only by md_main.c	
+make	Makefile:84-96 IDLETOKEN,IDLEGRACE	DEAD	pre-R60 window cadence; R60 replaces that block :244-248; md_main.c legacy shim renamed unreachable (md_main.c:4068)	
+make	Makefile:103-106 CMDPROBE	DIAG	CMD_PROBE read only in mars_start.s (defsym :364)	
+make	Makefile:119-187 MDBG,MDBGFG0,MDBGALL,NTWRAP,EDGE42,SNAP1,WIN2	DEAD	MD_BG/NT_WRAP/EDGE42 readers were deleted m_main.c plus the legacy md_main shim (md_main.c:4068); WIN2 is an error under R60 :241-243; still in SHIP_COMMON :4119,4122	
+make	Makefile:188-191 CMDINT	DIAG	CMD_INT read only in mars_start.s	
+make	Makefile:205-215 K2FREE	DEAD	"R60 replaces K2FREE" errors if combined :238-240	
+make	Makefile:227-279 R60,PALDELTA,ADAPTERCAL	ENGINE	R60 gate defines -DR60 :249,256 (one vint = one frame, :216-226); PAL_DELTA is the R60 packet layout v3, needs R60 :258,272. Note :249 still adds dead -DK2_FREE -DWIN_TWO -DCUT_30	
+make	Makefile:280-298 PDFLOOR	DEAD	"TRIED AND DEAD, OFF BY DEFAULT" :280	
+make	Makefile:299-308 PALSTORM	DIAG	census, "NEVER SHIP" :304	
+make	Makefile:309-316 SPRFULL	DEAD	MAME pixel-gate arm for K2FREE :309-312, and K2FREE is dead	
+make	Makefile:317-331,369-375 VISRFLIP	ENGINE	V-ISR flip defsym VISR_FLIP read by mars_start.s; R60 forces it :372-374	
+make	Makefile:349-357 L2DIR,L2NONE	DIAG	arcade work-RAM capture for the L2 gate; a release tree links three empty blobs :350-357	docs/proof/l2m
+make	Makefile:363-368 CMDPROBE,CMDINT defsyms	DIAG	mars_start.s probes	
+make	Makefile:379-403 BOOTBEACON..BOOTSHSTAGE	DIAG	boot probes read by md_start.s, mars_start.s, mars.c	
+make	Makefile:404-406 BOOTSLVNOCACHE	DEAD	BOOT_SLVNOCACHE has no reader; mars_start.s reads SLV_CACHE_OFF (set :1321-1323)	
+make	Makefile:408-436 BOOTBANK3HALT..BOOTPKTCHK	DIAG	boot probes read by md_main.c, mars_start.s	
+make	Makefile:438-449 BOOTABDRAW,BOOTABREAD	DEAD	-DBOOT_ABDRAW :439,447 has no reader; md_main.c tests BOOT_ABREAD, which no flag defines	
+make	Makefile:487-612 BOOTMOTION..BOOTFBXB	DIAG	BOOT_* probes in md_main.c	
+make	Makefile:614-616 CENCAL	DEAD	CEN_CAL :615 has no reader	
+make	Makefile:631-646 BOOTCONSV,BOOTTILEVER	DIAG	md_main.c BOOT_CONSV/TILE_VERIFY	
+make	Makefile:667-671 TILESLIM	ENGINE	slim tile route, -DTILE_SLIM both CPUs :668-669; in SHIP_COMMON :4123; readers md_main.c:679,1184 (reachability from r60_shim.h not traced)	
+make	Makefile:675-694 CARTREAD*,SLIMVALUE,MDSVALUE	DIAG	md_main.c measurement hooks	
+make	Makefile:695-697 PALFIRST	ENGINE	in R60_LINE_FLAGS :4203; PAL_FIRST read by md_main.c	
+make	Makefile:699-777 CENSUS2..BANKPOKE	DIAG	md_main.c probes (RIGBARCODE, BC*, DMA*, SLIM*, DELIVTEST, PORTPOKE)	
+make	Makefile:786-789 SLIMCAP	ENGINE+TABLE	SLIM_CAP value; SHIP_COMMON sets 80 :4123	SLIMCAP=80
+make	Makefile:790-831 CARTDMAPROBE..FLIPRATEMEAN	DIAG	probes (BOOTENTRYV/POSTV/BURN*, FBXTAIL, FLIPRATE)	
+make	Makefile:832-880 TEXTCAPMASK,TEXTMASKPKT,TWOPOST,TPCONSUMEFIRST,NTPROBE,CSETCENSUS,VBSPAN,FLIPCENSUS,FBXPORT	DEAD	TXT_MASK feeds patch_game env :4545 for a 68K game body the port does not run (:5131-5135); TWO_POST parked; FB_XPORT is the old FB transport (LINE_FLAGS :4159); SH macros have no reader	
+make	Makefile:883-965 BOOTFBXT..CONSUMECENSUS	DIAG	BOOT_FB*, *_CENSUS probes in md_main.c	
+make	Makefile:971-1089 MDSTATE,C1PUNCH..C1MASKROUND,SCANMEMO,SPRRUN32,SPRLIST,SPRNOPIX,PLOTOFF,PORTPLOTW*,MDDEMOA*	DEAD	SH-only macros (C1_PUNCH :980, SET_COLS_MEMO :1009, SPR_LIST :1018, MD_DEMOA_SPLIT :1083) have no reader since m_main.c was deleted; LINE_FLAGS :4162-4165 still passes them	
+make	Makefile:1090-1133 PORTHOT,PORTHOT2	ENGINE+TABLE	hot-function set copied into .ramtext; PORTHOT2 in CANDIDATE_FLAGS :4268; verified by hot_check.py :4455-4457	CPORT_HOT/HOT_SET (AB function names), tools/hot_dispatch_keys.txt, ramtext cap 0x06039000 :2012
+make	Makefile:1134-1181 C1STAMPNW,C1FAST,CHEVPROBE,CHEVFIX,CACHELOCK*,C1CACHED	DEAD	SH macros with no reader (CACHE_LOCK_SHOW only in legacy md_main)	
+make	Makefile:1182-1270 BOOTVALUESEL..BOOTTAGBLUE	DIAG	md_main.c boot/palette probes	
+make	Makefile:1271-1289 PALPEN,PALVBL,BOOTABBOTH,BOOTABDRAWM,BOOTABDRAWK,FLIPDEFER	DEAD	PAL_PEN, PAL_VBLANK, BOOT_ABDRAW, BOOT_ABBOTH, FLIP_DEFER have no reader	
+make	Makefile:1290-1323 MISTERBOOT,MISTERWARM,NOSLVWARM,MISTERCACHE,SLVCACHEOFF	ENGINE	slave SDRAM warm-up is default :1309-1315; MISTER_BOOT/SLV_CACHE_OFF read by mars_start.s	
+make	Makefile:1324-1330 BOOTMDMODE,BOOTSLVALIVE	DIAG	md_main.c boot probes	
+make	Makefile:1334-1336 WRAMCODE2	DEAD	relocates the game's hot routines into 68K WRAM; the 68K runs no game under NO_GAMEHIGH :5131-5135	
+make	Makefile:1352-1370 CARTMB,CART4MB ifeq	ENGINE+TABLE	cart layout selector; sed rules :5505-5516	PORTROM_BASE 0x02300000/0x02400000, CART_PAD, .portrom 0x02300000, .portdata 0x02340000, .portcode 0x0234D000, .sfxdata 0x02292000, 256 KB alignment (port masks & 0x3FFFF :1347)
+make	Makefile:1393-1398 R60NEW	ENGINE	selects sh_src/r60 renderer :1395; the filter-out of sh_src/m_main.o,s_main.o :1394 now filters nothing	
+make	Makefile:1399-1487 R60NOFLIP,R60BARPROBE,R60MDPROBE,R60NOSPR,R60SOLID,R60REASSERT,R60ONEPEN,R60WORDPLOT,R60SOLIDSPR,R60LONGSPR,R60NOVDPOVERLAP,R60PACE,R60BAROVR,R60FBCACHED,R60TICKLATE	DIAG	board/rig bisect probes, "PROBE ONLY" :1399,1405,1411,1416,1422,1428,1433,1445,1451,1457	
+make	Makefile:1490-1492 R60SLAVEWIN	ENGINE	in R60_LINE_FLAGS :4202	
+make	Makefile:1493-1495 R60PLOT2	DEAD	superseded plot variant; PLOT3 on line :4202, PLOT4/5 in candidate :4265	
+make	Makefile:1496-1504 R60PLOT3,R60NOBARS,R60TEXT	ENGINE	in R60_LINE_FLAGS :4202-4203	
+make	Makefile:1505-1529 R60MBAND,SPLIT,WAITX,TUNE,YIELD,STEAL,STEALDRAW	DIAG	master-draws-rows feature, not in :4202 or :4265-4268; STEALDRAW is "PROBE" :1528	
+make	Makefile:1530-1532 R60SPLITFAST	DEAD	in CANDIDATE_FLAGS :4268 but only speeds r60_split_row, which belongs to the MBAND path (:1531 vs :1509), so it is a no-op there	
+make	Makefile:1533-1547 R60MBANDW,NOWAIT,FLIPA,MBTIME,NULL	DIAG	MBAND probes :1537,1540,1543,1546	
+make	Makefile:1548-1550 R60ROWFAST	ENGINE	in CANDIDATE_FLAGS :4268	
+make	Makefile:1551-1553 R60CRAMPROBE	DIAG	probe	
+make	Makefile:1554-1559 R60RECTCLR,R60ZOOM	ENGINE	in R60_LINE_FLAGS :4203	
+make	Makefile:1567-1581 R60PLANREMARK,R60FILL32,R60XOFFPROBE,R60XOFFEVEN,R60XOFFCONST	DIAG	unshipped options/probes; FILL32 "a CANDIDATE, not the line" :1563	
+make	Makefile:1582-1596 R60ARTMAX,R60FATCAP,R60FATSPAN	ENGINE+TABLE	per-window art/hold caps tuned on AB cuts :1560,1585-1590	ARTMAX 10, FATCAP 160, FATSPAN 4
+make	Makefile:1612-1614 R60PENIDX	DIAG	unshipped option, "costs pens in busy scenes" :1611	
+make	Makefile:1618-1656 R60PLOT4,KEEPSPR,CMSTATS,CRAMMASK,RAWPENS,TXTTOUCH,ROWFILL,ROWCLR,TXTFAST	ENGINE	all in CANDIDATE_FLAGS :4265-4266	
+make	Makefile:1657-1659 R60EVPROBE	DIAG	"PROBE" :1658	
+make	Makefile:1660-1674 R60TXTPLANFAST,R60SPEECHSLAVE,R60TXTLUTPAL,R60PLANFAST,R60PLANNEW	ENGINE	in CANDIDATE_FLAGS :4268	
+make	Makefile:1675-1677 R60TXTHEALLATE	DIAG	labelled PROBE :1676 yet listed in CANDIDATE_FLAGS :4268	
+make	Makefile:1678-1683 R60TXTHEAL,R60PLOT5	ENGINE	in CANDIDATE_FLAGS :4266,4268	
+make	Makefile:1687-1689 R60BLANKFILL	ENGINE+TABLE	solid-tile slots :1685-1686	slots 1016-1023
+make	Makefile:1692-1700 R60PRIO,R60IDPENS	ENGINE	FG priority from jts16_prio.v:63-86 :1691; provisional-palette pens :1695	
+make	Makefile:1704-1713 R60HOLDDIRECT,R60STAGEDIRECT,R60IDLECONSUME	ENGINE+TABLE	direct hold packet geometry :1701-1703	11264 words, 500 art records, FB 0x11800, stub 0x17000
+make	Makefile:1717-1720 R60LIVEPAD	ENGINE+TABLE	live pads and MCU coin mailbox :1714-1716	A punch, B kick, C jump, Y/START+A coin, two coins a play
+make	Makefile:1723-1725 PORTSTARTCOIN	ENGINE	START also coins, port_l2.c :2493	
+make	Makefile:1726-1731 R60PADBAR,R60LOGOPROBE	DIAG	probes	
+make	Makefile:1735-1755 R60SOUND,R60SPEECH,R60SFX	ENGINE+TABLE	music/speech/SFX lanes; banks from sndtest and build/sfx/arc_<HEX>.wav :4383-4414; SPEECH/SFX in CANDIDATE_FLAGS :4268, SOUND is not	.sfxdata 0x2FE400 :1751, sound command HEX ids, speech manifest, sndmap_data.h
+make	Makefile:1758-1760 R60CUTPF	GAME-AB	preloads the demo's transformation art pages 10/11 :1756-1757	
+make	Makefile:1766-1768 R60NORECOLOUR	DIAG	rig A/B :1763	
+make	Makefile:1769-1771 R60PALMAP	ENGINE+TABLE	in CANDIDATE_FLAGS :4268; sprite palettes 0-63 onto 16 banks :1761	64 sprite palettes -> 16 banks
+make	Makefile:1774-1793 R60PHBARS,R60LOCKPROBE,R60RIGSPLIT,R60CLRPROBE	DIAG	probes; LOCKPROBE reads enemy count 0xFFF154 (:5272-5276)	0xFFF154
+make	Makefile:1798-1806 R60CLREXT,R60CLRPRE	ENGINE	in CANDIDATE_FLAGS :4268	
+make	Makefile:1809-1818 R60CLRIDENT,R60PUNCHCACHED	DIAG	probe / "A/B ONLY" :1812	
+make	Makefile:1822-1825 R60PKTODDHI	ENGINE+TABLE	in CANDIDATE_FLAGS :4268; moves hold packet :1819-1821	FB 0x11800 -> 0x11E00
+make	Makefile:1832-1834 R60STAGEGATE	ENGINE	fix for the rig's hold-scene tear :1829-1831, in neither :4202 nor :4265-4268	
+make	Makefile:1838-1841 R60HTPROBE	DIAG	probe :1835	
+make	Makefile:1842-1844 R60PUNCHBAND	ENGINE	FG punch once per tile-row band :1826; not listed in :4202 or :4265-4268	
+make	Makefile:1849-1854 R60PRIOROW,R60PRIOROWCHECK	DEAD	alternative FG-mask form; box punch R60PUNCH2 is the candidate's :4268	
+make	Makefile:1864-1866 R60PUNCH2	ENGINE	in CANDIDATE_FLAGS :4268	
+make	Makefile:1867-1869 R60PUNCH2CHECK	DIAG	"a check rom is correctness only" :1862	
+make	Makefile:1873-1880 R60PRIOMASK,R60PRIOINLINE	DEAD	in-plot FG mask forms, superseded by PUNCH2	
+make	Makefile:1881-1892 R60SNDTEST,R60SKIPPROBE,R60PLOT5CHECK	DIAG	probes/checks	
+make	Makefile:1894-1896 R60ZOOMFAST	ENGINE	in CANDIDATE_FLAGS :4268	
+make	Makefile:1897-1910 R60ZOOMCHECK,R60RAMTEXTPEEK,R60PLOTSTATS,R60PLOT4CHECK	DIAG	checks/probes, "PROBE, NEVER RUN" :1900	
+make	Makefile:1913-1916 R60EMPTYPKT	ENGINE	in CANDIDATE_FLAGS :4266	
+make	Makefile:1917-1922 R60SPANPROBE,R60FSPROBE	DIAG	68K probes	
+make	Makefile:1923-1931 R60TXTPOOL,R60KEEPSTALE,R60CHURNCAP	ENGINE+TABLE	TXTPOOL/KEEPSTALE in R60_LINE_FLAGS :4203; text pens :1603-1606	text colours in sprite sets' pens 0 and 15; sets 12-14 measured as AB sprite use; CHURNMIN 100
+make	Makefile:1932-1934 R60FILLCLR	DIAG	undocumented, in no flag list; reader in r60_main.c	
+make	Makefile:1935-1937 R60CRAMDELTA	ENGINE	in R60_LINE_FLAGS :4202	
+make	Makefile:1940-1957 R60CRAMFLOOD,R60FZ	DIAG	board probes :1938,1948	
+make	Makefile:1958-1960 R60PLANES	ENGINE	MD background plane, in R60_LINE_FLAGS :4203	
+make	Makefile:1961-1967 R60BARSFIRST,R60RBPROBE	DIAG	probes :1946,1943	
+make	Makefile:1970-1972 GOVERNOR	ENGINE	R60 pacing divider, in R60_LINE_FLAGS :4202	
+make	Makefile:1976-1978 R60PKTPROBE	DIAG	"PROBE ONLY" :1973	
+make	Makefile:1997-2023 PORTFULL	ENGINE+TABLE	links generated port unit, layout.ld, and MD-side -DPORT_FULL :1998-2020; else branch filters port_l2 objects :2022	.tilesmd/.porttest step-up 8 KB :2004, work RAM base 0x0602CC00, MMIO 0x06019000, program ROM 0x02340000 (:1990-1992)
+make	Makefile:2077-2262 CUT30,SPRTRUNC,BLITSKIP..SPRLINE,BANDSHIFT,RG2SHIFT,BLITSHIFT,SPRLATE,GRPRELOC,TILEDEDUP,PAIRHOLD	DEAD	CUT30 is an error under R60 :242; the rest are SH blit/compose macros (BLIT_SKIP :2110, BAND_SHIFT :2190) with no reader; SHIP_COMMON :4119-4121 still passes them	
+make	Makefile:2274-2297 RIGSPAN=18,PCSAMP,WRITECOST	DIAG	rig/PC-sampling probes (md_start.s PC_SAMP, md_main.c WRITECOST_PROBE)	
+make	Makefile:2298-2436 NOBLIT,ROWSHIP,BLITHASH*,FBPROBE,FMLATE,POSTLATE,SHIMNOPUSH,SHIMBURN,PRHOLD,FBSPR*,FBTEXT,FOLD5,MDHSCR,FLICKFUSE	DEAD	SH-only macros; FBSPR/FBTEXT/MDHSCR feed the patched 68K body via patch_game :4545 and hscr_thunks :4415-4418, which the port never runs	
+make	Makefile:2449-2452 PAL32	ENGINE	-DPAL32 both CPUs :2450-2451, read by packet_fmt.h; in SHIP_COMMON :4119	
+make	Makefile:2459-2461 PKTSLIM	DEAD	excluded by K2FREE :209-210, packet family replaced by R60	
+make	Makefile:2471-2474 FMGATE	ENGINE+TABLE	FM_GATE read by md_main.c and md_start.s; patch-side gate table generated from the AB program :4544	fmgate_tab.h patch sites (tools/game_altbeast.py)
+make	Makefile:2483-2766 TXTWRAM,SPRMDFREE,SLVPAIR,LATE*,DRAWADOPT,ARMGATE,TEXTCAPSLAVE,DIRTYROW*,MTASKWHY,BGPACK2,MDSPRTOP,MDSPR_WHY,TILESMD,MDSNOFLUSH,NTHASH*,MDAWATCH,MDALLOCWHY,DRIFT*,TAGKEEP,PENHOLD,PENREPAINT,IDLEOFF,NOMAPS,NOCLEAR,NTSKIP,NTKEY8,NBUILD1,NTMAXAGE	DEAD	m_main.c allocator/blit knobs with no reader; TILESMD is skipped by NOTILESMD=1 in CANDIDATE_FLAGS :2624,4267; TAGKEEP family left the line :4156-4158; NBUILD1 still in LINE_FLAGS :4161	
+make	Makefile:2796-2798 PORTTEST	DIAG	read by sh_src/port_selftest.c	
+make	Makefile:2808-2829 PORTTIME,PORTTIMESHIFT,C1NOFB,C1FB	DEAD	no reader for PORTTIME; C1NOFB still in LINE_FLAGS :4162	
+make	Makefile:2830-2848 MDATTRACTSPLIT,MDLINES4	GAME-AB	attract tables keyed on 0xFFF022 :4191-4193, TILESMD_SKIP :4570-4572; MD_ATTRACT_SPLIT has no reader (comment only, sh_src/pal_rounds_md.h:28), MDP_LINES4 read md_main.c:703,2340	key 0xFFF022, TILESMD_SKIP 5,6,7,8,9, 4-line/3-line tables
+make	Makefile:2849-2858 MDSREFUSE	DEAD	MDS_REFUSE has no reader; in LINE_FLAGS :4163	
+make	Makefile:2859-2870 MDROUND	GAME-AB	MD_ROUND read md_main.c:4015,5202; round-keyed pen tables, round masked &7 :4566-4567; in LINE_FLAGS :4163	AB rounds 0-7, pal_rounds_md.h
+make	Makefile:2871-3004 GENSKIP,GENMAXAGE,GATEFREE,MISSKEEP,RELBANK,PASSCOUNT,FRAMEDONE*,PALAPOST,DRIFTTOL,PHASECENSUS,GENRING,PHASEGEN,LANDPARK,PACE30,LAUNCHEARLY,BLITCHASE,PENMATCH	DEAD	SH-only macros, plus exports into patch_game env :4545 for an unexecuted body; LAUNCHEARLY/BLITCHASE/PENMATCH still in SHIP_COMMON :4122,4135	
+make	Makefile:3005-3007 XDEF	DIAG	arbitrary -D passthrough	
+make	Makefile:3012-3035 CAT1MD,ARTTAIL,HSSHIP,NEARMERGE	DEAD	SH macros, no reader; CAT1MD in LINE_FLAGS :4162	
+make	Makefile:3036-3039 DRQPROBE	DIAG	DREQ truncation probe, "NEVER SHIP" :3037-3042	
+make	Makefile:3040-3150 CAT1INLINE,ROWDEFER,TILECLASS,CHAINMETER,QCHAIN,ROWGEN*,WAITPROBE,PALNOCMP,PALSTREAK,PALBACKOFF,PALROTOROFF,R60TIGHT*	DEAD	SH macros or legacy md consume knobs with no live reader; ROWGEN in LINE_FLAGS :4165, TILECLASS in SHIP_US :4135	
+make	Makefile:3152-3154 LAYOUTPROBE	DIAG	md_main.c layout probe	
+make	Makefile:3163-3344 FBXSTAGE,FBXBOTH,PGSKIPPKT,PGKEEPB,FBXISRLIFT,FBXPEND,FBXECHO,C1RTALL,C1RTN,C1REFUSEBG,BGBOTTOM,NTWIPEGEN,MDSREMARK,OFFSCREENREMARK,HOLDCOMPLETE,MDSCENES,HOLDFROMBLANK,PALQUANT,CUTPREFETCH,EARLYREC,ERECIRQ4	DEAD	old FB transport and m_main.c scene knobs (FBX_* :3164-3222 in LINE_FLAGS :4159); PAL_QUANT_RAMP retired, quant_diff.py now targets r60_quant (tools/quant_diff.py:19-20)	
+make	Makefile:3345-3395 RIGGAME,RIGWIN,GATESLOW,UPLOADSKIP,SPRSKIP,CARTBENCH	DIAG	rig/bench knobs	
+make	Makefile:3402-3410 PORTLOAD,PORTLOADN	DEAD	synthetic-load hook gone; PORT_LOAD only in a comment (sh_src/port_l2.c:2652)	
+make	Makefile:3420-3424 TCPADTEST	DIAG	test-cart pad diagnostic	
+make	Makefile:3425-3431 R60FRONTEND	ENGINE	in CANDIDATE_FLAGS :4267; md_src/frontend.c, md_start.s	
+make	Makefile:3432-3500 TESTCART,TCBISECT,TCNOTESTS,TCPAGE,RIGRATE,SH2BENCH,RIGBCEVERY,CHAINPRICE,BURSTGATE	DIAG	test cartridge and rig counters, "Never a ship" :3416	
+make	Makefile:3507-3521 WRAMCODE,WRAMCODE2,MDTWOCHOICE	DEAD	patch_game exports for the 68K game body; not executed under NO_GAMEHIGH :5131-5135	
+make	Makefile:3525-3563 RIGSPAN,DISPFORCE,VIDFORCE,MDQUIET,RIGWIN3,RIGWIN4	DIAG	rig span/window probes in md_main.c	
+make	Makefile:3565-3655 BODYPROF,BLITNOAUDIT,BLITSTOREALL,CRAMISR,BLITAUDITDIV,PUBNORB,ROWGRP,MTASKINWIN,MDSCENECUT,SLIMWORDCAP,BLANK*,WINPROF,GAMEGATE,PALSTAMP	DEAD	SH macros with no reader (SHIP_COMMON :4124 still passes CRAMISR etc.); GAMEGATE gates the game program via patch_game :4545, LINE_FLAGS :4160	
+make	Makefile:3656-3661 MDCONSUMEOFF	DIAG	md_main.c consume-off probe	
+make	Makefile:3662-3829 FBBENCH,DIRECTFB,TXTCLASS,MDSPRSPIKE,MDSPR,MDSPRDOUBLE,SELFCHAIN,NATIVE,PALSTATIC,GLOWMASK,FBBYTES,MASKPROBE	DEAD	no readers (NATIVE_FRAME :3745, PAL_STATIC); NATIVE/TXTCLASS/MDSPR/PALSTATIC still in SHIP_COMMON/SHIP_US :4121,4135; PALSTATIC tables are level-1 scenes :3752	
+make	Makefile:3830-3832 OBJLOG	DIAG	md_main.c object log	
+make	Makefile:3841-3910 GLOWPAGE,GLOWCUT,GLOWRATE,GLOWPROBE,BODYGAP,BODYSHIFT,PURGESTRESS	DEAD	SH glow/body knobs, no reader; GLOWPAGE in LINE_FLAGS :4162	
+make	Makefile:3935-3947 CACHEOFF,BODYCENSUS,TRIPCENSUS	DIAG	census/cache probes	
+make	Makefile:3949-4023 PALGLOW,MDBATCH*,EDGENOWIPE,ASSIGNNOWIPE,MDSTATIC,SPRBAKE,MDSPROFF	DEAD	no readers; SPRBAKE blob filtered out :1385 and NOSPRBAKE in PORT_FLAGS :4194; MDSPROFF filters macros nobody reads :4022; MDBATCH=24 in LINE_FLAGS :4163	
+make	Makefile:4028-4032 NOSLIM	DIAG	A/B knob :4024	
+make	Makefile:4061-4071 INFO_GOALS ifeq	ENGINE	info-only goals do not restamp flags	
+make	Makefile:4084-4086 all,release,debug (:4431-4437),clean (:4636-4641)	ENGINE	generic toolchain targets	
+make	Makefile:4143-4145 ship	ENGINE+TABLE	builds both titles in turn	altbeast, altbeastj
+make	Makefile:4173-4175 glyphcheck	DIAG	test-cart glyph audit (tools/tc_glyphcheck.py:4)	
+make	Makefile:4177-4179 quantcheck	ENGINE	tools/quant_diff.py extracts r60_quant from sh_src/r60/r60_planes.c (quant_diff.py:15-20)	
+make	Makefile:4181-4183 line	ENGINE+TABLE	`make port` still recurses through it :4244, so every build runs ship-us	GAME=altbeast via ship-us
+make	Makefile:4218-4222 $(GAMEROMS)/prog68k.bin,.asm,romset	ENGINE	parameterised by GAME (tools/romset.py $(GAME))	
+make	Makefile:4229-4234 release-sync,release-check	ENGINE+TABLE	RELEASE_INPUTS hardcoded :4227-4228	altbeast.c, datwidth.json, datwidth_observed.json, datwidth_observed_min.json, indirect_roots.txt, object_handlers_union.txt
+make	Makefile:4235-4239 L2NONE	DIAG	empty capture stubs	
+make	Makefile:4242-4257 port	ENGINE+TABLE	out-of-tree shadow build; PORT_FLAGS :4194-4197	NOSPRBAKE PORTFULL PORTMAIN PORTOS NOGAMEHIGH PORTVIDEO PORTPLAY PORTBOOT PORTCORO PORTCLK1 PORTFFBM MDATTRACTSPLIT MDLINES4 MDSPROFF PORTTILEDIRTY; R60_LINE_FLAGS :4202-4203
+make	Makefile:4259-4288 candidate,sound-inputs,release-rom	ENGINE+TABLE	one-command shipping build :4280-4288; release-rom uses NAME=$(GAME) :4278	CANDIDATE_FLAGS :4265-4268 (CARTMB=4, R60SPEECH, R60SFX, PORTHOT2), sound banks sh_src/{speech,sfx}.bin and *_tab.h :4285
+make	Makefile:4315-4332 parity,parity-oracle,parity-candidate	ENGINE+TABLE	gameplay parity harness :4290-4311	TAPE tools/inputs/level1_full.csv, ARCADE tests/gameplay/arcade_level1_full :4312-4313, DIPs 66/54 :4298, PORTGODMODE lives at 0xFFE018 :5048
+make	Makefile:4341-4343 PORT_EXTRA ifdef	DIAG	DEMO_PROBE opt-in for named probe roms	
+make	Makefile:4344-4364 check-demo	GAME-AB	gate diffs records at ticks 0xA2 0xD4 0x1FE 0x228 0x246 against tests/demo-b/arcade/aw_*.bin :4334-4336	ticks, tests/demo-b dumps
+make	Makefile:4366-4369 ship-us,ship-jp	ENGINE+TABLE	hardcode the GAME values :4367,4369	GAME=altbeast, GAME=altbeastj
+make	Makefile:4371-4377 object deps	ENGINE+TABLE	md_main.o depends on sh_src/tiles_md.bin :4373 even when NOTILESMD=1 drops the blob	
+make	Makefile:4388-4411 R60SOUND/R60SPEECH/R60SFX deps	ENGINE+TABLE	blob rules sound.bin, speech.bin, sfx.bin :4384-4414	AB sound banks (gitignored)
+make	Makefile:4415-4418 MDHSCR dep	DEAD	hscr_thunks.h from game_body.bin, used only with MDHSCR (dead, :2409-2433)	
+make	Makefile:4427-4429 sh_src/buildstamp.h	ENGINE	git hash header	
+make	Makefile:4439-4457 $(MDTARGET).lst,$(TARGET).lst	ENGINE+TABLE	region guards :4444-4454; PORTHOT2 hot_check :4455	SDRAM region base 0x06019000
+make	Makefile:4459-4471 md elf/bin and md pattern rules	ENGINE	generic	
+make	Makefile:4476-4534 $(TARGET).32x	ENGINE+TABLE	pad, dropped-section guard, 8 MB guard, build_id stamp :4529; the stamp name chain lists retired flags	CART_PAD/CART_HI, stamp offset 0x3C0, check_tilesmd_bytes.py :4534 (checks a blob NOTILESMD drops)
+make	Makefile:4536-4540 $(TARGET).elf,$(ROMDIR)	ENGINE	generic link	
+make	Makefile:4543-4559 game_body,boot_copy,game_high,pal_thunks,fmgate_tab,game_irq,wram_code rule and copies	ENGINE+TABLE	patch_game keyed on tools/game_$(GAME).py :4544; outputs mostly moot under NO_GAMEHIGH :5131-5135	per-game TABLES, patch_game env list :4545
+make	Makefile:4562-4564 sh_src/tiles.bin	ENGINE+TABLE	tools/gen_tiles.py reads $(GAMEROMS)/prog68k.bin :4562	game tile layout
+make	Makefile:4570-4575 MDATTRACTSPLIT TILESMD_SKIP, tiles_md.bin	GAME-AB	bake_tiles_md.py reads pal_rounds_md.h :4573	TILESMD_SKIP 5,6,7,8,9 :4571
+make	Makefile:4579-4583 cat1hole,cat1mask	DEAD	only for C1PUNCH (SH-only, no reader) :4578	
+make	Makefile:4586-4588 sh_src/sprites.bin	ENGINE+TABLE	gen_sprites.py with GAME :4587	game sprite ROM layout
+make	Makefile:4599-4610 sprbake,md_sprart	DEAD	both objects filtered from SHOBJS :1385; NOSPRBAKE in PORT_FLAGS :4194	
+make	Makefile:4612-4621 sh_src pattern rules,-include	ENGINE	generic	
+make	Makefile:4626-4634 tables	GAME-AB	bakes sprbake, md_sprart, palscene, mdpen from discover/palscenes harvests :4627-4634; release-rom runs it :4277	discover/palscenes/*.palsh, palharv_*.txt, *.bs1
+make	Makefile:4650-4721 sndtest,sndtest-clean	DIAG	sound lab ROM, outside the shipping build :4643-4649	
+make	Makefile:4733-4744 print-defs,shipus-defs,line-defs,candidate-defs	ENGINE+TABLE	prints the exact -D sets; shipus-defs hardcodes GAME=altbeast :4738	GAME=altbeast
+make	Makefile:4747-4752 lint,lint-generic,lint-32x	ENGINE	tools/lint.sh	
+make	Makefile:4763-4765 tilesmd-addr	DEAD	checks the .tilesmd blob address :4754-4757; candidate builds with NOTILESMD=1 :4267	
+make	Makefile:4805-4811 PORTMAIN	ENGINE+TABLE	roots the rotated frame :4806-4807	roots FUN_00003aae,FUN_0000144a,object_dispatcher,irq4_handler :4784; frame_rotated 0x0AE2; FUN_0000040e (reset 0x40E); stubs wait_frame_flag, FUN_0000e16a, walk_player_slots, FUN_00003774, FUN_00003716, FUN_0000d80e
+make	Makefile:4830-4832 PORTVIDEO	DEAD	PORT_VIDEO has no reader (comment only, sh_src/r60/r60_tiles.h:6); in PORT_FLAGS :4195	
+make	Makefile:4855-4857 PORTPLAY	ENGINE	read by port_l2.c; in PORT_FLAGS :4195	
+make	Makefile:4870-4881 PORTCLK1,PORTHIST	DEAD	PORT_CLK1/PORT_HIST have no reader; PORTCLK1 in PORT_FLAGS :4195	
+make	Makefile:4922-4938 PORTRIG,PORTGENSEED,PORTTICKFREE,PORTFFBM	DEAD	no readers; PORTTICKFREE "IT IS OFF" :4906; PORTFFBM (ff_bm was m_main.c) still in PORT_FLAGS :4195	
+make	Makefile:4944-4946 PORTIRQ4OWED	DIAG	port_l2.c experiment, "Measurement first" :4943	
+make	Makefile:4968-4973 PORTROTATE,PORTTILEHASH	DEAD	no readers; renderer they tuned is gone	
+make	Makefile:4974-4982 PORTTILEDIRTY	ENGINE+TABLE	store-site page marks into port_tile_dirty (defined sh_src/r60/r60_main.c:185), in PORT_FLAGS :4196	hand files FUN_0001a52c.c:5,26, tilemap_unpack_hi/lo, tilemap_block_04/a5, FUN_0000258a, clear_tileram; page bits
+make	Makefile:5000-5002 PORTBOOT	ENGINE+TABLE	cold-boot root :4984-4999	reset vector 0x400 bra.w 0x40E (:4986-4987)
+make	Makefile:5007-5009 PORTRESEED	DIAG	boot then seed from capture	
+make	Makefile:5026-5029 PORTCORO	ENGINE	coroutine frame on .portstack, in PORT_FLAGS :4195	
+make	Makefile:5044-5046 PORTBLANKLATCH	ENGINE+TABLE	load hold keeps latch :5031-5043; not in any flag list	latch 0xFFF01C, 0xFFF020/21
+make	Makefile:5051-5053 PORTNOPALPROBE	ENGINE	in CANDIDATE_FLAGS :4268; drops port_pal_probe scans	
+make	Makefile:5054-5129 PORTGODMODE,PORTTAPEPAD,PORTJUMP,PORTFORM,PORTROUND,PORTENDCLEAR,PORTPROBEROUND,PORTHOLDLIVES,PORTKINDCENSUS,PORTPFSLOT	DIAG	measurement fixtures, "Never on a candidate" :5076,5082,5088,5094	0xFFE018 lives, 0xFFF028 bit0, 0xFFC06B form, 0xFFF14E/0xFFF142 round, 0xFFF152 lock, 0x1A406 crystal-ball scene
+make	Makefile:5136-5164 NOGAMEHIGH,PORTOS	ENGINE	68K keeps shim/VDP only :5131-5135; -Os for the 716-function closure :5157-5160; both in PORT_FLAGS :4194	
+make	Makefile:5166-5372 CPORT_* variable tables	GAME-AB	decompiler fixups keyed on AB addresses	CPORT_CLAMP FFFFF142,FFFFF028,FFFFF400 :5209; CPORT_HI :5231; CPORT_AREG 13,7 :5255; CPORT_DREG FUN_00004870 :5268; CPORT_ANYNORM FUN_0000d868 :5289; CPORT_WIDTH ~50 addresses :5337; CPORT_PARAMNORM ~24 functions :5355; CPORT_ROOTFILE docs/proof/indirect_roots.txt :4776
+make	Makefile:5274-5276 R60LOCKPROBE CPORT_F154LOG	DIAG	logs writes to 0xFFF154	
+make	Makefile:5385-5406 width_census.json,regwrites.json,port.o rule	ENGINE+TABLE	generators read roms/altbeast/prog68k.bin :5385,5392,5403 and docs/proof/altbeast.c :5401	altbeast paths, --wram-base 0x0602CC00, --mmio-base 0x06019000, --io-base 0x0602C700 :5403-5405
+make	Makefile:5413-5470 PORTTRACE,PORTZOOM,PORTENDURE,PORTSEED,PORTSKIP,PORTWATCH,PORTBODY,PORTREGS	DIAG	seeded-frame and trace probes :5408-5470	
+make	Makefile:5473-5487 objdispatch.o,defs.o	ENGINE	generated-unit support objects	
+make	Makefile:5483-5487 dispregs.o	DIAG	arcade register-file table for PORTREGS, linked unconditionally :2000	docs/proof/l1_vectors.jsonl
+make	Makefile:5489-5491 l2seed.o	GAME-AB	seeds the gate from the AB capture (tools/cport_l2seed.py), linked unconditionally :2000	
+make	Makefile:5497-5502 FLAGSTAMP ifndef	ENGINE	build-flag and port-flag stamps	
+make	Makefile:5505-5516 mars6.ld,mars4.ld	ENGINE+TABLE	sed-generated linker scripts :5506-5515	0x02292000 .sfxdata, 0x02300000 .portrom, 0x02340000 .portdata, 0x0234D000 .portcode, .sounddata 0x022F8000 limit
+md	md_src/boot_copy.bin	GAME-AB	Generated from the game's prog68k.bin by patch_game.py (Makefile:4544, copied to sh_src at Makefile:4551). It is gitignored (.gitignore:2).	the rebased AB boot code
+md	md_src/common.h	ENGINE	Plain MD/32X register and COMM macros with no game content (common.h:1-62).	
+md	md_src/fmgate_tab.h	GAME-AB	Generated by patch_game.py (fmgate_tab.h:1). It holds AB thunk targets: FMGATE_THUNK_ADDR 0xBCF4 and FMGATE_SPIN_ADDR 0xBF9A (fmgate_tab.h:6-8). The thunk words embed AB ROM addresses such as 0x9278B8 (fmgate_tab.h:25-29). The `txtw[]` table is empty for AB (fmgate_tab.h:17-18).	
+md	md_src/font.s	ENGINE	A 45-glyph font table with no game content. The boot code uploads it (md_start.s:101-111) and the frontend reads it (testcart.c:1837).	
+md	md_src/font.o	DEAD	Stale build artifact dated Oct 4 (listing). `*.o` is gitignored (.gitignore:10), and the build regenerates it.	
+md	md_src/frontend.c	ENGINE	The mailbox state machine (request, grant, return) uses only COMM registers (frontend.c:12-39). It is compiled in the candidate (Makefile:4267, 3425-3429).	
+md	md_src/frontend.h	ENGINE	The mailbox protocol constants (frontend.h:6-11). The one AB-flavoured value is FE_TITLE 0xB601 (frontend.h:11), a title-phase token the game adapter supplies.	
+md	md_src/game_body.bin	GAME-AB	The patched AB program body, generated (Makefile:4544, 4546).	
+md	md_src/game_high.bin	GAME-AB	The patched AB high ROM section, generated (Makefile:4548-4550).	
+md	md_src/game_irq.h	ENGINE+TABLE	Generated per game by patch_game.py (game_irq.h:1). It is already a per-game table.	GAME_IRQ4 0x902AAC; GAME_ABSW_JMP_TARGET 0x90047E; GAME_MCU_BUSY/COINS/SND 0xFFF0C0/C2/C4 (game_irq.h:2-8)
+md	md_src/hscr_thunks.h	GAME-AB	Generated by patch_game.py (MDHSCR) for AB's scroll stores. It holds baked 68K opcodes that write 0xFF8E98 and 0xFF8E9A (hscr_thunks.h:5-10), installed at 0xFFB300.	
+md	md_src/md_main.c	ENGINE+TABLE	The generic engine is the boot, the packet consume, the VDP DMA and the shim hookup (md_main.c:2577-2580, 7948). AB state is hard-coded in the body. It also keeps a legacy staged-consume branch (md_main.c:2376-2533), and its R60_PKT_PROBE, R60_FSPROBE and RIGSPAN probe blocks are DIAG (md_main.c:1397-1420, 7168).	0xFFF142 round, 0xFFF148 cutscene, 0xFFF026 play, 0xFFF031 attract step, 0xFFF02A scene timer, 0xFFF01C frame flag, 0xFFF144, 0xFFF028/9 (md_main.c:4019-4160, 4208); MCU_BANKREQ 0xFFF095 (md_main.c:182); idle-PC range 0x903980-0x903990 (md_main.c:1027, 4687); TILESMD_CART 0x26A000 (md_main.c:732); palette WRAM 0xFF9000 and sprite regs 0xFF8000+0x740/0x7C0 (md_main.c:3172, 3560, 3978); AB colour indexes 0x99/0xA1/0xA6 (md_main.c:2886-2893); BTN1-3 to A/B/C pad map (md_main.c:203)
+md	md_src/md_main.d	DEAD	A stale dependency file from Oct 4. It lists md_main.o, common.h and the headers (md_main.d:1-5). It is gitignored (.gitignore:11) and regenerated.	
+md	md_src/md_main.o	DEAD	A stale Oct 4 object (listing). It is gitignored and rebuilt, and Makefile:1376-1377 wildcards the sources.	
+md	md_src/md_sound.c	ENGINE+TABLE	A generic Z80 streaming player and LZSS reader, built only with R60SOUND (md_sound.c:11). Its contract values are fixed by the sound blob and linker script.	SND_CART_BASE 0x260000 (md_sound.c:16); sound command byte 0x5A00
+md	md_src/md_sprart_info.h	GAME-AB	Generated by bake_mdspr.py for AB's sprite art (md_sprart_info.h:1-13). It holds AB's per-scene blob offsets and the two scenes `normal` and `boss`.	
+md	md_src/md_start.o	DEAD	A stale Oct 4 object, gitignored and rebuilt.	
+md	md_src/md_start.s	ENGINE+TABLE	The 68K boot sequence is generic: clear RAM, copy .data, init the VDP, upload the font and set up the vector table (md_start.s:42-111). The AB hook is GAME_IRQ4 from game_irq.h (md_start.s:2). The R60_FRONTEND and TC_PADTEST blocks (md_start.s:278-361) are optional.	GAME_IRQ4; boot-time CRAM debug colours
+md	md_src/md_z80_player.h	ENGINE	Generated from player.asm by z80_pack.py (md_z80_player.h:1-12). The Z80 ring-buffer addresses are fixed and the header has no AB content.	
+md	md_src/md.ld	ENGINE+TABLE	The linker script is generic (md.ld:1-79). The WRAM memory map is shared with the game, and the fences are hard-coded.	ROM origin 0x8C0410 (md.ld:5); .data at 0xFF0100 (md.ld:17); PAL_SHADOW fence 0xFF6000 (md.ld:44); WRAMCODE2 region 0xFF4600; boot-stack fence 0xFF4C00 and 0xFF4E00 under testcart
+md	md_src/packet_fmt.h	ENGINE+TABLE	The FB packet format (layer regs, rowscroll, palette, sprites) is the S16 shared shape (packet_fmt.h:123-131). The addresses are the project's fixed layout.	FBX_PKT_MD 0x85E000 and FBX_PUB_MD 0x85E7F8 (packet_fmt.h:181-184); FBX_TXM_MD 0x85E758 (packet_fmt.h:195); PAL_SHADOW 0xFF6000 (packet_fmt.h:239); S16 layer regs at 0xFF8000+0x740 and rowscroll at +0x7C0 (packet_fmt.h:123, 131)
+md	md_src/pal_thunks.h	GAME-AB	Generated by patch_game.py. It holds AB palette-write thunks that target 0xFF9000 and carry AB colour constants (pal_thunks.h:1-20). The PAL32 bitmap at 0xFFBA00 is the engine part (pal_thunks.h:4).	
+md	md_src/r60_shim.h	ENGINE+TABLE	The vint shim: flip, consume and DONE post (r60_shim.h:1-31). It is #included from md_main.c:7948 under R60_NEW. Probe blocks inside it (SPANPROBE, MDPROBE, HTPROBE, FSPROBE, SKIPPROBE) are DIAG.	0xFFB0F0 vint counter; 0xFFA084 and 0xFFA400 staging scratch (r60_shim.h:45-47); 0xC00008 VDP counter; COMM0 0xC000 DONE token
+md	md_src/sega_blob.bin	ENGINE	The one tracked .bin (.gitignore:4). Makefile:4553 copies it into the boot image. It is 1040 bytes, so I infer it is the generic 32X boot or Sega header blob. I did not open it.	
+md	md_src/sound_tab.h	GAME-AB	Generated by sound_blob.py from the AB sound lab (Makefile:4384-4385). It holds AB's 8 rendered tracks and 73 per-command streams, with SND_BLOB_BYTES 416098 (sound_tab.h:1-6).	
+md	md_src/testcart.c	DIAG	The test-cart suite runs with TEST_CART and halts (testcart.c:1-25). It is also compiled under R60_FRONTEND (testcart.c:27), because it holds `frontend_menu_screen` (testcart.c:2340), which the candidate links (Makefile:4267). Scratch lives at 0xFFE000-0xFFE9FF (testcart.c:31-35). The menu screen is the one ENGINE part and should move into frontend.c.	
+md	md_src/testcart.d	DEAD	A stale Oct 4 dependency file (testcart.d:1-2), gitignored and regenerated.	
+md	md_src/testcart.o	DEAD	A stale Oct 4 object, gitignored and rebuilt.	
+md	md_src/tile_thunks.h	GAME-AB	Generated by patch_game.py. It holds AB tile dirty-bit thunks with baked FB tilemap addresses such as 0x852518 and 0x85D230 (tile_thunks.h:1-20).	
+md	md_src/wram_code.h	ENGINE+TABLE	Generated, and empty for AB because WRAMCODE is off (wram_code.h:1-4). The mechanism is generic.	WRAM_CODE_BASE 0xFF5000
+sh	sh_src/mars_start.s	ENGINE+TABLE	Generic SH-2 boot, vectors, hotcopy and ctx-switch (mars_start.s:1-3, 1436, 1483), but it embeds the AB 68K boot copy and bank layout	68K boot RAM copy 0xFFB400/0xFFB408 (:11,128), rebased game 0x300000 (:118), jmptab 0x40410/0x40422 (:133-134), sega_blob/boot_copy/md_start bins (:109-136). Stale probe words 0x26028D80, 0x260280E4, 0x260280E8 (:853-863) are DEAD, left by the old renderer.
+sh	sh_src/mars.c	ENGINE	Chilly Willy 32X lib; Hw32xInit is called at r60/r60_main.c:5763, the other Hw32x*/HwMd* functions are never called (mars.c:12-269)	
+sh	sh_src/mars.h	ENGINE	32X register map, no game content (mars.h:35-60)	
+sh	sh_src/string.c	ENGINE	strlen/strnlen for mars.c (string.c:1-2)	
+sh	sh_src/string.h	ENGINE	strlen/strnlen declarations (string.h:6-7)	
+sh	sh_src/sdram_map.h	ENGINE+TABLE	SDRAM shadow map shared by renderer and generator (sdram_map.h:1-14)	TILEMAP_U 0x26019000 (13 pages), TEXT_U 0x26026000, PAL_SH 0x26027000, DIAG 0x26028000, SPR_SNAP 0x26028400 (64 x 8 words), SYNC 0x26028800
+sh	sh_src/port_l2.c	ENGINE+TABLE	Mixed. Engine: coroutine, call68, frame_wait, blank, l2 driver (port_l2.c:1744-1990, 3037-3487). Game logic: score, spawn walk, player slots, despawn (:457-835). It should be split into engine and a game file	68K addrs 0xFFF026/028/029, score blocks 0xFFE000/0xFFE080 (:459-479), frame latch 0xFFF01C and 0x397E (:1918-1934), DIP 0xC42001=0x54 / 0xC42003=0x66 (:2767-2769), 57 FUN_<addr> refs, 8 altbeast/prog68k refs
+sh	sh_src/port_rom_data.s	ENGINE+TABLE	incbin of the game's program image into .portrom (port_rom_data.s:16-20)	path roms/altbeast/prog68k.bin, 256 KB .portrom
+sh	sh_src/sound_data.s	ENGINE+TABLE	Guarded incbin of the sound, speech and SFX blobs (sound_data.s:6-23)	sh_src/sound.bin, speech.bin, sfx.bin, sections .sounddata/.sfxdata
+sh	sh_src/tiles_data.s	ENGINE+TABLE	incbin of decoded tile art (tiles_data.s:5-6); r60_planes.c:160 and r60_main.c:189 consume it by name	symbol _altbeast_tiles, tiles.bin, 16384 tiles x 64 B chunky 8bpp
+sh	sh_src/sprites_data.s	ENGINE+TABLE	incbin of sprite ROM (sprites_data.s:4-6); consumed at r60_main.c:188	symbol _altbeast_sprites, sprites.bin, 512K words
+sh	sh_src/speech_tab.h	GAME-AB	Generated table of 22 AB utterances keyed by sound command (speech_tab.h:1-25); included at r60_speech.inc:15	
+sh	sh_src/sfx_tab.h	GAME-AB	Generated table of 61 AB YM effects, cmd 0x81 and up (sfx_tab.h:1-12); included at r60_speech.inc:17	
+sh	sh_src/tiles_md.h	GAME-AB	Generated blob shape for 11 AB scenes; still included by md_src/md_main.c:709 (tiles_md.h:3-5)	
+sh	sh_src/port_selftest.c	DIAG	Generated decompiled-function self-test, compiled only under PORT_TEST (port_selftest.c:1-15, Makefile:2797)	
+sh	sh_src/port_l2_data.s	DIAG	L2 gate seed, AB work RAM at capture frame 9000 (port_l2_data.s:1-18)	
+sh	sh_src/port_l2_frames.s	DIAG	L2 gate per-frame delta blob from AB frames 9000-9030 (port_l2_frames.s:1-21)	
+sh	sh_src/port_l2_io.s	DIAG	L2 gate per-frame I/O capture (port_l2_io.s:1-23)	
+sh	sh_src/dreq_proof.h	DIAG	DREQ transport proof; testcart.c:29 depends on DRQ_N, but no SH-side includer remains (dreq_proof.h:1-25)	
+sh	sh_src/fmdl_proof.h	DIAG	FM-list transport proof, orphaned: no includer (fmdl_proof.h:1-12)	
+sh	sh_src/sh_probe.h	DIAG	SH-2 hardware probe, referenced by md_src/testcart.c:882; no SH includer (sh_probe.h:1-20)	
+sh	sh_src/port_load.h	DIAG	Synthetic port-load measurement, no includer (port_load.h:1-20; Makefile:3401)	
+sh	sh_src/game_high_data.s	DEAD	Rebased 68K image omitted by the candidate; PORT_FLAGS has NOGAMEHIGH=1 (Makefile:4194, game_high_data.s:25)	
+sh	sh_src/tiles_md_data.s	DEAD	425 KB MD tile blob, off in the candidate (NOTILESMD=1, Makefile:4267; guard at tiles_md_data.s:6)	
+sh	sh_src/sprbake_data.s	DEAD	Baked-sprite blob, filtered out of every link (Makefile:1385; NOSPRBAKE=1 at :4194)	
+sh	sh_src/sprbake.h	DEAD	Constants for the sprbake blob, no includer (sprbake.h:1-12)	
+sh	sh_src/md_sprart_data.s	DEAD	MD sprite art blob, filtered out (Makefile:1385); SH-2 never reads it (md_sprart_data.s:5-6)	
+sh	sh_src/md_sprart.h	DEAD	Index for the same blob, no includer (md_sprart.h:1-14)	
+sh	sh_src/cat1hole_data.s	DEAD	Hole map for the old renderer's cat1 punch; the consumer m_main.c is deleted (cat1hole_data.s:1-8, Makefile:981)	
+sh	sh_src/cat1hole.h	DEAD	No includer (cat1hole.h:1-8)	
+sh	sh_src/cat1map.h	DEAD	No includer (cat1map.h:1-4)	
+sh	sh_src/cat1vis.h	DEAD	No includer (cat1vis.h:1-4)	
+sh	sh_src/cat1mask.h	DEAD	No includer (cat1mask.h:1-4); Makefile:4582 still builds it	
+sh	sh_src/pal_scenes.h	DEAD	Old static-palette scenes, no includer (pal_scenes.h:1-5)	
+sh	sh_src/pal_scenes_md.h	DEAD	Old static MD pen tables, no includer (pal_scenes_md.h:1-4)	
+sh	sh_src/pal_rounds_md.h	DEAD	Per-round pen tables; only a bake-tool input (Makefile:4573), the candidate has NOTILESMD (pal_rounds_md.h:1-12)	
+sh	sh_src/glow_tab.h	DEAD	Level-1 PALGLOW animators, no includer (glow_tab.h:1-5)	
+sh	sh_src/mdlines_md.h	DEAD	Per-round MD colour-line tables, no includer (mdlines_md.h:1-9)	
+sh	sh_src/tilecram.h	DEAD	Old per-scene CRAM tables, no includer (tilecram.h:1-4)	
+sh	sh_src/tile_classes.h	DEAD	Old fade-stable palette classes for the retired allocator, no includer (tile_classes.h:1-7)	
+sh	sh_src/setcols_md.h	DEAD	Old colour-set column extents, no includer (setcols_md.h:1-5)	
+sh	sh_src/tile_nonblank.h	DEAD	Old nonblank bitmap, no includer (tile_nonblank.h:1)	
+sh	sh_src/sh2_asm.h	DEAD	DIVU helpers with no includer anywhere in sh_src, r60 or md_src (sh2_asm.h:1-20)	
+sh	sh_src/buildstamp.h	DEAD	Generated hash (Makefile:4427); nothing includes it (buildstamp.h:1)	
+sh	sh_src/r60/r60_main.c	ENGINE+TABLE	Generic renderer, slave frame loop and mailboxes; m_main/s_main/visr_vbi entry points (r60_main.c:9-13, 4590, 5751)	altbeast_tiles/sprites externs (:188-189); R60_SPR_BANK(b)&7 "US set" (:325); WRAM 0x3031/0x3028/0x3018 attract step and flags (:5744); sprite priority 2 or 3 assumption (:1879); R60_PRKEEP 0x06029440 free-gap address (:2007); mailbox block 0x26028E00-0x26028FF8 (:97-295); TEXT_UW 0x26026000 (:316); the speech_cmd hook
+sh	sh_src/r60/r60_planes.c	ENGINE+TABLE	Generic MD plane slot allocator and walk (r60_planes.c:1-15)	altbeast_tiles (:160,628,1773); WRAM_BASE[0x3031] attract step (:880-881); 0x26028FB6 FGGEN; MD_SLOTS 1024 (:66)
+sh	sh_src/r60/r60_tiles.h	ENGINE+TABLE	S16B tile bank decode (r60_tiles.h:4-25)	bank1 byte at 0x2602FC95, arcade 0xFFF095 (:10); GAME_ALTBEASTJ remap, code>=0x4000 minus 0x2000 (:20-23); 16K-tile mask 0x3FFF
+sh	sh_src/r60/r60_speech.inc	ENGINE+TABLE	Generic PWM ADPCM mixer on the slave (r60_speech.inc:1-12, 24-33)	speech_tab.h/sfx_tab.h (:15-17), SP_VOICES 4, ping-pong at 0x26029800 (:43), uPD7759 8 kHz bank rate (:6-8)
+sh	sh_src/r60/r60_lockprobe.h	DIAG	Scroll-lock footer reading the AB adapter's addresses; probe only (r60_lockprobe.h:1-5)	
+sh	sh_src/portfull/layout.ld	ENGINE+TABLE	Generated linker placement, per game (layout.ld:1-16)	_WRAM_BASE 0x0602CC00 (16259 B), _ROM_BASE 0x02340000, VID0-3 bases and sizes (0x06019000/0xD000, 0x06026000, 0x06027000, 0x06028400), 414 symbols, per-address PROVIDEs
+sh	sh_src/portfull/w68.h	ENGINE+TABLE	68K absolute-short to SH-2 pointer translation (w68.h:12-60)	WRAM_68K_ORIGIN 0xFFC000 (:17); the _WRAM_BASE value comes from layout.ld
+sh	sh_src/portfull/obj_record.h	ENGINE+TABLE	S16 object record layout (obj_record.h:10-18)	OBJ_STRIDE 0x80, offsets +0 flags, +2 handler, +6 type, +0xA sprite_attr, from an AB census (:2-6)
+sh	sh_src/portfull/pseudoregs.h	ENGINE+TABLE	Decompiler pseudo-register globals, same scheme for any title (pseudoregs.h:1-40)	the _r_extraout_* name set and ref counts are per game
+sh	sh_src/portfull/ghidra_rt.h	ENGINE	Ghidra intrinsics CONCAT/SUB/ZEXT/SEXT/CARRY (ghidra_rt.h:8-49)	
+sh	sh_src/portfull/ghidra_types.h	ENGINE	Ghidra typedefs (ghidra_types.h:4-20)	
+sh	sh_src/portfull/objdispatch.c	GAME-AB	Generated thunk table of AB handler addresses (objdispatch.c:22-40); the port_handler typedef at :18-20 is engine and should move to a header	
+sh	sh_src/portfull/protos.h	GAME-AB	Generated FUN_<addr> prototypes (protos.h:9-25)	
+sh	sh_src/portfull/dat_syms.h	GAME-AB	Generated AB ROM and WRAM absolute symbols (dat_syms.h:8-20)	
+sh	sh_src/portfull/defs.c	GAME-AB	Generated definitions for AB externs (defs.c:1-40)	
+sh	sh_src/portfull/extras.h	GAME-AB	AB-specific LAB_/PTR_ labels and p_Dn externs (extras.h:6-40)	
+sh	sh_src/portfull/dispregs.c	DIAG	Arcade register file per object slot from an AB capture, self-labelled "A DIAGNOSTIC" (dispregs.c:1-11)	
+sh	sh_src/portfull/l2seed.c	DEAD	Empty experiment stub, switch has only default (l2seed.c:1,6-11)	
+sh	sh_src/portfull/hand/	GAME-AB	About 130 hand-derived AB FUN_<addr> bodies and AT_FUN_ variants (directory listing; process in CLAUDE.md "hand-derived function is a C file")	
+tools1a	a68.py	ENGINE+TABLE	68K address to port location for ares --dump, a68.py:2; not called by Makefile	port RAM map, 0xFF9000-style WRAM bases
+tools1a	accept_ares.sh	ENGINE	acceptance wrapper invoked at Makefile:4291,4320; the game-specific part is its input data (header only, body not read)	
+tools1a	active_area.py	ENGINE	one definition of ares' active picture area, active_area.py:2	
+tools1a	actor_palettes.py	GAME-AB	AB actor palette table (records 132-137 chevron etc.), actor_palettes.py:2	
+tools1a	anchorshot.lua	DIAG	screenshot at demo anchor, anchorshot.lua:1	
+tools1a	anim_rate.py	ENGINE	presented-animation-rate metric, anim_rate.py:2	
+tools1a	arc_dump.lua	DIAG	arcade tile/text RAM dump at eyehold anchor, arc_dump.lua:1	
+tools1a	arc_sky.lua	DIAG	gradient-sky writer 0x3108 probe, arc_sky.lua:1	
+tools1a	arcade_census.lua	DIAG	arcade object census (header not read; inferred from name)	
+tools1a	arcade_census.py	DIAG	census analysis (inferred from name; AB addresses in 2 hits)	
+tools1a	arcade_level_run.lua	GAME-AB	level 1 to 2 driver with lives at 0xFFE018, boss at 0xFFF132, arcade_level_run.lua:1-3	
+tools1a	arcade_pagesel_round.lua	DIAG	forced-round page-select census using DIP round table 0x1848, arcade_pagesel_round.lua:1-4	
+tools1a	arcade_pagesel.lua	DEAD	feeds the hardcoded BG0/FG7 pairing in bake_cat1vis and cites m_main.c decode_pages, arcade_pagesel.lua:3,9	
+tools1a	arcade_palram.lua	ENGINE+TABLE	dumps palette RAM in bake_tilecram --live layout, arcade_palram.lua:1-4	palram base 0x840000, size 0x1000
+tools1a	arcade_trace_multi.lua	DIAG	multi-window 68K trace over a recorded playthrough, arcade_trace_multi.lua:1	
+tools1a	arcade_trace.lua	DIAG	68K instruction trace, arcade_trace.lua:1	
+tools1a	arcade_trace.py	DIAG	analyses the arcade_trace.lua output, arcade_trace.py:2	
+tools1a	arcade_wav.lua	ENGINE+TABLE	audio capture that injects one sound command (marked KIT), arcade_wav.lua:1	altbeast driver sound latch address
+tools1a	arcade_writecensus.lua	DIAG	counts 68K writes into the ranges patch_game rebases, arcade_writecensus.lua:1	
+tools1a	ares_baselines/	DIAG	README plus K2FREE and Y attract_3600.json baselines (Glob listing; contents not read)	
+tools1a	ares_diag_at.py	DEAD	reads the m_main.c DIAG slot map, ares_diag_at.py:8	
+tools1a	ares_gate.py	ENGINE+TABLE	ares dump decoder and CI gate, ares_gate.py:2; savestate layout is cited to m_main.c at :11, which is deleted	SDRAM/DIAG offsets
+tools1a	artaudit.py	DIAG	per-frame visible MD plane cell audit, artaudit.py:2	
+tools1a	at_gameframe.py	ENGINE	finds the emulator frame where a rom reaches a given game frame, at_gameframe.py:2	
+tools1a	attract_harvest.py	DEAD	MD_TAG 0x0603B400 and md_dbg_nt come from m_main.c, attract_harvest.py:29,56	
+tools1a	attract_parity.py	ENGINE+TABLE	attract scorecard against the arcade corpus, attract_parity.py:2	AB attract timeline, scene anchors
+tools1a	attract_steps.lua	GAME-AB	AB attract step 0xFFF031, attract_steps.lua:1-3	
+tools1a	auto_beast.lua	GAME-AB	AB level-1 transform driver, auto_beast.lua:1	
+tools1a	auto_goldnaxe.lua	GAME-AB	Golden Axe level-1 driver, auto_goldnaxe.lua:1; it is the GA starter, not AB	
+tools1a	bake_cat1hole.py	DEAD	cat-1 hole map for fold-1 sprite suppress, bake_cat1hole.py:2; CAT1MD was accepted but Makefile also calls it at 4579, so it may still be live (unconfirmed)	
+tools1a	bake_cat1map.py	DEAD	per-scene CAT1 priority bitmaps, bake_cat1map.py:2; no Makefile call found	
+tools1a	bake_cat1mask.py	DEAD	class-2 opacity masks, bake_cat1mask.py:2; cites m_main.c at :57, though the Makefile calls it at 990 and 4582	
+tools1a	bake_cat1vis.py	DEAD	hardcodes BG0/FG7 and reads m_main.c latch_layer_regs, bake_cat1vis.py:6-8	
+tools1a	bake_mdlines.py	DEAD	set-list packing analysis for m_main.c 2415-2429, bake_mdlines.py:2,6	
+tools1a	bake_mdspr.py	ENGINE+TABLE	mob-class sprite art baked to MD tile format, bake_mdspr.py:2; Makefile:3696,4608	AB mob classes, ROM art offsets
+tools1a	bake_setcols.py	DEAD	colour-set extents for m_main.c build_maps, bake_setcols.py:5; no Makefile call	
+tools1a	bake_sprites.py	DEAD	LOOP 17 sprite bake with constants from sh_src/sprbake.h for m_main.c, bake_sprites.py:2,11,73; Makefile:4599 may still call it	
+tools1a	bake_tilecram.py	ENGINE+TABLE	per-scene MD CRAM assignment for tile layers, bake_tilecram.py:2; Makefile:3305; MDP_LINES 3 constant cites m_main.c:473 at :78	MDP_LINES=3, scene list, 0xFF9000 palette
+tools1a	bake_tiles_md.py	ENGINE+TABLE	offline MD tile patterns, bake_tiles_md.py:2; Makefile:2609,4573; md_emit_art mirror cites m_main.c:10003 at :53	tile ROM layout, scene/page list
+tools1a	band_denom.py	DEAD	decodes m_main.c record fields and slave_concurrent_k, band_denom.py:7-20	
+tools1a	batch_census.py	DEAD	batch composition census (NOTES 51, pre-R60; inferred)	
+tools1a	black_cells.py	DIAG	black-cell census over a gameplay route, black_cells.py:2	
+tools1a	black_probe.lua	DIAG	LOOP 7c strobe hunt, black_probe.lua:1	
+tools1a	blackrun.py	DIAG	black-frame runs per span, blackrun.py:1	
+tools1a	blitskip_probe.lua	DEAD	BLITSKIP skip-rate meter, retired experiment, blitskip_probe.lua:1	
+tools1a	boss_census.py	DIAG	boss-scene sprite census from ares savestates, boss_census.py:2	
+tools1a	bound_ref.py	GAME-AB	function-map bounding audit without Ghidra, bound_ref.py:2; AB addresses	
+tools1a	bs9_audit.py	DEAD	ares bs9 audit against the md_dbg_nt mirror, bs9_audit.py:2	
+tools1a	build_facts.py	ENGINE	regenerates FACTS.md, build_facts.py:2	
+tools1a	build_id.py	ENGINE	provenance stamp for rom/s16.32x, build_id.py:2; Makefile:4528	
+tools1a	build_music.py	ENGINE+TABLE	oracle music sweep to LZSS render_music.h (KIT), build_music.py:2	AB sound command list, sample ROM layout
+tools1a	build_vgm_music.py	ENGINE	VGZ to LZSS with intro and loop (KIT), build_vgm_music.py:2	
+tools1a	cell_timeline.lua	DIAG	prints work-RAM byte changes per frame, cell_timeline.lua:1-2	
+tools1a	cguard.py	ENGINE	preprocessor-aware scanner shared by the linters, cguard.py:2; its m_main.c figures at :5 are only examples	
+tools1a	check_tilesmd_addr.py	ENGINE	fails if the baked blob's cart address drifts across two files, check_tilesmd_addr.py:2; Makefile:2018,4765	
+tools1a	check_tilesmd_bytes.py	ENGINE	verifies the compiled 68K art base in a built rom, check_tilesmd_bytes.py:2; Makefile:4533	
+tools1a	chevcells.lua	DEAD	MDCHEV sizing from m_main.c:15546, chevcells.lua:1-12	
+tools1a	chevron_probe.lua	GAME-AB	transform chevron palette records 132-137 and table 0x26CC, chevron_probe.lua:1-2	
+tools1a	cmd_sweep.lua	DIAG	per-command sound sweep with read gag on the latch, cmd_sweep.lua:1	
+tools1a	code_census.py	DIAG	structural census; already updated for the candidate (code_census.py:38), though VINT_ROOTS at :49 still names m_main and s_main	
+tools1a	code_stream.py	ENGINE	instruction stream without Ghidra, code_stream.py:2	
+tools1a	code_walk.py	ENGINE	finds code in a 68000 rom without Ghidra, code_walk.py:2	
+tools1a	corpus_compare.py	ENGINE+TABLE	arcade capture against ares capture, scene-anchored, corpus_compare.py:2	scene anchors, tick lists
+tools1a	cport_audit.py	ENGINE	audits the generated port unit for 68K idioms, cport_audit.py:2	
+tools1a	cport_build.sh	ENGINE	builds the decompiled corpus for SH-2, closing the undeclared list by feedback, cport_build.sh:2; Makefile:1986	
+tools1a	cport_cast.py	ENGINE	inserts the casts gcc asks for, cport_cast.py:2	
+tools1a	cport_dispatch.py	ENGINE+TABLE	object dispatch table, 68K handler address to SH-2 function, cport_dispatch.py:2; Makefile:5406	handler addresses, slot layout
+tools1a	cport_dispregs.py	ENGINE+TABLE	register file per object slot from the oracle, cport_dispregs.py:2; Makefile:5466	AB slot count and registers
+tools1a	cport_l2seed.py	ENGINE+TABLE	L2 register seed generator, cport_l2seed.py:2; Makefile:5490	AB level-2 register set
+tools1a	cport_layout.py	ENGINE+TABLE	places absolute symbols at true addresses, cport_layout.py:2; Makefile:4817	AB symbol and address list (41 literal hits)
+tools1a	cport_names.py	ENGINE	single resolver for Ghidra symbol names, cport_names.py:2	
+tools1a	cport_prep.py	ENGINE+TABLE	makes Ghidra C compile for SH-2, cport_prep.py:2; Makefile:5218; the pass bodies hold many AB addresses (684 literal hits) and one stale m_main.c comment at :490	per-function patch tables, AB addresses
+tools1a	cport_review.py	DIAG	pairs each transformed line with its Ghidra source line, cport_review.py:2	
+tools1a	cport_widths.py	ENGINE	width of every work-RAM access read from the 68K's own bytes, cport_widths.py:2; Makefile:5198	
+tools1a	cram_dump_scene.lua	ENGINE+TABLE	dumps live palette for bake_tilecram --live, cram_dump_scene.lua:1-3	WRAM 0xFF9000, 0x1000 bytes
+tools1a	ctr_audit.py	DIAG	counter audit run on the source, updated 2026-10-29, ctr_audit.py:2; baseline in ctr_baseline.txt:1	
+tools1a	ctr_baseline.txt	DIAG	known counter findings for `make lint`, ctr_baseline.txt:1-3	
+tools1a	cut_profile.lua	DEAD	MDBGALL cut profiler for a retired flavor, cut_profile.lua:1-3	
+tools1a	cut_snap.lua	DEAD	CUT_BLANK verification using scrap counters at 0x28FA0, cut_snap.lua:1-2	
+tools1a	inputs/coin_start_a.csv	DIAG	ares --input coin script, coin_start_a.csv:1	
+tools1a	tapes/altbeast_walk_p2mirror.hex	GAME-AB	AB attract tape for ROM 0x3E4B0, altbeast_walk_p2mirror.hex:1	
+tools1a	ghidra/*.py (classify, areg_locals, bound_audit, coverage, call_inputs)	ENGINE	headless Ghidra analyses run through ghidra_run.sh, ghidra/classify.py:2; bound_audit.py and classify.py carry AB addresses	
+tools1b	tools/d_ns.bin	DEAD	binary blob, no text header and no Makefile reference found (unverified: contents not inspected)	
+tools1b	tools/dat_width_observed.py	ENGINE	oracle-observed access widths feeding the cport pipeline, tools/dat_width_observed.py:2-8 (reads docs/proof/ json, not tied to AB source paths)	
+tools1b	tools/decode_gfx.py	GAME-AB	docstring hardcodes AB ROMs opr-11674/75/76 and 16384 tiles, tools/decode_gfx.py:2-4 (preview only, superseded by gen_tiles.py)	
+tools1b	tools/diag_grid.lua	DIAG	MDBGALL MAME capture script, tools/diag_grid.lua:1	
+tools1b	tools/dirtyrow_probe.lua	DEAD	LOOP18 stage A probe for the old row-mark/DIRTYROWVERIFY renderer; r60 has no match (grep count 0 across sh_src/r60), tools/dirtyrow_probe.lua:1-6	
+tools1b	tools/disasm_funcs.py	ENGINE+TABLE	generic function-boundary disassembler, but ROM path is hardcoded, tools/disasm_funcs.py:24	roms/altbeast/prog68k.bin (should be GAME env)
+tools1b	tools/dreg_callsites.py	ENGINE+TABLE	generic jsr (An) register-constant scan; ROM path hardcoded, tools/dreg_callsites.py:43; its output is consumed by the Makefile at line 5258	roms/altbeast/prog68k.bin, docs/audit/dreg_callsites.json
+tools1b	tools/dreq_corr.py	DEAD	tests a LOOP10 master-ack-late hypothesis against the old sprite-push pipeline, tools/dreq_corr.py:2-8	
+tools1b	tools/drq_probe.py	DEAD	decodes the LOOP17 DRQPROBE histogram, tools/drq_probe.py:2-4; DRQPROBE has no match in r60 or md_main.c (count only 37 matches across a wider flag list, so unverified for this flag alone)	
+tools1b	tools/f1_coverage.py	ENGINE	trace-merge and Ghidra gap finder over a trace dir and f1_export.json, tools/f1_coverage.py:2-5	
+tools1b	tools/f1_heatmap.py	DIAG	coverage heat map for the 68K image, tools/f1_heatmap.py:2-5	
+tools1b	tools/fb_png.py	ENGINE	32X framebuffer + CRAM to PNG, takes argv only, tools/fb_png.py:2-5, 24-26	
+tools1b	tools/flag_audit.py	ENGINE	finds Makefile flags that cannot do anything, tools/flag_audit.py:2-8	
+tools1b	tools/flagcheck.sh	ENGINE	clean-tree build check, tools/flagcheck.sh:2-8; the blob list is partly stale because sh_src/*_tab.h and sound blobs still exist but s_main/m_main are gone (B list at line 8)	
+tools1b	tools/flick_gate.lua	DEAD	FLICKFUSE A/B gate in MAME; the header says MAME is colour-blind on the canonical bundle, and MAME renders every current build as confetti per CLAUDE.md, tools/flick_gate.lua:1-7	
+tools1b	tools/flick_peek.lua	DEAD	reads FLICKFUSE tracker state at the 0x06 alias of the old rom, tools/flick_peek.lua:1-4	
+tools1b	tools/fmgate_derive.py	DEAD	LOOP23 FMGATE derivation from wpcatch censuses; Makefile:2467 still cites it as the source of the thunks, but the 68K-era FM gate is replaced by r60, tools/fmgate_derive.py:2-8	
+tools1b	tools/frame_grade.py	ENGINE	screenshot-corpus defect grader, argv only, tools/frame_grade.py:2-8	
+tools1b	tools/frame_profiler.py	DIAG	ares capture cadence profile, tools/frame_profiler.py:2-8	
+tools1b	tools/frame_snap.lua	DIAG	MAME frame snapshots from FS_FRAMES, tools/frame_snap.lua:1-8	
+tools1b	tools/frame_timeline.py	DIAG	68K frame timeline built on the old shim's FM raise/drop, tools/frame_timeline.py:2-8	
+tools1b	tools/frametest.py	DIAG	scene-anchored defect tests, run on rom/night roms, tools/frametest.py:2-8; scenes are AB-specific, so it needs per-game scene tables before reuse	
+tools1b	tools/func_profile_ref.py	ENGINE+TABLE	profiler fix over the func_profile.py region list, tools/func_profile_ref.py:2-8	the AB workram and objtable region list (func_profile.py:32-35)
+tools1b	tools/game_align.py	ENGINE	aligns two programs' disassembly shapes, argv-driven, tools/game_align.py:2-8, 68-93	
+tools1b	tools/game_altbeast.py	GAME-AB	hand-derived patch tables for AB US set 8, tools/game_altbeast.py:1-8	
+tools1b	tools/game_altbeastj.py	GAME-AB	patch tables derived from AB US, tools/game_altbeastj.py:1-3	
+tools1b	tools/game_derive.py	ENGINE	derives a title's tables from a reference title, argv-driven, tools/game_derive.py:2-8, 103-112	
+tools1b	tools/game_goldnaxe.py	GAME-AB	Golden Axe tables: the next title, not AB (the class label is "per-game data", not AB), tools/game_goldnaxe.py:1-8; it is the template for the per-game data layer	
+tools1b	tools/gameplay_align.py	ENGINE+TABLE	screenshots a rom at a given scene-timer value, tools/gameplay_align.py:2-8	WRAM 0xFFF02A scene timer (grep found AB addresses in the file; the count is 2)
+tools1b	tools/gameplay_dump.lua	GAME-AB	MAME replay plus WRAM dump for arcade altbeast, forces DSW2 0xFD and DSW1 0xFF, tools/gameplay_dump.lua:1-8	
+tools1b	tools/gameplay_speed.py	ENGINE+TABLE	headless scene-timer speed ladder, tools/gameplay_speed.py:2-8	WRAM 0xFFF02A scene timer, level-1 input script, DIAG page offsets (0x38F00 per Makefile:2303)
+tools1b	tools/gen_ring.py	DEAD	reads a GENRING ring stamped by the deleted master code (Makefile:2963 cites m_main.c GR), tools/gen_ring.py:2-8	
+tools1b	tools/gen_ring_classify.py	DEAD	companion to gen_ring.py, uses its rom, tools/gen_ring_classify.py:2-8	
+tools1b	tools/gen_ring_slave.py	DEAD	reads the slave ring at 0x38A00 written by s_main.c (deleted), tools/gen_ring_slave.py:7	
+tools1b	tools/gen_selftest.py	ENGINE+TABLE	generates port_selftest.c from decompiled C plus oracle vectors, tools/gen_selftest.py:2-8, 32	docs/proof/altbeast.c corpus default, WRAM_LO 0xFFC000 / STACK_LO 0xFFFE00, ROM_HI 0x040000, GAMEHIGH 0x02300000 (tools/gen_selftest.py:53, 82); line 875 also mentions m_main by name
+tools1b	tools/gen_sprites.py	ENGINE+TABLE	already game-selectable, tools/gen_sprites.py:12-36	GAME env, per-game sprite ROM filename table at lines 20-36 (the Makefile passes GAME at 4587)
+tools1b	tools/gen_tiles.py	ENGINE+TABLE	already game-selectable, tools/gen_tiles.py:11-24	GAME env, per-game tile ROM filename table (lines 19-24); the Makefile passes GAME at 4563
+tools1b	tools/gen_trace.py	DEAD	decodes PHASECENSUS slave and master event ids from the old chain (slave events like chain end, master launch/echo), tools/gen_trace.py:2-8	
+tools1b	tools/gf_align.py	ENGINE+TABLE	captures our rom at the game frame an arcade recording names, tools/gf_align.py:2-8	game-frame counter 0xFFA1D0 from the md shim; it has 7 AB hits in a grep, so it needs a table for the counter and tapes
+tools1b	tools/ghidra_run.sh	ENGINE+TABLE	Ghidra headless driver, already takes GAME, tools/ghidra_run.sh:2-8	GAME default (3 AB hits in the file, unverified which)
+tools1b	tools/ghidra/ (directory, 56 files)	ENGINE+TABLE	the Ghidra census/classify/export pipeline (e.g. ghidra/func_ranges.py, f1_export.py); mostly game-agnostic scripts, but AB-specific object and hero scripts exist: ghidra/make_hero_attacks.py, make_kind_inits.py, make_spawn_inits.py, object_census.py, palette_census.py	AB object-table layout and kind tables (unverified per file; no line citations because I did not read the individual scripts)
+tools1b	tools/glow_bake.py	DEAD	bakes the old PALSTATIC glow table for the SH-2 animator GLOW_ANIM in the deleted m_main.c, tools/glow_bake.py:24; Makefile:3769 still names it	
+tools2	tools/h_ns.bin	DEAD	scratch data written for nat_score.py (nat_score.py:8), which has a hardcoded ares path (nat_score.py:3); name-only inference	
+tools2	tools/handler_plausible.py	ENGINE+TABLE	checks whether a harvested handler address is 68K code (handler_plausible.py:2); input is object_handlers_union.txt (:4)	docs/proof/object_handlers_union.txt, the AB prog68k
+tools2	tools/harvest_ptr_tables.py	ENGINE+TABLE	harvests the jump tables that the object system dispatches through (harvest_ptr_tables.py:2-8); writes docs/proof/ptr_table_targets.txt (:4)	slot+2 handler layout, docs/proof output path
+tools2	tools/harvested_handlers.txt	GAME-AB	AB handler address data; name-only	
+tools2	tools/hazard_census.py	ENGINE	"the generalisable half of the kit": 68K instruction classes that behave differently on 32X (hazard_census.py:2-8)	
+tools2	tools/health_mame.lua	DIAG	reads state_health meters live in MAME (health_mame.lua:1-7); MAME cannot land R60 packets (CLAUDE.md "What MAME is for now" c)	
+tools2	tools/hot_check.py	ENGINE+TABLE	post-link check on the hot set (hot_check.py:2-8); Makefile:1122, :4456	sh_src/portfull/objdispatch.c, tools/hot_dispatch_keys.txt
+tools2	tools/hot_dispatch_keys.txt	GAME-AB	object dispatch keys baseline passed by Makefile:4456; name-only	
+tools2	tools/hot_set.py	ENGINE+TABLE	ranks cart functions by wait per byte and writes hot_set.txt (hot_set.py:2-8; Makefile:1117)	.portcode and .ramtext2/.ramtext3 regions (Makefile:1121), MiSTer IF.sv wait model
+tools2	tools/hot_set.txt	GAME-AB	generated list of AB function names and regions (Makefile:1118, :1128)	
+tools2	tools/inp_dump.lua	DIAG	replays a recorded arcade run and dumps the oracle (inp_dump.lua:1-8); hardwired to `mame altbeast` and cfg/oracle	
+tools2	tools/inputs/	GAME-AB	AB input tapes, e.g. level1_full.csv (make_tape.py:1-2); name-only for the other files	
+tools2	tools/io_read.lua	DIAG	reads bytes at one frame, IO and DIP ports included (io_read.lua:1-2)	
+tools2	tools/l1_oracle.lua	DIAG	MAME-side capture of per-call register and WRAM vectors (l1_oracle.lua:1-8)	
+tools2	tools/l1_order.lua	GAME-AB	one-frame call order for AB free-run frame 109, slot 0, FUN_000053A8 (l1_order.lua:1-8)	
+tools2	tools/l1_triage.py	ENGINE+TABLE	sorts decompiled functions into testable and blocked (l1_triage.py:2-8)	default --src docs/proof/altbeast.c (:5)
+tools2	tools/l1_vectors.py	ENGINE+TABLE	turns an l1_oracle capture into per-call vectors (l1_vectors.py:2-8)	the AB capture layout; name-only for constants
+tools2	tools/l1_verify.py	ENGINE+TABLE	runs a decompiled function against its vectors (l1_verify.py:2-8)	docs/proof/altbeast.c, FUN_ addresses
+tools2	tools/l2_handlers.lua	GAME-AB	census of resume addresses held in AB object slots (l2_handlers.lua:1-8; FULL-PORT.md 12)	
+tools2	tools/l2_io_pack.py	ENGINE+TABLE	packs per-frame I/O captures into a blob for .portdata (l2_io_pack.py:2-8)	docs/proof/l2m, io.bin
+tools2	tools/l2_oracle.lua	DIAG	captures the full work-RAM image at frame boundaries (l2_oracle.lua:1-8)	15.6 KB WRAM size
+tools2	tools/l2_pack.py	ENGINE+TABLE	packs L2 captures into a seed plus per-frame delta blob (l2_pack.py:2-8)	.portdata 32 KB limit (sh_src/mars.ld 0x02380000-0x02388000, quoted at l2_pack.py:6)
+tools2	tools/l2_where.lua	GAME-AB	places the 68K at capture time using FUN_00003aae and FUN_0000144a (l2_where.lua:1-8)	
+tools2	tools/lint_selftest.py	DIAG	self-test for the linters (lint_selftest.py:2-8); targets lint32x rules	
+tools2	tools/lint.sh	ENGINE+TABLE	`make lint` gate (lint.sh:2; Makefile:4731-4752); 2 m_main refs per grep	m_main.c file lists and the -D flag set (lint.sh:12)
+tools2	tools/lint32x.py	DEAD	the rules are hardware facts, but the docstring is built around m_main.c (lint32x.py:9) and it has 4 m_main refs per grep; retarget before reuse	
+tools2	tools/lint32x_baseline.txt	DEAD	4 m_main refs per grep	
+tools2	tools/longtab_seeds.py	ENGINE	scans prog68k.bin for absolute-long tables into the code band, filtered (longtab_seeds.py:2-4); the path is an argument	
+tools2	tools/loop_probe.lua	GAME-AB	AB Z80 sound driver state, Z80 RAM F840 + slot*0x28 (loop_probe.lua:1-8)	
+tools2	tools/lzss.py	ENGINE	LZSS codec, "KIT" (lzss.py:2)	
+tools2	tools/m1_occupancy.lua	DIAG	breakpoints the 12 `stop #$2300` sites in AB (m1_occupancy.lua:2-8); REBUILD Phase 0 measurement	
+tools2	tools/m1_occupancy.py	DIAG	decoder for m1_occupancy.lua (m1_occupancy.py:2-8)	
+tools2	tools/m68k_regwrites.py	ENGINE+TABLE	transitive register-write sets per 68K function (m68k_regwrites.py:2-8; Makefile:5392)	docs/audit/regwrites.json, extraout_producers.json
+tools2	tools/magic_smoke.lua	DEAD	MAME run of the "magic-tail" DRQR block writing /tmp (magic_smoke.lua:1-3); MAME lands no R60 packets (CLAUDE.md)	
+tools2	tools/make_tape.py	GAME-AB	generates the AB level-1 input tape (make_tape.py:2-8)	
+tools2	tools/mame_tap.lua	DIAG	logs accesses to danger zones with coin and start injected (mame_tap.lua:1-2)	
+tools2	tools/md_alloc_why.py	DEAD	census of the MD residency allocator, MDALLOCWHY=1 (md_alloc_why.py:2-8); the allocator was dropped (memory: s16-native-pivot)	
+tools2	tools/md_pc.py	DIAG	disassembles RAM-resident 68K code from a rom (md_pc.py:2-8)	.data VMA 0xFF0100 (:7)
+tools2	tools/md_tiles.py	ENGINE	S16 tile ROMs (3bpp) to MD 4bpp planar, with verification (md_tiles.py:2-8)	
+tools2	tools/mdpen_bake.py	DEAD	bakes pal_scenes_md.h, which only the stale sh_src/m_main.d lists (m_main.d:3); mdpen_bake.py:8 names m_main.c; 3 m_main refs	
+tools2	tools/mdspr_census.py	DEAD	cites MD_SPR at m_main.c:6334 (mdspr_census.py:7)	
+tools2	tools/mdstatic_gate.py	DEAD	headless gate for the STATIC-SCENE arc, MDSTATIC=1 (mdstatic_gate.py:2-8; Makefile:3991)	
+tools2	tools/mdstatic_oracle.py	DEAD	diffs pen tables that sh_src/m_main.c includes (mdstatic_oracle.py:8)	
+tools2	tools/mister_push.sh	ENGINE	copies a rom to the rig and launches it (mister_push.sh:1-8)	
+tools2	tools/mus_testgen.py	DIAG	generates the sndtest streaming test track (mus_testgen.py:2-8)	
+tools2	tools/music_sweep.lua	GAME-AB	AB music capture using the arcade sound-command latch (music_sweep.lua:1-8)	
+tools2	tools/music_sweep.lua.bak	DEAD	backup copy; name-only	
+tools2	tools/nat_score.py	DEAD	hardcoded ares path and scratch bins (nat_score.py:3-8)	
+tools2	tools/nt_audit.py	DEAD	replays the m_main.c nt-walk rules (nt_audit.py:5-8)	
+tools2	tools/nt_dump.lua	DEAD	dumps the MD nt-builder chain (md_dbg_nt) (nt_dump.lua:1-8)	
+tools2	tools/nt_dump_ares.py	DEAD	ares twin of nt_dump.lua (nt_dump_ares.py:2-8)	
+tools2	tools/obj_dispatch.lua	GAME-AB	AB dispatch site 0x039AC (obj_dispatch.lua:7-8)	
+tools2	tools/obj_handlers.py	ENGINE+TABLE	names handlers from an obj_dispatch capture (obj_handlers.py:2-8)	the `jsr (a0)` object loop shape, oracle/scenes.csv, oracle/state.csv
+tools2	tools/objdiff_32x.lua	DEAD	hardcoded session scratchpad output path (objdiff_32x.lua:4)	
+tools2	tools/objdiff_ref.lua	DEAD	hardcoded session scratchpad output path (objdiff_ref.lua:4)	
+tools2	tools/objlog_arcade.lua	GAME-AB	AB object-0 position log, 0xFFF02A, 0xFFF031 steps, 0xFFC00C/0xFFC010 (objlog_arcade.lua:2-8)	
+tools2	tools/opm2opn.py	DEAD	OPM to OPN2+PSG for the Z80 player (opm2opn.py:2-8); superseded by the SH-2 FM synth (memory: sh2-fm-synth)	
+tools2	tools/oracle_grade.py	ENGINE	cadence and scroll metrics over a folder of frames (oracle_grade.py:2-8)	
+tools2	tools/oracle_scenes.py	GAME-AB	scene map of an AB oracle dump (oracle_scenes.py:2-8)	
+tools2	tools/oracle_shots.lua	DEAD	scratchpad path and fixed AB shot frames 1300-1700 (oracle_shots.lua:7-8)	
+tools2	tools/padtest_ares.py	DIAG	exercises a standalone TCPADTEST rom on ares (padtest_ares.py:2-8)	
+tools2	tools/pal_diff.lua	DIAG	arcade CRAM words changed per frame on a coin and start cadence (pal_diff.lua:1-2)	
+tools2	tools/pal_fm_census.lua	DEAD	R60 palette-transport step 1, taps 0xFF9000 (pal_fm_census.lua:1-8)	
+tools2	tools/pal_probe.lua	DEAD	LOOP 8 mirror vs PAL_U 0x06027000 (pal_probe.lua:1-4)	
+tools2	tools/pal_rate.lua	DEAD	LOOP 8 dirty word 0xFFB9FC (pal_rate.lua:1-5)	
+tools2	tools/pal_tap.lua	DEAD	LOOP 8 writer census for the dirty-bit thunks (pal_tap.lua:1-5)	
+tools2	tools/palette_bands.py	DEAD	per-band sprite palette census for the old allocator (palette_bands.py:2-7)	
+tools2	tools/palette_demand.py	DEAD	sprite-palette demand census for the decompile thread (palette_demand.py:2-5)	
+tools2	tools/palette_oracle.py	ENGINE+TABLE	diffs a palette dump against arcade palette RAM at 0x840000 (palette_oracle.py:2-8)	discover/cram/arcade/sceneN.bin, scene list
+tools2	tools/palharvest.lua	DEAD	LOOP 19 sprite palette harvest (palharvest.lua:1-5)	
+tools2	tools/palharvest_tiles.lua	DEAD	R60/E4 tile palette harvest; 1 m_main ref per grep (palharvest_tiles.lua:1-8)	
+tools2	tools/palharvest_tiles_ares.py	DEAD	ares twin of the above; 1 m_main ref per grep	
+tools2	tools/palpack.py	DEAD	LOOP 19 offline sprite palette packer (palpack.py:2-8)	
+tools2	tools/palpack_tiles.py	DEAD	feeds tile_classes.h, which only m_main.d lists (Makefile:3054; m_main.d:3)	
+tools2	tools/palscene_bake.py	DEAD	writes pal_scenes.h; its only listed consumer is m_main.d:3, and the bake names m_main.c (1 m_main ref per grep)	
+tools2	tools/parity_cap.lua	DEAD	scene-anchored statics capture (parity_cap.lua:1-8); the statics no longer gate the line (CLAUDE.md "Gates on every commit")	
+tools2	tools/parity_compare.py	ENGINE+TABLE	gameplay parity scorecard (parity_compare.py:2-8; Makefile:4292, :4322)	tests/gameplay/arcade_level1_full, tools/inputs/level1_full.csv
+tools2	tools/parity_diff.py	DEAD	per-scene pixel diff for the parity_cap pairs (parity_diff.py:2-8)	
+tools2	tools/parity_play.py	ENGINE+TABLE	port side of the gameplay oracle (parity_play.py:2-8; Makefile:4292, :4321)	the tape, timeline.csv header
+tools2	tools/parity_run.sh	DEAD	drives parity_cap, uses `altbeastj` and rom/s16.32x (parity_run.sh:4-8)	
+tools2	tools/patch_game.py	ENGINE+TABLE	rebases S16B addresses into the 32X map (patch_game.py:2-8; Makefile:4544); AB-specific in the file header	altbeast binary, md_src/game_body.bin bytes 0x400-0x3FFFF (:7), 0x85E000 remap and TXTMASK 0xFFA1A6 (Makefile:2349, :823-824)
+tools2	tools/patch_report.txt	GAME-AB	generated report (patch_game.py:9)	
+tools2	tools/pc_profile.py	DEAD	reads the PCSAMP ring at 0xFFA200 from the 68K-era md_start.s (pc_profile.py:2-8)	
+tools2	tools/pcm_from_rom.py	ENGINE+TABLE	decodes uPD7759 samples from an S16B sample ROM (pcm_from_rom.py:2-8)	per-game sample table; name-only for constants
+tools2	tools/pk_pass.py	DEAD	PICKUP_PASS probe, "NEVER SHIP" (pk_pass.py:3-7)	
+tools2	tools/play_32x.lua	DIAG	coin and start, health counters, screenshots (play_32x.lua:1-2)	
+tools2	tools/port_arglog_read.py	DIAG	decodes the CPORT_ARGLOG ring at fixed SDRAM 0x3A700/0x3A740 (port_arglog_read.py:2)	
+tools2	tools/port_guard.py	ENGINE	build-time guard against three recurring mistakes (port_guard.py:2-10)	
+tools2	tools/port_loop.py	DEAD	2026-10-01 overnight keep-or-revert loop with a fixed candidate list (port_loop.py:2-10)	
+tools2	tools/port_partition.py	DEAD	incremental 68K to SH-2 port, ruled out by PORT-CENSUS.md (port_partition.py:2-5)	
+tools2	tools/port_peek.py	DIAG	reads port memory by symbol name (port_peek.py:2-8)	
+tools2	tools/port_scorecard.py	DIAG	one-line scorecard from fixed ares dumps incl. palsh (port_scorecard.py:2-8)	
+tools2	tools/port_watch_read.py	DIAG	PORTTRACE watchpoint and floor_collide sampler reader (port_watch_read.py:2-8)	
+tools2	tools/portl2_endure.py	DIAG	free-run N frames and compare (portl2_endure.py:2-8; Makefile:5025, :5436)	
+tools2	tools/portl2_read.py	DIAG	one-frame L2 gate reader (portl2_read.py:2-8)	
+tools2	tools/portl2_seed.py	DIAG	one seeded frame scored host-side (portl2_seed.py:2-8; Makefile:5446)	
+tools2	tools/portl2m_read.py	DIAG	multi-frame L2 curves from port_l2m_run() (portl2m_read.py:2-6)	
+tools2	tools/portl2m_zoom.py	DIAG	PORTZOOM 32-frame curve (portl2m_zoom.py:2-8)	
+tools2	tools/pre-push	ENGINE	refuses pushes that would publish game content (pre-push:2-7)	
+tools2	tools/preack_max.py	DEAD	PREACK_MAX probe, "NEVER SHIP" (preack_max.py:2-4)	
+tools2	tools/presented_fps.py	ENGINE+TABLE	distinct pictures per second at matched step and tick (presented_fps.py:2-8)	AB window names such as demoA:1800, title:3400
+tools2	tools/probe_build.sh	DIAG	patch-then-build chain for probes (probe_build.sh:1-10)	
+tools2	tools/probe_read.py	DIAG	reads a .bss probe counter block by symbol (probe_read.py:2-8)	
+tools2	tools/profile_32x.lua	DEAD	scratchpad path, old pipeline stage names, DIAG base 0x06028000 (profile_32x.lua:2-8)	
+tools2	tools/public_refresh.sh	ENGINE	rebuilds the `public` branch minus game content (public_refresh.sh:2-10)	
+tools2	tools/quant_diff.py	ENGINE	SH-2 r60_quant vs the host baker over all S16 colour words (quant_diff.py:2-10; Makefile:4178-4179)	
+tools3	rebase_report.txt	DEAD	stale generated artifact of old "+0x900000" rebase and LOOP 8 thunks (rebase_report.txt:1-8; written by patch_game.py:1805-1812)	
+tools3	r60_tick_fb.py	ENGINE+TABLE	generic land-on-tick FB dump (r60_tick_fb.py:1-14)	tick counter 0xFFF02A, WRAM_BASE 0x2CC00, ares path (r60_tick_fb.py:17-19)
+tools3	rebase_scan.py	DEAD	feasibility scan for retired 0x880000 "unpair" rebase, unreferenced (rebase_scan.py:2-3)	
+tools3	record_setup.lua	GAME-AB	MAME altbeast input-record setup, cfg/oracle (record_setup.lua:4-14)	
+tools3	ref_dump.lua	DIAG	per-frame PNG dump, no game constants (ref_dump.lua:1-20)	
+tools3	reg_probe.lua	DEAD	probes old MD text-RAM mirror vs SH-2 shadow 0x06026000, transport gone (reg_probe.lua:1-18)	
+tools3	render_music.py	ENGINE+TABLE	Makefile:4383-4385 builds music header; cmd list is AB (render_music.py:21-23)	DEFAULT_CMDS 0x90..0x97, 0xB1, 0xB2, 0xD3
+tools3	render_track.py	DIAG	single-command render for sndtest, not in Makefile (render_track.py:2-13)	
+tools3	replay_csv.lua	GAME-AB	replays csv into MAME altbeast, forces AB DIPs, cites md_main.c:3039 (replay_csv.lua:1-9); default csv path not found	
+tools3	ret_storage_audit.py	ENGINE+TABLE	generic return-register audit (ret_storage_audit.py:1-21)	default vectors docs/proof/l1_vectors.jsonl (not found), /tmp/l1_seed*.jsonl (ret_storage_audit.py:25)
+tools3	rig_barcode.py	DIAG	decodes RIGBARCODE name-table barcode (rig_barcode.py:1-18)	
+tools3	rig_bars.py	DIAG	reads PORTRIG bars off screenshot (rig_bars.py:1-18)	
+tools3	rig_bg.py	DIAG	background-present check on rig screenshots, attract criterion (rig_bg.py:1-18)	
+tools3	rig_blackcells.sh	DIAG	black cells in view rows 24-27, band AB-measured (rig_blackcells.sh:1-14)	
+tools3	rig_value.py	DIAG	CRAM-flood value channel from rig screenshot (rig_value.py:1-17)	
+tools3	rigpass.sh	ENGINE	game-agnostic rig capture and montage; hostname and worktree path hardcoded (rigpass.sh:1-25)	
+tools3	ring_script.py	ENGINE+TABLE	S16B colour-cycler ring extractor, used by bake_tilecram.py:61 and mdpen_bake.py:143 (ring_script.py:1-30)	installer 0x1A6BA, script 0x1A70C, slot table 0xFFF300, 18-byte steps
+tools3	rom_map.py	GAME-AB	attributes AB prog68k.bin bytes, ATTRIBUTED table (rom_map.py:18-30)	
+tools3	romsyms.py	ENGINE	SH-2 symbol map resolver, no game constants, used by many tools (romsyms.py:1-19)	
+tools3	roster2.py	DEAD	7-line scratch, no references (roster2.py:1-18)	
+tools3	romset.py	ENGINE+TABLE	MAME zip unpack, Makefile:4214-4242; GAMES dict already includes goldnaxe (romset.py:22-30)	altbeast/altbeastj/goldnaxe chip names and sha1
+tools3	rom_reader_tap.lua	DIAG	superseded by rom_reader_wp.lua (rom_reader_tap.lua:1-18)	
+tools3	rom_reader_wp.lua	DIAG	watchpoint ROM-owner probe, AB ranges (rom_reader_wp.lua:1-17)	
+tools3	rom_wav.lua	DIAG	sndtest audio capture (rom_wav.lua:1-9)	
+tools3	round_profile.lua	DIAG	per-round 68K PC trace, AB DIP table 0x1848 (round_profile.lua:1-20)	
+tools3	round_profile.py	GAME-AB	hardcoded AB EXT/DROP/SPIN addresses (round_profile.py:20-25)	
+tools3	round_sets.py	DEAD	feeds old MD-pen/rounds path, cites m_main.c:2357 (round_sets.py:7); caveat: pal_rounds_md.h is still read by bake_tiles_md.py:40, so output may be live	
+tools3	round_split.py	DEAD	emits MD_ATTRACT_SPLIT table for deleted m_main.c (round_split.py:16,343,612); same pal_rounds_md.h caveat	
+tools3	round_workload.lua	DIAG	AB objects 0xFFC000, sprite RAM 0x440000 (round_workload.lua:1-20)	
+tools3	row_health.py	DIAG	per-band update rate from ares shots, 20 Hz era (row_health.py:1-25)	
+tools3	rowship_hist.py	DEAD	decodes ROWSHIP probe from deleted blit path (rowship_hist.py:1-5)	
+tools3	rowstale_probe.lua	DEAD	needs retired flags MDBGALL/BQCHUNK/ROWSTALE (rowstale_probe.lua:1-8)	
+tools3	s16b_fmgate_spans.py	ENGINE+TABLE	game is argument, tables from game_<game>.py (s16b_fmgate_spans.py:21-22)	IRQ4 (0x2F60, 0x3172) is Golden Axe literal (:28)
+tools3	s16b_handler_harvest.lua	ENGINE+TABLE	kit tool (kit/schema.py:165), inline object tables (s16b_handler_harvest.lua:6-14)	TABLES {0xFFC000,64,128},{0xFFE100,16,64}, auto_goldnaxe.lua, cutoff 0x80000 (:25)
+tools3	s16b_jumptables.py	ENGINE+TABLE	game argument (s16b_jumptables.py:19)	--half default 0x40000
+tools3	s16b_map_probe.lua	ENGINE+TABLE	env-driven MCU/5195 tap (s16b_map_probe.lua:3-17)	MP_TEXT default 0x110000 (:23)
+tools3	s16b_sound_posts.py	ENGINE	game and entry are arguments (s16b_sound_posts.py:15,18,22)	
+tools3	s16b_sprline_arcade.lua	ENGINE+TABLE	generic sprite-line budget (s16b_sprline_arcade.lua:5-10)	SL_BASEVAR 0xFFECC4 (:15), auto_goldnaxe.lua, 128 x 16 B records
+tools3	s16b_write_census.lua	ENGINE+TABLE	per-game MAPS inline (s16b_write_census.lua:26-36)	goldnaxe/altbeast region lists, sprite_base_var 0xFFECC4, WC_GAME default goldnaxe
+tools3	sbuf_canary.lua	DEAD	sbuf gone (sh_src/r60/r60_main.c:16), stale address 0x060054A0 (sbuf_canary.lua:7)	
+tools3	scene_sets.py	GAME-AB	reads AB prog68k.bin (scene_sets.py:15), descriptors 0x1CE2 (:38)	
+tools3	scenesel_arc.lua	DIAG	one-off AB SCENESEL 0x1CDA probe (scenesel_arc.lua:5-14)	
+tools3	sdram_audit.py	DIAG	old-era SDRAM map dump-diff, hardcoded ares path (sdram_audit.py:1-29)	
+tools3	sdram_map.py	ENGINE+TABLE	Makefile:4357 soft check, generic extent parser (sdram_map.py:31)	INTENTIONAL alias list (:78-84), stale m_main.c comment (:82)
+tools3	sh2_profile.py	DIAG	agnostic ares PC-profile ranker (sh2_profile.py:4-5)	
+tools3	sh_probe_read.py	DIAG	TESTCART probe decoder, cites deleted m_main.c:2722 (sh_probe_read.py:17)	
+tools3	shape_d_seeds.py	ENGINE+TABLE	finds lea-pc install idiom, rom as arg (shape_d_seeds.py:4)	--lo 0x400, --hi 0x1F000 (:34-35)
+tools3	sfx_bake.py	ENGINE+TABLE	Makefile:4413 builds sfx.bin	inject frame 200, gain 2.5 (sfx_bake.py:22-23), cart run 0x2FE400-0x340000 (:11), 61 AB effects
+tools3	save_build.sh	DIAG	copies rom artefacts under probe name (Makefile:4249 comment)	
+tools3	shvram.py	DIAG	shadow-vs-VRAM ares check, no referrers (shvram.py:9,14)	0x28E3A, 0x28FE0, 0x28E40, VRAM 0xC000/0xE000, WRAM 0xFFA070
+tools3	shadow_tree.sh	ENGINE	`make port` runs it (Makefile:4243; shadow_tree.sh:1-13)	
+tools3	snd_tap94.lua.bak	DEAD	backup copy, unreferenced	
+tools3	snd_autopsy.lua	DIAG	sndtest-era music-path debug	
+tools3	snd_listen.lua	DIAG	sndtest menu driver (snd_listen.lua:1-9)	
+tools3	snd_tap.lua	ENGINE+TABLE	Z80 I/O tap used by sound_inputs.sh:50	usage names mame altbeast (snd_tap.lua:8)
+tools3	snd_tap94.lua	DIAG	one-command tap, SB_CMD default 94 (snd_tap94.lua:1-4)	
+tools3	snd_ymtap.lua	DIAG	YM2612/PSG tap for sndtest (snd_ymtap.lua:1-5)	
+tools3	snd_render.py	ENGINE	S16B sound-board harness, rom as arg (snd_render.py:6-9)	
+tools3	snd_seq_decode.py	ENGINE+TABLE	Z80 sequence decoder with epr-11671 CFG (snd_seq_decode.py:9,28-36)	song_table 0x03B4, cmd_mask 0x7F, music_cmds 0x90-0x97, hdr_rec_len 9, hdr_ptr_ofs 3
+tools3	sound_posts.py	GAME-AB	hardcoded ENTRY 0x3352 (sound_posts.py:4,16-19); superseded by s16b_sound_posts.py	
+tools3	soundmap_build.py	ENGINE+TABLE	run by sound_inputs.sh:54 (soundmap_build.py:19-23)	RATE 16000 (:36), sndtest/ paths
+tools3	sound_blob.py	ENGINE+TABLE	Makefile:4384 builds sound.bin (sound_blob.py:8)	cart bank 2 0x200000..0x2FFFFF, sndtest header paths
+tools3	speech_blob.py	ENGINE+TABLE	Makefile:4398 builds speech.bin (speech_blob.py:1-8)	sndtest/sh/speech_bank8.c, manifest.json layout
+tools3	speech_bake.py	ENGINE	IMA-ADPCM encoder, Makefile:4396,4413 (speech_bake.py:1-17)	
+tools3	speech_order.py	GAME-AB	AB command ORDER pins blob layout (speech_order.py:14)	
+tools3	sound_inputs.sh	ENGINE+TABLE	`make sound-inputs` (Makefile:4270-4273)	mame altbeast (sound_inputs.sh:13,16), SFX5/SFX6 lists (:18-20), 7000-frame sweep
+tools3	span_hist.py	DEAD	RETIRED SPANPROBE counters (span_hist.py:17-22)	
+tools3	sprite_census.lua	DEAD	old MD sprite feasibility, cites m_main.c compose_sprites (sprite_census.lua:4,36) [LIKELY]	
+tools3	sprite_census.py	DEAD	summarizes sprite_census.lua output (sprite_census.py:2-3)	
+tools3	sprite_discover.lua	DEAD	feeds old renderer's bake, cites m_main.c (sprite_discover.lua:17)	
+tools3	sprite_discover.py	DEAD	old bake budget (sprite_discover.py:12-13)	
+tools3	sprite_discover.sh	DEAD	drives retired sprite_discover.lua (sprite_discover.sh:19-31)	
+tools3	sprlate_probe.lua	DEAD	SPRLATE retired flag, Makefile:2222 comment only [INFERRED 70%]	
+tools3	sprline_probe.lua	DEAD	old SPRLINE/MDBGALL flags, Makefile:2172 comment only [INFERRED 70%]	
+tools3	stage_lines.py	DEAD	md_main.c-era 68K SHIM stamps (stage_lines.py:1-30) [INFERRED 75%]	
+tools3	state_deadlock.py	DEAD	finds RAM via TAS thunk at 0xFFB380 (state_deadlock.py:26-27) [INFERRED 75%]	
+tools3	state_frame.py	DIAG	savestate frame rebuild, imported by mdstatic_gate.py:26; constants mirror m_main.c, stale (state_frame.py:32-34,175)	
+tools3	state_health.py	DIAG	old-pipeline health report, TAS-thunk layout (state_health.py:39) [LIKELY stale 65%]	
+tools3	state_timeline.lua	ENGINE+TABLE	prints state byte on change (state_timeline.lua:1-10)	0xFFF031 (:8), mame altbeast
+tools3	strobe_scan.py	DIAG	black-frame count by file size (strobe_scan.py:1-20)	
+tools3	stub_music_tracks.py	DEAD	edits sndtest/md/sndmap_data.h, no Makefile caller (stub_music_tracks.py:10) [INFERRED 65%]	
+tools3	tape_patch.py	DEAD	pre-port image layout GAME_BASE 0x300000 (tape_patch.py:10,13) [INFERRED 70%]	
+tools3	tape_pad.py	DIAG	PORTTAPEPAD measurement only (Makefile:5070-5071); AB pad bits (tape_pad.py:27)	
+tools3	tapes/altbeast_walk_p2mirror.hex	GAME-AB	AB attract tape, consumed only by tape_patch.py	
+tools3	tc_compare.py	DIAG	TESTCART compare, md_src/testcart.c (tc_compare.py:21-31)	
+tools3	tc_glyphcheck.py	ENGINE	Makefile:4175 gate (tc_glyphcheck.py:17)	
+tools3	tc_readstate.py	DEAD	TC_MAX=16 reader, table now 56 (tc_readstate.py:6-8) [INFERRED 65%]	
+tools3	temporal_metric.py	ENGINE	game-agnostic, accept_ares.sh:8 (temporal_metric.py:2-25)	
+tools3	text_census.lua	DIAG	AB arcade text census, text RAM 0x410000 (text_census.lua:8)	
+tools3	tickdump.lua	DEAD	LOOP 13 MAME 32x dump, MAME renders confetti (tickdump.lua:1,6,13)	
+tools3	tile_rate.py	DEAD	needs old TILERATE=1 probe (tile_rate.py:2,4-5) [INFERRED 70%]	
+tools3	tilewrite_probe.lua	DIAG	arcade tile-RAM writer probe, S16B ranges (tilewrite_probe.lua:7-8,18)	
+tools3	timing_hazards.py	ENGINE	opcode-based 68K hazard finder (timing_hazards.py:1-29)	
+tools3	upd7759_decode.py	ENGINE	uPD7759 decode, sound_inputs.sh:51 (upd7759_decode.py:1-25)	
+tools3	vdp_planes.lua	DIAG	VRAM/VSRAM plane-fill shadow (vdp_planes.lua:1-15)	
+tools3	vdp_survey.lua	DIAG	VDP/32X control write tap (vdp_survey.lua:1-3)	
+tools3	vgm2ym.py	ENGINE	VGZ to YM2151 segments, build_vgm_music.py:20 (vgm2ym.py:1-24)	
+tools3	video_writers.lua	DIAG	arcade video-writer census, cited by cport_prep.py:471 (video_writers.lua:19)	0xFFF031, mame altbeast
+tools3	video_writers_hist.py	DIAG	bins log by func_ranges.txt (video_writers_hist.py:5-8)	
+tools3	vint_census.py	DEAD	"move logic to SH-2" question already answered by port (vint_census.py:4-5) [INFERRED 70%]	
+tools3	visr_probe.lua	DEAD	cites visr_vbi in deleted m_main.c, DIAG 0x06028000 (visr_probe.lua:10)	
+tools3	voidmetric.py	DEAD	15-line scratch, no references (voidmetric.py:9-10) [INFERRED 70%]	
+tools3	w_ns.bin	DEAD	unnamed binary, no references; not inspected	
+tools3	wait_split.py	DEAD	needs WAITSPLIT=1 build, flag absent from Makefile/md_src/sh_src (wait_split.py:5)	
+tools3	wav_ab.py	ENGINE	WAV level comparator, build_vgm_music.py:87,135 (wav_ab.py:1-12)	
+tools3	win_probe.lua	DEAD	decodes DIAG block from m_main.c diag_add() (win_probe.lua:14)	
+tools3	winspan_check.lua	DIAG	WINSPAN meter 0xFFA038/3C/3E, written at md_src/md_main.c:2543-2554 (winspan_check.lua:8-10)	
+tools3	wp_census.lua	ENGINE	env-driven watchpoint census (wp_census.lua:1-10)	default range FFF800:400, scene byte 0xFFF031 (:25)
+tools3	wpcatch.lua	DIAG	env-driven catcher, cited patch_game.py:753 (wpcatch.lua:1-11)	
+tools3	wpcatch_hv.lua	DIAG	decoder wpcatch_hv.py is missing (wpcatch_hv.lua:9)	
+tools3	wram_dump.lua	ENGINE	env-driven WRAM dump, used by round_sets.py:67 (wram_dump.lua:1-5)	
+tools3	wram_reloc.py	ENGINE	rewrites ROM entries from GT WRAM_ENTRIES, patch_game.py:1787-1799 (wram_reloc.py:2-38)	
+tools3	write_census.lua	ENGINE+TABLE	region list inline (write_census.lua:9-27)	FB 0x850000-0x85DFFF, 0x840000-0x85FFFF, WRAM 0xFF7000-0xFFBBFF blocks, frames 600/800/1500-3000
+tools3	write_census_ares.py	ENGINE+TABLE	RANGES at write_census_ares.py:29-34, READS :40	tile_dirty 0xFFB9FE, pal_dirty 0xFFB9FC, pal_dirty32 0xFFBA00, adapter 0xA15100-0xA1518F, frame flag 0xFFF01C, frames 4100, ares path
+tools3	ym_synth.py	DIAG	offline OPM synth, no referrers (ym_synth.py:1-24)	
+tools3	ymtables.json	DIAG	jt51-derived tables, only consumer ym_synth.py:21-24	
+tools3	z80_pack.py	ENGINE	Makefile:4667-4668, sndtest only (z80_pack.py:1-29)	
+tools3	z80cpu.py	ENGINE	KIT-CORE Z80 interpreter (z80cpu.py:1-18)	
+tools3	z80dis.py	ENGINE	KIT-CORE Z80 disassembler (z80dis.py:1-16)	
+tools3	zeus_arcade.lua	GAME-AB	AB Zeus text rectangle, gate 0xFFF148 (zeus_arcade.lua:1-20); one-off probe	
+tools3	zeus_list_probe.lua	GAME-AB	AB Zeus flicker probe, scene byte 0xFFF031 (zeus_list_probe.lua:1-20; Makefile:2428); one-off	
+tools3	kit/__init__.py	ENGINE	docstring only, states game-agnostic (kit/__init__.py:1-14)	
+tools3	kit/schema.py	ENGINE+TABLE	generic schema (kit/schema.py:1-60,350-445)	evidence='altbeast' on WRAM_BLOCKS, WRAM_BLOCKS2, WRAM_ENTRIES (:334-338), AB address examples in what-strings (:116,139-150,172,244,254-304)

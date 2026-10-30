@@ -45,12 +45,14 @@ rm -f "$OUT/port.o"
 # undeclared kept its zeroed global for ever. Measured 2026-10-20: a two-day-old copy
 # still carried ram0x000070be after the rename. Keep it in $OUT and start it empty;
 # the five passes below still accumulate into it, which is what the feedback needs.
+# the title directory, so the unit's #include "hand/X.c" finds games/<title>/hand (framework 3c)
+HANDINC=${CPORT_HAND_DIR:+-I$(dirname "$CPORT_HAND_DIR")}
 CPORT_OVERRIDES="$OUT/cport_overrides.json"
 export CPORT_OVERRIDES
 rm -f "$CPORT_OVERRIDES"
 for i in 1 2 3 4 5; do
-  tools/cport_prep.py docs/proof/altbeast.c "$OUT" >/dev/null
-  N=$($G $CF -I"$OUT" "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -c 'error:' || true)
+  tools/cport_prep.py "${CPORT_CORPUS:?CPORT_CORPUS unset -- run through make (docs/proof/<title>.c)}" "$OUT" >/dev/null
+  N=$($G $CF -I"$OUT" $HANDINC "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -c 'error:' || true)
   echo "pass $i: $N errors"
   [ "$N" = 0 ] && break
   # LOCALE-PROOF (2026-10-11). This grep matched only gcc's CURLY quotes, which gcc
@@ -61,7 +63,7 @@ for i in 1 2 3 4 5; do
   # was never regenerated; the failure only appears on a CLEAN port build. Accept both
   # quote styles, and set the locale so gcc's own output is predictable either way.
   LC_ALL=${LC_ALL:-en_US.UTF-8} \
-  $G $CF -I"$OUT" "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 \
+  $G $CF -I"$OUT" $HANDINC "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 \
     | grep -oE "[‘'][A-Za-z_][A-Za-z0-9_]*[’'] undeclared" \
     | sed "s/[‘’']//g; s/ undeclared//" | sort -u > "$OUT/undeclared.txt"
   python3 - "$OUT" <<'PY'
@@ -91,10 +93,10 @@ python3 tools/cport_cast.py "$OUT/altbeast_port.c" -I "$OUT" || true
 # object compiled before it carried `&LAB_00003d60` as an SH-2 address and, once the
 # text no longer named the symbol, cport_layout.py stopped PROVIDE-ing it (rd107 link:
 # undefined reference to _LAB_00003d60). Recompile once more, from the final text.
-$G $CF -I"$OUT" "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -E "error:" | head -5 || true
+$G $CF -I"$OUT" $HANDINC "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -E "error:" | head -5 || true
 
 if [ -f "$OUT/port.o" ]; then ls -l "$OUT/port.o" && echo "*** SH-2 OBJECT PRODUCED ***"; else
   echo "*** NO SH-2 OBJECT: the unit does not compile (see the errors above) ***"
-  $G $CF -I"$OUT" "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -E "error:" | head -5
+  $G $CF -I"$OUT" $HANDINC "$OUT/altbeast_port.c" -o "$OUT/port.o" 2>&1 | grep -E "error:" | head -5
   exit 1
 fi

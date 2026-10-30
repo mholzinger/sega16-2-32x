@@ -20,7 +20,7 @@ MESSAGES = 'MESSAGES.md'   # the open cards AND their premise checks;
 # come from: a 2026-09-24 analysis of the WRAMCODE block set duplicated a code
 # comment in tools/game_altbeast.py committed 22 minutes earlier.
 import glob as _glob
-CONFIG_SOURCES = ['Makefile'] + sorted(_glob.glob('tools/game_*.py'))
+CONFIG_SOURCES = ['Makefile'] + sorted(_glob.glob('games/*/game.py'))
 
 # STATE sections worth indexing, in the order they matter for a premise check
 STATE_SECTIONS = [

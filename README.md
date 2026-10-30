@@ -365,11 +365,11 @@ That one target, from a fresh clone:
    speech from an attract tap plus a full command sweep (about 40
    minutes, once). Anything already present is left alone.
 4. `make candidate` builds the port out of tree in `build/port` from
-   the decompiled program and its committed inputs (`docs/decomp/`).
+   the decompiled program and its committed inputs (`games/altbeast/decomp/`).
 
 A working tree with the untracked `docs/proof/` decompile directory
 builds from that instead; `make release-sync` copies its inputs into
-`docs/decomp/`, and `candidate` refuses when the two differ.
+`games/altbeast/decomp/`, and `candidate` refuses when the two differ.
 
 Probe builds: `make candidate NAME=<name> EXTRA="<FLAG>=1 ..."`; the
 flags are documented in the Makefile header. Objects depend on
@@ -468,7 +468,7 @@ no capture of the running game; you build the rom from a set you own.
 
 What it does contain, by the author's decision:
 
-- The decompiled 68000 program (`docs/decomp/altbeast.c`, the port in
+- The decompiled 68000 program (`games/altbeast/decomp/altbeast.c`, the port in
   `sh_src/portfull/`), produced with Ghidra from the program ROM and
   hand-corrected.
 - `md_src/sega_blob.bin`, Sega's 32X "MARS Initial & Security

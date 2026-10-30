@@ -88,3 +88,6 @@ sh_src/portfull/cport_overrides.json
 tests/gameplay/arcade*/
 sh_src/tape_pad.h
 sh_src/tape_pad.id
+
+# generated per GAME by tools/emit_game_cfg.py (framework step 2)
+sh_src/game_cfg.h

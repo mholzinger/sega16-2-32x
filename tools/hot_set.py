@@ -38,7 +38,7 @@ def generated_names():
     if os.path.exists(src):
         for m in re.finditer(r'^(?:\w+[\w \*]*?)\b(\w+)\s*\([^;]*$', open(src).read(), re.M):
             names.add(m.group(1))
-    hand = os.path.join(ROOT, 'sh_src', 'portfull', 'hand')
+    hand = os.path.join(ROOT, 'games', os.environ.get('GAME', 'altbeast'), 'hand')
     if os.path.isdir(hand):
         names |= {f[:-2] for f in os.listdir(hand) if f.endswith('.c')}
     return names

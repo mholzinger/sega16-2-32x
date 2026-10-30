@@ -31,6 +31,8 @@ static volatile unsigned frontend_paused;
  * hardware already refuses.
  */
 #include "mars.h"
+#include "sdram_map.h"
+#include "game_cfg.h"
 #if defined(R60_FRONTEND) && (!defined(R60_SLAVEWIN) || defined(R60_NOVDPOVERLAP))
 #error "The frontend pause adapter requires the R60 slave-owned frame loop"
 #endif
@@ -78,7 +80,7 @@ static volatile unsigned frontend_paused;
 #define FB_RMW(off)   ((volatile uint32_t *)(0x24000000u + FB_ROW0 + (off)))
 #endif
 
-#define SPR_SNAP      ((const volatile uint16_t *)0x26028400u)  /* 64 x 8 words, the port's */
+#define SPR_SNAP      ((const volatile uint16_t *)SDRAM_SPR_SNAP)  /* 64 x 8 words, the port's */
 /* THE SLAVE'S OWN COPY OF THE SPRITE TABLE (R60_TICKLATE). The master copies SPR_SNAP
  * here right before GO, while the slave is idle, and then runs the game tick WHILE the
  * slave draws (REBUILD section 2: tick and draw in parallel). The tick rewrites
@@ -116,7 +118,7 @@ static uint32_t logo_ring[256] __attribute__((aligned(16)));   /* [go<<16 | bank
 #define R60_EVPUT(ev) do { uint16_t _l = (uint16_t)(r60_frt() - R60_TVINT) / 184u; \
         R60_EVRING[R60_EVRING[255] & 0x7Fu] = ((uint32_t)(ev) << 28) | ((uint32_t)(r60_frame & 0xFFFu) << 16) | _l; \
         R60_EVRING[255] = (R60_EVRING[255] + 1u) & 0x7Fu; } while (0)
-#define PAL_SH        ((const volatile uint16_t *)0x26027000u)  /* the port's palette shadow */
+#define PAL_SH        ((const volatile uint16_t *)SDRAM_PAL_SH)  /* the port's palette shadow */
 
 /* the slave mailbox: the master posts a frame number, the slave echoes it when the bank is
  * drawn. One word each way, no protocol -- the old renderer's SYNC[] command set, its band

@@ -56,7 +56,13 @@ test:
                  The fix is `RAMCODE` on the definition -- and
                  `__attribute__((noinline))` with it, because a static
                  with a section placement still inlines under LTO.
-                 Needs rom/s16.lst; skipped if absent.
+                 WARN, NOT ERROR, SINCE 2026-10-29: the RV=1 premise is
+                 measured false -- test cart T25 reads RV=0 and md_main.c's
+                 UNPAIR MODEL keeps it 0 (testcart.c:9-12) -- so cart
+                 residency is a speed cost, ranked here against the
+                 .ramtext budget, not a hardware hazard. The port runs its
+                 whole decompiled game from the cart window by design.
+                 Reads build/port/rom/<candidate>.lst; skipped if absent.
 
   H8 FBBYTE      a BYTE-wide access to the framebuffer. TOOLKIT.md:617,
                  "FB byte-write zero-drop -- patch game byte-writers to
@@ -89,8 +95,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cguard import scan, parse_defs
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SH_FILES = ['sh_src/m_main.c', 'sh_src/s_main.c', 'sh_src/mars.c']
-MD_FILES = ['md_src/md_main.c']
+# --candidate ROMNAME: the SHIPPING port build (2026-10-29) -- its files, `make candidate-defs`,
+# and build/port/rom/ROMNAME.{lst,elf,32x}. The line's files above are not compiled there.
+CAND_SH = ['sh_src/r60/r60_main.c', 'sh_src/r60/r60_planes.c', 'sh_src/port_l2.c',
+           'sh_src/port_selftest.c', 'sh_src/portfull/objdispatch.c', 'sh_src/mars.c']
+CAND_MD = ['md_src/md_main.c', 'md_src/testcart.c', 'md_src/md_sound.c', 'md_src/frontend.c']
+ROMBASE = os.path.join('rom', 's16')
+DEFS_TARGET = 'candidate-defs'
+SH_FILES, MD_FILES = CAND_SH, CAND_MD   # the default since 2026-10-29 (m_main.c retired)
 
 # SH-2 area bits. 0x2x = uncached, 0x0x = cached, same DRAM underneath.
 def phys(a):
@@ -287,7 +299,7 @@ def rule_H6(sh_defs, md_defs):
 
 def rule_H7(sh, md):
     """Per-vint SH-2 functions that did not land in SDRAM."""
-    lst = os.path.join(ROOT, 'rom', 's16.lst')
+    lst = os.path.join(ROOT, ROMBASE + '.lst')
     if not os.path.exists(lst):
         return
     import code_census
@@ -321,7 +333,7 @@ def rule_H7(sh, md):
         import subprocess as _sp
         nm = os.environ.get('MARSDEV', os.path.expanduser('~/src/marsdev/mars'))
         nm = os.path.join(nm, 'sh-elf', 'bin', 'sh-elf-nm')
-        elf = os.path.join(ROOT, 'rom', 's16.elf')
+        elf = os.path.join(ROOT, ROMBASE + '.elf')
         if os.path.exists(nm) and os.path.exists(elf):
             for ln in _sp.run([nm, '-S', elf], capture_output=True,
                               text=True).stdout.splitlines():
@@ -340,10 +352,10 @@ def rule_H7(sh, md):
                               sorted(live, key=lambda x: size.get(x[1], 1 << 30))[:6])
                   + '.')
     if live:
-        yield ('ERROR', 'H7', f'{len(live)} per-vint SH-2 function(s) link into the '
-               f'CART WINDOW instead of SDRAM. At RV=1 the SH-2 must not fetch from '
-               f'the cart (NOTES.md:181); where it merely works it is a 4-6x fetch '
-               f'stall on every instruction (md_main.c ~515). Fix: RAMCODE + '
+        yield ('WARN', 'H7', f'{len(live)} per-vint SH-2 function(s) link into the '
+               f'CART WINDOW instead of SDRAM: a 4-6x fetch stall on every instruction '
+               f'(md_main.c ~515), a SPEED cost since RV=0 is measured (testcart.c:9-12, T25). '
+               f'Fix where .ramtext allows: RAMCODE + '
                f'__attribute__((noinline)) on the definition — a static with a '
                f'section placement still inlines under LTO. '
                + ', '.join(f'{n}@0x{a:06X}' for a, n in live) + '.' + budget)
@@ -384,7 +396,7 @@ def rule_H9(sh, md):
 def rule_H10(sh, md):
     """Arcade hardware addresses surviving in the patched game body."""
     import struct
-    rom = os.path.join(ROOT, 'rom', 's16.32x')
+    rom = os.path.join(ROOT, ROMBASE + '.32x')
     if not os.path.exists(rom):
         return
     body = open(rom, 'rb').read()[GAME_BODY[0]:GAME_BODY[1]]
@@ -412,7 +424,7 @@ def defs_for_line():
     stamp = os.path.join(ROOT, '.build_flags')
     save = open(stamp, 'rb').read() if os.path.exists(stamp) else None
     try:
-        out = subprocess.run(['make', '--no-print-directory', 'line-defs'],
+        out = subprocess.run(['make', '--no-print-directory', DEFS_TARGET],
                              cwd=ROOT, capture_output=True, text=True).stdout
     finally:
         if save is not None:
@@ -430,6 +442,11 @@ def main():
     a, sh_defs, md_defs, only, bless, show_all = sys.argv[1:], None, None, None, False, False
     while a:
         k = a.pop(0)
+        if k == '--candidate':
+            global SH_FILES, MD_FILES, ROMBASE, DEFS_TARGET
+            SH_FILES, MD_FILES, DEFS_TARGET = CAND_SH, CAND_MD, 'candidate-defs'
+            ROMBASE = os.path.join('build', 'port', 'rom', a.pop(0))
+            continue
         if k == '--sh-defs':
             sh_defs = a.pop(0)
         elif k == '--md-defs':

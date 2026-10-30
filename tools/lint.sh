@@ -9,12 +9,15 @@
 # EXIT 1 if any ERROR-class finding is present. WARN and INFO never fail
 # the gate: this codebase pivots, and a gate that cries wolf gets muted.
 #
-# THE FLAG SET IS NOT OPTIONAL. 866 `#if` blocks live in sh_src/m_main.c
-# alone; a lint run under the wrong -D set analyses code that does not
-# ship and skips code that does. Every tool here is fed the defines of
-# THE LINE, taken from `make line-defs` (which mirrors `line:` ->
-# `ship-us:`), never from `.build_flags` -- that is the LAST BUILD, which
-# is usually somebody's probe (LESSONS.md).
+# THE FLAG SET IS NOT OPTIONAL. A lint run under the wrong -D set analyses
+# code that does not ship and skips code that does. Every tool here is fed
+# the defines of THE SHIPPING BUILD, `make candidate-defs` (line + PORT_FLAGS
+# + CANDIDATE_FLAGS), never `.build_flags` -- that is the LAST BUILD, which is
+# usually somebody's probe (LESSONS.md). Until 2026-10-29 this read
+# `make line-defs` and sh_src/m_main.c, which the shipping build does not compile.
+#
+# The rom-reading rules (H7, H10, region guard) read build/port/rom/$LINT_ROM.*,
+# default the newest candidate there.
 #
 # .build_flags is SAVED AND RESTORED around the make call: the FLAGSTAMP
 # `$(shell ...)` in the Makefile runs at parse time, so merely asking
@@ -39,16 +42,21 @@ err() { ERRORS=$((ERRORS+1)); }
 
 # ---- the line's -D sets, without disturbing the stamp -----------------
 [ -f .build_flags ] && cp .build_flags "$TMP/build_flags.save"
-make line-defs > "$TMP/defs" 2>"$TMP/defs.err" || { cat "$TMP/defs.err"; echo "lint: 'make line-defs' failed"; exit 2; }
+make candidate-defs > "$TMP/defs" 2>"$TMP/defs.err" || { cat "$TMP/defs.err"; echo "lint: 'make candidate-defs' failed"; exit 2; }
 [ -f "$TMP/build_flags.save" ] && cp "$TMP/build_flags.save" .build_flags
 MDDEFS=$(grep '^MD ' "$TMP/defs" | tr ' ' '\n' | grep '^-D' | sort -u | tr '\n' ' ')
 SHDEFS=$(grep '^SH ' "$TMP/defs" | tr ' ' '\n' | grep '^-D' | sort -u | tr '\n' ' ')
-echo "lint: line flags — MD $(wc -w <<<"$MDDEFS") defines, SH $(wc -w <<<"$SHDEFS") defines"
+echo "lint: shipping flags — MD $(wc -w <<<"$MDDEFS") defines, SH $(wc -w <<<"$SHDEFS") defines"
+# the SH-2 sources the shipping build compiles (R60NEW: sh_src/r60 replaces m_main.c)
+SHFILES="sh_src/r60/r60_main.c sh_src/r60/r60_planes.c sh_src/port_l2.c sh_src/port_selftest.c
+         sh_src/mars.c sh_src/portfull/objdispatch.c"
+LINT_ROM=${LINT_ROM:-$(ls -t build/port/rom/*.lst 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null | sed 's/\.lst$//')}
+echo "lint: rom rules read build/port/rom/${LINT_ROM:-<none>}"
 
 # ======================= GENERIC C =====================================
 if [ $DO_GENERIC = 1 ]; then
 
-hdr "cppcheck (line configuration)"
+hdr "cppcheck (shipping configuration)"
 if command -v cppcheck >/dev/null; then
   CPPARGS="--enable=warning,style,performance,portability --inline-suppr
            --suppress=missingIncludeSystem --suppress=unusedStructMember
@@ -56,7 +64,7 @@ if command -v cppcheck >/dev/null; then
            --platform=unix32 --std=c99 -q --max-configs=1
            --template={severity}:{id}:{file}:{line}: {message}"
   # shellcheck disable=SC2086
-  cppcheck $CPPARGS $SHDEFS -I sh_src sh_src/*.c 2>"$TMP/cc_sh"
+  cppcheck $CPPARGS $SHDEFS -I sh_src -I sh_src/r60 $SHFILES 2>"$TMP/cc_sh"
   # shellcheck disable=SC2086
   cppcheck $CPPARGS $MDDEFS -I md_src md_src/*.c 2>"$TMP/cc_md"
   cat "$TMP/cc_sh" "$TMP/cc_md" > "$TMP/cc"
@@ -87,7 +95,7 @@ MDCC=${MARSDEV:-$HOME/src/marsdev/mars}/m68k-elf/bin/m68k-elf-gcc
 if [ $DO_GCC = 1 ] && [ -x "$SHCC" ]; then
   # shellcheck disable=SC2086
   $SHCC -m2 -mb -std=c99 -ffreestanding -fsyntax-only -Wall -Wextra $STRICT \
-        $SHDEFS -I sh_src sh_src/m_main.c 2>"$TMP/w_sh"
+        $SHDEFS -I sh_src -I sh_src/r60 $SHFILES 2>"$TMP/w_sh"
   # shellcheck disable=SC2086
   $MDCC -m68000 -mshort -std=c99 -ffreestanding -fsyntax-only -Wall -Wextra $STRICT \
         $MDDEFS -I md_src md_src/md_main.c 2>"$TMP/w_md"
@@ -115,14 +123,18 @@ fi
 if [ $DO_32X = 1 ]; then
 
 hdr "32X hardware rules (tools/lint32x.py)"
-python3 tools/lint32x.py --sh-defs "$SHDEFS" --md-defs "$MDDEFS" || err
+if [ -n "$LINT_ROM" ]; then
+  python3 tools/lint32x.py --candidate "$LINT_ROM" --sh-defs "$SHDEFS" --md-defs "$MDDEFS" || err
+else
+  echo "  SKIP — no candidate rom in build/port/rom (make candidate NAME=...)"
+fi
 
 hdr "counter registry (tools/ctr_audit.py)"
 python3 tools/ctr_audit.py --sh-defs "$SHDEFS" --md-defs "$MDDEFS" || err
 
 hdr "region guard"
-if [ -f rom/s16.lst ]; then
-  END=$(grep ' _end$' rom/s16.lst | awk '{print $1}' | tail -1)
+if [ -n "$LINT_ROM" ] && [ -f "build/port/rom/$LINT_ROM.lst" ]; then
+  END=$(grep ' _end$' "build/port/rom/$LINT_ROM.lst" | awk '{print $1}' | tail -1)
   LIM=06019000
   if [ -n "$END" ]; then
     if [ "$((16#$END))" -lt "$((16#$LIM))" ]; then
@@ -132,7 +144,7 @@ if [ -f rom/s16.lst ]; then
     fi
   fi
 else
-  echo "  SKIP — no rom/s16.lst (run make line)"
+  echo "  SKIP — no candidate .lst in build/port/rom"
 fi
 
 fi

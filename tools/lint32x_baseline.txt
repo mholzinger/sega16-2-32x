@@ -11,3 +11,6 @@
 # H3 FB_SPR/FBX_PKT_SH share 0x2401E000 by design (m_main.c:13914).
 H3|sh_src/m_main.c:328 spells 0x2401E000 as a literal in <file>()
 H9|sh_src/m_main.c:8620 spins on the FBCTL frame-select latch in <file>()
+# H8 testcart tc_run_all: preprocessor-live under R60_FRONTEND but LTO drops it (only tc_frame/tc_puts
+# link into md_start.elf, 2026-10-29); pre-existing. Step 4 guards it out of the shipping build.
+H8|md_src/testcart.c:529 reaches the framebuffer (0x840200) through a uint8_t pointer in tc_run_all()
