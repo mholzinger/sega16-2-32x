@@ -4542,6 +4542,29 @@ def _waitn_all(txt):
 out = [_waitn_all(_c) for _c in out]
 _pass_report('multi-frame waits rewritten (4 = both copies of the duplicated loop)', _waitn_hits[0], 4)
 
+# ---- CPORT_AFTER: A CALL INSERTED RIGHT AFTER A MARKED CALL SITE (2026-10-30) -------
+#
+# CPORT_AFTER='574=port_region_boot,...' -- MARKER=hook. The marker is the game's own
+# breadcrumb (`_DAT_fffffefc = <jsr + 6>`), so the site is anchored on a value the
+# program writes, as _WAITN is. The hook runs after the call that follows the marker.
+# For a regional variant that adds a step the reference program lacks (altbeastj's boot
+# warning, games/altbeast/glue.c port_region_boot): the decompile stays the reference's
+# and the glue decides at runtime.
+_after = []
+for _x in (os.getenv('CPORT_AFTER') or '').split(','):
+    _mk, _, _fn = _x.strip().partition('=')
+    if _fn:
+        _after.append((int(_mk, 16), _fn.strip()))
+for _mk, _fn in _after:
+    _k = [0]
+    def _ins(txt, _mk=_mk, _fn=_fn):
+        txt, k = re.subn(r'(_DAT_fffffefc = 0x%x\s*;\s*\n(\s*)[A-Za-z_]\w*\([^;\n]*\)\s*;)' % _mk,
+                         r'\1\n\2%s();' % _fn, txt)
+        _k[0] += k
+        return txt
+    out = [_ins(_c) for _c in out]
+    _pass_report('CPORT_AFTER %s after marker 0x%x' % (_fn, _mk), _k[0], 1)
+
 # ---- THE LOAD BLANK, PACED TO THE ARCADE (the builder, 2026-10-17) ---------------
 #
 # The game blanks the display across a scene load by clearing bit 5 of its own

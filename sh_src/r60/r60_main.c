@@ -501,8 +501,21 @@ static void r60_palmap_init(void)
 }
 #define R60_BANK_OF(pal6) (R60_PALMAP_U[(pal6) & 63u] < 16u ? R60_PALMAP_U[(pal6) & 63u] : ((pal6) & 15u))
 #endif
+#ifndef R60_CRAMDELTA
+#define R60_CRAM_RESEND() ((void)0)      /* every commit writes all 256 */
+#endif
 #ifdef R60_CRAMDELTA
 static uint16_t r60_cram_shadow[256] = { [0 ... 255] = 0xFFFEu };
+/* SET WHEN CRAM WAS NOT OURS (r60_frontend_service): the shadow no longer describes CRAM, so
+ * the next commit resends all 256. Without it a palette the game set under the boot window
+ * reached CRAM only at the 64-commit resend: altbeastj's warning page drew in black pens
+ * from the window's end (frame 146) to frame 203 (2026-10-30). */
+static unsigned r60_cram_stale;
+/* A RELEASED HOLD RESENDS TOO. The hold covers the boot and every load, which is when the game
+ * rewrites its palettes en masse and when commits are lost (FM down, outside PEN): altbeastj's
+ * warning page set its colours at frame 16 and they first reached CRAM at the 64-commit
+ * resend, frame 203, 62 frames after this hold released. 256 writes per cut. */
+#define R60_CRAM_RESEND() (r60_cram_stale = 1u)
 #ifdef R60_CRAMMASK
 static unsigned r60_cm_skip, r60_cm_pool;
 #ifdef R60_CMSTATS
@@ -559,9 +572,11 @@ R60CODE static void r60_cram_commit(void)
          * while their shadow was right (sw55; a ramp probe landed only the one entry
          * that kept changing). 256 writes once a second. */
         static unsigned ncommit;
-        if ((++ncommit & 63u) == 1u) { unsigned i; for (i = 0; i < 256u; i++) r60_cram_shadow[i] = 0xFFFEu; R60_DIAG2[0]++; }   /* 0xFFFE: 0xFFFF is a real colour */
+        unsigned resend = ((++ncommit & 63u) == 1u) || r60_cram_stale;
+        r60_cram_stale = 0;
+        if (resend) { unsigned i; for (i = 0; i < 256u; i++) r60_cram_shadow[i] = 0xFFFEu; R60_DIAG2[0]++; }   /* 0xFFFE: 0xFFFF is a real colour */
 #ifdef R60_CRAMMASK
-    {   unsigned cm = R60_CRAMMASK_W, pd = R60_POOLDIRTY, resend = (ncommit & 63u) == 1u;
+    {   unsigned cm = R60_CRAMMASK_W, pd = R60_POOLDIRTY;
         R60_CRAMMASK_W = 0; R60_POOLDIRTY = 0;
 #ifdef R60_PALMAP
         cm |= R60_REMAPMASK; R60_REMAPMASK = 0;
@@ -1623,7 +1638,7 @@ R60CODE static void r60_planes_prepare(void)
             if (load_hold) min_windows = 4u;
 #endif
             if ((since >= min_windows && quiet >= 2u) || since >= R60_HOLD_MAX) {
-                hold = 0; R60_GATE_REL++;
+                hold = 0; R60_GATE_REL++; R60_CRAM_RESEND();
 #ifdef PORT_FULL
                 load_hold = 0; r60_bulk_hold = 0;
 #endif
@@ -1634,7 +1649,7 @@ R60CODE static void r60_planes_prepare(void)
         else if (hold) {
             since++;
             quiet = holes < R60_HOLD_HOLES ? quiet + 1u : 0u;   /* three quiet windows in a row: one dip is a full packet, not a whole screen (sw77 released at ~485 into litter) */
-            if ((since >= 4u && quiet >= 2u) || since >= R60_HOLD_MAX) { hold = 0; R60_GATE_REL++; }   /* sw168: a 14-row rotation covers the screen in two windows; was 8 and 3 for the 7-row sweep */
+            if ((since >= 4u && quiet >= 2u) || since >= R60_HOLD_MAX) { hold = 0; R60_GATE_REL++; R60_CRAM_RESEND(); }   /* sw168: a 14-row rotation covers the screen in two windows; was 8 and 3 for the 7-row sweep */
         }
 #endif
         if (hold) R60_GATE_HELD++;                   /* windows held */
@@ -5738,6 +5753,9 @@ __attribute__((noinline)) static int r60_frontend_service(void)
         if ((command & 0xFF00u) == FE_RESULT) port_frontend_settings(command & 0xFFu);
         pp_due = 0;
         R60_FM_UP();
+#ifdef R60_CRAMDELTA
+        r60_cram_stale = 1;              /* the MD owned CRAM through the pause */
+#endif
         frontend_paused = 0;
         MARS_SYS_COMM12 = 0;
     } else if (!FE_WAITING(command)) {

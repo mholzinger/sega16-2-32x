@@ -589,3 +589,32 @@ SEC_port_zoom_scale unsigned long long port_zoom_scale(int p_A0)
     _port_reg_n++;
     return ((unsigned long long)(uint)(p_A0 + 2) << 32) | (unsigned long long)d1;
 }
+
+/* ---- REGION 1 (altbeastj): THE JAPAN-ONLY WARNING AT BOOT -------------------------
+ *
+ * altbeastj runs one extra step between the boot's set_level_palettes and the main
+ * entry (JP 0x574-0x59E; the US program goes straight on to 0x1E4E). Everything it
+ * uses is already in the US program, unreferenced: the printer is 0x57A (`lea
+ * 0x1D0A,a1`, then FUN_0000057E) and 0x1D0A holds the "WARNING / THIS GAME IS TO BE
+ * USED ONLY IN JAPAN" page (tools/region_diff.py, 2026-10-30). In US terms the JP step is
+ *     bsr   0x57A                    print the page
+ *     bset  #5,0xFFF018              display on
+ *     moveq #0,d0    ; jsr 0x397E    1 frame   (wait_frame_flag waits D0+1)
+ *     move.w #600,d0 ; jsr 0x397E    601 frames
+ *     bclr  #5,0xFFF018              display off
+ *     moveq #0,d0    ; jsr 0x397E    1 frame
+ * cport_prep calls this after the boot's set_level_palettes (CPORT_AFTER, marker 0x574). */
+PORTCODE void port_region_boot(void)
+{
+    extern byte DAT_fffff018;
+    extern uint port_frame_wait_n(uint frames);
+    extern uint FUN_0000057e(byte *p_A1, uint p_D0);
+    if (port_region != 1u)
+        return;
+    FUN_0000057e((byte *)ROM_BASE + 0x1D0Au, 0);
+    DAT_fffff018 |= 0x20u;
+    port_frame_wait_n(1u);
+    port_frame_wait_n(601u);
+    DAT_fffff018 &= (byte)~0x20u;
+    port_frame_wait_n(1u);
+}

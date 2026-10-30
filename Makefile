@@ -1710,6 +1710,11 @@ endif
 ifdef PORTSTARTCOIN
 SHCCFLAGS += -DPORT_STARTCOIN
 endif
+# `PORTREGION=N` = the region byte's power-on value (sh_src/port_l2.c port_region): 0 = the
+# reference set, 1 = altbeastj (games/altbeast/glue.c). 2026-10-30.
+ifdef PORTREGION
+SHCCFLAGS += -DPORT_REGION=$(PORTREGION)
+endif
 ifdef R60PADBAR
 SHCCFLAGS += -DR60_PADBAR
 endif
@@ -5362,6 +5367,11 @@ CPORT_WIDTH ?= 00840000=2,0000DD8A=2,0000DD8C=2,0000DCEE=2,0000DCF0=2,0000DD3C=2
 #   FUN_00014b5e (A1 = ROM object templates 0x10112/0x15164..), FUN_000180c2 (A5 = ROM
 #   0x186FA).
 CPORT_PARAMNORM ?= FUN_00002622,FUN_00003972,textram_stride_write,FUN_00001732,tilemap_unpack_hi,tilemap_unpack_lo,FUN_0000258a,FUN_00003aa4,FUN_0000f28a,FUN_0000135e,FUN_0000469c,FUN_00004612,FUN_00010394,FUN_00001192,switchD_00002ef0__caseD_f0,FUN_000037d0,FUN_00004276,FUN_00004330,FUN_00004196,FUN_000058e4,FUN_00005e04,FUN_0000f8c0,FUN_00014b5e,FUN_000180c2
+# CPORT_AFTER: hooks called right after a marked call site, MARKER=hook (the marker is the
+# game's breadcrumb _DAT_fffffefc = jsr + 6; tools/cport_prep.py). 574 = the boot's
+# set_level_palettes (FUN_00000500), where altbeastj adds its warning page: the hook
+# returns at once unless the region byte is 1 (games/altbeast/glue.c port_region_boot).
+CPORT_AFTER ?= 574=port_region_boot
 CPORT_ENV = CPORT_CORPUS=docs/proof/$(GAME).c CPORT_HAND_DIR=games/$(GAME)/hand CPORT_CLAMP=$(CPORT_CLAMP) \
 	    CPORT_STUBS='$(CPORT_STUB_WAIT),object_dispatcher->port_object_dispatch,zoom_scale_lookup->port_zoom_scale' \
 	    CPORT_HANDLERS=$(CPORT_ROOTFILE) \
@@ -5378,6 +5388,7 @@ CPORT_ENV = CPORT_CORPUS=docs/proof/$(GAME).c CPORT_HAND_DIR=games/$(GAME)/hand 
 	    CPORT_PARAMNORM=$(CPORT_PARAMNORM) \
 	    CPORT_ARGLOG=$(CPORT_ARGLOG) \
 	    CPORT_COUNT=$(CPORT_COUNT) \
+	    CPORT_AFTER=$(CPORT_AFTER) \
 	    CPORT_ROOTS=$(CPORT_ROOTS_SET)
 
 # $(PORTSTAMP) IS A REAL PREREQUISITE HERE. The generated unit's CONTENT is
@@ -5506,7 +5517,7 @@ sh_src/portfull/l2seed.o: sh_src/portfull/port.o
 ifndef FLAGSTAMP_SKIP
 $(shell f='$(MDCCFLAGS) $(SHCCFLAGS)'; \
         [ "$$(cat $(FLAGSTAMP) 2>/dev/null)" = "$$f" ] || printf '%s' "$$f" > $(FLAGSTAMP))
-$(shell f='$(CPORT_ROOTS_SET) | $(CPORT_STUB_WAIT) | $(CPORT_OPT_SET) | $(CPORT_CLAMP) | $(CPORT_A6) | $(CPORT_HOT)'; \
+$(shell f='$(CPORT_ROOTS_SET) | $(CPORT_STUB_WAIT) | $(CPORT_OPT_SET) | $(CPORT_CLAMP) | $(CPORT_A6) | $(CPORT_HOT) | $(CPORT_AFTER)'; \
         [ "$$(cat $(PORTSTAMP) 2>/dev/null)" = "$$f" ] || printf '%s' "$$f" > $(PORTSTAMP))
 endif
 

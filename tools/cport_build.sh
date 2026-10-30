@@ -85,7 +85,11 @@ done
 # that would LOSE bits (a pointer into a char) are NOT inserted: those are wrong
 # declarations, and a cast would only hide them. Mike, 2026-09-27: "we want the compiler
 # clean."
-python3 tools/cport_cast.py "$OUT/altbeast_port.c" -I "$OUT" || true
+# THE TITLE DIRECTORY TOO (2026-10-30). Without it the 146 `#include "hand/X.c"` lines do not
+# resolve here, the compile stops at the first one, and the casts after it are never derived:
+# from framework 3c (2026-10-29) the four symbol-address arguments below stayed SH-2 pointers
+# (0x0230F658 where the arcade stores 0x0000F658) and demo B's slot 19 differed by 2 bytes.
+python3 tools/cport_cast.py "$OUT/altbeast_port.c" -I "$OUT" ${CPORT_HAND_DIR:+-I "$(dirname "$CPORT_HAND_DIR")"} || true
 # THE OBJECT MUST COME FROM THE TEXT cport_cast.py WROTE. The loop above produced
 # port.o from the pre-cast text (the casts are warnings under -Wno-error, so pass N
 # reached 0 errors before any were derived), and cport_cast.py now also rewrites the

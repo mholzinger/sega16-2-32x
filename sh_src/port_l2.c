@@ -404,6 +404,15 @@ static const unsigned int HANG[] = { 0u };
 static int seed_regs = 0;
 void port_l2_seed(unsigned int slot);
 
+/* THE REGION BYTE. 0 = the reference set the decompile was made from; 1.. = a regional
+ * variant whose differences the title's glue switches on (altbeast: 1 = altbeastj,
+ * games/altbeast/glue.c). Runtime, so the title menu can set it; `make ... PORTREGION=N`
+ * sets the power-on value. */
+#ifndef PORT_REGION
+#define PORT_REGION 0
+#endif
+byte port_region = PORT_REGION;
+
 #include "glue.c"   /* the title's runtime glue: games/<title>/glue.c (framework 3e) */
 
 /* PORTHOT: this function alone is 22,053 cyc/vint of the master (5.7%) and it lives in
