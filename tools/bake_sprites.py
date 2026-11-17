@@ -87,7 +87,7 @@ def load_rom():
 
 class Rom:
     """Word-addressed view of the interleaved sprite ROM, banked in
-    64K-word pages exactly like `altbeast_sprites + bank * 0x10000`."""
+    64K-word pages exactly like `game_sprites + bank * 0x10000`."""
 
     def __init__(self, raw):
         self.raw = raw

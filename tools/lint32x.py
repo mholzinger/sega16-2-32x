@@ -272,7 +272,8 @@ def rule_H5(sh, md):
 
 def rule_H6(sh_defs, md_defs):
     """Flags the Makefile itself marks NEVER SHIP / probe only."""
-    mk = open(os.path.join(ROOT, 'Makefile')).read().split('\n')
+    from mktext import makefile_text
+    mk = makefile_text(ROOT).split('\n')
     banned, comment = {}, []
     for i, ln in enumerate(mk):
         s = ln.strip()

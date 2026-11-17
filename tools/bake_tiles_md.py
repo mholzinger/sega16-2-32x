@@ -5,7 +5,7 @@
 
 WHY. md_emit_art (m_main.c) converts EVERY tile EVERY time it ships:
 
-    px  = altbeast_tiles + code*64          # S16 art, ONE BYTE PER PIXEL
+    px  = game_tiles + code*64          # S16 art, ONE BYTE PER PIXEL
     map = mdp_s_map + cset*8                # the set's pixel->pen map
     for y in 8: for kk in 4:
         out = (map[px[y*8+kk*2]] << 4) | map[px[y*8+kk*2+1]]

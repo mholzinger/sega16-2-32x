@@ -130,7 +130,7 @@ R60PHWALKCODE static unsigned r60_stale_same(uint16_t cell, unsigned line, unsig
 #define R60_DIAG       ((volatile uint32_t *)0x26028E40u)
 #define R60_MDHOLD     (*(volatile uint16_t *)0x26028FE2u)   /* the display gate's hold for the MD (packet bit 13); the slave's word is 0x26028FE0 */
 #define R60_DIAG2      ((volatile uint32_t *)0x26028E80u)
-extern const uint8_t altbeast_tiles[];           /* 16384 tiles x 64B, one byte a pixel */
+extern const uint8_t game_tiles[];           /* 16384 tiles x 64B, one byte a pixel */
 extern unsigned r60_artcap;
 
 /* THE PEN PACK, the old renderer's rule made static (m_main.c:622-633, 3855-3917): four
@@ -545,7 +545,7 @@ R60ARTCODE static void r60_art_pixels(volatile uint16_t *out, unsigned slot)
         for (k=0;k<16u;k++) out[k]=v;
         return;
     }
-    r60_tb_pixels(out, (const uint32_t *)(altbeast_tiles+(md_tag[slot]&0x3FFFu)*64u),
+    r60_tb_pixels(out, (const uint32_t *)(game_tiles+(md_tag[slot]&0x3FFFu)*64u),
                   r60_smap+((md_tag[slot]>>16)&0x7Fu)*8u, (md_tag[slot]>>15)&1u);
 }
 
@@ -1681,7 +1681,7 @@ R60COLD void r60_fill_cells(volatile uint8_t *fbdir, volatile uint8_t *fbovr,
                 if (cx < 0) continue;
                 map = smap + (unsigned)mid[cset] * 8u;
                 base = r60_fill_set[line - 1u] * 16u;
-                px = altbeast_tiles + code * 64u;
+                px = game_tiles + code * 64u;
                 for (k8 = 0; k8 < 8u; k8++) { unsigned m = map[k8]; pen8[k8] = which ? (m ? base + m : r60_fill_set[0] * 16u) : (k8 ? base + m : 0u); }   /* BG pixel 0 with no pen: opaque black (set 7 entry 0 = line 0 pen 0 = black), never through to the MD */
                 for (yy = 0; yy < 8u; yy++) {
                     int y = y0 + (int)yy;

@@ -14,7 +14,7 @@ def sym(n):
         if l.rstrip().endswith(' _'+n): return int(l.split()[0],16)
     raise SystemExit('no symbol '+n)
 D=f'/tmp/artaudit_{os.getpid()}'; os.makedirs(D,exist_ok=True)
-SM=sym('r60_smap')-0x06000000; TL=sym('altbeast_tiles')-0x02000000
+SM=sym('r60_smap')-0x06000000; TL=sym('game_tiles')-0x02000000
 cmd=[A,'--frames',str(a.frame+1)]+(['--input',a.input] if a.input else [])+[
  '--dump',f'VDP VRAM:0:0x10000:{D}/vram.bin','--dump',f'32X SDRAM:0x3B400:0x1000:{D}/tag.bin',
  '--dump',f'32X SDRAM:{SM:#x}:0x400:{D}/smap.bin',

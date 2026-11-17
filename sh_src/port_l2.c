@@ -387,6 +387,9 @@ void port_l2_seed(unsigned int slot);
 #endif
 byte port_region = PORT_REGION;
 
+#include "port_game.h"   /* the title's rules: games/<title>/port_game.h */
+/* a work-RAM cell of the title, by its 68K address, as an offset from WRAM_BASE */
+#define GAME_W(a68) ((a68) - SDRAM_WRAM_68K)
 #include "glue.c"   /* the title's runtime glue: games/<title>/glue.c (framework 3e) */
 
 /* PORTHOT: this function alone is 22,053 cyc/vint of the master (5.7%) and it lives in
@@ -397,8 +400,8 @@ byte port_region = PORT_REGION;
 PORTHOT uint port_object_dispatch(void)
 {
     byte *slot = (byte *)WRAM_BASE;                    /* 68K 0xFFC000 */
-    volatile byte *idx  = (volatile byte *)WRAM_BASE + 0x3109;   /* DAT_fffff109 */
-    volatile byte *solo = (volatile byte *)WRAM_BASE + 0x3148;   /* DAT_fffff148 */
+    volatile byte *idx  = (volatile byte *)WRAM_BASE + GAME_W(GAME_WRAM_OBJ_INDEX);
+    volatile byte *solo = (volatile byte *)WRAM_BASE + GAME_W(GAME_WRAM_CUTSCENE);   /* non-zero = only that slot runs */
     uint i;
 
     *idx = 0;
@@ -825,25 +828,7 @@ PORTCODE void port_irq_redirect(uint target)
  * rather than switching back out of a dead stack. */
 static void coro_entry(void)
 {
-    {   /* A REDIRECT STARTS THE FRESH THREAD WHERE THE rte WOULD HAVE LANDED. */
-        uint _t = irq_redirect;
-        irq_redirect = 0;
-        if (_t == 0x1E4Eu) {
-            /* 0x1E4E is six bytes above the sequencer and its whole content is
-             * `move.b #4,0xFFF031`; falling into 0x1E54 then adds 4, so the step
-             * lands on 8, the title. FUN_00001e54 begins AT 0x1E54, so the step
-             * write has to be done here or the step just advances normally. */
-            DAT_fffff031 = 4;
-            FUN_00001e54(0, 0, 0, 0, 0);
-            coro_returned++;
-            for (;;) port_ctx_switch(&coro_game_sp, coro_drv_sp);
-        }
-        if (_t == 0x05BEu) {
-            main_entry();
-            coro_returned++;
-            for (;;) port_ctx_switch(&coro_game_sp, coro_drv_sp);
-        }
-    }
+#include "coro_redirect.inc"   /* the title's restart points: games/<title>/coro_redirect.inc */
     /* COLD BOOT ON THE COROUTINE'S STACK. Entering at frame_rotated resumes the
      * GAMEPLAY frame; the game's real loop is main_entry, which dispatches by mode,
      * so a build that re-enters frame_rotated every frame can never advance the
@@ -856,7 +841,7 @@ static void coro_entry(void)
      * game's whole control flow persists across frames and port_frame_wait suspends
      * it wherever it stands. That is what a coroutine is FOR here -- not a speed
      * tweak, a requirement. */
-    FUN_0000040e();
+    GAME_BOOT_ENTRY();
     coro_returned++;
     for (;;)
         port_ctx_switch(&coro_game_sp, coro_drv_sp);
@@ -1239,14 +1224,14 @@ PORTCODE static void mainloop_one_frame(void)
      * tick N's counter with slots 0..k dispatched and k+1.. not. port_tick_done is the
      * value of 0xFFF02A for the last tick that ran to its wait; tests/demo-b/
      * check_demo.py accepts a frame only when it equals the counter in the dump. */
-    port_tick_done = ((uint)((volatile byte *)WRAM_BASE)[0x302a] << 8) | ((volatile byte *)WRAM_BASE)[0x302b];
+    port_tick_done = ((uint)((volatile byte *)WRAM_BASE)[GAME_W(GAME_WRAM_TICK)] << 8) | ((volatile byte *)WRAM_BASE)[GAME_W(GAME_WRAM_TICK) + 1u];
     {
-        unsigned n = ((volatile byte *)WRAM_BASE)[0x3020], b = ((volatile byte *)WRAM_BASE)[0x3021];
-        unsigned gf = (n >> 1) * 90u + (n & 1u) * 30u + ((n & 1u) ? 60u : 30u) - 1u - b;
+        unsigned n = ((volatile byte *)WRAM_BASE)[GAME_W(GAME_WRAM_BLINK)], b = ((volatile byte *)WRAM_BASE)[GAME_W(GAME_WRAM_BLINK) + 1u];
+        unsigned gf = GAME_BLINK_FRAME(n, b);
         if (port_gf_count == 0xFFFFu)
             port_gf_count = 0;                                     /* the first tick */
         else if (port_gf_prev != 0xFFFFFFFFu) {
-            unsigned d = (gf + 11520u - port_gf_prev) % 11520u;    /* 256 blink cycles */
+            unsigned d = (gf + GAME_BLINK_WRAP - port_gf_prev) % GAME_BLINK_WRAP;
             if (d <= 4u)
                 port_gf_count = (unsigned short)(port_gf_count + d);
         }
@@ -1392,7 +1377,7 @@ PORTCODE static void l2m_io_live(void)
         {   static uint st_prev, st_coin;
             extern byte DAT_fffff000;                 /* credits, placed by layout.ld */
             uint st = svc & 0x10u;
-            if (st && !st_prev) st_coin = (DAT_fffff000 < 2u);
+            if (st && !st_prev) st_coin = GAME_START_NEEDS_COIN(DAT_fffff000);
             st_prev = st;
             if (st && st_coin) svc |= 0x01u;
         }
@@ -1419,8 +1404,8 @@ PORTCODE static void l2m_io_tape(void)
 {
     const volatile byte *w = (const volatile byte *)WRAM_BASE;
     int c = (port_gf_count == 0xFFFFu) ? 0 : (int)port_gf_count;
-    if (!tp_off_set && tp_i >= (unsigned)TP_CAL_FROM && (w[0x3028] & 1u)
-            && (((unsigned)w[0x302a] << 8) | w[0x302b]) == TP_CAL_TICK) {
+    if (!tp_off_set && tp_i >= (unsigned)TP_CAL_FROM && (w[GAME_W(GAME_WRAM_P1_STATE)] & 1u)
+            && (((unsigned)w[GAME_W(GAME_WRAM_TICK)] << 8) | w[GAME_W(GAME_WRAM_TICK) + 1u]) == TP_CAL_TICK) {
         tp_off = c - (int)TP_CAL_S;
         tp_off_set = 1;
     }
@@ -1652,64 +1637,7 @@ PORTCODE void port_play_tick(void)
                                                      * (16.67 ms / 1.39 us per FRT tick) */
         }
     }
-    /* ---- THE i8751, ON THE SH-2 ----------------------------------------------------
-     *
-     * The arcade's MCU talks to the 68K through three work-RAM mailboxes (US MCU
-     * 317-0078; tools/game_altbeast.py): 0xFFF0C0 screen-sync busy, 0xFFF0C2 the
-     * coin/service byte the MCU POSTS (inverted, 0 = nothing pressed), 0xFFF0C4 the
-     * sound command the 68K posts and the MCU CONSUMES back to 0xFF. md_main.c
-     * replicates the MCU for the 68K build ("Stage B"); it writes MD RAM, which a
-     * port running on the SH-2 never sees. So a port-alone build had NO MCU.
-     *
-     * MEASURED 2026-10-04, with the real dips: 0xFFF0C4 held a posted command 0xB6
-     * that nothing consumed (the arcade capture holds 0xFF, idle); by tick 1200 the
-     * unconsumed queue had spilled 0xB6 into 0xFFF0C0..C2 as well, so MCU_COINS read
-     * 0xB6 -- bits 2 and 7 set -- and irq4_handler's `do {} while (DAT_fffff0c2 & 4)`
-     * spun forever waiting for an MCU to clear a TEST press that never happened. The
-     * master SH-2 hung at 0x0238FBF6 for 183 million iterations (ares --profile), the
-     * tick counter stopped at 849, and every per-frame function with it.
-     *
-     * This is the MD shim's per-vint half, verbatim in behaviour: post idle inputs to
-     * MCU_COINS every frame (md_main.c:6729 `MCU_COINS = svc`), consume a pending
-     * sound command back to 0xFF (md_main.c:5920-5924 -- logged, no Z80 yet), and the
-     * busy flag exactly as it keeps it. Live coins/service come later with the pads. */
-    {
-        volatile unsigned char *mcu = (volatile unsigned char *)WRAM_BASE + (0xFFF0C0u - 0xFFC000u);
-        static unsigned char mcu_busy;
-        if (!mcu_busy && mcu[0]) mcu_busy = 1;        /* 68K set the busy high byte */
-        else if (mcu_busy)       mcu_busy = 0;        /* no TEXT_SYNC here: one frame */
-        if (mcu[4] != 0xFFu && r60_comm_push(R60_COMM,mcu[4])) {
-            port_play_dbg[3] = (port_play_dbg[3] & 0xFFFF0000u) | 0xB600u | mcu[4];
-            { extern void speech_cmd(unsigned); speech_cmd(mcu[4]); }   /* the slave's PWM speech lane (r60_speech.c) */
-            mcu[4] = 0xFFu;
-        }
-        mcu[2] = (port_live_svc & 0x100u) ? (unsigned char)(port_live_svc & 0xFFu) : 0x00u;   /* MCU_COINS: the MCU posts the service bits pressed (md_main.c old shim: MCU_COINS = svc) */
-#ifdef PORT_GODMODE
-        {   /* measurement only (Makefile PORTGODMODE): hold P1 lives at 3 while in play, the
-             * arcade oracle's GD_GOD rule, so a tape runs a whole level without dying */
-            volatile unsigned char *f028 = (volatile unsigned char *)WRAM_BASE + (0xFFF028u - 0xFFC000u);
-            volatile unsigned char *e018 = (volatile unsigned char *)WRAM_BASE + (0xFFE018u - 0xFFC000u);
-            if ((*f028 & 1u) && *e018 < 3u) *e018 = 3u;
-        }
-#endif
-        if (frontend_round && (w[0x3028] & 1u) && w[0x3026] == 0u && w[0x314E] == 0u) {
-            w[0x314E] = (byte)frontend_round;
-            w[0x3142] = (byte)frontend_round;
-        }
-        /* THE MCU SEEDS THE CREDIT COUNT. MEASURED 2026-10-04 on the oracle (MAME
-         * altbeast, DIPs 0x54/0x66): 0xFFF000 reads 0xFF through frame 6 and 7 from
-         * frame 7 on, with NO 68K write to it from the reset vector onward (MAME
-         * watchpoint armed before frame 1) -- the i8751 writes it. The arcade then
-         * shows "CREDITS 7" and spawns the credit object; the port showed "INSERT
-         * COIN" and lacked slot 6 at the eye scene. Once, at the first tick. */
-        /* RETRACTED 2026-10-04 (rd71): the 7 was MAME's NVRAM, not the MCU. The S16B
-         * work RAM is battery-backed and MAME saves it to nvram/altbeast/nvram; the
-         * oracle measured above had seven credits from an earlier session. A fresh
-         * nvram directory reads 0xFFF000 = 0 from frame 7 (cell_timeline, 2026-10-04),
-         * and the fresh-NVRAM arcade's table scene draws no "CREDITS 7" line (text row
-         * 26 is bare where rd69 typed one). The factory board boots with zero credits;
-         * restoring a saved count is the BATTERY SAVE card's job (STATE.md). */
-    }
+#include "mcu.inc"   /* the title's MCU and per-tick work-RAM rules: games/<title>/mcu.inc */
     {
         /* slot 2 = 0xFFC080; +0x21 at 0xFFC0A1, +0x22 at 0xFFC0A2 */
         const volatile unsigned char *s2 = (const volatile unsigned char *)WRAM_BASE + (0xFFC0A0u - 0xFFC000u);

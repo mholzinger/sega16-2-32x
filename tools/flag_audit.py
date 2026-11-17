@@ -46,7 +46,8 @@ def sources():
 
 def makefile_flags():
     """ifdef FOO ... SHCCFLAGS/MDCCFLAGS += -DBAR  ->  {FOO: [BAR, ...]}"""
-    txt = open(os.path.join(ROOT, "Makefile"), errors="replace").read().split("\n")
+    from mktext import makefile_text
+    txt = makefile_text(ROOT).split("\n")
     flags = {}
     cur = None
     for line in txt:

@@ -22,6 +22,14 @@ and left for a person.
 
 The proof is the rebuild: NAME.flags of the new build must equal the old one and
 tools/romcmp.py must report 0 bytes.
+
+    python3 tools/strip_makefile.py build/port/rom/NAME.flags --unread [--apply]
+
+--unread also removes the options that are ON but that nothing reads any more:
+strip_dead.py resolved their #if, so the define reaches no source, no generated
+file and no tool. Such a block goes the same way, and the option's VAR=value is
+taken out of the flag lists when nothing else in the Makefile mentions VAR. Here
+NAME.flags loses those defines and only romcmp.py is the proof.
 """
 import argparse
 import os
@@ -73,22 +81,83 @@ def pure(body, off):
     return saw
 
 
+READ_TREES = ('sh_src', 'md_src', 'games', 'sndtest', 'introlab', 'tools', 'tests', 'kit',
+              'build/port/sh_src', 'build/port/md_src')
+READ_EXT = ('.c', '.h', '.inc', '.s', '.S', '.ld', '.py', '.sh', '.lua', '.txt', '.mk')
+# files that name options without reading them: this tool, its sibling, the lint baselines
+NOT_READERS = ('strip_makefile.py', 'strip_dead.py', 'flag_audit.py')
+
+
+def read_words():
+    """Every identifier in the sources, the generated files of the last build and the tools."""
+    words = set()
+    for top in READ_TREES:
+        for d, dirs, files in os.walk(os.path.join(S.ROOT, top)):
+            dirs[:] = [x for x in dirs if x not in ('__pycache__', 'arcade', 'arcade_jp', 'picbase')]
+            for f in files:
+                if f.endswith(READ_EXT) and f not in NOT_READERS:
+                    try:
+                        words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', open(os.path.join(d, f), errors='replace').read()))
+                    except OSError:
+                        pass
+    return words
+
+
+def drop_tokens(lines, gone_vars):
+    """Take VAR=value out of the flag lists for every removed option nothing else mentions."""
+    dropped = []
+    for var in sorted(gone_vars):
+        tok = re.compile(r'(?<![A-Za-z0-9_])%s=(?:\$\([A-Za-z0-9_]+\)|[^\s\\(),]+)' % re.escape(var))
+        word = re.compile(r'(?<![A-Za-z0-9_])%s(?![A-Za-z0-9_])' % re.escape(var))
+        hits = [i for i, l in enumerate(lines) if not l.lstrip().startswith('#') and word.search(l.split(' #')[0])]
+        if not hits or any(len(word.findall(lines[i])) != len(tok.findall(lines[i])) for i in hits):
+            continue
+        for i in hits:
+            l = tok.sub('', lines[i])
+            l = re.sub(r'(?<=\S) {2,}(?=\S)', ' ', l)
+            lines[i] = l.rstrip() if l.strip() else None
+        dropped.append(var)
+    # a list line that lost every token: drop it, and mend the continuation above it
+    out = []
+    for l in lines:
+        if l is None or l.strip() == '\\':
+            if l is not None and out and not out[-1].rstrip().endswith('\\'):
+                pass
+            continue
+        out.append(l)
+    for i in range(len(out) - 1):
+        if out[i].rstrip().endswith('\\') and (out[i + 1].strip() == '' or not out[i + 1][:1].isspace()):
+            out[i] = out[i].rstrip()[:-1].rstrip()
+    return out, dropped
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('flags')
     ap.add_argument('--apply', action='store_true')
+    ap.add_argument('--file', default='mk/options.mk', help='the part to edit (default: the option blocks)')
+    ap.add_argument('--unread', action='store_true', help='also remove ON options no source or tool reads')
     a = ap.parse_args()
 
     on = set().union(*map(set, S.split_flags(a.flags)))
-    path = os.path.join(S.ROOT, 'Makefile')
+    # the options come from the whole build (Makefile + mk/*.mk); one file is edited
+    from mktext import makefile_text
+    path = os.path.join(S.ROOT, a.file)
     mk = open(path).read()
-    opts, used = S.makefile_options(mk), S.used_vars(mk)
+    whole = makefile_text(S.ROOT)
+    opts, used = S.makefile_options(whole), S.used_vars(whole)
     off = set()
     for d, vs in opts.items():
         if d in on:
             continue
         if d in S.FORCE_OFF or not (S.KEEP.match(d) or (vs & used) or not vs):
             off.add(d)
+
+    if a.unread:
+        words = read_words()
+        unread = {d for d in opts if d not in words}
+        print('%d of %d defines the Makefile can add are read by nothing' % (len(unread), len(opts)))
+        off |= unread
 
     lines = mk.split('\n')
     kill, gone_vars, left = set(), set(), []
@@ -138,6 +207,9 @@ def main():
 
     removed = [lines[i] for i in sorted(kill)]
     kept = [l for i, l in enumerate(lines) if i not in kill]
+    if a.unread:
+        kept, dropped = drop_tokens(kept, gone_vars)
+        print('%d options taken out of the flag lists' % len(dropped))
     # collapse the blank runs the removal leaves behind
     out = []
     for l in kept:

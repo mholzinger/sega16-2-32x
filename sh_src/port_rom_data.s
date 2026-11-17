@@ -8,7 +8,7 @@
 ! frame's indirect calls to address 0x00000, silently.
 !
 ! .incbin is what every other blob in this tree uses (game_high_data.s,
-! port_l2_data.s) and it demonstrably works -- .portdata's bytes arrive.
+! tiles_data.s) and it demonstrably works.
 !
 ! NOT .gamehigh: that image is REBASED (+0x900000 on every ROM reference) for the
 ! 68K's bank window, so its operand bytes differ from what the decompiled code
@@ -17,4 +17,4 @@
 	.global _port_rom_image
 	.align 2
 _port_rom_image:
-	.incbin "roms/altbeast/prog68k.bin"
+	.incbin "prog68k.bin"   ! the title's program: -I$(GAMEROMS), Makefile

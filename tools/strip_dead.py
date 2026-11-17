@@ -110,7 +110,8 @@ def main():
     a = ap.parse_args()
 
     on = dict(zip(('md', 'sh'), split_flags(a.flags)))
-    mk = open(os.path.join(ROOT, 'Makefile')).read()
+    from mktext import makefile_text
+    mk = makefile_text(ROOT)
     opts, used = makefile_options(mk), used_vars(mk)
     every_on = set(on['md']) | set(on['sh'])
 

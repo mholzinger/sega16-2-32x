@@ -22,7 +22,7 @@ R60SPRCODE static void r60_sprite(const volatile uint16_t *e, unsigned ylo, unsi
     int      pitch = (int)(signed char)(d2 & 0xFF);
     int      flip  = d2 & 0x100;
     unsigned addr  = e[3];
-    const uint16_t *sd = altbeast_sprites + R60_SPR_BANK((e[4] >> 8) & 0xF) * 0x10000u;
+    const uint16_t *sd = game_sprites + R60_SPR_BANK((e[4] >> 8) & 0xF) * 0x10000u;
     unsigned base  = (unsigned)(R60_BANK_OF(e[4] & 0x3Fu) << 4);   /* FB byte = bank*16 + pen; bank = this palette's 32X bank */
     int      y;
     const uint16_t *pt5; int lim5 = (int)(FB_W + XO_), xo5 = (int)XO_; unsigned npx5 = 0;   /* per sprite, not per row */

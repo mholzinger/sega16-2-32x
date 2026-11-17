@@ -239,7 +239,7 @@ __attribute__((noinline)) static void r60_text_plan(void)
         unsigned lutpals = 0;
         if (!pm_init) {
             unsigned c2, k;
-            for (c2 = 0; c2 < 512u; c2++) { unsigned m = 0; for (k = 0; k < 64u; k++) m |= 1u << (altbeast_tiles[c2 * 64u + k] & 7u); penmask[c2] = (uint8_t)m; }
+            for (c2 = 0; c2 < 512u; c2++) { unsigned m = 0; for (k = 0; k < 64u; k++) m |= 1u << (game_tiles[c2 * 64u + k] & 7u); penmask[c2] = (uint8_t)m; }
             for (s = 0; s < R60_POOLN; s++) { users[s] = 0; slotcol[s] = 0xFFFEu; }
             for (pr = 0; pr < 64u; pr++) { pair_slot[pr] = 0xFFu; lut_shadow[pr] = 0; }
             pm_init = 1;

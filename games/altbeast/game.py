@@ -51,6 +51,9 @@ TABLES = {
     'WRAM_SPR_ORDER':    0xFFEC80,
     'WRAM_DSW2_LATCH':   0xFFF01B,
     'WRAM_LIVES_LATCH':  0xFFF019,
+    'WRAM_OBJ_INDEX':    0xFFF109,
+    'WRAM_TICK':         0xFFF02A,
+    'WRAM_BLINK':        0xFFF020,
     # THE SECRET MENU (hold B at boot): its title, round count and DIP-backed options.
     'TITLE':            'ALTERED BEAST',
     'ROUNDS':           5,

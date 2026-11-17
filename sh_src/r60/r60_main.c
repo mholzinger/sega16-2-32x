@@ -165,8 +165,8 @@ static uint32_t r60_rowmask[2][7];
 volatile uint16_t port_tile_dirty;      /* one bit per 4 KB tilemap page */
 volatile uint32_t pp_marks_p2;          /* the port's own mark counter */
 
-extern const uint16_t altbeast_sprites[];   /* 512K WORDS big-endian, cart ROM */
-extern const uint8_t  altbeast_tiles[];     /* 16384 tiles x 64 B, one byte a pixel */
+extern const uint16_t game_sprites[];   /* 512K WORDS big-endian, cart ROM */
+extern const uint8_t  game_tiles[];     /* 16384 tiles x 64 B, one byte a pixel */
 /* THE TEXT LAYER (R60_TEXT): 64 x 28 cells in text RAM, screen columns 24..63, cell =
  * code (9 bits) | pal (3 bits) << 9, tiles from the tile ROM, 3-bit pixels, pixel 0
  * transparent (native1 compose_text). It is drawn by the slave after the sprites through
@@ -938,7 +938,7 @@ R60CODE void s_main(void)
                     g = R60_TXTGRP[((unsigned)d >> 9) & 7u];
                     if (g == 0xFFu) continue;
                     base = R60_TXTBASE + g * 8u;
-                    tp = altbeast_tiles + code * 64u;
+                    tp = game_tiles + code * 64u;
                     dst = FB_OVR(y0 * FB_W + col * 8u + r60_xo);
                     R60_DIAG2[2]++;
                     { uint16_t _td = r60_frt();

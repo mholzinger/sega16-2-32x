@@ -1,3 +1,4 @@
+import sys
 #!/usr/bin/env python3
 """Actual optional ROM adapter under ASan/UBSan, active and idle control.
 
@@ -14,7 +15,8 @@ root=source.resolve().parents[2]
 with tempfile.TemporaryDirectory(prefix="master-chunk-") as tmp:
     # Exercise the actual Make option block in isolation: no shared Makefile,
     # asset generation, object/ROM recipes or port shadow are invoked.
-    make_text=(root/"Makefile").read_text()
+    sys.path.insert(0, str(root/"tools")); from mktext import makefile_text
+    make_text=makefile_text(str(root))
     begin=make_text.index("# R60MCLEAD=")
     end=make_text.index("# `R60ZOOMWORDS=1`",begin)
     gate=Path(tmp)/"gates.mk"

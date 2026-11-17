@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+import sys as _sys; _sys.path.insert(0, str(ROOT/'tools')); from mktext import makefile_text
 SDK = Path(os.environ.get('SHBIN', str(Path.home()/'src/marsdev/mars/sh-elf/bin')))
 AS, LD, CC, OBJCOPY = (str(SDK/('sh-elf-'+n)) for n in ('as', 'ld', 'gcc', 'objcopy'))
 spec = importlib.util.spec_from_file_location('page_checker', ROOT/'tools/check_workset_code.py')
@@ -57,7 +58,7 @@ def load_addresses(path):
 with tempfile.TemporaryDirectory(prefix='workset-code-') as directory:
     tmp = Path(directory)
     # Fresh-checkout canonical linker base, without any ignored generated files.
-    lines = (ROOT/'Makefile').read_text().splitlines()
+    lines = makefile_text(str(ROOT)).splitlines()
     recipe = []
     for line in lines[lines.index('sh_src/mars4.ld: sh_src/mars.ld')+1:]:
         if not line.startswith('\t'):

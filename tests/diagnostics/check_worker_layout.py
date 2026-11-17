@@ -12,6 +12,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+import sys as _sys; _sys.path.insert(0, str(ROOT/'tools')); from mktext import makefile_text
 SDK = Path(os.environ.get('SHBIN', str(Path.home()/'src/marsdev/mars/sh-elf/bin')))
 AS = str(SDK/'sh-elf-as')
 LD = str(SDK/'sh-elf-ld')
@@ -30,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='worker-layout-') as tmp:
     tmp = Path(tmp)
     # Execute only the existing sed recipe, with all outputs redirected to tmp.
     # This also works on fresh checkouts without ignored sh_src/mars4.ld.
-    lines = (ROOT/'Makefile').read_text().splitlines()
+    lines = makefile_text(str(ROOT)).splitlines()
     start = lines.index('sh_src/mars4.ld: sh_src/mars.ld') + 1
     recipe = []
     for line in lines[start:]:

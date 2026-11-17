@@ -114,3 +114,4 @@ sndtest/sh/speech_bank8.h
 
 # session logs: local only
 /logs/
+/.claude/prompt.log

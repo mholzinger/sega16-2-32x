@@ -74,7 +74,7 @@ static __attribute__((noinline)) const uint8_t *r60_prio_mask_cold(unsigned code
     if (!r60_prio_init) { unsigned k; for (k = 0; k < R60_PRIO_ENTRIES; k++) PRIO_TAG[k] = 0xFFFFu; r60_prio_init = 1; }
     if (PRIO_TAG[i] != code) {
         r60_prio_miss[1]++;
-        const uint8_t *a = altbeast_tiles + code * 64u;
+        const uint8_t *a = game_tiles + code * 64u;
         unsigned py;
         for (py = 0; py < 8u; py++) {
             const uint8_t *r = a + py * 8u;

@@ -15,7 +15,7 @@
         ! sprbake_data.s and md_sprart_data.s both carry the "a".
         .section .tilesmd, "a"
         .align  4
-        .global _altbeast_tiles_md
-_altbeast_tiles_md:
+        .global _game_tiles_md
+_game_tiles_md:
         .incbin "tiles_md.bin"
         .endif

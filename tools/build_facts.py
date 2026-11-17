@@ -21,7 +21,7 @@ MESSAGES = 'MESSAGES.md'   # the open cards AND their premise checks;
 # comment in tools/game_altbeast.py committed 22 minutes earlier.
 import glob as _glob
 # docs/history/retired-flags.Makefile: the option comments tools/strip_makefile.py moved out
-CONFIG_SOURCES = ['Makefile', 'docs/history/retired-flags.Makefile'] + sorted(_glob.glob('games/*/game.py'))
+CONFIG_SOURCES = ['Makefile'] + sorted(_glob.glob('mk/*.mk')) + ['docs/history/retired-flags.Makefile'] + sorted(_glob.glob('games/*/game.py'))
 
 # STATE sections worth indexing, in the order they matter for a premise check
 STATE_SECTIONS = [
@@ -115,7 +115,7 @@ def config_facts():
             lines = open(path, encoding='utf-8').read().splitlines()
         except OSError:
             continue
-        if path.endswith('Makefile'):
+        if path.endswith(('Makefile', '.mk')):
             i = 0
             while i < len(lines):
                 if re.match(r'^# [A-Z][A-Z0-9_]*\s*=', lines[i]):

@@ -345,7 +345,7 @@ static R60BKCODE unsigned r60_bk_sprite(
 #ifdef R60_BAKEARTCHECK
     unsigned ca_addr = record[3];
     int pitch = (int)(signed char)(d2 & 0xFF), flip = d2 & 0x100;
-    const uint16_t *sd = altbeast_sprites + R60_SPR_BANK((record[4] >> 8) & 0xF) * 0x10000u;
+    const uint16_t *sd = game_sprites + R60_SPR_BANK((record[4] >> 8) & 0xF) * 0x10000u;
     const uint16_t *pt5;
     if (!r60_pt_init) r60_pt_build();
     pt5 = r60_pt[flip ? R60_PT_FI : 0u][base >> 4];

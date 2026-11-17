@@ -79,3 +79,31 @@ were silent; all five are loud since 2026-10-29. Next work: thread GAME through 
 CPORT_* tables as game.py keys) and make every AB default an error; split patch_game.py's
 port-needed outputs from its 68K-shim patching; GAME-parameterise the sprite discovery inputs and
 the sound lists.
+
+## State 2026-11-16 (branch release-pipeline, 61bdaa56)
+
+Five steps, each proven by `tools/romcmp.py` against the same line rom (0 bytes):
+
+| step | result |
+|---|---|
+| engine symbols | `game_tiles`, `game_sprites`, `game_tiles_md` replace the `altbeast_` names; the program image is `.incbin "prog68k.bin"` through `-I$(GAMEROMS)` |
+| game files | `games/altbeast/mcu.inc` (the i8751 mailboxes and per-tick work-RAM rules, cut from `port_l2.c`), `games/altbeast/r60_altbeast_events.h` |
+| Makefile fold | 106 option blocks nothing reads removed (`tools/strip_makefile.py --unread`); 182 -> 95 defines on the line |
+| Makefile split | `Makefile` (67 lines) + `mk/{options,line,rom,sndtest,lint,decomp,stamp}.mk`; the make database is identical |
+| game settings | `games/<title>/game.mk`: decompile tables, hot set, atlas and pose names, macro key, song list as `GAME_*` variables |
+
+Still Altered Beast inside the engine, by measurement:
+
+- `sh_src/port_l2.c` (second pass, same day): the dispatcher's cells, the tick counter, the blink
+  clock, the boot entry, the start-as-coin rule and the vblank restart points now come from
+  `game_cfg.h`, `games/<title>/port_game.h` and `games/<title>/coro_redirect.inc`. What is left
+  there is measurement code (the slot-2 and state rings, the PORT_GODMODE mirror) and comments
+  that cite Altered Beast addresses as evidence.
+- `mk/decomp.mk`: the comment paragraphs beside each `CPORT_*` variable describe Altered Beast
+  addresses; the values moved, the history did not.
+- 52 options add a define nothing reads but also add an object, a rule or an else branch
+  (`python3 tools/flag_audit.py`). Removing them changes the rom: `C1PUNCH` links
+  `cat1hole_data.o`, 25,600 bytes no source references. That needs the demo gate and a rig pass.
+- Blocker 4 stands: `cat1hole.h cat1mask.h dreq_proof.h glow_tab.h md_sprart.h pal_rounds_md.h
+  sh_probe.h sprbake.h tile_classes.h tilecram.h hscr_thunks.h` are included by no source.
+- `tools/` is 380 files in one directory; `tools/build_line.sh` and `tools/sound_inputs.sh` name altbeast.

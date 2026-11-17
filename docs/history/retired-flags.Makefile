@@ -2916,3 +2916,703 @@ endif
 ifdef PORTBODY
 SHCCFLAGS += -DL2M_BODY_N=$(PORTBODY)
 endif
+# `make SNAP1=1` = LOOP 16 step 1: single-frame snapshot. Sprites push
+# after k1 (land at k2); regs+sprite snapshot latch at k2, BEFORE R0's
+# compose — all three bands of a displayed frame see ONE game state.
+# Kills the band-tear class (sprite halves / scroll seams) by
+# construction. Protocol change on BOTH CPUs — whole and gated.
+ifdef SNAP1
+SHCCFLAGS += -DSNAP_ONE
+MDCCFLAGS += -DSNAP_ONE
+endif
+# `make ... PALDELTA=1` = the palette-transport arc's packet diet
+# (R60 layout v3). The pal_fm_census verdict (2026-08-30, 12.7k-frame
+# full-level rig): palette writes land EVERY frame (glow streamer,
+# 75% of writes) but only ~10 words/frame actually CHANGE (p50 8,
+# p99 24, p999 81) — the 107-word/push pal payload is ~10x amplified
+# by 32-word block granularity + redundant rewrites; and 80% of
+# writes land inside the FM span even in MAME, so FM-gated staging
+# writes are conservation of pain (the diet-ledger warning, now
+# measured). Instead the 68K packer diffs dirty blocks against a
+# WRAM shadow (0xFF6000) and ships per-block word deltas
+# (mask + changed words); dense blocks and tear recovery ship raw
+# (id bit 7). WRAM compares are ~free; the saving is adapter words
+# at ~0.65 lines each.
+ifdef PALDELTA
+ifndef R60
+$(error PALDELTA is an R60-family packet layout - needs R60=1)
+endif
+MDCCFLAGS += -DPAL_DELTA
+SHCCFLAGS += -DPAL_DELTA
+endif
+ifdef FBXPORT
+MDCCFLAGS += -DFB_XPORT
+SHCCFLAGS += -DFB_XPORT
+endif
+# `make ... MDSTATE=1` = PLAN-SINGLE-VINT fold 4 (LOOP29 233): the 68K
+# posts one state word per vint from IRQ4 on COMM14 (tag E, sequence,
+# cutscene byte 0xFFF148, round 0xFFF142); the SH-2 takes the round from
+# it (never from COMM10's dirty-mask neighbours) and the cutscene bit
+# forces the round off screen with no detector lag. Needs MDROUND.
+ifdef MDSTATE
+SHCCFLAGS += -DMD_STATE
+MDCCFLAGS += -DMD_STATE
+endif
+# `make ... C1MASKTAB=1` = Build D (LOOP29 247, NOTES 34): the scene's
+# class-2 tile opacity masks (tools/bake_cat1mask.py -> sh_src/cat1mask.h,
+# <= 1.5 KB) live in SDRAM from mds_install; the name-table pass stores a
+# mask index per class-2 cell and the slave's punched loop reads one SDRAM
+# byte per cell row instead of eight cart bytes. Needs C1PUNCH.
+ifdef C1MASKTAB
+SHCCFLAGS += -DC1_MASKTAB
+endif
+# `make ... C1STAMP=1` = Card H (NOTES 36, LOOP29 252): the punch as a
+# STAMP. The sprite loops compile unpunched (vi95's bytes); after the
+# pp<3 pass the slave writes MD-through over the hole cells of every row
+# a sprite touched (class 1 whole, class 2 by the cat1mask.h opacity
+# bit), then draws the pp=3 sprites. Implies C1MASKTAB. Needs C1PUNCH.
+ifdef C1STAMP
+SHCCFLAGS += -DC1_STAMP
+endif
+# `make ... SCANMEMO=1` = Card I (NOTES 33.2, LOOP29 254): each plane's
+# baked scan is memoized by (round, pages, vy0, vx0 cell) and re-merged
+# while the scroll stays inside the cell. Needs SETCOLS.
+ifdef SCANMEMO
+SHCCFLAGS += -DSET_COLS_MEMO
+endif
+# Card J (NOTES 41, LOOP29 256), two flags measured alone then together:
+#   SPRRUN32=1  (b) baked runs copied four pixels a longword store
+#   SPRLIST=1   (a) the chain's live records read once into a cached list
+ifdef SPRRUN32
+SHCCFLAGS += -DSPR_RUN32
+endif
+ifdef SPRLIST
+SHCCFLAGS += -DSPR_LIST
+endif
+ifdef R60PLOT3
+SHCCFLAGS += -DR60_PLOT3
+endif
+ifdef R60NOBARS
+SHCCFLAGS += -DR60_NOBARS
+endif
+ifdef R60SPLITFAST
+SHCCFLAGS += -DR60_SPLITFAST   # r60_split_row's histogram as a prefix sum (same split; ~4.8 master lines a vint less)
+endif
+ifdef R60ROWFAST
+SHCCFLAGS += -DR60_ROWFAST_OPT   # the hoisted per-sprite row loop (2026-10-23); see R60_ROWFAST in r60_main.c
+endif
+ifdef R60ZOOM
+SHCCFLAGS += -DR60_ZOOM
+endif
+# `R60KEEPSTALE=1` = a cell whose new art did not ship this window keeps LAST window's
+# cell instead of tile 0: the title logo recolour rolls white->red with no black holes,
+# scene rewrites show the old scene's tiles until the new art lands. 2026-10-16.
+# `R60TXTPOOL=1` = the text colours live in the sprite sets' unused pens 0 and 15 (31 CRAM
+# entries, allocated per window to the (group, pen) pairs the visible text uses) instead
+# of sprite sets 12-14, which the arcade's sprites DO use (MAME census: all 16 sets, 12-14
+# from frame 1733; the white wolf drew in text colours). 2026-10-16.
+# `R60PLOT4=1` = the sprite plot's four pens by table (r60_pt, 16 KB): two byte loads and two
+# table loads a word instead of four extracts, tests and packs; PLOT3's stores. `R60PLOT4CHECK=1`
+# runs the on-rom identity check at the first sprite (r60_plot4_bad, bit 31 = ran). 2026-10-17.
+ifdef R60PLOT4
+SHCCFLAGS += -DR60_PLOT4
+endif
+ifdef R60CMSTATS
+SHCCFLAGS += -DR60_CMSTATS
+endif
+ifdef R60CRAMMASK
+SHCCFLAGS += -DR60_CRAMMASK
+endif
+ifdef R60RAWPENS
+SHCCFLAGS += -DR60_RAWPENS   # preserve distinct S16 colours through palette transforms while pens fit
+endif
+ifdef R60TXTTOUCH
+SHCCFLAGS += -DR60_TXTTOUCH   # restore text touched by new sprite draws and priority cuts
+endif
+ifdef R60ROWFILL
+SHCCFLAGS += -DR60_ROWFILL
+endif
+ifdef R60TXTFAST
+SHCCFLAGS += -DR60_TXTFAST
+endif
+ifdef R60TXTPLANFAST
+SHCCFLAGS += -DR60_TXTPLANFAST   # the text diff scans longword pairs first; the plan's pen demand is rescanned only when the text moved (r60_tx_scan/r60_tx_demand)
+endif
+ifdef R60SPEECHSLAVE
+SHCCFLAGS += -DR60_SPEECHSLAVE   # the speech/SFX fill on the slave's idle spins, SP_CHUNK samples a call (speech_pump_chunk), off the master's prepare
+endif
+ifdef R60TXTLUTPAL
+SHCCFLAGS += -DR60_TXTLUTPAL   # a text LUT change marks only the moved pals' cells pending in both banks instead of forcing every glyph (r60_txt_palmark)
+endif
+ifdef R60PLANFAST
+SHCCFLAGS += -DR60_PLANFAST   # the line plan's census reads each named page once, weighted by its quadrant count (same hist/bgu)
+endif
+ifdef R60PLANNEW
+SHCCFLAGS += -DR60_PLANNEW   # a hold-time line plan that packs a set the old pack lacks is a change: adopt it (the green eye, 2026-10-24)
+endif
+ifdef R60TXTHEALLATE
+SHCCFLAGS += -DR60_TXTHEAL_LATE   # PROBE (with R60TXTHEAL): the spread heal marks where the forced heal ran, after the keep decisions
+endif
+ifdef R60TXTHEAL
+SHCCFLAGS += -DR60_TXTHEAL   # the text heal spread over the passes (8 cells a pass, cursor) instead of a whole-layer force every 16 (r60_txt_heal)
+endif
+# `R60BLANKFILL=1` = a BG cell whose art cannot ship this window names a SOLID tile of its set's
+# colour 0 (slots 1016-1023, one per line/pen) instead of the blank over the black backdrop; a
+# stale cell is kept only when it is the same art. The title cut's black blocks. 2026-10-17.
+ifdef R60BLANKFILL
+SHCCFLAGS += -DR60_BLANKFILL
+endif
+# `R60IDPENS=1` = a set arriving with a provisional palette (<= 3 colours, display up) gets a pen per
+# index; identical sets in the following windows share its map (the title logo's ten sets): the
+# fade-in and the red flip become CRAM writes instead of a 622-tile re-bake. 2026-10-17.
+ifdef R60IDPENS
+SHCCFLAGS += -DR60_IDPENS
+endif
+# `R60HOLDDIRECT=1` = under the game's blank the master writes packet A straight into the framebuffer
+# (11264 words, 500 art records a window; odd parity at 0x11800 behind a stub at 0x17000), the slave
+# stops flipping once the shown bank is black. Cuts fill in 2-3 windows instead of ~10. 2026-10-17.
+ifdef R60HOLDDIRECT
+SHCCFLAGS += -DR60_HOLDDIRECT
+MDCCFLAGS += -DR60_HOLDDIRECT
+endif
+ifdef R60STAGEDIRECT
+SHCCFLAGS += -DR60_STAGEDIRECT
+endif
+# `PORTSTARTCOIN=1` = START also coins while the credits cannot pay for a start (needs R60LIVEPAD). 2026-10-26, for pads
+# the Miyoo / Analogue Pocket cores hand over without X/Y/Z/MODE. Edge-latched in sh_src/port_l2.c l2m_io_live.
+ifdef PORTSTARTCOIN
+SHCCFLAGS += -DPORT_STARTCOIN
+endif
+# `R60PTONE=1` (2026-11-01) = the sprite plotter's pen table keeps ONE flip (8 KB, not 16): the
+# flipped entry was the byte-swapped twin, so the flipped read swaps (swap.b) instead.
+# Gate: attract screenshots byte-identical to the same build without the flag (ares). The
+# 8 KB is for the synth lane's hot tables (sh_src/r60/r60_main.c R60_PTONE).
+ifdef R60PTONE
+SHCCFLAGS += -DR60_PTONE
+endif
+# `R60CLREXT=1` = the ROWCLR clear zeroes ONE run per row (its cleared spans' extent, cut around the
+# row's kept extent) instead of one fill per span (2026-10-24). MEASURED DEAD on the way: the exact
+# per-row union (R60CLRMERGE, linked lists + insertion sort) halved the fills and cost more in
+# bookkeeping than it saved (fight 0.61 -> 0.59 passes/vint).
+ifdef R60CLREXT
+SHCCFLAGS += -DR60_CLREXT
+endif
+# `R60CLRPRE=1` (with R60CLREXT) = the per-row extents of the bank the next pass clears are computed at
+# the top of the slave loop, where it waits for the flip and the snapshot; the clear walks only the
+# kept sprites' spans (2026-10-24).
+ifdef R60CLRPRE
+SHCCFLAGS += -DR60_CLRPRE
+endif
+# `R60PKTODDHI=1` (with R60STAGEDIRECT) = the odd-parity direct hold packet moves from FB 0x11800
+# (68K 0x851800), which overlapped canvas rows 222-223 and left its words there as pixels, to
+# 0x11E00 (68K 0x851E00), past the canvas and its spill (2026-10-24). Both CPUs.
+ifdef R60PKTODDHI
+SHCCFLAGS += -DR60_PKTODDHI
+MDCCFLAGS += -DR60_PKTODDHI
+endif
+# `R60PUNCH2=1` = the FG-priority box punch with its row loop hoisted (one instantiation per
+# window shift, FB pointer walked by row, stats and prio_ymin/ymax summed per cell; r60_punch2
+# in r60_main.c, 2026-10-23). Byte-identical in effect to the old punch. `R60PUNCH2CHECK=1`
+# runs the old punch beside it on every box, in alternating order, and compares what each WROTE
+# (a hash of address + keep mask per store, in store order: the FB itself moves under the slave,
+# the master fills rows into it), the store count, the rows hit and prio_ymin/ymax; any
+# disagreement counts in r60_punch2_bad (r60_punch2_checked boxes, r60_punch2_why[4] says which,
+# r60_punch2_fb[3] = the FB checksum's own movement and its no-punch noise floor); a check rom
+# is correctness only.
+ifdef R60PUNCH2
+SHCCFLAGS += -DR60_PUNCH2
+endif
+ifdef R60SPRPREP
+SHCCFLAGS += -DR60_SPRPREP -DR60_PRIOCACHE512
+endif
+ifdef R60PRIOCACHE512
+SHCCFLAGS += -DR60_PRIOCACHE512
+endif
+# `R60ZOOMFAST=1` = zoomed sprite rows by source word through the PLOT5 pen table (the
+# per-pixel zoom loop cost ~120 instructions a word; Neff's entrance smoke, 19 zoomed
+# sprites, ran six vints a picture, 2026-10-23). `R60ZOOMCHECK=1` replays every zoomed
+# row both ways into RAM and counts differing bytes (r60_zoom_bad / r60_zoom_rows).
+ifdef R60ZOOMFAST
+SHCCFLAGS += -DR60_ZOOMFAST
+endif
+# `R60ZOOMKEEP=1` = optional immutable horizontal keep patterns. Copy16 bytes
+# once per scaled sprite into the existing caller buffer; retain old row
+# kernels and reconstruct the two scalar/check masks.512 ROM bytes, no BSS.
+# Independent of R60ZOOMWORDS; defaults off. Setup savings require measurement.
+ifdef R60ZOOMKEEP
+ifndef R60ZOOMFAST
+$(error R60ZOOMKEEP requires R60ZOOMFAST=1)
+endif
+SHCCFLAGS += -DR60_ZOOMKEEP
+endif
+# R60BOOTBANKS=1: initialize complete framebuffer banks while MODE remains off.
+# R60-only cold path; default off preserves the accepted initialization.
+ifdef R60BOOTBANKS
+ifneq ($(strip $(R60BOOTBANKS)),1)
+$(error R60BOOTBANKS must be 1)
+endif
+SHCCFLAGS += -DR60_BOOTBANKS=1
+endif
+# R60WORKSETCLIP=1: exact right-edge scaled packet copy, independently gated.
+ifdef R60WORKSETCLIP
+ifndef R60WORKSET
+$(error R60WORKSETCLIP requires R60WORKSET)
+endif
+ifneq ($(strip $(R60WORKSETCLIP)),1)
+$(error R60WORKSETCLIP must be 1)
+endif
+SHCCFLAGS += -DR60_WORKSET_CLIP=1
+endif
+# R60SNAPLEASE=1: the slave claims the LATEST published snapshot (GO lease) instead of
+# a stale one, and the master may republish while the slave is mid-draw of that same
+# sequence. Default off; part of wslease01, the 2026-11-08 line (Mike's play pass).
+ifdef R60SNAPLEASE
+ifneq ($(strip $(R60SNAPLEASE)),1)
+$(error R60SNAPLEASE must be 1)
+endif
+ifndef R60WORKSET
+$(error R60SNAPLEASE requires R60WORKSET=1)
+endif
+SHCCFLAGS += -DR60_SNAPSHOT_LEASE=1
+endif
+# `R60ROWDIFF=1`: build row deltas without copying the old 64-cell shadow row.
+# The walk writes every scratch cell in its emitted span; default off.
+ifdef R60ROWDIFF
+SHCCFLAGS += -DR60_ROWDIFF
+endif
+# `R60PLANROWS=1`: resolve each contiguous physical source-row segment once;
+# preserve live per-word reads, page boundaries and the existing residency planner.
+ifdef R60PLANROWS
+SHCCFLAGS += -DR60_PLANROWS
+endif
+# Experimental: completed packet work renews the slave's existing stall budget.
+# COMM4 is reserved for this producer after the R60 startup handshake.
+ifdef R60SPANPROGRESS
+ifndef R60SLAVEWIN
+$(error R60SPANPROGRESS requires R60SLAVEWIN)
+endif
+SHCCFLAGS += -DR60_SPANPROGRESS
+MDCCFLAGS += -DR60_SPANPROGRESS
+endif
+ifdef R60TXTPOOL
+SHCCFLAGS += -DR60_TXTPOOL
+endif
+ifdef R60KEEPSTALE
+SHCCFLAGS += -DR60_KEEPSTALE
+endif
+ifdef R60CRAMDELTA
+SHCCFLAGS += -DR60_CRAMDELTA
+endif
+# `R60PLANES=1` = the MD background plane: the slot allocator carried from native1
+# (m_main.c:19180-19280) with a new walk, two packets a frame (type 0 art, type 1 name
+# table), seven plane rows each so a 28-row screen refreshes in four frames.
+ifdef R60PLANES
+SHCCFLAGS += -DR60_PLANES
+endif
+# `make CAT1INLINE=1` = LOOP 17 A/B arm for the MISSING FG cat-1 layer
+# (the tall grass blades that draw OVER sprites; the arcade has them at
+# the foot line, we show a flat strip). cat1+text are normally DEFERRED
+# to the next window gap through a single-slot record (cat1_valid); this
+# runs them inline at the band tail instead, the pre-LOOP-10 order.
+# Costs the strobe win back — diagnosis, not a ship.
+# `make DRQPROBE=1` = LOOP 17: DOES A SHORT DREQ PUSH REPORT A PARTIAL
+# TCR0? Everything about sprite-push truncation (~18 lines of 68K,
+# measured) rests on that one hardware fact, and MAME cannot answer it
+# (LOOP 13: "MAME never showed it"). The MD pushes ONE RECORD SHORT (588
+# words instead of 596, publishing 588) on every 16th sprite packet —
+# record 63, which is always past the terminator, so nothing visual
+# depends on it — and the master histograms what `landed` reads.
+#   partial readable  -> the short pushes land 588 and validate
+#   not readable      -> they read 0 and the master skips them (1 frame
+#                        of stale sprites in 16, expected on this build)
+# Counters at 0x28FBC, decoded by tools/drq_probe.py. NEVER SHIP.
+# `make CUT30=1` = LOOP 17 item 4b, first cut: DROP THE IDLE BEAT.
+# WIN_TWO runs k1, k2, then one idle vint the game keeps whole — three
+# vints per cycle = a 20Hz display, which is the "slideshow" Mike keeps
+# reporting and the reason the Zeus scale animation steps. Skipping the
+# idle beat makes it k1,k2,k1,k2 = 2 vints/cycle = 30Hz, halving every
+# animation step.
+# This is deliberately UNCONDITIONAL rather than cutscene-gated: the
+# question that has to be answered first is whether the master can
+# sustain a 2-vint cycle AT ALL. If it can, gating it to cutscenes
+# (scene state 0xFFF031) is the easy part; if it cannot, the falsifier
+# is loud — flip/blit skips and V-gate rejects climb and bands ship
+# stale. The cost lands on the 68K too: the game loses the whole idle
+# vint it used to keep, so watch the handler mean as well as the eyes.
+ifdef CUT30
+MDCCFLAGS += -DCUT_30
+endif
+# `make BANDSHIFT=n` = LOOP 18: move n rows of every band from the
+# MASTER to the SLAVE. Compose is split 112/112 and the blit 56/56, but
+# the master alone also does the flip, page drain/restore, CRAM,
+# build_maps, the shadow LUT, the sprite snapshot and the band queue —
+# so it finishes late while the slave idles ~15,500 polls/cycle (STALE:
+# the slave idle meter reads 0.0 polls/vint on the current line,
+# LOOP29 118 -- it is saturated). The
+# slave's echo PUSHES bands and the master's progress DRAINS them, so
+# the queue sheds ~1 band/cycle and the dropped band is always the
+# MASTER's rows: rows 72 and 144, exactly where Mike's tears are.
+# Uniform speedups cannot fix this (BLITSKIP+DIRTYROW+SPRBAKE moved the
+# handler mean 91.3 -> 86.5 and left drops/cycle at 0.95-0.97).
+# Watch `deferrals` per cycle, not the handler mean.
+ifdef BANDSHIFT
+SHCCFLAGS += -DBAND_SHIFT=$(BANDSHIFT)
+endif
+# RG2SHIFT=n: separate shift for the R2/master boundary (184+n; 40 =
+# the master's rg2 slice vanishes entirely). 2026-08-29: Mike's red-
+# boxed frames put the persistent band stripes EXACTLY at the master
+# half-slice rows (68-71, 140-143); BANDSHIFT=36 deletes those two by
+# geometry and RG2SHIFT=40 deletes the third (220-223).
+ifdef RG2SHIFT
+SHCCFLAGS += -DBAND_SHIFT_RG2=$(RG2SHIFT)
+endif
+# `make BLITSHIFT=N` (R60 only) — N rows of the in-window blit move
+# from the master to the slave. MEASURED DEAD 2026-08-24 (pass 8):
+# sweep 24/48/72 left the 68K handler mean UNMOVED (106.2 ->
+# 105.5-108.6) and made flips WORSE at 24/48 (isr 3231 -> 2882/3000).
+# THE BLIT IS FB-BUS-BOUND, NOT CPU-BOUND: both SH-2s share the one
+# FB write path (the ~47us/row stall floor), so moving rows only
+# relabels which CPU waits. The master's 777-vs-366 cyc/row premium
+# is its cap_drain sharing the same bus, not CPU inefficiency. The
+# blit cost yields only to WRITING FEWER FB WORDS (dirty-ROW blit:
+# skip rows unchanged since that bank's last blit) or to moving
+# cap_drain's FB reads out of the window (the write-log ring the
+# copy_pages comment already names). Do not re-sweep this knob.
+ifdef BLITSHIFT
+SHCCFLAGS += -DBLIT_SHIFT=$(BLITSHIFT)
+endif
+# `make SPRLATE=1` = LOOP 19: kill the 1-3 frame sprite colour flashes.
+# spr_pair[] is rebuilt only by build_maps, whose only caller passes
+# `bpar ^ 1` — the map for this parity was built a cycle ago from the
+# PREVIOUS sprite list, so a set appearing now reads 0xFF and draws with
+# base 15, the shadow ramp. One cycle is three vints, which is the flash.
+# This claims only the missed sets, from pairs nothing owns, at k1 before
+# apply_cram (which paints out of spr_pair, so they land the same
+# window). Counters at 0x3A7D8, read with tools/sprlate_probe.lua:
+# [3] is the one that matters and must reach 0.
+ifdef SPRLATE
+SHCCFLAGS += -DSPR_LATE
+endif
+ifdef PRHOLD
+SHCCFLAGS += -DPR_HOLD_TICKS=$(PRHOLD)
+endif
+# `make FBTEXT=1` = LOOP 20: text RAM in place, same move as FBSPR. The
+# game's text writes land at FB 0x85F000 (the slot the dead FB_PAL
+# quarters copy vacated); the SH-2 captures the 2048-word region to
+# TEXT_U each k1 and restores it into the fresh bank at the k2 flip
+# (text is written SPARSELY, unlike the sprite list, so restore is
+# mandatory). Kills the DREQ text chunks and the regs/rowscroll prefix
+# apply; the push itself is left intact (payload ignored) until the
+# ares verdict, exactly like FBSPR's staging. Requires FBSPR's audit
+# result (game code never runs with FM=1) - no new hazard.
+ifdef FBTEXT
+ifndef FOLD5
+SHCCFLAGS += -DFB_TEXT_READ
+MDCCFLAGS += -DFB_TEXT_READ
+endif
+endif
+# `make ... DIRTYROW=1` = LOOP 18 job 2: let the blit skip a row WITHOUT
+# READING IT. Four probes said the blit is throughput-bound and partial
+# removal returns sub-linearly (57% of stores gone kept 86% of the cost),
+# so only whole rows pay. Under MD_BG sbuf is explicitly zeroed every row
+# every cycle, which is why a "was it written" flag is useless and the
+# fact tracked here is "is this row all zeros" — asserted only by the
+# clear, revoked by every draw.
+ifdef DIRTYROW
+SHCCFLAGS += -DDIRTY_ROW
+endif
+# `make ... MDSPR_WHY=1` = LOOP29 119: WHY does the MD-VDP sprite offload
+# claim only 1.0 record per generation (cap 20, MD hardware 80)? Counts
+# each rejection reason in the claim loop: [0] zoomed [1] pp!=2 [3] X<=0
+# [4] NO BAKED KEY [5] no anchor [6] palette mismatch [7] caps
+# [8] claimed [9] live records examined. Counters live in .bss (the
+# 0x28Fxx scratch is crowded and this repo has numbered its collisions to
+# #15); read the `mdspr_why` symbol out of rom/s16.lst. PROBE ONLY.
+# `make ... MDSPRTOP=1` = LOOP29 132: choose the MD sprite palette line by
+# RECORD COUNT instead of the baked per-scene anchor. The scene table pins
+# the normal scene to set 0x09 (3 records at f3000) while set 0 carries 7,
+# so line 0 is spent on the wrong palette. Runs the existing leader
+# election in every scene and switches on a 2-record margin held 5 passes
+# instead of only when the incumbent owns nothing. Gate: MDSPR_WHY census
+# (claims/gen) then a play pass for colour flicker.
+ifdef MDSPRTOP
+SHCCFLAGS += -DMDSPR_TOP
+endif
+ifdef MDSPR_WHY
+SHCCFLAGS += -DMDSPR_WHY
+endif
+# `make ... MDALLOCWHY=1` = LOOP29 153: the MD residency allocator's own
+# counters, 16 longs at 0x3A680 (see MDALLOC in m_main.c). Entry 152
+# could not tell "the cell never claimed a slot" from "it claimed and
+# something wiped it" because DIAG[39]/[50]/[53] are each written by
+# three subsystems including the DREQ landing path. Read with
+# tools/md_alloc_why.py. PROBE ONLY (collides with SPRLINE).
+ifdef MDALLOCWHY
+SHCCFLAGS += -DMD_ALLOC_WHY
+endif
+# `make ... NBUILD1=1` = one MD packet build per gap instead of two.
+# Brake for NTSKIP's transport flood (LOOP29 170).
+ifdef NBUILD1
+SHCCFLAGS += -DNBUILD1
+endif
+# `make ... MDROUND=1` = LOOP29 193. Drive the static MD pen tables from
+# the GAME'S ROUND (its own scene variable, published by the 68K in
+# COMM10 bits 13-15) instead of PALSTATIC's palette-DETECTED scene. The
+# detected space has two slots for a five-round game, which is why
+# MDSREFUSE blanked level 2 and the transition (191). Tables come from
+# sh_src/pal_rounds_md.h, baked from each round's own gated dumps (192).
+# Needs MDSTATIC. Pair with MDSREFUSE=1 for the zero-churn result.
+ifdef MDROUND
+SHCCFLAGS += -DMD_ROUND
+MDCCFLAGS += -DMD_ROUND
+endif
+# `make ... PHASECENSUS=1 GENRING=1` = THE GENERATION STAMP RING (2026-10-12, P2's
+# yield gate). PHASECENSUS reports its six events as SUMS and MAXES in FRT ticks, and
+# a mean cannot answer the one question a one-vint frame turns on: what SHARE of
+# generations CLOSE inside the vint they launched in. GENRING records the V-ISR vint
+# number (DIAG[49]) at each of launch / slave echo / master tail / close / ship / flip,
+# per generation, 64 entries at 0x38000 (m_main.c GR). Read with tools/gen_ring.py.
+# PROBE-ONLY: it shares 0x38000 with PORT_RIG and ROWSHIP_PROBE and the build fails
+# hard rather than let either corrupt it. Needs PHASECENSUS -- the stamps are its.
+ifdef GENRING
+SHCCFLAGS += -DGEN_RING
+endif
+# `make ... LAUNCHEARLY=1` = pipelining arc step 1: launch the generation
+# before apply_cram/publish/ack instead of after (launch offset 0.46v ->
+# less). Byte-identical picture; the compose gets the window tail back.
+ifdef LAUNCHEARLY
+SHCCFLAGS += -DLAUNCH_EARLY
+endif
+# `make ... LAUNCHEARLY=1 BLITCHASE=1` = pipelining arc step 2: post the
+# slave's blit half before the pre-ack work, launch, THEN blit the
+# master's half; the slave composes behind a row fence (SYNC[14]).
+ifdef BLITCHASE
+SHCCFLAGS += -DBLIT_CHASE
+endif
+# `make ... PENMATCH=1` = C1 done right, part 1: FB tile groups painted
+# with the MD's own quantised pens (nearest-pen substitution included)
+# so a tile split between the FB and plane A is one colour.
+ifdef PENMATCH
+SHCCFLAGS += -DPEN_MATCH
+endif
+# `make ... CAT1MD=1` = pipelining arc C1 step 1: FG cat-1 cells are emitted
+# on MD plane A with the priority bit instead of blanked. Pixel-neutral by
+# construction while the FB keeps composing cat1; step 2 restricts the FB
+# cat1 pass to SH-2 sprite rows/strips (the 0.44v/gen slave lever).
+ifdef CAT1MD
+SHCCFLAGS += -DCAT1_MD
+endif
+# `make ... HSSHIP=1` = MD plane scroll lands on the same vint as the FB
+# flip (pending per parity at launch, live at ship, patched at copy).
+ifdef HSSHIP
+SHCCFLAGS += -DHS_SHIP
+endif
+ifdef DRQPROBE
+SHCCFLAGS += -DDRQ_PROBE
+MDCCFLAGS += -DDRQ_PROBE
+endif
+ifdef CAT1INLINE
+SHCCFLAGS += -DNOCAT1DEFER=1
+endif
+# TILECLASS=1 = LOOP19 endgame: static fade-stable tile palette classes
+# (sh_src/tile_classes.h, generated by tools/palpack_tiles.py --emit from
+# the harvest corpus). Tiles collapse to 11 fixed groups, sprites get a
+# fixed 8-pair zone — the S11 over-subscription is gone by construction.
+# Corpus covers title + round 1; regenerate the table before later rounds.
+ifdef TILECLASS
+SHCCFLAGS += -DTILE_CLASS
+endif
+# ROWGEN=1 = write-tracked row skip (2026-08-26): rows provably
+# unchanged (no sprite span, no scroll/text/page/cut delta) skip their
+# clear AND their blit. ROWSTALE measured 96% cycle-stable rows; this
+# takes the write-knowable subset at zero read cost. Block at 0x39750
+# (collides with DIRTYROWVERIFY's probe capture — probe-only overlap).
+ifdef ROWGEN
+SHCCFLAGS += -DROW_GEN
+endif
+# LAYOUTPROBE=1 = LOOP28 88 CONTROL. Adds 64 bytes of unreferenced .data
+# inside r60_push and changes nothing else. Any speed difference it
+# produces is the level-1 ladder's sensitivity to code layout, not to a
+# change in behaviour. Measured 85.3% vs 82.4% on the FBXPORT line.
+ifdef LAYOUTPROBE
+MDCCFLAGS += -DLAYOUT_PROBE
+endif
+# PGSKIPPKT=1 = LOOP29 137. The page truth (cap_page/restore_pages)
+# excludes the two packet regions that live inside game tile-RAM pages:
+# the R60 packet + publish word in page 0 (0x12000-0x1283F) and MD-plane
+# packet B in page 12 (0x1E800-0x1EFFF). Measured on the dblfast line in
+# steady play: pg_watch = 0x1001 -- exactly those two pages, watched
+# forever because the pipeline's own writes dirty them every vint, 23
+# lines of capture and ~20 of restore per flip for bytes that are not
+# game truth. The game writes zero tilemap pages in steady level-1 play.
+ifdef PGSKIPPKT
+SHCCFLAGS += -DPG_SKIP_PKT
+endif
+# FBXISRLIFT=1 = LOOP29 137. fbx_lift() runs at the top of flip_span,
+# BEFORE the FS write, so it reads the bank the 68K's tail blast wrote
+# (no flip can have intervened). That makes FBXBOTH's second blast
+# before the post unnecessary -- the 12 lines of 68K FB writes between
+# the consumes and the raise. The body's lift stays as a fallback for
+# vints where the ISR did not reach flip_span.
+ifdef FBXISRLIFT
+SHCCFLAGS += -DFBX_ISRLIFT
+endif
+# MDSREMARK=1 = 2026-09-21: a scene install re-ships (marks dirty) the
+# slots of sets whose pen map changed instead of wiping their tags; cells
+# naming a wiped slot showed the next claimant's art until re-walked (the
+# eye scene's stale patches).
+ifdef MDSREMARK
+SHCCFLAGS += -DMDS_REMARK
+endif
+# MDSCENES=1 = 2026-09-21: the MD tile tables are keyed by SCENE (rounds
+# 0-4 plus the attract's splash/eye/picture/scores/transformation, baked
+# from tools/attract_harvest.py dumps) instead of by round.
+ifdef MDSCENES
+SHCCFLAGS += -DMD_SCENES
+endif
+# HOLDFROMBLANK=1 = 2026-09-21: the display hold's settle rotations count
+# from the game's blank, and a baked attract scene needs one rotation.
+ifdef HOLDFROMBLANK
+SHCCFLAGS += -DHOLD_FROM_BLANK
+endif
+# CRAMISR=1 = 2026-09-22: paint the 32X CRAM at the flip in the V-ISR
+# (vblank, PEN-safe) instead of inside the FM-held window: -10 lines of
+# the window the game's gated writers wait on (BODYPROF).
+ifdef CRAMISR
+SHCCFLAGS += -DCRAM_ISR
+endif
+# BLITAUDITDIV=N = 2026-09-22: the blit audits one skipping row in N per
+# window (rotating) instead of every row; the audit was ~13 lines of a
+# compose frame's 66-line master half (BLITNOAUDIT probe).
+ifdef BLITAUDITDIV
+SHCCFLAGS += -DBLIT_AUDIT_DIV=$(BLITAUDITDIV)
+endif
+# PUBNORB=1 = 2026-09-22: the publish builds its replay copies (tp_lastA/B)
+# from the SDRAM packet instead of reading the framebuffer copy back
+# (2 x 368 FB reads, ~8 lines of the window; BODYPROF probe7).
+ifdef PUBNORB
+SHCCFLAGS += -DPUB_NORB
+endif
+# MDSCENECUT=1 = 2026-09-21: select scene 9 (the round-0 transformation
+# cut) from the state word's cut bit; off until its install is proven
+ifdef MDSCENECUT
+SHCCFLAGS += -DMD_SCENE_CUT
+endif
+# SLIMWORDCAP=1 = 2026-09-21: the slim emitter stops on packet WORDS, not
+# at 40 records (baked records are 2 words). Pair with SLIMCAP=N and
+# MDBATCHBLANK=N to load a baked scene faster while the display is blank.
+ifdef SLIMWORDCAP
+SHCCFLAGS += -DSLIM_WORDCAP
+endif
+# TXTCLASS=1 = static TEXT class (2026-08-29, the green-HUD-digits
+# fix): text set 0 — the always-on HUD text, one palette state across
+# the whole arcade census — pins to GROUP 0 (the 32nd group, reserved
+# since MDBGALL for the through bit and never armed; entries 1-7
+# verified virgin). The HUD can no longer lose its palette to the
+# 2-deep dynamic zone and draw green. Scene text still rides the
+# dynamics. Candidate for the canonical line after Mike's pass.
+ifdef TXTCLASS
+SHCCFLAGS += -DTEXT_CLASS
+endif
+# COHERENT30: DEAD BY MIKE'S ORDER 2026-08-26 ("why on earth are you
+# regressing to 30hz") — 30Hz stepping has no place in this
+# architecture. Flag deleted; the 60Hz path is the MD-VDP sprite
+# offload arc (P3). Do not rebuild this.
+# NATIVE=1 = the whole-frame pipeline (branch native1, docs/design/NATIVE.md,
+# 2026-08-31 — Mike's "gates should be for an entire screen update").
+# ONE generation in flight and it is the WHOLE frame: launch latches
+# regs+records once, the slave composes all three bands from one
+# self-chain command with cat1+text inline, the master tail (text
+# halves + build_maps) runs as poll-gap chunks, the blit ships ONLY
+# closed generations and the ISR flips ONLY freshly-blitted banks.
+# Band queue / chain relaunch / ROW_DEFER / cat1 deferral compile
+# out. 60Hz when a generation closes in a vint; whole-frame-coherent
+# 30Hz when it does not — never a band, never a mixed frame.
+# NOT the SELFCHAIN experiment (which kept per-band ships racing the
+# compose); see docs/design/NATIVE.md's ledger notes before citing that negative.
+ifdef NATIVE
+ifndef R60
+$(error NATIVE is the R60 whole-frame scheduler - needs R60=1)
+endif
+SHCCFLAGS += -DNATIVE_FRAME -DNOCAT1DEFER=1 -DNO_ROW_DEFER
+endif
+# PALSTATIC=1 = per-scene static palettes v1 (docs/design/PALSTATIC.md): baked
+# PAL_SH images (tools/palscene_bake.py -> sh_src/pal_scenes.h) load
+# WHOLE on scene detect + all tile/text generations bump, collapsing
+# the scene-cut palette trickle (Mike's blue-white gravestones) to
+# detect latency; a shadow-LUT rush shrinks the silhouette window.
+# Tables are level-1 (3 scenes); unknown scenes ride the dynamic
+# path unchanged. Candidate for the canonical line after Mike's pass.
+ifdef PALSTATIC
+SHCCFLAGS += -DPAL_STATIC
+endif
+# GLOWMASK=1 = PALSTATIC v2 MEASUREMENT PROBE (battery only — the
+# glow FREEZES on screen; never hand this to ares eyes as a build).
+# The 68K rotor drops the glow blocks' (4,5) dirty marks in steady
+# state (ndirty<=24), so their per-vint compare+ship vanishes.
+# Heal/force-raw and storm/fade vints bypass the mask. Measures the
+# real 68K prize of baking the glow SH-2-side before any animator
+# is written (census 2026-09-01: 17 of the 18 live glow words sit
+# in blocks 4-5; the 0x36 blink in block 1 stays unmasked).
+ifdef GLOWMASK
+MDCCFLAGS += -DGLOW_MASK
+endif
+# GLOWPAGE=1 = LOOP29 284 / LOOP-DECOMPILE 124. The glow animator
+# yields to the 68K whenever the CHEVRON PLANE is up -- any 4-bit
+# quadrant of either plane's page select >= 10. Pages 10/11 carry the
+# transformation and nothing else in a whole arcade run selects a page
+# that high, so it is an exact scene marker that is not palette-derived
+# (the animator cannot corrupt it), not a sentinel peek (the transform's
+# palette sits inside the ambient envelope) and needs no new channel.
+# Replaces the `pscene_cur != 0` gate, which never fired.
+ifdef GLOWPAGE
+SHCCFLAGS += -DGLOW_PAGE
+endif
+# `make ... MDBATCH=N` = LOOP29 199. Tiles shipped to MD VRAM per vint
+# while the display is ON. 12 is the R60 default: 40 was calibrated for
+# 30Hz windows and overruns vblank at 60, which is the load-in tear and
+# the purple band. But 12 is also why cells pop in black -- a scene change
+# needs the whole 1120-tile working set, which is 93 vints at 12. The
+# blanked path already ships 40 (m_main.c:13268). Mike's eye ranks this.
+ifdef MDBATCH
+SHCCFLAGS += -DMD_BATCH_N=$(MDBATCH)
+endif
+# `make ... PORTCLK1=1` = ONE GAME FRAME PER MASTER VINT, no drain.
+#
+# pp_due is a COUNT of vints owed (cap 4) drained by a while loop, so a long master
+# body (a scene cut) makes the game run 2-4 times in one master frame. Every
+# irq4-driven counter advances once per game frame -- the blink timer 0xFFF020/21, the
+# seconds counter, the colour-cycle index -- so a burst advances them faster than any
+# arcade vblank can, and the phase never comes back (measured 2026-10-05: +19 steps by
+# demo A, constant inside the scene, acquired at the boot and the two attract cuts).
+# Under this flag the cap is 1 and the backlog is DROPPED rather than caught up: the
+# game runs slower in wall time than the arcade, which it already does, but never
+# faster. pp_clk_dbg[0] counts master frames that had more than one game frame waiting.
+ifdef PORTCLK1
+SHCCFLAGS += -DPORT_CLK1=$(PORTCLK1)
+endif
+ifdef PORTFFBM
+SHCCFLAGS += -DPORT_FFBM=$(PORTFFBM)
+endif
+# `make ... PORTBOOT=1` = ROOT THE 68K RESET VECTOR, so the port can COLD BOOT.
+#
+# The reset vector is 0x400 and holds `bra.w 0x40E` (prog68k.bin, verified
+# 2026-10-03), so FUN_0000040e is the game's real power-on entry: it clears work RAM
+# 0xFFC000 for 0xF00 longwords, calls clear_textram / clear_tileram /
+# clear_spriteram_and_pool / set_level_palettes, and falls into main_entry.
+#
+# WHY IT WAS MISSING. Every port build so far rooted at `frame_rotated` -- one
+# gameplay frame -- because the gate seeds work RAM from an arcade capture and only
+# ever needed the frame that follows. That is also why a PORTPLAY build drew nothing
+# but sprites: a mid-level capture restores WORK RAM, and the tilemap, text layer and
+# palette were built by the init long before the capture starts, so they were never
+# in the seed. Measured 2026-10-03: the port wrote real sprite records into SPR_SNAP
+# and left TILEMAP_U / TEXT_U / PAL_SH at the 0xFF poison fill.
+#
+# This root pulls the whole init closure in, so expect it to cost cart space.
+ifdef PORTBOOT
+SHCCFLAGS += -DPORT_BOOT
+endif
+ifdef PORTNOPALPROBE
+SHCCFLAGS += -DPORT_NOPALPROBE   # the palette-collapse detector (port_pal_probe, 2026-10-04) off the tick: two 128-set uncached scans + a 256-byte WRAM scan a tick, ~5.7 master lines a vint (ares profile, fight 600-700); it only writes port_watch_out[180..188]
+endif

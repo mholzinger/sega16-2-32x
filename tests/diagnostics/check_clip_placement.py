@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+import sys as _sys; _sys.path.insert(0, str(ROOT/'tools')); from mktext import makefile_text
 SDK = Path(os.environ.get('SHBIN', str(Path.home()/'src/marsdev/mars/sh-elf/bin')))
 AS, LD, OBJCOPY = (str(SDK/('sh-elf-'+name)) for name in ('as', 'ld', 'objcopy'))
 
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='clip-placement-') as directory:
     tmp = Path(directory)
     # Use the actual canonical-base recipe, including on fresh checkouts where
     # sh_src/mars4.ld has not been generated. All outputs stay temporary.
-    lines = (ROOT/'Makefile').read_text().splitlines()
+    lines = makefile_text(str(ROOT)).splitlines()
     recipe = []
     for line in lines[lines.index('sh_src/mars4.ld: sh_src/mars.ld')+1:]:
         if not line.startswith('\t'):
