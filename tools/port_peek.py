@@ -15,7 +15,7 @@ were 0x00 and the real cause (an unconsumed sound command) was a different bug.
 The record held the right answer; the arithmetic was the invention.
 """
 import os, re, subprocess, sys, tempfile
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 rom = sys.argv[1]; frames = int(sys.argv[2]); specs = sys.argv[3:]
 lst = os.path.splitext(rom)[0] + ".lst"
 syms = {}

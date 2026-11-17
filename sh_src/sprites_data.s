@@ -3,4 +3,12 @@
         .align  4
         .global _altbeast_sprites
 _altbeast_sprites:
+.ifdef CART_SSF
+        ! CARTSSF (2026-10-31): the blob's last 178 KB is the unpopulated top of the sprite
+        ! ROM space (a 0xFF run, measured), and no sprite bank points there. Trimmed to
+        ! 0xD4000 so the low 4 MB can give slot 7 to the stream window (sh_src/mars4s.ld).
+        ! The bank stride (r60_main.c: bank * 0x10000 words) is unchanged.
+        .incbin "sprites.bin", 0, 0xD4000
+.else
         .incbin "sprites.bin"
+.endif

@@ -17,7 +17,7 @@ args = getScriptArgs()
 OUT = args[0] if args else '/tmp/altbeast.c'
 TMO = int(args[1]) if len(args) > 1 else 60
 
-ROOT = '/Users/mikeholzinger/src/sega16-2-32x'
+ROOT = os.path.expanduser('~/src/sega16-2-32x')
 NAMES, CLASSES = {}, {}
 row = re.compile(r'\|\s*0x([0-9A-Fa-f]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^|]*?)\s*\|')
 for l in open(os.path.join(ROOT, 'docs/audit/function_map.md')):

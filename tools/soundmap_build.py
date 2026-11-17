@@ -106,6 +106,10 @@ def transcode(seg, loop, secs=14.0):
     else:
         t_cut = (keyons[-1] + 2.5) if keyons else seg["t0"] + 1.0
     tc = Transcoder(fm_map, psg_map)
+    # THE ACCEPTED EFFECTS WERE CUT BEFORE THE 2026-10-31 PITCH FIX (opm2opn.Stream.ym), so
+    # they are cut the same way here: with it the line's sound.bin reproduces byte for byte
+    # (2026-11-16). Dropping this changes how the YM effects sound and needs an audition.
+    tc.s.dedup_pitch = True
     tc.s.t = seg["t0"]
     tc.snapshot(seg["shadow"])
     shadow = list(seg["shadow"])
@@ -231,6 +235,10 @@ def main():
 
     with open(os.path.join(args.speech_dir, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=1)
+
+    # The music plays from the rendered songs (render_music*.h), so a looping track keeps
+    # its table entry and loses its bytes: unstubbed they are 700 KB the rom has no room for.
+    tracks = [(name, [0xFF] if loop else data, loop) for name, data, loop in tracks]
 
     total = 0
     with open(args.out, "w") as f:

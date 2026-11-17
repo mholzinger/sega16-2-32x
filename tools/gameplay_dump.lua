@@ -42,6 +42,9 @@
 --                        at every GD_FRAMES frame. GD_ONCHANGE_MAX (default 2000) caps the
 --                        event count so a status word that flickers cannot fill the disk.
 --   GD_END=<frame>       exit at this frame even when it is past the last GD_FRAMES entry.
+--   GD_SPRDUMP=<file>    append the sprite RAM (0x440000, 64 records x 16 B = 1 KB) EVERY frame
+--                        from GD_SPRFROM (default 1): the art census input (frame k of the file
+--                        is arcade frame GD_SPRFROM + k). 1 KB a frame, 31 MB for 31000 frames.
 --   GD_ROUND=N           PROBE: credited play starts at round N (2 = level 3): while P1 is in
 --                        play (0xFFF028 bit0) with 0xFFF026 still 0 and the round index
 --                        0xFFF14E 0, write 0xFFF14E = 0xFFF142 = N. That is the window between
@@ -144,6 +147,15 @@ if gd_end > last then last = gd_end end
 
 -- the recorders
 local GOD = os.getenv('GD_GOD') == '1'
+-- GD_FORM=N: raise P1's TARGET form byte 0xFFC06B to N while in play, the arcade twin of the
+-- port's PORTFORM=N (sh_src/port_l2.c PORT_FORM): the player handler's own form-change
+-- dispatch walks the form up, so the transformation cut runs at the start of play on both
+-- machines without a tape that hunts three wolves (2026-11-05, the transformation seam).
+local FORM = tonumber(os.getenv('GD_FORM') or '0')
+-- GD_FORM_TICK=<hex>: not before game tick 0xFFF02A reaches it. Raised at START the walk runs
+-- inside the level intro (the rise), where the cut draws the face over the level and never
+-- selects pages 10/11 (measured 2026-11-05: f148 set 1050-1220, pages 0000/5555 throughout).
+local FORM_TICK = tonumber(os.getenv('GD_FORM_TICK') or '0', 16)
 local ROUND = tonumber(os.getenv('GD_ROUND') or '0')   -- see the GD_ROUND note at the top
 local ENDCLEAR = os.getenv('GD_ENDCLEAR') == '1'   -- see the GD_ENDCLEAR note at the top
 local tl_path = os.getenv('GD_TIMELINE')
@@ -152,6 +164,9 @@ local CENSUS_EVERY = tonumber(os.getenv('GD_CENSUS_EVERY') or '60')
 local SNAP_EVERY = tonumber(os.getenv('GD_SNAP_EVERY') or '0')
 local ONCHANGE = os.getenv('GD_ONCHANGE') == '1'
 local ONCHANGE_MAX = tonumber(os.getenv('GD_ONCHANGE_MAX') or '2000')
+local spr_path = os.getenv('GD_SPRDUMP')
+local SPR_FROM = tonumber(os.getenv('GD_SPRFROM') or '1')
+local sprf = spr_path and io.open(spr_path, 'wb') or nil
 
 local TL_HEADER = 'frame,tick,gameframe,level,round,scroll,px,py,pstat,phand,lives,score,' ..
                   'credits,f028,f14b,f154,pad,boss_stat,boss_hand,step,demo'
@@ -252,6 +267,12 @@ emu.register_frame_done(function()
         cs:flush()
     end
 
+    if sprf and frames >= SPR_FROM then
+        local buf = {}
+        for i = 0, 1023 do buf[i + 1] = string.char(sp:read_u8(0x440000 + i)) end
+        sprf:write(table.concat(buf))
+    end
+
     if SNAP_EVERY > 0 and frames % SNAP_EVERY == 0 then
         manager.machine.screens[':screen']:snapshot(string.format('%s/snap_%d.png', outdir, frames))
     end
@@ -286,6 +307,9 @@ emu.register_frame_done(function()
             sp:write_u8(0xFFE018, 3)
         end
     end
+    if FORM > 0 and (sp:read_u8(0xFFF028) & 1) ~= 0 and sp:read_u16(0xFFF02A) >= FORM_TICK and sp:read_u8(0xFFC06B) < FORM then
+        sp:write_u8(0xFFC06B, FORM)
+    end
 
     -- GD_ROUND: start credited play at round N; the same poke as the port's PORTROUND
     if ROUND > 0 and (sp:read_u8(0xFFF028) & 1) ~= 0 and sp:read_u8(0xFFF026) == 0
@@ -308,6 +332,7 @@ emu.register_frame_done(function()
     if last > 0 and frames >= last then
         if tl then tl:close() end
         if cs then cs:close() end
+        if sprf then sprf:close() end
         print('GAMEPLAY-DUMP END ' .. frames .. ' events ' .. ev_count)
         manager.machine:exit()
     end

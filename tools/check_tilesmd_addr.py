@@ -22,7 +22,10 @@ import re, sys, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 ld = open(os.path.join(ROOT, "sh_src/mars.ld"), encoding="utf-8").read()
-md = open(os.path.join(ROOT, "md_src/md_main.c"), encoding="utf-8").read()
+# md_main.c and the pieces it includes (md_src/md_*.inc)
+md = "".join(open(os.path.join(ROOT, "md_src", f), encoding="utf-8").read()
+             for f in sorted(os.listdir(os.path.join(ROOT, "md_src")))
+             if f == "md_main.c" or (f.startswith("md_") and f.endswith(".inc")))
 
 # THE AT() IS THE CART ADDRESS, AND IT IS ON THE LINE AFTER THE SECTION NAME --
 # which is the whole reason the original regex matched nothing and this check had

@@ -48,7 +48,7 @@ MDDEFS=$(grep '^MD ' "$TMP/defs" | tr ' ' '\n' | grep '^-D' | sort -u | tr '\n' 
 SHDEFS=$(grep '^SH ' "$TMP/defs" | tr ' ' '\n' | grep '^-D' | sort -u | tr '\n' ' ')
 echo "lint: shipping flags — MD $(wc -w <<<"$MDDEFS") defines, SH $(wc -w <<<"$SHDEFS") defines"
 # the SH-2 sources the shipping build compiles (R60NEW: sh_src/r60 replaces m_main.c)
-SHFILES="sh_src/r60/r60_main.c sh_src/r60/r60_planes.c sh_src/port_l2.c sh_src/port_selftest.c
+SHFILES="sh_src/r60/r60_main.c sh_src/r60/r60_planes.c sh_src/port_l2.c
          sh_src/mars.c sh_src/portfull/objdispatch.c"
 LINT_ROM=${LINT_ROM:-$(ls -t build/port/rom/*.lst 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null | sed 's/\.lst$//')}
 echo "lint: rom rules read build/port/rom/${LINT_ROM:-<none>}"

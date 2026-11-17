@@ -1,7 +1,7 @@
 #!/bin/zsh
 # rigpass.sh <rom> [name] : launch on the office rig, capture every 8 s for ~2 min, write a montage
 R=$1; N=${2:-$(basename $R .32x)}; D=${ACCEPT_OUT:-$(dirname $0)/../build/accept}/rig/pass_$N; mkdir -p $D; M=root@mister.office.local
-cd /Users/mikeholzinger/src/sega16-2-32x/.claude/worktrees/advisor-bisect
+cd "$(dirname "$0")/.."
 # The rigs live on the home LAN (mister.office.local = 10.0.4.x). Off that subnet (Mike's work
 # office, weekdays) the rig cannot answer and the strip would fail half way: say so and stop.
 MYIP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)

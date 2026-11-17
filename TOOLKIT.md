@@ -35,6 +35,20 @@ what must be parameterized.
      (`tools/sprite_discover.*`), and its accuracy gate re-decodes
      every baked frame through a Python port of the live algorithm
      before the ROM links. Already kit-grade.
+   - `tools/extend_zoom_atlas.py` builds exact scaled packets from raw
+     sprite words and explicit pose descriptors. `--empty-base` starts
+     from scratch; `--base-atlas` preserves every existing packet.
+     `tools/bake_sprite_workingset.py` packs bounded unscaled/scaled
+     inputs with the music prefix and page guard, rejecting overflow.
+     Decoding, validation and serialization contain no title phases.
+   - Per-game working-set inputs live under `games/<title>/graphics/`;
+     native phase selection stays in the title adapter. The Altered
+     Beast manifests reproduce its 45-pose atlas directly from raw art,
+     with no dependency on a previous experimental ROM or atlas. See
+     [the rebuild recipe](games/altbeast/graphics/README.md).
+     Working-set runtime flags remain opt-in. The newer block compositor
+     and cross-core workspace protocol are host prototypes, with target
+     integration and hardware timing still pending.
 
 ## MAME is the asset config source — KIT-CORE
 

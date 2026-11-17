@@ -24,7 +24,7 @@ project never reached.
 import re, subprocess, sys, os
 
 OD = os.environ.get('M68K_OBJDUMP',
-     '/Users/mikeholzinger/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump')
+     os.path.expanduser('~/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump'))
 BIN = 'roms/altbeast/prog68k.bin'
 SEEDS = 'docs/audit/altbeast_seeds.json'
 

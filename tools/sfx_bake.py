@@ -28,6 +28,11 @@ def main():
     blob = bytearray(); ents = []; cmap = {}
     for f in sorted(glob.glob(os.path.join(a.wav_dir, 'arc_*.wav'))):
         cmd = int(os.path.basename(f)[4:6], 16)
+        if 0x90 <= cmd <= 0x97:
+            # the eight SONGS (SOUND_DRIVER.md:67) belong to the Z80 music lane; a capture of one
+            # here plays a PCM copy over the lane's own rendering (0x93, the round-clear jingle,
+            # doubled on psg5: Mike 2026-11-02 "the purple orb music on top of your own")
+            print('%02X: a music command, not an effect, skipped' % cmd); continue
         s = load_wav_16k(f, a.rate)
         s = s[int(a.inject * a.rate):]
         win = a.rate // 100

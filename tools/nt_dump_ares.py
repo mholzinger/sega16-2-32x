@@ -7,8 +7,8 @@ nt_dump.lua can no longer serve this audit: under R60 no packet lands in
 MAME (CLAUDE.md, LOOP29), so the mirror and the tags there are not our
 machine's.  ares is.  Regions are the same five, as SDRAM offsets."""
 import os, re, subprocess, sys
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/"
-                      "build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser(
+    "~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # EVERY OFFSET COMES FROM tools/sdram_map.py, NEVER FROM A CONSTANT HERE.

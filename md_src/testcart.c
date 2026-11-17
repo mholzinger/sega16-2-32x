@@ -24,7 +24,6 @@
  * 2026-09-27) -- not yet wired; the grid is the phase-1 readout.
  */
 #include "common.h"
-#if defined(TEST_CART) || defined(R60_FRONTEND)
 
 #define DRQ_WORDS 64u          /* must match DRQ_N in sh_src/dreq_proof.h */
 #define TC_MAX 72
@@ -1660,7 +1659,6 @@ static void tc_hold(uint16_t units)
  * makes the window cover from row 0 down, i.e. the whole screen. Plane A's
  * base at this point in boot is not ours to assume.
  */
-#ifdef R60_FRONTEND
 #include "frontend.h"
 #include "../sh_src/game_cfg.h"   /* GAME_TITLE, GAME_ROUNDS, GAME_REGIONS_*, GAME_DIP_* (games/<title>/game.py) */
 /* The game uses C000-CFFF and E000-EFFF plane tables, art below C000,
@@ -1668,11 +1666,6 @@ static void tc_hold(uint16_t units)
 #define TC_NAMES 0xD000u
 #define TC_FONT 0xF400u
 #define TC_TILE (0x8000u | (TC_FONT / 32u))
-#else
-#define TC_NAMES 0xC000u
-#define TC_FONT 0u
-#define TC_TILE 0u
-#endif
 static uint16_t tc_glyph(char c)
 {
     if (c == ' ') return 0;
@@ -1850,9 +1843,7 @@ static void tc_font_pen(uint32_t mask)
     VWIDE = ((uint32_t)(0x4000u | (TC_FONT & 0x3FFFu)) << 16) | (TC_FONT >> 14);
     for (i = 0; i < 45u * 8u; i++) {
         uint32_t row = font_data[i] & mask;
-#ifdef R60_FRONTEND
         row = 0x22222222ul ^ ((row & 0x11111111ul) * 3ul); /* opaque black ground */
-#endif
         VDATA = (uint16_t)(row >> 16);
         VDATA = (uint16_t)row;
     }
@@ -1917,9 +1908,7 @@ static void tc_frame(const char *title)
 {
     uint16_t row, col;
     tc_dma_wait();
-#ifdef R60_FRONTEND
     VCTRL = 0x8134;                       /* hide font/window construction */
-#endif
     *(volatile uint16_t*)0xA15180 = 0;      /* 32X layer off -- MD shows */
     tc_font();
     VCTRL = 0x8F02;
@@ -1929,9 +1918,7 @@ static void tc_frame(const char *title)
     VWIDE = ((uint32_t)0xC000u << 16) | 0u;
     VDATA = 0x0000;                          /* black */
     VDATA = 0x0EEE;                          /* white */
-#ifdef R60_FRONTEND
     VDATA = 0;                               /* opaque black pen 2 */
-#endif
     for (row = 0; row < 28u; row++)
         for (col = 0; col < 40u; col++) {
             uint32_t a = TC_NAMES + ((uint32_t)row * 64u + col) * 2u;
@@ -1940,9 +1927,7 @@ static void tc_frame(const char *title)
         }
     tc_puts(0, 1, title);
     for (col = 1; col < 39u; col++) tc_puts(1, col, "-");
-#ifdef R60_FRONTEND
     VCTRL = 0x8174;
-#endif
 }
 
 static void tc_splash(void)
@@ -2265,7 +2250,6 @@ static void tc_screen(uint16_t page)
     }
 }
 
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 /* Diagnostic presentation follows 32x-builder's pad_test_draw: decoded word,
  * lamps in bit order and four distinct recent words. That project's RAW is
  * post-decode (and can be post-sticky-latch); capture the four electrical
@@ -2335,9 +2319,7 @@ static void tc_padtest(uint16_t standalone)
         }
     }
 }
-#endif
 
-#ifdef R60_FRONTEND
 /* THE OPTIONS SCREEN (hold B at power-on, or START+B on the title). Rows, top to bottom:
  * VERSION (the region byte: games/<title>/game.py REGIONS), STARTING ROUND, the arcade DIP
  * sheet (game.py DIPS), CONTROLLER TEST, RESTORE ARCADE DEFAULTS, RETURN TO ARCADE.
@@ -2371,7 +2353,7 @@ static uint16_t fe_screen_row(uint16_t r)
 
 static int fe_editable(uint16_t r, uint16_t at_boot)
 {
-    if (r == FE_ROW_REGION) return at_boot && GAME_REGIONS_N > 1u;
+    if (r == FE_ROW_REGION) return at_boot == 1u && GAME_REGIONS_N > 1u;   /* 2: the launcher chose it */
     if (r >= FE_ROW_DIP0 && r < FE_ROW_PADS) return at_boot || fe_dip_bank[r - FE_ROW_DIP0] != 1u;
     return 1;
 }
@@ -2392,7 +2374,12 @@ void frontend_menu_screen(void)
     uint16_t palette[3], mode, n, selected = FE_ROW_ROUND, prev = 0xFFFFu, dirty = 1;
     uint16_t at_boot = frontend_at_boot;
     if (!set_up) { dsw[0] = fe_region_dsw1[0]; dsw[1] = fe_region_dsw2[0]; set_up = 1; }
-    if (at_boot) selected = FE_ROW_REGION;
+    if (at_boot == 2u && region != frontend_launch_region && frontend_launch_region < GAME_REGIONS_N) {
+        region = frontend_launch_region;        /* the launcher's cabinet: that board's switches, as a region change here gives */
+        dsw[0] = fe_region_dsw1[region];
+        dsw[1] = fe_region_dsw2[region];
+    }
+    if (at_boot == 1u) selected = FE_ROW_REGION;
     tc_dma_wait();
     VWIDE = 0x00000020ul;                /* CRAM read, auto-increment 2 */
     for (n = 0; n < 3u; n++) palette[n] = VDATA;
@@ -2405,6 +2392,7 @@ void frontend_menu_screen(void)
             tc_puts(3, 2, "VERSION");
             tc_puts(3, 21, fe_region_names[region]);
             if (!at_boot) tc_puts(3, 25, "- POWER-ON ONLY");
+            if (at_boot == 2u) tc_puts(3, 25, "- LAUNCHER");
             tc_puts(4, 2, "STARTING ROUND"); tc_hex(4, 21, round + 1u, 1);
             for (n = 0; n < GAME_DIPS_N; n++) {
                 uint16_t k = fe_dip_option(n, dsw);
@@ -2413,11 +2401,12 @@ void frontend_menu_screen(void)
             }
             tc_puts(fe_screen_row(FE_ROW_PADS), 2, "CONTROLLER TEST");
             tc_puts(fe_screen_row(FE_ROW_RESET), 2, "RESTORE ARCADE DEFAULTS");
-            tc_puts(fe_screen_row(FE_ROW_RETURN), 2, "RETURN TO ARCADE");
+            tc_puts(fe_screen_row(FE_ROW_RETURN), 2, at_boot == 2u ? "RETURN TO LAUNCHER" : "RETURN TO ARCADE");
             tc_puts(fe_screen_row(selected), 0, ">");
             tc_puts(21, 2, "UP DOWN SELECT  LEFT RIGHT CHANGE");
             tc_puts(22, 2, "A OR START CONFIRM  B RETURN");
-            tc_puts(24, 2, at_boot ? "VERSION AND COINS: POWER-ON MENU"
+            tc_puts(24, 2, at_boot == 2u ? "VERSION: CHOSEN IN THE LAUNCHER"
+                         : at_boot ? "VERSION AND COINS: POWER-ON MENU"
                                    : "COINS LOCKED: HOLD B AT POWER-ON");
             tc_puts(25, 2, "ROUND APPLIES TO THE NEXT GAME");
             dirty = 0;
@@ -2470,7 +2459,6 @@ void frontend_menu_screen(void)
     while (*(volatile uint16_t*)MARS_COMM12 != FE_MORE2) __asm__ volatile ("nop");
     *(volatile uint16_t*)MARS_COMM12 = FE_DSW2 | dsw[1];
 }
-#endif
 
 void testcart_run(void)
 {
@@ -2555,4 +2543,3 @@ void testcart_run(void)
         }
     }
 }
-#endif /* TEST_CART */

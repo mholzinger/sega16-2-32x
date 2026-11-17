@@ -11,6 +11,31 @@ speculation.
 
 ## About the instruments
 
+### Bind ares screenshots to active scanout, not the final selected bank
+
+The NTSC v28 host-frame event is at VCounter 234, after active lines 0..223.
+A flip at 224 therefore selects the next picture's bank. Early-blank flips at
+485..511 occur before active scanout in the same host frame, so blindly using
+either the last end-of-frame flip or a universal one-frame subtraction is wrong.
+Source witnesses are ares md/vdp/vdp.cpp `updateScreenParams`, md/vdp/main.cpp
+frame completion, and the m32x applied-flip trace. The software `r60_bkp` label
+also needs calibration against physical DRAM; it toggles on a requested flip.
+
+Measured 2026-11-07: normal06 frame 1708 used the bank selected by 1707/v224.
+Both physical DRAM banks, actual line entries, zero canvas/dotshift witnesses,
+CRAM and committed MD planes bind two brown pixels to opaque sprite pen 41 over
+foreground scroll 950, while the completed punch used 951. End-frame KS records
+were insufficient to identify that displayed cohort. Earlier strict native
+pose matches remain code-state evidence, not shown-picture or cadence proofs.
+Static fixture proofs retain their separate both-bank/full-PNG scope.
+
+Cost: natural-frame shown-cohort claims had to be withdrawn and rebuilt from
+beam, memory and RGB evidence. Raw outputs and correction notes remain in
+build/codex-working-set/acceptance-wsplay06/{WITNESS-CORRECTION.md,
+TWO-PIXEL-FG-COHORT.md}. A private ACK-before-flip test removed early open-bus
+polls but left 86 qualified foreground leaks; its two initially green pixels
+were a different sprite pose, not proof of a fix. Keep that experiment withheld.
+
 ### ares and the rig disagree about WHICH CPU the wall is on
 
 **ares is SLAVE-gated. The rig is MASTER-gated.** On ares the wall is
@@ -11527,3 +11552,27 @@ the unit, and a hand file is included into it.
 THE SEEDS WERE NEVER THE PROBLEM. All eleven addresses were already present in
 docs/audit/altbeast_seeds.json (in function_seeds, repair_seeds and seeds) before any
 of this. The committed export is simply older than the seeding.
+
+## The SSF2 cart mapper works on the 32X FPGA, but the 68K must page under RV=1 with the SH-2 in SDRAM (2026-10-31, CARTSSF=1 PAGEPROBE=5 ssf5g yellow-white on the office MiSTer)
+
+The core drives the cart address bus from the SH-2 whenever it holds the ROM grant
+(`srcref/S32X_MiSTer/rtl/32X/32X.sv:351`, `CA = IF_SEL ? SHA : VA`), and a /TIME write is not
+arbitrated, so a 68K bank write landing during a grant reaches `cart.sv:65` with the SH-2's
+address in VA[3:1]. `IF.sv:822` refuses SH-2 grants while RV=1, so the write goes under RV
+with the requester running from SDRAM (`md_src/md_bank.c` cart_bank_set); d32xr's
+`set_bank_page` does the same. The unguarded probe (ssf1) read right on ares and wrong on the
+board: ares has no such mux, so it cannot gate this. Two more board-only facts from the same
+chase: FM=1 from `sh_src/md_start.s:168` until `md_src/md_main.c:7438`, and a 68K 32X-VDP access
+in that window stalls the board (ignored on ares); and the MD display enabled at boot shows
+the board's uninitialised VRAM, so a boot verdict paints with the display off and the 32X layer
+blanked. Full account: docs/design/SILICON.md 4e "ADOPTED 2026-10-31".
+
+## A 16 MB cart image is a red screen on the MiSTer: cart.sv's SRAM_EN compares against rom_sz[23:1], which wraps to 0 at 0x1000000 (2026-10-31, st3 vs st5)
+
+st3 (CARTSSF=1 R60STREAM=1 R60SOUND=1, 24 pages, exactly 16777216 bytes) stopped on the 68K's
+RED boot stage on the office MiSTer; st5 (23 pages, 15.5 MB, otherwise the same code) plays.
+`srcref/S32X_MiSTer/rtl/CART/cart.sv:89`: `SRAM_EN = ((SRAM_BANK || ({2'b00,VA[21:1]} >=
+rom_sz[23:1] && !noram_quirk)) && VA[21] && !CE0_N)` -- with rom_sz = 0x1000000 the compared
+field is 0, so every cart read in 0x200000-0x3FFFFF of the low 4 MB is served as SRAM. ares has
+no such rule. The bake asserts <= 23 pages (tools/stream_bake.py); the mapper's 32 pages are
+usable only up to the 31st. [INFERRED from the RTL; the measurement is the pair of roms.]

@@ -17,6 +17,9 @@
 #include "mars.h"
 #include "sound.h"
 #include "speech_bank.h"
+#ifdef OPM_LANE
+#include "opm_lane.h"       /* the YM2151 overflow channels, synthesized here (hybrid 3) */
+#endif
 
 #define SND_MIX_RATE 16000
 
@@ -36,7 +39,7 @@
  * pump for one long stretch; 64 ms per side plus pump checkpoints is
  * the proven shape. DMA reads cached SDRAM; SH-2 cache is write-through
  * so the mixer's stores reach memory before DMA does. */
-#define SND_SAMPLES_PER_BUF 1024
+#define SND_SAMPLES_PER_BUF SND_BUF_SAMPLES
 
 static uint16_t snd_pwm_buf[2][SND_SAMPLES_PER_BUF]
                             __attribute__((aligned(16)));
@@ -46,7 +49,19 @@ static volatile uint8_t snd_buf_needs_fill;   /* bit i = buf i needs fill */
 /* Cache-through alias: both SH-2s see one coherent copy. */
 #define UC(x) (*(volatile __typeof__(x) *)((uintptr_t)&(x) | 0x20000000))
 
-static uint16_t snd_underruns_storage;
+static uint16_t snd_underruns_storage;     /* holds: the DMA came due on a side the pump never refilled */
+
+/* AUDIO PLAN phase A (docs/sound/AUDIO-PLAN.md), pattern from 32X Live Mixer Vol. 1:
+ * A1 hold the last sample instead of replaying a stale 64 ms side; A2 load meter, the
+ * fill's cost in FRT ticks (TCR /128 = 5.56 us, 64 ms = 11506 ticks); A3 lateness, IRQ
+ * entries that find the PWM FIFO already empty. */
+#define SND_GAP 64
+static uint16_t snd_gap[SND_GAP] __attribute__((aligned(16)));
+static volatile uint8_t snd_gapping;
+static uint16_t snd_late_storage;
+static uint32_t snd_fill_n, snd_fill_sum;
+static uint16_t snd_fill_peak_storage;
+static inline uint16_t snd_frt(void) { uint8_t h = SH2_FRT_FRCH, l = SH2_FRT_FRCL; return (uint16_t)((h << 8) | l); }
 
 /* Per-voice trigger mailbox (primary writes, secondary consumes). */
 struct sfx_req {
@@ -120,13 +135,27 @@ static void Mars_InitPWM(int sample_rate, int min_sample, int max_sample)
  * word transfer, src-increment, dest-fixed, IE, DREQ edge, enable. */
 void amb_dma_handler(void)
 {
-	snd_buf_needs_fill |= (uint8_t)(1 << snd_current_buf_idx);
-	snd_current_buf_idx ^= 1;
+	uint8_t drained = snd_current_buf_idx, next = (uint8_t)(drained ^ 1);
+	if (MARS_PWM_MONO & 0x4000)                  /* A3: the FIFO ran dry before this IRQ ran */
+		UC(snd_late_storage)++;
+	if (!snd_gapping)
+		snd_buf_needs_fill |= (uint8_t)(1 << drained);
 
-	/* UNDERRUN: about to drain a buffer the pump never refilled — DMA
-	 * will replay stale samples (the audible chop, made countable). */
-	if (snd_buf_needs_fill & (uint8_t)(1 << snd_current_buf_idx))
+	/* A1 UNDERRUN: the side due next was never refilled. The old code replayed it (a stale
+	 * 64 ms echo). Hold the last played sample SND_GAP samples (4 ms) and look again. */
+	if (snd_buf_needs_fill & (uint8_t)(1 << next)) {
+		uint16_t *g = (uint16_t *)((uintptr_t)snd_gap | 0x20000000);
+		uint16_t hold = snd_gapping ? g[0] : snd_pwm_buf[drained][SND_SAMPLES_PER_BUF - 1];
+		for (int i = 0; i < SND_GAP; i++) g[i] = hold;
+		snd_gapping = 1;
 		UC(snd_underruns_storage)++;
+		SH2_DMA_SAR1  = (uint32_t)(uintptr_t)g;
+		SH2_DMA_TCR1  = SND_GAP;
+		SH2_DMA_CHCR1 = 0x14E5;
+		return;
+	}
+	snd_gapping = 0;
+	snd_current_buf_idx = next;
 
 	SH2_DMA_SAR1  = (uint32_t)(uintptr_t)snd_pwm_buf[snd_current_buf_idx];
 	SH2_DMA_TCR1  = SND_SAMPLES_PER_BUF;
@@ -163,7 +192,11 @@ void sfx_stop_all(void)
 		sfx_stop(v);
 }
 
+uint8_t snd_fill_pending(void) { return snd_buf_needs_fill; }
 uint16_t snd_underruns(void) { return UC(snd_underruns_storage); }
+uint16_t snd_late(void) { return UC(snd_late_storage); }
+uint16_t snd_fill_peak(void) { return UC(snd_fill_peak_storage); }
+uint16_t snd_fill_avg(void) { uint32_t n = UC(snd_fill_n); return n ? (uint16_t)(UC(snd_fill_sum) / n) : 0; }
 
 uint8_t snd_active_mask(void)
 {
@@ -205,6 +238,9 @@ static void fill_buffer(uint16_t *buf)
 {
 	for (int i = 0; i < SND_SAMPLES_PER_BUF; i++) {
 		int32_t mix = 0;
+#ifdef OPM_LANE
+		mix += opm_lane_sample() >> 6;          /* 16-bit PCM scale -> PWM span, like a voice at unity */
+#endif
 		for (int v = 0; v < SND_MAX_VOICES; v++) {
 			struct voice *vc = &voices[v];
 			if (!vc->active)
@@ -248,13 +284,24 @@ static void fill_buffer(uint16_t *buf)
 void snd_pump(void)
 {
 	consume_reqs();
+#ifdef OPM_LANE
+	opm_lane_poll();
+#endif
 	uint8_t need = snd_buf_needs_fill;
 	if (!need)
 		return;
 	for (int b = 0; b < 2; b++) {
 		if (need & (1 << b)) {
+			uint16_t t0 = snd_frt(), dt;
 			fill_buffer(snd_pwm_buf[b]);
+			dt = (uint16_t)(snd_frt() - t0);
+			UC(snd_fill_n)++; UC(snd_fill_sum) += dt;
+			if (dt > UC(snd_fill_peak_storage)) UC(snd_fill_peak_storage) = dt;
 			snd_buf_needs_fill &= (uint8_t)~(1 << b);
+#ifdef UNDERPROBE
+			/* probe: every 32nd fill (~2 s) stall the pump 200 ms: the double buffer covers 128 ms */
+			if ((UC(snd_fill_n) & 31u) == 0u) { for (int k = 0; k < 10; k++) { uint16_t s0 = snd_frt(); while ((uint16_t)(snd_frt() - s0) < 3600u) {} } }
+#endif
 		}
 	}
 }
@@ -264,6 +311,12 @@ void snd_init(void)
 	snd_current_buf_idx = 0;
 	snd_buf_needs_fill  = 0;
 	UC(snd_underruns_storage) = 0;
+	UC(snd_late_storage) = 0; UC(snd_fill_n) = 0; UC(snd_fill_sum) = 0; UC(snd_fill_peak_storage) = 0;
+	snd_gapping = 0;
+	SH2_FRT_TCR = 0x02;                          /* FRC = clock / 128 (load meter) */
+#ifdef OPM_LANE
+	opm_lane_init();
+#endif
 	for (int v = 0; v < SND_MAX_VOICES; v++) {
 		voices[v].active = 0;
 		voices[v].last_serial =

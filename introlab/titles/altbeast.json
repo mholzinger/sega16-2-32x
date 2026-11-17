@@ -1,0 +1,96 @@
+{
+  "_doc": [
+    "One title's cabinet. `make -C introlab cabinet TITLE=altbeast` reads this file and writes",
+    "everything under introlab/art/altbeast/ (gitignored: it is derived from Sega artwork).",
+    "Paths are relative to the repository root; a path missing from a worktree is looked up",
+    "in the main checkout, because the artwork is untracked and lives only there.",
+    "The tools expect the model, after `rotate_deg`, to stand with +Z up and its front on +X."
+  ],
+  "title": "altbeast",
+
+  "model": "artwork/altbeast/3d/altered_beast_cab.glb",
+  "rotate_deg": [-90, 0, 0],
+  "lift": [
+    {"object": "ID678", "by": [0.1, 0, 0], "why": "bezel and screen decal, coplanar with a plain face"},
+    {"object": "ID694", "by": [0.1, 0, 0], "why": "marquee decal, coplanar with a plain face"},
+    {"object": "ID710", "by": [0, 0.1, 0], "why": "right side art"},
+    {"object": "ID726", "by": [0, -0.1, 0], "why": "left side art"}
+  ],
+  "texture_width": 64,
+  "side_panel_thickness": 0.75,
+  "profile_tolerance": {"side": 0.45, "centre": 0.35},
+
+  "screen": {
+    "face": "c06",
+    "image": "parity/title_arc.png",
+    "rect": [0.160, 0.168, 0.836, 0.703]
+  },
+
+  "banner": {"face": "c08", "size": [152, 48],
+             "why": "the marquee, shown flat beside the cabinet; a region that replaces this whole face replaces the banner too"},
+
+  "font": {"zip": "mame/altbeast.zip", "planes": ["opr-11674.a14", "opr-11675.a15", "opr-11676.a16"],
+           "first_tile": 32, "why": "the game's own 8x8 text tiles, in ASCII order from space; plane 0 is the face, plane 1 its shadow"},
+
+  "room": {"effects": [5, 8, 11, 28, 34, 38, 37, 39, 52], "quieter": 16, "every_frames": 200, "murmur": 0,
+           "why": "the room's sounds: numbers of the captured effects under art/<title>/room (tools/gen_room.py). Mike's picks by ear, 2026-11-14; they are to sit under the crowd murmur, not over it. murmur = the crowd bed's level on FM channels 1-2 (a TL: smaller is louder, 0 = none). OFF: the first recipe sounded like an engine (Mike); the next is chosen by ear from rendered previews before it is built"},
+
+  "backdrop": "beasts",
+  "backdrops": {
+    "_doc": "the room's back wall; `make cabinet BACKDROP=<name>` picks another. At most 18 colours.",
+    "crescent": {"image": "introlab/art/altbeast/src/backdrop.png",
+                 "keep_rows": [[21, 55], [69, 196]], "brightness": 0.8},
+    "moon": {"image": "introlab/art/altbeast/src/backdrop_moon.png",
+             "keep_rows": [[18, 125], [132, 137], [156, 196]], "brightness": 0.8,
+             "why": "rows dropped only where every shape is a plain vertical, so nothing but column height changes"},
+    "beasts": {"height": 156, "bands": 12, "ground": 8, "top": [8, 8, 40], "bottom": [80, 112, 168],
+               "brightness": 0.8,
+               "sheet": "srcref/alteredbeast/Altered_beast_sprites_pallette_all.png",
+               "why": "only the beasts the centurion turns into; `sink` moves a figure down (negative: up, into the sky)",
+               "figures": [
+                 {"seed": [1690, 245],  "x": 24,  "why": "werewolf"},
+                 {"seed": [1375, 1514], "x": 64,  "why": "weretiger"},
+                 {"seed": [80, 425],    "x": 104, "why": "werebear, standing"},
+                 {"seed": [492, 425],   "x": 148, "why": "werebear on all fours"},
+                 {"seed": [1070, 335],  "x": 196, "flip": true, "why": "weredragon"},
+                 {"seed": [1218, 338],  "x": 236, "flip": true, "sink": -62, "why": "weredragon in flight"},
+                 {"seed": [604, 1512],  "x": 256, "flip": true, "why": "weretiger, kicking"},
+                 {"seed": [1838, 246],  "x": 304, "flip": true, "why": "werewolf, striding"}
+               ]},
+    "figures": {"height": 156, "bands": 12, "ground": 8, "top": [8, 8, 40], "bottom": [80, 112, 168],
+                "brightness": 0.8,
+                "sheet": "srcref/alteredbeast/Altered_beast_sprites_pallette_all.png",
+                "figures": [
+                  {"seed": [1247, 125], "x": 22,  "why": "the centurion"},
+                  {"seed": [1290, 245], "x": 62,  "why": "demon with its staff"},
+                  {"seed": [1690, 245], "x": 100, "why": "werewolf"},
+                  {"seed": [492, 425],  "x": 143, "why": "bear on all fours"},
+                  {"seed": [1070, 335], "x": 190, "flip": true, "why": "dragon"},
+                  {"seed": [80, 425],   "x": 232, "flip": true, "why": "bear, standing"},
+                  {"seed": [1838, 246], "x": 266, "flip": true, "why": "werewolf, striding"},
+                  {"seed": [1244, 46],  "x": 298, "flip": true, "why": "the centurion, kicking"}
+                ]}
+  },
+
+  "regions": [
+    {"name": "us", "replace": [
+      {"face": "c08", "image": "artwork/altbeast/3d/dae/model/texture_0.png", "rect": [0, 0, 1, 1],
+       "why": "the model's own marquee artwork (1600x502), taken straight from the file: the bake of it is soft and cropped"}
+    ]},
+    {"name": "jp", "replace": [
+      {"face": "c06", "image": "introlab/art/altbeast/src/title_jp.png", "rect": [0.160, 0.168, 0.836, 0.703]},
+      {"face": "c08", "image": "artwork/altbeast/jp/marquee_jp_card.png", "rect": [0, 0, 1, 1],
+       "why": "JP marquee (1600x502, same shape as the US one): 獣王記 logo in the instruction card's own pale blue and navy, supplied by Mike, on the red of the JP arcade instruction card (segaretro AlteredBeast_System16_JP_InstructionCard.jpg)"}
+    ]}
+  ],
+
+  "colours": {
+    "edge": [150, 190, 30],
+    "panel": [30, 30, 32],
+    "inner": [16, 16, 18],
+    "background": [4, 4, 12]
+  },
+  "palette": {"base": 57, "shades": [0.50, 0.68, 0.84, 1.0], "gamma": 0.72},
+
+  "preview": {"swing_deg": 78, "distance": 150, "height": 8, "bob": 5, "focal": 2.55, "frames": 72}
+}

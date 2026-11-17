@@ -19,7 +19,7 @@ PCS = set()
 if len(args) > 1 and os.path.exists(args[1]):
     PCS = set(int(s, 16) for s in json.load(open(args[1])))
 
-ROOT = '/Users/mikeholzinger/src/sega16-2-32x'
+ROOT = os.path.expanduser('~/src/sega16-2-32x')
 CLASSES = {}
 row = re.compile(r'\|\s*0x([0-9A-Fa-f]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([^|]*?)\s*\|')
 fmap = os.path.join(ROOT, 'docs/audit/function_map.md')

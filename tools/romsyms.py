@@ -14,21 +14,43 @@ Resolution, first match wins:
   1. <rom>.lst with <rom>.elf      (tools/save_build.sh keeps both): the elf must match the rom
   2. <rom>.lst without an elf      (older save_build.sh pairs): trusted, they were copied as a pair
   3. s16.lst with s16.elf beside the rom: the elf must match the rom
-Anything else exits with the reason. "Match" = every loaded ELF segment equals the rom at its
-p_paddr (the rom offset): a matching build differs in 0 bytes, ctl1 against belt1's elf in 1.2 MB.
+Anything else exits with the reason. "Match" = every allocated ELF section equals the rom at its
+load address (the rom offset), the build stamp excluded: a matching build differs in 0 bytes, ctl1 against belt1's elf in 1.2 MB.
 """
 import os, struct, sys
 
 _cache = {}
 
+STAMP = 48    # tools/build_id.py writes the build stamp over the rom's last 48 bytes, after the link
+
 def elf_matches(rom_bytes, elf):
+    """Every allocated section's bytes equal the rom at the section's load address.
+
+    Compared per SECTION, not per segment (2026-11-16): one loaded segment can hold several
+    sections with alignment gaps between them, and the gaps are 0x00 in the ELF file but
+    0xFF in the rom (objcopy's gap fill). Per segment, every rom of the paged 7 MB line
+    read as "a different build" -- 160 bytes of gap fill and the stamp -- and all twelve
+    tools that resolve symbols through this file refused it."""
     e = open(elf, 'rb').read()
-    phoff, = struct.unpack('>I', e[28:32]); phsz, phn = struct.unpack('>HH', e[42:46])
+    phoff, shoff = struct.unpack('>II', e[28:36])
+    phsz, phn, shsz, shn = struct.unpack('>4H', e[42:50])
+    segs = []
     for i in range(phn):
         typ, off, va, pa, fsz = struct.unpack('>5I', e[phoff + i*phsz:phoff + i*phsz + 20])
-        if typ != 1 or fsz == 0: continue
-        if rom_bytes[pa:pa + fsz] != e[off:off + fsz]: return False
-    return True
+        if typ == 1 and fsz: segs.append((off, pa, fsz))
+    end = len(rom_bytes) - STAMP
+    seen = False
+    for i in range(shn):
+        typ, flags, addr, off, size = struct.unpack('>5I', e[shoff + i*shsz + 4:shoff + i*shsz + 24])
+        if typ != 1 or not (flags & 2) or not size: continue      # PROGBITS + ALLOC only
+        for soff, pa, fsz in segs:
+            if soff <= off and off + size <= soff + fsz:
+                lo = pa + (off - soff)
+                n = max(0, min(size, end - lo))                    # the stamp is not the link's
+                if rom_bytes[lo:lo + n] != e[off:off + n]: return False
+                seen = True
+                break
+    return seen
 
 def lst_for(rom, lst=None):
     """An explicit `lst` is the caller's claim and is returned as given."""

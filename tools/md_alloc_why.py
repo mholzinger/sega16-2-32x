@@ -8,8 +8,8 @@ Answers what LOOP29 152 could not: whether a blank cell never claimed a
 slot or claimed one that something then wiped.  DIAG[39]/[50]/[53] are
 shared with the DREQ path and cannot be read for this (152)."""
 import os, struct, subprocess, sys, tempfile
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/"
-                      "build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser(
+    "~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 N = ("cells", "hit", "claim", "evict", "c1decl", "blkcut", "blkdrt",
      "blkfg", "blkbot", "flush", "flushed", "instl", "instwipe",
      "freeset", "fswipe")

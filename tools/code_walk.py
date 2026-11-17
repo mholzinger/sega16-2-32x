@@ -47,7 +47,7 @@ hides data. Where they disagree, the descent is right.
 import re, subprocess, sys, os
 
 OD = os.environ.get('M68K_OBJDUMP',
-     '/Users/mikeholzinger/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump')
+     os.path.expanduser('~/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump'))
 HEAD = re.compile(r'^\s+([0-9a-f]+):\t([0-9a-f ]+?)\s*\t(\S+)\s*(.*?)\s*$')
 CONT = re.compile(r'^\s+([0-9a-f]+):\t([0-9a-f ]+?)\s*$')
 TARGET = re.compile(r'0x([0-9a-f]+)$')

@@ -468,6 +468,32 @@ every line of the derivation above:
         bank   = I_SetBankPage(page);           // 68K switches
         newptr = (ptr & 0x0007FFFF) + 512*1024*bank + 0x02000000;
 
+**ADOPTED 2026-10-31 (`CARTSSF=1`, advisor-bisect 13073be4..fe240892), proven on
+the office MiSTer and on the ares fork.** The image is the CARTMB=4 layout with
+a 16 MB rom region and `.pages` at 0x400000 (`sh_src/mars4s.ld`, generated;
+`sh_src/pages_data.s`), header "SEGA SSF", ROM end 0x4FFFFF. The 68K pages a slot
+on the SH-2's COMM10 request (`md_src/md_bank.c`, 0x5B00 | slot << 5 | page).
+The gate `PAGEPROBE=1` pages slot 7 to the marker pages from both CPUs and hangs
+on a wrong read; `PAGEPROBE=5` paints the verdict (68K red, SH-2 green). Three
+board facts the first four probes paid for, none visible on ares:
+
+1. **The bank write must happen under RV=1 with the requesting SH-2 in SDRAM.**
+   `rtl/32X/32X.sv:351`: `CA = IF_SEL ? SHA : VA` -- the core drives the cart
+   address bus from the SH-2 whenever the SH-2 holds the ROM grant, and a /TIME
+   write is not a ROM cycle, so a bank write landing during a grant reaches
+   `cart.sv` with the SH-2's address in VA[3:1] (the wrong register, or the SRAM
+   control). `IF.sv:822` refuses SH-2 grants while RV=1. d32xr's `set_bank_page`
+   does `sh2_wait` + `set_rv` for the same reason. The pre-fix probe (ssf1) read
+   wrong on the board and right on ares.
+2. **FM=1 from `md_start.s:168` until `md_main.c:7438`.** A 68K access to the 32X
+   VDP (0xA15180, CRAM at 0xA15200) in that window stalls the 68K on the board
+   and is ignored on ares. The diagnostic drops FM itself, after the master's
+   init (whose framebuffer flips need FM=1).
+3. **A blank screen on the board is not a verdict.** The MD display enabled at
+   boot shows the board's uninitialised VRAM (ares zero-fills it); paint with the
+   display off and the 32X layer blanked (mode 0) or in every 32X palette entry.
+   Boot-time MD backdrop writes land on the board.
+
   - **`Mars_ClearCache()` after every switch** — the same addresses now
     hold different bytes, so the SH-2 cache must be dropped.
   - MD side writes 0xA130F0/F1/FF (src-md/crt0.s), with EverDrive and

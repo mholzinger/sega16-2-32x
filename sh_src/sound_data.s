@@ -5,9 +5,11 @@
 ! bank at 8 kHz IMA ADPCM, played by the slave's PWM mixer (sh_src/r60/r60_speech.c).
         .section .sounddata,"a"
         .ifdef R60_SOUND
+        .ifndef CART_SSF
         .global _snd_blob
 _snd_blob:
         .incbin "sh_src/sound.bin"
+        .endif
         .endif
         .ifdef R60_SPEECH
         .align 4

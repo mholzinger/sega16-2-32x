@@ -23,7 +23,7 @@ fall-through test looks at the wrong address and fails.
 import re, subprocess, sys, os
 
 OD = os.environ.get('M68K_OBJDUMP',
-     '/Users/mikeholzinger/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump')
+     os.path.expanduser('~/src/marsdev/mars/m68k-elf/bin/m68k-elf-objdump'))
 BIN = 'roms/altbeast/prog68k.bin'
 MAP = 'docs/audit/function_map.md'
 

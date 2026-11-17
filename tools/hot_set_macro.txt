@@ -1,0 +1,33 @@
+# Candidate-only prefix of tools/hot_set.txt.  The accepted 4,680-byte set
+# overlaps the compact-sound boundary once frontend + macro code are linked.
+# Keep the highest wait/byte entries (3,492 profile bytes) and leave the
+# accepted source file unchanged.
+sprite_frame_lookup@2 68 2361 generated
+FUN_00003f24@2 48 1651 generated
+port_zoom_scale@2 148 4802 runtime
+FUN_00003cb6@2 44 1287 generated
+collide_box_b@2 92 2676 generated
+clamp_y_velocity@2 44 1256 generated
+integrate_position@2 24 652 generated
+floor_collide@2 228 5796 generated
+port_object_dispatch@2 544 13651 runtime
+hitbox_b_expand@2 60 1456 generated
+restore_position@2 40 917 generated
+hitbox_a_expand@2 60 1372 generated
+FUN_0000669c@2 344 7423 generated
+order_list_insert@2 48 1034 generated
+animation_frame_fetch@2 216 4625 generated
+walk_player_slots@2 12 253 generated
+animation_peek_next@2 224 4415 generated
+FUN_00003f32@2 52 911 generated
+hitbox_c_expand@2 60 866 generated
+sprite_build_depth_banded@2 552 5464 generated
+FUN_0000673e@2 28 265 generated
+port_call68_at@2 200 1855 runtime
+FUN_0000e20c@2 88 792 generated
+animate_variant@2 268 2315 generated
+port_walk_player_slots@2 340 2898 runtime
+FUN_00011386@2 130 1108 generated
+FUN_00004d54@2 128 1004 generated
+FUN_00006646@2 28 217 generated
+thk_FUN_000049ba@2 96 740 thunk

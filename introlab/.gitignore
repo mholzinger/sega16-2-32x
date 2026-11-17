@@ -1,0 +1,12 @@
+# Everything under art/ is derived from Sega artwork (model bakes, the packed header,
+# previews). The code and the per-title configs are tracked; their output never is.
+art/
+# generated lookup tables
+sh/gen_tables.h
+.flags
+sh/font8.h
+port/
+sh/smoke_data.h
+md/smoke_sine.h
+sh/smoke_data.pic
+sh/smoke68k.h

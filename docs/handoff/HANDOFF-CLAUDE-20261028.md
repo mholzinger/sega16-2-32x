@@ -6,7 +6,7 @@ This is the current entry point. Read `HANDOFF-CODEX.md` for project constraints
 
 ## Worktree and source state
 
-Work in `/Users/mikeholzinger/src/sega16-2-32x/.claude/worktrees/advisor-bisect`,
+Work in `~/src/sega16-2-32x/.claude/worktrees/advisor-bisect`,
 branch `advisor-bisect`. Do not work from the root checkout by accident.
 
 Recent local commits:

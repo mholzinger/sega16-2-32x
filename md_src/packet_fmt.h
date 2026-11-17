@@ -21,21 +21,12 @@
 #ifndef PACKET_FMT_H
 #define PACKET_FMT_H
 
-#if defined(PKT_SLIM) && !defined(PAL32)
-#error PKT_SLIM requires PAL32 (and the FBSPR+FBTEXT era it implies)
-#endif
-
 /* PKT_SLIM (LOOP 22): under FBSPR + FBTEXT + PAL32, prefix words 0..79
  * are provably dead — regs ride the text capture, sprite records ride
  * FB staging, text chunks are gone — so the prefix shrinks to the two
  * live words (tilemap bitmap + tag) and the k1 junk record goes with
  * it. ~168 junk words/cycle off the 68K's FIFO feed. */
-#ifdef PKT_SLIM
-#define PKT_PREFIX     2u                 /* bitmap + tag words only */
-#define PKT_K1_LEN     (PKT_PREFIX + PKT_TAIL)              /* 4 */
-#else
 #define PKT_PREFIX     82u                /* incl. bitmap + tag words */
-#endif
 #define PKT_W_BM       (PKT_PREFIX - 2u)  /* tilemap dirty bitmap word */
 #define PKT_W_TAG      (PKT_PREFIX - 1u)  /* text base / pal tag word */
 #define PKT_TAIL       2u
@@ -56,16 +47,9 @@ _Static_assert((PKT_K2_BARE & 3u) == 0, "bare k2 length not burst-aligned");
 _Static_assert((PKT_K2_LEN(1) & 3u) == 0 && (PKT_K2_LEN(PKT_PAL_KMAX) & 3u) == 0
                && (PKT_PAL_BLK & 3u) == 0, "pal k2 lengths not burst-aligned");
 /* pin the concrete family so silent drift in any constant screams */
-#ifdef PKT_SLIM
-_Static_assert(PKT_K1_LEN == 4 && PKT_K2_BARE == 4
-               && PKT_K2_LEN(1) == 40 && PKT_K2_LEN(2) == 72
-               && PKT_K2_LEN(3) == 104 && PKT_K2_LEN(4) == 136,
-               "slim packet family changed - update EVERY consumer");
-#else
 _Static_assert(PKT_K2_LEN(1) == 120 && PKT_K2_LEN(2) == 152
                && PKT_K2_LEN(3) == 184 && PKT_K2_LEN(4) == 216,
                "k2 packet family changed - update EVERY consumer");
-#endif
 /* K must fit its 3-bit tag field */
 _Static_assert(PKT_PAL_KMAX <= 7, "K overflows the tag field");
 
@@ -112,7 +96,6 @@ _Static_assert((K2F_K2_LEN(1) & 3u) == 0 && (K2F_K2_LEN(4) & 3u) == 0,
 _Static_assert(K2F_PAL_KMAX <= 7, "K overflows the 3-bit tag field");
 #endif
 
-#ifdef R60
 /* REBUILD (docs/design/REBUILD.md P2) — THE ONE PACKET. One vint = one frame =
  * one push, 68K -> SH-2, built at the 68K's vint entry and landed
  * against an IDLE master (the master waits for it before its FM
@@ -175,9 +158,6 @@ _Static_assert((R60_LEN(1, 1, 1) & 3u) == 0 && (R60_LEN(0, 16, 40) & 3u) == 0
  * which only the FBSPR probe uses. So the packet lives here now, the
  * publish word last in the half, and page 12 is skipped by the truth
  * machinery as a whole. */
-#ifdef FB_SPR_READ
-#error the FBX packet occupies the FB_SPR mirror at 0x1E000 - not with FBSPR
-#endif
 #define FBX_PKT_MD     0x85E000uL         /* 68K view: page 12, first half */
 #define FBX_PUB_MD     0x85E7F8uL         /* publish word, last in the half */
 #define FBX_PKT_SH     0x2401E000u        /* master view, uncached */
@@ -206,7 +186,6 @@ _Static_assert((R60_LEN(1, 1, 1) & 3u) == 0 && (R60_LEN(0, 16, 40) & 3u) == 0
 _Static_assert(0x758u >= R60_ARM * 2u && 0x758u < 0x7F8u,
                "FBX text-mask word is not in the dead space");
 #define FBX_MAGIC      0xB600u            /* publish: 0xB6<<8 | sequence */
-#ifdef PAL_DELTA
 /* R60 layout v3 (PALDELTA) — the pal payload ships WORD DELTAS.
  * Only the pal section changes; header/tag/rowscroll/records/tail
  * are v2 verbatim, and the tag's K counts shipped blocks as ever.
@@ -237,12 +216,10 @@ _Static_assert(0x758u >= R60_ARM * 2u && 0x758u < 0x7F8u,
 #define R60_PAL_RAW    0x80u              /* id bit 7: raw 32-word block */
 #define R60_PAL_DMAX   29u                /* delta cap: 2+29 < 32 raw */
 #define PAL_SHADOW     0xFF6000           /* 68K shadow, 2048 words */
-#endif
 /* whitelist: landed must satisfy the family for SOME (K, n) — the
  * tag names K, so the check is arithmetic on (landed - fixed(K)):
  * given K from the tag, (landed - 82 - (K?8+32K:0) - 2) must be a
  * multiple of 8 within 0..320. Checked in code, not a macro. */
-#endif /* R60 */
 
 /* SH-2 whitelist term for the PAL32 k2 family (bare or 1..KMAX blocks) */
 #define PKT_K2_OK(landed) \

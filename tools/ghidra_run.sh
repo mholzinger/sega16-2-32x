@@ -11,7 +11,7 @@ set -e
 # Jython (11.x) or PyGhidra (12.x) itself, and refuses a writable run that would upgrade a pinned DB.
 HEADLESS="$(command -v ghidra-run || echo "$HOME/tools/ghidra/bin/ghidra-run")"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-PROJ=${GHIDRA_PROJ:-/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/ghidra_proj}
+PROJ=${GHIDRA_PROJ:-/tmp/sega16-2-32x/ghidra_proj}
 # GAME env var selects the title (2026-09-12, Golden Axe thread): each game is
 # its own Ghidra project + image; the timing census default lands under
 # docs/audit/<GAME>/ for every title but altbeast (whose file predates that).

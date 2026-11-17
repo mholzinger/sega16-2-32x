@@ -24,7 +24,7 @@ and the mid-attract step 2), 6 eye (step 4), 7 second picture (step 5),
 import os, sys, struct, subprocess, argparse, glob
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 OUT = os.path.join(ROOT, "discover", "cram", "wide")
 MD_TAG = 0x0603B400            # m_main.c: md_tag, NSETS*NWAYS longs
 SCENES = {

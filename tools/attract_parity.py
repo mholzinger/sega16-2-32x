@@ -26,7 +26,7 @@ import active_area as AA
 import numpy as np
 from PIL import Image
 
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 # NOT THE SCRATCHPAD. This pinned a DEAD SESSION's scratchpad until 2026-10-07, so --arc
 # defaulted to a corpus directory that no longer existed and the one tool that grades the
 # picture against the ARCADE could not run at all -- found only when a wrong tile turned up

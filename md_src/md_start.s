@@ -217,9 +217,7 @@ _start:
 		move.w	#0x0EEE,(0xC00000).l	/* white: into main */
 .endif
 
-#ifdef R60_FRONTEND
 		jsr frontend_boot_check
-#endif
 		jmp		main				/* RAM-resident. [RV=1: SUPERSEDED — main does
 									   NOT set RV; the UNPAIR MODEL (md_main.c,
 									   "RV stays 0 FOREVER") runs the game through
@@ -275,16 +273,12 @@ InitVDPRegs:
 
 	.section .data
 
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 	/* Two records: four LOW/HIGH phase words, decoded word, poll sequence.
 	 * Each diagnostic store adds a few cycles BETWEEN complete phase pairs.
 	 * The edge-to-read delays inside get_input and the detection rule stay intact.
 	 * No trace unless the diagnostic or frontend is enabled. */
 	.comm pad_probe,24,2
 #define PAD_POLL bsr.w get_input
-#else
-#define PAD_POLL bsr.s get_input
-#endif
 	.global read_joypad
 read_joypad:
 		PAUSE_Z80
@@ -293,13 +287,11 @@ read_joypad:
 		beq.s	1f
 		lea		IO_DATA2,a0
 	1:
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		lea		pad_probe,a1
 		tst.b	d0
 		beq.s	8f
 		lea		12(a1),a1
 	8:
-#endif
 		move.w	d2,-(sp)
 		/* Mask interrupts across the 4-phase probe: a VINT landing between
 		 * TH toggles desyncs the controller's six-button counter and returns
@@ -307,23 +299,15 @@ read_joypad:
 		move.w	sr,-(sp)
 		move.w	#0x2700,sr
 		PAD_POLL		/* - 0 s a 0 0 d u - 1 c b r l d u */
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		move.w	d2,(a1)+
-#endif
 		move.w	d2,d1
 		PAD_POLL		/* - 0 s a 0 0 d u - 1 c b r l d u */
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		move.w	d2,(a1)+
-#endif
 		PAD_POLL		/* - 0 s a 0 0 0 0 - 1 c b m x y z */
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		move.w	d2,(a1)+
-#endif
 		move.w	d2,d0
 		PAD_POLL		/* - 0 s a 1 1 1 1 - 1 c b r l d u */
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		move.w	d2,(a1)+
-#endif
 		move.w	(sp)+,sr		/* phases done; timing no longer critical */
 		/* SGDK-canon detection. The strict 1111 test is KNOWN-FRAGILE:
 		 * SGDK's own source documents six-button pads whose 4th phase reads
@@ -358,10 +342,8 @@ read_joypad:
 		lsr.w	#6,d1			/* 0 0 0 0 0 0 0 0 s a 0 0 0 0 0 0 */
 		or.w	d1,d0			/* 0 0 0 0 m x y z s a c b r l d u */
 		eori.w	#0x1FFF,d0		/* 0 0 0 1 M X Y Z S A C B R L D U */
-#if defined(TC_PADTEST) || defined(R60_FRONTEND)
 		move.w	d0,(a1)
 		addq.w	#1,2(a1)
-#endif
 		RESUME_Z80
 		move.w	(sp)+,d2
 		rts
@@ -438,9 +420,6 @@ _vblank:
 .endif
 		tst.w	(game_running)
 		beq.s	1f
-.ifdef MD_QUIET_IRQ4
-		bra.s	1f					/* MDQUIET=1 probe: no game IRQ4 -- the boot path (post only) */
-.endif
 .ifdef FM_GATE
 		/* LOOP 23 — RTE TRAMPOLINE. The game's vint upload must run at
 		 * FM=0 (its stores are DELIBERATELY ungated), so the FM raise
@@ -455,29 +434,10 @@ _vblank:
 		move.l	#fmgate_ret,2(sp)
 		jmp		(GAME_IRQ4).l		/* game IRQ4; its rte -> fmgate_ret */
 	1:
-.ifdef POST_LATE
-		movem.l	d0-d1/a0-a1,-(sp)
-		jsr		r60_late_post
-		movem.l	(sp)+,d0-d1/a0-a1
-.endif
 		jsr		fmgate_partb		/* boot path (no game handler): the
 									 * real frame is still intact */
 		rte
 fmgate_ret:							/* via the game's rte, SR=2700 */
-.ifdef BOOT_GAMERATE
-		/* GAME FRAMES, COUNTED WHERE THEY HAPPEN (LOOP27 68). Every exit
-		 * path of the game's IRQ4 lands here, so this counter is exactly
-		 * "the game advanced a frame" — scene-independent, unlike the
-		 * scene timer, which runs at different rates (and backwards) in
-		 * different attract scenes and made the first comparison
-		 * meaningless. */
-		addq.w	#1,(0xFFA18E).l
-.endif
-.ifdef POST_LATE
-		movem.l	d0-d1/a0-a1,-(sp)	/* the game's live scratch regs */
-		jsr		r60_late_post		/* post+push AFTER the game's vint */
-		movem.l	(sp)+,d0-d1/a0-a1
-.endif
 .ifdef EREC_IRQ4
 		movem.l	d0-d7/a0-a6,-(sp)	/* EARLYREC at the IRQ4 exit: records final here (masked: an SR drop here re-entered the ISR) */
 		jsr		earlyrec_push
@@ -513,7 +473,7 @@ fmgate_ret:							/* via the game's rte, SR=2700 */
 fmgate_partb:
 		movem.l	d0-d1/a0,-(sp)
 		/* C hooks (md_main.c partb_hook / partb_end_hook), assembled only
-		 * under PARTB_HOOK (TILESLIM or CARTREADAT builds) so the line's
+		 * under PARTB_HOOK (TILESLIM builds) so the line's
 		 * vint path is byte-for-byte untouched otherwise. The slim cart
 		 * fetch runs in the first one: after the game's IRQ4, before the
 		 * FM raise. C clobbers a1 too. */
@@ -523,15 +483,9 @@ fmgate_partb:
 		move.l	(sp)+,a1
 .endif
 		move.w	(fmgate_wcmd),d0
-.ifdef RIG_WIN3
-		beq.w	9f					/* (RIGWIN3's stamp pushes 9f/8f out of .s range) */
-		tst.w	(0xA15120).l
-		bne.w	8f
-.else
 		beq.s	9f					/* no window wanted this vint */
 		tst.w	(0xA15120).l		/* COMM0: previous window running? */
 		bne.s	8f
-.endif
 		move.l	(0xFFB0F8),d1		/* interrupted game PC */
 		lea		(fmgate_spans),a0	/* u32 pairs, 0-terminated */
 	0:	move.l	(a0)+,d0
@@ -562,12 +516,7 @@ fmgate_partb:
 		ori.w	#0x8000,(0xA15100).l	/* FM=1: SH-2 owns the FB */
 		move.w	(fmgate_wcmd),(0xA15120).l	/* post the window */
 		move.w	#1,(fmgate_posted)
-.ifdef RIG_WIN3
-		move.w	(0xC00008).l,(0xFFA0EE).l	/* RIGWIN3: V at the post (barcode byte 5) */
-		bra.w	7f						/* the stamp pushes 7f past a short branch */
-.else
 		bra.s	7f
-.endif
 	8:	addq.w	#1,(fmgate_defer)
 		clr.w	(fmgate_posted)
 	7:	clr.w	(fmgate_wcmd)

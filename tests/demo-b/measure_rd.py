@@ -1,7 +1,7 @@
 import sys, os, subprocess, struct, glob, re
 rd=sys.argv[1]; S=os.path.dirname(os.path.abspath(__file__)); T=os.environ.get('DEMO_TICKS', S+'/arcade')
-A=os.environ.get('ARES','/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless')
-ROM=rd if rd.endswith('.32x') else '/Users/mikeholzinger/src/sega16-2-32x/rom/%s.32x'%rd
+A=os.environ.get('ARES',os.path.expanduser('~/src/ares-debug/build_macos/headless-ui/Release/ares-headless'))
+ROM=rd if rd.endswith('.32x') else os.path.expanduser('~/src/sega16-2-32x/rom/%s.32x')%rd
 def dump(f, off, ln, out):
     subprocess.run([A, ROM, '--frames', str(f), '--dump', 'sdram:0x%x:0x%x:%s'%(off,ln,out)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 frames=[22,100,1492,1493,1495,1500,1510,1530,1540,1560,1650,1700,2000,2100,2150]

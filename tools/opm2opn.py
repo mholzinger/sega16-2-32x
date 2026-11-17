@@ -66,6 +66,10 @@ class Stream:
     an OPN-side shadow drops them, which is a ~4x size win. Reg 0x28
     (key on/off) is NEVER deduped — a same-value write is a retrigger."""
 
+    # True restores the pre-2026-10-31 behaviour of dropping an unchanged pitch write.
+    # Only tools/soundmap_build.py sets it: the accepted effect tracks were cut that way.
+    dedup_pitch = False
+
     def __init__(self):
         self.out = []
         self.t = None   # stream time in seconds
@@ -88,7 +92,12 @@ class Stream:
 
     def ym(self, part, reg, val):
         val &= 0xFF
-        if reg != 0x28 and self.shadow[part].get(reg) == val:
+        # never drop a pitch write: the YM2612 applies block/fnum only when the low byte
+        # (A0-A2) lands, so an unchanged low byte after a changed A4-A6 must still be written
+        # or the chip keeps the previous octave (found 2026-10-31: tools/opm_stage2.sh, the
+        # mul and ks tests an octave out while every kc test at octave 4 was exact)
+        pitch = 0xA0 <= reg <= 0xAE and not self.dedup_pitch
+        if reg != 0x28 and not pitch and self.shadow[part].get(reg) == val:
             return
         self.shadow[part][reg] = val
         self.out.extend([0xF0 if part == 0 else 0xF1, reg & 0xFF, val])

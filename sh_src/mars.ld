@@ -249,7 +249,8 @@ SECTIONS {
 	 *              NOT .gamehigh: that image is REBASED (+0x900000 on every ROM
 	 *              reference) for the 68K's bank window, so its operand bytes
 	 *              differ from what the decompiled code expects to read as data.
-	 *   .portdata  the two 16 KB L2 oracle captures.
+	 *   .portdata  empty: it held the arcade captures of the retired L2 harness.
+	 *              The slot stays so .portcode keeps its address.
 	 *   .portcode  the port itself. */
 	.portrom 0x02400000 : AT(0x00400000) {
 		/* EXPLICIT object reference, not `KEEP(*(.romimg))`: the wildcard form
@@ -259,19 +260,11 @@ SECTIONS {
 		 * address 0). Naming the object is how .portcode already does it. */
 		KEEP(*(.portrom))
 	} > rom
-	/* 64 KB. It was 32 (exactly the two 16 KB captures), then 48. It holds ONE
-	 * 16 KB seed plus the multi-frame DELTA blob: 256 frames in 42,744 bytes
-	 * (tools/l2_pack.py). The second full image was dropped -- it is the seed
-	 * with delta frame 1 applied -- which is where 16 KB of this came from. */
 	.portdata 0x02440000 : AT(0x00440000) {
 		KEEP(*(.portdata))
 	} > rom
-	/* 52 KB. It was 32 (the two 16 KB captures), then 48, now 52: the per-frame
-	 * I/O capture (sh_src/port_l2_io.s, 3,144 bytes for 258 frames) is the frame's
-	 * OTHER input and took the seed + deltas + I/O past 48 KB. .portcode has ~72 KB
-	 * spare at -Os, so it moves up rather than the chain being trimmed. */
 	ASSERT(SIZEOF(.portdata) <= 0xD000,
-	       ".portdata (L2 seed + delta blob + I/O capture) grew into .portcode at 0x238D000")
+	       ".portdata grew into .portcode at 0x238D000")
 	.portcode 0x0244D000 : AT(0x0044D000) {
 		KEEP(*(.portcode))
 		KEEP(*(.tapepad))   /* measurement builds: the in-port input tape (PORTTAPEPAD, tools/tape_pad.py) */

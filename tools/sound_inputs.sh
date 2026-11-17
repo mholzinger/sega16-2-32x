@@ -21,6 +21,10 @@ MAME="mame altbeast -rompath ./mame -skip_gameinfo -video none -sound none -noth
 SFX5="81 86 8A B4 B6 C0"
 SFX6="82 83 84 85 87 88 89 8B 8C 8D 93 A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 AA AB AC B0 B3 B5 B7 B8 B9
       BA BB BC BD BE BF C1 C2 C3 C4 C5 C6 C7 C8 C9 CA CB CC CD CE CF D0 D1 D2 D4 D5 D6"
+# Neff's footstep: half a second, so the bank holds one step and not a run of them
+# (2026-11-02). It was recorded by hand and left out of this list until 2026-11-16, so a
+# fresh clone baked 60 effects where the line has 61.
+SFXH="B2"
 # THE GAME'S WORK RAM IS MAME NVRAM (16 KB), saved at exit and loaded at boot, so a run's
 # audio depends on what ran before it: the first run of a fresh clone recorded effect 81
 # differently from the shipped capture (2026-10-29). Every run here starts from its own copy
@@ -34,16 +38,16 @@ fi
 warm() { d=$(mktemp -d); cp -R $NV/. $d/; echo $d; }
 export NV
 mkdir -p build/sfx
-todo=$( { for c in $SFX5; do echo "$c 5"; done; for c in $SFX6; do echo "$c 6"; done; } |
+todo=$( { for c in $SFX5; do echo "$c 5"; done; for c in $SFX6; do echo "$c 6"; done; for c in $SFXH; do echo "$c 0.5"; done; } |
         while read c s; do [ -s build/sfx/arc_$c.wav ] || echo "$c $s"; done )
 if [ -n "$todo" ]; then
     echo "sound_inputs: recording $(echo "$todo" | wc -l | tr -d ' ') effects"
     # ONE AT A TIME: six parallel runs came out different from the shipped captures on 3 of 7
-    # effects (cause not isolated); sequential runs are byte-identical on all 63, ~2 min.
+    # effects (cause not isolated); sequential runs are byte-identical on all 64, ~2 min.
     echo "$todo" | xargs -P 1 -n 2 sh -c 'd=$(mktemp -d); cp -R $NV/. $d/; \
         AW_CMD=$0 AW_SECS=$1 '"$MAME"' -nvram_directory $d -seconds_to_run 20 \
         -wavwrite build/sfx/arc_$0.wav -autoboot_script tools/arcade_wav.lua >/dev/null 2>&1; rm -rf $d'
-    for c in $SFX5 $SFX6; do
+    for c in $SFX5 $SFX6 $SFXH; do
         [ -s build/sfx/arc_$c.wav ] || { echo "sound_inputs: effect $c was not recorded"; exit 2; }
     done
 fi

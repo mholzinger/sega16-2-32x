@@ -6,7 +6,7 @@
 # is undeclared, regenerate, and repeat to a fixpoint.
 set -e
 cd "$(dirname "$0")/.."
-OUT=${1:-/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/3ba22ef2-fdb1-416d-8b4f-e64e8f3f046a/scratchpad/cport}
+OUT=${1:-/tmp/sega16-2-32x/3ba22ef2-fdb1-416d-8b4f-e64e8f3f046a/scratchpad/cport}
 G=$HOME/src/marsdev/mars/sh-elf/bin/sh-elf-gcc
 # GCC 15 promotes 68K-normal pointer/integer punning to errors; C23 makes f() mean
 # f(void), which breaks Ghidra's inconsistent arities. Both are dialect, not bugs.

@@ -116,7 +116,7 @@ The PALSTATIC=1 flag still builds; runtime code is in m_main.c
 
 ## 4. RIG CHEATSHEET
 
-  ARES=/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless
+  ARES=~/src/ares-debug/build_macos/headless-ui/Release/ares-headless
   battery:   scratchpad nat_score.py <rom> (1900f play2, prints
              ships/wall/bad1/rej/handler; gen-wall census 0x28F50)
   soak bots: discover/inputs/play_native2/3.csv — survive level 1

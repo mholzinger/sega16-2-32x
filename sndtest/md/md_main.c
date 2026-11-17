@@ -11,7 +11,11 @@
 #include "z80_player.h"    // generated: player blob + ZP_* contract addrs
 #include "test_track.h"    // generated: P3 streaming test stream
 #include "sndmap_data.h"   // generated: arcade command map + per-cmd cuts
+#ifdef OPM_LANE
+#include "render_music_lane.h"  // generated: the same, channels 6/7 left to the SH-2 synth lane
+#else
 #include "render_music.h"  // generated: ALL music cmds rendered from the real driver
+#endif
 
 // 32X COMM
 static volatile uint16_t* const mars_comm0  = (uint16_t*) MARS_COMM0;
@@ -349,6 +353,22 @@ static void ym_write_held(uint8_t reg, uint8_t val) {
 // phantom-command lesson), PRIME the full 8-block ring, set MGO,
 // reset pulse while owning the bus, hand the bus back. The Z80 wakes
 // at $0000, sees MGO, and owns the YM2612+PSG from then on.
+#ifdef OPM_LANE
+// THE LANE TRIGGER (hybrid 3, 2026-10-31). The SH-2 synth lane (sndtest/sh/opm_lane.c)
+// has to put its first sample where the Z80's first millisecond lands, and it only sees
+// COMM words. So a render song is primed at once with the Z80 held in reset, COMM6 =
+// {frame, cmd} is published right after the next vblank's COMM12, and the Z80 is released
+// OPM_LANE_FRAMES vblanks after that, at the same point in the frame: the lane reads the
+// frame it is in and its DMA position at a vblank edge and lands the song on the frame.
+#ifndef OPM_LANE_FRAMES
+#define OPM_LANE_FRAMES 8
+#endif
+static uint8_t  lane_cmd, lane_state;      // 1 = primed, publish; 2 = published, counting
+static uint16_t lane_frame;
+static uint8_t  mus_defer;                 // music_start_ex stops before the release
+static void music_go(void);
+#endif
+
 static void music_start_ex(const uint8_t *src, uint32_t len, uint8_t loop,
                            uint8_t compressed, const uint8_t *loopsrc,
                            uint32_t looplen) {
@@ -389,6 +409,9 @@ static void music_start_ex(const uint8_t *src, uint32_t len, uint8_t loop,
 	for (mus_wr = 0; mus_wr < 3; mus_wr++)
 		fill_block(zram, (uint16_t)(ZP_RING + ((uint16_t)mus_wr << 9)), mus_wr);
 	zram[ZP_WR_BLK] = mus_wr;
+#ifdef OPM_LANE
+	if (mus_defer) return;             // primed, bus held, Z80 in reset: music_go() releases
+#endif
 	zram[ZP_MGO] = 1;
 	*reset = 0x000;                    // pulse while we own the bus
 	for (volatile uint16_t d = 0; d < 64; d++) ;
@@ -397,6 +420,21 @@ static void music_start_ex(const uint8_t *src, uint32_t len, uint8_t loop,
 	z80_parked = 0;                    // the player owns the bus now
 	mus_on = 1;
 }
+
+#ifdef OPM_LANE
+static void music_go(void) {
+	volatile uint16_t *busreq = (uint16_t *)Z80_BUS_REQ;
+	volatile uint16_t *reset  = (uint16_t *)Z80_RESET;
+	volatile uint8_t  *zram   = (uint8_t *)0xA00000;
+	zram[ZP_MGO] = 1;
+	*reset = 0x000;
+	for (volatile uint16_t d = 0; d < 64; d++) ;
+	*busreq = 0x000;
+	*reset = 0x100;
+	z80_parked = 0;
+	mus_on = 1;
+}
+#endif
 
 static void music_start(const uint8_t *src, uint32_t len, uint8_t loop) {
 	music_start_ex(src, len, loop, 0, src, len);   // raw (test_track path)
@@ -602,8 +640,18 @@ void do_commands(void) {
 			// compressed (docs/sound/SOUND_DRIVER.md, render_music.h) and stream-
 			// decompressed into the ring. Replaces the isolation-sweep
 			// trk_XX that faded (the 0x01=volume-1 latch bug).
+#ifdef OPM_LANE
+			mus_defer = 1;
 			music_start_vgm(rt->intro, rt->intro_len,
 			                rt->loop, rt->loop_len);
+			mus_defer = 0;
+			lane_cmd = b;
+			lane_state = 1;            // COMM6 goes out at the next vblank, frame-stamped
+			break;
+#else
+			music_start_vgm(rt->intro, rt->intro_len,
+			                rt->loop, rt->loop_len);
+#endif
 		} else {
 			const struct snd_ent *e = &sndmap[b];
 			if (e->type == SND_MUSIC || e->type == SND_YMSFX)
@@ -641,22 +689,38 @@ static void music_feed(void) {
 	}
 	volatile uint16_t *busreq = (uint16_t *)Z80_BUS_REQ;
 	volatile uint8_t  *zram   = (uint8_t *)0xA00000;
+	static uint8_t blkbuf[2][512];
 	*busreq = 0x100;
 	{ uint32_t g = 100000; while ((*busreq & 0x100) && --g) ; }
 	uint8_t rd = zram[ZP_RD_BLK];
 	uint8_t st = zram[ZP_MSTAT];
-	uint8_t fed = 0;
+	*busreq = 0x000;
 	// Keep only 2 blocks (~1.2s) ahead so live mixer changes reach the
 	// Z80 within ~1s (a block lasts ~0.6s; we refill every 16ms, so the
 	// stall margin is still ~70 frames). The 8-block prime at start is
 	// unchanged.
-	while ((uint8_t)(mus_wr - rd) < 2 && fed < 2) {
-		fill_block(zram, (uint16_t)(ZP_RING + (((uint16_t)mus_wr & 7) << 9)), mus_wr);
-		mus_wr++;
-		zram[ZP_WR_BLK] = mus_wr;
+	// BUILD WITH THE BUS RELEASED, COPY UNDER A SHORT HOLD (2026-10-30). The
+	// LZSS decode and the mixer/VU parse used to run byte by byte with the Z80
+	// stopped -- 15-40 ms per block -- and every Timer A/B tick the Z80 missed
+	// while stopped was music time lost (player.asm header; measured 4.6% slow).
+	// Now the hold is only the 512-byte copy.
+	uint8_t fed = 0;
+	while ((uint8_t)(mus_wr + fed - rd) < 2 && fed < 2) {
+		fill_block(blkbuf[fed], 0, (uint8_t)(mus_wr + fed));
 		fed++;
 	}
-	*busreq = 0x000;
+	if (fed) {
+		*busreq = 0x100;
+		{ uint32_t g = 100000; while ((*busreq & 0x100) && --g) ; }
+		for (uint8_t k = 0; k < fed; k++) {
+			volatile uint8_t *d = zram + ZP_RING + (((uint16_t)mus_wr & 7) << 9);
+			const uint8_t *src = blkbuf[k];
+			for (uint16_t i = 0; i < 512; i++) d[i] = src[i];
+			mus_wr++;
+			zram[ZP_WR_BLK] = mus_wr;
+		}
+		*busreq = 0x000;
+	}
 	*((volatile uint16_t *)MARS_COMM14) =
 		(uint16_t)(((uint16_t)mus_wr << 8) | rd);
 	// VU: publish the window that is playing NOW. rd changing marks the
@@ -739,6 +803,16 @@ void main(void) {
 		/* COMM10 now carries the channel VU (music_feed); pad 2 is unused
 		 * by the SH-2 menu, so it is no longer published. */
 		*mars_comm12 = ++timer;
+#ifdef OPM_LANE
+		if (lane_state == 1) {
+			*mars_comm6 = (uint16_t)(((uint16_t)(timer & 0xFF) << 8) | lane_cmd);
+			lane_frame = (uint16_t)timer;
+			lane_state = 2;
+		} else if (lane_state == 2 && (uint16_t)((uint16_t)timer - lane_frame) >= OPM_LANE_FRAMES) {
+			music_go();
+			lane_state = 0;
+		}
+#endif
 		music_feed();
 	}
 }

@@ -352,6 +352,11 @@ with the number that ended them, so they are not retried.
 - MAME on `PATH`. The build records the sound effects and speech from
   your set (0.288 reproduces the shipped banks byte for byte). ares,
   for hardware-proxy testing.
+- The music's YM2151 logs: the vgmrips.net pack "Altered Beast (Sega
+  System 16B)", version 1.03, unpacked as
+  `srcref/audio/Altered_Beast_(Sega_System_16B)/` (eight `.vgz` files).
+  `make music-inputs` transcodes them; it needs `numpy` and a host C
+  compiler.
 
 ### Building the rom
 
@@ -467,8 +472,17 @@ The reproducible build treats generated files by where they come from.
 
 The shipping rom contains Sega's 68000 program, tile and sprite art,
 music sequence data, and speech samples. Altered Beast is still sold.
-This repository distributes no rom, no ROM image, no art, no audio and
-no capture of the running game; you build the rom from a set you own.
+The source tree holds no rom, no ROM image, no art, no audio and no
+capture of the running game; a source build makes the rom from a set you
+own.
+
+Built roms are attached to this repository's
+[releases](https://github.com/mholzinger/sega16-2-32x/releases/latest),
+cut with `tools/release.sh`. A release rom opens with the cabinet
+launcher (region and DIP switches). A source build boots straight into
+the game: the launcher's artwork is not in the tree. A source build also
+leaves out the sprite macro packets, a small drawing shortcut packed from
+a capture of the running game; the picture is the same without them.
 
 What it does contain, by the author's decision:
 

@@ -23,7 +23,7 @@ launch=1
 name_opt=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --name) name_opt="$2"; shift 2 ;;
+        --name) [ $# -ge 2 ] || { echo "$0: --name requires a host" >&2; exit 2; }; name_opt="$2"; shift 2 ;;
         --name=*) name_opt="${1#--name=}"; shift ;;
         -n|--no-launch) launch=0; shift ;;
         -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -65,7 +65,18 @@ if [ ! -f "$rom" ]; then
     exit 1
 fi
 name="${2:-$(basename "$rom")}"
+# A destination is a basename, not another remote path. Control characters also
+# cannot be represented unambiguously in the launch log protocol.
+case "$name" in ''|.|..|*/*) echo "$0: destination must be a basename" >&2; exit 2 ;; esac
+# Preserve the validated scp transport. Its legacy remote shell cannot safely
+# receive arbitrary path text, so refuse it rather than silently changing to -O.
+case "$name$MISTER_DIR" in *[!a-zA-Z0-9_./-]*)
+    echo "$0: remote paths support ASCII letters, digits, underscore, dot, slash and hyphen only" >&2
+    exit 2 ;;
+esac
 dest="$MISTER_DIR/$name"
+# Quote ssh command arguments independently of the local shell.
+shell_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\''/g")"; }
 
 echo "deploy  $rom -> $MISTER:$dest  ($(wc -c < "$rom" | tr -d ' ') bytes)"
 echo "rig     $MISTER_HOST"
@@ -73,30 +84,73 @@ scp -q "$rom" "$MISTER:$dest"
 
 [ "$launch" = 1 ] || exit 0
 
-echo "launch  http://$MISTER_HOST:8182/api/games/launch"
-curl -sS -X POST "http://$MISTER_HOST:8182/api/games/launch" \
-     -H 'Content-Type: application/json' \
-     -d "{\"path\":\"$dest\"}" >/dev/null
+# Capture the boundary BEFORE the API request. Neither old matching lines nor
+# ACTIVEGAME prove that this invocation launched anything. stat is BusyBox/GNU.
+baseline=$(ssh -o ConnectTimeout=5 "$MISTER" \
+    "if [ -f /tmp/remote.log ]; then stat -c '%d:%i:%s' /tmp/remote.log; else printf 'missing\\n'; fi") || {
+    echo "$0: cannot establish launch-log boundary; launch not requested" >&2
+    exit 1
+}
+case "$baseline" in
+    missing) identity=missing; offset=0 ;;
+    *:*:*) identity=${baseline%:*}; offset=${baseline##*:}
+           printf '%s\n' "$baseline" | LC_ALL=C grep -Eq '^[0-9]+:[0-9]+:[0-9]+$' || {
+               echo "$0: invalid launch-log boundary" >&2; exit 1;
+           } ;;
+    *) echo "$0: invalid launch-log boundary" >&2; exit 1 ;;
+esac
 
-# /tmp/remote.log is the real signal; /tmp/ACTIVEGAME is written by mrext
-# itself and proves nothing. The launch appends "core stopped/started" lines
-# right after "game started", so scan the recent tail, not just the last line.
+# Keep JSON encoding separate from remote-shell quoting.
+json_dest=$(printf '%s' "$dest" | sed 's/\\/\\\\/g; s/"/\\"/g')
+echo "launch  http://$MISTER_HOST:8182/api/games/launch"
+if ! curl -fsS -X POST "http://$MISTER_HOST:8182/api/games/launch" \
+     -H 'Content-Type: application/json' \
+     -d "{\"path\":\"$json_dest\"}" >/dev/null; then
+    echo "$0: launch API request failed" >&2
+    exit 1
+fi
+
+# Read only bytes appended after the boundary, rejecting a replaced/truncated
+# log rather than accidentally accepting a historical launch after rotation.
+# Fresh bytes are scanned locally, so a ROM name is never shell/regex code.
+read_fresh='log=/tmp/remote.log
+[ -f "$log" ] || exit 3
+before=$(stat -c "%d:%i:%s" "$log") || exit 3
+ident=${before%:*}; size=${before##*:}
+[ "$1" = missing ] || [ "$ident" = "$1" ] || exit 4
+[ "$size" -ge "$2" ] || exit 4
+tail -c +$(($2 + 1)) "$log" || exit 3
+# The sentinel joins an unterminated line; the local reader drops that last line.
+printf "__MISTER_PUSH_END__\n"
+after=$(stat -c "%d:%i:%s" "$log") || exit 3
+[ "${after%:*}" = "$ident" ] && [ "${after##*:}" -ge "$size" ] || exit 4'
 i=0
 while [ $i -lt 10 ]; do
     sleep 1
-    line=$(ssh -o ConnectTimeout=5 "$MISTER" \
-        "tail -10 /tmp/remote.log | grep 'game started' | grep '$name' | tail -1" \
-        2>/dev/null || true)
-    if [ -n "$line" ]; then
-        echo "ok      $line"
-        exit 0
+    if fresh=$(ssh -o ConnectTimeout=5 "$MISTER" \
+        "sh -c $(shell_quote "$read_fresh") sh $(shell_quote "$identity") $(shell_quote "$offset")"); then
+        line=$(printf '%s\n' "$fresh" | sed '$d' | MISTER_EXPECTED_NAME="$name" awk '
+            index($0, "game started:") {
+                path = substr($0, index($0, "game started:") + length("game started:"))
+                sub(/^[ \t]+/, "", path)
+                sub(/\r$/, "", path)
+                # mrext appends elapsed time to real launch-log paths.
+                sub(/ \([0-9]+s\)$/, "", path)
+                sub(/^.*\//, "", path)
+                if (path == ENVIRON["MISTER_EXPECTED_NAME"]) found = $0
+            }
+            END { if (found != "") print found }')
+        if [ -n "$line" ]; then
+            echo "ok      launch log confirmed: $line"
+            echo "        display and cold-boot state are not verified by this log"
+            exit 0
+        fi
+    else
+        echo "$0: fresh launch log unavailable, replaced or truncated; launch unconfirmed" >&2
+        exit 1
     fi
     i=$((i + 1))
 done
 
-echo "WARN    no 'game started: ...$name' in /tmp/remote.log after 10s" >&2
-echo "        recent log:" >&2
-ssh -o ConnectTimeout=5 "$MISTER" 'tail -5 /tmp/remote.log' 2>/dev/null | sed 's/^/        /' >&2 || true
-echo "        if MiSTer main is not running the cmd FIFO has no reader:" >&2
-echo "        ssh $MISTER 'ps aux | grep -c [M]iSTer'   then reboot" >&2
+echo "WARN    no fresh matching 'game started:' entry after 10 polls; launch unconfirmed" >&2
 exit 1

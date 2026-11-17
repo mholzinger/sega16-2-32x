@@ -18,49 +18,26 @@
 #include "sdram_map.h"
 #include "game_cfg.h"
 #include "r60_tiles.h"
+#include "r60_plane_rows.h"
+volatile unsigned r60_pr_stats[4]; /* visible rows, resolved segments, invalid segments, cells */
+#include "r60_tile_batches.h"
 
 #define R60CODE __attribute__((section(".ramtext")))
 /* R60COLD (2026-10-23): the master's once-a-build art fit and the hold fill. In .ramtext on the
  * line; under R60ZOOMFAST they run from cart so the slave's zoom row functions fit the slot
  * (.ramtext ended 20 bytes under its cap on sw307). They cost the master ~4 lines a build on
  * ares; the master idles 150-200 lines a vint. */
-#ifdef R60_ZOOMFAST
 #define R60COLD
-#else
-#define R60COLD R60CODE
-#endif
-#if defined(R60_PHBARS) || defined(R60_ZOOMFAST)
 #define R60FITCODE   /* probe builds: the phase timers need .ramtext room; the master's fit runs from cart.
                       * 2026-10-23: under R60ZOOMFAST too (the zoom row functions take the room), see R60COLD */
-#else
-#define R60FITCODE R60CODE
-#endif
 /* R60ARTCODE (2026-10-24): the master's per-slot art copy and its tail. Cart under R60ROWFAST /
  * R60PUNCH2, whose slave loops take the .ramtext room (720 bytes over with both); the master idles
  * 150-200 lines a vint on the line (START-HERE MASTER BUDGET). */
-#if defined(R60_ROWFAST_OPT) || defined(R60_PUNCH2)
 #define R60ARTCODE __attribute__((noinline))
-#else
-#define R60ARTCODE R60WALKCODE
-#endif
-#ifdef R60_MBAND_YIELD
-void r60_band_yield(void);                        /* r60_main.c: run the master's sprite band now if the slave has posted it */
-#define R60_YIELD() r60_band_yield()
-#else
 #define R60_YIELD() ((void)0)
-#endif
 extern unsigned r60_unlined;                     /* sw276: defined beside r60_plan_soft below */
-#if defined(R60_PRIOINLINE) || defined(R60_PRIOROW) || defined(R60_MBTIME)   /* R60MBTIME: the probe's stamps take the room (ares charges instructions only) */
-#define R60WALKCODE  /* the inline mask's loops need .ramtext room; the master's plane walk runs from cart (sw264;
-                      * 2026-10-23 PRIOROW too: its keep-masked PLOT5 stores grew r60_sprite by 1.3 KB) */
-#else
 #define R60WALKCODE R60CODE
-#endif
-#if (defined(R60_PRIOINLINE) && defined(R60_PHBARS)) || defined(R60_ROWFAST_OPT) || defined(R60_PUNCH2)
 #define R60PHWALKCODE  /* and the bars' timers need two more small master helpers out (sw264ph) */
-#else
-#define R60PHWALKCODE R60CODE
-#endif
 
 #define NSETS          128u
 #define MD_NWAYS       8u
@@ -96,7 +73,6 @@ static inline uint16_t r60_frt_p(void)
  * the evictions of a sweep's own slots. Off-screen rows release their cells when the
  * walk skips them, so a scroll cannot pin the cache with rows nobody draws. */
 static uint8_t md_pin[MD_SLOTS];
-#ifdef R60_BLANKFILL
 /* THE SOLID FALLBACK (sw155, 2026-10-17). A BG cell whose art cannot ship this window used to
  * name the blank tile, and the blank over the black backdrop is a BLACK CELL where the arcade
  * draws the set's colour 0 (scr2 is opaque). At the title cut the arcade shows flat 0a60 for
@@ -148,10 +124,6 @@ R60PHWALKCODE static unsigned r60_stale_same(uint16_t cell, unsigned line, unsig
     tg = md_tag[os];
     return tg < 0xFFFFFFFEu && (tg & 0x3FFFu) == code && ((tg >> 16) & 0x7Fu) == r60_mapid[cset];
 }
-#else
-#define MD_UNPIN(sl)   do { if ((sl) && md_pin[(sl)]) md_pin[(sl)]--; } while (0)
-#define MD_PIN(sl)     do { if (sl) md_pin[(sl)]++; } while (0)
-#endif
 
 #define TILEMAP_U      ((const volatile uint16_t *)SDRAM_TILEMAP_U)  /* 13 pages x 0x800 w */
 #define PAL_SH         ((const volatile uint16_t *)SDRAM_PAL_SH)
@@ -184,11 +156,9 @@ uint8_t  r60_set_bg[NSETS];               /* the BG uses the set: colour 0 is a 
 static uint16_t r60_nt_shadow[2][2048];          /* what the MD name tables hold, per plane */
 static uint8_t  r60_rel_wc[2][32];               /* (wc0 & 63) + 1 at each row's last off-screen release, 0 = none */
 #define R60_NT_RELEASED 0x0400u                  /* shadow of an off-screen cell whose pin was dropped: bit 10 is no slot (< 1024) and no attribute */
-#ifdef R60_KEEPSTALE
 static uint16_t r60_nt_prev[2][2048];              /* the cell each shadow entry held before this window's walk: a cell whose new art did not ship keeps it (stale, not black) */
 static uint32_t md_reused[MD_SLOTS / 32 + 1];       /* slots re-tagged since the last plan: a stale cell naming one goes blank (sw147: garbage mid-roll) */
 #define R60_STALE_OK(cell) (!((md_reused[((cell) & 0x3FFu) >> 5] >> ((cell) & 31u)) & 1u))
-#endif
 
 /* cart-resident since sw243: .ramtext is full and this is cold */ static uint16_t r60_quant(uint16_t v)
 {
@@ -204,7 +174,6 @@ static uint32_t md_reused[MD_SLOTS / 32 + 1];       /* slots re-tagged since the
 
 /* ONE PEN for colour q on line l, for set s pixel p: share an exact match, else a free
  * pen, else the nearest. */
-#if defined(R60_PENIDX) || !defined(R60_NORECOLOUR)   /* sw283: the recolour/split pass and its state compile on the line too */
 /* PENS PER COLOUR INDEX (2026-10-16/17). A palette write must be a CRAM write, not new art:
  * a set's pixel p owns a pen of its own, shared across sets only with an IDENTICAL set at the
  * same index (recoloured together). Under pressure (a line cannot fit the set's indices) the
@@ -222,7 +191,6 @@ R60CODE static unsigned r60_sets_identical(unsigned s, unsigned t)
     for (k = 0; k < 8u; k++) if (r60_quant(PAL_SH[s * 8u + k]) != r60_quant(PAL_SH[t * 8u + k])) return 0;
     return 1u;
 }
-#endif
 /* STABILITY PER (SET, PIXEL) (2026-10-25, the face's orange field). The deduping pack folds
  * equal colours onto one pen, and the pen's colour follows ONE owner. A set whose palette cycles
  * some pixels and holds others (set 20, the face's flames: pixels 2-5 run a 16-frame wave through
@@ -262,36 +230,20 @@ static uint32_t r60_row_baked[NSETS];            /* per map id: the pen row its 
  * else the nearest (counted in R60_DIAG[10]). An exact match whose owner is of the other
  * stability class (one settled, one cycling) is shared only when no pen is free: a steady
  * pixel never rides a cycling one's pen while the line has room. */
-#ifdef R60_RAWPENS
 /* Equal MD quantisations need not survive the game's palette transforms:
  * S16 2C74/4B73 both quantise to 1A2 but Neff's grayscale gives 16D/124.
  * Keep their source identities while space allows instead of rebaking tiles. */
 #define R60_RAW_SAME(s,p,t,k) ((PAL_SH[(s)*8u+(p)] & 0x7FFFu) == (PAL_SH[(t)*8u+(k)] & 0x7FFFu))
-#else
-#define R60_RAW_SAME(s,p,t,k) 1u
-#endif
 static unsigned r60_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
 {
     unsigned pen, freepen = 0, best = 0, bd = 0xFFFFu, xpen = 0, mine = R60_PIX_SETTLED(s, p);
-#ifdef R60_PENIDX
-    unsigned sharepen = 0;
-#endif
     for (pen = 1; pen < 16u; pen++) {
         uint16_t c = r60_lc[l * 16u + pen];
-#ifdef R60_PENIDX
-        if (c == q) {
-            if (!r60_claim_mode) return pen;                       /* deduped: any equal colour */
-            if (r60_pown_p[l * 16u + pen] == p && r60_sets_identical(s, r60_pown_s[l * 16u + pen])) return pen;
-            if (!sharepen) sharepen = pen;
-            continue;
-        }
-#else
         if (c == q) {
             if (mine == R60_PIX_SETTLED(r60_pown_s[l * 16u + pen], r60_pown_p[l * 16u + pen]) && R60_RAW_SAME(s,p,r60_pown_s[l * 16u + pen],r60_pown_p[l * 16u + pen])) return pen;
             if (!xpen) xpen = pen;               /* another source/class: only if nothing is free */
             continue;
         }
-#endif
         if (c == 0xFFFFu) { if (!freepen) freepen = pen; continue; }
         {
             int dr = (int)(c & 7u) - (int)(q & 7u);
@@ -307,9 +259,6 @@ static unsigned r60_claim_pen(unsigned l, uint16_t q, unsigned s, unsigned p)
         r60_pown_p[l * 16u + freepen] = (uint8_t)p;
         return freepen;
     }
-#ifdef R60_PENIDX
-    if (sharepen) return sharepen;               /* full: share with the coincident set after all */
-#endif
     if (xpen) return xpen;                       /* full: a quantised match beats the nearest */
     R60_DIAG[10]++;                              /* nearest-colour fallbacks (low 16) */
     r60_set_degraded[s] = 1u;
@@ -352,14 +301,6 @@ static unsigned r60_pens_needed(unsigned l, const uint16_t *qc, unsigned mask, u
     for (p = 0; p < 8u; p++) {
         unsigned seen = 0;
         if (!(mask & (1u << p))) continue;
-#ifdef R60_PENIDX
-        if (idx) {
-            for (pen = 1; pen < 16u; pen++)
-                if (r60_lc[l * 16u + pen] == qc[p] && r60_pown_p[l * 16u + pen] == p && r60_sets_identical(s, r60_pown_s[l * 16u + pen])) { seen = 1; break; }
-            if (!seen) need++;
-            continue;
-        }
-#endif
         for (k = 0; k < p; k++) if ((mask & (1u << k)) && qc[k] == qc[p] && R60_RAW_SAME(s,p,s,k)) { seen = 1; break; }
         if (seen) continue;
         for (pen = 1; pen < 16u; pen++) if (r60_lc[l * 16u + pen] == qc[p] && R60_RAW_SAME(s,p,r60_pown_s[l * 16u + pen],r60_pown_p[l * 16u + pen])) { seen = 1; break; }
@@ -373,7 +314,6 @@ static unsigned r60_pens_needed(unsigned l, const uint16_t *qc, unsigned mask, u
  * that appears mid-scene costs no flush; the plan every 32 windows re-packs by cell count
  * and flushes only when a resident set would move. force < R60_LINES tries that line only
  * (a resident set under the plan) and returns 0 when it does not fit. */
-#ifdef R60_IDPENS
 /* IDENTITY PENS (sw165, 2026-10-17). The title logo is ten colour sets (37-46) that stay IDENTICAL
  * through the whole title (MAME palette RAM at 240/280/300/320/400) and arrive at the cut as a flat
  * provisional palette (three colours). The deduping pack folded their seven indices onto two pens
@@ -438,20 +378,13 @@ static unsigned r60_pack_identity(unsigned s, unsigned bg, const uint16_t *qc, u
     r60_set_id[s] = (uint8_t)(s + 1u); r60_id_open = s + 1u; r60_id_openwin = 8u; r60_id_stats[0]++;
     return bestl + 1u;
 }
-#endif
 static unsigned r60_pack_set_on(unsigned s, unsigned bg, unsigned force)
 {
     uint16_t qc[8];
     unsigned mask = bg ? 0xFFu : 0xFEu, p, l, bestl = 0, bestneed = 99u, bestfree = 0, idx = 0;
     for (p = 0; p < 8u; p++) qc[p] = r60_quant(PAL_SH[s * 8u + p]);
     r60_set_degraded[s] = 0;                     /* r60_claim_pen marks it again on a nearest fallback */
-#ifdef R60_IDPENS
     if (force >= R60_LINES) { unsigned r = r60_pack_identity(s, bg, qc, mask); if (r) return r; }
-#endif
-#ifdef R60_PENIDX
-    idx = 1u;
-again:
-#endif
     bestl = 0; bestneed = 99u; bestfree = 0;
     for (l = 0; l < R60_LINES; l++) {
         unsigned need, nfree = 0, pen;
@@ -461,14 +394,7 @@ again:
         if (need <= nfree) { if (need < bestneed || (need == bestneed && nfree > bestfree)) { bestneed = need; bestl = l; bestfree = nfree; } }
         else if (bestneed == 99u && nfree >= bestfree) { bestl = l; bestfree = nfree; }
     }
-#ifdef R60_PENIDX
-    if (idx && bestneed == 99u) { idx = 0; goto again; }   /* pressure: this set packs deduped */
-    if (force < R60_LINES && bestneed == 99u) return 0;
-    r60_set_mode[s] = (uint8_t)idx;
-    r60_claim_mode = idx;
-#else
     (void)force;
-#endif
     for (p = 0; p < 8u; p++)
         r60_smap[s * 8u + p] = (mask & (1u << p)) ? (uint8_t)r60_claim_pen(bestl, qc[p], s, p) : 0u;
     r60_set_line[s] = (uint8_t)(bestl + 1u);
@@ -486,7 +412,6 @@ again:
 }
 static unsigned r60_pack_set(unsigned s, unsigned bg) { return r60_pack_set_on(s, bg, R60_LINES); }
 
-#if defined(R60_PENIDX) || !defined(R60_NORECOLOUR)
 #define R60_DROPSTALE 1
 uint8_t r60_set_stale[NSETS];                    /* resident but on no page at the last plan; cleared when the walk uses it */
 static unsigned r60_stale_any;
@@ -507,22 +432,14 @@ static unsigned r60_set_fits(unsigned s, unsigned bg)
         if (r60_pens_needed(l, qc, mask, s, 0u) <= nfree[l]) return 1u;
     return 0u;
 }
-#endif
-#if defined(R60_PENIDX) || !defined(R60_NORECOLOUR)
 void r60_map_sync(void);
 #define R60_MAP_SYNC() r60_map_sync()
-#else
-#define R60_MAP_SYNC() ((void)0)
-#endif
 /* the slow path, cart: a set packs or gains colour 0, then the slots baked on a moved row re-mark */
 __attribute__((noinline)) static unsigned r60_line_slow(unsigned cset, unsigned bg)
 {
     unsigned line;
     if (r60_set_line[cset]) {                    /* FG-packed set now used on the BG: needs colour 0 */
         unsigned l = r60_set_line[cset] - 1u;
-#ifdef R60_PENIDX
-        r60_claim_mode = r60_set_mode[cset];
-#endif
         r60_smap[cset * 8u] = (uint8_t)r60_claim_pen(l, r60_quant(PAL_SH[cset * 8u]), cset, 0u);
         r60_set_bg[cset] = 1u;
         R60_MAP_SYNC();                          /* pixel 0's pen joined the row: the set's slots re-mark, its map id re-derives */
@@ -603,9 +520,7 @@ R60CODE static unsigned r60_claim(unsigned code, unsigned cset, unsigned win, un
             else { unsigned age = (uint8_t)((uint8_t)win - md_ref[i]); if (age > vage) { vage = age; victim = i; } }
         }
     if (freei != MD_BLANK_SLOT) {
-#ifdef R60_KEEPSTALE
         md_reused[freei >> 5] |= 1u << (freei & 31u);   /* a free way after a flush is a reuse as far as a stale cell is concerned */
-#endif
         md_tag[freei] = key; md_ref[freei] = (uint8_t)win; MD_MARK(freei);
         r60_ckey[ci] = key; r60_cslot[ci] = (uint16_t)freei;
         return freei;
@@ -614,9 +529,7 @@ R60CODE static unsigned r60_claim(unsigned code, unsigned cset, unsigned win, un
         victim = r60_claim_any(win);
         if (victim == MD_BLANK_SLOT) { R60_DIAG2[14]++; return MD_BLANK_SLOT; }
     }
-#ifdef R60_KEEPSTALE
     md_reused[victim >> 5] |= 1u << (victim & 31u);   /* a stale cell naming this slot would show the new art: blank it instead */
-#endif
     md_tag[victim] = key; md_ref[victim] = (uint8_t)win; MD_MARK(victim);
     r60_ckey[ci] = key; r60_cslot[ci] = (uint16_t)victim;
     return victim;
@@ -624,39 +537,16 @@ R60CODE static unsigned r60_claim(unsigned code, unsigned cset, unsigned win, un
 
 /* ONE TILE'S ART, 32 bytes, exactly the conversion native1 m_main.c:12345-12356 does:
  * one byte a pixel in, two pixels a byte out, through the set's pen map. */
-R60ARTCODE static void r60_art(volatile uint16_t *w, unsigned slot)
+R60ARTCODE static void r60_art_pixels(volatile uint16_t *out, unsigned slot)
 {
-    const uint8_t *px = altbeast_tiles + (md_tag[slot] & 0x3FFFu) * 64u;   /* physical art index; bit 15 is the plane */
-    volatile uint8_t *o = (volatile uint8_t *)(w + 1);
-#ifdef R60_BLANKFILL
-    if (slot >= R60_SOLID0) {                    /* a solid: sixteen words of one pen */
-        unsigned pen = r60_solid_lp[slot - R60_SOLID0] & 0xFu, k;
-        uint16_t v = (uint16_t)((pen << 12) | (pen << 8) | (pen << 4) | pen);
-        w[0] = (uint16_t)slot;
-        for (k = 1; k <= 16u; k++) w[k] = v;
+    if (slot>=R60_SOLID0) {
+        unsigned pen=r60_solid_lp[slot-R60_SOLID0]&15u, k;
+        uint16_t v=(uint16_t)(pen*0x1111u);
+        for (k=0;k<16u;k++) out[k]=v;
         return;
     }
-#endif
-    const uint8_t *map = r60_smap + ((md_tag[slot] >> 16) & 0x7Fu) * 8u;   /* the map id's map */
-    unsigned bg = (md_tag[slot] >> 15) & 1u;        /* BG: pixel 0 is a pen; FG: transparent */
-    unsigned y;
-    const uint32_t *px32 = (const uint32_t *)px;   /* _altbeast_tiles is 16-aligned (s16.lst) and a tile is 64 bytes */
-    (void)o;
-    w[0] = (uint16_t)slot;
-    /* WORD STORES, LONGWORD LOADS (sw181). The byte form wrote the record a byte at a time, and under
-     * R60HOLDDIRECT the record is the framebuffer: a byte store of ZERO to the FB is dropped (LESSONS
-     * 10555, sw156-160), so every transparent pixel pair of an FG tile kept whatever byte the region
-     * held before. Two words a row land whole. Eight pixels a row come in as two longwords, 16 cached
-     * cart loads a tile instead of 64. pen = map[pixel], exactly the old md_emit_art. */
-    for (y = 0; y < 8u; y++) {
-        uint32_t h = px32[y * 2u], l = px32[y * 2u + 1u];
-        unsigned p0 = (h >> 24) & 7u, p1 = (h >> 16) & 7u, p2 = (h >> 8) & 7u, p3 = h & 7u;
-        unsigned p4 = (l >> 24) & 7u, p5 = (l >> 16) & 7u, p6 = (l >> 8) & 7u, p7 = l & 7u;
-        p0 = (p0 || bg) ? map[p0] : 0u; p1 = (p1 || bg) ? map[p1] : 0u; p2 = (p2 || bg) ? map[p2] : 0u; p3 = (p3 || bg) ? map[p3] : 0u;
-        p4 = (p4 || bg) ? map[p4] : 0u; p5 = (p5 || bg) ? map[p5] : 0u; p6 = (p6 || bg) ? map[p6] : 0u; p7 = (p7 || bg) ? map[p7] : 0u;
-        w[1u + y * 2u] = (uint16_t)((p0 << 12) | (p1 << 8) | (p2 << 4) | p3);
-        w[2u + y * 2u] = (uint16_t)((p4 << 12) | (p5 << 8) | (p6 << 4) | p7);
-    }
+    r60_tb_pixels(out, (const uint32_t *)(altbeast_tiles+(md_tag[slot]&0x3FFFu)*64u),
+                  r60_smap+((md_tag[slot]>>16)&0x7Fu)*8u, (md_tag[slot]>>15)&1u);
 }
 
 /* THE WALK, new. Plane B, the background: page 0 of the tilemap (the page selects never
@@ -686,6 +576,7 @@ unsigned r60_walk_rows = 7u;                     /* rows a window: 7 with the di
  * row block is 8 + 32 * (2 + 16) = 584 words, below B's palette at word 688. */
 static unsigned r60_walk_cols = 42u, r60_pan_strip, r60_bank1;
 static int r60_walk_bias[2];
+static unsigned r60_sw_active;                   /* a page switch's own two windows: no entering-edge strip for its scroll jump */
 __attribute__((noinline)) static void r60_pan_walk(uint16_t ha, uint16_t hb)
 {
     static uint16_t prev[2]; static unsigned ready, tail[2];
@@ -697,6 +588,7 @@ __attribute__((noinline)) static void r60_pan_walk(uint16_t ha, uint16_t hb)
         if (d > 512) d -= 1024;
         if (R60_DISPHOLD_W) tail[k] = 0;
         else if (ready && (d >= 8 || d <= -8)) { tail[k] = 4u; bias[k] = d > 0 ? -6 : 30; }
+        if (r60_sw_active) tail[k] = 0;          /* the jump is a page switch: its walk rewrites the whole screen */
         if (tail[k]) { tail[k]--; strip = 1; }
         prev[k] = h[k];
     }
@@ -719,12 +611,19 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
     unsigned start_col = wc0 + (unsigned)r60_walk_bias[which];
     volatile uint16_t *cells = pk + 8;
     uint16_t *shadow = r60_nt_shadow[which];
+    struct r60_pr_view source_view={TILEMAP_U,13u,psel};
     unsigned r, c;
     for (r = 0; r < r60_walk_rows; r++) {
         unsigned mrow = (row0 + r) & 31u;
         R60_YIELD();
         unsigned wr = wr0 + ((mrow - wr0) & 31u);        /* the visible world row on this MD row */
-        unsigned first = 64u, last = 0u;
+        unsigned firstc = 64u, lastc = 0u;         /* WALK-RELATIVE (2026-11-05): tracked by MD column the span of a
+                                                     * window wrapping the 64-column table (the cut at columns 24..65) was
+                                                     * min(24.., 0)..1 = the two wrapped cells, and the other 40 waited a
+                                                     * window; every scroll past column 22 paid the same */
+        /* Scratch holds only this walk's new cells. Emission is either the
+         * first..last changed subspan or the full pan strip, so every emitted
+         * column has been assigned below, including a wrap at column 63. */
         uint16_t row[64];
         if (((mrow - wr0) & 31u) >= 29u) {              /* MD rows outside the 29 visible: skip */
             for (c = 0; c < 64u; c++) {                 /* and release what they named */
@@ -744,23 +643,29 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
          * crossing a released entry writes the blank.
          * Once per row per column position, so a static scene pays nothing (the every-window version
          * landed the attract's packets a frame later from f157 and its cuts 1-2 frames later). */
-        for (c = 0; c < 64u; c++) row[c] = shadow[mrow * 64u + c];
         if (r60_pan_strip) {
             r60_rel_wc[which][mrow] = 0; /* retain pins until their entering strip replaces them */
         } else if (r60_rel_wc[which][mrow] != (uint8_t)((wc0 & 63u) + 1u)) {
             r60_rel_wc[which][mrow] = (uint8_t)((wc0 & 63u) + 1u);
             for (c = 42u; c < 64u; c++) {
                 unsigned mc = (wc0 + c) & 63u;
-                uint16_t sv = row[mc];
-                if (sv && sv != 0xFFFFu && sv != R60_NT_RELEASED) { MD_UNPIN(sv & 0x3FFu); shadow[mrow * 64u + mc] = R60_NT_RELEASED; row[mc] = R60_NT_RELEASED; }
+                /* Release from the authoritative shadow. These columns lie outside
+                 * the normal walk and its emitted span, so scratch is unnecessary. */
+                uint16_t sv = shadow[mrow * 64u + mc];
+                if (sv && sv != 0xFFFFu && sv != R60_NT_RELEASED) { MD_UNPIN(sv & 0x3FFu); shadow[mrow * 64u + mc] = R60_NT_RELEASED; }
             }
         }
-        for (c = 0; c < r60_walk_cols; c++) {
-            unsigned wc = start_col + c;
-            unsigned mcol = wc & 63u;
-            unsigned q = ((wc >> 6) & 1u) | (((wr >> 5) & 1u) << 1);
-            unsigned page = (psel >> (q * 4u)) & 0xFu;
-            uint16_t w = page > 12u ? 0u : TILEMAP_U[page * 0x800u + (wr & 31u) * 64u + (wc & 63u)];
+        r60_pr_stats[0]++; r60_pr_stats[3]+=r60_walk_cols;
+        c=0;
+        while (c<r60_walk_cols) {
+            unsigned count,end;
+            const volatile uint16_t *source=r60_pr_segment(&source_view,start_col+c,wr,&count);
+            if (count>r60_walk_cols-c) count=r60_walk_cols-c;
+            end=c+count; r60_pr_stats[1]++;
+            if (!source) r60_pr_stats[2]++;
+            for (;c<end;c++) {
+            unsigned mcol=(start_col+c)&63u;
+            uint16_t w=source?*source++:0u;
             unsigned code = r60_tile_index(w, r60_bank1);
             unsigned cset = ((unsigned)w >> 6) & 0x7Fu;
             unsigned line, slot;
@@ -776,11 +681,7 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
                     /* THE SHADOW'S OWN SLOT FIRST (sw195): a cell that has not changed names a slot whose
                      * tag is this very tile; one compare instead of the 16-way claim. Steady scenes are
                      * almost all such cells. */
-#ifdef R60_BLANKFILL
 #define R60_FAST_TOP R60_SOLID0                  /* solid slots carry no tag */
-#else
-#define R60_FAST_TOP MD_SLOTS
-#endif
                     if (sv0 != 0xFFFFu && sl0 && sl0 < R60_FAST_TOP && ((sv0 >> 13) & 3u) == line - 1u && md_tag[sl0] == MD_KEY(code, cset, which)) { slot = sl0; md_ref[sl0] = (uint8_t)win; }
                     else
                     slot = r60_claim(code, cset, win, which);
@@ -790,46 +691,38 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
                                 md_dirty[slot >> 5] &= ~(1u << (slot & 31u));
                                 art_slot[(*nslot)++] = slot;
                             } else {
-#ifdef R60_KEEPSTALE
                                 slot = 0x8000u; R60_DIAG2[7]++;   /* art not shipped yet: KEEP the old cell (stale beats black; its slot stays pinned by this cell) */
-#else
-                                slot = MD_BLANK_SLOT; R60_DIAG2[7]++;   /* art not shipped yet: next time (counted with the fit's blanks) */
-#endif
                             }
                         }
-#ifdef R60_KEEPSTALE
                         if (slot == 0x8000u) {
                             uint16_t sv = shadow[mrow * 64u + mcol];
                             cell = (sv == 0xFFFFu) ? r60_nt_prev[which][mrow * 64u + mcol] : sv;
                             if (cell == 0xFFFFu || cell == R60_NT_RELEASED || !R60_STALE_OK(cell)) cell = 0u;
-#ifdef R60_BLANKFILL
                             if (cell && r60_stale_same(cell, line, code, cset)) r60_solid_stats[3]++;
                             else {                   /* not the same art: the set's colour 0 on the BG, blank on the FG */
                                 cell = 0u;
                                 if (which) { unsigned ss = r60_solid_get(line, r60_smap[cset * 8u]); if (ss) { cell = (uint16_t)(((line - 1u) << 13) | ss); r60_solid_stats[0]++; } }
                             }
-#endif
                         } else
-#endif
                         cell = (uint16_t)(((line - 1u) << 13) | slot);
                     }
-#ifdef R60_BLANKFILL
                     else if (which) {            /* claim REFUSED (both sets' ways pinned, the splash's 800 tiles): the set's colour 0 as a
                                                   * solid, not black (sw229: black cell holes in the cast art on the MiSTer, ares refuses 16 there) */
                         unsigned ss = r60_solid_get(line, r60_smap[cset * 8u]);
                         if (ss) { cell = (uint16_t)(((line - 1u) << 13) | ss); r60_solid_stats[1]++; }
                     }
-#endif
                 }
             }
             row[mcol] = cell;
-            if (cell != shadow[mrow * 64u + mcol]) { if (mcol < first) first = mcol; last = mcol; }
+            if (cell != shadow[mrow * 64u + mcol]) { if (c < firstc) firstc = c; lastc = c; }
         }
-        if (first > last) {
+        }
+        if (firstc > lastc) {
             *cells++ = (uint16_t)(mrow << 8);
             *cells++ = 0u;
         } else {
-            unsigned n = r60_pan_strip ? r60_walk_cols : last - first + 1u;
+            unsigned first = (start_col + firstc) & 63u;
+            unsigned n = r60_pan_strip ? r60_walk_cols : lastc - firstc + 1u;
             if (r60_pan_strip) first = start_col & 63u;
             if (!which) (*(volatile uint16_t *)0x26028FB6u)++;   /* R60_FGGEN: the FG changed (the slave's punched sprites key on it) */
             *cells++ = (uint16_t)((mrow << 8) | first);
@@ -839,9 +732,7 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
                 uint16_t nv = (row[c] == R60_NT_RELEASED) ? 0u : row[c];
                 unsigned os = shadow[mrow * 64u + c] & 0x3FFu, ns = nv & 0x3FFu;
                 if (os != ns) { MD_UNPIN(os); MD_PIN(ns); }
-#ifdef R60_KEEPSTALE
                 if (shadow[mrow * 64u + c] != 0xFFFFu) r60_nt_prev[which][mrow * 64u + c] = shadow[mrow * 64u + c];   /* a flushed shadow keeps the older cell as the stale fallback */
-#endif
                 *cells++ = nv; shadow[mrow * 64u + c] = nv;
             }
         }
@@ -849,7 +740,6 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
     return cells;
 }
 
-#ifdef R60_CUTPF
 /* CUT-ART PRELOAD (R60CUTPF, sw249). The demo's transformation cut (the face, then the flames)
  * is a page switch to pages 10 (FG) and 11 (BG), and the game wrote those pages long before:
  * measured on sw248, both pages are byte-identical from frame 600 to the switch at 1054 (127 FG
@@ -864,105 +754,183 @@ R60WALKCODE static volatile uint16_t *r60_walk_plane(volatile uint16_t *pk, unsi
  * the state word's cut bit (m_main.c CUT_PREFETCH); here the bit leads by two frames only, so the
  * trigger is the scene (attract step 0x0C, demo 1) and the pages' absence. */
 #define PF_ROWS 4u
+#ifndef R60_PF_FORM
+#define R60_PF_FORM 2u                           /* in play, preload the cut pages once the hero holds this many orbs (Makefile R60PFFORM) */
+#endif
 static uint32_t r60_pf_pinned[MD_SLOTS / 32u];
-static unsigned r60_pf_row, r60_pf_npin;
-unsigned r60_pf_stats[4];                        /* [0] slots preloaded [1] art shipped [2] no free way [3] releases */
+static unsigned r60_pf_row, r60_pf_npin, r60_pf_cur, r60_pf_hold, r60_pf_clean;
+static unsigned r60_pf_prehold;                  /* 1: entering cut, 2: returning to play; held until that page switch completes */
+static uint16_t r60_pf_ret_sel[2], r60_pf_ret_xs[2], r60_pf_ret_ys[2];   /* the pages and scroll the game returns to after the cut (saved at the switch in) */
+unsigned r60_pf_stats[6];                        /* [0] slots preloaded [1] art shipped [2] no free way [3] releases [4] return-page walks [5] cut-page walks */
+/* Cold transition policy: one call per plane build is cheaper than growing the
+ * RAM-resident walk, and the master has ample idle time. */
+__attribute__((noinline)) static unsigned r60_pf_page_hold(uint32_t pages,
+                                                           unsigned active)
+{
+    unsigned cut = (pages >> 16) == 0xAAAAu || (pages & 0xFFFFu) == 0xBBBBu;
+    extern unsigned char WRAM_BASE[];
+    const volatile uint8_t *w = (const volatile uint8_t *)WRAM_BASE;
+    unsigned owner = w[0x3148u] != 0u;
+    /* FUN_90F4 waits one game frame before publishing the cut owner.  At
+     * that point the MD palette can beat this builder's completed name table
+     * to the screen.  Player slots 0 and 8 expose the preceding edge as target
+     * form 3's state-15 countdown reaching two.  The target-form guard is
+     * essential: states 0/1/2 use the same countdown for ordinary spirit-orb
+     * upgrades, which must never blank the playfield. */
+    unsigned entering = (w[0x6Bu] == 3u && w[0x20u] == 0x15u &&
+                         w[0x22u] != 0u && w[0x22u] <= 2u) ||
+                        (w[0x46Bu] == 3u && w[0x420u] == 0x15u &&
+                         w[0x422u] != 0u && w[0x422u] <= 2u);
+    if (entering)
+        r60_pf_prehold = 1u;
+    if (cut != owner)
+        r60_pf_prehold = owner ? 1u : 2u;
+    else if (!active && ((r60_pf_prehold == 1u && cut) ||
+                         (r60_pf_prehold == 2u && !cut)))
+        r60_pf_prehold = 0u;
+    return (r60_pf_prehold != 0u) | active;
+}
 static void r60_pf_release(void)
 {
     unsigned i;
+    r60_pf_row = 0; r60_pf_clean = 0;
     if (!r60_pf_npin) return;
     for (i = 0; i < MD_SLOTS; i++)
         if ((r60_pf_pinned[i >> 5] >> (i & 31u)) & 1u) { MD_UNPIN(i); }
     for (i = 0; i < MD_SLOTS / 32u; i++) r60_pf_pinned[i] = 0;
-    r60_pf_npin = 0; r60_pf_row = 0; r60_pf_stats[3]++;
+    r60_pf_npin = 0; r60_pf_stats[3]++;
 }
+/* ONE CELL OF A PAGE THAT IS NOT ON SCREEN: find its slot by tag or claim a FREE way (never a
+ * victim: the scene in view keeps its art), pin it once, and ship its art if it is dirty and
+ * the window has room. */
+static unsigned r60_pf_cell(uint16_t w, unsigned which, unsigned win, unsigned *art, unsigned n, unsigned cap)
+{
+    unsigned code, cset, line, i;
+    if (!w) return n;
+    code = r60_tile_index(w, r60_bank1); cset = ((unsigned)w >> 6) & 0x7Fu;
+    line = r60_line_for(cset, which);
+    if (!line) return n;
+    /* THE NORMAL CLAIM (2026-11-05): a hit, a free way, or the oldest UNPINNED victim. The first
+     * cut only took free ways and left 10 of the level-1 cut's 320 tiles without a slot: the
+     * shared ones (the field, the chevron), so the switch's first window sent 40 cells and the
+     * rest waited on those tiles' art for four more windows. Every cell on screen pins its slot,
+     * so an unpinned victim is off screen and costs one re-ship if it scrolls back in. */
+    i = r60_claim(code, cset, win, which);
+    if (i == MD_BLANK_SLOT) { r60_pf_stats[2]++; return n; }
+    if (((md_dirty[i >> 5] >> (i & 31u)) & 1u) && !((r60_pf_pinned[i >> 5] >> (i & 31u)) & 1u)) r60_pf_stats[0]++;
+    md_ref[i] = (uint8_t)win;
+    if (!((r60_pf_pinned[i >> 5] >> (i & 31u)) & 1u)) { r60_pf_pinned[i >> 5] |= 1u << (i & 31u); MD_PIN(i); r60_pf_npin++; }
+    if (((md_dirty[i >> 5] >> (i & 31u)) & 1u) && n < cap) {
+        md_dirty[i >> 5] &= ~(1u << (i & 31u));
+        art[n++] = i; r60_pf_stats[1]++;
+    }
+    return n;
+}
+/* WHAT TO PRELOAD (2026-11-05, the transformation seam's second half). The target is the
+ * page set that is NOT on screen but is about to be:
+ *   1 = the cut pages 10/11, while demo 1 runs (attract step 0x0C, as before) or in play once
+ *       the hero holds R60_PF_FORM orbs (0xFFC06A; the next orb is the cut). Pages 10/11 are
+ *       written at level load (byte-identical at frames 1000, 1500 and inside the cut on the
+ *       level-1 tape), so the walk is safe any time; the pins are held only through that
+ *       last orb so the level's own claims are not starved (demo 2's pins raised its flicker
+ *       32k -> 51k, sw252).
+ *   2 = the RETURN pages, while the cut is up: the page select and scroll of the last window
+ *       before the switch (r60_pf_ret_*), the 29 visible rows by world position. The cut's
+ *       ~85 windows ship no cells, so the level's art evicted by the cut's (35 + 5 + 3
+ *       records on the level-1 return, measured) is back before the game switches back.
+ * When the target changes the old pins hold three windows (the switch walk claims under
+ * them), then everything releases and the new target starts from row 0. */
 __attribute__((noinline)) static unsigned r60_pf_step(unsigned win, unsigned *art, unsigned n, unsigned cap)
 {
     extern unsigned char WRAM_BASE[];
-    unsigned step = ((const volatile uint8_t *)WRAM_BASE)[GAME_WRAM_ATTRACT_STEP - SDRAM_WRAM_68K];
+    const volatile uint8_t *w8 = (const volatile uint8_t *)WRAM_BASE;
+    unsigned step = w8[GAME_WRAM_ATTRACT_STEP - SDRAM_WRAM_68K];
     uint16_t fsel = TEXT_U[0x740u], bsel = TEXT_U[0x741u];
-    unsigned r, which;
-    static unsigned hold;
-    if (fsel == 0xAAAAu || bsel == 0xBBBBu) {   /* the switch: keep the pins one full name rotation (32 rows, 7 a window) */
-        if (r60_pf_npin && !hold) hold = 6u;
-        if (hold && --hold == 0u) r60_pf_release();
+    unsigned want = 0, limit, r, which, c;
+    if (fsel == 0xAAAAu || bsel == 0xBBBBu) want = 2u;
+    else if (step == 0x0Cu || ((w8[0x3028] & 1u) && w8[0x6A] >= (unsigned)(R60_PF_FORM) && w8[0x6A] < 3u)) want = 1u;
+    if (want != r60_pf_cur) {
+        r60_pf_cur = want; r60_pf_row = 0; r60_pf_clean = 0;
+        if (r60_pf_npin) r60_pf_hold = 3u; else r60_pf_release();
+    }
+    if (r60_pf_hold) { if (--r60_pf_hold == 0u) r60_pf_release(); return n; }
+    if (!want) return n;
+    limit = (want == 2u) ? 29u : 32u;
+    if (r60_pf_row >= limit) {                   /* walked; the pins hold until the switch. SHIP WHAT THE WALK
+                                                  * COULD NOT FIT: the last rows' slots stayed dirty (17 of 310 on the
+                                                  * level-1 cut, the field tiles among them, so the switch's first
+                                                  * window sent 40 cells and kept the rest stale: KEEPSTALE waits for
+                                                  * the art). One scan per quiet window until it finds nothing. */
+        unsigned i;
+        if (r60_pf_clean) return n;
+        r60_pf_clean = 1;
+        for (i = 1; i < MD_SLOTS; i++)
+            if (((r60_pf_pinned[i >> 5] >> (i & 31u)) & 1u) && ((md_dirty[i >> 5] >> (i & 31u)) & 1u)) {
+                if (n >= cap) { r60_pf_clean = 0; break; }
+                md_dirty[i >> 5] &= ~(1u << (i & 31u)); art[n++] = i; r60_pf_stats[1]++;
+            }
         return n;
     }
-    hold = 0;
-    if (step != 0x0Cu) { r60_pf_release(); return n; }   /* sw252: demo 1 only; demo 2 (0x14) never selects pages 10/11 (measured, two loops) and the pins raised its flicker 32k -> 51k */
-    if (r60_pf_row >= 32u) return n;             /* both pages walked; their pins hold until the switch */
-    for (r = 0; r < PF_ROWS && r60_pf_row < 32u; r++, r60_pf_row++)
+    for (r = 0; r < PF_ROWS && r60_pf_row < limit; r++, r60_pf_row++)
         for (which = 0; which < 2u; which++) {
-            const volatile uint16_t *row = TILEMAP_U + (10u + which) * 0x800u + r60_pf_row * 64u;
-            unsigned c;
-            for (c = 0; c < 64u; c++) {
-                uint16_t w = row[c];
-                unsigned code, cset, line, k, i = MD_BLANK_SLOT, freei = MD_BLANK_SLOT;
-                uint32_t key;
-                if (!w) continue;
-                code = r60_tile_index(w, r60_bank1); cset = ((unsigned)w >> 6) & 0x7Fu;
-                line = r60_line_for(cset, which);
-                if (!line) continue;
-                key = MD_KEY(code, cset, which);
-                for (k = 0; k < 2u * MD_NWAYS && i == MD_BLANK_SLOT; k++) {
-                    unsigned j = (k < MD_NWAYS ? MD_SET(code, cset, which) : MD_SET2(code, cset, which)) * MD_NWAYS + (k & (MD_NWAYS - 1u));
-                    if (j == MD_BLANK_SLOT) continue;
-                    if (md_tag[j] == key) i = j;
-                    else if (md_tag[j] == 0xFFFFFFFFu && freei == MD_BLANK_SLOT && !md_pin[j]) freei = j;
+            if (want == 1u) {
+                const volatile uint16_t *row = TILEMAP_U + (10u + which) * 0x800u + r60_pf_row * 64u;
+                for (c = 0; c < 64u; c++) n = r60_pf_cell(row[c], which, win, art, n, cap);
+                r60_pf_stats[5]++;
+            } else {
+                unsigned xs = (0xC0u - r60_pf_ret_xs[which]) & 0x3FFu, ys = r60_pf_ret_ys[which] & 0x1FFu;
+                unsigned wc0 = xs >> 3, wr = (ys >> 3) + r60_pf_row;
+                for (c = 0; c < 42u; c++) {
+                    unsigned wc = wc0 + c;
+                    unsigned q = ((wc >> 6) & 1u) | (((wr >> 5) & 1u) << 1);
+                    unsigned page = (r60_pf_ret_sel[which] >> (q * 4u)) & 0xFu;
+                    uint16_t w = page > 12u ? 0u : TILEMAP_U[page * 0x800u + (wr & 31u) * 64u + (wc & 63u)];
+                    n = r60_pf_cell(w, which, win, art, n, cap);
                 }
-                if (i == MD_BLANK_SLOT) {
-                    if (freei == MD_BLANK_SLOT) { r60_pf_stats[2]++; continue; }
-                    i = freei; md_tag[i] = key; MD_MARK(i);
-#ifdef R60_KEEPSTALE
-                    md_reused[i >> 5] |= 1u << (i & 31u);
-#endif
-                    r60_pf_stats[0]++;
-                }
-                md_ref[i] = (uint8_t)win;
-                if (!((r60_pf_pinned[i >> 5] >> (i & 31u)) & 1u)) { r60_pf_pinned[i >> 5] |= 1u << (i & 31u); MD_PIN(i); r60_pf_npin++; }
-                if (((md_dirty[i >> 5] >> (i & 31u)) & 1u) && n < cap) {
-                    md_dirty[i >> 5] &= ~(1u << (i & 31u));
-                    art[n++] = i; r60_pf_stats[1]++;
-                }
+                r60_pf_stats[4]++;
             }
         }
     return n;
 }
-#endif
 
 /* THE ART TAIL: [n] then n inline records (slot|0x4000, 16 art words), the 68K's
  * slim_walk form. The blank tile (slot 0) is re-sent in packet B every window. */
+static unsigned r60_art_tail_words;
+volatile unsigned r60_tb_stats[8]; /* tails, tiles, DMAs, multi runs, largest run, words saved, bad slots, zero commands */
 R60ARTCODE static unsigned r60_art_tail2(volatile uint16_t *cells, const unsigned *art_slot,
                                       unsigned nslot, const unsigned *art2, unsigned n2, unsigned with_blank)
 {
-    unsigned i, k, n = 0;
-    volatile uint16_t *cnt = cells++;
-    if (with_blank) {
-        *cells++ = 0x4000u;
-        for (k = 0; k < 16u; k++) *cells++ = 0u;
-        n++;
-#ifdef R60_BLANKFILL
-        if (r60_solid_ship) {                    /* the solid assigned this window: its record is reserved */
-            r60_art(cells, r60_solid_ship);
-            cells[0] = (uint16_t)(r60_solid_ship | 0x4000u);
-            cells += 17; n++;
-            r60_solid_ship = 0;
+    struct r60_tb_set set;
+    struct r60_tb_iter iter;
+    volatile uint16_t *start=cells++, *header;
+    unsigned i, first, count, tiles=0;
+    r60_tb_clear(&set);
+    if (with_blank) r60_tb_add(&set,0);
+    if (with_blank && r60_solid_ship) { r60_tb_add(&set,r60_solid_ship); r60_solid_ship=0; }
+    for (i=0;i<nslot;i++) if (!r60_tb_add(&set,art_slot[i])) r60_tb_stats[6]++;
+    for (i=0;i<n2;i++) if (!r60_tb_add(&set,art2[i])) r60_tb_stats[6]++;
+    r60_tb_begin(&iter,&set);
+    while ((count=r60_tb_next(&iter,&first))) {
+        R60_YIELD();
+        if (!first) {
+            *cells++=R60_TB_ZERO; tiles++; r60_tb_stats[7]++;
+            first++; if (!--count) continue;
         }
-#endif
+        header=cells++;
+        if (count>1u) *cells++=(uint16_t)count;
+        for (i=0;i<count;i++,cells+=16) {
+            r60_art_pixels(cells,first+i);
+        }
+        *header=(uint16_t)(first|(count>1u?R60_TB_RUN:0x4000u));
+        tiles+=count; r60_tb_stats[2]++;
+        if (count>1u) r60_tb_stats[3]++;
+        if (count>r60_tb_stats[4]) r60_tb_stats[4]=count;
     }
-    for (i = 0; i < nslot; i++) {
-        if (!(i & 7u)) R60_YIELD();
-        r60_art(cells, art_slot[i]);
-        cells[0] = (uint16_t)(art_slot[i] | 0x4000u);
-        cells += 17; n++;
-    }
-    for (i = 0; i < n2; i++) {                   /* a second list: the other plane's art under a fat window */
-        r60_art(cells, art2[i]);
-        cells[0] = (uint16_t)(art2[i] | 0x4000u);
-        cells += 17; n++;
-    }
-    *cnt = (uint16_t)n;
-    return n;
+    *start=(uint16_t)tiles;
+    r60_art_tail_words=(unsigned)(cells-start);
+    r60_tb_stats[0]++; r60_tb_stats[1]+=tiles;
+    r60_tb_stats[5]+=1u+17u*tiles-r60_art_tail_words;
+    return tiles;
 }
 R60COLD static unsigned r60_art_tail(volatile uint16_t *cells, const unsigned *art_slot,
                                      unsigned nslot, unsigned with_blank)
@@ -992,9 +960,7 @@ R60COLD static unsigned r60_art_fit(volatile uint16_t *pk, volatile uint16_t *e,
      * later window re-shipped it (the title cut's 4x3 grid of black cells, slot 895; the
      * 68K also read that record as slot 0 with palette words for art). */
     if (which && avail) avail--;                 /* the blank record */
-#ifdef R60_BLANKFILL
     if (which && avail) avail--;                 /* one record kept for this window's solid (the blank's packet) */
-#endif
     return r60_art_fit_n(pk, e, avail, art_slot, n, which);
 }
 R60FITCODE static unsigned r60_art_fit_n(volatile uint16_t *pk, volatile uint16_t *e, unsigned avail,
@@ -1020,10 +986,8 @@ R60FITCODE static unsigned r60_art_fit_n(volatile uint16_t *pk, volatile uint16_
             if (!((gb[sl >> 5] >> (sl & 31u)) & 1u)) continue;
             for (k = avail; k < n; k++)
                 if (art_slot[k] == sl) {
-#ifdef R60_KEEPSTALE
                     uint16_t pv = r60_nt_prev[which][mrow * 64u + ((first + c) & 63u)];   /* row spans may wrap */
                     if (pv == 0xFFFFu || pv == R60_NT_RELEASED || !R60_STALE_OK(pv)) pv = 0u;
-#ifdef R60_BLANKFILL
                     {   unsigned ln = ((q[c] >> 13) & 3u) + 1u, mid = (md_tag[sl] >> 16) & 0x7Fu;
                         if (pv && r60_stale_same(pv, ln, md_tag[sl] & 0x3FFFu, mid)) r60_solid_stats[3]++;
                         else {
@@ -1031,11 +995,7 @@ R60FITCODE static unsigned r60_art_fit_n(volatile uint16_t *pk, volatile uint16_
                             if (which) { unsigned ss = r60_solid_get(ln, r60_smap[mid * 8u]); if (ss) { pv = (uint16_t)(((ln - 1u) << 13) | ss); r60_solid_stats[0]++; } }
                         }
                     }
-#endif
                     q[c] = pv; shadow[mrow * 64u + ((first + c) & 63u)] = pv; MD_UNPIN(sl); MD_PIN(pv & 0x3FFu); R60_DIAG2[7]++; break;
-#else
-                    q[c] = 0u; shadow[mrow * 64u + ((first + c) & 63u)] = 0u; MD_UNPIN(sl); R60_DIAG2[7]++; break;
-#endif
                 }
         }
         q += cnt;
@@ -1051,19 +1011,14 @@ R60FITCODE static unsigned r60_art_fit_n(volatile uint16_t *pk, volatile uint16_
  * words because the 68K writes 0xFC00/0xFC02 from every packet (md_main.c:2021). Rows
  * cost 8 + 7 x 65 = 463 words; the tail fits 13 records before the palette at 688. */
 unsigned r60_pkta_words = 736u;                  /* words of packet A the master copies to the FB this window */
-#ifdef R60_HOLDDIRECT
 unsigned r60_pkta_cap = 3072u;                   /* packet A's word cap this window (11264 direct) */
 unsigned r60_artmax = 160u;                      /* the walk's art list this window (500 direct) */
-#endif
 unsigned r60_pktb_words = 752u;                  /* words of packet B (through the palette block when it ships) */
 R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
                                   unsigned row0, unsigned win)
 {
     r60_bank1 = r60_tile_bank1();
-#ifndef R60_ARTMAX
 #define R60_ARTMAX 160u                          /* the walk's list; the packet's free space bounds what ships (r60_art_fit) */
-#endif
-#ifdef R60_HOLDDIRECT
     /* THE DIRECT HOLD PACKET (sw169, 2026-10-17). Under the game's blank the master writes
      * packet A straight into the framebuffer (no staging copy, no flip): 11264 words a
      * window, 500 art records, where the staged fat packet held 3072 and 160. The art lists
@@ -1071,25 +1026,16 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
 #define R60_PKTA_CAP r60_pkta_cap
 #define R60_ARTLIST  r60_artmax
     unsigned *art_a = (unsigned *)0x06038000u, *art_b = (unsigned *)0x06038800u, na = 0, nb = 0, nart;   /* 0x38000-0x38FFF: not .ramtext's to grow into (2026-10-23: the 0x29000 scratch was tried and holds the speech PWM buffer at 0x29800) */
-#else
-#define R60_PKTA_CAP 3072u                       /* packet A under a FAT window, words: the staging and the FB region (0x17000..0x1E000) hold it */
-#define R60_ARTLIST  R60_ARTMAX
-    unsigned art_a[R60_ARTMAX], art_b[R60_ARTMAX], na = 0, nb = 0, nart;
-#endif
     volatile uint16_t *e, *eb;
     unsigned fat = r60_artcap > 40u;             /* FAT window (the master sets artcap 160 under the blank hold): both planes' art rides packet A */
-#ifdef R60_EMPTYPKT
     unsigned a_empty = 0;
-#endif
     uint16_t hsA = (uint16_t)((TEXT_U[0x74Cu] - 0xC0u) & 0x3FFu);   /* = -xs mod 1024 */
     uint16_t hsB = (uint16_t)((TEXT_U[0x74Du] - 0xC0u) & 0x3FFu);
     uint16_t vsA = (uint16_t)(TEXT_U[0x748u] & 0xFFu);             /* ys mod 256: the NT is 32 rows */
     uint16_t vsB = (uint16_t)(TEXT_U[0x749u] & 0xFFu);
-    unsigned l, p;
+    unsigned l, p, page_hold = R60_MDHOLD;
 
-#ifdef R60_BLANKFILL
     r60_solid_new = 0; r60_solid_ship = 0;
-#endif
     /* UNDER THE GAME'S BLANK, TWICE THE ROWS (sw168, 2026-10-17). A cut's art reached the
      * screen at the pace the 7-row rotation visited it: the face-to-eye cut shipped 1-2
      * records on most of its 14 windows while the fat packet had room for 140, and we held
@@ -1102,24 +1048,44 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
      * bogus baked records per event; junk art DMA'd into random slots; tools/artaudit.py: 19
      * persistent wrong cells after START, 47 in the second logo splash). 14 x 44 + 8 = 624. */
     r60_walk_rows = (R60_DISPHOLD_W == 1u) ? 14u : 7u;
-#ifdef R60_CUTPF
-    {   /* A LIVE PAGE SWITCH WALKS 14 ROWS (sw250). With the cut's art preloaded the switch windows
-         * carry almost no art, and the face painted over five 7-row windows. For three windows after
-         * either page select changes with the display up, walk 14 rows: packet B's rows still end
-         * before the palette block (14 x 44 + 8 = 624 < 688), the 68K's row cap is 16, and the
-         * rotation advances by the rows walked (r60_main.c row0). */
-        static uint32_t pf_prev; static unsigned pf_churn;
+    {   /* THE SWITCH WALK (2026-11-05, the transformation seam's second half; replaces sw250's
+         * three 14-row windows). A page switch comes with a scroll jump, and the jump started the
+         * pan strip: 32 rows x 16 entering-edge columns, then THREE MORE windows of the same 16
+         * columns that ship nothing because the camera does not move again, then 7-row windows
+         * for the other 26 columns -- 8 windows, ~20 frames of half-and-half (build/pairs_form2,
+         * packets decoded 1778-1790 and 1956-1970). Instead: two windows of the visible rows at
+         * full width, top-down, 15 then 14 rows (15 x 44 + 8 = 668 < packet B's palette block at
+         * 688; the 68K's row cap is 32), the rotation parked at the visible top row, no strip.
+         * The rows the switch finds already correct cost two words each. The art the switch needs
+         * is preloaded (r60_pf_step: the cut pages in play once the hero has two orbs, the return
+         * pages during the cut), so the four records the first window has room for are enough. */
+        static uint32_t pf_prev; static unsigned sw_left, sw_row0;
+        static uint16_t prev_sel[2], prev_xs[2], prev_ys[2];
         uint32_t ps = ((uint32_t)TEXT_U[0x740u] << 16) | TEXT_U[0x741u];
-        if (ps != pf_prev) { pf_prev = ps; pf_churn = 3u; }
-        if (R60_DISPHOLD_W != 0u) pf_churn = 0;  /* a switch under the hold is filled by the hold's own 16-row windows */
-        if (pf_churn) { pf_churn--; r60_walk_rows = 14u; }
+        if (ps != pf_prev) {
+            if ((ps >> 16) == 0xAAAAu || (ps & 0xFFFFu) == 0xBBBBu) {   /* into the cut: remember where to return */
+                r60_pf_ret_sel[0] = prev_sel[0]; r60_pf_ret_sel[1] = prev_sel[1];
+                r60_pf_ret_xs[0] = prev_xs[0]; r60_pf_ret_xs[1] = prev_xs[1];
+                r60_pf_ret_ys[0] = prev_ys[0]; r60_pf_ret_ys[1] = prev_ys[1];
+            }
+            pf_prev = ps; sw_left = 2u; sw_row0 = (TEXT_U[0x749u] & 0x1FFu) >> 3;
+        }
+        prev_sel[0] = TEXT_U[0x740u]; prev_sel[1] = TEXT_U[0x741u];
+        prev_xs[0] = TEXT_U[0x74Cu]; prev_xs[1] = TEXT_U[0x74Du];
+        prev_ys[0] = TEXT_U[0x748u]; prev_ys[1] = TEXT_U[0x749u];
+        /* Keep the explicit two-packet switch transaction even when the game
+         * has already requested a display hold.  The game hold and the page
+         * selector cross CPUs asynchronously; cancelling here can release the
+         * MD plane after only the first half of the new table has landed. */
+        r60_sw_active = sw_left;
+        page_hold |= r60_pf_page_hold(ps, r60_sw_active);
+        r60_pan_walk(hsA, hsB);
+        if (sw_left) {
+            r60_walk_rows = (sw_left == 2u) ? 15u : 14u;
+            row0 = (sw_row0 + ((sw_left == 2u) ? 0u : 15u)) & 31u;
+            sw_left--;
+        }
     }
-#endif
-#ifdef R60_CHURNCAP
-    if (R60_DISPHOLD_W == 0u && r60_artcap > 40u) r60_walk_rows = 16u;   /* sw210: a churn window (live cut) walks 16 rows too; the picture is changing anyway */
-#endif
-    r60_pan_walk(hsA, hsB);
-#ifdef R60_IDPENS
     if (r60_id_openwin && --r60_id_openwin == 0u) r60_id_open = 0;
     {   /* a member whose colours left its owner's leaves the family: its cells re-pack deduped */
         unsigned s2;
@@ -1133,20 +1099,22 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
                 }
         }
     }
-#endif
     { extern volatile uint16_t r60_census[8]; r60_census[2] = r60_frt_p(); }   /* phase timers (sw196 probe): [2] walk B [3] walk A [5] fits + tails, FRT ticks */
     e = r60_walk_plane(pb, 1u, row0, win, art_b, &nb, r60_artcap < R60_ARTLIST ? r60_artcap : R60_ARTLIST);   /* BG = scr2 -> plane B */
     { extern volatile uint16_t r60_census[8]; uint16_t _t = r60_frt_p(); r60_census[2] = (uint16_t)(_t - r60_census[2]); r60_census[3] = _t; }
     eb = e;
     if (!fat) {
         nb = r60_art_fit(pb, e, 688u, art_b, nb, 1u);    /* the palette block sits at 688 */
-#ifdef R60_BLANKFILL
         if (r60_solid_new) r60_solid_ship = R60_SOLID0 + r60_solid_new - 1u;
-#endif
         nart = r60_art_tail(e, art_b, nb, 1u);
         r60_pktb_words = (unsigned)(e - pb) + 1u + 17u * nart;
+        r60_pktb_words = (unsigned)(e-pb)+r60_art_tail_words;
     } else { nart = 0; r60_pktb_words = (unsigned)(e - pb) + 1u; }   /* FAT: B's art goes out on A; B's tail is written after A's fit */
-    pb[1] = (uint16_t)(0xC001u | (R60_MDHOLD ? 0x2000u : 0u));   /* type 1, palette (15), art tail (14), MD display hold (13) */
+    /* A live page switch takes two full-width name-table packets.  The new
+     * palette is already in packet B, so presenting a partial table renders
+     * old tiles through new colours.  Hide those internal packets and let the
+     * following ordinary packet reveal the completed scene. */
+    pb[1] = (uint16_t)(0xC001u | (page_hold ? 0x2000u : 0u));   /* type 1, palette (15), art tail (14), MD display hold (13) */
     pb[2] = (uint16_t)(win & 0xFFu);             /* plane B; low byte = this window's sequence (sw173: the 68K skips a stale, unconsumed packet) */
     pb[3] = hsA; pb[7] = hsB; pb[4] = vsB; pb[6] = vsA;
     pb[5] = (uint16_t)(r60_walk_rows * 64u);   /* rows walked x 64: the 68K's row loop bound (sw168) */
@@ -1154,16 +1122,13 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
     e = r60_walk_plane(pa, 0u, row0, win, art_a, &na, r60_artcap < R60_ARTLIST ? r60_artcap : R60_ARTLIST);   /* FG = scr1 -> plane A */
     { extern volatile uint16_t r60_census[8]; uint16_t _t = r60_frt_p(); r60_census[3] = (uint16_t)(_t - r60_census[3]); r60_census[5] = _t; }
     if (!fat) {
-#ifdef R60_CUTPF
         if (na == 0u && nb == 0u)                /* sw251: only in a window whose own walk shipped no art, so a scene's fill is never delayed */
             na = r60_pf_step(win, art_a, na, r60_artcap < R60_ARTLIST ? r60_artcap : R60_ARTLIST);   /* the cut's art in A's spare room; what does not fit is given back below */
-#endif
         na = r60_art_fit(pa, e, 736u, art_a, na, 0u);    /* 368 longs a packet */
         nart += r60_art_tail(e, art_a, na, 0u);
         r60_pkta_words = (unsigned)(e - pa) + 1u + 17u * na;   /* exact: the publish copies only this (752 longs a pass cost ~9 lines of FB writes) */
-#ifdef R60_EMPTYPKT
+        r60_pkta_words = (unsigned)(e-pa)+r60_art_tail_words;
         a_empty = (na == 0u && (unsigned)(e - pa) == 8u + 14u) ? 0x1000u : 0u;   /* EMPTY: seven rows of nothing, no art: the 68K may skip the walk (its empty consume cost 8 lines) */
-#endif
     } else {
         /* FAT WINDOW: A carries its rows, the blank slot, its art, then B's art, up to
          * R60_PKTA_CAP words. Under the display gate's hold the slave draws nothing, so
@@ -1172,25 +1137,20 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
         unsigned used = (unsigned)(e - pa);
         unsigned avail = used + 1u + 17u >= R60_PKTA_CAP ? 0u : (R60_PKTA_CAP - used - 1u - 17u) / 17u;
         unsigned share_b;
-#ifdef R60_BLANKFILL
         if (avail) avail--;                      /* the solid's record */
-#endif
         /* THE BG GETS ITS SHARE (sw171): A's list took the whole budget and the eye's BG never
          * landed under the hold (plane B all blank at release). B is served first up to half. */
         share_b = nb < avail / 2u ? nb : avail / 2u;
         na = r60_art_fit_n(pa, e, avail - share_b, art_a, na, 0u);
         nb = r60_art_fit_n(pb, eb, avail > na ? avail - na : 0u, art_b, nb, 1u);
-#ifdef R60_BLANKFILL
         if (r60_solid_new) r60_solid_ship = R60_SOLID0 + r60_solid_new - 1u;
-#endif
         nart = r60_art_tail2(e, art_a, na, art_b, nb, 1u);
         *eb = 0u;                                /* B's tail: no records */
         r60_pkta_words = used + 1u + 17u * nart;
+        r60_pkta_words = used+r60_art_tail_words;
     }
-    pa[1] = (uint16_t)(0x4001u | (R60_MDHOLD ? 0x2000u : 0u));   /* type 1, art tail, no palette; the MD hold rides BOTH packets (sw113: A without it turned the display back on until B landed ~150 lines later, fragments of the loading scene) */
-#ifdef R60_EMPTYPKT
+    pa[1] = (uint16_t)(0x4001u | (page_hold ? 0x2000u : 0u));   /* type 1, art tail, no palette; the MD hold rides BOTH packets (sw113: A without it turned the display back on until B landed ~150 lines later, fragments of the loading scene) */
     pa[1] |= (uint16_t)a_empty;                /* written after the header, which the line above rebuilds */
-#endif
     pa[2] = (uint16_t)(0x8000u | (win & 0xFFu)); /* plane A; low byte = the window sequence */
     pa[3] = hsA; pa[7] = hsB; pa[4] = vsB; pa[6] = vsA;
     pa[5] = (uint16_t)(r60_walk_rows * 64u);
@@ -1232,7 +1192,6 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
         (void)same; (void)palwin;
 #endif
         { for (k = 0; k < 64u; k++) palprev[k] = pb[688u + k]; r60_pktb_words = 752u; }
-#ifdef R60_EMPTYPKT
         {   /* EMPTY B: no changed cells, no art beyond the blank record, palette and scroll words as last window */
             static uint16_t scr_prev[4]; static unsigned scr_init;
             unsigned rows_empty = (unsigned)(eb - pb) == 8u + 14u, pal_same = same, scr_same;
@@ -1240,30 +1199,47 @@ R60CODE unsigned r60_planes_build(volatile uint16_t *pa, volatile uint16_t *pb,
             scr_prev[0] = pb[3]; scr_prev[1] = pb[7]; scr_prev[2] = pb[4]; scr_prev[3] = pb[6]; scr_init = 1;
             if (!fat && rows_empty && nb == 0u && pal_same && scr_same) pb[1] |= 0x1000u;
         }
-#endif
     }
     { extern volatile uint16_t r60_census[8]; r60_census[5] = (uint16_t)(r60_frt_p() - r60_census[5]); }
     return nart;
 }
 
+/* THE SHADOW IS A PROMISE THE 68K CAN BREAK (2026-11-05, the transformation seam). The walk
+ * diffs every cell against r60_nt_shadow and sends only what changed, and the shadow is
+ * written as the packet is BUILT, not when its DMA lands. When the master closes the 68K's
+ * FM=0 span on the timeout (r60_main.c R60_DIAG[15]) the rows the 68K had not yet DMA'd read
+ * the framebuffer at FM=1 and land nothing, and the shadow says they did: a static scene
+ * then never re-sends them. Measured on the level-1 transformation (PORTFORM=3, ares):
+ * plane B's world columns 54-63, all 32 rows, held level tiles through the whole cut
+ * (shadow != VRAM in 250 cells, plane A 0) after the one timeout close of the run at the
+ * page switch's 32-row strip packet. So a timeout close FLUSHES both shadows: every cell
+ * re-sends over the next rotation and the picture heals even where the span was cut short
+ * (the FPGA's slower 68K). The pins the old cells held are released as the adoption flush
+ * does; the re-sent cells re-pin their slots. Cart-resident: once per timeout. */
+__attribute__((noinline)) void r60_nt_flush(void)
+{
+    unsigned i;
+    for (i = 0; i < 2u * 2048u; i++) {
+        uint16_t sv = r60_nt_shadow[i >> 11][i & 2047u];
+        if (sv != 0xFFFFu && sv != R60_NT_RELEASED) MD_UNPIN(sv & 0x3FFu);
+        r60_nt_shadow[i >> 11][i & 2047u] = 0xFFFFu;
+    }
+}
 void r60_planes_reset(void)
 {
     unsigned i;
     for (i = 0; i < MD_SLOTS; i++) { md_tag[i] = 0xFFFFFFFFu; md_ref[i] = 0; md_pin[i] = 0; }
     md_tag[MD_BLANK_SLOT] = 0xFFFFFFFEu;        /* never matches a key, never free */
-#ifdef R60_BLANKFILL
     r60_solid_reset();
-#endif
+    r60_pf_prehold = 0u;
     for (i = 0; i < 4096u; i++) r60_nt_shadow[0][i] = 0xFFFFu;   /* both planes: everything differs */
     for (i = 0; i < 32u; i++) md_dirty[i] = 0;
     for (i = 0; i < NSETS; i++) { r60_set_line[i] = 0; r60_set_bg[i] = 0; r60_mapid[i] = (uint8_t)i; }
     for (i = 0; i < R60_LINES * 16u; i++) r60_lc[i] = 0xFFFFu;
     for (i = 0; i < NSETS * 8u; i++) r60_smap[i] = 0;
     for (i = 0; i < NSETS; i++) { r60_row_baked[i] = 0; r60_set_degraded[i] = 0; }   /* every row zero, every tag free */
-#ifdef R60_IDPENS
     for (i = 0; i < NSETS; i++) r60_set_id[i] = 0;
     r60_id_open = 0; r60_id_openwin = 0;
-#endif
 }
 
 /* THE LINE PLAN, per scene: pack the sets by cell count (the BG page weighted double),
@@ -1273,7 +1249,6 @@ void r60_planes_reset(void)
  * adopted only if a resident set would change line or map; adoption flushes the slot
  * cache (a wiped tag leaves cells naming the next claimant's art, so the shadow is
  * invalidated with it: m_main.c:3664-3687). */
-#if defined(R60_PENIDX) || !defined(R60_NORECOLOUR)   /* sw283: the recolour/split pass and its state compile on the line too */
 __attribute__((noinline)) static void r60_remap_id(unsigned s)   /* cart-resident (sw283: .ramtext is full) */
 {   /* the map id: the first set with this line and map (as r60_pack_set derives it) */
     unsigned t, p;
@@ -1316,9 +1291,7 @@ __attribute__((noinline)) void r60_map_sync(void)
     if (!any) return;
     for (i = 1; i < MD_SLOTS; i++) {
         uint32_t tg = md_tag[i];
-#ifdef R60_BLANKFILL
         if (i >= R60_SOLID0) break;              /* solids carry their pen, not a map */
-#endif
         if (tg >= 0xFFFFFFFEu) continue;
         if (hit[(tg >> 16) & 0x7Fu]) { MD_MARK(i); r60_sync_stats[1]++; }
     }
@@ -1444,9 +1417,7 @@ __attribute__((noinline)) void r60_recolour_pens(void)   /* cart-resident, once 
             for (s = 0; s < NSETS; s++)
                 if (r60_set_degraded[s] && r60_set_line[s]) {
                     r60_set_line[s] = 0; r60_set_bg[s] = 0; r60_mapid[s] = (uint8_t)s; r60_set_degraded[s] = 0;
-#ifdef R60_IDPENS
                     r60_set_id[s] = 0;
-#endif
                     r60_pen_stats[6]++;
                 }
         }
@@ -1455,7 +1426,6 @@ __attribute__((noinline)) void r60_recolour_pens(void)   /* cart-resident, once 
     /* a moved pixel's set changed its map: r60_map_sync re-marks the slots baked with it */
     r60_map_sync();
 }
-#endif
 
 /* DROP THE SETS OFF EVERY PAGE (2026-10-24, the attract's eye). A plan that adopts nothing kept
  * the whole old pack, so a set that left every page kept its pens for good: demo 1's sets 74-86
@@ -1467,7 +1437,6 @@ __attribute__((noinline)) void r60_recolour_pens(void)   /* cart-resident, once 
  * them (the owner then passes to that set, the live colour source), and its slots are freed or
  * re-keyed to the resident representative of their map. */
 volatile unsigned r60_stale_dropped;             /* sets dropped (probe, read by symbol) */
-#if defined(R60_PENIDX) || !defined(R60_NORECOLOUR)
 static void r60_drop_stale(void)
 {
     uint8_t oldid[NSETS], trans[NSETS], drop[NSETS];
@@ -1486,10 +1455,8 @@ static void r60_drop_stale(void)
         if (!drop[s]) continue;
         r60_set_line[s] = 0; r60_set_bg[s] = 0; r60_mapid[s] = (uint8_t)s;
         for (p = 0; p < 8u; p++) r60_smap[s * 8u + p] = 0;
-#ifdef R60_IDPENS
         r60_set_id[s] = 0;
         if (r60_id_open == s + 1u) { r60_id_open = 0; r60_id_openwin = 0; }
-#endif
         r60_stale_dropped++;
     }
     /* pens: free the ones no resident set names; a shared pen passes to a resident user,
@@ -1521,20 +1488,15 @@ static void r60_drop_stale(void)
     for (i = 1; i < MD_SLOTS; i++) {
         uint32_t tg = md_tag[i];
         unsigned mid;
-#ifdef R60_BLANKFILL
         if (i >= R60_SOLID0) break;
-#endif
         if (tg >= 0xFFFFFFFEu) continue;
         mid = (tg >> 16) & 0x7Fu;
         if (trans[mid] == 0xFFu) {
             md_tag[i] = 0xFFFFFFFFu;
-#ifdef R60_KEEPSTALE
             md_reused[i >> 5] |= 1u << (i & 31u);   /* a stale cell naming it must not show the next claimant */
-#endif
         } else if (trans[mid] != mid) md_tag[i] = (tg & 0x0000FFFFu) | ((uint32_t)trans[mid] << 16);
     }
 }
-#endif
 
 unsigned r60_plan_soft, r60_plan_refused;        /* sw183: 1 = refuse a plan that moves resident lines; the count refused */
 unsigned r60_unlined;                            /* sw276: visible cells the walk skipped because their colour set has no line (counted per window, read by the plan scheduler) */
@@ -1542,15 +1504,12 @@ unsigned r60_plan_adopted, r60_pal_changes;   /* r60_pal_changes: palette blocks
 void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is full) */
 {
     static uint16_t hist[NSETS];
-#ifdef R60_KEEPSTALE
     { unsigned z; for (z = 0; z < MD_SLOTS / 32u + 1u; z++) md_reused[z] = 0; }   /* a plan period: reuse marks start afresh */
-#endif
     static uint8_t  bgu[NSETS];
     static uint16_t lc0[R60_LINES * 16];
     static uint8_t  ps0[R60_LINES * 16], pp0[R60_LINES * 16], map0[NSETS * 8], line0[NSETS], bg0[NSETS], mid0[NSETS], deg0[NSETS];
     unsigned i, pg, changed = 0;
     for (i = 0; i < NSETS; i++) { hist[i] = 0; bgu[i] = 0; }
-#ifdef R60_PLANFAST
     /* THE SAME CENSUS, EACH PAGE READ ONCE (R60PLANFAST, 2026-10-24): a page named by k FG quadrants and
      * j BG quadrants adds k + 2j per cell, and marks bgu when j > 0; longword reads, a zero pair skipped.
      * The 8 x 2048-word census was most of the every-32-window soft plan, a 400-line master stall in
@@ -1580,7 +1539,6 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
         }
     }
     if (0)
-#endif
     for (pg = 0; pg < 2u; pg++) {                /* pg 0 = FG (0x740), 1 = BG (0x741) */
         uint16_t psel = TEXT_U[0x740u + pg];
         unsigned q;
@@ -1599,7 +1557,6 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
     for (i = 0; i < R60_LINES * 16u; i++) { lc0[i] = r60_lc[i]; ps0[i] = r60_pown_s[i]; pp0[i] = r60_pown_p[i]; r60_lc[i] = 0xFFFFu; }
     for (i = 0; i < NSETS * 8u; i++) { map0[i] = r60_smap[i]; r60_smap[i] = 0; }
     for (i = 0; i < NSETS; i++) { line0[i] = r60_set_line[i]; bg0[i] = r60_set_bg[i]; mid0[i] = r60_mapid[i]; deg0[i] = r60_set_degraded[i]; r60_set_line[i] = 0; r60_set_bg[i] = 0; r60_mapid[i] = (uint8_t)i; }
-#ifdef R60_IDPENS
     for (i = 0; i < NSETS; i++) {                /* identity sets keep their pens exactly: their art must not re-bake */
         unsigned p, l;
         if (!r60_set_id[i]) continue;
@@ -1613,16 +1570,6 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
         }
         r60_set_line[i] = line0[i]; r60_set_bg[i] = bg0[i]; r60_mapid[i] = mid0[i];
     }
-#endif
-#ifdef R60_PENIDX
-    for (;;) {   /* pass 1: resident sets keep their line when they still fit it (a palette change must not move lines) */
-        unsigned best = 0, bi = 0xFFu;
-        for (i = 0; i < NSETS; i++) if (!r60_set_line[i] && line0[i] && hist[i] > best) { best = hist[i]; bi = i; }
-        if (bi == 0xFFu) break;
-        if (!r60_pack_set_on(bi, bgu[bi] | bg0[bi], line0[bi] - 1u)) r60_set_line[bi] = 0xFEu;   /* did not fit: pass 2 */
-    }
-    for (i = 0; i < NSETS; i++) if (r60_set_line[i] == 0xFEu) r60_set_line[i] = 0;
-#endif
     for (;;) {
         unsigned best = 0, bi = 0xFFu;
         for (i = 0; i < NSETS; i++) if (!r60_set_line[i] && hist[i] > best) { best = hist[i]; bi = i; }
@@ -1633,7 +1580,6 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
      * held and this one does not (off every page now) is no change. */
     for (i = 0; i < NSETS && !changed; i++) {
         unsigned p;
-#ifdef R60_PLANNEW
         /* A NEW SCENE UNDER THE HOLD IS A CHANGE (R60PLANNEW, 2026-10-24, the green eye). The test
          * below sees only sets resident in BOTH packs, so a cut whose pages and palette land before
          * the walk has packed any of the new sets reads "no change": the old pack is restored, the
@@ -1644,15 +1590,9 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
          * for the whole scene); the slower line packed eleven eye sets between its plans and the
          * since==1 plan adopted. Behind the blank a fresh pack costs nothing visible. */
         if (!line0[i] && r60_set_line[i] && R60_DISPHOLD_W && !r60_plan_soft) { changed = 1; break; }
-#endif
         if (!line0[i] || !r60_set_line[i]) continue;
         if (line0[i] != r60_set_line[i] || (bg0[i] && !r60_set_bg[i])) { changed = 1; break; }
-#ifdef R60_PENIDX
-        (void)p;   /* pen POSITIONS differ between an incremental pack and a fresh one by order alone; the
-                    * resident maps stay (the recolour pass keeps their colours current), only a line move flushes */
-#else
         for (p = 0; p < 8u; p++) if (map0[i * 8u + p] != r60_smap[i * 8u + p]) { changed = 1; break; }
-#endif
     }
     if (changed && r60_plan_soft) { r60_plan_refused++; changed = 0; }   /* SOFT PLAN (sw183): the display is up, and adopting means every cell re-sent with new line
                                                                           * bits over a rotation while CRAM still holds the old lines -- sw182 eye pan f1392-1401,
@@ -1676,41 +1616,11 @@ void r60_line_plan(void)   /* ROM: runs every 32 windows (sw165: .ramtext is ful
     { unsigned z; for (z = 0; z < NSETS; z++) r60_set_stale[z] = 0; r60_stale_any = 0; }   /* the fresh pack holds no stale set */
 #endif
     R60_DIAG[10] += 0x10000u;                    /* plans adopted (high 16) */
-#ifdef R60_PLANREMARK
-    /* RE-MARK, DO NOT WIPE (m_main.c:3664-3687). A slot keeps its tag and its cells; one
-     * whose set's map or line moved goes dirty and is re-baked on its next visit; a slot
-     * whose set left every page is freed (pins keep its art until its cells move). The
-     * whole shadow is invalidated so every cell is re-sent with its new line bits within
-     * one rotation (five windows): sw71 re-marked without that and the eye kept stale
-     * line bits for good (luma 30 against 9). A wipe re-shipped the whole screen at
-     * every plan (the face transition in Mike's capture, f1045: 775 stale cells). */
-    for (i = 1; i < MD_SLOTS; i++) {
-        uint32_t tg = md_tag[i];
-        unsigned mid, p, diff = 0;
-        if (tg >= 0xFFFFFFFEu) continue;
-        mid = (tg >> 16) & 0x7Fu;
-        if (!r60_set_line[mid]) { md_tag[i] = 0xFFFFFFFFu; continue; }
-        if (line0[mid] != r60_set_line[mid]) diff = 1;
-        for (p = 0; p < 8u && !diff; p++) if (map0[mid * 8u + p] != r60_smap[mid * 8u + p]) diff = 1;
-        if (diff) MD_MARK(i);
-        /* the key's map id follows the new pack's representative, or every hit misses
-         * (sw110 first cut: 1,176 holes a plane, the whole cache pinned and unclaimable) */
-        md_tag[i] = (tg & 0x0000FFFFu) | ((uint32_t)r60_mapid[mid] << 16);
-    }
-    for (i = 0; i < 4096u; i++) {                /* release the pins the old cells held, then every cell re-sends */
-        unsigned os = r60_nt_shadow[0][i] & 0x3FFu;
-        if (r60_nt_shadow[0][i] != 0xFFFFu) MD_UNPIN(os);
-        r60_nt_shadow[0][i] = 0xFFFFu;
-    }
-#else
     for (i = 0; i < MD_SLOTS; i++) { md_tag[i] = 0xFFFFFFFFu; md_ref[i] = 0; md_pin[i] = 0; }
     md_tag[MD_BLANK_SLOT] = 0xFFFFFFFEu;
-#ifdef R60_BLANKFILL
     r60_solid_reset();
-#endif
     for (i = 0; i < 32u; i++) md_dirty[i] = 0;
     for (i = 0; i < 4096u; i++) r60_nt_shadow[0][i] = 0xFFFFu;   /* every cell re-sent with its new slot */
-#endif
     R60_MAP_SYNC();
 }
 

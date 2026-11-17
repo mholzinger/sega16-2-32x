@@ -1,12 +1,799 @@
+**TWO-SLOT PREPARED-SPRITE ENGINE PLAY-ACCEPTED (2026-11-10, Codex).** Mike
+playtested `build/port/rom/sprengine-line01.32x` (SHA-256
+`b5fa22d0c21ae09e53b795cbedd7c2bcbaec0dd0ab92846b78f51cd40aea9513`)
+and reported no regressions. The measured Altered Beast policy is now pinned in
+`tools/build_line.sh` as 768/256 words with the small route at height 24.
+The same existing 4 KiB arena now holds a 3 KiB large pose and 1 KiB small pose
+through engine-opt-in `R60SPRPREP2=1`, now enabled for the Altered Beast line;
+the packet and assembly renderer are unchanged. At ares frame 3001, prepared
+hits rose 665 to 971 (+46%). On MiSTer,
+the same seven indexed fight samples reduced plot 157.7 to 125.7 timing lines
+and whole pass 572.6 to 541.7. MAME 5k, ares 6k/65k/125k, sanitizer and canary
+tests pass; 125k ended at 124989 VInts/124991 ticks/0.845 flips per VInt.
+The measured 768/256, height-24 behavior is now portable build policy:
+`R60SPRPREP2S` selects small-slot words and `R60SPRPREP2H` its height route over
+the same fixed 1,024-word arena. A deliberately different 832/192, height-12
+policy passes host canaries/fallback and cross-builds. The rebuilt default ROM
+differs from the measured candidate at only 14 positions inside the stamp and
+repeats its ares 6k temporal/health results. The generic census screens policy candidates but
+still requires temporal/hardware measurement. No game-specific object knowledge
+entered the renderer.
+Round-one frontend passed; round two identically misses menu input on candidate
+and `wsline02`, so that harness case is unresolved rather than waived. Art audit
+refused an unproven post-pack symbol map; no art equality is claimed. The rig
+still holds `wsline02`; no hardware state was changed during promotion. Full evidence:
+docs/performance/PREPARED-SPRITE-TWO-SLOT-2026-11-09.md.
+
+**PRIORITY BOUNDARY-MERGE TRIAL REJECTED (2026-11-09, Codex).** The candidate
+passed 20,000 randomized overwrite-image equivalence cases and fit the real hot
+RAM caps, but MiSTer PUNCH cost rose from 65.1 to 113.1 timing lines/pass over
+the same seven indexed busy-fight samples; total rose 572.6 to 621.7. The per-row
+coordination cost exceeded the saved boundary stores. Source was reverted and
+the rig restored `wsline02`. Evidence:
+docs/performance/PUNCH-BOUNDARY-MERGE-2026-11-09.md.
+
+**WORKSET MASK-BLOCK TRIAL REJECTED (2026-11-09, Codex).** A safe four-slot
+32x32 foreground-mask cache passed scalar sanitizers and a 6k ares health gate,
+but the MiSTer punch phase rose from 65.1 to 148.6 lines/pass across the same
+seven indexed render-busy samples; total rose 572.6 to 634.3. Unsafe shared-
+scratch precursors never reached hardware. Integration source was reverted,
+the rig restored `wsline02`, and default-off `wsline03` differs from `wsline02`
+only in 14 build-stamp bytes. Next target is direct batching of the accepted
+priority row emitter, not on-demand 32x32 composition. Full evidence:
+docs/performance/MASK-BLOCK-WORKSET-2026-11-09.md.
+
+**wsline02 125k soak PASS (2026-11-08): vints 124989, ticks 124991, TICKS TRACK, flips/vint 0.844.** Temporal 48/59 at 600, 55/59 at 1700. Handoff: docs/handoff/HANDOFF-20261108-LINE.md.
+
+**CURRENT LINE, 2026-11-08 (Claude): wsline02 = wslease01.** Mike play-accepted wslease01 as the new line (looks and sounds right, Neff smoke less choppy but slower than arcade; boot VERSION US/JP option verified). Reproducible from committed source: `tools/build_line.sh NAME` (R60SNAPLEASE=1 overlay + R60WORKSET page, 50172bc9); wsline02 differs from wslease01 only in 14 stamp bytes. Rig strips (180 s, 25 shots each): wsline02 A/B 0 black; rdplay01 2 black (isolated blacks occur on baseline); one garbled logo frame in wsline02 A only, not reproduced. wsline02 is resident on the office rig. Speed phase now has a fight-wide rig profile: heavy passes need 568-624 slave lines (2.20-2.38 vints/pass), led by plot 160-192, punch up to 80 and clear up to 56. Target plot coverage and cart traffic before the block compositor, which still has no live caller. All private experiments remain default-OFF, see docs/performance/SMOKE-EXPERIMENTS-2026-11-08.md.
+
+**CURRENT CHECKPOINT — 2026-11-08 19:02 UTC (Codex).**
+The zero-foreground-mask shortcut first physical pair is independently qualified
+under the campaign's original 1992..2008 service eligibility: 124 reference versus
+133 candidate whole fixed16-cloud jobs in 2000 VInts; actual services 2000/1999
+remain explicit and unnormalized. Peer378445b7 binds separate original-domain V2.
+The newer exact2000-service v1 remains WITHHELD permanently. Four fresh nonce-only
+repeat ROMs built successfully and passed actual derivative peer74d92; hardware
+collector review is pending, none of those four nonces has launched. No repeatable
+or whole-game speed/adoption claim. Accepted rdplay01 SHA/path verified18:45UTC.
+The private atomic tick TAKE source/opcode review passed0e1b; wsbot03 Make passed,
+but postbuild archive failed on two incorrect provenance-copy paths. Original
+failure/partial archive retained; separate recovery and actual named/runtime gates
+pending. It is not a proved explanation for the earlier service count.
+Input-only wsbot02 cold2001 passed peer4410023. Its own10001 run finished normally
+and passed owner capture/health checks but collected no orb and never reached Neff
+or page7: generic core unexercised. No longer run or forced game state; attack-start
+versus active-contact input policy is being audited. Actual result peer pending.
+Mixed-render HOST captured routing seams passed296jobs/464generic chunks/1136seams:
+all71684 backing bytes+31metadata objects+bothRECTN cells exact at every boundary.
+Root independently rehashed6419 retained files and replayed scalar-prefix checks;
+root-review02 PASS, root-review01 exit-field KeyError preserved. RealRAW/PREP/
+REPUNCH, KEEP/FULL/synthetic/mutation coverage remains pending; no target promotion.
+Canonical game and alpha unchanged; cache-RAM trial stays held117C/124R. Full
+working journal: build/codex-working-set/overnight-active.json.
+
+**CURRENT CHECKPOINT — 2026-11-08 18:45 UTC (Codex).**
+The foreground-mask shortcut has complete source/host/actual-SH A/B/C proofs.
+Its first physical pair completed 124 reference versus 133 candidate whole
+fixed16-cloud jobs in 2000 VInts, with actual service counts 2000/1999.
+The newer exact-2000-service pair gate remains WITHHELD permanently. A separate
+analysis using the campaign's original, unchanged 1992..2008 service eligibility
+is under independent review; no repeatability, whole-game speed or adoption claim.
+Both arms restored accepted rdplay01; root verified its SHA and active path at
+18:24 UTC. Cache-RAM trial remains held after 117 versus 124 jobs.
+Private input-only controller wsbot02 (ROM SHA 4568fe64…a25dcbfc) finished its
+2001-frame cold run with exit0; boot/input/health acceptance is pending. It changes
+approach/attack input decisions only. Natural generic rendering remains unexercised.
+A separate private atomic tick dequeue prototype closes a source-feasible lost
+enqueue race without masking native game execution; source/opcode models pass,
+independent review and actual link/run remain pending. This is not a proved cause
+of the hardware service-count difference. Canonical game and alpha are unchanged.
+Working evidence: build/codex-working-set/overnight-active.json and
+build/codex-sprite-block-audit/{hardware-zero-fg-meter01,event-input-integration02,pp-due-atomic01}/.
+
 # STATE — what is true right now
 
 **Volatile document. PRUNE IT, do not append to it.**
-Last updated: 2026-09-22.
+Last updated: 2026-11-08.
 
 If a line here is stale, fix the line. Do not add a newer line below it.
 That is how the logs became unreadable.
 
 ---
+
+## Active smoke work (2026-11-08)
+
+Accepted **rdplay01** remains the play/restore baseline. Every hardware probe
+restores it, including failures. The office rig is free for this work; serialize
+launches and never use the TV rig or change MiSTer configuration.
+
+**Normal06 acceptance reference, superseded by wsplay09 below; neither is a new alpha.**
+SHA256 `492e554e724f1e150a8fff1bdd706f73e90a2a1cf9d3fe45b12b975d6aede7ff`.
+It adds KEEP, BOOTBANKS, WORKSET45, RIGHTclip, per-pass off-page dispatch and the
+MD display-release fix. Full frontend/live controls remain. No event, fixture,
+forced form, GOD, tape, admission-cache, RAM-kernel or block-code flags.
+
+Both cold headless health gates pass. At 65,001 frames: 64,989 VInts, 64,991
+native ticks, 1,082 healthy samples. At 125,001: 124,989 VInts, 124,991 ticks,
+2,082 healthy samples, 69 page switches and 5,008 accepted/posted sound commands.
+Both have zero timeouts, malformed records, dropped ticks, missed indirects,
+FIFO full attempts or budget yields; final pending0/FIFO empty/highwater3.
+All five real level starts and three/six-button menu reentry/residency pass.
+The named 22,352-byte MD payload matches ROM0x40410 exactly. Graphics, music,
+speech, SFX, game ROM and all normal art pages are preserved. All 264 changed
+linked game words are exactly old/new addresses of the same named ELF symbols.
+Native09 has zero shown-pen, full-PNG or native sprite errors and exact complete
+1,024-span/22-record metadata against KEEP/native04. Original fences hold.
+
+Natural wsroute04 GOD+tape (no forced form/endclear/fixture) reaches level two
+at control frame36405, score33800/lives3. All 440 mirror bytes and 18 fields
+match across 33,328 fully copied common native clocks; all 138 coherent ordered
+boss/level states match. Unqualified/raw sequence differences remain recorded.
+Normal06 acceptance is complete and HELD: all7standard commands/profile pass;
+original20 has18ordinary exact rows, H7explicitalternate aw_H_1169 exact,
+H13unreached, with2picture/19legacyFB exceptions retained. Not20/20. Actual
+frame1708 foreground exposure is proven with canvas/shift checked: completed
+punch951 over MD950. It also occurs in05. Private ACK-before-FS wsack01 changes
+transport order and eliminates local pending-flip openbus, but leaves86qualified
+FG exposures; the original2greenpixels were pose-confounded. Privateexperiment
+is withheld, rootruntime source unchanged, no hardwaretrial or fixclaim.
+Screenshot endframe bank is not necessarily scanout bank; old natural pose
+matches are code-state facts, not shown-cohort proofs. Semantic MD-apply epoch
+and committed FG projection are the next binding components. Fresh headless MAME1800 matches all107 archived
+native anchors exactly. Retain any H7alternate/H13unreached/picture/legacyFB
+exceptions; do not claim20/20 or blanket cadence/pixel equality.
+
+**Hardware blackout investigation:** wsplay04 is withheld. Its first strip has
+four final black samples; repeat has samples6..24 black. Accepted clone rdctrl01
+has one black capture then recovers. Independent source tests prove three MD
+packet paths cached one display register independently and could suppress an
+on command after another writer turned it off. Commit9db88f45 replaces those
+caches with each packet's exact requested8134/off or8174/on write. All six
+cross-path and external/menu cases plus196,608headers pass; actual linked MD
+and real MMIO traces confirm all three fixed paths execute.
+
+Both180s normal06 hardware strips recover after isolated black captures.
+Old-cache05 also recovers, so timing is involved and hardware cause is not
+proven. Causal wshold01 uses exact04 SH source plus fixed06 MD, with every linked
+change strictly qualified; its180s strip recovers after sample13. All runs
+restore rdplay01. Untouched12,001-frame headless06/04/control/hold01 runs also
+recover after bounded26/26/25/25black frames, with no transport deadlock.
+
+**Measured smoke gain, limited to MODE2 cloud windows:** the original three
+hardware controls have entrance25/24/24 versus candidate31/32/32 over126native
+clocks/VInts, death28/29/28 versus34/34/32 over124/124. Mean ACK gains30.1%/17.6%.
+ACKs are not unique images or whole-game FPS; mode2 excludes entry/restoration.
+Updated MD/dispatch three controls have entrance25/24/25 versus31/32/32,
+death28/29/28 versus35/33/32, all matching126/124clocks. Gains28.38%/17.65%,
+kept separate from older series. All six trials complete and restore rdplay01.
+
+Separate MODE1 rightclip07a182/115 uses inclusive377/252 clocks;07b death has
+254VInts versus252native and remains UNMATCHED, not pooled. Post8 restores pass.
+
+**Larger-block work is experimental, not used by wsplay06.** Generic source
+manifests067509a1 reproduce all45poses directly from raw art. The host-only
+32×32 compositor d14d0980 and workspace protocol1b544b50 pass1,430 native-word
+pixel/metadata cases and9.67million SC schedules. On the matched1,401-case
+corpus packet reads fall16.5% and foreground callbacks85.5%; these are work
+counts, not hardware gains. Generic FG-window capture fe2b1a15 passes4235oracle cases (350B privateSH);
+no runtime reader or committed-plane adapter yet.
+FGGEN alone is not a content identity; acquisition must precede KEEP decisions.
+Persistent control must be outside SPRPREP, with physical-alias and lifetime
+checks. See docs/performance/SPRITE-BLOCKS-2026-11-07.md.
+
+Placement audit corrected an incomplete budget: named cold slots have3336B,
+but an additional fixed ROM-load gap23315C..234000 has3748B. The3460B closure
+fits there (252B remain after64B alignment); freezer350B and adapter glue can
+use the separate cold slots. Resident wsfix01 now links:3460B at cached02233180..02233F04,252B
+below the unchanged speech boundary. All other nonstamp ROM bytes match
+offnormal07 exactly; strict closure validation and independent SH tests pass.
+The8KiB page7 alternative already links as wspage01 with no caller; every ROM
+difference from offnormal07 lies inside owned code or the final48B stamp.
+All prefix/art/music/guard bytes remain exact. Offnormal07 matches tested06
+outside its stamp. Baker ede418fb reserves optional aligned FF space with exact
+disabled identity. Make/linker/strict-object infrastructure is committed5da80876;
+no new RAM, displaced art or relaxed existing fence. Master helpers stay fixed.
+
+Matched RAM-kernel81bfe76d stays OFF: two hardware ROM/RAM pairs average183/113
+versus185/113 over377/252 clocks, no clear worthwhile gain. Small master jobs
+remain OFF/withheld (hardware slower); admission cache stays OFF/unmeasured.
+A host-only committed-plane projector is committed b2ca3b71: local7,239,680
+pixel comparisons/11negative controls and independent full64KiB MDVRAM
+281cases/20,545,920comparisons pass. It binds typed NT/art updates and per-cell
+eligibility to retained physical identity; split inputarrays can use existing
+two4096B regions. Captured-body replays use explicit fixture eligibility and
+opacity witnesses, not historical native provenance or proof of MD admission.
+This does not implement runtimepins, semanticACK, staginglease or shownview yet.
+Private trace-only wsmeta01 is built and linked-audited, with unchanged BSS and
+all fences intact. Cold120/451/1800 strict traces pass;1800 retains766,765complete
+events and exact final tails. Replay has317,350known FG selections,100,200eligible;
+all6,565declines remain. FG history declines involve released0400sentinels.
+Historical source-packet bytes are captured; MD application and sprite/plane
+binding remain unproven. Diagnostic cart walk timing cannot establish
+performance. Private read-only headless body capture passes canonical120/451/
+1800 equivalence: all raw traces, five memory dumps and events exact;2228
+historical packet bodies join one-to-one at1800.
+
+Actualsource/body1800 adaptation now passes independent review:2228bodies,
+5044ART records,2528FGpatterns allmatchnativeopacity;18578serializedFGNTwords
+have known eligibility,6379true. BGopacity1357+7nonphysicalsolids decline;
+no fabricated committedMD baseline or projector invocation follows.
+Private staticblock target03 PASS independentlyreviewed: wsbr03/reference and
+wsbc03/candidate match all71684backingbytes/1024spans/22records/boxes/punch/
+22rectangles/native/PENID/fullPNG. Actualentry S33/M0,32completed+oneprecisely
+currentunfinished job. Fatal/canary0; finalwindow observedSstack960/1016B is
+onlylowerbound, static1364/2048B boundpasses. GO→PUB→DONE+actualflips bind
+metadata tophysicalDRAM. Ownedclosure6412B+shared74BUDIV, page8192/fenceshold.
+Fast04 O1loader/no-microcounter variant also PASSES independentlyreviewed:
+same completebytes/metadata/native/PENID/fullPNG; entryS62/M0,61complete+one
+livecore,fatal/canary0. BCD6..10 strictUINTMAX/unavailable, callbackPCs proveuse.
+Inline05 alsoPASS independentlyreviewed: all8auditedguarded packet-readPCs
+executeS/0M, oldloadcallback0, core76entries/75complete+onecurrentlive; full
+backing/metadata/native/PENID/PNGexact,fatal/canary0. Ownedclosure7100/8192,
+staticstack1384/2048. No per-pass/FPS/cadence/natural-frame proof; whole-window
+census is notnormalized acrossdifferent completed-work mixtures. Cursorhost
+variant1462casesPASS butonly2.27%nativepacketread saving/+364Bcode, WITHHELD.
+Word06 also PASS independently reviewed: full71684bytes/1024spans/all22metadata,
+native/PENID/fullPNG exact. Four bounded byte sites and aligned word site execute
+on S only; oldloader0, core69entries/68complete+one live, fatal/canary0.
+Ownedclosure7736/8192; staticstack1424/2048, observed1080 is onlylowerbound.
+Actual completed metadata0 maps physical1; dynamic flip mapping remains required.
+No speed benefit over Inline05 established. Meter02 links with exact06 renderer,
+assets/MD/flags and original fences; staticchain1428/2048. Initial paired8001
+headless runs are WITHHELD for measurement: frozenfixture intentionally holds
+nativeclock2687 while tickcalls advance2000, and measuredpreflight rejects11R/3C.
+CFG audit proves most rejects are FEN; exact individual window causes unmeasured.
+All retainedpages/nonces/tails match; fatal/canary/flags0 and every postfooterRGB
+outside216..223 matches same-ROM3999. Private03 adds a matched bounded existing
+FEN wait and explicit frozen-fixture clock domain; linked/static1440/2048 pass.
+Its paired8001A runs still have20R/1C intervalrejections and remain WITHHELD.
+FEN also includes MDrefresh/pendingflip, not just autofill. No hardwaremeter launch.
+A separate ares SH7604 TEMP-latch discrepancy is now reproduced with actual
+SH2 MOVBL/FRT.run: canonical can return torn1200/elapsedFF02 at rollover;
+manual-correct private model returns12FF/elapsed1.393235actual-core checks and
+independent review pass. Full19TU+frontend privatebuild and4065-input custody
+review PASS; tool3ae5da84e204a07e7392cce23de7aba6cd43aed63a960ddf6b1bc2c4d6f01a14
+reruns the SAME03 ROMs in actual-gateA-frt01: still8R/1C intervalrejections.
+Canonical tool/sources unchanged. Passiveobserver02 passes exact22+watch=23
+baselineguestfile neutrality and completeROI3900..6100 traces. Independent
+analysis proves all9 measured rejects are waitCLEAR→laterFENreadSET→takenreject
+branch→counterstore, none deadline-caused; underlyingFENcomponent remainsunknown.
+Private04 returns a capturedCLEARsample at the actual late decision, preserving
+earlywait, allotherguards and boundedtimeout. Linked1436/2048 PASS; bothinitial
+8001A gates nowPASS zero-windowfallback/guard/page/PEN/scenepixels. B independent
+DIAG0 replay active; compare22COMMONguestartifacts, changedwatchstreams separately.
+C fullphysicalbank/stack/native gate and independentreview PASS:69124 scene/tail
+bytes+2560 actualC-painter footerbytes, complete1024spans/22metadata/native/PENID;
+Raw completed-bank pen differences04 R2540/C2552 retained separately from
+raw frame8000PNG10160 each; earlier universal2540 prose was a clericalsummary
+error; exactper-arm DRAM/oracle+PNG hashes are retained in
+`build/codex-sprite-block-audit/RAW-FOOTER-SUMMARY-ERRATA.json`. All69124outside and2560painter
+checks unchanged. Hybridcalibration separatelylabeled.
+FirstHW R1 collection WITHHELD: slow freshSSHpermetadata call yields only7shots/
+3pages beforedeadline, no completecountrecord. Acceptedrdplay01 freshlaunch
+confirmed23:28:28; duplicateacceptedrelaunch lackedfreshlog andhelperreported3.
+RemoteacceptedSHA/path reverified. tools/rig_cut.sh now skips duplicate ONLYif
+primarysamecanonicalrestorealreadyconfirmed;7actualmock+8independentcasesPASS.
+Mux02 R2 collection WITHHELD: redundant SSH master flag refused channels;
+accepted restore passed. Mux03 removes only duplicate -M; actual SSH/SCP
+transport proof and independent review pass. Fresh R3 captured19 unique shots,
+all6 pages repeated, restore0/transport-close0. OriginalV3 gate WITHHELD solely
+for startup-derived native2685 vs model2687; VInts4000..6000/service2000,
+drops/preflight/fatal/canary/flags0. Raw diagnostic whole118 is UNQUALIFIED,
+not a gain. New source-bound fixture identity protocol is being prepared:
+actual WRAM[302a/b] must equal compiled PORT_SPRITEFIXTURE_AT=0x710.
+No retrospective relabeling of V3 results or nonce reuse. Accepted SHA/path
+verified again2026-11-08 05:07UTC; no candidate hardware count yet.
+Private05 new FROZEN_NATIVE_FRAME_V5 source/link peer gates PASS; firstpair
+wsenr1(6ea8150b)/wsenc1(b855f4e3) samples active nativeframe0x710 atbothcutoffs.
+Core7736/MD/assets/flags unchanged, actualaligned SHBEload/WRAMbase/fences
+verified; no rendererchange. BothcoldA and independentB PASS: sourceframe710,
+zero guard/drop/preflight failures, all22common+4named artifacts exact; coherent
+retained-count mutations rejected by independent admission/DONE reconstruction.
+FinalC and independent finalreview PASS: fullnative scene/tail/metadata, actual
+footerpainter and dynamicpresentedbank binding; rawfooterPNG differences kept.
+Rootauthorized physicaltrial gates after allproof rehashes. Firstofficepair
+COMPLETE/independentlyreviewed:113R vs86C whole16-cloud jobs in matched2000VInt
+windows. C ACK87/crossings1+1; R ACK113/crossings0+0. Measured drop/preflight/
+fatal/canary/flags0; C cumulative startupdrops1→1 preserved (R0→0). Both
+restore0/transportclose0; accepted SHA/path verified05:46UTC. Firstexploratory
+pair is NOT a gain; currentblock prototype stays withheld.
+Fourfresh siblingnonce ROMs built and
+whole-ROM/allocated-layout/source-only-nonce derivative proofs independentlyPASS.
+No game-timer workaround; hardware high→low read already follows the manual.
+Private qiquiet01 removes only per-poll DIAG5 RMW, defaultoffobjectidentityPASS;
+linkedMD/assets/game closure/fencesPASS, but both12001healthsentinel checksFAIL:
+frame9bootFFFF marker overwritten three times atframe12 by nativeIRQ4 spritecopy.
+Native2KiB mirroredspriteRAM vsport1KiB linearshadow is source/ROM/MAME-proven;
+no blanketIRQsuppression/countcap. Private lower-aperture projection5638IRQ+
+128clear oraclecasesPASS, preservesfull256scan/nativewrap/terminator/source reads/
+finalA2scalar, defaultofffullTUidentity and independentreviewPASS. Actualdiscarded
+ordinaryRAMloads canDCE; no physicaltrafficidentityclaim. Privategenerator-owned
+defaultOFF integration nowREADY, exactoffgeneratedfiles/objectidentity,12failclosed
+passcontrols; privateO2 ONtext+76/BSS0/IRQstack+8. ActualproductionOs linked
+qimirror01(d1b1ee75)/qimidle01(e3667dd2) BASIC_STATIC_PASS: source-boundIRQ
++80B, actualprologue40→40, allotherportcodeunits qualified byexactbytes/named
+relocs, MD/assets/flags/BSS/fences unchanged. Rootnormalshadowinputsrestored.
+Bothcold12k quietruns PASS health/sentinel: exactnamedFFstorepair, no later
+writes; fourBIOSprefix writes source-qualified from actual embeddedfirmware.
+Mirrorlevel1 PASS; unattended frozen>100distinct timer heuristic FAILS at92
+while rendering/nativeIRQ/status progression continues. Originalfailurekept;
+Separate source-qualified v2 IRQ/service/render liveness+common gates PASS all4,
+independently replayed from immutable captures; originalv1 staysFAILED. Bound31
+is derived from one-sidednativeclock publication, actualGF-service±1. Not
+fullgameplay/parity/zeroIRQloss proof. Allquietaresjobs finished; no polling
+performanceclaim. Nonce-tagged MODE2 smoke pair qsmctrl01(d473f258)/
+qsmquiet01(92cbc4bc) built0 and actualsource/link+16k+independentheadless PASS.
+Allshadowinputsrestored. Both15990VInts/15989services, span/MDmalformed/
+FIFOfull0, pending0; quietactualmarker tracehas4certifiedBIOS+2namedFFhalves
+and0laterwrites. Nativeentrance5583+126/death6893+124 match; deathM_VInts
+control124/quiet123 differs. M18/S86 uncertainty/headpartial/taggap retained;
+LIGHT FRT unavailable, no headlessperformanceclaim. Both share currentworkset45/
+right/cacheOFF+projection1; postcompleteidentity neveridleloop. Boundedphysical
+diagnosticcollector7bd5badc/freeze11d272c1 independentlyPASS andfirstphysicalpair
+COMPLETE/independentcustodyPASS: entrancecontrol32/quiet31 ACKs overexact
+5583+126native/126VInts. Deathcontrol33ACK/124VInts vsquiet34ACK/126VInts
+over6893+124native: elapsedcomparisonWITHHELD. M18/S86/FRTunavailable retained;
+hardwarehealthnotcarriedbyfooter staysunavailable. Bothrestore/close0;accepted
+hash/path verified07:20UTC. No usefulgain/adoption; pollremoval staysPRIVATE.
+Existing64recordrenderercapunchanged; no full128claim/no newRAM. No quietpromotion.
+Packedvalidation actual target+independent review PASS: full71684/spans/metadata/
+native/PENID/PNG, bothcompleted Cbanks,72entries/72complete, bothwordroles Spositive,
+0M/oldload/fatal/canary. Linked7980/8192/static1428; no speed proof.
+Private compactFG Word06 host/object PASS:7888/8192,1430corpus+2048edges+
+actualnativeentry exact; +40localchain requires1476targetstackbound. Firstpair
+source/link independentlyPASS; wsgfr1(0a3ebc12)/wsgfc1(c4e807e9) firstcoldA
+PASS, actual7888closure reconstructed with10relocs, newhelperS-only/0M.
+BothB and independentcounts PASS (R499/C133 modelonly); finalC runs completed0/
+exactidentities, Fullnative/physicalbank/stack independentPASS; correctedpeer-v2 binds exactraw
+R2540/C2528bankpen differences separately from10160PNG each. Originalsummary
+certificate preserved witherratum. Rootgates bind v2. Firstphysicalpair COMPLETE/independentlyreviewed:109R/104C
+wholejobs per2000VInts, measuredguards/drops0; Rservice1999/C2000. Rstartup
+preflight1→1 preserved, C0→0. Bothrestore/transportclose0; acceptedhash/path
+verified06:26UTC. Oneexploratorypair, existingdrawingstillahead; noadoption.
+One disjoint compactFG+
+packedvalidation object measured8264>8192 and was stopped, failurepreserved.
+No fit/runtime/gain assumption for the new target pair.
+Immutable admission private prototype passes final linked and fresh headless
+A/B/C gates plus independent v2 review. Exact16 ROM-member certificates,
+header/extent and liveGO/page/gen guards replace repeated immutable body checks;
+generic mutable validation is unchanged. Final7508/8192 closure, 13relocs,
+zeroRW, onlyfixedUDIV; primaryC36Bfree, R2end18CA4, conservative1480B stack.
+Original B beam-order failure remains; source-qualified inverse-vtick v2 fixes
+the coordinate conversion, with missing-H C events treated as intervals.
+ABC reviewed-v2 receipt7642c967 binds all corrected proofs. C completed-bank
+rawpensR2540/C2552 and frame8000PNG10160 each are separate image domains.
+Three fresh physical pairs COMPLETE/independently reviewed: reference whole
+jobs111/112/111 vs candidate124/124/124, each over2000VInts. Sum334vs372 is
+11.377% more wholly-contained fixed16cloud work; ACK335vs375 remains separate.
+Measuredhealthdeltas0 throughout; R3service1999 within unchanged1992..2008
+source-qualified domain, otherfive2000. No service renormalization. Allstartup
+countertotals/crossings retained in THREE-PAIR-SUMMARY.json; two earlyR3 unknown
+footer shots rejected/preserved. All111qualified rigPNGs have exactly equal
+RGB top208rows; this is not rawpen/nativehardware/cadence parity. Allsixrestore/
+close0; acceptedhash/path reverified09:07UTC. Fixed-scene throughput only,
+no naturalgameFPS/CPUutilization/adoption claim. Evidence hardware-immutable-meter01/.
+Sourceaudit penvalidation20.06%core/helper instructions and43.31%logicalpacket
+reads are not bus-speed measurements. Overdraw2.021x; composite dictionary
+proxies needMiBs and actualpalette/FG/KEEP cohort coverage remains unknown.
+Private metadata-row-header7528B remains host/object-only. Separate coarse16-row
+checkpoint prototype passes host/object/peer at7952/8192, readonly+124B tables,
+zeroRW, entry292/local328 (adds24stack), default/offexact7508. It preserves
+preceding spill row and full metadata. Fresh targetpair wscpr1(f0953ce9)/
+wscpc1(8f60005a) built0, allshadowrestored. Namedmechanical+semantic gatesPASS,
+primary36Bboth and conservative1480/1504stack. FreshfullABC+peer42cf PASS:
+all71684 bytes/1024spans/22records/native/physicalbank and indexedPCusage exact.
+ObservedS1120/1144 is a boundedlowerbound only. Rawcompletedbank calibration
+2528R/2528C vsrawPNG10160each remain separate. Hardwarefirstpair COMPLETE/
+peerPASS124whole125ACKboth over2000VInts/service, crossings1/1, measuredhealth0.
+Startupdrop1→1both; preflightR1→1/C0→0. R17shots15valid2rejected, C22valid;
+37qualifiedtop208RGBexact. Bothrestore/close0; acceptedhash/pathverified10:05UTC.
+Oneexploratorytie, no gain/adoption and no morepairs chasing subresolutiongain.
+Natural same-pass backend replay now matches all eight captured normal wsplay09
+passes (GO1378..1385): all71,684 pre-text framebuffer bytes, including the final
+four, and31 source-certified metadata objects plus slave rectangle counts.
+The unchanged generic block core runs on HOST; an independent scalar old-word
+DRAW/actual-mask PUNCH oracle matches the same captures separately. All64
+records in this corpus are full-height ROM-backed DRAW; no observed KEEP,
+PREP, RAW, REPUNCH or rightclip coverage is inferred. Unknown relevant FG input
+fails closed; irrelevant-cell mutations preserve complete output. ActualSH
+replay is next, not yet a live renderer caller or performance result.
+
+Observer04 actual tool a7af2f65, source0828d5f5 and runtimefreeze271a01e2 pass
+independent input review d48b6cc5. Cold2401 OFF/ON and qualified02 OFF match
+all23 guest artifacts, plus4 named identities. The eight complete passes bind
+64 row copies/PUNCH calls,1618 actual FG words and3819 mask-byte uses, with
+zero declines. Descriptor, packet, mapper and full model extents are checked.
+Observer01 extent failure and03 actual compiler/namespace failure remain
+preserved; qualified02 partial-first-pass evidence is not upgraded retroactively.
+Full MD presentation/scanout coherence remains separate.
+See docs/performance/NATURAL-RENDER-DIFFERENTIAL-2026-11-08.md.
+
+Private cache-scratch01 host/object source5fd7813a/peer4dfd9f9f passes:
+active7672/8192, disabled exact7508, strict15relocs/UDIV-only/zeroRW. It redirects
+only1152B tile+mask toCPU-local RAM without changing arena/main/ABI. Host and
+emitted-opcode checks do not prove physical pipeline/IRQ safety or speed.
+Isolated cssafe01 never reached its body because its MD handshake omittedB007;
+that startup failure remains preserved. Corrected cssafe02 ROM8e6d9b0d keeps
+mandatory warmup and actual B007/worker-ready/5044 handshake. Focused cold1001
+passes independent v2 review3c3b3300: errors0, CCR9/restored1,33 in-body IRQs,
+112B stack bound, intact guards. Original strict checker failure on32 proven
+master boot-byte writes is preserved separately. Strict address-array tag
+readback remains RAW/WITHHELD; no model/core patch or fullcache verdict.
+Extended cold32001 passes independent result review29523db9:125 authenticated
+captures, each16 page5..14 appearances, all32 result words unchanged. Physical
+cssafe02 trial is WITHHELD: header-only images, zero qualified result pages;
+no-fresh-screenshot/deadline exit, restore0/close0, all inputs unchanged. Header
+alone does not localize the wait or prove a cache failure. Accepted rdplay01
+SHA/path independently reverified12:09UTC. Newstage-only cssafe03 ROMf64ee547
+fits5840/8192, Sstack112; fresh static peer4ac48cf0 and cold1001 result peer
+dc4cac83 pass. Cache body/tag/warmup are preserved; visible stage markers and
+compiled cart nonce are observational. Hardware03 observes outer4C12 with no
+return observed. Fresh04 inner-marker variant ad4f989d passes static/cold peers
+f666/9db0,6256readonly/116stack. Six04 physical records authenticate pages0..2
+[33,0]/[0,0]/[0,FFFFFFFF]: wrapper/tag reached publication in THISvariant, but
+activeCCR/bodySR are0 versus successful09/20. Component notqualified; source
+of earlier03nonreturn remains open. Physicalstagepeer9f6f8387; restore/close0
+and acceptedSHA/path independentlyverified13:23UTC. New05 failure-readback
+telemetry planned; no transport bug or core/emulator patch is inferred.
+
+Private normal wslease01 snapshot ownership candidate remains HELD; ROM
+8b6eded19eb8cb05e94b406bb1c03d7fbbac3d269a61fa1446f06764616807d9.
+Named static peer4a65b1d9 and completed health/menu peer33c98656 PASS:
+65k/125k, all11 current-layout menu cases, all5 starts, 3/6-button residency,
+normal36k, zero timeout/malformed/drop/missed/FIFO-full/budget errors.
+Original stale-layout runner failures remain preserved in both baseline/candidate.
+Fresh original20 two-worker run completes both profiles inside1800s (1398.79/
+1401.25s), rawchecker exit1 both. Independent e824cabd confirms19 landed exact,
+H13unreached,2picture/19staging flags. New staging/RGB timing differences are
+explicitly NOT waived; no full renderer equality/promotion. Earlier serial
+1800s timeout/cleanupEPERM remains preserved. Separate GOD36k basic health PASS;
+extended page-progress coverage FAIL(gen0/stat0), terminal handler16C6C outside
+eligible4; no full request-history proof and no stall diagnosis/coverage waiver.
+
+Private natural live-block candidate wsgrid01 now BUILT, not play-qualified:
+ROM9c757d016d20b74d24e611dca3dde82791a472aeb5147ce09238a9b5442175ee.
+Source/HOST/O2 prototype870cd32f peerb7651580 PASS; root normal transactional
+builder6461a07c peer46e73084 PASS; actual Make exits0, full actual dependency/
+216 native-generation-input archive retained before next Make. Strict owned
+object6844/32relocs, linked capacity8192, ordinary page7 pre-code prefix,
+normal MD ELF and exact09+CODE flags pass build gates. Retires old prep/cache
+writers and reuses9216B for existing arena + paired FG grids/context; all FG
+consumers use one leased view. No new BSS or gameplay/test flags. Actual named mechanical
+review5c4c63a9 +independent7c8ecc32 PASS:2912changed nativewords are2908
+same-symbol addresses plus4typed object-interior offsets;1636nativefunctions
+retain address/size, othernative/art/MD bytes exact. Primary512B headroom;
+6844RO/32relocs. Semantic call/stack/writer/order review remains ACTIVE. All11 corrected-FRT current-menu cases PASS. Bounded normal12k health PASS:
+11989VInts/11991ticks/199samples,0timeout/malformed/drop/missed/FIFO-full/budget,
+pagegen2/pending0/sound432drained/high2. Separate passive12k profile peer7bf3600d
+proves NOT_EXERCISED:8968 plan entries,zero post-page7guard/core calls, only
+BIOS+startup latch writes. All333 capture inputs unchanged; passive health
+also0errors. First natural admission witness needs the recorded Neff route;
+no parity, physical speed or alpha claim.
+Canonical game source unchanged; two temporary source shadows restored.
+
+Matched natural Neff diagnostic pair wsnlr02/wsnlc02 now BUILT0, not runtime
+qualified: control e877f58a..., candidate f2fafdbb..., full actualarchives.
+Same latest-SNAP lease/currentatlas/GOD+embeddedticktape/RIG3/noFE in both.
+Tape intentionally removes artwindow1; compare actualcanonicalroutebake and
+exact across-arm art, never claim normal09prefixidentity. Initial01 control
+Make0/postbuildFAIL expected6844 vsactual6840 is preserved. Controlled exact
+recompiles prove only generated metadata changes produce4B nv_entry_lookup
+reduction; drawingcore/allotherfunctions unchanged. Independent789a confirms.
+Fresh02builderd0ad/peer97a3 requires strict6840/32/sectiondict andoriginal8192
+fence,219generationinputs before/after. Both02builds pass. Routeactualnamed/
+tapetables/MD/art/latch gates active; bounded40001 OFFscout02 sourcepeer51d2
+ready afterward. No natural-admission or speed claim from building the pair.
+
+
+Cache07 physical scoped component fields now PASS independent e8cb492b:
+34 fresh authenticated pictures, all16pages at leasttwice, full32word record.
+Return1/dataerror0/CCR09 active and01 restored/IRQ0->31/SP603FFD8 restored,
+minimum603FF8C/static116/guards/fatal/firstfault0. Tag2/raw0404 remains RAW/
+WITHHELD; no universalcache/renderer/pipeline/performance/adoption claim.
+Collectorrestore0/close0; rootSSH12757 reverified acceptedrdplay01 SHA/selected
+path afterterminal16:04UTC. Original offlinecheckerV1 JSONstring-pagekeys vs
+Pythonint-pagekeys comparisonFAIL is preserved. V2 ONLY normalizes expected
+pagecountkeys, with12negativecontrols/sourcefe012/resultf0a5/freez871843/peer
+e8cb. No hardware data/guest/source changes to obtain PASS.
+Earlier06 sixzero firstfault words remain partialonly;05 immediate CPread10
+failure unchanged.07 fullrecord closes the wrapper-decline ambiguity forTHIS
+variant. BoundedCPcompletion checks remain failclosed; no core/config update.
+Headless07 full32001/250pictures/16pages7..23 each passes peer741b+additived2f9.
+Prospective private cache-scratch performanceV2 (~7748/8192) is source/HOST/
+object work only, incorporating boundedCP checks before a freshbenchmark.
+
+Both matched-route40001/1200 OFFscouts COMPLETE0, NOT a parity pass. Control
+reaches Neff entrance30635..30760/death34704..34827,611sampledpage7. Candidate
+reaches none of4targethandlers and remains page8:29,546plan calls all decline
+FIRSTpage7guard,0preflight/core. Frozen actualpair0f533b94/review21a7 preserves
+the route mismatch. Both consume7838tape entries/gf39988;tp_off20vs19. Initial
+cal rawRNGsame6ed0fb1a/all18coarsefields same. Raw scroll fractions10098000 vs
+10094000 may be midcopy; NOT proof of an extra nativeupdate or blinkphase cause.
+484overconstrainedraw clock tuples with0differences are NOT gameplay equality.
+PORTBLANKLATCH is documented to break IRQ4 tile publication: MUSTremainoff.
+
+440Bmirror copies AFTER tickdone; nativeF02A resets/counts down. Completed
+state/input instrumentation is required; do not infer coherentwhole440 or
+1:1serviceclock. Minimal private native-input observer source/HOST/parser
+work is in progress at native-input-observer01/, with actualpostcopy+TP input
+certificates and16KiB nativeWRAM (FFC000..FFFFFF). No guestwrites/forcedphase,
+scroll/form/orbs/RNG or longerblindroute replays to manufacture coverage.
+
+Separate cacheperf2 A/B/C and FIRST HARDWARE PAIR are COMPLETE. KeepHOLD.
+Source/component/target/actualsemantic/ABC peers9e87/1655/7bab/62cc PASS:
+7508R/7748Creadonly,strict8192/UDIV/stack1480R1476C, samefixed16cloud scene.
+All71,684backingbytes/1,024spans/22records/nativePEN/physicalbank proofs pass;
+actualP2CP/onchipC000tile/mask usageSpositive/M0, fatal/preflight/canary0.
+Hardware R124whole/125ACK vsC117whole/118ACK, each2,000VInts+2,000services,
+one crossing perendpoint andmeasuredhealth0. Candidate is7wholejobs lower
+(5.65%) inthis exploratorypair; no repeatability or cause inference. All34
+qualified original320x224images have exacttop208RGB andsourcepaintedfooter
+216..223;208..215unclaimed, no rawpen/cadence/fullgameFPS claim. Baseline
+preflight1->1 andcandidate startupdrop1->1 are retained, measured0. Final
+pairresult32a0df83/freezee219961f +independentf85129a4. Bothrestore/close0;
+rootSSH93448 independentlyverified acceptedrdplay01 SHA/path17:15UTC. No
+morecacheRAMtrial/adoption; prototype remainsPRIVATE/defaultOFF.
+
+Completed-native/input observer02 now BUILT tool09a09aea/source09c21; source
+peer0dbd/tool13e77/runtimeee8a andactualneutralitydbed/comparison8b46 PASS.
+BothROM ownOFFON2001runs match23guest+4named artifacts exactly. All1,989
+actualeffectiveinputs matchtheirROMtables;1,989completednativeevents and68
+full16KiBimages perarm validate. Completedstateconfirms0x4000scrollfraction
+alreadydifferentatcal (15/37nativebytediffs), RNGsame6ed0fb1a. Earlierreal
+blank envelope at449..466has18nativecallsR/17C despite samewallVIntend452.
+This is observed source-completed history, not proof of a specific timing
+component or a productiongamefix. Initial01missingTPreturn0420 remains
+preserved;02 coversbothreturns039C+0420. Do not enablebadBLANKLATCH or force
+scroll/RNG/phase/orbs. Next sourcework: input-onlyevent-anchoredreplay toreach
+Nefflegitimately plusanotherwork-reductionaudit, no publicpromotion.
+
+Actual generic SH-2 replay now has all8 third-series raw outputs matching:
+wsnr20..27, root-runtime03, recordedexit0/GO1/DONE1, every71,684 framebuffer
+byte,31 actual STT_OBJECT regions (20,528B) plusRECTN. Bank0 is derived from
+frozenmodel FSselect and actual trace. Final ownership/stack/custody owner30169e1c and independent7382032b PASS;
+no live-game caller/performance claim. Actual code6224/8192,
+realSDK+2privateheaders, originaltiles/prefix/ROMguard and typedwidths checked.
+Firstseries zero8 framebuffer initializer failures and rootposthash script error
+remain preserved. Secondseries NORMAL16RMW fixes all initialreadbacks;7cases
+match,case2refuses lateFENbusy beforecore. Thirdseries adds bounded65,536read
+first-clear wait, otherwise failsclosed; core/API/prefix/ownership unchanged.
+See natural differential doc and source/actual artifacts for exact scope.
+
+No trackedcore change. TypedNTexporthelper571f4570 is committedHOST-only,
+no runtimecaller.
+Failed01 exposed rectangleclearbankbug; wrong-overlay02 was rejectedbefore
+execution. Both retained. Correct03intendedsource/actualmachinecode verified.
+Rootshadowrestored; trackedbankfix e8885c01 usesbkp inallfourclearstatements.
+Evidence target-compositor-fixture02/actual-target-proof/ and
+fixture03/independent-target-review/; no natural compositorcaller.
+
+Normal wsplay09 (45e5f653c227231196b40e370f970af9125fb329f55dd6f430d6acd107741de3)
+adds thebankfix to08. All5levelstarts/3-6button reentry pass; cold65001 has
+64989VInts/64991ticks/1082healthy samples and0timeouts/malformed. Extended:
+29pageswitches,pending0,sound2668/2668,FIFOempty/high3/full0/budget0,dropped0/
+missed0. Strictassets/game/native/MDexact08 except484changedbytesinsideS_main
+and finalstamp; no privatecompositor/pagecode included. Naturalroute06 40kPASS:
+36,966completed commonkeys all440bytes/18fields exact,138coherent orderedstates
+match; both firstobservelevel2frame36405/score33800/lives3. Raw/inflight
+differences retained. Office09 180s capture has24shots; nearblack13 followed
+by nonblack14..24. Notparity/cadenceproof. Acceptedrdplay01selected19:44:01,
+remoteSHA/path verified again. Foregroundbinding remains held; not newalpha.
+
+**Palette follow-up wsplay08, not accepted:** linked normal06 can queue late MD
+palettes but has no active drain. Shared safe-blank drain and frontend pending
+reset are implemented; actual-source sanitizer/display-hold tests and target
+link audit pass. MDpayload22,496B (+144), BSS unchanged, original fences hold.
+Cold1800 start-of-frame pending samples fall118→18, longest run20→3; not a
+per-window latency, pixel-parity or speed claim. All5level starts and3/6button
+menu reentry pass. Cold65001 has64989VInts/64991ticks/1082healthy samples,
+zero timeouts/malformed/dropped/missed,32page switches,pending0,sound2602/2602,
+FIFOempty/high3/full0/budget0. Assets and same-symbol game relocations pass.
+Office180s sparse capture has24shots, one near-all-black18 then nonblack19..24;
+not parity/cadence proof. Acceptedrdplay01 restored18:02:28, remoteSHA/path
+verified. Naturalroute05 40k passes against04:33,406completed common keys have
+all440bytes/18fields exact, all138coherent ordered states match, level2 first
+observed36405/score33800/lives3 in both. Raw/in-flight differences remain.
+Foreground binding remains held. See PALETTE-QUEUE-2026-11-07.md.
+No all-level utilization, complete game coverage or60FPS claim.
+Reports: docs/performance/SPRITE-WORKING-SET-2026-11-07.md and SPRITE-BLOCKS.
+Evidence: build/codex-working-set/ and build/codex-sprite-block-audit/.
+Preserve the unrelated user files shown by git status. No push or stash.
+
+## Current performance baseline (2026-11-06)
+
+Mike is home again; the office rig is reachable. Before measurement, its selected
+ROM was rdplay01, and remote SHA256 matched the accepted local ROM. Restore
+rdplay01 after every probe, not the older p15bpt7. No whole-game speed gain is established.
+
+Measured hardware health (mode4,75 valid samples/545seconds): native progress
+and VInt both59.92/s; applied bank acknowledgments36.40/s. Rendering exceeds a
+frame in some sampled passes. This supports rendering pressure, not blanket
+simulation equivalence or flash cadence correctness. Controlled smoke native
+tick durations243/126/124/120 match selected arcade states; post-death wait43vs60
+remains unequal. Single sparse hardware bundle A/B is NOT a proven speed win.
+Normal rdplay01 restored and active path/log verified. See
+`docs/performance/SMOKE-HEALTH-2026-11-06.md`.
+
+Withheld experiment: optional R60ZOOMBAKE pre-scales observed poses into <=48KiB of the
+existing art window2, reducing space for unscaled art rather than relaxing ROM
+guards.42/1034 census keys selected;12/19 observed smoke keys. Native reference
+107snapshots/1,776,015visible pixels/zero RGB mismatches. Sourcec3e0371f: final
+native7544 fixture0/71,680pens and0/343,845full-screenpixels differ;18,458visible
+native sprite pixels zero missing/extra/wrong pens;959span entries identical.
+Final16,001 forced live frames match selected boss/level/round fields and final
+mirror fields;0timeouts. Hardware fixed7544 control/atlas/control PLOT1056/768/1056
+lines,7valid samples each; all21 scene images0RGBdiff above188. About27% less
+plot time in ONE atlas fixture launch, with extra repeated plane-copy master load;
+not a normal-game gain or three-launch promotion gate. Live atlas35.85acks/s vs
+controls36.09/36.24 establishes no overall win. Default OFF; WITHHELD from alpha.
+rdplay01 restored22:35:01 and active path/log/remote hash verified. Storage and clipped-case follow-ups are recorded in the active work above. White-wolf visible cadence remains open.
+
+Mike now reports "Full play works" following restored rdplay01. Record full-play
+acceptance on that existing normal baseline, not the diagnostic atlas builds.
+Compact follow-up R60ZOOMPACK sourcef794595d: same42poses,28280bytes vs49140raw
+(20860bytes reclaimed). Existing4KiB scratch, preflight/eviction then established
+copy loop; no new persistent RAM or copy assembly. ASan/UBSan72884cases,
+8192scaled codec cases, actual native7544 zero pen/full-screen/sprite errors and
+959identical spans.7fixed hardware RGB scenes match. Ordinary40k GOD route reaches
+level2at36405/control36405; zero timeout/malformed; final fields match except1tick.
+Forced16k first-round smoke transitions match; later level2 combat diverges from9198,
+root unclosed, not whole-route parity. Hardware fixed compactPLOT888 vsraw768 and
+original1056, with artificial fixture master load. Live compact36.00acks/s vs
+controls36.09/36.24: no whole-run gain. Default OFF; WITHHELD from alpha. Restored
+rdplay01 at23:26:38; active path/log/remote hash verified. The subsequent native census and KEEP/worker experiments supersede that next step.
+Report docs/performance/ZOOM-PACK-2026-11-06.md; evidence build/codex-zoom-pack/.
+
+Current benchmark priority from Mike: Neff entrance smoke, the consistency of
+white-wolf red flashing, and boss entrance/death smoke. Compare simulation clock,
+presentation clock and render phases; instruction savings alone do not close the
+smoke report. He wants work to continue after acceptance feedback, beyond merely
+recording the acceptance.
+
+WITHHELD: optional R60CLEARPLAN (58c3a19a) groups clear metadata per sprite run.
+113125 host cases/14 captured lists pass; planner instructions per call -13.1%,
+per processed span -13.3%. The fixed/full-clear fixture pixels match, but it
+bypasses the normal clear path and cannot prove absence of clearing ghosts.
+Normal 65k tick/transfer health, five level selects and repeated menus pass.
+However cp01 GOD/tape40k fails the progression check: control rd01 reaches level2
+at36405 and score33800; cp01 remains level1 with Neff16c6c/score15800/power2 at40000.
+First score divergence is at2375 despite matching tick05ce. A complete narrow
+SH-2 trace2340..2390 validates all34 successful plans against the old output
+contract and reconstructs final RAM exactly; the broader trace was truncated at
+8M events and is not a complete audit. Cause unclosed; do not
+promote cpplay01 or call the route pass. Accepted rdplay01 remains the baseline.
+Evidence build/codex-clear-plan/. Current work shifts to the requested smoke/
+flashing health measurements while this candidate stays off by default.
+
+Mike play-accepts prplay02 and reports sharing that exact build with friends as an
+alpha. SHA256 0d916620b74060fe7f96b034d3578f315dec3e54d48f8178b0eafed8e8c1ddf0.
+This records visual acceptance; it does not establish hardware speed or full
+release regression coverage. The externally hosted Mega.nz alpha may be updated
+by Mike; retain local build names/hashes for feedback and rollback.
+
+Latest play-accepted optional row-delta path: R60ROWDIFF=1, implementation dfa6c81f; default off.
+Removes the initial 64-cell shadow copy, reads offscreen pin releases from the
+shadow, and emits only cells assigned in the current walk. Source/page reads,
+claims, palette and packet ordering retained. Interpreter window: 39,603.16 ->
+37,211.98 planner instructions/call (6.0% less), not FPGA timing. Fresh headless
+MAME and final uninstrumented paired ares fixture/MD audit pass: zero full-image,
+shown-bank, native supported-sprite, cell and pattern errors. The 40k GOD route
+has zero timeouts/malformed records, same level-two frame/final game fields as
+pr02; no full tick-aligned equivalence claim for intermediate mirror samples.
+Eight-counter poison/written-mask checker: 65,001 frames, 583,952 rows / 750,853
+emitted cells, zero unwritten reads, 9,518 wraps / 12,586 strips / 70,058 release
+rows; zero transfer timeouts/malformed records. Auditor 0c48587b rejects injected
+read/coverage/count faults. All five level selects and repeated three-/six-button
+menu residency pass. rdplay01 normal controls/menu/lives/sound SHA256
+`d7d2f4a395013e171c9ccb002e192473b09cc65645ce81549c12fc803326472f`.
+Normal 125,001-frame soak passes: 124986 V-ints / 124991 ticks,
+105652 flip publications, zero timeouts/malformed records and all
+2082 post-startup health samples pass. Mike reports another playtest with no
+regressions: rdplay01 is visually play-accepted. Hardware smoke diagnostics are now recorded above; no new gameplay promotion. Report:
+docs/performance/ROW-DELTAS-2026-11-06.md; evidence build/codex-row-deltas/.
+
+Latest optional source-row planner: R60PLANROWS=1, implementationc3927b0e.
+Resolves contiguous physical row segments once; live volatile word reads and
+all palette/slot/pin/packet logic stay ordered. No persistent row cache. Host C
+ASan/UBSan5046273 cases include all65536page selections and145saved native
+snapshots. Fresh MAME4001 and final paired ares whole-screen/shown-bank/MDVRAM
+proofs pass:0/343845image pixels,0/71680pens,0/2296MDcells and0/44352pattern
+pens differ. Sampled planner function47360->39603instructions/call (16.4% less),
+not hardware time. Global shift-helper work not attributed; shared DIAG2[4/5]
+not used to normalize. Report docs/performance/PLANE-ROWS-2026-11-06.md.
+
+pr02 GOD/tape40krows:39986vints39992ticks35353flip-publications,0timeouts/
+malformed,level2at36405 and matching captured final gameplay fields vs tp05.
+prplay02 normal options/controls/lives/sound:65001external-input frames,
+64986vints64991ticks55342flip-publications,0timeouts/malformed,1082healthy
+samples. Five level selects and repeated menus on3/6button pads pass.
+SHA2560d916620b74060fe7f96b034d3578f315dec3e54d48f8178b0eafed8e8c1ddf0.
+Experimental; defaultOFF, visually play-accepted, hardware timing pending; scoped
+checks, not full125k/two-tape release gating. tpplay05 is visually play-accepted
+(Mike: stellar) and unchanged; accepted rdplay01 is the current rig restore baseline.
+Evidence build/codex-plane-rows/.
+
+Current optional tile-art backend: R60TILEBATCH=1, implementation396deda3.
+Portable source-to-4bpp conversion, contiguous upload runs and persistent blank
+pattern reuse cover FG/BG; page/scroll/pen allocation and priority remain in their
+existing adapters. Up to16 VRAM patterns/run, no duplicated world-block storage.
+Default OFF; requires progress handoff. Default MD/SH preprocessing unchanged.
+ActualC ASan/UBSan131072color cases plus packet/VRAM/fault tests pass.
+Fresh headless MAME/ares matched fixtures:0/71680 shown pens and0/343845 image
+pixels differ;12sprites15962visible/3143FG-covered0errors. Independent committed
+MD viewport:2296cells,693patterns/44352pens,0errors. Both3/6button repeated menus
+pause/resume and restore/reuse zero; all5level selects pass.
+
+tp05 GOD/tape40k rows:39986vints/39992ticks,35371flip publications,0timeouts and
+malformed records,level2at36405 and matching final captured game fields vs sp03.
+Receiver6156dataDMAs vs15132single-tile equivalents for its submitted work
+(59.3% fewer calls), not a paired FPS/hardware gain. Interactive tpplay05 normal
+controls/menu/lives/sound:65001external-input frames,64986vints/64992ticks,
+55601flip publications,0timeouts/malformed records,1082healthy samples.
+SHA256a83a9c69a093f6ecac2db2ca1592b5b2209dde47b22325dfa8cf5a4f871406b4.
+Mike playtested tpplay05 and reports a stellar result. Visual play acceptance
+recorded; hardware performance remains unmeasured. Scoped checks, not full125k/
+two-tape release gating.
+Reports docs/performance/TILE-PIPELINE-2026-11-06.md; build/codex-tile-pipeline/.
+
+Prepared sprites (73f7980b) and progress handoff (3b8dab16) are retained in these
+experiments. Mike reported no new visible defects in spplay01 and smoother ares
+behavior in spplay02; hardware speed was not judged. Progress-aware stall
+recovery retains2/4V-int budgets; deliberate consumer stop still recovers.
+Both source flags remain OFF in defaults. p15bpt7 remains the accepted hardware
+baseline, hash unchanged. No rig retry/upload occurred.
+
+Earlier experiment: optional `R60MASKBLOCK=1`, portable 32x32 opacity preparation
+with all sixteen source keys checked inside the existing 10 KiB arena. Default
+code retains the accepted punch and 1024-entry tile cache. Fresh MAME headless
+36001-frame oracle and ares headless runs complete. Direct native audit of all
+12 fixture sprites: 15962 visible pixels, 3143 FG-covered pixels, zero missing,
+wrong, extra or leaked pixels; native RGB reference also matches MAME exactly.
+Whole shown port/control fixture: 71680 pens, zero differences, actual flip-trace
+bank selection. Bottom calibration rows and unsupported reference modes explicit.
+
+Refined mb04 resolves one source page per block and emits only clipped groups.
+Independent C oracle (ASan/UBSan): 3512 cases, twelve fresh native snapshots,
+actual linear FB stride and canvas offsets 0..400. All 1024 populated cache rows
+reconstruct exactly after a 40000-row live ares timeline. vints/ticks 39986/39992,
+zero span timeouts; old renderer and prototypes all enter level two at frame
+36405 and have matching final captured gameplay fields. Native arcade enters
+at 34910: shared baseline delay, not a new-mask fix or full-parity pass.
+
+Headless instruction window 2400..3600: lookup 829 -> 341 instructions/lookup;
+lookup+punch helpers 89414 -> 54484 instructions/pass (~39% less work vs mb02,
+not FPGA time). Refined ares flips 34581 vs mb02 33504, still below old perf04
+35325 in the 40001-frame runs. Keep experimental path OFF. `R60PRIOCACHE512=1` is the
+matching-capacity old-path timing control. No gameplay/cadence/normal-color
+closure from frozen/full-clear/PENID fixtures; normal default remains unchanged.
+See `docs/design/RENDER-PREPARATION.md`,
+`docs/performance/HEADLESS-MASK-VALIDATION-2026-11-06.md`, and
+`build/codex-maskblocks/headless/`. Audit d89dbf14, loop refinement 5f633987.
+
+Read `docs/performance/VINT-HOTPATHS-2026-11-06.md` before applying historical
+MASTER-GATED/SLAVE-GATED rankings below.
+
+perf04 R60RIGSPLIT3 + GOD/level1_full tape, no frontend/fixture/forced form:
+67 valid-marker rig captures, no saturated readings;32-pass means,8-line units.
+C V-int body1048..1232CPU cycles (~0.3%frame budget; excludes assembly entry/exit).
+Slave median plot120/punch32/clear24/text8lines, total work280vs262available;
+heaviest sampled mean544lines. Master median tick40.8%, planes37.0%, idle18.7%;
+minimum idle1.5%. Plot is the largest rendering cost; neither CPU is always idle.
+
+Timing bar tails previously used ineffective zero BYTE stores and could read
+1..3pixels too long. Fixed with a partial longword. All28PNG row lengths match
+stored ares counters in the final probe; ISR counters use previously unusedRSX65..69.
+Normal preprocessed renderer equals the accepted baseline with probes disabled.
+Four block-census cases and quant65536 pass; normal-build code/ROM unchanged.
+
+Ten native level1 source snapshots: visible FG32x32composed masks+full keys max3520B,
+inside existing10KiBmask/tag arena; SH-2cache/invalidation/construction cost still
+must be priced. Full64x64graphics blocks take more source-pixel storage than16x16
+in this sample. Prioritize plot-work reduction,16/32composed mask A/Bs, and batched
+plane planning; no Neff-specific draw code, no blind global renderer replacement.
+Tools tile_block_census.py and sh2_profile_window.py retain inputs/provenance.
+Evidence build/codex-perf01/ and build/accept/rig/cut_perf04. Normal path/checksum
+verified restored after capture. No FPS gain claimed and no gameplay acceptance
+inferred from phase bars or interpreter instruction frequencies.
 
 ## THE TWO BRANCHES HAVE DIVERGED AND THE RECORD IS ON THE WRONG ONE (2026-10-17)
 
@@ -3320,7 +4107,490 @@ whatever was BUILT LAST, which is usually a probe. At the start of
 
 **Read both before costing anything.**
 
+## THE LINE (sound era): psg6, 2026-11-02 21:54, commit 740f4740
+
+    Mike, 2026-11-02 22:00 on the office rig: "The entire game plays through and the
+    music plays! There are some balance issues to tweak." The first full playthrough
+    with the music lane. Recipe: `make candidate NAME=psg6 EXTRA="CARTSSF=1 R60SOUND=1
+    R60PSGMUSIC=1"` (gitignored sound banks: sh_src/speech.bin, sh_src/sfx.bin from
+    build/sfx with 0x93 excluded, sh_src/sound.bin cut from sndtest/md/render_music_psg.h).
+    Lineage, one measured delta each: psg3 (Neff's footstep in the effects bank) ->
+    psg4 (0x93/0x95 song map swap, 4c08856c) -> psg5 (music_stop holds the Z80 in reset,
+    512c4bd2) -> psg6 (0x93 out of the effects bank, 740f4740). Gate = the level1_full
+    god-mode replay to level 2 (build/tapes/psg6g_l1full) plus Mike's play pass.
+    OPEN in this lane: level balance (Mike's notes pending), the game's master-volume
+    bytes 0x28..0x40 (the fades before Neff and before round clear) ignored, the
+    master's 8-deep sound queue, YM SFX not played.
+
+## CANDIDATE psg7, 2026-11-03 15:41, commit 2c40f84f (awaiting Mike's play pass)
+
+    psg6 + R60PTONE=1 R60SPANCAP=1536. Recipe: `make candidate NAME=psg7 EXTRA="CARTSSF=1
+    R60SOUND=1 R60PSGMUSIC=1 R60PTONE=1 R60SPANCAP=1536"`. One measured delta: the slave's
+    row-span table (768 a bank) overflowed on 390 of 870 first-wave passes of psg6 (level-1
+    tape frames 1800-3600, RSX split build/gate/psg6grs2) and each overflow clears the whole
+    canvas, 146.5 lines against the row clear's median 35. With 1536 (PTONE's 8 KB of .bss
+    pays for it): 0 overflows over the 36,000-frame tape and 12,000 attract frames
+    (r60_clr_stats[3]), peak need 1130 spans; first wave presented 49.8% -> 72.0% of vints,
+    one-vint frames 30.5% -> 62.1% (build/gate/ac/w6_psg6gspl.csv vs w_psg6g.csv). Pixels
+    unchanged by construction (the table only decides whether the clear is per row or the
+    whole bank). Also in the tree behind flags, measured and left off: R60ARTCACHE (repeated
+    art decoded once a pass, copied: plot 190 -> 168 lines a pass on ares, the FB store
+    stays) and R60ARTCLR (direct-store copies registering their groups: identity-clean,
+    no gain on ares). Watch r60_clr_stats[3] on every soak: a scene past 1536 spans a
+    pass wipes again.
+
+    NEFF MEASURED ON ARES (2026-11-03 18:40). Neff is reachable headlessly by the kit's
+    baked-tape route: tools/arcade_neff_run.lua (arcade_level_run.lua with a no-jump arena
+    cadence; the jump-kick cadence parks the hero on the platform at scroll 0x18C0 forever)
+    logs its inputs -> tools/inputs/arcade_neff_v1.csv -> tests/gameplay/arcade_oracle.sh
+    corpus (build/gate/neff/arcade) -> `make candidate NAME=psg7neff EXTRA="<psg7 flags>
+    PORTGODMODE=1 PORTTAPEPAD=<tape> PORTTAPEARCADE=<corpus>"` -> headless ares with no
+    --input. GUI recordings (build/tapes/psg5_neff.csv) and direct --input replays die at
+    the fence on every build (tick-phase lottery; 121 of 694 presses missed on psg5
+    itself). Presented frames per vint, psg7 flags vs psg6 flags, same tape:
+        pre-boss wave 26400-27000   67.2%   66.5%   (118 two-vint + 8 three-vint per 300)
+        smoke entrance 27600-28200  83.7%   84.0%
+        boss fight 28800+           97.7%   97.8%
+    The span cap buys NOTHING at Neff (psg6 overflowed 8 times in the arena). The smoke's
+    sprite table is 16 records / 4,500-5,000 row-words, lighter than the first wave; the
+    palette path commits ~1 CRAM set a vint there; speech lane 0 underruns, game tick 0
+    lost. The pole at Neff is the plain slave pass, same as the first wave. Also seen on the
+    way (not reported before): the white wolf at the boss approach (37x19-word record, pal
+    7/8 bank 3/4) draws FLAT RED on the port at frames 24000-27000 [CLOSED 11-05: the
+    arcade's own one-in-four palette-8 flash, see SELF-SERVE CAPTURE below], and a black wolf
+    silhouette at 24000 (scratchpad ab_26400.png vs build/gate/neff/arcade/snap_26400.png).
+
+    ART CENSUS FOR THE BAKED-ART RENDERER (2026-11-04 04:20, Mike's RISC direction). The
+    arcade's sprite table every frame along the Neff tape (tools/gameplay_dump.lua
+    GD_SPRDUMP=<file> GD_SPRFROM=900; 30101 frames) decoded by tools/art_census.py the way
+    the slave plotter reads art; report build/gate/neff/art/art_census.txt. Level 1 + the
+    arena draw 977 distinct (bank,addr,pitch,flip,height) frames: 591 KB as 8-bit opaque
+    runs, 737 KB as longword groups, against 570 KB of free SH-2 cart in psg7
+    (0x02374de8-0x02400000; the 68K .pages above 4 MB are not SH-2 readable). Pre-shifting
+    four alignments = 2.9 MB, out. The work is concentrated: 8 frames = 50% of the source
+    words the plotter decodes, 96 = 95% (126 KB), 196 = 99% (232 KB runs / 287 KB groups).
+    Zoomed records are 1-4% of the words (old path). Flipped art is never also drawn
+    unflipped (1 of 367): a flip is its own bake. Per frame: first wave 6379 words decoded
+    (max 8044) = 26 KB of baked groups to copy (max 32 KB); pre-boss wave 4171 w / 15 KB;
+    smoke 3687 w / 13 KB; boss fight 2359 w / 8 KB. Open before costing: the FPGA's cart
+    data-read cost for a 2x-wider sequential read (vi70 measured instruction fetch only).
+    WHOLE GAME (05:30, tools/arcade_round_census.lua per round 0-4 + tools/art_census_all.py,
+    build/gate/neff/art/census_all_levels.txt): 3382 distinct frames, 3496 KB in the copy
+    format, 1499 shared by 2+ levels. A fixed 560 KB set bakes 92.8% of the plotter's words
+    game-wide (per level 91.7 / 97.3 / 96.7 / 88.7 / 80.7%; on each level's heaviest 10% of
+    frames 90 / 98 / 98 / 89 / 77%). The tail stays on the plotter. COSTED (sh-elf-gcc -O2
+    prototype): PLOT5 ~26 instructions a 4-px group vs the copy's 6 aligned / 10-11 shifted;
+    first wave ~130 -> ~58 lines of decode a pass, ~70-80 lines off a 320-400-line pass on
+    ares; alone not the one-vint wave, paired with the clear skip the baked rows carry it is
+    the candidate. Mike's call 2026-11-04: the bank fold was initially planned to OR bank<<4 into every byte (CORRECTED in
+    adcaa3e7: only opaque pens get bank bits; zero must remain zero), so the
+    text pool (R60TXTPOOL) moves to pen 15 only and pen 0 of every sprite bank shows the MD
+    plane. Build order: pool to pen 15 -> bake tool -> runtime copy (identity check flag) ->
+    clear skip -> rig cart-read probe.
+
+    POOL TO PEN 15 MEASURED (2026-11-04 12:30, commit 24b65c83, flag R60TXTPOOL15, roms
+    build/port/rom/p15.32x + p15neff.32x = psg7's recipe + the flag). 16 slots instead of 31.
+    Borrows (r60_txt_borrow: pairs the pool could not seat, summed / worst window): attract
+    12,000 frames 5300 / 7, ALL in the three high-score-table windows (2300-2800, 5600-6500,
+    9800-12000; zero in title, demos, cut scenes) and VISIBLE there ("2 CREDITS 1 PLAY" and
+    the rank row take a substituted colour: yellow-white -> blue-white). Neff tape 30,000
+    frames 3172 / 2, on the bottom "CREDITS" line only, nearest-colour substitutes, 8 rows.
+    Sprites and planes unchanged (pens 1-14 untouched; the diffs sit in text rows alone).
+    Gates vs psg7: soak 64,986 vints ticks track both; attract parity table equal within the
+    lag wobble; temporal 600-660 identical, 1700-1760 presented 52 vs 50 of 59. The
+    instrument: wall-frame screenshot identity between builds is the WRONG tool (the second
+    demo runs 1-3 frames apart once the master's instruction count changes; tools/shot_identity.py
+    stays for same-timing diffs). HYBRID VERDICT (p15i/p15ineff: the slave publishes the banks
+    drawn in the last three passes, R60_BANKBUSY): a pool of pen 15 of every bank PLUS pen 0
+    of the banks idle for three passes would have seated every borrowed pair, 0 windows short
+    on both corpora (max 3 busy banks while borrowing on the attract, 11 on the tape). Mike's
+    call pending: ship pool-15 as is (text colour loss on the high-score table) or the hybrid
+    (slave avoids assigning a palette to a bank whose pen 0 seats text; ~1 h). .ramtext was 44
+    bytes from full: r60_text_plan moved to .ramtext2 (1.2 KB freed; ares charges no fetch).
+
+    HYBRID POOL BUILT AND PASSED (2026-11-04 14:00, Mike's call "hybrid pool"; flag
+    R60TXTPOOLHYB, roms build/port/rom/p15h2.32x + p15h2neff.32x). Slots: pen 15 of every bank
+    always, pen 0 of banks 1-15 only while the slave reports them idle for three passes
+    (R60_BANKBUSY); seated pen-0 banks go to the slave (R60_POOL0MASK) so a new palette takes
+    them last; a bank that goes busy evicts its pairs, which re-seat next window. Borrows 0 / 0
+    on the 12,000-frame attract AND the 30,000-frame Neff tape. Pixels: the high-score table
+    (f2200) and the tape frames 1400/9000/19000 are byte-identical to psg7 whole-frame; the
+    f5900 logo rows differ only by the pulse phase (every p15h frame matches a psg7 frame at 0 px
+    within +-2). Gates: soak ticks track, attract parity table IDENTICAL to psg7, temporal 53/59.
+    FOUND ON THE WAY, fixed in the same commit: CRAM entry 255 is R60_BAR_PEN (forced white at
+    every commit, skipped by the loop); the hybrid's slot 15 sat on it and blue text drew WHITE
+    (p15h). The pool now never seats entry 255 (R60_SLOTBAR, every pool config). The line's old
+    pool had the same hole at its 31st colour. Step 2 of the bake order is done; next = the
+    bake tool (needs the KB budget from Mike; recommend the full 560 KB free span).
+
+    BAKE TOOL BUILT (2026-11-04 15:00, Mike: "bake tool 560"; tools/bake_art.py + tools/s16art.py
+    + tools/artbake_check.py, flag R60BAKEART=1, rom build/port/rom/p15b.32x = p15h2 + the blob
+    linked, inert). THE 560 KB WAS WRONG: the span 0x02375000..0x02400000 holds the SSF mapper's
+    slot-7 window (0x380000-0x3FFFFF), which shows page 8 = the music blob (md_sound.c reads it
+    every vint; the mapper pages for the 68K AND the SH-2s). What the SH-2 can read statically:
+    the tail of page 8 behind sound.bin (0x023E05A0, 126 KB), the slot-6 tail after .portcode
+    (0x02375000, 44 KB), the empty .opmrows slot (0x022B1000, 60 KB), the gap after .sfxdata
+    (0x02298000, 24 KB) = 255 KB in four windows (tools/gen_ld_ssf.py pins them with per-window
+    ASSERTs; the 32 KB above .text is NOT free: the .data/.ramtext load image ends at
+    __romimg_end 0x231918). Bake at 255 KB: 115 frames, 80.7% of the game's plotter words; per
+    corpus r0 79 / r1 92 / r2 85 / r3 62 / r4 49 / Neff tape 84%. (556 KB would have been 93%.)
+    Index: 'AB1', n, bytes, then (key, SH-2 address) sorted; key = flip<<28 | bank<<24 |
+    pitch8<<16 | addr; frame = u16 h, u16 w, rows of (i16 first, u16 ngroups, groups).
+    FOUND BY THE ROM-IMAGE CHECK: the first key put flip at bit 23 = the pitch's sign; 23 of 115
+    frames indexed wrong and the pre-link self-check (Python keys) passed. tools/artbake_check.py
+    re-decodes every frame from the .32x through the SH-2 address map: 115 / 0 bad. Also: the
+    rom's last 48 bytes are the build stamp, so window 0 stops 64 bytes short. MAKE TRAP: a rule
+    above `all:` becomes the inner make's default goal (the first p15b baked and linked nothing).
+    OPEN CARD for the full budget: time-share slot 7 (68K buffers the music stream in WRAM, pages
+    slot 7 to art pages 9+ at a slave pass boundary via the COMM10 mailbox; the PAGEPROBE gate
+    of 2026-10-31 already proved SH-2 reads through a repaged slot 7) = 512 KB per level, the
+    per-level sets the census wanted. Mike's call; the static 255 KB ships first.
+
+    RUNTIME COPY BUILT AND MEASURED (2026-11-04 17:30, Mike: "runtime copy"; commits 897c79a9 +
+    1f3629d3; roms build/port/rom/p15b.32x (psg7 recipe + R60TXTPOOLHYB=1 R60BAKEART=1) and
+    p15bneff.32x (+ the Neff tape pad; window 1 dropped there, 96 frames / 211 KB)). The slave
+    draws a record whose key is in the index and whose rows fit the bake as a longword copy
+    (sh_src/bkcopy.s: load / test / or bank / store / dt / bf.s, one loop per shift) with the
+    ROWFAST bookkeeping; zoomed, left-clipped and taller records stay on the plotter.
+    IDENTITY (R60BAKEARTCHECK, p15bc2): 1,334,511 copied rows over the whole Neff tape, 0
+    differing in pixels, row ends or pixel counts; 24,636 records copied, 32,284 on the plotter.
+    SPEED on ares (R60RIGSPLIT, p15hrs vs p15brs2, lines a pass): plot first wave 119 -> 95,
+    pre-boss 142 -> 114, smoke 118 -> 103; the pass 239 -> 214 / 249 -> 223 / 217 -> 200.
+    Presented frames per vint (tape, hybrid -> bake): first wave 71.2 -> 75.7%, pre-boss wave
+    66.2 -> 80.5%, smoke 83.5 -> 88.7%, boss 98.0 -> 98.0%. Attract: soak ticks track,
+    flips/vint 0.819 -> 0.838, temporal 1700-1760 presented 51 -> 55 of 59, parity table within
+    the lag wobble. gcc's C copy loops were NO gain (plot 119 -> 127: stack spills, three
+    branches a group); the asm loops are the gain. The pass is still 0.82 vints in the first
+    wave: the clear (38 lines) and the punch (36) are next, then the per-level pages for the
+    missing art (first wave: 69% of records copied). Mike 17:40: "once we measure, we can work
+    on tuning the bake and tile presentation".
+
+    THE COPY IS CART-BANDWIDTH BOUND (2026-11-04 19:30, commit 9fdef5fe; Mike: "tune the bake").
+    Per-path timers (r60_bk_stat[5..7]) in the first wave: copies 7.1 records / 323 rows a pass
+    = 77 of the 95 plot lines, 346 CYCLES A ROW of ~8 groups; the plotter's 1.6 leftover
+    records = 14 lines. Moving the whole row loop into asm (r60_bk_rows, identity 1,302,204
+    rows / 0 bad) changed nothing (352 -> 346): the cost is not instructions. R60BKBENCH (512
+    groups through the aligned loop, p15bbench, ares): SDRAM->SDRAM 12.7 cycles a group,
+    first-touch cart->SDRAM 23.5, the same cart data again (cached) 8.6, SDRAM->FB 17.8,
+    cached cart->FB 15.2. So on ares a streamed baked group = ~9 loop + ~15 cart line fill
+    (ares: sh7604/cache.cpp step(12) a 16-byte fill, measured ~60) + ~6.6 FB store = ~31,
+    against the plotter's ~35 a WORD: the copy reads 4 cart bytes a group where the decoder
+    reads 2, and that doubled traffic eats the instruction saving. The 119 -> 95 plot gain is
+    what is left. The clear-skip and per-row levers cannot fix this; the levers that can:
+    (a) a hot set in SDRAM (12.7 a group: the top ~8 frames of a level = ~50% of its words in
+    ~20 KB; free SDRAM to audit: 0x3B000-0x3F000 is probe-only on the line?), (b) the rig
+    bench (the same probe on the FPGA, where cart reads are slower still: the bake could LOSE
+    there), (c) half the bytes: a 2-px-a-byte bake expanded through a table is the plotter
+    again. Pixels stay exact in every variant (the identity check is the gate).
+
+    THE RIG BENCH (2026-11-04 18:39-18:41, p15brig = the psg7 recipe + R60TXTPOOLHYB
+    R60BAKEART R60BKBENCH R60NOBARS=, office MiSTer, six shots, tools/rig_bkbench.py,
+    commit 47163d77). Cycles a group, FPGA vs ares: SDRAM->SDRAM first touch 18.5 vs 12.5,
+    cart->SDRAM first touch 23.0 vs 23.0, cached SDRAM->FB 16.0 vs 17.5, cached cart->FB 13.5
+    vs 14.5, cached cart->SDRAM 12.0 vs 8.5. Live run averages (attract): a copied row 480
+    cycles vs ~400, the plotter 129 cycles per 4 rowpix vs 102. So the FPGA's CART LINE FILL
+    IS NOT SLOWER THAN ARES' MODEL (23.0 both); the FPGA is ~1.3x slower on cached work and
+    SDRAM fills and cheaper on FB stores (+4 vs +9). Copy/plotter ratio 3.7 vs 3.9: the bake's
+    gain carries to the FPGA unchanged, no extra loss (Mike on the rig: "feels just like
+    before, nothing gained nothing lost" = a 24-line shorter pass that still presents the
+    same frames). Lever (a), the SDRAM hot set, is DEAD on the FPGA: an SDRAM first touch
+    (18.5) saves 4.5 of ~27 a group against the cart (23), on the baked share only. What is
+    left: coverage (31% of records unbaked: per-level pages) and the 74 clear+punch lines the
+    bake does not touch; both need the same bars to be measured, not the presented census.
+
+    THE RIG PHASE SPLIT ON THE BAKE ROM (2026-11-04 18:54-18:57, p15brs3 = p15b + R60RIGSPLIT
+    R60NOBARS=, office MiSTer, seven shots all with a valid 32-pass window, tools/rig_split.py;
+    ares = the same rom headless, two valid windows; Mike: "clear punch - measure first").
+    Lines a pass, the level-1 demos:
+                       rig demo A   rig demo B   rig demo C   ares demo 1   ares demo 2
+        clear              32           32           41            20            16
+        prep               20           20           20            16            16
+        plot              144          159          136            99            72
+        punch              80           64           92            36            40
+        text               24           24           86            22            41
+        waits             178          192          160            88           138
+        vints a pass     2.03         2.09         2.26          1.12          1.28
+    Slave WORK a pass on the rig ~350-430 lines against 262: the demos run at TWO vints a
+    pass on the FPGA. FPGA/ares: plot 1.5x, clear 1.7x, PUNCH 2x (it reads the PRIO mask
+    from SDRAM: the 18.5 vs 12.5 SDRAM fill), text 1-2x. Punch is the second pole after the
+    plot; clear is third. Master on the rig: the game TICK is 92-104/262 of its window in
+    the demos (ares 29-31) = the port code's cart fetch on the FPGA, idle still 59-80: not
+    the pole yet. Light scenes (title, loads) sit at 1.01-1.03 vints a pass on the rig.
+
+    PAGE PROBE 6.5 PASSED (2026-11-04 19:02, pp13 = `make candidate NAME=pp13 EXTRA="CARTSSF=1
+    PAGEPROBE=13"`, a 7 MB rom with marker pages 8..13; office MiSTer three shots and ares, both
+    yellow-white = the 68K read pages 8/9 (red) AND the SH-2 read pages 8, 9, 12, 13 through
+    slot 7 (green)). A per-level art layout of five 512 KB pages (6.5 MB) is within what the
+    FPGA core serves. Mike: "page probe 6.5", then "bake per level".
+
+    BAKE PER LEVEL BUILT AND GATED (2026-11-04 19:06-19:25, commit 1bb90791; Mike: "bake per
+    level"). `R60BAKEPAGES=1` with R60BAKEART: pages 8..12 (6.5 MB rom) each = sh_src/sound.bin
+    unchanged + one level's baked tail (page 8 + level; the corpus rounds 0-4 are the level
+    pokes 0-4, the Neff tape joins round 0); windows 1-3 hold the frames two or more levels
+    share (tools/bake_art.py --pages r0+tape,r1,r2,r3,r4; one index per page = global + own).
+    Coverage of the plotter words: 92.5% of the game (80.5% single-page); level 1 88.6 (81.0),
+    tape 91.9, level 2 96.1, level 3 91.2, level 4 76.9 (63.2), level 5 65.5 (49.1); the global
+    windows alone 32%. Gates: tools/artbake_check.py 5 pages / 715 frames / 0 bad, music blob
+    byte-identical per page; R60BAKEARTCHECK on the Neff tape (p15bpc) 1,394,391 rows 0 bad,
+    not-baked records 32,284 -> 17,091; accept_ares on p15bp = p15b within a frame (soak
+    flips/vint 0.837 vs 0.838, temporal 45/59 + 54/59 vs 46 + 55, parity rows the same); rig
+    strip (office MiSTer, 8 shots) every attract scene as the psg7 strip. The rom still runs
+    page 8 everywhere: the SWITCH (master -> COMM10 at the level transition on a pass
+    boundary, slot cache cleared) is the next card. Rom: build/port/rom/p15bp.32x.
+
+    PAGE SWITCH BUILT AND GATED (2026-11-04 20:14-20:40; Mike: "page switch"). r60_main.c
+    R60_BAKEPAGES (on with R60BAKEPAGES=1; R60BAKEPAGESNOSW=1 = the pages alone): the master
+    reads the level byte (68K 0xFFF142 via WRAM_BASE) once a vint after its tick; when page
+    8 + level differs from the page shown it posts COMM10 0x5B00|7<<5|page ONLY while the
+    slave is between passes (R60_DONE == R60_GO, no unread snapshot) and withholds snapshots
+    until the 68K's ack (md_bank.c cart_bank_service, in the idle loop); then bumps
+    r60_page_gen, which the slave reads uncached at its next pass start to PURGE ITS CACHE
+    (CCR 0xFFFFFE92 = 0x11) and zero the slot index cache. Stats r60_page_stat[4] (switches,
+    vints withheld for the ack, vints withheld busy, page). ares attract: level byte 1 at
+    frame 2684 -> page 9 at 2685, back to 8 at 3834, 0 withheld vints; identity through four
+    switches (p15bpsc, 8000 frames) 140,223 rows 0 bad; accept_ares p15bps = p15bp (soak
+    0.837, temporal 45/59 + 54/59); rig strip (12 shots) both demos and every scene right.
+    Rom: build/port/rom/p15bps.32x.
+    THE ATTRACT IS NOT PLAY: demo 2 (level byte 1) draws the "ALTERED BEAST" LOGO as eight
+    large bank-1 sprites (keys (1,29707,23,0) h61 ... half of demo 2's words; the play corpus
+    holds them only at the ending and a continue screen) and demo 1 the same: demo 2 copied
+    322 -> 592 records on page 9 but 2,424 of ~3,000 stay on the plotter; plot ticks -6%. Rig
+    split of p15bpsrs = p15brs3 (demo plot 132-164, punch 76-84). One attract cycle joined
+    to pages 8 and 9 as a corpus run (5201 frames, 12M words vs r1's 412M) serves only 53% of
+    the attract's words and moves play coverage < 1 point: the attract needs a WEIGHT if it
+    is to show the gain (~50 KB of logo + demo frames, ~3-5 points of level 1-2 play
+    coverage). Mike's call pending: (1) keep the play fit, measure the bake in play on the
+    rig through a tape; (2) weight the attract.
+
+    THE BAKE IN PLAY ON THE RIG (2026-11-04 23:06-23:59, office MiSTer, Mike playing at
+    random spots; p15bpsrs = pages + switch + R60RIGSPLIT, p15nbrs = the same flags minus
+    R60_BAKEART/R60_BAKEPAGES (building it found every no-bake build broken since the switch
+    commit: the empty R60_PAGE_HOLD fallback sat inside the bake block, fixed a14ae5d0); then
+    p15bpsrs2/p15nbrs2 = R60RIGSPLIT=2, plot and punch at 2 lines a px because the 1 px form
+    CAPS AT 319 and Aggar reaches it on both roms, 210242ea; tools/rig_split.py --plot2).
+    The page switch held in play: level 2 drew right after the switch (dragon, Octeyes, the
+    hydra); the boss-death cloud (grey puffs, red and yellow fire) is the arcade's own
+    (tests/gameplay/arcade_level1_full/snap_33600.png). Lines a pass, Aggar fully on screen:
+                          bake+pages     no bake
+        plot                196-222      264-288
+        punch                58-68        64-72
+        clear                56-63        56-60
+        vints a pass      2.03-2.37    1.89-2.44
+        master tick          88-102       76-88       (/262 of its window)
+    Level-1 walk 1.00-1.06 on both; bosses and level 2 at TWO vints a pass on both; the
+    explosion and Neff's transformation exceed 638 plot lines (still capped). The bake takes
+    a quarter off the plot at Aggar and moves the presented rate NOT AT ALL; the master's game
+    tick reads 12-15% LONGER on the bake rom (the slave's cart copies share the cart bus with
+    the master's port-code fetch: INFERRED, one strip each, no late ticks either way).
+    MIKE'S FEEL (one pass each, unblinded): BOTH roms felt better ("the smoother faster
+    build" was read by the advisor as no-bake > bake and a "bake not a candidate" verdict was
+    written for ~10 minutes; Mike corrected it: "the two roms I tested BOTH felt better").
+    A blind A/B between the two was declined ("too much toil"). So: the bars rank the two
+    equal on the presented rate, the bake lower on plot and higher on the master tick, and
+    Mike feels no difference between them; what BOTH carry over the last candidate (psg7) is
+    R60TXTPOOLHYB, CARTSSF and the split bars. The pass at the boss is paced by plot + punch
+    + clear together; the cart-bus cost to the master is the open question for the bake. The
+    transform's garbled background in Mike's p15nbrs shots (233644, 233647) is the known
+    OPEN DEFECT below, on every recent rom.
+
+    THE PUNCH ON THE FPGA (2026-11-05 00:05-00:32, Mike: "punch"; rig self-service, no Mike
+    time; commit 3f93978e). R60BKBENCH=2 (p15bprig2, tools/rig_bkbench.py --punch), cycles a
+    longword, FPGA / ares: SDRAM->SDRAM copy 22.5 / 12.5, FB uncached read 31.5 / 17.5, SDRAM->FB
+    store 14.5 / 17.0, FB uncached read-modify-write 37.0 / 24.5, SDRAM UNCACHED read-modify-write
+    36.5 / 6.0. EVERY UNCACHED ACCESS ON THE FPGA IS ~16-18 CYCLES, framebuffer or SDRAM; ares
+    charges the SDRAM one at 1-2. The punch's solid cell-row was one store and two RMWs over
+    the uncached alias: five of them.
+    R60PUNCHTHRU (p15bpt = p15bps + the flag): the punch writes a reserved THROUGH PEN (CRAM
+    bit 15 with entry 0's colour; 255 = the bar pen on a NOBARS build, 254 under bars) through
+    the overwrite image, zero bytes skipped: plain stores, no FB read, no cache hazard (the
+    through bit is per entry on ares vdp.cpp:71-81 and S32X_MiSTer VDP.sv:506). Rig attract,
+    24 shots each rom (R60RIGSPLIT=2, matched scenes): punch 88,88 -> 68,72 in the demo-1
+    fight, 62-78 -> 56-70 later, 74-104 -> 74-80 in demo 2; plot, clear, text unchanged.
+    R60PUNCHPROF (p15bppp / p15bptpp, --punchprof), demo-1 fight a pass: ~100 priority cells,
+    ~750 rows iterated, ~640 hit; ROWS 92-101 -> 61-67 cycles each, RESOLVE 120-144 a cell
+    unchanged (the tag and mask line fills + the uncached tilemap word), cold rebuilds 0-2 a
+    pass at ~1000. Demo 2: 300+ cells, 1200+ rows iterated for 30-400 hit at 26-38 cycles an
+    EMPTY row (sparse priority tiles): the next punch lever is skipping empty mask rows and
+    cells (an any-column byte per mask), then the per-cell line fills. ares acceptance of
+    p15bpt: soak 0.845 (p15bps 0.837), presented 47/59 and 57/59 (45, 54), parity rows move
+    only at the scene cuts (a faster rom cuts a frame earlier; the residue under the face is
+    the 68K planes, not the punch); 51 of 71 sampled attract frames pixel-identical to p15bps,
+    the rest inside the scrolling demos. p15bpt is on the rig for Mike's play pass.
+    MIKE'S PLAY PASS ON p15bpt (01:00): "frames? better. sprites? artifacting, missing
+    transparency flags, lower third of the screen". Cause: pen 255 is the bar pen and its
+    forced 0x7FFF write ran EVERY commit while the pen's own write ran only in the full loop;
+    a pool-only commit (the score text in play) left the punched pixels WHITE. ares could not
+    show it (the attract's pool commits fall where no sprite sits under a priority cell).
+    Fixed: the pen written first every commit from r60_thru_cram (commit after 3f93978e).
+    p15bpt2: rig attract clean through both demos, parity rows = p15bps, 53/71 sampled
+    frames identical. ON THE RIG for the play pass. Lesson applied: a 17-luma frame diff in
+    a scrolling demo was written off as timing without looking; look at the frame.
+
+    ARES REPRODUCES IT (11-05 office, no rig): the Neff play tape replayed headless with a
+    shot every 100 frames (tools/tape_scan.py, new) shows the white lines on p15bpt at 5 of
+    ~200 play frames (8600, 12000, 18600-19000: thin white rows at the grass line under the
+    gravestones), on p15bpt2 at 0 and on p15bps at 0; every remaining white run is the white
+    wolf, Neff's eye or the title. So "ares could not show it" was true of the ATTRACT only:
+    a play defect from the rig is checked with the tape in 7 minutes, three roms in parallel.
+    p15bpt2 is the candidate; Mike's ares play pass pending (tools/ares_record.sh gives a
+    tape of his run for every later build). Seen once and not chased: p15bpt2 frame 23900
+    (post-tape attract) = the known intermittent title tear.
+
+    MIKE'S ARES PASS ON p15bpt2 (11-05 10:17, tape build/tapes/p15bpt2_1105-1014.csv):
+    "pass. Level 1 looks good and sounds good. issues: sprites for zombies are slightly
+    transparent, same as parts of the boss, and the floating head has jagged sprite
+    opacity instead of transparent. we still have a real seam issue with the beast
+    transformation." Checked the same day, nothing found yet:
+      - the zombie at rest, 6x, p15bpt2 vs the arcade attract (ref 1600-2000): the same
+        pixels; the cloak's tattered gaps are the art.
+      - S16 SHADOW sprites (palette 0x3F, TOOLKIT.md "Shadow is arithmetic") are NOT in
+        level 1: 0 of 2337 visible records over the 134 arcade sprite dumps in
+        tests/gameplay/arcade_level1_full carry palette 0x3F. r60 has no shadow path and
+        needs none for level 1.
+      - his tape replayed headless (p15bpt2, p15bps, p15nbrs2) DIVERGES from his run: the
+        hero dies at ~8000 and never reaches Aggar, so the boss and the heads are not in
+        the replay. Consecutive-frame strips of the zombie/troll scenes show no
+        alternation or holes. A desktop-recorded tape is not a replay of the run, only
+        of the inputs (same as the psg5 Neff tape: game over at ~20000 on p15bpt2).
+      Next for this item: an ares screenshot from Mike at the moment he sees it, or a
+      savestate; without a frame the report cannot be located.
+
+    SELF-SERVE CAPTURE (11-05 13:00, Mike: "capture screens where you think they should
+    be; this frees me from playing the game over and over"). The route, now
+    tools/play_pairs.py: `make parity-candidate NAME=p15bpt2g TAPEPAD=1 EXTRA='<p15bpt2
+    flags>'` bakes the level-1 tape into a god-mode rom that follows the arcade's route
+    tick for tick to the boss (REPORT 3b: 92/92 opening ticks, diverges at tick 7732 in
+    the Aggar fight, round clear reached at 35357, level 2 not within 36000); ares shoots
+    it every 50 host frames, MAME shoots the arcade at frame+33 (the harness's start
+    lead), `sheet` lays [port | arcade | diff] side by side, `red` counts flash pixels.
+    700 pairs over level 1 in ~8 minutes, no play. Findings:
+      - THE RED WOLF (3372 above) IS THE ARCADE'S OWN FLASH, CLOSED: the white wolf's
+        record alternates sprite palette 7/8 (palette 8 = sixteen 0x000F, all red) one
+        frame in four on BOTH machines, 1450-3600 and again at the boss approach (arcade
+        GD_SPRDUMP per frame: p7 225 / p8 75 per 300 frames; port SPR_SNAP watch: 226/74).
+        It showed red on the port and white on the arcade only because the pair lands
+        one tick apart (port tick 07a9 vs arcade 07aa at the same pair). The WRAM diff at
+        that tick is 215 bytes: the +0x22 status byte of every zombie slot one step
+        apart, the wolf's +0x0A palette byte (08/07), nothing else in the object table.
+      - PRESENTED FLASH DUTY: 80 consecutive presented frames at 2800: arcade
+        .R...R... exactly 0.25; port RR....R.RR....R.R... = 0.35, the red frame held for
+        two vints wherever a pass takes two. Every hit flash in the game (zombies, Aggar,
+        the thrown heads all flash palette 8 when struck) is presented this way: a 15 Hz
+        1-in-4 flash becomes an uneven 1-in-3 with doubled frames. CANDIDATE MECHANISM
+        for Mike's "slightly transparent / jagged opacity" [LIKELY]: it is the cadence,
+        not a pixel; the static pairs show no transparent pixel anywhere in level 1.
+      - Aggar's pile solid red at port 32300/33100/33450/33500/33950/34100 = the same
+        flash (hits), the arcade's at 33550-33700 = his death flash; routes differ there.
+
+    THE TRANSFORMATION SEAM (11-05 16:30, Mike: "do the transformation seam"). No corpus run
+    ever reached the hero's cut (0 of 826 level-1 dumps select pages 10/11; the harness's
+    "boss transform" is Neff turning into Aggar). A wolf-hunting driver
+    (tools/arcade_orb_run.lua, tape tools/inputs/level1_orb.csv) transforms at 13758 on the
+    arcade but its run does not replay on the port (the first wolf's death depends on frame
+    timing the port's pad lands one tick off), and a driver run under MAME's default DIPs
+    FF/FD is not the same run as its replay under the port's 66/54 (the driver forces 66/54
+    now). THE REPRODUCER IS THE FORM POKE: PORTFORM=3 PORTFORMTICK=768 (port) + GD_FORM=3
+    GD_FORM_TICK=300 (arcade, new), both machines cut at ticks 0x377-0x42C; captured with
+    tools/play_pairs.py every 5 frames (build/pairs_form, build/pairs_form2). tape_pad.py now
+    refuses a tape longer than its corpus (keyed to 0 past the end, it buried the coin).
+    Finding and fix in OPEN DEFECTS below (beast transformation: FIXED IN p15bpt3).
+
 ## OPEN DEFECTS Mike can see
+
+    beast transformation:         FIXED IN p15bpt3 (2026-11-05, commit 16a1f005; Mike's
+    BACKGROUND TILES WHERE THE    ares pass pending). Reproduced in ares with PORTFORM=3
+    CHEVRON SHOULD BE, and a      PORTFORMTICK=768 on the port and GD_FORM=3 GD_FORM_TICK=300
+    GARBLED BACKGROUND until      on the arcade (no wolves needed; the raise at START runs
+    level clear                   the cut inside the level intro without the page switch):
+                                  the cut's right quarter (plane B, world columns 54-63,
+                                  all 32 rows) held level tiles for the whole cut. CAUSE: a
+                                  live page switch zeroes the scroll, the pan strip ships
+                                  32 rows x 16 cells on BOTH planes (584 words each, 64 DMAs
+                                  each) with the display up; the 68K's consume ran 1779 ->
+                                  1781 line 498 and the master's 2-vint span timeout raised
+                                  FM under plane B's DMAs (R60_DIAG[15] 0 -> 1, the run's
+                                  only close); the rows not yet DMA'd landed nothing while
+                                  r60_nt_shadow, written at build time, said they had, so a
+                                  static scene never re-sent them (shadow != VRAM in 250
+                                  cells, plane A 0). FIX: a B packet over 400 words gets the
+                                  FAT span, and any timeout close flushes both shadows
+                                  (r60_nt_flush), which is what heals the rig's "garbled
+                                  until the level clear" where the FPGA's slower 68K cuts
+                                  the span earlier. After: 0 timeout closes, 0 mismatches,
+                                  the cut pixel-right (build/pairs_form2/cut_body.png).
+                                  THE SWITCHES THEMSELVES (p15bpt4, commit after 16a1f005,
+                                  Mike: "preload the level pages before the return the way
+                                  R60CUTPF does"): a page switch's scroll jump started the
+                                  pan strip (16 entering-edge columns, then three windows
+                                  shipping nothing, then 7-row windows: 8 windows, ~20
+                                  frames of half-and-half). Now two windows of 15 + 14
+                                  visible rows, full width, top-down; the preload runs in
+                                  play from two orbs (pages 10/11, written at level load)
+                                  and during the cut for the return pages (saved select +
+                                  scroll), claiming unpinned victims and draining its last
+                                  rows' art; and the span tracker's wrap bug (a window past
+                                  column 22 sent only its two wrapped cells) is fixed.
+                                  Per-frame vs the arcade (build/pairs_form6): entry
+                                  planes complete 7 frames after the page change (was 20+),
+                                  return 10 (two windows + the cut's last long passes).
+                                  The arcade is instant on both; the rest is window
+                                  cadence (a 2-vint pass per window) and packet B's 688-
+                                  word row cap, not the walk.
+                                  ON THE FPGA (11-05 21:15, home, tools/rig_cut.sh): the
+                                  pre-fix probe p15bpt2ft garbles the WHOLE background
+                                  after the cut and stays garbled (5 of 5 post-cut shots:
+                                  Mike's rig report, reproduced); the fixed probe
+                                  p15bpt2ft6 is clean in every post-cut shot. p15bpt4's
+                                  rig strip: every attract scene present, in order, twice,
+                                  the demo's cut clean; the small yellow "GET IT" beside
+                                  the cave wolf is the game's own text (ares shows it on
+                                  p15bpt3 too). MIKE'S RIG PASS (11-05 21:40): "looking
+                                  better! We still have enemy sprite transparency issue
+                                  but it appears you solved the beast transformation
+                                  seam!" CLOSED. p15bpt4 = accepted seam control.
+
+    enemy sprite transparency:    FIXED AND PLAY-ACCEPTED BY MIKE ON p15bpt7 (2026-11-06).
+                                  Codex 2026-11-05: adcaa3e7 colors only opaque baked bytes.
+                                  Old bkcopy OR-ed bank bits into transparent zero bytes,
+                                  causing nonzero overwrite-image stores to erase earlier
+                                  sprites. Its BAKEARTCHECK explicitly allowed the mismatch;
+                                  now it requires exact bytes. At matched arcade frame2729,
+                                  control loses148wolf+59zombie pixels. Repaired shown bank
+                                  has missing/wrong/extra0/0/0 for player953pens, wolf1285,
+                                  zombie987, head169. Historical port snapshot words0..5
+                                  match arcade; independent flip trace selects shown bank.
+                                  Snapshot slots may already have been reused: preserve an
+                                  earlier dump, never assume live SPR_SNAP describes display.
+                                  Reference is decoded from arcade table + sprite ROM.
+                                  Native renderer validated against MAME RGB at2728..2731.
+                                  Strict on-ROM153262row checks have0pixel/end/count errors.
+                                  Nine host cases include all65536groups/all16banks packed
+                                  coloring; quant65536 passes; diagnostic link caps pass.
+                                  Normal p15bpt7 (e819e58c)65k/both36k pass,0timeouts. No
+                                  physical cadence/speed/full-frame equality claimed.
+                                  Natural-route rig captures remain unverified for equality.
+                                  Direct arcade-table fixture p15bpt11fx: all1024bytes equal
+                                  oracle in ares live/bothsnapshots; FPGA3captures each224
+                                  calibrated colors and player/wolf/zombie/head0missing,
+                                  0wrong,0extra pens. This establishes selected renderer
+                                  fixture exactness, NOT original colors/gameplay/cadence.
+                                  b51bdf17 adds ignored oracle fixture generation and exact
+                                  screenshot ID inversion. Raw-tick/fingerprint holds were
+                                  rejected as invalid alignment and removed. p15bpt4 was
+                                  restored after probes; normal p15bpt7 now ON THE RIG,
+                                  ACTIVEGAME + remote SHA verified, normal input/no probes.
+                                  SHA661f907492dfba6d68ee5f70ca289f497536e1f291c4ad0f1dff89ed0af09a3e.
+                                  Mike: "You fixed the transparency issues!" Transparency
+                                  report CLOSED by play acceptance. Separate boss behavior,
+                                  full gameplay coverage and cadence are not implied. Helper
+                                  e819e58c restores on EXIT even if local capture fails.
+                                  Method/evidence: docs/handoff/SPRITE-PIXEL-AUDIT.md and
+                                  build/codex-sprite-pens/. Zoom/shadow reference unsupported.
+                                  Earlier visual closures and strip/flash explanations are
+                                  UNVERIFIED/WITHDRAWN, not acceptance. Bake window1 excluded
+                                  by Mike's p15bpt5 pass. Full report/context remains in
+                                  docs/handoff/HANDOFF-2026-11-05-SPRITES.md. Transformation
+                                  seam remains play-accepted; enemy FPGA acceptance OPEN.
 
     high-score palettes are       NEW 2026-10-15, ORACLE-VERIFIED, found by
     SHIFTED ONE WORD              the advisor thread, unfixed and unstarted.

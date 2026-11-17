@@ -53,3 +53,28 @@ the speed pole (1.34 vints, compose-echo-is-the-pole), so copying their placemen
 - **24 voices, 8-bit PCM.** We need 4, and IMA ADPCM keeps the bank small in cart.
 - **Run-length precompute and the mono fast path.** They pay off at 24 voices, not at 4.
 - **Boot ramp.** We already ramp to centre before the first DMA (`r60_speech.inc:224-229`).
+
+## Phase A results: sound lab only (2026-10-20, branch `soundlab`)
+
+All of this lives in the sound lab (`sndtest/sh/sound.c`, `make sndtest`). Nothing touches the
+Altered Beast port until the audio plan is settled (Mike, 2026-10-20). The lab's slave fills one
+voice (speech) per side; it carries no effects bank.
+
+New lab screen rows: UNDERRUN now counts holds, PCM LATE (row 24), FILL PK AV (row 25, FRT ticks
+at /128 = 5.56 us; 11506 = one 64 ms side).
+
+ares-headless, 6000 frames, speech command fired every 90 frames from 0x44 upward:
+
+| rom | holds | late | fills | fill avg | fill peak |
+|---|---|---|---|---|---|
+| lab1 (belt + meters) | 0 | 0 | 1513 | 945 ticks (8.2% of a side) | 1115 (9.7%) |
+| lab1u (`SNDEXTRA=... -DUNDERPROBE`, 200 ms stall every 32 fills) | 970 | 0 | 1453 | 946 | 1117 |
+
+- A 100 ms stall forced NO hold: the double buffer covers 128 ms. The probe needs 200 ms.
+- 970 holds over ~45 stalls = ~86 ms of held sample per stall (200 - ~114), and speech posts kept
+  playing after each stall.
+- ares charges SH-2 instructions only (no SDRAM waits), so the 8.2% fill cost is a floor, not the
+  hardware figure. One voice only.
+
+Open in the lab: a four-voice load reading needs the effects bank in the lab; a by-ear check that
+a hold is quieter than the old stale replay.

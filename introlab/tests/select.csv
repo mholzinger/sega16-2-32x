@@ -1,0 +1,9 @@
+# doors run first (about 220 vblanks after boot); then: right at 520 (US -> JP), down 660, button 690, left 740
+520,right,1
+530,right,0
+660,down,1
+670,down,0
+690,a,1
+700,a,0
+740,left,1
+750,left,0

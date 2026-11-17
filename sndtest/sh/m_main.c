@@ -135,6 +135,8 @@ static void vu_init(void) {
 	}
 }
 
+void opm_bench(void);
+
 int m_main(void) {
 	uint8_t  cmd = 0x94;       /* boot on round-1 BGM, not 0x00: command
 	                            * 0x00 is the arcade STOP-ALL byte, so a
@@ -149,6 +151,9 @@ int m_main(void) {
 	uint16_t held = 0;         /* frames the current direction has been held */
 	uint32_t prev_tick = 0;
 
+#ifdef OPM_BENCH
+	opm_bench();
+#endif
 	HwMdClearScreen();
 	HwMdPuts("SEGA16 SOUND LAB", PAL_GREEN, 12, 2);
 	HwMdPuts("SYSTEM 16B SOUND ENGINE TEST ROM", PAL_GREY, 4, 3);
@@ -165,6 +170,8 @@ int m_main(void) {
 	HwMdPuts("BTN HIST", PAL_GREY, 8, 21);   /* 1=A 2=B 3=C 4=ST, newest right */
 	HwMdPuts("A PLAYS THE ARCADE COMMAND MAP", PAL_GREEN, 5, 22);
 	HwMdPuts("MUSIC 94-9D   SOUND.MD P4", PAL_GREY, 7, 23);
+	HwMdPuts("PCM LATE", PAL_GREY, 8, 24);
+	HwMdPuts("FILL PK AV", PAL_GREY, 8, 25);   /* FRT ticks per 1024-sample fill; 11506 = one side */
 	vu_init();
 
 	for (;;) {
@@ -284,6 +291,9 @@ int m_main(void) {
 		put_hex16(19, 17, pad, PAL_GREY);
 		put_hex8(19, 18, snd_active_mask(), PAL_GREEN);
 		put_hex16(19, 19, snd_underruns(), PAL_GREY);
+		put_hex16(19, 24, snd_late(), PAL_GREY);
+		put_hex16(19, 25, snd_fill_peak(), PAL_GREY);
+		put_hex16(24, 25, snd_fill_avg(), PAL_GREY);
 		/* COMM14 = {produced blk, consumed blk}: moving numbers mean the
 		 * Z80 is eating the stream and the 68K is refilling behind it. */
 		put_hex16(19, 20, MARS_SYS_COMM14, music_on ? PAL_GREEN : PAL_GREY);

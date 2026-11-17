@@ -4,7 +4,7 @@
 local frames = 0
 local fields = {}
 local inited = false
-local outdir = '/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/821761a1-b62c-404f-824a-6f25c3a157b9/scratchpad'
+local outdir = '/tmp/sega16-2-32x/821761a1-b62c-404f-824a-6f25c3a157b9/scratchpad'
 local shots = { [1300]=1, [1400]=1, [1500]=1, [1600]=1, [1700]=1,
                 [2400]=1, [3600]=1, [5400]=1 }
 local function init_fields()

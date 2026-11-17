@@ -11,7 +11,7 @@ the first was misleading once already (FULL-PORT.md 22).
 """
 import os, struct, subprocess, sys, tempfile, bisect
 
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 rom = os.path.abspath(sys.argv[1])
 n = int(sys.argv[2]) if len(sys.argv) > 2 else 1200
 lst = os.path.splitext(rom)[0] + ".lst"

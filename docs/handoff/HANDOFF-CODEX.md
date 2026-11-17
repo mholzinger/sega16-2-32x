@@ -1,4 +1,50 @@
+**CURRENT CHECKPOINT — 2026-11-08 19:02 UTC (Codex).**
+The zero-foreground-mask shortcut first physical pair is independently qualified
+under the campaign's original 1992..2008 service eligibility: 124 reference versus
+133 candidate whole fixed16-cloud jobs in 2000 VInts; actual services 2000/1999
+remain explicit and unnormalized. Peer378445b7 binds separate original-domain V2.
+The newer exact2000-service v1 remains WITHHELD permanently. Four fresh nonce-only
+repeat ROMs built successfully and passed actual derivative peer74d92; hardware
+collector review is pending, none of those four nonces has launched. No repeatable
+or whole-game speed/adoption claim. Accepted rdplay01 SHA/path verified18:45UTC.
+The private atomic tick TAKE source/opcode review passed0e1b; wsbot03 Make passed,
+but postbuild archive failed on two incorrect provenance-copy paths. Original
+failure/partial archive retained; separate recovery and actual named/runtime gates
+pending. It is not a proved explanation for the earlier service count.
+Input-only wsbot02 cold2001 passed peer4410023. Its own10001 run finished normally
+and passed owner capture/health checks but collected no orb and never reached Neff
+or page7: generic core unexercised. No longer run or forced game state; attack-start
+versus active-contact input policy is being audited. Actual result peer pending.
+Mixed-render HOST captured routing seams passed296jobs/464generic chunks/1136seams:
+all71684 backing bytes+31metadata objects+bothRECTN cells exact at every boundary.
+Root independently rehashed6419 retained files and replayed scalar-prefix checks;
+root-review02 PASS, root-review01 exit-field KeyError preserved. RealRAW/PREP/
+REPUNCH, KEEP/FULL/synthetic/mutation coverage remains pending; no target promotion.
+Canonical game and alpha unchanged; cache-RAM trial stays held117C/124R. Full
+working journal: build/codex-working-set/overnight-active.json.
+
+**CURRENT CHECKPOINT — 2026-11-08 18:45 UTC (Codex).**
+The foreground-mask shortcut has complete source/host/actual-SH A/B/C proofs.
+Its first physical pair completed 124 reference versus 133 candidate whole
+fixed16-cloud jobs in 2000 VInts, with actual service counts 2000/1999.
+The newer exact-2000-service pair gate remains WITHHELD permanently. A separate
+analysis using the campaign's original, unchanged 1992..2008 service eligibility
+is under independent review; no repeatability, whole-game speed or adoption claim.
+Both arms restored accepted rdplay01; root verified its SHA and active path at
+18:24 UTC. Cache-RAM trial remains held after 117 versus 124 jobs.
+Private input-only controller wsbot02 (ROM SHA 4568fe64…a25dcbfc) finished its
+2001-frame cold run with exit0; boot/input/health acceptance is pending. It changes
+approach/attack input decisions only. Natural generic rendering remains unexercised.
+A separate private atomic tick dequeue prototype closes a source-feasible lost
+enqueue race without masking native game execution; source/opcode models pass,
+independent review and actual link/run remain pending. This is not a proved cause
+of the hardware service-count difference. Canonical game and alpha are unchanged.
+Working evidence: build/codex-working-set/overnight-active.json and
+build/codex-sprite-block-audit/{hardware-zero-fg-meter01,event-input-integration02,pp-due-atomic01}/.
+
 # HANDOFF: Codex thread, until Claude credits return (written 2026-10-26)
+
+**Latest continuation, 2026-11-08:** Start with `STATE.md` active smoke work and the newest `START-HERE.md` entry; the October candidate list below is historical. Accepted rig restore is rdplay01. Private normal live-block wsgrid01 now builds with full actual dependency archives; all11 current-menu tests pass. Named mechanical and semantic/stack/writer gates now pass independent review; normal12k is healthy but explicitly does not exercise the generic renderer (all page7 guards decline). Both matched natural Neff40001 scouts completed: control reaches Neff, candidate neverpage7/core; input calibration history differs and is being traced with validated completed-state instrumentation. No natural admission proof yet. Eight isolated captured SH-2 backend replays pass exact full pixels/metadata, but this does not establish live-game parity or speed. Cache07 full32word hardware result now passes scoped independent review e8cb492b (error0/CCR9→1/IRQ31/restoredstack/guards); tag2/raw0404 remains withheld, with no renderer adoption or speed claim. Its V1 JSON-key-format failure and narrow V2 fix are preserved. The subsequent fullABC-qualified cache-RAM throughput experiment loses its first hardwarepair117vs124wholejobs/2000VInts, so it staysHOLD/defaultOFF. Completed-native/inputobserver02 passes ownOFFON27artifact neutrality; actualloadblankhistory18Rvs17C calls predatescal. No forcedstate or knownbadBLANKLATCH fix. Accepted rig ROM SHA/path was reverified after restore17:15UTC. Root owns all serial Make, max2 ares jobs and rig access. Never infer equality from thumbnails or cadence from stills; preserve failed variants. User authorized continued work and agents; no need to ask again before the next reversible test.
 
 **Claude resumption, 2026-10-28:** Read `HANDOFF-CLAUDE-20261028.md` first. Mike confirms sw336 still locks in level five after collecting two spirit orbs. No level-five fix is claimed.
 
@@ -18,7 +64,7 @@ Read this first, then `CLAUDE.md` (reading order and gates), then the top 10 ent
 - **Controller-only diagnostic:** `build/port/rom/pad333.32x`, source `5d1e4496`, ready for Mike on the failing emulator/cart setup. Opens directly into raw handshake/type/button/history display; B freezes, C clears, reset exits. Three 1100-frame ares matrices pass six/three, three/six and absent ports. No six-button detection-rule change, no claim hardware issue fixed. Reuses existing test-cart display and 32x-builder conventions; no external-project edits. Read `docs/handoff/CONTROLLER-TEST.md` and `build/codex-pad-sw333/RESULTS.md`. Source also fixes boot linker alignment; normal guard has only copy-length1593->1594 plus stamp differences, short roster/art/quant pass. Full gameplay gates must run on the next game candidate; sw333/332 ROMs remain unchanged. Optional boot/title menu is implemented and locally gated in sw334, ready for Mike play pass.
 
 - **Branch / worktree:** `advisor-bisect` in
-  `/Users/mikeholzinger/src/sega16-2-32x/.claude/worktrees/advisor-bisect`, game source head `b19abf2c` (2026-10-28; diagnostic sources `f00f710c`/`67d710cc`, later documentation commits may follow).
+  `~/src/sega16-2-32x/.claude/worktrees/advisor-bisect`, game source head `b19abf2c` (2026-10-28; diagnostic sources `f00f710c`/`67d710cc`, later documentation commits may follow).
   Do all work there or in a new worktree off it. Never push (`git push` is forbidden).
 - **Previous game candidate:** `sw333`, source `ff1c181a`, local `build/port/rom/sw333.32x`. Level-four harpy entry delegates to repaired initializer; two raw signed-link sprite-index accesses map through W68. Natural ROUND3/GOD-only probes now continue after untransformed Neff retreat, no forced form or clear. Required local checks complete:65k/125k/both36k, roster/art/quant/temporal and20 measured object/sprite checkpoints (H13 direct tick-end proof; existing picture/FB exceptions unchanged). Ready for Mike's level-four play pass. Evidence `build/codex-level4-sw332/RESULTS.md`. Mike accepts sw332 boss colour and only noticed the new retreat trap in level four. Harpy/trap acceptance still pending.
 - **Previous test candidate:** `sw332`, source `d7435d63`, local `build/port/rom/sw332.32x`. Retains sw331 statue cleanup; restores per-part boss1892A and shot18C82 palette contexts. Weak point now has native normal/flash banks1B/0D instead of0/0; projectiles get own75/8F palettes. Full65k/125k/both36k, roster, art/quant and20 original measured arcade object/sprite checkpoints pass (H#13 exact direct tick-end proof; known picture/legacy-FB exceptions unchanged). Normal flags, no fixture or gameplay probes; hash in newest START-HERE. Mike confirms "Boss color fixed"; do not infer blanket acceptance of other combat cases. His167..1273 recording is OLD sw330, not a331regression. Damage/defeat logic was present in BOTH old and changed controlled tests; changed ordinary-input probe also reachesHP30. Do not claim newly added damage logic or close his inability-to-harm report without play acceptance. The proposed projectile zoom/script-corruption issue was disproved and no such rewrite remains. Evidence `build/codex-boss3-sw331/RESULTS.md`. Prior sw328..sw331 unchanged. Remaining smoke hardware slowdown and uncaptured top-edge boss-death colour tiles stay open. No rig accessed.

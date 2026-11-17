@@ -12,7 +12,7 @@ A corrected entry is marked WRONG in place and names its successor.
 
 Auto-analysis succeeded on `roms/altbeast/prog68k.bin` (262144 bytes,
 `68000:BE:32:default`, base 0x0). Project lives at
-`/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/ghidra_proj`
+`/tmp/sega16-2-32x/ghidra_proj`
 and is outside the repo, as required.
 
 The linear disassembly used for cross-checks throughout this log is

@@ -27,7 +27,7 @@ Memory: the 68K work RAM 0xFFC000-0xFFFFFF is mirrored in 32X SDRAM at offset
 0x2CC00 (sdram_off = 0x2CC00 + (addr - 0xFFC000)); the video shadows are tilemap
 0x19000, text 0x26000, sprite 0x28400, palette 0x27000 (STATE.md, port_l2.c).
 
-Instrument: /Users/mikeholzinger/src/bin/ares-headless-sdram (A1 build, branch
+Instrument: ~/src/bin/ares-headless-sdram (A1 build, branch
 headless-32x-sdramwatch) whose --gameframe-watch takes an sdram: selector. Its log
 samples at the START of each frame, so log row N is the state after N frames and the
 same bytes a "--dump ... --frames N" run writes; the timeline therefore comes from a
@@ -52,8 +52,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-ARES_SDRAM = '/Users/mikeholzinger/src/bin/ares-headless-sdram'
-ARES_SDRAM_GF = '/Users/mikeholzinger/src/bin/ares-headless-sdram-gf'
+ARES_SDRAM = os.path.expanduser('~/src/bin/ares-headless-sdram')
+ARES_SDRAM_GF = os.path.expanduser('~/src/bin/ares-headless-sdram-gf')
 ARES_OLD = os.path.expanduser('~/src/ares-debug/build_macos/headless-ui/Release/ares-headless')
 
 WRAM_BASE = 0xFFC000
@@ -516,7 +516,8 @@ def main():
     sdram_ok = a.ares is None and os.access(ARES_SDRAM, os.X_OK)
     if a.ares is None:
         a.ares = ARES_SDRAM if sdram_ok else ARES_OLD
-    elif os.path.basename(a.ares) == 'ares-headless-sdram' or 'sdram' in os.path.basename(a.ares):
+    elif os.path.basename(a.ares) == 'ares-headless-sdram' or 'sdram' in os.path.basename(a.ares) \
+            or 'ssf' in os.path.basename(a.ares):   # the mapper-aware fork carries the sdram watch too (2026-11-01)
         sdram_ok = True
     log('ares %s (sdram watch %s)' % (a.ares, 'yes' if sdram_ok else 'NO, sampling fallback'))
     a.keyed = None

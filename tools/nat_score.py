@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess, sys, struct, os
-ARES="/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless"
-REPO="/Users/mikeholzinger/src/sega16-2-32x"
+ARES=os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+REPO=os.path.expanduser("~/src/sega16-2-32x")
 SCR=os.path.dirname(os.path.abspath(__file__))
 rom=sys.argv[1]; frames=int(sys.argv[2]) if len(sys.argv)>2 else 1900
 dp,wp=SCR+"/d_ns.bin",SCR+"/w_ns.bin"

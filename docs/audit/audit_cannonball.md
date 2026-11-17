@@ -3,7 +3,7 @@
 Reference read exhaustively (all ~4,900 lines): `srcref/cannonball-outrun-32x/`
 plus upstream `srcref/cannonball/` and `marsdev/examples/32x-skeleton/` for
 contrast. All paths below are relative to
-`/Users/mikeholzinger/src/sega16-2-32x/srcref/` unless absolute.
+`~/src/sega16-2-32x/srcref/` unless absolute.
 
 ## 0. What this codebase actually is (scope caveat, read first)
 

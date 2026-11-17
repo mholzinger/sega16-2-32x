@@ -97,9 +97,13 @@ from cguard import scan, parse_defs
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # --candidate ROMNAME: the SHIPPING port build (2026-10-29) -- its files, `make candidate-defs`,
 # and build/port/rom/ROMNAME.{lst,elf,32x}. The line's files above are not compiled there.
-CAND_SH = ['sh_src/r60/r60_main.c', 'sh_src/r60/r60_planes.c', 'sh_src/port_l2.c',
-           'sh_src/port_selftest.c', 'sh_src/portfull/objdispatch.c', 'sh_src/mars.c']
-CAND_MD = ['md_src/md_main.c', 'md_src/testcart.c', 'md_src/md_sound.c', 'md_src/frontend.c']
+# r60_main.c is one unit in nine files: the .inc pieces it includes, in order
+R60_MAIN_PARTS = ['sh_src/r60/r60_palette.inc', 'sh_src/r60/r60_vblank.inc', 'sh_src/r60/r60_text_planes.inc', 'sh_src/r60/r60_plot.inc',
+                  'sh_src/r60/r60_sprite.inc', 'sh_src/r60/r60_baked_sprite.inc', 'sh_src/r60/r60_clear.inc', 'sh_src/r60/r60_macro.inc']
+CAND_SH = ['sh_src/r60/r60_main.c'] + R60_MAIN_PARTS + ['sh_src/r60/r60_planes.c', 'sh_src/port_l2.c',
+           'sh_src/portfull/objdispatch.c', 'sh_src/mars.c']
+MD_MAIN_PARTS = ['md_src/md_palette.inc', 'md_src/md_slim.inc', 'md_src/md_consume.inc']
+CAND_MD = ['md_src/md_main.c'] + MD_MAIN_PARTS + ['md_src/testcart.c', 'md_src/md_sound.c', 'md_src/frontend.c']
 ROMBASE = os.path.join('rom', 's16')
 DEFS_TARGET = 'candidate-defs'
 SH_FILES, MD_FILES = CAND_SH, CAND_MD   # the default since 2026-10-29 (m_main.c retired)

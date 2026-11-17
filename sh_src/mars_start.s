@@ -1,4 +1,11 @@
 ! SEGA 32X support code for SH2
+! CART_SSF_HDR: the mapper header (CARTSSF=1) unless SSFPLAINHDR=1 asks for the plain one (a probe:
+! the SSF layout on the standard board, 2026-10-31)
+.ifdef CART_SSF
+.ifndef CART_SSF_PLAINHDR
+.set CART_SSF_HDR, 1
+.endif
+.endif
 ! by Chilly Willy
 ! Rom header and SH2 init/exception code - must be first in object list
 
@@ -25,7 +32,14 @@
 		.long	0x00FFB408
 	.endr
 
+.ifdef CART_SSF_HDR
+		/* THE SSF2 MAPPER (docs/design/SILICON.md 4e): 8 slots x 512 KB, the 68K pages a
+		 * slot by writing 0xA130F1 + 2*slot (md_src/md_bank.c); the SH-2 reads through it.
+		 * The console field is what a loader keys on (d32xr's romheaderfix writes the same). */
+		.ascii	"SEGA SSF        "
+.else
 		.ascii	"SEGA 32X        "
+.endif
 		.ascii	"SKYCHASE 2024.04"
 		.ascii	"SAMPLE PROGRAM                                  "
 		.ascii	"SAMPLE PROGRAM                                  "
@@ -33,7 +47,11 @@
 		.byte	0,0	/* header 0x18E = 0: skip BIOS ROM-checksum handshake (race-prone) */
 		.ascii	"J6              "
 		.long	0x000000
+.ifdef CART_SSF_HDR
+		.long	0x4FFFFF	/* ROM end: the 4 MB base plus the paged 1 MB (.pages, mars4s.ld) */
+.else
 		.long	0x3FFFFF
+.endif
 		.long	0xFF0000
 		.long	0xFFFFFF
 		.long	0x20202020
@@ -528,11 +546,6 @@ scont:
 		mov.w   r0,@r1
 
 		mov.l   _secondary_stk,r15
-.ifdef BOOT_SHSTAGE
-		mov.l   _sstage_comm10,r4
-		mov     #1,r5
-		mov.w   r5,@r4      /* slave probe stage 1 */
-.endif
 ! handshake with the 68000: keep (re)posting S_OK on COMM4 until the
 ! 68000 ACKs with 0x55555555 (same sticky scheme as the primary's M_OK —
 ! the BIOS one-shot post is race-prone on fast boots).
@@ -549,11 +562,6 @@ scont:
 		bf      1b
 		mov     #0,r2
 		mov.l   r2,@r0
-.ifdef BOOT_SHSTAGE
-		mov.l   _sstage_comm10,r4
-		mov     #2,r5
-		mov.w   r5,@r4      /* slave probe stage 2 */
-.endif
 
 		mov.l   _secondary_adapter,r1
 		mov     #0x00,r0
@@ -569,11 +577,6 @@ scont:
 		mov     #0x11,r1    /* purge + enable */
 .endif
 		mov.b   r1,@r0
-.ifdef BOOT_SHSTAGE
-		mov.l   _sstage_comm10,r4
-		mov     #3,r5
-		mov.w   r5,@r4      /* slave probe stage 3 */
-.endif
 ! SLAVE SDRAM WARM-UP (2026-09-08, MiSTer FPGA — LOOP27 entry 10).
 ! DEFAULT ON since 2026-09-08 (LOOP27 69). A 2x2 on the MiSTer settled it:
 ! neither = black, cache-off alone = black, WARM-UP ALONE = BOOTS, both =
@@ -671,24 +674,6 @@ _slvstub_end:
 		.data
 		.align  2
 main_err:
-.ifdef BOOT_SHSTAGE
-		mov.l   _shstage_cram,r1
-		mov.w   _shstage_magenta,r0
-		mov.w   r0,@r1      /* probe: MAGENTA = an SH-2 exception (then halt) */
-		mov.l   _shstage_comm10,r1
-		mov     #5,r0
-		mov.w   r0,@r1      /* and on COMM10 for the 68K to paint (FM may be down) */
-	9:	bra     9b
-		nop
-		.align  2
-_shstage_comm10:
-		.long   0x2000402A
-_shstage_cram:
-		.long   0x20004200
-_shstage_magenta:
-		.word   0x7C1F
-		.align  2
-.endif
 		rte
 		nop
 

@@ -22,8 +22,8 @@ Level-1 demo on ares, 2026-09-24 (wcp2, 216 dumps): WRAM game 40%, idle 31%,
 shim 17%, cart game 12%; the cart residue's top ranges became the second
 WRAM block set (tools/game_altbeast.py WRAM_BLOCKS).
 """
-import sys, glob, re, struct, collections
-MAP='/Users/mikeholzinger/src/sega16-2-32x/docs/audit/function_map.md'
+import os, sys, glob, re, struct, collections
+MAP=os.path.expanduser('~/src/sega16-2-32x/docs/audit/function_map.md')
 EXTEND = {0x0040E: 0x0057A, 0x05FA8: 0x0602C, 0x060E6: 0x06168,
           0x063CC: 0x0644E, 0x06C44: 0x06CB8, 0x18146: 0x181E4}
 funcs=[]

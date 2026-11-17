@@ -6,11 +6,7 @@
  * See segaic16.cpp:tilemap_16b_tile_info and m_main.c's PORT_VIDEO path. */
 static inline unsigned r60_tile_bank1(void)
 {
-#ifdef PORT_FULL
     return *(const volatile unsigned char *)SDRAM_WRAM_AT(GAME_WRAM_TILE_BANKREQ) & 7u;
-#else
-    return MARS_SYS_COMM2 & 7u;
-#endif
 }
 
 static inline unsigned r60_tile_index(unsigned code, unsigned bank1)

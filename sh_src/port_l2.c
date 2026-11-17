@@ -20,10 +20,10 @@ void port_watch_hook(unsigned int tag);   /* measurement hook, defined below */
  * infinite loop, because the flag is set by IRQ4 which is outside the program).
  * irq4_handler runs first here, standing for the interrupt at the frame boundary.
  */
-#ifdef PORT_FULL
 #include "mars.h"
 #include "sdram_map.h"
 #include "game_cfg.h"
+#include "r60/r60_comm_adapter.h"
 
 typedef unsigned int  uint;
 typedef unsigned char byte;
@@ -41,26 +41,14 @@ typedef unsigned char byte;
  * instead of cart; the Makefile passes -DHOT2_<name> for each. One macro per function, so
  * the set is the file's and not this source's. */
 #define PORTHOT2_SEC __attribute__((section(".ramtext2"), noinline))
-#ifdef HOT2_port_walk_player_slots
 #define SEC_port_walk_player_slots PORTHOT2_SEC
-#else
-#define SEC_port_walk_player_slots PORTCODE
-#endif
 #ifdef HOT2_port_despawn_index
 #define SEC_port_despawn_index PORTHOT2_SEC
 #else
 #define SEC_port_despawn_index PORTCODE
 #endif
-#ifdef HOT2_port_call68_at
 #define SEC_port_call68_at PORTHOT2_SEC
-#else
-#define SEC_port_call68_at PORTCODE
-#endif
-#ifdef HOT2_port_zoom_scale
 #define SEC_port_zoom_scale PORTHOT2_SEC
-#else
-#define SEC_port_zoom_scale
-#endif
 
 extern char WRAM_BASE[];
 extern char ROM_BASE[];
@@ -124,16 +112,7 @@ uint port_zoom_dbg[3];      /* port_zoom_scale: last D3, call count, last 68K A0
  * that array in .portcode and gcc refuses the section conflict. */
 uint port_spawn_dbg[6];
 /* port_spawn_a6 (the record FUN_0000e0f4 allocated) is DEFINED by the generated defs.c: cport_prep.py collects every undeclared identifier the unit uses. Defining it here too was rd44's duplicate-symbol link error. */
-#ifdef PORT_DISPREGS
-extern const unsigned char port_dispregs_have[64];
-extern const unsigned int port_dispregs[64][15];
-unsigned int port_dispreg_fix(unsigned int i, unsigned int v);
-#endif
 
-extern const byte l2_before[];     /* work RAM at the seed frame */
-/* NO l2_after. It is EXACTLY the seed with delta frame 1 applied, so carrying a
- * second 16 KB image cost .portdata space the delta chain needed; the one-frame
- * ladder scores through l2m_score(w, 1, ...) like every other frame. */
 
 #define WRAM_BYTES 16384u          /* 68K 0xFFC000-0xFFFFFF */
 #define SLOTS      64u             /* object_dispatcher: 0x40 slots */
@@ -197,9 +176,7 @@ volatile uint port_watch_out[192];
  * harness that was L2M_WATCH's only reader. The live-arm in the entry hook reads it too
  * and the hook comes first in this file, so without this the probe build fails with
  * 'L2M_WATCH undeclared' at the hook. */
-#ifndef L2M_WATCH
 #define L2M_WATCH 0u
-#endif
 static volatile byte *watch_cell;
 /* CHANGE 1 (2026-10-11): THE WATCH CAN POINT AT TILE RAM, NOT ONLY WORK RAM.
  * watch_cell was computed as `w + (L2M_WATCH - 0xFFC000)`, an offset into the port's work
@@ -364,10 +341,7 @@ static void probe_sample(void)
     q[13] = 0x464E5452u;                       /* 'FNTR' */
 }
 
-volatile uint port_l2_canary_lo[8];
 volatile uint port_l2_out[80];
-volatile uint port_l2_canary_hi[8];
-#define CANARY 0xC0DEFACEu
 static uint unknown_handlers;      /* handler addresses not in the table */
 
 /* THE DISPATCHER, supplied rather than decompiled. Ghidra's body calls
@@ -419,13 +393,7 @@ byte port_region = PORT_REGION;
  * cart .text today. Spelled out rather than included, as the note at :1587 explains for
  * the types. .portcode selects only `.text .text.*` from portfull objects, so `.ramtext`
  * is not matched by it and needs no new output section; mars_start.s already copies it. */
-#if defined(HOT2_port_object_dispatch)
 #define PORTHOT PORTHOT2_SEC
-#elif defined(PORT_HOT)
-#define PORTHOT __attribute__((section(".ramtext")))
-#else
-#define PORTHOT
-#endif
 PORTHOT uint port_object_dispatch(void)
 {
     byte *slot = (byte *)WRAM_BASE;                    /* 68K 0xFFC000 */
@@ -505,11 +473,6 @@ PORTHOT uint port_object_dispatch(void)
                         if (q != 3u && q != 6u) port_cur_regs[q] = 0;
                     port_cur_regs[3] = _port_reg[3];
                     port_cur_regs[6] = _port_reg[6];
-#ifdef PORT_DISPREGS
-                    if (port_dispregs_have[i])
-                        for (q = 0; q < 15u; q++)
-                            port_cur_regs[q] = port_dispreg_fix(q, port_dispregs[i][q]);
-#endif
                     port_cur_regs[14] = (uint)slot;    /* A6, always the real one */
                 }
                 /* EXPERIMENT (FULL-PORT.md 14): supply the OTHER inherited
@@ -650,22 +613,6 @@ static const uint port_vid_len[VIDN] = {
     (uint)(unsigned long)VID0_BYTES_SYM, (uint)(unsigned long)VID1_BYTES_SYM,
     (uint)(unsigned long)VID2_BYTES_SYM, (uint)(unsigned long)VID3_BYTES_SYM,
 };
-/* 0xFF over the I/O block, 0xFF over the video regions TOO -- deliberately the same
- * byte the single contiguous block used, so this layout change moves the base
- * addresses and NOTHING ELSE about the measurement.  Resting video memory is really
- * zeros (md_main.c zeroes the palette mirror at boot because boot RAM is random),
- * and that is a separate experiment with its own score, not a free rider here. */
-PORTCODE static void port_mmio_reset(void)
-{
-    volatile byte *io = (volatile byte *)MMIO_BASE;
-    uint k, r;
-    for (k = 0; k < MMIO_BYTES; k++) io[k] = 0xFFu;
-    for (r = 0; r < VIDN; r++) {
-        volatile byte *v = port_vid_base[r];
-        uint n = port_vid_len[r];
-        for (k = 0; k < n; k++) v[k] = 0xFFu;
-    }
-}
 
 /* THE SAME REGIONS, ZEROED. 0xFF is a POISON value: the gate fills with it so a cell
  * the port never wrote is distinguishable from one it wrote as zero, and that is
@@ -691,55 +638,6 @@ PORTCODE static void port_mmio_zero(void)
  * body. Adding one call at a time therefore attributes every wrong byte to the
  * call that introduced it. */
 #define NVARIANT 16
-PORTCODE static void run_variant(uint v)
-{
-    /* The `v >= n` ladder is for variants 0..4 ONLY. Variants 5..7 repeat it
-     * without irq4, and an earlier version wrote them as further `v ==` tests
-     * inside the same chain -- so they ran the whole ladder AND their own extra,
-     * and reported numbers for a sequence nobody asked for. Split explicitly. */
-    if (v <= 4) {
-        if (v == 0) return;                                      /* control */
-        if (v >= 1) { port_l2_out[1] = 1; irq4_handler(); }
-        if (v >= 2) { port_l2_out[1] = 2; FUN_00003aae(); }
-        if (v >= 3) { port_l2_out[1] = 3; FUN_0000144a(); }
-        if (v >= 4) { port_l2_out[1] = 4; port_object_dispatch(); }
-        return;
-    }
-    if (v <= 7) {
-        /* 5..7: the same ladder WITHOUT irq4, to separate its contribution */
-        port_l2_out[1] = 2;  FUN_00003aae();
-        if (v >= 6) { port_l2_out[1] = 3; FUN_0000144a(); }
-        if (v >= 7) { port_l2_out[1] = 4; port_object_dispatch(); }
-        return;
-    }
-    if (v >= 14) {
-        /* 14: the full frame WITH the oracle's registers supplied at each
-         * dispatch. 15: slot 0 alone, with them. Compare against 4 and 8. */
-        seed_regs = 1;
-        port_l2_out[1] = 1;  irq4_handler();
-        port_l2_out[1] = 2;  FUN_00003aae();
-        port_l2_out[1] = 3;  FUN_0000144a();
-        port_l2_out[1] = 4;
-        dispatch_only = (v == 15) ? 0 : -1;
-        port_object_dispatch();
-        dispatch_only = -1;
-        seed_regs = 0;
-        return;
-    }
-    /* 8..13: the full frame, but dispatching ONE object slot. The capture has four
-     * active slots (0, 16, 17, 40); the extra rows cost nothing and catch a fifth
-     * if a different capture has one. */
-    {
-        static const signed char SLOT[6] = { 0, 16, 17, 40, 41, 63 };
-        port_l2_out[1] = 1;  irq4_handler();
-        port_l2_out[1] = 2;  FUN_00003aae();
-        port_l2_out[1] = 3;  FUN_0000144a();
-        port_l2_out[1] = 4;
-        dispatch_only = SLOT[v - 8];
-        port_object_dispatch();
-        dispatch_only = -1;
-    }
-}
 
 /* ===================== THE MULTI-FRAME GATE (2026-09-30) =====================
  *
@@ -765,236 +663,6 @@ PORTCODE static void run_variant(uint v)
  * with one ascending pass over work RAM. Cost is O(16384 + records*k) per frame,
  * not O(16384*k), and the RAM cost is one cursor per frame -- 128 bytes.
  */
-extern const byte l2_frames[];          /* sh_src/port_l2_frames.s */
-
-
-
-/* HOW MANY FRAMES THE CHAIN RUNS, AND WHY IT IS NOT 30.
- *
- * It was 30, and 30 was never derived -- it is this repo's house unit for a
- * sampling WINDOW (MESSAGES.md:852, FACTS.md:655) and, worse, 30 is the CADENCE
- * BARRIER this whole port exists to break (FULL-PORT.md 1: "the cuts path cannot
- * reach 60Hz"). Borrowing it as a sample size was a collision with the project's
- * most loaded number. See LESSONS, "A HOUSE UNIT IS NOT A JUSTIFIED SAMPLE SIZE".
- *
- * The dense curves now run as many frames as TWO measured ceilings allow:
- *   CART     .portdata plus the cart's 73 KB of spare holds 574 frames of delta
- *            records at 159 B/frame (measured 2026-09-30).
- *   SCORER   l2m_score's merge is O(distinct offsets x k), so the per-frame curve
- *            is O(k^2) overall: 512 frames costs ~14 s of EMULATED time per curve
- *            and would not finish before the dump frame. 256 costs ~4 s.
- * The scorer binds first, so the dense length is 256 frames = 4.3 s at 59.92 Hz.
- *
- * Endurance is a separate, longer run scored HOST-side at its endpoint
- * (tools/portl2_endure.py), which costs no cart space at all and uses the repo's
- * own probe unit of 900 frames. */
-#define L2M_MAX 288u
-volatile uint port_l2m_canary_lo[4];
-/* 160 words. [8..37] free-run per frame, [40..69] per-frame per frame, [0..7] and
- * [70..79] summary, [96..127] the spurious cells, [128..159] the missed cells.
- * Nothing may reuse a range -- three slot collisions in port_l2_out[] cost a day
- * between them (HANDOFF 5 trap 8). */
-volatile uint port_l2m_out[256];
-volatile uint port_l2m_canary_hi[4];
-
-/* ZOOM. The per-frame curve is downsampled to 32 points, which located two STEPS
- * -- f113 reads 60 where the control is 34, f201 reads 98 against 52 -- but not the
- * frame they start on. Built with PORTZOOM=N the per-frame block becomes frames
- * N..N+31 at FULL resolution, and the collector fires on the first frame in that
- * window whose score jumps by >= L2M_STEP over its predecessor, so the window finds
- * its own step rather than being told where it is. Per-frame re-seeds from the
- * arcade every frame, so a step here is a defect the port owns outright -- there is
- * no inherited error to blame. */
-#ifndef L2M_ZOOM
-#define L2M_ZOOM 0u
-#endif
-#ifndef L2M_ENDURE
-#define L2M_ENDURE 0u
-#endif
-/* PORTSEED=N + PORTSKIP=S: the PER-FRAME gate with a HOST-side cell list.
- *
- * Seed work RAM to the arcade's frame N (apply deltas 1..N), run ONE frame body,
- * and leave it. The host diffs against the capture at N+1. No inherited error, and
- * unlike the in-rom collector the host sees EVERY wrong cell.
- *
- * PORTSKIP=S dispatches every active slot except S. Running the same seed with and
- * without a slot and diffing the two host cell lists gives that slot's exact
- * contribution -- the leave-one-out ablation said skipping slot 40 is worth 10 cells
- * a frame, and this names which ten. */
-#ifndef L2M_SLOTMASK_AT
-#define L2M_SLOTMASK_AT 8u
-#endif
-#ifndef L2M_SEEDAT
-#define L2M_SEEDAT 0u
-#endif
-#ifndef L2M_SKIP
-#define L2M_SKIP (-1)
-#endif
-/* PORTWATCH=0xADDR: watch ONE 68K cell through a PORTSEED frame and publish the
- * sequence of functions whose span changed it. The curves path watches a fixed
- * list; this makes the cell a build parameter so a named defect can be chased
- * without editing the driver. Needs PORTTRACE=1 for the hooks. */
-#define L2M_STEP 8u
-static int  l2m_collect;              /* record the offsets, not just the counts */
-static uint l2m_nmiss, l2m_nspur;
-/* U16 COUNTS AND CURSORS, not pointer arrays. Two arrays of 288 pointers is
- * 2,304 bytes of .bss and there are ~1.8 KB of headroom under the region guard at
- * 0x06019000; the start of frame k's records is derivable from the blob header, so
- * only the record COUNT and the walk CURSOR need storing. */
-/* BYTES, not shorts: 288 x 2 arrays of shorts is 1,152 B and the region guard at
- * 0x06019000 refused the build (".bss end 0x06019160 crosses SDRAM region base").
- * The packer measures 15..140 records per frame, so a byte holds both the count and
- * the cursor -- and l2m_index() REFUSES to run the chain if that ever stops being
- * true, rather than truncating a frame's record list and scoring the result. */
-static byte fcnt[L2M_MAX];
-static byte fcur[L2M_MAX];
-static uint l2m_n;
-
-#define FSTART(k) ((const unsigned short *)(l2_frames + ((const uint *)l2_frames)[k] + 4))
-
-PORTCODE static void l2m_index(void)
-{
-    const uint *h = (const uint *)l2_frames;
-    uint k;
-    l2m_n = h[0];
-    if (l2m_n > L2M_MAX - 1u) l2m_n = L2M_MAX - 1u;
-    for (k = 1; k <= l2m_n; k++) {
-        uint cnt = *(const uint *)(l2_frames + h[k]);
-        if (cnt > 255u) {                  /* a byte cursor cannot walk it */
-            port_l2m_out[166] = cnt;       /* publish WHY, then run nothing */
-            l2m_n = 0;
-            return;
-        }
-        fcnt[k] = (byte)cnt;
-    }
-}
-
-/* apply ONE frame's delta to work RAM: the arcade's own writes for that frame */
-PORTCODE static void l2m_apply(volatile byte *w, uint k)
-{
-    const unsigned short *p = FSTART(k), *e = p + 2u * fcnt[k];
-    while (p < e) { w[p[0]] = (byte)p[1]; p += 2; }
-}
-
-/* THE SCORE against expected(k). `cur` is the merge state: the lowest head among
- * the k lists is the next offset the arcade changed, and when two lists hold the
- * same offset the LATER FRAME's value wins because it was written later. */
-/* THE SPLIT THAT NAMES THE WORK. `wrong` alone cannot tell two opposite failures
- * apart: not DOING the arcade's writes, and doing writes the arcade did not. For a
- * cell the arcade's frame CHANGED, a mismatch is MISSED WORK; for a cell whose end
- * value it did NOT change, a mismatch means we left it somewhere else.
- * miss + spur == wrong, always.
- *
- * `spur` IS NOT "the arcade never touched this cell" -- that reading was wrong and
- * l1_vectors.jsonl refuted it the same day: across 669 captured calls the arcade
- * writes 0xFFC800 46 times and 0xFFC82C 10 times and still ENDS the frame where it
- * started. The honest name is UNCHANGED-BUT-WRONG (FULL-PORT.md 21). */
-/* K IS CLAMPED, AND THAT IS NOT COSMETIC. l2m_score walks fcnt[]/fcur[] for
- * j = 1..k. Called with k = 900 (PORTENDURE=900) against a 256-frame delta chain
- * and L2M_MAX = 288, it READ out of bounds and, worse, WROTE `fcur[j] = 0` for
- * j up to 900 -- 612 bytes past the end of a .bss array. Measured 2026-10-01: the
- * run reported "212 wrong, missed 0" against 1,168 genuinely wrong cells, and
- * `missed 0` with a four-figure wrong count is the only reason it was caught.
- *
- * Beyond the chain there is simply no expected image to score against, so the
- * score is REFUSED (0xFFFFFFFF) rather than computed from clamped data that would
- * look like a result. The host-side endpoint diff is the valid instrument there. */
-/* FREE-RUN PER-SLOT TRACKING. Off by default so the per-frame curve and the
- * ablation passes -- which re-seed and re-score dozens of times -- cannot write into
- * it. The free-run loop is the only caller that turns it on, because it is the only
- * one where "the frame a slot first went wrong" means anything. */
-static byte l2m_slotfirst[SLOTS];     /* frame 1..255, 0 = never wrong */
-static byte l2m_slotwrong[SLOTS];     /* wrong bytes this scored frame */
-static uint l2m_slotframe;            /* the frame being scored */
-static int  l2m_slotmark;             /* 1 = record into the two arrays above */
-static uint l2m_offmask[4];           /* byte-offset-within-slot mask, this frame */
-
-PORTCODE static uint l2m_score(volatile byte *w, uint k, uint *firstp, uint *reg,
-                               uint *missp, uint *spurp)
-{
-    uint j, i, wrong = 0, first = 0xFFFFFFFFu;
-    uint nxt_off = 0x10000u, nxt_val = 0;
-    uint miss = 0, spur = 0;
-
-    for (j = 0; j < 4; j++) reg[j] = 0;
-    if (l2m_slotmark) {
-        for (j = 0; j < SLOTS; j++) l2m_slotwrong[j] = 0;
-        for (j = 0; j < 4; j++) l2m_offmask[j] = 0;
-    }
-    *missp = *spurp = 0; *firstp = 0xFFFFFFFFu;
-    if (k > l2m_n || k >= L2M_MAX)
-        return 0xFFFFFFFFu;          /* no expected image exists for this k */
-    for (j = 1; j <= k; j++) fcur[j] = 0;
-    for (;;) {                             /* prime the merge */
-        uint best = 0x10000u, val = 0;
-        for (j = 1; j <= k; j++)
-            if (fcur[j] < fcnt[j] && FSTART(j)[fcur[j]*2] <= best)
-                { best = FSTART(j)[fcur[j]*2]; val = FSTART(j)[fcur[j]*2+1]; }
-        if (best == 0x10000u) break;
-        for (j = 1; j <= k; j++)
-            if (fcur[j] < fcnt[j] && FSTART(j)[fcur[j]*2] == best) fcur[j]++;
-        nxt_off = best; nxt_val = val;
-        break;
-    }
-    for (i = 0; i < WRAM_BYTES; i++) {
-        byte exp;
-        int changed = 0;
-        if (i == nxt_off) {
-            exp = (byte)nxt_val;
-            changed = 1;
-            {   /* advance the merge to the next distinct offset */
-                uint best = 0x10000u, val = 0;
-                for (j = 1; j <= k; j++)
-                    if (fcur[j] < fcnt[j] && FSTART(j)[fcur[j]*2] <= best)
-                        { best = FSTART(j)[fcur[j]*2]; val = FSTART(j)[fcur[j]*2+1]; }
-                for (j = 1; j <= k; j++)
-                    if (fcur[j] < fcnt[j] && FSTART(j)[fcur[j]*2] == best) fcur[j]++;
-                nxt_off = best; nxt_val = val;
-            }
-        } else {
-            exp = l2_before[i];
-        }
-        if (w[i] != exp) {
-            wrong++;
-            if (changed) miss++; else spur++;
-            if (l2m_slotmark && i < 0x2000u) {
-                uint sl = i >> 7;                  /* STRIDE = 0x80 */
-                uint off = i & 0x7Fu;
-                l2m_offmask[off >> 5] |= 1u << (31u - (off & 31u));
-                if (l2m_slotwrong[sl] < 255u) l2m_slotwrong[sl]++;
-                if (!l2m_slotfirst[sl])
-                    l2m_slotfirst[sl] = (byte)(l2m_slotframe > 255u ? 255u
-                                                                    : l2m_slotframe);
-            }
-            /* NAME THE CELLS, not just the count. 40 spurious writes a frame is a
-             * defect in one or two places, and the OFFSET says which: offset/0x80
-             * is the object slot and offset%0x80 the field. Collected on the last
-             * frame of the per-frame curve only -- every frame's list is nearly
-             * the same and one is enough to look up. */
-            if (l2m_collect) {
-                volatile uint *dst = port_l2m_out + (changed ? 132 : 100);
-                uint c = changed ? l2m_nmiss : l2m_nspur;
-                if (c < 32u) {
-                    dst[c] = 0xFFC000u + i;
-                    if (changed) l2m_nmiss = c + 1; else l2m_nspur = c + 1;
-                }
-            }
-            if (first == 0xFFFFFFFFu) first = i;
-            /* WHICH REGION, because one of them may not be winnable: the 31-frame
-             * run differs from the 2026-09-27 pair by 30 bytes and ALL of them are
-             * at 0xFFFF00+, so that region is not reproducible even between two
-             * MAME runs of the same playback. */
-            if      (i < 0x2000u) reg[0]++;        /* objects 0xFFC000-0xFFDFFF */
-            else if (i < 0x3000u) reg[1]++;        /* 0xFFE000 */
-            else if (i < 0x3F00u) reg[2]++;        /* globals 0xFFF000-0xFFFEFF */
-            else                  reg[3]++;        /* 0xFFFF00+ */
-        }
-    }
-    *firstp = first;
-    *missp = miss; *spurp = spur;
-    return wrong;
-}
-
 /* THE FRAME BODY. irq4_handler here is the GAME's own 68K VBL handler at 0x02AAC,
  * part of the decompiled program -- not a transport signal.
  *
@@ -1061,23 +729,18 @@ PORTCODE static uint l2m_score(volatile byte *w, uint k, uint *firstp, uint *reg
  * rather than report a number that means something else. A real resume needs a
  * second stack and a context switch; that is its own step.
  */
-#ifdef PORT_MAINLOOP
 /* Ghidra's signature is five register parameters, all undefined4 (= unsigned int,
  * sh_src/portfull/ghidra_types.h:6). Spelled out rather than included because this
  * driver does not pull in the generated headers. */
 extern void frame_rotated(void);   /* 0x0AE2 -- ONE rotated arcade frame */
 extern void port_reset_sp(void);   /* generated: 68K A7 <- 0xFFFFFF00 */
 
-#if defined(PORT_BOOT) && defined(PORT_PLAY)
 extern void FUN_0000040e(void);   /* the 68K reset vector's target, 0x40E.
                                   * File scope, NOT inside the PORT_CORO block:
                                   * the non-coroutine boot path needs it too. */
-#endif
 extern volatile uint port_play_dbg[8];   /* defined with the play tick below */
-static void *mainloop_exit[5];
 static int   mainloop_armed;      /* 0 = the hook is inert (the four-call body) */
 
-#ifdef PORT_CORO
 /* ---- THE COROUTINE: `frame_rotated` YIELDS AND RESUMES --------------------------
  *
  * WHAT RE-ENTRY COSTS. Free-run already works at the 0x0AE2 entry: there is no
@@ -1108,14 +771,6 @@ extern void  port_ctx_switch(void **save_sp, void *load_sp);
 extern void *port_ctx_make(void *stack_top, void (*entry)(void));
 extern char  PORT_CORO_BASE[], PORT_CORO_TOP[];
 
-#ifdef PORT_KINDCENSUS
-/* ONE FLAT LIST, 128 BYTES: a per-round table overflowed .bss into the renderer's
- * region at 0x06019000. Each entry is (round << 24) | handler; the handler is 17 bits
- * so the top byte is free. */
-#define PORT_KIND_MAX 32
-volatile uint port_kind_seen[PORT_KIND_MAX];
-volatile uint port_kind_n;
-#endif
 static void *coro_drv_sp;     /* the driver's SP while the game runs */
 static void *coro_game_sp;    /* the game's SP while the driver runs */
 static uint  coro_live;       /* the game coroutine exists and is suspended */
@@ -1188,18 +843,7 @@ static void coro_entry(void)
             coro_returned++;
             for (;;) port_ctx_switch(&coro_game_sp, coro_drv_sp);
         }
-#ifdef PORT_JUMP
-        if (_t == (uint)PORT_JUMP) {       /* PROBE ONLY (Makefile PORTJUMP): start the fresh thread at a
-                                            * scene routine, e.g. 0x1A406 = the crystal-ball scene, so a
-                                            * headless run reaches a scene the tapes cannot (tick lottery) */
-            extern uint FUN_0001a406(void);
-            if (_t == 0x1A406u) { FUN_0001a406(); }
-            coro_returned++;
-            for (;;) port_ctx_switch(&coro_game_sp, coro_drv_sp);
-        }
-#endif
     }
-#if defined(PORT_BOOT) && defined(PORT_PLAY)
     /* COLD BOOT ON THE COROUTINE'S STACK. Entering at frame_rotated resumes the
      * GAMEPLAY frame; the game's real loop is main_entry, which dispatches by mode,
      * so a build that re-enters frame_rotated every frame can never advance the
@@ -1213,27 +857,11 @@ static void coro_entry(void)
      * it wherever it stands. That is what a coroutine is FOR here -- not a speed
      * tweak, a requirement. */
     FUN_0000040e();
-#else
-    frame_rotated();
-#endif
     coro_returned++;
     for (;;)
         port_ctx_switch(&coro_game_sp, coro_drv_sp);
 }
 
-/* WATERMARK, not a guess: the paint is 0xA5 and this counts how much of it survived.
- * An 8 KB allocation for a call graph nobody has measured is exactly the kind of
- * number this project has been burned by, so the rom reports it. */
-static uint coro_stack_used(void)
-{
-    const volatile uint *p = (const volatile uint *)PORT_CORO_BASE;
-    uint n = (uint)(PORT_CORO_TOP - PORT_CORO_BASE) / 4u, i;
-    for (i = 0; i < n; i++)
-        if (p[i] != CORO_PAINT)
-            break;
-    return (n - i) * 4u;      /* bytes from the deepest disturbed word to the top */
-}
-#endif
 
 /* ---- 68K ENTRIES THAT RESET THE STACK (2026-10-24) ------------------------------
  *
@@ -1255,7 +883,6 @@ static uint coro_stack_used(void)
  * 68000's are. Off the coroutine (a harness calling the routine directly) it is a
  * plain call. */
 uint port_sp_resets;                  /* how many resets ran, for the reader */
-#ifdef PORT_CORO
 extern void port_sp_reset_jump(void *fn, uint a, uint b, uint c, uint d, uint e, void *root)
     __attribute__((noreturn));        /* sh_src/mars_start.s */
 void port_sp_root_run(void *fn, uint a, uint b, uint c, uint d, uint e)
@@ -1267,16 +894,13 @@ void port_sp_root_run(void *fn, uint a, uint b, uint c, uint d, uint e)
     for (;;)
         port_ctx_switch(&coro_game_sp, coro_drv_sp);
 }
-#endif
 PORTCODE uint port_sp_reset(void *fn, uint a, uint b, uint c, uint d, uint e)
 {
-#ifdef PORT_CORO
     char here;
     if (&here >= PORT_CORO_BASE && &here < PORT_CORO_TOP) {
         port_sp_resets++;
         port_sp_reset_jump(fn, a, b, c, d, e, (void *)(PORT_CORO_TOP - 64));
     }
-#endif
     return ((uint (*)(uint, uint, uint, uint, uint))fn)(a, b, c, d, e);
 }
 static uint  mainloop_waits;      /* yields seen this frame */
@@ -1375,17 +999,12 @@ PORTCODE uint port_frame_wait(void)
     mainloop_waits++;
     mainloop_yields++;
     mainloop_frames++;
-#ifdef PORT_CORO
     /* YIELD. The driver resumes us from exactly here on the next frame, with every
      * live frame of decompiled 68K code still below us -- which is the whole point
      * of the coroutine and the one thing re-entry cannot do. */
     port_ctx_switch(&coro_game_sp, coro_drv_sp);
     port_watch_hook(0x397fu);   /* MEASUREMENT: resumed inside the game */
     return 0;                               /* resumed: the game's loop goes on */
-#else
-    __builtin_longjmp(mainloop_exit, 1);    /* work RAM is the answer */
-    return 0;                               /* not reached */
-#endif
 }
 
 /* ---- YIELD WITHOUT CLEARING THE LATCH (PORT_BLANKLATCH) -------------------------
@@ -1420,14 +1039,9 @@ PORTCODE uint port_frame_hold(void)
     port_watch_hook(0x3980u);   /* MEASUREMENT: a HELD vint, distinct from a wait */
     mainloop_yields++;
     mainloop_frames++;
-#ifdef PORT_CORO
     port_ctx_switch(&coro_game_sp, coro_drv_sp);
     port_watch_hook(0x3981u);   /* MEASUREMENT: resumed inside the hold */
     return 0;
-#else
-    __builtin_longjmp(mainloop_exit, 1);
-    return 0;
-#endif
 }
 
 /* ---- THE LOAD BLANK, PACED TO THE ARCADE (PORT_BLANKPACE) -----------------------
@@ -1556,13 +1170,7 @@ PORTCODE byte port_blank_off(byte v, uint site)
             if (!mainloop_armed) break;          /* not driving: never spin */
             if (++spin > BLANK_MAX_SPIN) break;  /* the clock is not advancing */
             port_blank_paced++;
-#ifdef PORT_BLANKLATCH
-            /* LEAVE 0xFFF01C SET, as the arcade's suspended main loop does, so the
-             * held vints advance no game clock. See port_frame_hold above. */
-            port_frame_hold();
-#else
             port_frame_wait();                   /* BLOCK, so the game's timer parks */
-#endif
         }
     }
     blank_saw_load = 0;
@@ -1583,45 +1191,6 @@ volatile uint port_tick_done;   /* 0xFFF02A of the last COMPLETE game tick (chec
  * word reads stale image bytes (21394 here), ares took that as game frame 21394 and fired
  * every tape event up to it at boot. 0xFFFF is what ares reads as "counter not started". */
 volatile unsigned short port_gf_count = 0xFFFFu;
-#ifdef R60_LOCKPROBE
-/* THE F154 WRITE RECORDER (diagnostic builds only, R60LOCKPROBE; CPORT_F154LOG makes cport_prep route
- * every write to the enemy count 0xFFF154 through port_f154_note and every zero-test through
- * port_f154_read). At four FPGA level-5 locks the footer read F154 = FF while no tick-end sample
- * ever saw it negative, so the writes are recorded where they happen: the first write that takes
- * the count from >= 0 to negative latches its site, old/new value, tick, and the object A6 points
- * at; the first zero-test that reads a negative count latches its site and tick. Game RAM is read
- * only. Layout: [0] hit [1..2] tick [3] site [4] old [5] new [6] A6 slot (0xFF = not a record)
- * [7..9] that record's handler [10] first negative read's site [11..12] its tick [13] F152 [14] writes. */
-volatile uint8_t port_uf_latch[16];
-void port_f154_note(unsigned site, unsigned char old)
-{
-    extern byte *_r_unaff_A6;
-    const volatile byte *w = (const volatile byte *)WRAM_BASE;
-    uint8_t nw = w[0x3154];
-    port_uf_latch[14]++;
-    if (!port_uf_latch[0] && old < 0x80u && nw >= 0x80u) {
-        uint32_t off = (uint32_t)_r_unaff_A6 - (uint32_t)WRAM_BASE;
-        port_uf_latch[1] = w[0x302A]; port_uf_latch[2] = w[0x302B];
-        port_uf_latch[3] = (uint8_t)site; port_uf_latch[4] = old; port_uf_latch[5] = nw;
-        if (off < 0x2000u) {
-            const volatile byte *r = w + (off & ~0x7Fu);
-            port_uf_latch[6] = (uint8_t)(off >> 7);
-            port_uf_latch[7] = r[3]; port_uf_latch[8] = r[4]; port_uf_latch[9] = r[5];
-        } else port_uf_latch[6] = 0xFFu;
-        port_uf_latch[13] = w[0x3152];
-        port_uf_latch[0] = 1u;
-    }
-}
-unsigned char port_f154_read(unsigned site, unsigned char v)
-{
-    if (v >= 0x80u && !port_uf_latch[10]) {
-        const volatile byte *w = (const volatile byte *)WRAM_BASE;
-        port_uf_latch[11] = w[0x302A]; port_uf_latch[12] = w[0x302B];
-        port_uf_latch[10] = (uint8_t)site;
-    }
-    return v;
-}
-#endif
 #ifdef PORT_GODMODE
 /* THE TICK-END MIRROR (measurement builds only). ares samples SDRAM at the frame start, which
  * lands inside the port's tick about half the time, so a timeline read straight off the work
@@ -1652,20 +1221,8 @@ PORTCODE static void mainloop_one_frame(void)
     /* THE ARCADE'S IRQ4 FIRES WHILE THE 68K SITS IN THE WAIT WE ARE RESUMING FROM.
      * The four-call body ran irq4_handler first for the same reason, and that
      * ordering is what the banked -43 was measured with. */
-#if defined(PORT_IRQ4OWED) && (PORT_IRQ4OWED == 1)
-    {   /* ONE CALL PER VINT THE MASTER OWED, not one per game frame. The handler decides
-         * for itself: the first call finds the game's latch clear and publishes, the rest
-         * find it set and only bump 0xFFF144, which is exactly what the arcade's does while
-         * the 68K is busy in a teardown. See pp_vint_owed in sh_src/m_main.c. */
-        extern volatile unsigned char pp_vint_owed;
-        unsigned n = pp_vint_owed;
-        pp_vint_owed = 0;
-        while (n > 1) { irq4_handler(); n--; }
-    }
-#endif
     irq4_handler();
     port_watch_hook(0x3334u);   /* MEASUREMENT: after the 68K vint handler */
-#ifdef PORT_CORO
     if (!coro_live) {
         volatile uint *p = (volatile uint *)PORT_CORO_BASE;
         uint n = (uint)(PORT_CORO_TOP - PORT_CORO_BASE) / 4u, i;
@@ -1682,49 +1239,6 @@ PORTCODE static void mainloop_one_frame(void)
      * tick N's counter with slots 0..k dispatched and k+1.. not. port_tick_done is the
      * value of 0xFFF02A for the last tick that ran to its wait; tests/demo-b/
      * check_demo.py accepts a frame only when it equals the counter in the dump. */
-#ifdef PORT_KINDCENSUS
-    /* ---- PROBE ONLY: WHICH ENEMY KINDS EVER SPAWN, PER LEVEL --------------------
-     * Combat diverges between the two machines within seconds, so a record-by-record
-     * diff of level 2 measures the divergence and not the port. What transfers is the
-     * SET of handlers that ever run in the enemy band, slots 16-39 (the advisor's
-     * call, 2026-10-21). One end-of-run dump cannot see it -- the band was empty at
-     * frame 40000 of the first run while the arcade lists sixteen distinct handlers --
-     * so accumulate it here instead, one scan a tick, keyed by the round in 0xFFF142.
-     *
-     * THE HANDLER IS THE LONGWORD AT +2, not the word at +4: 0x12F0A does not fit in
-     * sixteen bits and the low word alone reads 0x2F0A.
-     * port_kind_seen[round][i], terminated by a zero slot; port_kind_n[round] counts. */
-    {
-        unsigned _r = ((volatile byte *)WRAM_BASE)[0x3142] & 7u;
-        unsigned _s;
-        for (_s = 16; _s < 40; _s++) {
-            const volatile byte *_p = (const volatile byte *)WRAM_BASE + _s * 0x80;
-            if (!(_p[0] & 0x80)) continue;
-            {   unsigned _h = ((unsigned)_p[2] << 24) | ((unsigned)_p[3] << 16)
-                            | ((unsigned)_p[4] << 8)  |  (unsigned)_p[5];
-                unsigned _k = (_r << 24) | (_h & 0xFFFFFFu);
-                unsigned _i, _n = port_kind_n;
-                for (_i = 0; _i < _n; _i++)
-                    if (port_kind_seen[_i] == _k) break;
-                if (_i == _n && _n < PORT_KIND_MAX) {
-                    port_kind_seen[_n] = _k;
-                    port_kind_n = _n + 1;
-                }
-            }
-        }
-    }
-#endif
-#ifdef PORT_HOLDLIVES
-    /* ---- PROBE ONLY: HOLD THE LIVES COUNTER AT 3 (0xFFE018) ----------------------
-     * tools/arcade_level_run.lua does exactly this from lua on the MAME side so an
-     * unattended run reaches level 2; ares-headless cannot write memory mid-run, so
-     * the port needs it compiled in to survive the same script. The game decrements
-     * 0xFFE018 at altbeast_port.c's `DAT_ffffe018 = DAT_ffffe018 + -1` and ends the
-     * game when it hits 0. Written once a TICK, after the game's frame, so the
-     * decrement inside the frame still happens and only the game-over is prevented.
-     * NEVER on a candidate: it is cheating, and the rate it buys is not the rom's. */
-    ((volatile byte *)WRAM_BASE)[0x2018] = 3;
-#endif
     port_tick_done = ((uint)((volatile byte *)WRAM_BASE)[0x302a] << 8) | ((volatile byte *)WRAM_BASE)[0x302b];
     {
         unsigned n = ((volatile byte *)WRAM_BASE)[0x3020], b = ((volatile byte *)WRAM_BASE)[0x3021];
@@ -1748,35 +1262,9 @@ PORTCODE static void mainloop_one_frame(void)
         for (i = 0; i < 0x160u; i++) port_tl_mirror[0x58u + i] = w[0x3000u + i];
     }
 #endif
-#else
-    if (__builtin_setjmp(mainloop_exit) == 0)
-        frame_rotated();
-#endif
     mainloop_armed = 0;
 }
 
-#ifdef PORT_BOOT
-/* ---- THE COLD BOOT. One frame, entered at the 68K RESET VECTOR.
- *
- * 0x400 holds `bra.w 0x40E`, so FUN_0000040e is power-on: it clears work RAM, clears
- * the text / tile / sprite layers, sets the level palettes and falls into main_entry
- * -- whose loop reaches wait_frame_flag, which is redirected to port_frame_wait and
- * longjmps back out here. So this call returns at the END of the game's first frame
- * and every frame after it is an ordinary frame_rotated.
- *
- * No irq4_handler first (there is no previous frame to service) and no seed: the
- * boot is the thing that BUILDS the state the seed used to supply. */
-PORTCODE static void mainloop_boot_frame(void)
-{
-    mainloop_waits = 0;
-    mainloop_armed = 1;
-    port_reset_sp();
-    if (__builtin_setjmp(mainloop_exit) == 0)
-        FUN_0000040e();
-    mainloop_armed = 0;
-}
-#endif /* PORT_BOOT */
-#endif
 
 /* THE FRAME BODY. `seed_upto` is vestigial: it existed when PORTMAIN entered at
  * 0x005BE and the seed had to be deferred past that function's prologue. At 0x0AE2
@@ -1785,16 +1273,8 @@ PORTCODE static void mainloop_boot_frame(void)
  * must never do is change two things between measurements. */
 PORTCODE static void l2m_frame_body_seeded(int seed_upto)
 {
-#ifdef PORT_MAINLOOP
     (void)seed_upto;                 /* the caller has already seeded work RAM */
     mainloop_one_frame();
-#else
-    (void)seed_upto;
-    irq4_handler();
-    FUN_00003aae();
-    FUN_0000144a();
-    port_object_dispatch();
-#endif
 }
 
 PORTCODE static void l2m_frame_body(void)
@@ -1802,37 +1282,15 @@ PORTCODE static void l2m_frame_body(void)
     l2m_frame_body_seeded(-1);
 }
 
-/* ---- THE FRAME'S OTHER INPUT: THE CONTROLLER AND THE DIPS -------------------
- *
- * A frame's inputs are the seeded work RAM PLUS the System 16 I/O state, and only
- * the first was ever supplied. FUN_00001366 (`bsr 0x1366`, in the loop head) reads
- * the ports straight:
- *
- *     DAT_ffffe028 = ~DAT_00c41003;      player 1
- *     DAT_ffffe0a8 = ~DAT_00c41007;      player 2
- *
- * so against a constant stub every input-derived cell is wrong by construction --
- * 9 of the 19 the rotated real frame got wrong (FULL-PORT.md 38). And the gate was
- * PAYING the hand-rolled four-call body for never reading the controller at all: it
- * leaves the seed values, which are already right.
- *
- * NOT CIRCULAR. These bytes are captured by tools/l2_oracle.lua from MAME's ioport
- * layer -- no bus access, no latch consumed -- and are an INPUT declared like the
- * seed, never read back out of the answer. They are CHECKED against the answer,
- * which is a different thing: ~io(N)[0xC41003] equals work RAM's 0xFFE028 at frame
- * N+1 for 239 of 257 frames (the other 18 have that write gated off) and player two
- * is 257 of 257.
- *
- * The four ports with no ioport behind them -- 0xC40001, 0xC41005, 0xC43001,
- * 0xC43007, which are display/watchdog and mapper, not inputs -- are recorded 0xFF
- * by the packer and so land on the same value the blanket fill gives them. */
-extern const byte l2_io[];        /* sh_src/port_l2_io.s: 'L2IO' blob */
+/* ---- THE SYSTEM 16 I/O CELLS ------------------------------------------------
+ * FUN_00001366 reads the ports straight (DAT_ffffe028 = ~DAT_00c41003 for player 1,
+ * DAT_ffffe0a8 = ~DAT_00c41007 for player 2). The port gives each of the nine a cell
+ * and fills them itself: the two DIP ports from the region's switches, the rest 0xFF
+ * until the live pads write them. */
 extern byte DAT_00c40001, DAT_00c41001, DAT_00c41003, DAT_00c41005,
             DAT_00c41007, DAT_00c42001, DAT_00c42003, DAT_00c43001, DAT_00c43007;
 
-/* IN THE PACKER'S ORDER, and that order is the contract (tools/l2_io_pack.py). The
- * blob carries the 68K addresses too, and l2m_io_apply REFUSES if they disagree --
- * a silently re-ordered capture would feed the player-2 byte to player 1. */
+/* The two tables are in the same order. */
 static byte *const l2_io_cell[9] = {
     &DAT_00c40001, &DAT_00c41001, &DAT_00c41003, &DAT_00c41005, &DAT_00c41007,
     &DAT_00c42001, &DAT_00c42003, &DAT_00c43001, &DAT_00c43007
@@ -1841,7 +1299,6 @@ static const uint l2_io_a68[9] = {
     0xC40001u, 0xC41001u, 0xC41003u, 0xC41005u, 0xC41007u,
     0xC42001u, 0xC42003u, 0xC43001u, 0xC43007u
 };
-uint port_io_dbg[4];   /* [0] 'L2IO' seen, [1] frames, [2] ports, [3] frame applied */
 
 /* CPORT_COUNT's array. The prep pass inserts `port_fn_count[i]++;` at the top of
  * each function named in that variable, in the order given; the driver publishes it
@@ -1871,23 +1328,17 @@ volatile uint port_fn_count[8];
 volatile uint port_fn_seq;
 /* CPORT_ARGLOG's ring lives at SDRAM scratch 0x0603A700 (w68.h): .bss has no room. */
 
-PORTCODE static uint l2_io_u32(uint w)
-{
-    const byte *p = l2_io + w * 4u;
-    return ((uint)p[0] << 24) | ((uint)p[1] << 16) | ((uint)p[2] << 8) | (uint)p[3];
-}
 
 /* Put arcade frame `f`'s I/O into the stub. f is the capture index, the same one
  * the seed and the delta chain use. Returns 0 and changes nothing on any
  * disagreement -- a wrong input is worse than a constant one, because it looks
  * computed. */
-#ifdef PORT_LIVEPAD
-#ifdef PORT_SOUND
-static unsigned char port_snd_q[8]; static unsigned port_snd_w, port_snd_r;   /* sound commands queued for the 68K: COMM10 = 0x5A00 | cmd, acked to 0 */
-#endif
+/* Ordinary native emission waits while an unaccepted MCU command is retained.
+ * Native RESET retains its original explicit cancellation semantics. */
+PORTCODE unsigned port_sound_mcu_ready(void)
+{return ((volatile unsigned char *)WRAM_BASE)[0x30c4u]==0xffu;}
 volatile uint16_t port_live_p1;   /* probe: the raw P1 byte the 68K posted */
 volatile uint port_live_svc;    /* VOLATILE, non-static: LTO folded the static (builder trap 2026-10-17). bit 8 = live pads seen; low byte = service bits pressed (coin1 b0, start1 b4, start2 b5) */
-#ifdef R60_FRONTEND
 /* THE OPTIONS SCREEN'S RESULT (md_src/testcart.c frontend_menu_screen, three words over
  * COMM12). The region and DSW1 decide the game's boot -- port_region_boot and the DIP latch
  * in FUN_0000040E -- so they are taken only before it has run (the power-on menu); DSW2 is
@@ -1906,13 +1357,21 @@ PORTCODE void port_frontend_settings(unsigned packed, unsigned dsw1, unsigned ds
     frontend_dsw2 = dsw2 & 0xFFu;
     frontend_configured = 1;
 }
+#ifdef LAUNCHER
+/* THE LAUNCHER'S REGION (sh_src/r60/r60_launcher.c), before the game's first frame. The region
+ * decides the boot (port_region_boot) and which board's default DIP switches the boot reads
+ * (GAME_REGIONS_DSW1/2 below); the switches themselves are not touched here, so a launch
+ * without a visit to the switch sheet runs that board's own defaults. */
+PORTCODE void port_launch_region(unsigned region)
+{
+    if (!port_game_booted && region < GAME_REGIONS_N) port_region = (byte)region;
+}
 #endif
 PORTCODE static void l2m_io_live(void)
 {
     /* LIVE PADS (sw211): the 68K posts COMM2 = P1 << 8 | P2 (arcade active-low bytes) and
      * COMM8 = 0xA5 << 8 | service bits pressed, every vint. They override the capture. */
     uint c8 = MARS_SYS_COMM8;
-#ifdef R60_FRONTEND
     if (frontend_configured) {
         extern void port_dips_latch(unsigned dsw2);   /* games/<title>/glue.c */
         DAT_00c42001 = (byte)frontend_dsw2;
@@ -1920,10 +1379,8 @@ PORTCODE static void l2m_io_live(void)
             DAT_00c42003 = (byte)frontend_dsw1;   /* read once, by the boot */
         port_dips_latch(frontend_dsw2);
     }
-#endif
     if ((c8 & 0xFF00u) != 0xA500u) return;
     {   uint c2 = MARS_SYS_COMM2, svc = c8 & 0xFFu;
-#ifdef PORT_STARTCOIN
         /* START AS COIN (Mike 2026-10-26: the Miyoo and the Analogue Pocket FPGA core do not see the wired 6-button pad,
          * so X/Y/Z/MODE never arrive and a 3-button pad can only coin with START+A). The common minimal-button MAME
          * mapping: START inserts a coin while the credits cannot pay for a start, and starts once they can. A 1P start
@@ -1939,7 +1396,6 @@ PORTCODE static void l2m_io_live(void)
             st_prev = st;
             if (st && st_coin) svc |= 0x01u;
         }
-#endif
         port_live_p1 = (uint16_t)(c2 >> 8);
         DAT_00c41003 = (byte)(c2 >> 8);
         DAT_00c41007 = (byte)c2;
@@ -1986,39 +1442,7 @@ PORTCODE static void l2m_io_tape(void)
     }
 }
 #endif
-#endif
-PORTCODE static uint l2m_io_blob(uint f);
-PORTCODE static uint l2m_io_apply(uint f)
-{
-    uint r = l2m_io_blob(f);
-#ifdef PORT_LIVEPAD
-    l2m_io_live();
-#endif
-    return r;
-}
-PORTCODE static uint l2m_io_blob(uint f)
-{
-    uint nf, np, i, stride;
-    const byte *rec;
-    port_io_dbg[0] = l2_io_u32(0);
-    if (port_io_dbg[0] != 0x4C32494Fu)            /* 'L2IO' */
-        return 0;
-    nf = l2_io_u32(1); np = l2_io_u32(2);
-    port_io_dbg[1] = nf; port_io_dbg[2] = np;
-    if (np != 9u || f >= nf)
-        return 0;
-    for (i = 0; i < np; i++)
-        if (l2_io_u32(3u + i) != l2_io_a68[i])
-            return 0;                             /* the capture re-ordered: refuse */
-    stride = (np + 3u) & ~3u;
-    rec = l2_io + (3u + np) * 4u + f * stride;
-    for (i = 0; i < np; i++)
-        *l2_io_cell[i] = rec[i];
-    port_io_dbg[3] = f;
-    return 1;
-}
 
-PORTCODE static void l2m_fill_mmio(void) { port_mmio_reset(); }
 
 /* ---- THE RESULT MAP, EXPLICIT. Anything added goes HERE first; the sixth slot
  * collision in this project's result arrays was mine, two hours ago.
@@ -2106,7 +1530,6 @@ PORTCODE static void l2m_fill_mmio(void) { port_mmio_reset(); }
  * clamped, because a held input is a truer continuation than a zeroed one and the
  * frame counter is published either way.
  */
-#if defined(PORT_PLAY) && (PORT_PLAY > 0)
 /* THE GAME'S OWN PC BREADCRUMB, ONE PER TICK.
  *
  * The decompiled program writes 0xFFFFFEFE before nearly every call it makes, so the
@@ -2152,9 +1575,7 @@ static uint port_pal_sets(void)
     return n;
 }
 static uint pal_sets_last;
-#ifdef PORT_NOPALPROBE
 static void port_pal_probe(uint tick, uint inside) __attribute__((unused));
-#endif
 static void port_pal_probe(uint tick, uint inside)
 {
     uint n = port_pal_sets();
@@ -2184,8 +1605,6 @@ PORTCODE void port_play_tick(void)
                                        * gate fills with: 0xFF is a tile index */
         port_reset_pseudoregs();
         dispatch_skip = -1;           /* no dispatch truncation in a play build */
-#ifdef PORT_BOOT
-#ifdef PORT_CORO
         /* The coroutine's own first switch-in IS the boot (coro_entry), so there is
          * nothing to call here: mainloop_one_frame creates the stack and enters. */
         /* THE DIP SWITCHES ARE NOT 0xFF.
@@ -2206,35 +1625,11 @@ PORTCODE void port_play_tick(void)
                                : (l2_io_a68[i] == 0xC42003u) ? dsw1[port_region] : 0xFFu;
         }
         port_play_dbg[0] = 0x424F4F54u;   /* 'BOOT' */
-#else
-        /* COLD BOOT: no capture at all. The game clears its own work RAM, loads its
-         * own layers and runs its own attract. Inputs idle at 0xFF (active low),
-         * which is what md_main.c:7566 writes at reset. */
-        for (i = 0; i < 9u; i++) *l2_io_cell[i] = 0xFF;
-        port_play_dbg[0] = 0x424F4F54u;   /* 'BOOT' */
-        mainloop_boot_frame();
-        pp_k = 1u;
-        port_play_dbg[1]++;
-        port_play_dbg[2] = pp_k;
-        return;                       /* the boot WAS this frame */
-#endif /* PORT_CORO */
-#else
-        l2m_index();                  /* parse the capture blob */
-        for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-        for (i = 1u; i <= (uint)PORT_PLAY && i <= l2m_n; i++) l2m_apply(w, i);
-        pp_k = (uint)PORT_PLAY;
-        port_play_dbg[0] = 0x504C4159u;   /* 'PLAY' */
-#endif
     }
 
-#ifndef PORT_BOOT
-    port_play_dbg[3] = l2m_io_apply(pp_k);
-#endif
-#if defined(PORT_BOOT) && defined(PORT_LIVEPAD)
     l2m_io_live();                        /* the boot build never applied the capture; the live pads go in here, every tick */
 #ifdef PORT_TAPEPAD
     l2m_io_tape();                        /* measurement: the tape overrides the live pads, by game frame */
-#endif
 #endif
     {
         /* WHAT THE TICK COSTS THE RENDERER. The master IS the renderer, and this
@@ -2245,17 +1640,9 @@ PORTCODE void port_play_tick(void)
          * only a number decides it. FRT16 wraps at ~91 ms, which is far longer than
          * any one frame, so a per-tick span is sound even though a summed one would
          * not be. */
-#ifndef PORT_NOPALPROBE
-    port_pal_probe(pp_k, 2u);         /* collapsed since last tick's post sample = between frames */
-#endif
         uint t0 = FRT16();
         l2m_frame_body();
-#ifdef R60_FRONTEND
         port_game_booted = 1u;        /* the first frame ran the boot: region and DSW1 are final */
-#endif
-#ifndef PORT_NOPALPROBE
-        port_pal_probe(pp_k, 1u);     /* collapsed inside this frame */
-#endif
         {
             uint dt = (uint)(unsigned short)(FRT16() - t0);
             port_play_dbg[4] = dt;
@@ -2265,7 +1652,6 @@ PORTCODE void port_play_tick(void)
                                                      * (16.67 ms / 1.39 us per FRT tick) */
         }
     }
-#ifdef PORT_BOOT
     /* ---- THE i8751, ON THE SH-2 ----------------------------------------------------
      *
      * The arcade's MCU talks to the 68K through three work-RAM mailboxes (US MCU
@@ -2292,24 +1678,12 @@ PORTCODE void port_play_tick(void)
         static unsigned char mcu_busy;
         if (!mcu_busy && mcu[0]) mcu_busy = 1;        /* 68K set the busy high byte */
         else if (mcu_busy)       mcu_busy = 0;        /* no TEXT_SYNC here: one frame */
-        if (mcu[4] != 0xFFu) {                        /* MCU_SND: consume the command */
+        if (mcu[4] != 0xFFu && r60_comm_push(R60_COMM,mcu[4])) {
             port_play_dbg[3] = (port_play_dbg[3] & 0xFFFF0000u) | 0xB600u | mcu[4];
-#ifdef PORT_SOUND
-            port_snd_q[port_snd_w & 7u] = mcu[4]; port_snd_w++;   /* to the 68K's music engine (md_src/md_sound.c) */
-#endif
-#ifdef PORT_SPEECH
             { extern void speech_cmd(unsigned); speech_cmd(mcu[4]); }   /* the slave's PWM speech lane (r60_speech.c) */
-#endif
             mcu[4] = 0xFFu;
         }
-#ifdef PORT_SOUND
-        if (port_snd_r != port_snd_w && MARS_SYS_COMM10 == 0u) { MARS_SYS_COMM10 = (uint16_t)(0x5A00u | port_snd_q[port_snd_r & 7u]); port_snd_r++; }
-#endif
-#ifdef PORT_LIVEPAD
         mcu[2] = (port_live_svc & 0x100u) ? (unsigned char)(port_live_svc & 0xFFu) : 0x00u;   /* MCU_COINS: the MCU posts the service bits pressed (md_main.c old shim: MCU_COINS = svc) */
-#else
-        mcu[2] = 0x00u;                               /* MCU_COINS: nothing pressed */
-#endif
 #ifdef PORT_GODMODE
         {   /* measurement only (Makefile PORTGODMODE): hold P1 lives at 3 while in play, the
              * arcade oracle's GD_GOD rule, so a tape runs a whole level without dying */
@@ -2318,69 +1692,10 @@ PORTCODE void port_play_tick(void)
             if ((*f028 & 1u) && *e018 < 3u) *e018 = 3u;
         }
 #endif
-#ifdef R60_FRONTEND
         if (frontend_round && (w[0x3028] & 1u) && w[0x3026] == 0u && w[0x314E] == 0u) {
             w[0x314E] = (byte)frontend_round;
             w[0x3142] = (byte)frontend_round;
         }
-#endif
-#ifdef PORT_FORM
-        {   /* measurement only (Makefile PORTFORM=N): raise P1's TARGET form byte 0xFFC06B to N
-             * while in play; the player handler's own form-change dispatch (0x4A6A, table
-             * 0x6D90) then walks the current form up to it, so a tape meets the full-beast
-             * paths (a 4th orb on a beast: Mike's sw297 rig freeze, 2026-10-22) without
-             * having to hunt three wolves. */
-            volatile unsigned char *f028 = (volatile unsigned char *)WRAM_BASE + (0xFFF028u - 0xFFC000u);
-            volatile unsigned char *c06b = (volatile unsigned char *)WRAM_BASE + (0xFFC06Bu - 0xFFC000u);
-            if ((*f028 & 1u) && *c06b < (unsigned char)(PORT_FORM)
-#ifdef PORT_PROBE_ROUND
-                && ((volatile unsigned char *)WRAM_BASE)[0x3142] == (unsigned char)PORT_PROBE_ROUND
-                && !(((volatile unsigned char *)WRAM_BASE)[0x3026] & 0x10u)
-#endif
-               ) *c06b = (unsigned char)(PORT_FORM);
-        }
-#endif
-#ifdef PORT_ROUND
-        {   /* PROBE ONLY (Makefile PORTROUND=N, N = 1..4): start credited play at round N
-             * (0 = level 1). The game's own round start does it: main_entry 0x5BE clears
-             * the round index 0xFFF14E (0x5DA clrw) and waits one vint (0x640 jsr 0x397E),
-             * then 0x670 sets the level byte 0xFFF142 = table 0x1CDA[0xFFF14E & 7]
-             * (= 0,1,2,3,4) and loads the round; 0xBCA `addqb #1,0xFFF14E ; bra 0x62A`
-             * is the real round advance. The window is P1 in play (0xFFF028 bit0, set at
-             * 0x2D52 on START) with 0xFFF026 still 0 (bit7 is set at 0x73A once the round
-             * is up; bit0 is the attract). Both bytes are written so a poke landing after
-             * 0x670 is consistent too. tools/gameplay_dump.lua GD_ROUND=N is the same
-             * poke on the arcade. Never on a candidate. */
-            volatile unsigned char *f028 = (volatile unsigned char *)WRAM_BASE + (0xFFF028u - 0xFFC000u);
-            volatile unsigned char *f026 = (volatile unsigned char *)WRAM_BASE + (0xFFF026u - 0xFFC000u);
-            volatile unsigned char *f14e = (volatile unsigned char *)WRAM_BASE + (0xFFF14Eu - 0xFFC000u);
-            volatile unsigned char *f142 = (volatile unsigned char *)WRAM_BASE + (0xFFF142u - 0xFFC000u);
-            if ((*f028 & 1u) && *f026 == 0u && *f14e == 0u) { *f14e = (unsigned char)(PORT_ROUND); *f142 = (unsigned char)(PORT_ROUND); }
-        }
-#endif
-#ifdef PORT_ENDCLEAR
-        {   /* PROBE ONLY (Makefile PORTENDCLEAR=1): at a scroll lock, clear the enemy band.
-             * The lock (0x9EA: camera 0xFFF132 >= 0xFFF13C, then 0xFFF140 counts down and
-             * sets 0xFFF152) releases, and at the end of a level the boss transforms
-             * (0x16C88), only when 0xFFF154 = 0 and no slot 16-39 is live. A tape cannot
-             * aim, so an enemy that trails the hero holds the lock forever on either machine
-             * (the arcade's kind-4 flames on level3_fightback*.csv, a kind-8 walker on the
-             * port's runs). While P1 is in play and 0xFFF152 != 0: zero every live status
-             * word in slots 16-39 and the counts 0xFFF154/0xFFF15D. The twin is
-             * tools/gameplay_dump.lua GD_ENDCLEAR=1. Never on a candidate. */
-            volatile unsigned char *w8 = (volatile unsigned char *)WRAM_BASE;
-            if ((w8[0x3028] & 1u) && w8[0x3152] != 0u && w8[0x3154] != 0u
-#ifdef PORT_PROBE_ROUND
-                && w8[0x3142] == (unsigned char)PORT_PROBE_ROUND
-#endif
-               ) {
-                unsigned _s;
-                for (_s = 16u; _s < 40u; _s++)
-                    if (w8[_s * 0x80u] & 0x80u) { w8[_s * 0x80u] = 0u; w8[_s * 0x80u + 1u] = 0u; }
-                w8[0x3154] = 0u; w8[0x315D] = 0u;
-            }
-        }
-#endif
         /* THE MCU SEEDS THE CREDIT COUNT. MEASURED 2026-10-04 on the oracle (MAME
          * altbeast, DIPs 0x54/0x66): 0xFFF000 reads 0xFF through frame 6 and 7 from
          * frame 7 on, with NO 68K write to it from the reset vector onward (MAME
@@ -2395,30 +1710,6 @@ PORTCODE void port_play_tick(void)
          * 26 is bare where rd69 typed one). The factory board boots with zero credits;
          * restoring a saved count is the BATTERY SAVE card's job (STATE.md). */
     }
-#endif
-#if defined(PORT_BOOT) && defined(PORT_RESEED)
-    /* ---- BOOT FIRST, THEN TAKE THE ARCADE'S STATE ------------------------------
-     *
-     * The two halves each work and neither is enough alone, measured 2026-10-03:
-     *
-     *   boot only   builds tile/text/palette RAM and DRAWS (18.3% of pixels), but
-     *               its own cold-boot path diverges and it hangs at state 0x10.
-     *   seed only   advances correctly THROUGH the transition to state 0x14 -- the
-     *               one the cold boot never makes -- but renders black, because a
-     *               work-RAM capture restores no video RAM.
-     *
-     * So: boot, let the game build its layers, then overwrite work RAM ONCE with the
-     * arcade's captured state and let the coroutine carry on from there. This is the
-     * gate's own model (position = where the game stands, state = the seed) applied
-     * to a running picture rather than to a score. PORT_RESEED is the tick to do it
-     * on; the capture is whichever L2DIR selected. */
-    if (pp_k == (uint)PORT_RESEED) {
-        uint i;
-        l2m_index();
-        for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-        port_play_dbg[7] = 0x52534544u;   /* 'RSED' -- the re-seed happened */
-    }
-#endif
     {
         /* slot 2 = 0xFFC080; +0x21 at 0xFFC0A1, +0x22 at 0xFFC0A2 */
         const volatile unsigned char *s2 = (const volatile unsigned char *)WRAM_BASE + (0xFFC0A0u - 0xFFC000u);
@@ -2466,579 +1757,7 @@ PORTCODE void port_play_tick(void)
             port_mark_n++;
         }
     }
-#ifdef PORT_JUMP
-    if (pp_k == (uint)PORT_JUMP_AT) { extern void port_irq_redirect(uint); port_irq_redirect((uint)PORT_JUMP); }   /* probe: see coro_entry */
-#endif
     pp_k++;
     port_play_dbg[1]++;
     port_play_dbg[2] = pp_k;
 }
-#endif /* PORT_PLAY */
-
-PORTCODE void port_l2m_run(void)
-{
-    volatile byte *w = (volatile byte *)WRAM_BASE;
-    uint k, i, t0, first, reg[4], miss, spur, d, step, acc;
-    uint amiss = 0, aspur = 0, bmiss = 0, bspur = 0;
-    uint amin = 0xFFFFFFFFu, amax = 0, asum = 0, alast = 0;
-    uint bmin = 0xFFFFFFFFu, bmax = 0, bsum = 0, blast = 0;
-
-    for (i = 0; i < 4; i++) { port_l2m_canary_lo[i] = CANARY; port_l2m_canary_hi[i] = CANARY; }
-    l2m_index();
-    port_l2m_out[0] = 0x464D4C32u;         /* 'FML2' */
-    port_l2m_out[1] = l2m_n;
-
-    /* ---- ONE SEEDED FRAME, left in work RAM for a host-side diff. */
-    if (L2M_SEEDAT) {
-        port_l2m_out[188] = 0x53454544u;             /* 'SEED' */
-        port_l2m_out[189] = L2M_SEEDAT;
-        port_l2m_out[179] = (uint)(int)L2M_SKIP;
-        l2m_fill_mmio();
-        port_reset_pseudoregs();
-        for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-        for (k = 1; k <= (uint)L2M_SEEDAT && k <= l2m_n; k++) l2m_apply(w, k);
-        /* AFTER the blanket fill, so the captured ports win over 0xFF. The frame
-         * being RUN is the one seeded to, so its own I/O is index L2M_SEEDAT. */
-        l2m_io_apply((uint)L2M_SEEDAT);
-        dispatch_skip = L2M_SKIP;
-        if (L2M_WATCH) {
-            port_watch_out[0] = 0x57415443u;          /* 'WATC' */
-            port_watch_out[1] = L2M_WATCH;
-            watch_sp = 0; watch_nhit = 0;
-            watch_cell = WATCH_IS_TILE(L2M_WATCH) ? WATCH_TILE_PTR(L2M_WATCH)
-                                                  : (w + ((uint)L2M_WATCH - 0xFFC000u));
-        }
-        t0 = FRT16();
-        l2m_frame_body_seeded((int)(uint)L2M_SEEDAT);
-        if (L2M_WATCH) {
-            watch_cell = 0;
-            port_watch_out[128] = watch_nhit;
-            port_watch_out[166] = watch_nhit;
-        }
-        port_l2m_out[191] = (uint)(unsigned short)(FRT16() - t0);
-        dispatch_skip = -1;
-        /* WHAT THE CHAIN ACTUALLY HOLDS. The write-backs are in (3,647 references
-         * in the unit) and the seed frame did not move, so publish the file rather
-         * than reason about it: [180] D3, [181] D6 after the frame body. The arcade
-         * at this frame ends slot 40 with D3=0x12 and D6=0xFA80. */
-        port_l2m_out[180] = _port_reg[3];
-        port_l2m_out[181] = _port_reg[6];
-        port_l2m_out[182] = _port_reg_n;
-        port_l2m_out[183] = port_zoom_dbg[0];
-        port_l2m_out[184] = port_zoom_dbg[1];
-        port_l2m_out[185] = port_zoom_dbg[2];
-        port_l2m_out[201] = port_spawn_dbg[0];
-        port_l2m_out[202] = port_spawn_dbg[1];
-        port_l2m_out[203] = port_spawn_dbg[2];
-        port_l2m_out[204] = port_spawn_dbg[3];
-        port_l2m_out[205] = port_spawn_dbg[4];
-        port_l2m_out[206] = port_spawn_dbg[5];
-        port_l2m_out[186] = _port_reg[9];   /* A1 -- the arcade has 0x6F2C at the zoom call */
-        /* A5, because the player's respawn hangs off it: the despawn needs
-         * A4 = the word at A5+0x1C, and the arcade has A5 = 0xFFFFE000 (the player-1
-         * record) at that call. Published as the SH-2 pointer the port holds, so
-         * subtract WRAM_BASE to read it as a 68K address. FULL-PORT.md 62. */
-        port_l2m_out[187] = _port_reg[13];
-#ifdef PORT_MAINLOOP
-        port_l2m_out[196] = port_io_dbg[0];  /* 'L2IO' if the capture was applied */
-        port_l2m_out[197] = port_io_dbg[3];
-        port_l2m_out[192] = 0x4D41494Eu;    /* 'MAIN' */
-        port_l2m_out[193] = mainloop_frames;
-        port_l2m_out[194] = mainloop_yields;
-#ifdef PORT_CORO
-        port_l2m_out[198] = 0x434F524Fu;    /* 'CORO' */
-        port_l2m_out[199] = coro_stack_used();
-        port_l2m_out[200] = coro_returned;
-#endif
-#endif
-        for (i = 0; i < 8u; i++) port_l2m_out[248 + i] = port_fn_count[i];
-        port_l2m_out[190] = 1;
-        return;                                      /* work RAM IS the result */
-    }
-
-    /* ---- ENDURANCE: free-run N frames and LEAVE WORK RAM AT THE ENDPOINT.
-     *
-     * Built with PORTENDURE=N this REPLACES the curves. It costs no cart space for
-     * deltas -- the host compares the dumped work RAM against the arcade's capture
-     * at frame 9000+N -- so N is not bounded by .portdata or by the O(k^2) scorer,
-     * and can be the repo's own 900-frame probe unit (15 s) instead of what the
-     * delta chain fits.
-     *
-     * It also yields EVERY wrong cell at the endpoint; the in-rom collector holds
-     * the first 32.
-     *
-     * IT REPLACES THE CURVES RATHER THAN FOLLOWING THEM because the curves and the
-     * ablation passes re-seed work RAM dozens of times -- whatever they leave behind
-     * is not an endpoint, and a dump must be unambiguous about which run made it. */
-    if (L2M_ENDURE) {
-        port_l2m_out[188] = 0x454E4452u;             /* 'ENDR' */
-        port_l2m_out[189] = L2M_ENDURE;
-
-        /* SELF-TEST THE SCORER FIRST, then free-run. Order matters and getting it
-         * wrong produced two plausible wrong numbers in a row: whatever runs LAST
-         * owns work RAM, and an ares --dump reports the END state. With the
-         * self-test last, work RAM held expected(N) -- the capture itself -- and the
-         * host diff read 2. With the one-frame ladder still running after, it held
-         * one frame from the seed and the host diff read 241 against a control of
-         * 236, which looks exactly like a port that nearly works.
-         *
-         * The self-test seeds work RAM to expected(N) by APPLYING the deltas (the
-         * host proves that image IS the capture, 0 bytes differ) and scores it. The
-         * only honest answer is 0. */
-        /* the self-test and the in-rom score only mean anything for N within the
-         * delta chain; beyond it the host diff is the instrument */
-        port_l2m_out[79] = l2m_n;
-        port_reset_pseudoregs();
-        for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-        for (k = 1; k <= (uint)L2M_ENDURE && k <= l2m_n; k++) l2m_apply(w, k);
-        port_l2m_out[76] = l2m_score(w, (uint)L2M_ENDURE, &first, reg, &miss, &spur);
-        port_l2m_out[77] = (first == 0xFFFFFFFFu) ? 0xFFFFFFFFu : (0xFFC000u + first);
-        port_l2m_out[78] = 0x53454C46u;               /* 'SELF' */
-
-        /* now the endurance run, and it is LAST so work RAM is the endpoint */
-        l2m_fill_mmio();
-        port_reset_pseudoregs();
-        for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-        acc = 0;
-        /* FREE-RUN IS AVAILABLE AGAIN AT THIS ENTRY. The refusal here was written
-         * when PORTMAIN entered at 0x005BE, whose PROLOGUE clears text/tile/sprite
-         * RAM -- so re-entering per frame erased everything and nothing could
-         * accumulate. `frame_rotated` begins at 0x0AE2, INSIDE the loop, and has no
-         * prologue: re-entering runs tail, head, body, vsync, which is exactly one
-         * more frame. State lives in work RAM and carries across by construction.
-         * A coroutine would still be more faithful (it would preserve the SH-2 call
-         * stack too) but it is no longer the precondition for measuring free-run. */
-        for (k = 1; k <= (uint)L2M_ENDURE; k++) {
-            /* PORTWATCH OVER THE LAST ENDURANCE FRAME ONLY.
-             *
-             * The watch used to be armed only inside the PORTSEED block, and that
-             * made it blind to exactly the defect it was needed for: the free-run
-             * cascade's first spurious spawn (slot 41) happens at FREE-RUN frame 2,
-             * whose input is the PORT'S OWN frame-1 output, not the arcade's capture.
-             * Armed on a seeded frame 1 the watch saw ZERO spans -- a true answer to
-             * the wrong question. Arming it on the LAST endurance frame makes
-             * PORTENDURE=N the frame selector: N is the frame watched, and the span
-             * list is that frame's alone rather than every frame's merged. */
-            if (L2M_WATCH && k == (uint)L2M_ENDURE) {
-                port_watch_out[0] = 0x57415443u;      /* 'WATC' */
-                port_watch_out[1] = L2M_WATCH;
-                watch_sp = 0; watch_nhit = 0;
-                watch_cell = WATCH_IS_TILE(L2M_WATCH) ? WATCH_TILE_PTR(L2M_WATCH)
-                                                  : (w + ((uint)L2M_WATCH - 0xFFC000u));
-            }
-            t0 = FRT16();
-            /* FEED THE FRAME ITS OWN CONTROLLER STATE. Without this a free-run is
-             * being scored against a capture of a session WITH inputs while playing
-             * with none, so it diverges by construction and the number says nothing
-             * about the port. Frame k's record is index k; beyond the blob
-             * l2m_io_apply returns 0 and leaves the last frame's values, which the
-             * reader can see from [197]. */
-            l2m_io_apply(k - 1u);   /* io(k-1): see the free-run loop's note */
-            l2m_frame_body();
-            acc += (uint)(unsigned short)(FRT16() - t0);
-            if (L2M_WATCH && k == (uint)L2M_ENDURE) {
-                watch_cell = 0;
-                port_watch_out[128] = watch_nhit;
-                port_watch_out[166] = watch_nhit;
-            }
-            port_l2m_out[190] = k;                   /* frames done, live */
-        }
-        port_l2m_out[191] = acc;
-#if defined(PORT_MAINLOOP) && defined(PORT_CORO)
-        port_l2m_out[198] = 0x434F524Fu;             /* 'CORO' */
-        port_l2m_out[199] = coro_stack_used();
-        port_l2m_out[200] = coro_returned;
-#endif
-        for (i = 0; i < 8u; i++) port_l2m_out[248 + i] = port_fn_count[i];
-        port_l2m_out[72] = l2m_score(w, (uint)L2M_ENDURE, &first, reg, &miss, &spur);
-        port_l2m_out[73] = miss; port_l2m_out[74] = spur;
-        port_l2m_out[75] = (first == 0xFFFFFFFFu) ? 0xFFFFFFFFu : (0xFFC000u + first);
-        return;                                      /* work RAM IS the endpoint */
-    }
-    /* THE CURVE IS DOWNSAMPLED TO 32 POINTS, not stored per frame. 256 frames of
-     * per-frame counts would be 256 words per curve and the array does not have
-     * them; the SHAPE is what the curve is read for, and min/max/sum/last carry
-     * the rest exactly. */
-    step = (l2m_n + 31u) / 32u;
-    if (!step) step = 1u;
-    port_l2m_out[7] = step;
-
-    /* ---- FREE-RUN. Seed once; the port's own output is the next frame's input,
-     * so an error at frame 3 is still there at the end. Pseudo-registers are NOT
-     * reset between frames: on the 68K they carry across the frame boundary. */
-    l2m_fill_mmio();
-    port_reset_pseudoregs();
-    for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-    /* PER-FRAME DELTAS SUMMED IN 32 BITS. FRT16 is a 16-bit free-running counter
-     * and wraps at ~91 ms, so ONE span across a 256-frame curve is meaningless: the
-     * same build reported 2.7 ms and 90.7 ms on two runs. Each FRAME is far below
-     * the wrap, so per-frame deltas accumulate correctly. */
-    acc = 0;
-    /* FREE-RUN WORKS AT THE 0x0AE2 ENTRY. The refusal that used to sit here was for
-     * the 0x005BE entry, whose prologue clears text/tile/sprite RAM so nothing could
-     * accumulate; `frame_rotated` has no prologue and state carries in work RAM. */
-    for (i = 0; i < SLOTS; i++) l2m_slotfirst[i] = 0;
-#ifndef L2M_SLOT_PERFRAME
-    l2m_slotmark = 1;               /* free-run ONLY: see l2m_slotfirst */
-#endif
-    for (k = 1; k <= l2m_n; k++) {
-        t0 = FRT16();
-        /* io(k-1), NOT io(k). The capture's own relation is that the frame which
-         * READS the ports produces the state visible at the NEXT boundary --
-         * `~io(N)[0xC41003]` equals work RAM's 0xFFE028 at frame N+1 (239 of 257
-         * frames; the other 18 have that write gated off). Free-run frame k
-         * transitions from the port's own frame k-1 to frame k, so the input it must
-         * read is frame k-1's.
-         *
-         * The PER-FRAME loop already had this right (`l2m_io_apply(k - 1u)`, "the
-         * frame being RUN is the one seeded to") and so did the seeded path; free-run
-         * and endurance did not, so every free-run and endurance number before
-         * 2026-10-03 was measured with the controller shifted one frame. */
-        l2m_io_apply(k - 1u);
-        l2m_frame_body();
-        l2m_slotframe = k;
-        d = l2m_score(w, k, &first, reg, &miss, &spur);
-        acc += (uint)(unsigned short)(FRT16() - t0);
-        amiss += miss; aspur += spur; asum += d; alast = d;
-        if (d < amin) amin = d;
-        if (d > amax) amax = d;
-        if ((k - 1u) % step == 0u && (k - 1u) / step < 32u)
-            port_l2m_out[8 + (k - 1u) / step] = d;
-        port_l2m_out[2] = k;
-        if (k == L2M_SLOTMASK_AT)
-            for (i = 0; i < 4; i++) port_l2m_out[240 + i] = l2m_offmask[i];
-        if (k == l2m_n) {
-            port_l2m_out[88] = (first == 0xFFFFFFFFu) ? 0xFFFFFFFFu : (0xFFC000u + first);
-            for (i = 0; i < 4; i++) port_l2m_out[84 + i] = reg[i];
-            for (i = 0; i < 4; i++) port_l2m_out[244 + i] = l2m_offmask[i];
-        }
-    }
-    l2m_slotmark = 0;
-#ifndef L2M_SLOT_PERFRAME
-    /* PACK BOTH PER-SLOT ARRAYS, 4 slots per word, slot 0 in the HIGH byte so a
-     * hex dump reads left to right in slot order. */
-    for (i = 0; i < SLOTS / 4u; i++) {
-        port_l2m_out[208 + i] =
-              ((uint)l2m_slotfirst[i*4+0] << 24) | ((uint)l2m_slotfirst[i*4+1] << 16)
-            | ((uint)l2m_slotfirst[i*4+2] <<  8) |  (uint)l2m_slotfirst[i*4+3];
-        port_l2m_out[224 + i] =
-              ((uint)l2m_slotwrong[i*4+0] << 24) | ((uint)l2m_slotwrong[i*4+1] << 16)
-            | ((uint)l2m_slotwrong[i*4+2] <<  8) |  (uint)l2m_slotwrong[i*4+3];
-    }
-#endif /* L2M_SLOT_PERFRAME: the per-frame curve owns this block instead */
-    port_l2m_out[4] = acc;
-    port_l2m_out[72] = amin; port_l2m_out[73] = amax; port_l2m_out[74] = asum;
-    port_l2m_out[75] = alast; port_l2m_out[76] = amiss; port_l2m_out[77] = aspur;
-
-    /* ---- PER-FRAME. Each frame starts from the ARCADE's state, so the score is
-     * that frame's own difficulty with no inherited error. */
-#ifdef L2M_SLOT_PERFRAME
-    /* RESET, or the first-wrong column is the FREE-RUN's. The free-run loop runs
-     * first and would otherwise have already stamped every slot, which turns the
-     * one column that answers "does this slot own a defect" back into the column
-     * that cannot answer it. Caught by the numbers looking identical to free-run. */
-    for (i = 0; i < SLOTS; i++) l2m_slotfirst[i] = 0;
-#endif
-    acc = 0;
-    {
-        uint zoom = L2M_ZOOM, found = 0;
-        int worstnet = 0;
-        for (k = 1; k <= l2m_n; k++) {
-            t0 = FRT16();
-            /* WHICH FRAME GETS ITS CELLS RECORDED. Without a zoom it is the last
-             * frame. With one it is the first frame in the window that STEPS, which
-             * is the frame worth looking at. */
-            if (zoom)
-                l2m_collect = 0;        /* decided after the score, below */
-            else
-                l2m_collect = (k == l2m_n);
-            l2m_nmiss = l2m_nspur = 0;
-            port_reset_pseudoregs();
-            for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-            for (i = 1; i < k; i++) l2m_apply(w, i);
-            l2m_io_apply(k - 1u);   /* the frame being RUN is the one seeded to */
-            l2m_frame_body_seeded((int)k - 1);
-            /* PER-SLOT ON THE PER-FRAME CURVE TOO, UNDER PORTPFSLOT=1 -- and it
-             * answers a question the free-run version cannot. Free-run per-slot says
-             * "slot 16 is 3 bytes wrong at f146 and 61 at f250", which is consistent
-             * with BOTH "its own defect, compounding" and "it inherits the player's".
-             * The per-frame curve re-seeds from the arcade every frame, so there is no
-             * inherited error at all: if slot 16 reads ~0 here it is purely downstream,
-             * and if it reads large it owns a defect. Those need opposite work, which
-             * is why guessing between them is not an option.
-             *
-             * It reuses the free-run block ([208..239]) rather than claiming new
-             * slots: the result array is exactly the 256 words the 0x400 dump carries
-             * and every one is accounted for. A build sets one or the other. */
-#ifdef L2M_SLOT_PERFRAME
-            l2m_slotmark = 1;
-            l2m_slotframe = k;
-#endif
-            d = l2m_score(w, k, &first, reg, &miss, &spur);
-#ifdef L2M_SLOT_PERFRAME
-            l2m_slotmark = 0;
-            if (k == l2m_n)
-                for (i = 0; i < SLOTS / 4u; i++) {
-                    port_l2m_out[208 + i] =
-                          ((uint)l2m_slotfirst[i*4+0] << 24) | ((uint)l2m_slotfirst[i*4+1] << 16)
-                        | ((uint)l2m_slotfirst[i*4+2] <<  8) |  (uint)l2m_slotfirst[i*4+3];
-                    port_l2m_out[224 + i] =
-                          ((uint)l2m_slotwrong[i*4+0] << 24) | ((uint)l2m_slotwrong[i*4+1] << 16)
-                        | ((uint)l2m_slotwrong[i*4+2] <<  8) |  (uint)l2m_slotwrong[i*4+3];
-                }
-#endif
-            bmiss += miss; bspur += spur; bsum += d; blast = d;
-            if (d < bmin) bmin = d;
-            if (d > bmax) bmax = d;
-            if (zoom) {
-                if (k >= zoom && k < zoom + 32u)
-                /* THE WORST FRAME IN THE WINDOW, not the first to step. A step
-                 * trigger only fires where the net JUMPS, and the net can be flat
-                 * and high -- f201..f232 all sit near +45 -- so the window with the
-                 * most to say would collect nothing. Tracking the maximum net always
-                 * fires and picks the frame actually worth looking at. */
-                if (k >= zoom && k < zoom + 32u) {
-                    int nt = (int)(d - fcnt[k]);
-                    if (!found || nt > worstnet) { worstnet = nt; found = k; }
-                }
-            } else if ((k - 1u) % step == 0u && (k - 1u) / step < 32u) {
-                port_l2m_out[40 + (k - 1u) / step] = d;
-            }
-            acc += (uint)(unsigned short)(FRT16() - t0);
-            port_l2m_out[3] = k;
-        }
-        port_l2m_out[168] = zoom;
-        if (zoom && found) {
-            port_l2m_out[167] = found;
-            port_l2m_out[169] = (uint)worstnet;      /* SIGNED: the reader casts */
-            port_l2m_out[170] = fcnt[found];
-            l2m_collect = 1; l2m_nmiss = l2m_nspur = 0;
-            port_reset_pseudoregs();
-            for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-            for (i = 1; i < found; i++) l2m_apply(w, i);
-            l2m_frame_body_seeded((int)found - 1);
-            (void)l2m_score(w, found, &first, reg, &miss, &spur);
-            l2m_collect = 0;
-            port_l2m_out[164] = l2m_nspur;
-            port_l2m_out[165] = l2m_nmiss;
-        }
-    }
-    port_l2m_out[5] = acc;
-    port_l2m_out[78] = bmin; port_l2m_out[79] = bmax; port_l2m_out[80] = bsum;
-    port_l2m_out[81] = blast; port_l2m_out[82] = bmiss; port_l2m_out[83] = bspur;
-    l2m_collect = 0;
-    if (!L2M_ZOOM) { port_l2m_out[164] = l2m_nspur; port_l2m_out[165] = l2m_nmiss; }
-
-    {   uint bad = 0;
-        for (i = 0; i < 4; i++) {
-            if (port_l2m_canary_lo[i] != CANARY) bad |= 1u;
-            if (port_l2m_canary_hi[i] != CANARY) bad |= 2u;
-        }
-        port_l2m_out[6] = bad;
-    }
-
-    /* ---- PER-SLOT ATTRIBUTION BY LEAVE-ONE-OUT ABLATION.
-     *
-     * The first version of this dispatched ONE slot and compared to the control. It
-     * was uninformative BY CONSTRUCTION and the measurement said so: all four slots
-     * returned a net between -4.5 and -9.0, because dispatching one slot leaves the
-     * other three's work undone and every row is dominated by that missing work
-     * (~30 missed cells regardless of which slot ran).
-     *
-     * Ablation is the right shape: dispatch ALL slots EXCEPT one, and compare to the
-     * full frame. The slot whose REMOVAL most improves the score is the one doing
-     * the damage; a slot whose removal makes things worse is doing useful work.
-     *
-     * [171..186] four slots x (sum with that slot skipped, missed, spurious,
-     * full-frame sum over the same sampled frames). */
-    {
-        static const signed char SL[4] = { 0, 16, 17, 40 };
-        uint si, fullsum = 0, cnt = 0;
-        /* the baseline over exactly the same sampled frames */
-        for (k = 8u; k <= l2m_n; k += 8u) {
-            port_reset_pseudoregs();
-            for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-            for (i = 1; i < k; i++) l2m_apply(w, i);
-            l2m_frame_body_seeded((int)k - 1);
-            fullsum += l2m_score(w, k, &first, reg, &miss, &spur);
-            cnt++;
-        }
-        port_l2m_out[187] = cnt;
-        for (si = 0; si < 4u; si++) {
-            uint ssum = 0, smiss = 0, sspur = 0;
-            dispatch_skip = SL[si];
-            for (k = 8u; k <= l2m_n; k += 8u) {
-                port_reset_pseudoregs();
-                for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-                for (i = 1; i < k; i++) l2m_apply(w, i);
-                l2m_frame_body_seeded((int)k - 1);
-                d = l2m_score(w, k, &first, reg, &miss, &spur);
-                ssum += d; smiss += miss; sspur += spur;
-            }
-            dispatch_skip = -1;
-            port_l2m_out[171 + si * 4 + 0] = ssum;
-            port_l2m_out[171 + si * 4 + 1] = smiss;
-            port_l2m_out[171 + si * 4 + 2] = sspur;
-            port_l2m_out[171 + si * 4 + 3] = fullsum;
-        }
-    }
-
-    /* ---- WHO WROTE IT. One pass per watched cell, from the arcade's own state at
-     * the last frame, so the write observed is the one the gate scored. RESTORED
-     * 2026-09-30: the rewrite above dropped these passes and left the hooks and
-     * probe_sample() in place with nothing calling them, so port_watch_out read as
-     * if the instrument had never run -- a silent loss of the instrument that found
-     * the DAT_fffff142 width bug. */
-    {
-        static const uint WATCH[4] = { 0xFFEC80u, 0xFFECC0u, 0xFFED20u, 0xFFC800u };
-        uint wi;
-        port_watch_out[0] = 0x57415443u;             /* 'WATC' */
-        for (wi = 0; wi < 4u; wi++) {
-            port_reset_pseudoregs();
-            for (i = 0; i < WRAM_BYTES; i++) w[i] = l2_before[i];
-            for (i = 1; i < l2m_n; i++) l2m_apply(w, i);
-            watch_sp = 0; watch_nhit = 0;
-            watch_cell = w + (WATCH[wi] - 0xFFC000u);
-            port_watch_out[1 + wi] = WATCH[wi];
-            l2m_frame_body_seeded((int)l2m_n - 1);
-            watch_cell = 0;
-            port_watch_out[20 + wi * 3 + 0] = port_watch_out[136];
-            port_watch_out[20 + wi * 3 + 1] = port_watch_out[137];
-            port_watch_out[20 + wi * 3 + 2] = port_watch_out[138];
-            port_watch_out[128 + wi]        = watch_nhit;
-            if (wi + 1u < 4u)
-                for (i = 136; i < 167u; i++) port_watch_out[i] = 0;
-        }
-    }
-}
-
-
-
-void port_l2m_run(void);
-
-/* FREEZE AFTER A FEW SWEEPS. The driver runs every vint so the result survives to
- * the rig's first screenshot, but that makes an ares memory dump land at a random
- * point in the variant order -- so the work RAM it reads belongs to whichever probe
- * happened to be running, not to the headline result. Measured: a dump of a rom
- * reporting 207 showed 85 wrong bytes, which is the single-slot probe's score.
- * After FREEZE_AFTER sweeps the counters stop changing and the memory holds
- * variant 4's state, which is what port_l2_out[2..6] describes. */
-#define FREEZE_AFTER 8
-
-PORTCODE void port_l2_run(void)
-{
-    volatile byte *w = (volatile byte *)WRAM_BASE;
-    uint i, v, vi, t0, _reg[4];
-
-    port_l2_out[0] = 0x504C3220u;            /* 'PL2 ' */
-    l2m_index();        /* the ladder scores through l2m_score now, which needs it */
-
-    /* UNDER PORTENDURE THE LADDER MUST NOT RUN. It re-seeds work RAM and runs the
-     * one-frame variants on EVERY vint for FREEZE_AFTER sweeps, so the state an
-     * ares dump reads is variant 4's -- ONE frame from the seed -- and not the
-     * endurance endpoint at all.
-     *
-     * Measured 2026-09-30, and it produced a plausible wrong number rather than an
-     * obvious one: the host diff read 241 against a control of 236 and I reported
-     * "net +5", when 241 is simply how far ONE frame from the seed sits from the
-     * capture 256 frames later. The in-rom score of the real endpoint was 281. A
-     * state that is nearly the control looks like a port that nearly works. */
-    if (L2M_ENDURE || L2M_SEEDAT) {
-        static int endure_done;
-        if (!endure_done) { endure_done = 1; port_l2m_run(); }
-        return;
-    }
-    {   /* PROBE: read the state jump table the object handlers dispatch through,
-         * directly, in the driver. If [64] is not 0x0000EFD2 the port cannot see
-         * the cart at all and the 208 missed calls are a memory-map fault, not a
-         * dispatch-table gap. */
-        extern char DAT_0000f556;
-        const unsigned char *t = (const unsigned char *)&DAT_0000f556;
-        port_l2_out[64] = ((uint)t[0] << 24) | ((uint)t[1] << 16)
-                        | ((uint)t[2] << 8)  |  (uint)t[3];
-        port_l2_out[65] = (uint)(unsigned long)t;
-        port_l2_out[66] = ((uint)((const unsigned char *)ROM_BASE)[0xF556] << 24)
-                        | ((uint)((const unsigned char *)ROM_BASE)[0xF557] << 16)
-                        | ((uint)((const unsigned char *)ROM_BASE)[0xF558] << 8)
-                        |  (uint)((const unsigned char *)ROM_BASE)[0xF559];
-    }
-    if (port_l2_out[8] >= FREEZE_AFTER)
-        return;
-    for (i = 0; i < 8; i++) {
-        port_l2_canary_lo[i] = CANARY;
-        port_l2_canary_hi[i] = CANARY;
-    }
-
-    /* ORDER: the headline variant (4, the full frame) runs LAST, so the work RAM
-     * an ares dump reads is always the state that produced port_l2_out[2..6].
-     * Otherwise the dump shows whatever the last per-slot probe left, and a
-     * per-cell analysis of "the 207 wrong bytes" is really analysing a
-     * single-slot run. */
-    static const unsigned char ORDER[NVARIANT] =
-        { 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 4 };
-    for (vi = 0; vi < NVARIANT; vi++) {
-        v = ORDER[vi];
-        uint diff = 0, first = 0xFFFFFFFFu, ticks;
-        unknown_handlers = 0;
-        port_l2_out[7] = 0;
-        port_l2_out[15] = v;                 /* watchdog: the variant ENTERED */
-
-        /* MMIO stub FIRST, work RAM second: if the two ever overlap, filling
-         * after the seed destroys the frame state and the score measures the
-         * overlap instead of the port. */
-        port_mmio_reset();
-        /* and the pseudo-registers, which persist between calls: re-seeding work
-         * RAM alone left each variant's score depending on what ran before it
-         * (191 vs 207 for the same sequence). */
-        port_reset_pseudoregs();
-        for (i = 0; i < WRAM_BYTES; i++)     /* re-seed: every variant gets the
-                                              * same starting frame */
-            w[i] = l2_before[i];
-        /* and prove they do not overlap, rather than trusting the map: a stray
-         * 0xFF inside the seeded frame would look like a port defect */
-        if (w[0] != l2_before[0] || w[WRAM_BYTES - 1] != l2_before[WRAM_BYTES - 1])
-            port_l2_out[22]++;
-
-        port_l2_out[1] = 1;
-        t0 = FRT16();
-        run_variant(v);
-        port_l2_out[1] = 5;
-        ticks = (uint)(unsigned short)(FRT16() - t0);
-
-        {   uint _m, _s, _f;
-            diff  = l2m_score(w, 1u, &_f, _reg, &_m, &_s);
-            first = _f;
-        }
-        port_l2_out[24 + v] = diff;          /* bytes wrong, per variant: 24..33,
-                                      * and NOTHING else may use 24..39 */
-        port_l2_out[21]     = ticks;         /* cost of the LAST variant run */
-        port_l2_out[23]     = 0x5641524Du;   /* 'VARM': the variant block is valid */
-
-        if (v == 4) {                        /* the best-guess sequence stays in [2..6] */
-            port_l2_out[2] = diff;
-            port_l2_out[3] = (first == 0xFFFFFFFFu) ? 0xFFFFFFFFu : (0xFFC000u + first);
-            port_l2_out[4] = ticks;
-            port_l2_out[5] = unknown_handlers;
-            port_l2_out[6] = WRAM_BYTES - diff;
-        }
-    }
-    {   /* report the canaries LAST: a surviving pair means nothing wrote through
-         * the array during the sweep, and the numbers above can be believed. */
-        uint bad = 0;
-        for (i = 0; i < 8; i++) {
-            if (port_l2_canary_lo[i] != CANARY) bad |= 1u;
-            if (port_l2_canary_hi[i] != CANARY) bad |= 2u;
-        }
-        port_l2_out[22] = bad;               /* 0 = intact, 1 = low, 2 = high, 3 = both */
-    }
-    port_l2_out[8]++;                        /* sweeps completed */
-
-    /* THE MULTI-FRAME CHAIN RUNS ONCE, on the first sweep, and LAST. It leaves
-     * work RAM in its own state, so the remaining sweeps restore variant 4's --
-     * which is what an ares memory dump is read against. */
-    {   static int l2m_done;
-        if (!l2m_done) { l2m_done = 1; port_l2m_run(); }
-    }
-}
-
-#endif /* PORT_FULL */

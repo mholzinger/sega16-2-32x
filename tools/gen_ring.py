@@ -19,7 +19,7 @@ import os, struct, subprocess, sys, tempfile
 from collections import Counter
 PHH_ = {}
 
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 EV = ["launch", "echo", "tail", "close", "ship", "flip"]
 
 def read(rom, n):

@@ -6835,6 +6835,16 @@ if os.environ.get('CPORT_F154LOG'):
     out.insert(0, 'extern void port_f154_note(unsigned site, unsigned char old); extern unsigned char port_f154_read(unsigned site, unsigned char v);')
     out.insert(1, '/* F154LOG sites: %s */' % ' '.join('%d=%s:%s' % (i + 1, k, f) for i, (k, f) in enumerate(_f154_sites)))
     sys.stderr.write('cport_prep: F154LOG %d sites: %s\n' % (len(_f154_sites), ' '.join('%d=%s:%s' % (i + 1, k, f) for i, (k, f) in enumerate(_f154_sites))))
+# Optional game-configured backpressure at native producer entries. The guard
+# compiles away exactly when its feature symbol is absent; no body is replaced.
+if os.environ.get('CPORT_ENTRY_GUARDS'):
+    from cport_entry_guards import apply_entry_guards
+    try:
+        _guarded, _nguards = apply_entry_guards('\n'.join(out), os.environ['CPORT_ENTRY_GUARDS'])
+    except ValueError as _error:
+        raise SystemExit('cport_prep: ' + str(_error))
+    out = [_guarded]
+    _pass_report('conditional native entry guards inserted', _nguards, 1)
 open(os.path.join(outdir, 'altbeast_port.c'), 'w').write('\n'.join(out))
 # the hand-defined gap handler (see "handler 0x24A4" above) must be visible to the
 # dispatcher unit too: objdispatch.c includes protos.h, not altbeast_port.c (rd42:

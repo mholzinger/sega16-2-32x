@@ -2,7 +2,7 @@
 """Batch composition census on ares (NOTES 51): per window, from
 mdalloc_ctr (MDALLOCWHY=1 build) and DIAG.  One ares run per frame."""
 import os, struct, subprocess, sys
-ARES="/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless"
+ARES=os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
 rom=sys.argv[1]; inp=sys.argv[2] if sys.argv[2]!='-' else None; frames=[int(x) for x in sys.argv[3:]]
 base=None
 import romsyms

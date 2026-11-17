@@ -312,8 +312,9 @@ against.
 
 ## The port's workflow (Mike, 2026-10-04)
 
-- **`make check-demo` is the only gate for the port.** It builds the port out of
-  tree (`make port` -> `build/port/rom/s16.32x`, never `rom/s16.32x`) and diffs every
+- **`make check-demo` is the only gate for the port.** It builds the shipping
+  line without the launcher, out of tree (`make candidate NAME=checkdemo NOLAUNCHER=1` ->
+  `build/port/rom/checkdemo.32x`, never `rom/s16.32x`) and diffs every
   live object record against the arcade's work RAM at ticks 0xA2 0xD4 0x1FE 0x228
   0x246 (`tests/demo-b/`). Report a build as its tick table plus the commit hash.
 - **A hand-derived function is a C file, not a regex pass:**

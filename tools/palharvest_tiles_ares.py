@@ -29,8 +29,8 @@ packer reads either corpus.
 import os, struct, subprocess, sys, tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-ARES = "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless"
-INPUT = "/Users/mikeholzinger/src/sega16-2-32x/discover/inputs/play2.csv"
+ARES = os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+INPUT = os.path.expanduser("~/src/sega16-2-32x/discover/inputs/play2.csv")
 JOBS = 8
 
 

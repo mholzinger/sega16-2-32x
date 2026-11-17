@@ -38,10 +38,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # THE SHIPPING BUILD (make candidate, R60NEW): sh_src/r60 replaces m_main.c/s_main.c.
 # The generated port unit (sh_src/portfull/altbeast_port.c) is decompiler output and is
 # left out; its hand files are audited as code.
-CANDIDATE_FILES = [('sh_src/r60/r60_main.c', 'sh'), ('sh_src/r60/r60_planes.c', 'sh'),
-                   ('sh_src/port_l2.c', 'sh'), ('sh_src/port_selftest.c', 'sh'),
+# r60_main.c is one unit in nine files: the .inc pieces it includes, in order
+R60_MAIN_PARTS = ['sh_src/r60/r60_palette.inc', 'sh_src/r60/r60_vblank.inc', 'sh_src/r60/r60_text_planes.inc', 'sh_src/r60/r60_plot.inc',
+                  'sh_src/r60/r60_sprite.inc', 'sh_src/r60/r60_baked_sprite.inc', 'sh_src/r60/r60_clear.inc', 'sh_src/r60/r60_macro.inc']
+# md_main.c is one unit in six files, the same way
+MD_MAIN_PARTS = ['md_src/md_palette.inc', 'md_src/md_slim.inc', 'md_src/md_consume.inc']
+CANDIDATE_FILES = [('sh_src/r60/r60_main.c', 'sh')] + [(f, 'sh') for f in R60_MAIN_PARTS] + [('sh_src/r60/r60_planes.c', 'sh'),
+                   ('sh_src/port_l2.c', 'sh'),
                    ('sh_src/portfull/objdispatch.c', 'sh'), ('sh_src/mars.c', 'sh'),
-                   ('md_src/md_main.c', 'md'), ('md_src/testcart.c', 'md'),
+                   ('md_src/md_main.c', 'md')] + [(f, 'md') for f in MD_MAIN_PARTS] + [('md_src/testcart.c', 'md'),
                    ('md_src/md_sound.c', 'md'), ('md_src/frontend.c', 'md')]
 DEFS_TARGET = 'candidate-defs'
 FILES = CANDIDATE_FILES   # the default since 2026-10-29; --candidate is kept as a no-op

@@ -3,7 +3,7 @@
 
     python3 tools/romcmp.py build/port/rom/A.32x build/port/rom/sw344.32x [--skip lo:hi ...]
 
-Exits 0 when every byte below the build id (0x3FFFD0) matches, 1 otherwise, and names the
+Exits 0 when every byte below the build id (the rom's last 48 bytes) matches, 1 otherwise, and names the
 symbol around each differing run when an .elf sits beside the first rom.
 
 WHY PYTHON (2026-10-30). The gate was `cmp -l A B | awk '$1-1 < 0x3FFFD0'`. macOS awk reads
@@ -13,7 +13,7 @@ in every build for a day and failed demo B.
 """
 import os, subprocess, sys, bisect
 
-BUILD_ID = 0x3FFFD0
+STAMP = 48   # tools/build_id.py: the stamp is the last 48 bytes, whatever the rom size
 NM = os.path.expanduser('~/src/marsdev/mars/sh-elf/bin/sh-elf-nm')
 
 def main():
@@ -28,7 +28,7 @@ def main():
     if len(a) != len(b):
         print('romcmp: sizes differ: %d vs %d' % (len(a), len(b)))
         return 1
-    diff = [i for i in range(min(len(a), BUILD_ID))
+    diff = [i for i in range(len(a) - STAMP)
             if a[i] != b[i] and not any(lo <= i < hi for lo, hi in skips)]
     print('romcmp: %d differing bytes below the build id' % len(diff))
     if not diff:

@@ -1,10 +1,10 @@
 # THE STANDARD 32X PROGRAMMING MODEL — SDK + d32xr audit
 
 Sources read (all local, all full source):
-- **marsdev SDK**: `/Users/mikeholzinger/src/marsdev/` — toolchain (`mars/m68k-elf`, `mars/sh-elf`, gcc 15.2), examples `examples/32x-skeleton/` (new) and `examples/32x-old-skel/` (Chilly Willy classic).
-- **d32xr (Doom 32X Resurrection)**: `/Users/mikeholzinger/src/32x-builder/srcref/d32xr/` — complete checkout (crt0.s, marshw.c/h, marsnew.c, mars.h, src-md/crt0.s 3501 lines, src-md/main.c). The gold standard.
-- **Other homebrew source local**: `/Users/mikeholzinger/src/32x-builder/` (Backrooms raycaster, sh_src/md_src, plus `D32XR_MINING.md` — two prior mining passes over d32xr with file:line cites, done for that project). OpenLara 32X was previously mined by the port itself (NOTES.md:2114-2161). No local Wolf32X tree found.
-- **The port**: `/Users/mikeholzinger/src/sega16-2-32x/` — NOTES.md, docs/log/DEVNOTES.md, sh_src/, md_src/.
+- **marsdev SDK**: `~/src/marsdev/` — toolchain (`mars/m68k-elf`, `mars/sh-elf`, gcc 15.2), examples `examples/32x-skeleton/` (new) and `examples/32x-old-skel/` (Chilly Willy classic).
+- **d32xr (Doom 32X Resurrection)**: `~/src/32x-builder/srcref/d32xr/` — complete checkout (crt0.s, marshw.c/h, marsnew.c, mars.h, src-md/crt0.s 3501 lines, src-md/main.c). The gold standard.
+- **Other homebrew source local**: `~/src/32x-builder/` (Backrooms raycaster, sh_src/md_src, plus `D32XR_MINING.md` — two prior mining passes over d32xr with file:line cites, done for that project). OpenLara 32X was previously mined by the port itself (NOTES.md:2114-2161). No local Wolf32X tree found.
+- **The port**: `~/src/sega16-2-32x/` — NOTES.md, docs/log/DEVNOTES.md, sh_src/, md_src/.
 
 ---
 

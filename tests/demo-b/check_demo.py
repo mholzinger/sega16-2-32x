@@ -27,7 +27,7 @@ table says so (check_one, GF_NEAR).
 import os, re, shutil, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor
 
-ARES = os.environ.get('ARES', '/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless')
+ARES = os.environ.get('ARES', os.path.expanduser('~/src/ares-debug/build_macos/headless-ui/Release/ares-headless'))
 HERE = os.path.dirname(os.path.abspath(__file__))
 ARC = os.environ.get('DEMO_TICKS', os.path.join(HERE, 'arcade'))
 WRAM_SDRAM_OFF = 0x2CC00           # 68K 0xFFC000 lives at SDRAM 0x0602CC00 (cport_layout.py)

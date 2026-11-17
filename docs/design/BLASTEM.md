@@ -8,7 +8,7 @@ Convention follows `SILICON.md`: every claim carries the command that
 reproduces it, and claims READ FROM SOURCE are marked separately from
 claims TESTED.
 
-    binary   /Users/mikeholzinger/bin/blastem-osx-1.0.0/blastem
+    binary   ~/bin/blastem-osx-1.0.0/blastem
     source   ~/src/blastem-0c61d0d95463/
 
 ---

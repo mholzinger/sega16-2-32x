@@ -364,7 +364,7 @@ def main():
                     help='on FAIL, print every mismatching cell with got vs want '
                          'and flag a byte-swap or an untouched input')
     ap.add_argument('--keep', default='/tmp/l1gen')
-    ap.add_argument('--headers', default='/private/tmp/claude-501/-Users-mikeholzinger-src-sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/cport',
+    ap.add_argument('--headers', default='/tmp/sega16-2-32x/a4a45f9f-19fb-4603-93a1-c2e374df121a/scratchpad/cport',
                     help="cport_build.sh output dir (ghidra_types.h, ghidra_rt.h)")
     a = ap.parse_args()
 

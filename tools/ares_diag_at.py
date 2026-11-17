@@ -13,7 +13,7 @@ consumed, 0xFFB0E4 tile packets, 0xFFB0E6 chunk packets, 0xFFB0F0
 vints, 0xFFB0FC entry rejects, 0xFFA0F2 consumes skipped (FM=1),
 0xFFA038/3E consume span mean/max, 0xFFA0A0 V at post (last)."""
 import os, struct, subprocess, sys, tempfile
-ARES = os.environ.get("ARES", "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
+ARES = os.environ.get("ARES", os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless"))
 rom = os.path.abspath(sys.argv[1])
 prev = None
 print("frame | cyc  tb   nt   tiles unc  bdef | phase frc pend | blanks held | 68K vints pkts tb  nt  rej  fmskip | Vpost")

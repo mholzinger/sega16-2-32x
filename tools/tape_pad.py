@@ -51,6 +51,12 @@ def main(tape, arcade, out):
                 cal = (f, int(r['tick'], 16))
     if cal is None:
         raise SystemExit('tape_pad: no in-play arcade tick before the first play input')
+    beyond = [fr for fr, _b, _v in ev if fr not in S]
+    if beyond:
+        raise SystemExit('tape_pad: %d tape edges (first at frame %d) lie beyond the corpus timeline (%d frames): '
+                         'record the corpus for the whole tape or trim the tape; keyed to 0 they would bury the coin '
+                         '(2026-11-05: a 36000-frame tape on a 6000-frame corpus gave keys 0..4690 and the attract ran untouched)'
+                         % (len(beyond), beyond[0], len(A)))
     last, keyed = {}, []
     for i, (fr, btn, val) in enumerate(ev):
         # S(fr), not S(fr - 1): the arcade latches a pad change in the vblank IRQ4 that ENDS

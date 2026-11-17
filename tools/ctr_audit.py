@@ -62,14 +62,18 @@ SHOW_OVERLAPS = False
 # THE SHIPPING BUILD'S BLOCKS (2026-10-29: sh_src/m_main.c's DIAG/mdalloc/CEN/mds blocks
 # retired with that renderer). Slot counts are the distance to the next block in the
 # SDRAM map: R60_DIAG 0x26028E40 -> R60_DIAG2 0x26028E80 -> R60_MMASK 0x26028F00.
-R60_SH = ['sh_src/r60/r60_main.c', 'sh_src/r60/r60_planes.c']
+# r60_main.c is one unit in nine files: the .inc pieces it includes, in order
+R60_MAIN_PARTS = ['sh_src/r60/r60_palette.inc', 'sh_src/r60/r60_vblank.inc', 'sh_src/r60/r60_text_planes.inc', 'sh_src/r60/r60_plot.inc',
+                  'sh_src/r60/r60_sprite.inc', 'sh_src/r60/r60_baked_sprite.inc', 'sh_src/r60/r60_clear.inc', 'sh_src/r60/r60_macro.inc']
+R60_SH = ['sh_src/r60/r60_main.c'] + R60_MAIN_PARTS + ['sh_src/r60/r60_planes.c']
 BLOCKS = {
     'R60_DIAG':  (R60_SH, 16, [r'\bR60_DIAG\s*\[\s*(\d+)\s*\]']),
     'R60_DIAG2': (R60_SH, 32, [r'\bR60_DIAG2\s*\[\s*(\d+)\s*\]']),
 }
 # the files the fixed-block overlap check reads: everything the shipping build compiles
-SH_FILES = R60_SH + ['sh_src/port_l2.c', 'sh_src/port_selftest.c', 'sh_src/mars.c']
-MD_FILES = ['md_src/md_main.c']
+SH_FILES = R60_SH + ['sh_src/port_l2.c', 'sh_src/mars.c']
+MD_MAIN_PARTS = ['md_src/md_palette.inc', 'md_src/md_slim.inc', 'md_src/md_consume.inc']
+MD_FILES = ['md_src/md_main.c'] + MD_MAIN_PARTS
 
 # An OWNING write accumulates: ++, +=, |=, ^=, or `= <something computed>`.
 # `DIAG[19] = 0;` in m_boot_init is an INITIALISER and owns nothing -- the

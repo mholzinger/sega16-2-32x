@@ -26,7 +26,7 @@ map does that, but a new suspect should also get a mid-run dump.
 """
 import glob, os, re, subprocess, sys
 
-ARES = "/Users/mikeholzinger/src/ares-debug/build_macos/headless-ui/Release/ares-headless"
+ARES = os.path.expanduser("~/src/ares-debug/build_macos/headless-ui/Release/ares-headless")
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE, LEN = 0x19000, 0x27000
 RUNS = [("p1", 1, "play2.csv"), ("p300", 300, "play2.csv"),
