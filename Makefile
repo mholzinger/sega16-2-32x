@@ -1,5 +1,8 @@
 # Altered Beast System 16B -> 32X. Build layout from 32x-builder (marsdev).
 MARSDEV ?= ${HOME}/src/marsdev/mars
+# The recipes use bash arithmetic ($$((16#...)) in mk/rom.mk) and tools/shadow_tree.sh
+# uses read -d. macOS /bin/sh is bash; Debian/Ubuntu /bin/sh is dash, where both fail.
+SHELL := /bin/bash
 MDBIN    = $(MARSDEV)/m68k-elf/bin
 SHBIN    = $(MARSDEV)/sh-elf/bin
 
