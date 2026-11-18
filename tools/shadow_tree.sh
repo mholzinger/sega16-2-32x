@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # A shadow of the source tree for an out-of-tree build.
 #   tools/shadow_tree.sh build/port
 # sh_src/, md_src/ and tools/ are REAL COPIES (rsync, newer-wins, objects excluded):
