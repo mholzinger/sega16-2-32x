@@ -549,6 +549,8 @@ endif
 # MAME 32X segfaults on PWM-DREQ DMA1 roms (docs/sound/SOUND.md): gate on ares + the rig only.
 ifdef R60SPEECH
 SHCCFLAGS += -DR60_SPEECH -DPORT_SPEECH
+# the lane decodes with SH2ZAM's exact IMA kernel (sh_src/sh2zam/, MIT, module adpcm-1)
+SHOBJS += sh_src/sh2zam/sh2zam_adpcm.o
 SHASFLAGS += --defsym R60_SPEECH=1
 endif
 # `R60SFX=1` = the arcade's YM sound effects as PWM voices beside the speech (needs R60SPEECH=1):

@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include "../speech_tab.h"
 #include "../sfx_tab.h"
+#include "../sh2zam/adpcm.h"   /* SH2ZAM adpcm-1: exact IMA decode (sh_src/sh2zam/README.md) */
 extern const unsigned char sfx_blob[];      /* sh_src/sound_data.s, cart .sfxdata */
 #define SP_VOICES 4
 
@@ -45,19 +46,10 @@ volatile uint32_t speech_census[8];         /* [0] dma irqs [1] fills [2] underr
 
 struct sp_req { uint8_t serial, sample, vol, flags; };   /* flags: bit7 stop, bit0 = SFX bank */
 static struct sp_req sp_req[SP_VOICES];
-struct sp_voice { const uint8_t *adp; uint32_t nibbles, pos; int32_t pred, idx; uint8_t last_serial, hold, active, rate; };
+struct sp_voice { const uint8_t *adp; uint32_t nibbles, pos; sh2z_ima_state_t st; uint8_t last_serial, hold, active, rate; };
 static struct sp_voice vcs[SP_VOICES];
 #define vc vcs[0]
 
-static const uint16_t ima_step[89] = {
-	7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31,
-	34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143,
-	157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544,
-	598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707,
-	1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871,
-	5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899,
-	15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767 };
-static const int8_t ima_index[16] = { -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8 };
 
 /* ---- master side: the port's sound command ---------------------------------------- */
 static SPCODE void sp_post(unsigned v, unsigned sample, unsigned flags)
@@ -122,27 +114,24 @@ static SPCODE void sp_consume(void)
 		if (r->flags & 1u) { const struct speech_ent *e = &sfx_tab[r->sample]; x->adp = sfx_blob + e->off; x->nibbles = e->nibbles; x->rate = SFX_HOLD; }
 		else
 		{ const struct speech_ent *e = &speech_tab[r->sample]; x->adp = speech_blob + e->off; x->nibbles = e->nibbles; x->rate = SP_HOLD; }
-		x->pos = 0; x->pred = 0; x->idx = 0; x->hold = 0; x->active = 1;
+		x->pos = 0; x->st.pred = 0; x->st.index = 0; x->hold = 0; x->active = 1;
 	}
 	{ unsigned m = 0; for (v = 0; v < SP_VOICES; v++) if (vcs[v].active) m |= 1u << v; UC(speech_census[4]) = m; }
 }
 
-/* Decode one nibble of a voice into its predictor; returns 0 when the voice ends. */
-static SPCODE int sp_step(struct sp_voice *x)
+/* Decode up to n nibbles of a voice into out[] (one predictor per nibble) with SH2ZAM's exact
+ * IMA kernel; returns how many were decoded. The voice ends after its last nibble, as the
+ * old per-nibble sp_step did (an active voice always decodes at least one: a 0-nibble entry
+ * played one nibble there too). */
+#define SP_RUN 32                           /* nibbles per decode run: 64 B of stack per voice */
+static SPCODE unsigned sp_run(struct sp_voice *x, int16_t *out, unsigned n)
 {
-	uint8_t b = x->adp[x->pos >> 1];
-	int nib = (x->pos & 1) ? (b >> 4) : (b & 0x0F);
-	int step = ima_step[x->idx];
-	int delta = step >> 3;
-	if (nib & 4) delta += step;
-	if (nib & 2) delta += step >> 1;
-	if (nib & 1) delta += step >> 2;
-	x->pred += (nib & 8) ? -delta : delta;
-	if (x->pred > 32767) x->pred = 32767; else if (x->pred < -32768) x->pred = -32768;
-	x->idx += ima_index[nib];
-	if (x->idx < 0) x->idx = 0; else if (x->idx > 88) x->idx = 88;
-	if (++x->pos >= x->nibbles) { x->active = 0; return 0; }
-	return 1;
+	uint32_t left = x->nibbles > x->pos ? x->nibbles - x->pos : 1u;
+	if (n > left) n = left;
+	sh2z_ima_decode(&x->st, x->adp, x->pos, out, n);
+	x->pos += n;
+	if (x->pos >= x->nibbles) x->active = 0;
+	return n;
 }
 
 /* One voice at unity: |pred >> 6| <= 512 keeps every sample inside the lab's soft-clip band
@@ -166,28 +155,38 @@ static SPCODE void sp_fill(uint16_t *buf)
 	for (v = 0; v < SP_VOICES; v++) if (vcs[v].active) { nact++; only = v; }
 	if (nact == 1) {
 		struct sp_voice *x = &vcs[only];
+		int16_t run[SP_RUN];
 		while (i < SP_BUF && x->active) {
-			uint16_t out;
-			sp_step(x);
-			out = (uint16_t)(SAMPLE_CENTER + (x->pred >> SP_SHIFT));
-			buf[i] = out; buf[i + 1] = out; i += SP_HOLD;
+			unsigned want = (unsigned)(SP_BUF - i + SP_HOLD - 1) / SP_HOLD, k, n;
+			n = sp_run(x, run, want < SP_RUN ? want : SP_RUN);
+			for (k = 0; k < n; k++) {
+				uint16_t out = (uint16_t)(SAMPLE_CENTER + (run[k] >> SP_SHIFT));
+				buf[i] = out; buf[i + 1] = out; i += SP_HOLD;
+			}
 		}
 	} else if (nact > 1) {
-		for (; i < SP_BUF; i += SP_HOLD) {
-			int32_t mix = 0, s;
-			unsigned any = 0;
+		/* each voice decodes a run, then the runs are mixed sample by sample: the same
+		 * sums as stepping the voices in turn per sample (they are independent), and a
+		 * sample is written while any voice still had a nibble, as before */
+		int16_t run[SP_VOICES][SP_RUN];
+		unsigned len[SP_VOICES];
+		while (i < SP_BUF) {
+			unsigned want = (unsigned)(SP_BUF - i + SP_HOLD - 1) / SP_HOLD, most = 0, k;
+			if (want > SP_RUN) want = SP_RUN;
 			for (v = 0; v < SP_VOICES; v++) {
-				struct sp_voice *x = &vcs[v];
-				if (!x->active) continue;
-				sp_step(x);
-				mix += x->pred >> SP_SHIFT; any = 1;
+				len[v] = vcs[v].active ? sp_run(&vcs[v], run[v], want) : 0u;
+				if (len[v] > most) most = len[v];
 			}
-			if (!any) break;
-			s = SAMPLE_CENTER + mix;
-			if (s > SOFT_HIGH) s = SOFT_HIGH + ((s - SOFT_HIGH) >> 2);
-			else if (s < SOFT_LOW) s = SOFT_LOW - ((SOFT_LOW - s) >> 2);
-			if (s > SAMPLE_MAX) s = SAMPLE_MAX; else if (s < SAMPLE_MIN) s = SAMPLE_MIN;
-			buf[i] = (uint16_t)s; buf[i + 1] = (uint16_t)s;
+			for (k = 0; k < most; k++) {
+				int32_t mix = 0, s;
+				for (v = 0; v < SP_VOICES; v++) if (k < len[v]) mix += run[v][k] >> SP_SHIFT;
+				s = SAMPLE_CENTER + mix;
+				if (s > SOFT_HIGH) s = SOFT_HIGH + ((s - SOFT_HIGH) >> 2);
+				else if (s < SOFT_LOW) s = SOFT_LOW - ((SOFT_LOW - s) >> 2);
+				if (s > SAMPLE_MAX) s = SAMPLE_MAX; else if (s < SAMPLE_MIN) s = SAMPLE_MIN;
+				buf[i] = (uint16_t)s; buf[i + 1] = (uint16_t)s; i += SP_HOLD;
+			}
+			if (most < want) break;          /* every voice ended inside this run */
 		}
 	}
 	for (; i < SP_BUF; i++) buf[i] = SAMPLE_CENTER;
@@ -232,28 +231,38 @@ static SPCODE void sp_fill_range(uint16_t *buf, int i, int end)
 	for (v = 0; v < SP_VOICES; v++) if (vcs[v].active) { nact++; only = v; }
 	if (nact == 1) {
 		struct sp_voice *x = &vcs[only];
+		int16_t run[SP_RUN];
 		while (i < end && x->active) {
-			uint16_t out;
-			sp_step(x);
-			out = (uint16_t)(SAMPLE_CENTER + (x->pred >> SP_SHIFT));
-			buf[i] = out; buf[i + 1] = out; i += SP_HOLD;
+			unsigned want = (unsigned)(end - i + SP_HOLD - 1) / SP_HOLD, k, n;
+			n = sp_run(x, run, want < SP_RUN ? want : SP_RUN);
+			for (k = 0; k < n; k++) {
+				uint16_t out = (uint16_t)(SAMPLE_CENTER + (run[k] >> SP_SHIFT));
+				buf[i] = out; buf[i + 1] = out; i += SP_HOLD;
+			}
 		}
 	} else if (nact > 1) {
-		for (; i < end; i += SP_HOLD) {
-			int32_t mix = 0, s;
-			unsigned any = 0;
+		/* each voice decodes a run, then the runs are mixed sample by sample: the same
+		 * sums as stepping the voices in turn per sample (they are independent), and a
+		 * sample is written while any voice still had a nibble, as before */
+		int16_t run[SP_VOICES][SP_RUN];
+		unsigned len[SP_VOICES];
+		while (i < end) {
+			unsigned want = (unsigned)(end - i + SP_HOLD - 1) / SP_HOLD, most = 0, k;
+			if (want > SP_RUN) want = SP_RUN;
 			for (v = 0; v < SP_VOICES; v++) {
-				struct sp_voice *x = &vcs[v];
-				if (!x->active) continue;
-				sp_step(x);
-				mix += x->pred >> SP_SHIFT; any = 1;
+				len[v] = vcs[v].active ? sp_run(&vcs[v], run[v], want) : 0u;
+				if (len[v] > most) most = len[v];
 			}
-			if (!any) break;
-			s = SAMPLE_CENTER + mix;
-			if (s > SOFT_HIGH) s = SOFT_HIGH + ((s - SOFT_HIGH) >> 2);
-			else if (s < SOFT_LOW) s = SOFT_LOW - ((SOFT_LOW - s) >> 2);
-			if (s > SAMPLE_MAX) s = SAMPLE_MAX; else if (s < SAMPLE_MIN) s = SAMPLE_MIN;
-			buf[i] = (uint16_t)s; buf[i + 1] = (uint16_t)s;
+			for (k = 0; k < most; k++) {
+				int32_t mix = 0, s;
+				for (v = 0; v < SP_VOICES; v++) if (k < len[v]) mix += run[v][k] >> SP_SHIFT;
+				s = SAMPLE_CENTER + mix;
+				if (s > SOFT_HIGH) s = SOFT_HIGH + ((s - SOFT_HIGH) >> 2);
+				else if (s < SOFT_LOW) s = SOFT_LOW - ((SOFT_LOW - s) >> 2);
+				if (s > SAMPLE_MAX) s = SAMPLE_MAX; else if (s < SAMPLE_MIN) s = SAMPLE_MIN;
+				buf[i] = (uint16_t)s; buf[i + 1] = (uint16_t)s; i += SP_HOLD;
+			}
+			if (most < want) break;          /* every voice ended inside this run */
 		}
 	}
 	for (; i < end; i++) buf[i] = SAMPLE_CENTER;
